@@ -5736,5 +5736,1088 @@
     "entrypoint": "InputDecimalDto",
     "value": "-1\n",
     "valid": false
+  },
+  {
+    "id": "phase-d-InputCanonicalDiagnosticDto",
+    "entrypoint": "InputCanonicalDiagnosticDto",
+    "valid": true,
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    },
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-OutputCanonicalDiagnosticDto",
+    "entrypoint": "OutputCanonicalDiagnosticDto",
+    "valid": true,
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    },
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-InputCanonicalFailureDto",
+    "entrypoint": "InputCanonicalFailureDto",
+    "valid": true,
+    "value": {
+      "kind": "queue_full",
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    },
+    "serde_output": {
+      "kind": "queue_full",
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-OutputCanonicalFailureDto",
+    "entrypoint": "OutputCanonicalFailureDto",
+    "valid": true,
+    "value": {
+      "kind": "queue_full",
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    },
+    "serde_output": {
+      "kind": "queue_full",
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-InputTraceContextV2Dto",
+    "entrypoint": "InputTraceContextV2Dto",
+    "valid": true,
+    "value": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "parent_span_id": null,
+      "flags": 131
+    },
+    "serde_output": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "parent_span_id": null,
+      "flags": 131
+    }
+  },
+  {
+    "id": "phase-d-OutputTraceContextV2Dto",
+    "entrypoint": "OutputTraceContextV2Dto",
+    "valid": true,
+    "value": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "parent_span_id": null,
+      "flags": 131
+    },
+    "serde_output": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "parent_span_id": null,
+      "flags": 131
+    }
+  },
+  {
+    "id": "phase-d-InputSpanLinkDto",
+    "entrypoint": "InputSpanLinkDto",
+    "valid": true,
+    "value": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "flags": 131,
+      "attributes": {}
+    },
+    "serde_output": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "flags": 131,
+      "attributes": {}
+    }
+  },
+  {
+    "id": "phase-d-OutputSpanLinkDto",
+    "entrypoint": "OutputSpanLinkDto",
+    "valid": true,
+    "value": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "flags": 131,
+      "attributes": {}
+    },
+    "serde_output": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "flags": 131,
+      "attributes": {}
+    }
+  },
+  {
+    "id": "phase-d-InputSpanKindDto",
+    "entrypoint": "InputSpanKindDto",
+    "valid": true,
+    "value": "server",
+    "serde_output": "server"
+  },
+  {
+    "id": "phase-d-OutputSpanKindDto",
+    "entrypoint": "OutputSpanKindDto",
+    "valid": true,
+    "value": "server",
+    "serde_output": "server"
+  },
+  {
+    "id": "phase-d-InputAggregationTemporalityDto",
+    "entrypoint": "InputAggregationTemporalityDto",
+    "valid": true,
+    "value": "delta",
+    "serde_output": "delta"
+  },
+  {
+    "id": "phase-d-OutputAggregationTemporalityDto",
+    "entrypoint": "OutputAggregationTemporalityDto",
+    "valid": true,
+    "value": "delta",
+    "serde_output": "delta"
+  },
+  {
+    "id": "phase-d-InputHistogramPointDto",
+    "entrypoint": "InputHistogramPointDto",
+    "valid": true,
+    "value": {
+      "explicit_bounds": [
+        1.0,
+        2.0
+      ],
+      "bucket_counts": [
+        "1",
+        "2",
+        "18446744073709551612"
+      ],
+      "count": "18446744073709551615",
+      "sum": 12.0
+    },
+    "serde_output": {
+      "explicit_bounds": [
+        1.0,
+        2.0
+      ],
+      "bucket_counts": [
+        "1",
+        "2",
+        "18446744073709551612"
+      ],
+      "count": "18446744073709551615",
+      "sum": 12.0
+    }
+  },
+  {
+    "id": "phase-d-OutputHistogramPointDto",
+    "entrypoint": "OutputHistogramPointDto",
+    "valid": true,
+    "value": {
+      "explicit_bounds": [
+        1.0,
+        2.0
+      ],
+      "bucket_counts": [
+        "1",
+        "2",
+        "18446744073709551612"
+      ],
+      "count": "18446744073709551615",
+      "sum": 12.0
+    },
+    "serde_output": {
+      "explicit_bounds": [
+        1.0,
+        2.0
+      ],
+      "bucket_counts": [
+        "1",
+        "2",
+        "18446744073709551612"
+      ],
+      "count": "18446744073709551615",
+      "sum": 12.0
+    }
+  },
+  {
+    "id": "phase-d-InputMetricValueDto",
+    "entrypoint": "InputMetricValueDto",
+    "valid": true,
+    "value": {
+      "kind": "histogram",
+      "data": {
+        "point": {
+          "explicit_bounds": [
+            1.0,
+            2.0
+          ],
+          "bucket_counts": [
+            "1",
+            "2",
+            "18446744073709551612"
+          ],
+          "count": "18446744073709551615",
+          "sum": 12.0
+        },
+        "temporality": "delta",
+        "start_time": "1970-01-01T00:00:00Z"
+      }
+    },
+    "serde_output": {
+      "kind": "histogram",
+      "data": {
+        "point": {
+          "explicit_bounds": [
+            1.0,
+            2.0
+          ],
+          "bucket_counts": [
+            "1",
+            "2",
+            "18446744073709551612"
+          ],
+          "count": "18446744073709551615",
+          "sum": 12.0
+        },
+        "temporality": "delta",
+        "start_time": "1970-01-01T00:00:00Z"
+      }
+    }
+  },
+  {
+    "id": "phase-d-OutputMetricValueDto",
+    "entrypoint": "OutputMetricValueDto",
+    "valid": true,
+    "value": {
+      "kind": "histogram",
+      "data": {
+        "point": {
+          "explicit_bounds": [
+            1.0,
+            2.0
+          ],
+          "bucket_counts": [
+            "1",
+            "2",
+            "18446744073709551612"
+          ],
+          "count": "18446744073709551615",
+          "sum": 12.0
+        },
+        "temporality": "delta",
+        "start_time": "1970-01-01T00:00:00Z"
+      }
+    },
+    "serde_output": {
+      "kind": "histogram",
+      "data": {
+        "point": {
+          "explicit_bounds": [
+            1.0,
+            2.0
+          ],
+          "bucket_counts": [
+            "1",
+            "2",
+            "18446744073709551612"
+          ],
+          "count": "18446744073709551615",
+          "sum": 12.0
+        },
+        "temporality": "delta",
+        "start_time": "1970-01-01T00:00:00Z"
+      }
+    }
+  },
+  {
+    "id": "phase-d-InputMetricRecordDto",
+    "entrypoint": "InputMetricRecordDto",
+    "valid": true,
+    "value": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:00Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    },
+    "serde_output": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:00Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-OutputMetricRecordDto",
+    "entrypoint": "OutputMetricRecordDto",
+    "valid": true,
+    "value": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:00Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    },
+    "serde_output": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:00Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-InputSpanStatusDto",
+    "entrypoint": "InputSpanStatusDto",
+    "valid": true,
+    "value": "Ok",
+    "serde_output": "Ok"
+  },
+  {
+    "id": "phase-d-OutputSpanStatusDto",
+    "entrypoint": "OutputSpanStatusDto",
+    "valid": true,
+    "value": "Ok",
+    "serde_output": "Ok"
+  },
+  {
+    "id": "phase-d-InputSpanRecordDto",
+    "entrypoint": "InputSpanRecordDto",
+    "valid": true,
+    "value": {
+      "timestamp": "1970-01-01T00:00:00Z",
+      "service": "demo",
+      "name": "run",
+      "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef",
+        "span_id": "0123456789abcdef",
+        "parent_span_id": null,
+        "flags": 131
+      },
+      "status": "Ok",
+      "diagnostic": null,
+      "attributes": {},
+      "duration_ms": "18446744073709551615",
+      "kind": "server",
+      "links": [
+        {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "flags": 131,
+          "attributes": {}
+        }
+      ]
+    },
+    "serde_output": {
+      "timestamp": "1970-01-01T00:00:00Z",
+      "service": "demo",
+      "name": "run",
+      "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef",
+        "span_id": "0123456789abcdef",
+        "parent_span_id": null,
+        "flags": 131
+      },
+      "status": "Ok",
+      "diagnostic": null,
+      "attributes": {},
+      "duration_ms": "18446744073709551615",
+      "kind": "server",
+      "links": [
+        {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "flags": 131,
+          "attributes": {}
+        }
+      ]
+    }
+  },
+  {
+    "id": "phase-d-OutputSpanRecordDto",
+    "entrypoint": "OutputSpanRecordDto",
+    "valid": true,
+    "value": {
+      "timestamp": "1970-01-01T00:00:00Z",
+      "service": "demo",
+      "name": "run",
+      "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef",
+        "span_id": "0123456789abcdef",
+        "parent_span_id": null,
+        "flags": 131
+      },
+      "status": "Ok",
+      "diagnostic": null,
+      "attributes": {},
+      "duration_ms": "18446744073709551615",
+      "kind": "server",
+      "links": [
+        {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "flags": 131,
+          "attributes": {}
+        }
+      ]
+    },
+    "serde_output": {
+      "timestamp": "1970-01-01T00:00:00Z",
+      "service": "demo",
+      "name": "run",
+      "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef",
+        "span_id": "0123456789abcdef",
+        "parent_span_id": null,
+        "flags": 131
+      },
+      "status": "Ok",
+      "diagnostic": null,
+      "attributes": {},
+      "duration_ms": "18446744073709551615",
+      "kind": "server",
+      "links": [
+        {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "flags": 131,
+          "attributes": {}
+        }
+      ]
+    }
+  },
+  {
+    "id": "phase-d-InputSpanEventDto",
+    "entrypoint": "InputSpanEventDto",
+    "valid": true,
+    "value": {
+      "timestamp": "1970-01-01T00:00:00Z",
+      "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef",
+        "span_id": "0123456789abcdef",
+        "parent_span_id": null,
+        "flags": 131
+      },
+      "name": "event",
+      "attributes": {},
+      "diagnostic": null
+    },
+    "serde_output": {
+      "timestamp": "1970-01-01T00:00:00Z",
+      "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef",
+        "span_id": "0123456789abcdef",
+        "parent_span_id": null,
+        "flags": 131
+      },
+      "name": "event",
+      "attributes": {},
+      "diagnostic": null
+    }
+  },
+  {
+    "id": "phase-d-OutputSpanEventDto",
+    "entrypoint": "OutputSpanEventDto",
+    "valid": true,
+    "value": {
+      "timestamp": "1970-01-01T00:00:00Z",
+      "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef",
+        "span_id": "0123456789abcdef",
+        "parent_span_id": null,
+        "flags": 131
+      },
+      "name": "event",
+      "attributes": {},
+      "diagnostic": null
+    },
+    "serde_output": {
+      "timestamp": "1970-01-01T00:00:00Z",
+      "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef",
+        "span_id": "0123456789abcdef",
+        "parent_span_id": null,
+        "flags": 131
+      },
+      "name": "event",
+      "attributes": {},
+      "diagnostic": null
+    }
+  },
+  {
+    "id": "phase-d-InputSpanSignalDto",
+    "entrypoint": "InputSpanSignalDto",
+    "valid": true,
+    "value": {
+      "Ended": {
+        "timestamp": "1970-01-01T00:00:00Z",
+        "service": "demo",
+        "name": "run",
+        "trace": {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "parent_span_id": null,
+          "flags": 131
+        },
+        "status": "Ok",
+        "diagnostic": null,
+        "attributes": {},
+        "duration_ms": "18446744073709551615",
+        "kind": "server",
+        "links": [
+          {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "flags": 131,
+            "attributes": {}
+          }
+        ]
+      }
+    },
+    "serde_output": {
+      "Ended": {
+        "timestamp": "1970-01-01T00:00:00Z",
+        "service": "demo",
+        "name": "run",
+        "trace": {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "parent_span_id": null,
+          "flags": 131
+        },
+        "status": "Ok",
+        "diagnostic": null,
+        "attributes": {},
+        "duration_ms": "18446744073709551615",
+        "kind": "server",
+        "links": [
+          {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "flags": 131,
+            "attributes": {}
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "phase-d-OutputSpanSignalDto",
+    "entrypoint": "OutputSpanSignalDto",
+    "valid": true,
+    "value": {
+      "Ended": {
+        "timestamp": "1970-01-01T00:00:00Z",
+        "service": "demo",
+        "name": "run",
+        "trace": {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "parent_span_id": null,
+          "flags": 131
+        },
+        "status": "Ok",
+        "diagnostic": null,
+        "attributes": {},
+        "duration_ms": "18446744073709551615",
+        "kind": "server",
+        "links": [
+          {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "flags": 131,
+            "attributes": {}
+          }
+        ]
+      }
+    },
+    "serde_output": {
+      "Ended": {
+        "timestamp": "1970-01-01T00:00:00Z",
+        "service": "demo",
+        "name": "run",
+        "trace": {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "parent_span_id": null,
+          "flags": 131
+        },
+        "status": "Ok",
+        "diagnostic": null,
+        "attributes": {},
+        "duration_ms": "18446744073709551615",
+        "kind": "server",
+        "links": [
+          {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "flags": 131,
+            "attributes": {}
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "phase-d-InputCanonicalWireEnvelopeAdmissionDto",
+    "entrypoint": "InputCanonicalWireEnvelopeAdmissionDto",
+    "valid": true,
+    "value": {
+      "schema_version": 1,
+      "kind": "error",
+      "error": {
+        "kind": "queue_full",
+        "at": "1970-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": [
+            "retry later"
+          ]
+        },
+        "cause": "bounded cause",
+        "docs": "https://example.test/recovery",
+        "details": {
+          "queue_depth": {
+            "kind": "integer",
+            "value": "1024"
+          }
+        }
+      }
+    },
+    "serde_output": {
+      "schema_version": 1,
+      "kind": "error",
+      "error": {
+        "kind": "queue_full",
+        "at": "1970-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": [
+            "retry later"
+          ]
+        },
+        "cause": "bounded cause",
+        "docs": "https://example.test/recovery",
+        "details": {
+          "queue_depth": {
+            "kind": "integer",
+            "value": "1024"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-OutputCanonicalWireEnvelopeAdmissionDto",
+    "entrypoint": "OutputCanonicalWireEnvelopeAdmissionDto",
+    "valid": true,
+    "value": {
+      "schema_version": 1,
+      "kind": "error",
+      "error": {
+        "kind": "queue_full",
+        "at": "1970-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": [
+            "retry later"
+          ]
+        },
+        "cause": "bounded cause",
+        "docs": "https://example.test/recovery",
+        "details": {
+          "queue_depth": {
+            "kind": "integer",
+            "value": "1024"
+          }
+        }
+      }
+    },
+    "serde_output": {
+      "schema_version": 1,
+      "kind": "error",
+      "error": {
+        "kind": "queue_full",
+        "at": "1970-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": [
+            "retry later"
+          ]
+        },
+        "cause": "bounded cause",
+        "docs": "https://example.test/recovery",
+        "details": {
+          "queue_depth": {
+            "kind": "integer",
+            "value": "1024"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-invalid-MetricValueDto-319",
+    "entrypoint": "InputMetricValueDto",
+    "valid": false,
+    "value": {
+      "kind": "future_metric",
+      "data": 0
+    }
+  },
+  {
+    "id": "phase-d-invalid-SpanKindDto-320",
+    "entrypoint": "InputSpanKindDto",
+    "valid": false,
+    "value": "future_kind"
+  },
+  {
+    "id": "phase-d-invalid-CanonicalFailureDto-321",
+    "entrypoint": "InputCanonicalFailureDto",
+    "valid": false,
+    "value": {
+      "kind": "future_error",
+      "at": "1970-01-01T00:00:00Z",
+      "code": "OTLP_QUEUE_FULL",
+      "message": "queue full",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": [
+          "retry later"
+        ]
+      },
+      "cause": "bounded cause",
+      "docs": "https://example.test/recovery",
+      "details": {
+        "queue_depth": {
+          "kind": "integer",
+          "value": "1024"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-invalid-SpanSignalDto-322",
+    "entrypoint": "InputSpanSignalDto",
+    "valid": false,
+    "value": {
+      "Future": {
+        "timestamp": "1970-01-01T00:00:00Z",
+        "service": "demo",
+        "name": "run",
+        "trace": {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "parent_span_id": null,
+          "flags": 131
+        },
+        "status": "Ok",
+        "diagnostic": null,
+        "attributes": {},
+        "duration_ms": "18446744073709551615",
+        "kind": "server",
+        "links": [
+          {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "flags": 131,
+            "attributes": {}
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "phase-d-invalid-HistogramPointDto-323",
+    "entrypoint": "InputHistogramPointDto",
+    "valid": false,
+    "value": {
+      "explicit_bounds": [
+        1.0,
+        2.0
+      ],
+      "bucket_counts": [
+        "1",
+        "2",
+        "18446744073709551612"
+      ],
+      "count": "18446744073709551616",
+      "sum": 12.0
+    }
+  },
+  {
+    "id": "phase-d-invalid-HistogramPointDto-324",
+    "entrypoint": "InputHistogramPointDto",
+    "valid": false,
+    "value": {
+      "explicit_bounds": [
+        1.0,
+        2.0
+      ],
+      "bucket_counts": [
+        "1",
+        "2",
+        "18446744073709551612"
+      ],
+      "count": "01",
+      "sum": 12.0
+    }
   }
 ]

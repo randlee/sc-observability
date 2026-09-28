@@ -198,6 +198,13 @@ subprocess.run(
     check=True,
 )
 
+# D.17's existing consumer migration replaces the temporary expected-failure gate.
+subprocess.run(
+    ["cargo", "check", "--manifest-path", "examples/custom-sink-example/Cargo.toml"],
+    cwd=root,
+    check=True,
+)
+
 print("repo boundary validation passed")
 PY
 

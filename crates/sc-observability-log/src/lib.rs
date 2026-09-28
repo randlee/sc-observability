@@ -107,6 +107,11 @@ use std::time::Duration;
 use crate::health::BridgeLifecycle;
 
 #[doc(inline)]
+pub use bridge::{
+    AttachmentOptions, BridgeEventDecision, BridgeEventPolicy, DetachError, LogAttachment,
+    PolicyRejection, attach_logger,
+};
+#[doc(inline)]
 pub use control::{BridgeEvent, EmitOutcome, LogControl};
 #[doc(inline)]
 pub use error::{
@@ -456,7 +461,7 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
     let active_log_path = enable_file_sink.then(|| initial_report.active_log_path.clone());
     let level_state = logger.level_state();
     let installed = Arc::new(Installed {
-        logger,
+        logger: Arc::new(logger),
         service,
         identity,
         options,
@@ -476,6 +481,7 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
     });
     health::store_report(initial_report);
     *SLOT.write().unwrap_or_else(PoisonError::into_inner) = Some(installed);
+    bridge::mark_owned_running();
     handle::set_lifecycle(BridgeLifecycle::Running);
     log::set_max_level(log::LevelFilter::Trace);
     Ok(LogGuard {

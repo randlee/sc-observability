@@ -1,12 +1,20 @@
+use std::error::Error;
 use std::fs;
+use std::io::Write as _;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
+use sc_observability::error_codes;
 use sc_observability::typed::{TypedLogSink, legacy_sink};
 use sc_observability::*;
+use sc_observability_types::{
+    DiagnosticInfo, QueryError, QueryHealthState,
+    error_codes::{SC_LOG_QUERY_DECODE, SC_LOG_QUERY_SHUTDOWN},
+    typed::{ClassifiedError, EventFailureKind},
+};
 use serde_json::json;
 
 struct TestRoot(tempfile::TempDir);
@@ -76,8 +84,8 @@ fn event() -> LogEvent {
 )]
 fn logging_only_consumer_can_emit_without_routing_or_otlp() {
     let root = temp_root("logging-only");
-    let logger =
-        Logger::new(LoggerConfig::default_for(service_name(), root.path_buf())).expect("logger");
+    let logger = Logger::new_typed(LoggerConfig::default_for(service_name(), root.path_buf()))
+        .expect("logger");
 
     logger.emit(event()).expect("emit");
     logger.flush().expect("flush");
@@ -88,6 +96,100 @@ fn logging_only_consumer_can_emit_without_routing_or_otlp() {
     let contents = fs::read_to_string(path).expect("read log output");
     assert!(contents.contains("\"action\":\"startup\""));
     assert!(contents.contains("\"message\":\"boot complete\""));
+}
+
+#[test]
+fn logging_only_consumer_observes_facade_event_and_shutdown_health_contracts() {
+    let root = temp_root("typed-event-and-shutdown-health");
+    let logger = Logger::new_typed(LoggerConfig::default_for(service_name(), root.path_buf()))
+        .expect("logger");
+
+    let mut invalid_event = event();
+    invalid_event.version = SchemaVersion::new("v0").expect("valid invalid test version");
+    let failure = logger
+        .log_typed(invalid_event)
+        .expect_err("invalid event failure");
+    let LogFailure::InvalidEvent(event_failure) = failure else {
+        panic!("expected the typed invalid-event variant");
+    };
+    assert_eq!(event_failure.kind(), EventFailureKind::InvalidEvent);
+    assert_eq!(
+        event_failure.diagnostic().code,
+        error_codes::LOGGER_INVALID_EVENT
+    );
+    assert!(matches!(
+        event_failure.diagnostic().remediation,
+        Remediation::Recoverable { .. }
+    ));
+    let context = event_failure.context();
+    assert_eq!(context.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
+
+    let mut follow = logger.follow(LogQuery::default()).expect("follow session");
+    let stopped = logger.shutdown();
+    let shutdown = follow.poll().expect_err("shutdown follow failure");
+    assert!(matches!(shutdown, QueryError::Shutdown));
+    assert_eq!(shutdown.code(), SC_LOG_QUERY_SHUTDOWN);
+    assert!(matches!(
+        shutdown.diagnostic().remediation,
+        Remediation::Recoverable { .. }
+    ));
+    assert!(
+        Error::source(&shutdown).is_none(),
+        "the source-free shutdown contract must not manufacture a source"
+    );
+    let query_health = follow.health();
+    assert_eq!(query_health.state, QueryHealthState::Unavailable);
+    assert_eq!(
+        query_health
+            .last_error
+            .expect("shutdown health summary")
+            .code,
+        Some(SC_LOG_QUERY_SHUTDOWN)
+    );
+    assert_eq!(
+        stopped.health().query.expect("stopped query health").state,
+        QueryHealthState::Unavailable
+    );
+}
+
+#[test]
+fn logging_only_consumer_preserves_decode_health_source() {
+    let root = temp_root("decode-health-source");
+    let logger = Logger::new_typed(LoggerConfig::default_for(service_name(), root.path_buf()))
+        .expect("logger");
+    logger.log_typed(event()).expect("admit event");
+    logger.flush_typed().expect("flush event");
+
+    let active_path = root
+        .join(DEFAULT_LOG_DIR_NAME)
+        .join(format!("logging-only-app{DEFAULT_LOG_FILE_SUFFIX}"));
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(active_path)
+        .expect("open active log");
+    writeln!(file, "{{not-json").expect("append malformed JSONL");
+
+    let decode = logger
+        .query(&LogQuery::default())
+        .expect_err("decode failure");
+    let QueryError::Decode(context) = decode else {
+        panic!("expected the query decode variant");
+    };
+    assert_eq!(context.diagnostic().code, SC_LOG_QUERY_DECODE);
+    assert!(matches!(
+        context.diagnostic().remediation,
+        Remediation::Recoverable { .. }
+    ));
+    Error::source(context.as_ref())
+        .and_then(|source| source.downcast_ref::<serde_json::Error>())
+        .expect("decode context preserves the serde_json source type");
+
+    let query_health = logger.health().query.expect("query health");
+    assert_eq!(query_health.state, QueryHealthState::Degraded);
+    assert_eq!(
+        query_health.last_error.expect("decode health summary").code,
+        Some(SC_LOG_QUERY_DECODE)
+    );
 }
 
 #[test]

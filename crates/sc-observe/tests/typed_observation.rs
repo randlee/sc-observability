@@ -14,6 +14,7 @@ use sc_observability_types::typed::{
     TypedMetricProjector, TypedObservationSubscriber, TypedSpanProjector, legacy_log_projector,
     legacy_metric_projector, legacy_span_projector, legacy_subscriber, typed_subscriber,
 };
+use sc_observability_types::v2::InitError as CanonicalInitError;
 use sc_observability_types::{
     ActionName, Diagnostic, DiagnosticInfo, ErrorCode, Level, LogEvent, MetricKind, MetricName,
     MetricRecord, MetricUnit, Observation, ObservationError, ObservationFilter, ProcessIdentity,
@@ -663,7 +664,10 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
         legacy_new.kind(),
         InitFailureKind::ObservationInitialization
     );
-    assert_eq!(new_empty.kind(), InitFailureKind::ObservationInitialization);
+    assert!(matches!(
+        &new_empty,
+        CanonicalInitError::Configuration { .. }
+    ));
     assert_eq!(legacy_new.diagnostic().code, new_empty.diagnostic().code);
 
     let Err(empty) = Observability::builder(
@@ -676,7 +680,7 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     .build_typed() else {
         panic!("empty routes must fail");
     };
-    assert_eq!(empty.kind(), InitFailureKind::ObservationInitialization);
+    assert!(matches!(&empty, CanonicalInitError::Configuration { .. }));
 
     let mut legacy_config = sc_observe::ObservabilityConfig::default_for(
         ToolName::new("typed-observe").expect("valid tool"),
@@ -710,10 +714,10 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
         legacy_logger_failure.kind(),
         InitFailureKind::LoggerInitialization
     );
-    assert_eq!(
-        typed_logger_failure.kind(),
-        InitFailureKind::LoggerInitialization
-    );
+    assert!(matches!(
+        &typed_logger_failure,
+        CanonicalInitError::Runtime { .. }
+    ));
     assert_eq!(
         legacy_logger_failure.diagnostic().code,
         typed_logger_failure.diagnostic().code

@@ -56,6 +56,18 @@ Consumed artifact: obs-d-12's canonical error enums under the v2 module path and
 
 This bead retargets owned call sites and tests to the accepted ADR-017 surface. Any transitional compatibility needed by unfinished sibling consumers is limited to the existing boundary and is consumed by `obs-d-18`, which owns canonical activation and final compatibility retirement. No new legacy feature or duplicate classifier is introduced. Every boundary close still has a green all-features workspace check and workspace tests.
 
+## Implementation evidence
+
+The binding runtime now constructs the staged `sc_observability_types::v2`
+families before projecting to its retained DTO boundary: event conversion uses
+`EventError::Validation`, helper/timer startup uses `InitError::Runtime` (with
+the native startup source retained), flush completion uses `FlushError::Drain`,
+shutdown failures use `ShutdownError::{Timeout,Drain}`, and observer deadlines
+classify flush and shutdown independently. Existing admission categories,
+operation ownership, retained shutdown results, and observer cancellation
+semantics remain unchanged. The contract matrix includes typed-context and
+tagged-DTO assertions for these mappings.
+
 The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
 ## Handoff to obs-d-18 (wave 3)

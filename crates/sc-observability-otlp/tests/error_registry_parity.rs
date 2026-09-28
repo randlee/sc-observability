@@ -17,6 +17,11 @@ use sc_observability_types::typed::{
     LogSinkFailure, ProjectionFailure, ShutdownFailure, SubscriberFailure,
 };
 
+use sc_observability_types::v2::{
+    AggregationTemporality, FiniteF64, HistogramPoint, MetricModelError, MetricRecord, MetricValue,
+};
+use sc_observability_types::{MetricName, ServiceName, Timestamp};
+
 fn remediation() -> Remediation {
     Remediation::not_recoverable("parity test remediation")
 }
@@ -192,5 +197,75 @@ fn export_failure_matches_owning_registry() {
     assert_owning_code!(
         ExportFailure::export("x", remediation()),
         sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL
+    );
+}
+
+fn assert_metric_model_failure(
+    error: &MetricModelError,
+    expected: &sc_observability_types::ErrorCode,
+) {
+    assert_eq!(&error.diagnostic().code, expected);
+    assert_eq!(error.context().diagnostic(), error.diagnostic());
+    assert!(
+        std::error::Error::source(error).is_none(),
+        "transparent model error has no source when its context has none"
+    );
+}
+
+fn metric(value: MetricValue, timestamp: Timestamp) -> Result<MetricRecord, MetricModelError> {
+    MetricRecord::try_new(
+        timestamp,
+        ServiceName::new("test-service").expect("valid service"),
+        MetricName::new("test.metric").expect("valid metric"),
+        value,
+    )
+}
+
+fn one_second_after_epoch() -> Timestamp {
+    serde_json::from_str("\"1970-01-01T00:00:01Z\"").expect("valid timestamp")
+}
+
+#[test]
+fn metric_model_failures_match_types_owned_registry_and_preserve_source() {
+    let invalid_histogram = HistogramPoint::try_new(
+        vec![FiniteF64::new(1.0).expect("finite bound")],
+        vec![1],
+        1,
+        FiniteF64::new(1.0).expect("finite value"),
+    )
+    .expect_err("one bound requires two buckets");
+    assert_metric_model_failure(
+        &invalid_histogram,
+        &sc_observability_types::error_codes::SC_METRIC_INVALID_HISTOGRAM,
+    );
+
+    let invalid_temporality = metric(
+        MetricValue::Sum {
+            value: FiniteF64::new(1.0).expect("finite sum"),
+            monotonic: true,
+            temporality: AggregationTemporality::Delta,
+            start_time: Timestamp::UNIX_EPOCH,
+        },
+        Timestamp::UNIX_EPOCH,
+    )
+    .expect_err("delta requires a nonempty interval");
+    assert_metric_model_failure(
+        &invalid_temporality,
+        &sc_observability_types::error_codes::SC_METRIC_INVALID_TEMPORALITY,
+    );
+
+    let invalid_interval = metric(
+        MetricValue::Sum {
+            value: FiniteF64::new(1.0).expect("finite sum"),
+            monotonic: false,
+            temporality: AggregationTemporality::Cumulative,
+            start_time: one_second_after_epoch(),
+        },
+        Timestamp::UNIX_EPOCH,
+    )
+    .expect_err("start cannot follow the point timestamp");
+    assert_metric_model_failure(
+        &invalid_interval,
+        &sc_observability_types::error_codes::SC_METRIC_INVALID_INTERVAL,
     );
 }

@@ -97,10 +97,113 @@ fn stop(owner: &CoreLoggerOwner) {
     crate::spawn::wait_live(1);
 }
 fn code<T>(result: Result<T, Failure>, expected: &str) {
+    let kind = match expected {
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT => "validation",
+        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL
+        | dto::error_codes::SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS
+        | dto::error_codes::SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS
+        | dto::error_codes::SC_OBSERVABILITY_BINDING_DISPATCH_FULL => "queue_full",
+        dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED
+        | dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL => "unavailable",
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT => "timeout",
+        value
+            if value
+                == sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT
+                    .as_str() =>
+        {
+            "timeout"
+        }
+        value
+            if value
+                == sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
+                    .as_str() =>
+        {
+            "queue_full"
+        }
+        _ => panic!("missing DTO assertion for {expected}"),
+    };
     match result {
-        Err(error) => assert_eq!(error.diagnostic().code, expected),
+        Err(error) => {
+            assert_eq!(error.diagnostic().code, expected);
+            let wire = serde_json::to_value(&error).expect("failure serializes to its tagged DTO");
+            assert_eq!(wire["kind"], kind, "{expected} must retain its DTO kind");
+            assert!(
+                serde_json::to_value(error.diagnostic())
+                    .expect("diagnostic serializes")["remediation"]
+                    .is_object(),
+                "{expected} must retain remediation in its DTO"
+            );
+            if kind == "timeout" {
+                assert!(
+                    wire["operation"].is_string(),
+                    "{expected} timeout must retain an operation string"
+                );
+            } else {
+                assert!(
+                    wire.get("operation").is_none(),
+                    "{expected} non-timeout must not invent an operation string"
+                );
+            }
+        }
         Ok(_) => panic!("expected {expected}"),
     }
+}
+
+fn assert_failure<T>(
+    result: Result<T, Failure>,
+    expected_code: &str,
+    expected_kind: &str,
+    expected_operation: Option<&str>,
+) {
+    match result {
+        Err(error) => {
+            assert_eq!(error.diagnostic().code, expected_code);
+            let wire = serde_json::to_value(&error).expect("failure serializes to its tagged DTO");
+            assert!(
+                serde_json::to_value(error.diagnostic())
+                    .expect("diagnostic serializes")
+                    .get("remediation")
+                    .is_some(),
+                "{expected_code} must retain remediation in its DTO"
+            );
+            assert!(
+                wire["kind"].is_string() && wire["kind"] == expected_kind,
+                "{expected_code} must retain its tagged DTO failure kind {expected_kind}"
+            );
+            assert_eq!(
+                wire.get("operation").and_then(serde_json::Value::as_str),
+                expected_operation,
+                "{expected_code} must retain its exact DTO operation disposition"
+            );
+        }
+        Ok(_) => panic!("expected {expected_code}"),
+    }
+}
+
+fn assert_canonical_context<T>(error: &T, expected_code: &str, source_depth: usize)
+where
+    T: native::DiagnosticInfo + std::error::Error + 'static,
+{
+    assert_eq!(
+        native::DiagnosticInfo::diagnostic(error).code.as_str(),
+        expected_code
+    );
+    assert!(
+        serde_json::to_value(native::DiagnosticInfo::diagnostic(error))
+            .expect("canonical diagnostic serializes")["remediation"]
+            .is_object(),
+        "{expected_code} must preserve remediation"
+    );
+    let mut source = std::error::Error::source(error);
+    for _ in 0..source_depth {
+        source = std::error::Error::source(
+            source.expect("canonical error must preserve its Error::source chain"),
+        );
+    }
+    assert!(
+        source.is_none(),
+        "{expected_code} retained an unexpected source-chain depth"
+    );
 }
 
 const CASES: &[&str] = &[
@@ -130,6 +233,13 @@ const CASES: &[&str] = &[
     "last_handle_teardown",
     "bridge_observers_callbacks",
     "native_diagnostic_fidelity",
+    "d15_callback_fixture",
+    "d15_conversion_fixture",
+    "d15_coordinator_fixture",
+    "d15_operation_fixture",
+    "d15_spawn_fixture",
+    "d15_sync_fixture",
+    "d15_timer_fixture",
 ];
 
 #[test]
@@ -170,6 +280,13 @@ fn contract_matrix() {
             "last_handle_teardown" => last_handle_teardown(),
             "bridge_observers_callbacks" => bridge_observers_callbacks(),
             "native_diagnostic_fidelity" => native_diagnostic_fidelity(),
+            "d15_callback_fixture" => d15_callback_fixture(),
+            "d15_conversion_fixture" => d15_conversion_fixture(),
+            "d15_coordinator_fixture" => d15_coordinator_fixture(),
+            "d15_operation_fixture" => d15_operation_fixture(),
+            "d15_spawn_fixture" => d15_spawn_fixture(),
+            "d15_sync_fixture" => d15_sync_fixture(),
+            "d15_timer_fixture" => d15_timer_fixture(),
             _ => panic!("unknown contract case {case}"),
         }
         println!("BINDING_CASE_PASS {case}");
@@ -283,7 +400,11 @@ fn ready<T>(future: impl Future<Output = T>) -> T {
     }
 }
 fn pending<T: Clone + Send + Sync + 'static>(backend: &CoreLoggerBackend) -> Operation<T> {
-    Operation::new(&backend.shared.dispatcher, &crate::timer::shared().unwrap())
+    Operation::new(
+        &backend.shared.dispatcher,
+        &crate::timer::shared().unwrap(),
+        crate::error::OperationKind::Query,
+    )
 }
 fn observer_bounds() {
     let (_root, owner, backend) = core();
@@ -682,6 +803,168 @@ fn native_diagnostic_fidelity() {
     assert_eq!(serde_json::to_value(failure).unwrap(), golden);
 }
 
+fn d15_callback_fixture() {
+    let error = crate::error::subscriber(
+        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
+        "callback registration capacity is occupied",
+    );
+    assert_canonical_context(
+        &error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
+        0,
+    );
+    assert_failure(
+        Err::<(), _>(crate::conversion::canonical(
+            &error,
+            crate::conversion::Kind::QueueFull,
+        )),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
+        "queue_full",
+        None,
+    );
+    callback_bounds();
+}
+
+fn d15_conversion_fixture() {
+    let (_root, config) = config();
+    let stamp = dto::EventStamp {
+        service: config.service_name,
+        timestamp: native::Timestamp::now_utc(),
+        identity: native::ProcessIdentity::default(),
+    };
+    let mut invalid = event();
+    invalid.schema_version = 2;
+    let error = crate::conversion::event(invalid, stamp, ProducerOrigin::RustHost)
+        .expect_err("unsupported schema must take the production conversion error path");
+    assert_canonical_context(
+        &error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
+        0,
+    );
+    assert_failure(
+        Err::<(), _>(crate::conversion::canonical(
+            &error,
+            crate::conversion::Kind::Validation,
+        )),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
+        "validation",
+        None,
+    );
+}
+
+fn d15_coordinator_fixture() {
+    let error = crate::error::flush_drain(Box::new(native::ErrorContext::new(
+        native::ErrorCode::new_static(dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL),
+        "sink flush failed",
+        native::Remediation::not_recoverable("inspect sink health"),
+    )));
+    assert_canonical_context(
+        &error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+        1,
+    );
+    assert_failure(
+        Err::<(), _>(crate::conversion::canonical(
+            &error,
+            crate::conversion::Kind::Io,
+        )),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+        "io",
+        None,
+    );
+    core_sink_and_shutdown();
+}
+
+fn d15_operation_fixture() {
+    let native_error = crate::error::flush_observer_timeout();
+    assert_canonical_context(
+        &native_error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        0,
+    );
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> = Operation::new(
+        &backend.shared.dispatcher,
+        &crate::timer::shared().unwrap(),
+        crate::error::OperationKind::Flush,
+    );
+    assert_failure(
+        operation.wait(Duration::ZERO),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        "timeout",
+        Some("flush"),
+    );
+    stop(&owner);
+    observer_bounds();
+}
+
+fn d15_spawn_fixture() {
+    let error = crate::error::init_runtime(
+        "helper startup failed",
+        Some(Box::new(std::io::Error::other("native startup source"))),
+    );
+    assert_canonical_context(
+        &error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED,
+        1,
+    );
+    assert_failure(
+        Err::<(), _>(crate::conversion::canonical(
+            &error,
+            crate::conversion::Kind::Unavailable,
+        )),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED,
+        "unavailable",
+        None,
+    );
+    spawn_rollback(0);
+}
+
+fn d15_sync_fixture() {
+    let error = crate::error::shutdown_drain("synchronization worker failed");
+    assert_canonical_context(
+        &error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+        0,
+    );
+    assert_failure(
+        Err::<(), _>(crate::conversion::canonical(
+            &error,
+            crate::conversion::Kind::Internal,
+        )),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+        "internal",
+        None,
+    );
+    sync_and_async_waiters();
+}
+
+fn d15_timer_fixture() {
+    let error = crate::error::shutdown_timeout("shutdown observation deadline elapsed");
+    assert_canonical_context(
+        &error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        0,
+    );
+    assert_failure(
+        Err::<(), _>(crate::conversion::canonical(
+            &error,
+            crate::conversion::Kind::Timeout,
+        )),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        "timeout",
+        Some("native_operation"),
+    );
+    assert_failure(
+        Err::<(), _>(crate::error::observer_timeout(
+            crate::error::OperationKind::Shutdown,
+        )),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        "timeout",
+        Some("shutdown"),
+    );
+}
+
 fn cross_logger_cancellation() {
     let (_root_a, owner_a, backend_a) = core();
     let (_root_b, owner_b, backend_b) = core();
@@ -839,7 +1122,11 @@ fn bridge_observers_callbacks() {
     let (_root, host) = bridge_host();
     let backend = bridge_backend(host.control()).unwrap();
     let timer = crate::timer::shared().unwrap();
-    let operation: Operation<u32> = Operation::new(&backend.shared.dispatcher, &timer);
+    let operation: Operation<u32> = Operation::new(
+        &backend.shared.dispatcher,
+        &timer,
+        crate::error::OperationKind::Query,
+    );
     let futures: Vec<_> = (0..64)
         .map(|_| operation.completion(Duration::from_secs(60)))
         .collect();

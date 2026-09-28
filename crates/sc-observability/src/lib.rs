@@ -27,6 +27,7 @@ mod maintenance;
 mod query;
 mod redact;
 mod runtime;
+mod settings;
 mod sinks;
 pub mod typed;
 
@@ -37,7 +38,7 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 #[doc(inline)]
-pub use builder::LoggerBuilder;
+pub use builder::{LoggerBuilder, SinkRegistrationError};
 #[doc(inline)]
 pub use follow::LogFollowSession;
 #[doc(inline)]
@@ -62,6 +63,20 @@ pub use sc_observability_types::{
     SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp,
     WriterState,
 };
+
+/// Staged 2.0 error contracts.
+///
+/// The crate-root names remain the retained 1.x compatibility surface until
+/// the integration sprint activates the major-version API. New consumers can
+/// use this namespace to match the discriminated errors without losing the
+/// original diagnostic context or typed source.
+pub mod v2 {
+    #[doc(inline)]
+    pub use sc_observability_types::v2::{
+        ConfigFailure, EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError,
+        MetricModelError, ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+    };
+}
 #[allow(
     deprecated,
     reason = "the facade retains legacy error names in its public compatibility surface"
@@ -69,6 +84,10 @@ pub use sc_observability_types::{
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+#[doc(inline)]
+pub use settings::{
+    EnvSnapshot, LogRoot, LogSettings, LogSettingsError, LogSettingsInputs, ResolvedLogSettings,
+};
 #[cfg(feature = "fault-injection")]
 #[doc(inline)]
 pub use sinks::RetainedSinkFaultInjector;
@@ -696,12 +715,8 @@ mod sealed_emitters {
     dead_code,
     reason = "crate-local emitter trait is intentionally available for logging-only injection"
 )]
-#[expect(
-    deprecated,
-    reason = "the crate-local compatibility emitter retains the deprecated legacy EventError boundary"
-)]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
+    fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError>;
 }
 
 impl sealed_emitters::Sealed for Logger<Running> {}
@@ -711,15 +726,12 @@ impl sealed_emitters::Sealed for Logger<Running> {}
     reason = "the crate-local compatibility emitter calls the retained deprecated logger boundary"
 )]
 impl LogEmitter for Logger<Running> {
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
+    fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError> {
         self.log(event).map_err(|error| match error {
-            LogError::InvalidEvent(error) => error,
-            LogError::WriterDegraded(error) => {
-                EventError(Box::new(writer_degraded_error_context(&error.to_string())))
+            LogError::InvalidEvent(error) => v2::EventError::Validation { context: error.0 },
+            LogError::WriterDegraded(context) | LogError::ShutdownTimedOut(context) => {
+                v2::EventError::Routing { context }
             }
-            LogError::ShutdownTimedOut(error) => EventError(Box::new(
-                shutdown_timed_out_error_context(&error.to_string()),
-            )),
         })
     }
 }
@@ -1574,6 +1586,43 @@ mod tests {
     }
 
     #[test]
+    fn flush_times_out_when_writer_is_blocked() {
+        let root = temp_path("flush-writer-timeout");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.retained_log_policy.writer_shutdown_timeout = join_ms(10);
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let logger = Logger::new_typed(config).expect("logger");
+
+        logger.log(log_event(service_name())).expect("initial log");
+        assert!(
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::is_active
+            ),
+            "expected maintenance worker to enter the delayed test pass"
+        );
+
+        let started = Instant::now();
+        let error = logger
+            .flush_typed()
+            .expect_err("flush must not wait indefinitely for a blocked writer");
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "flush should return within the configured timeout"
+        );
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_WRITER_DEGRADED);
+        assert_eq!(logger.health().state, LoggingHealthState::DegradedDropping);
+
+        release_test_pass_delay(&signal);
+        let _stopped = logger.shutdown();
+    }
+
+    #[test]
     fn default_log_path_uses_service_scoped_layout() {
         let service = ServiceName::new("custom-service").expect("valid service");
         let log_root = PathBuf::from("observability-root");
@@ -1886,7 +1935,7 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_records_join_timeout_but_waits_for_join() {
+    fn shutdown_returns_after_join_timeout_without_waiting_for_blocked_writer() {
         let root = temp_path("shutdown-maintenance-timeout");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
@@ -1922,18 +1971,21 @@ mod tests {
             ),
             "expected shutdown to record the configured timeout while maintenance is gated"
         );
-        assert!(
-            !shutdown_finished.load(Ordering::SeqCst),
-            "shutdown must remain blocked until the maintenance gate is released"
+        wait_for(
+            || shutdown_finished.load(Ordering::SeqCst),
+            "shutdown must return after the configured timeout without joining the blocked writer",
         );
-        release_test_pass_delay(&signal);
         let stopped = shutdown
             .join()
-            .expect("shutdown thread should complete after the maintenance gate is released");
+            .expect("shutdown thread should complete after the configured timeout");
         let maintenance = stopped.health().maintenance.expect("maintenance health");
-        assert_eq!(maintenance.state, MaintenanceWorkerState::Stopped);
         assert!(maintenance.last_error.is_some());
         assert_eq!(stopped.health().writer_state, WriterState::Degraded);
+        assert!(
+            signal.is_active(),
+            "shutdown returned before the blocked writer left its maintenance pass"
+        );
+        release_test_pass_delay(&signal);
     }
 
     #[test]
@@ -2081,7 +2133,7 @@ mod tests {
         let root = temp_path("typed-admission");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         config.level = LevelFilter::Off;
         let logger = Logger::new_typed(config).expect("typed logger");
 
@@ -2108,7 +2160,7 @@ mod tests {
         let root = temp_path("typed-accepted-admission");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         let logger = Logger::new_typed(config).expect("typed logger");
         assert_eq!(
             logger
@@ -2351,7 +2403,7 @@ mod tests {
         let root = temp_path("writer-start-failure");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         config.writer_start_should_fail = true;
 
         let Err(error) = Logger::new_with_level_owner(config) else {
@@ -2371,7 +2423,7 @@ mod tests {
         let root = temp_path("typed-writer-start-failure");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         config.writer_start_should_fail = true;
 
         let Err(error) = Logger::new_with_level_owner_typed(config) else {
@@ -2392,7 +2444,7 @@ mod tests {
         let root = temp_path("level-owner");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         config.level = LevelFilter::Info;
         let (logger, mut owner) =
             Logger::new_with_level_owner(config).expect("construct logger with owner");
@@ -2457,7 +2509,7 @@ mod tests {
             let root = temp_path(name);
             let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
             config.enable_file_sink = false;
-            config.enable_console_sink = false;
+            config.enable_console_sink = true;
             let (logger, owner) =
                 Logger::new_with_level_owner(config).expect("construct logger with owner");
             let logger = Arc::new(logger);
@@ -2524,7 +2576,7 @@ mod tests {
         let root = temp_path("typed-admission-flush-concurrency");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         let logger = Arc::new(Logger::new_typed(config).expect("typed logger"));
         let barrier = Arc::new(Barrier::new(3));
         let (flush_tx, flush_rx) = mpsc::channel();
@@ -2572,10 +2624,10 @@ mod tests {
         let second_root = temp_path("level-isolation-second");
         let mut first_config = LoggerConfig::default_for(service_name(), first_root.path_buf());
         first_config.enable_file_sink = false;
-        first_config.enable_console_sink = false;
+        first_config.enable_console_sink = true;
         let mut second_config = LoggerConfig::default_for(service_name(), second_root.path_buf());
         second_config.enable_file_sink = false;
-        second_config.enable_console_sink = false;
+        second_config.enable_console_sink = true;
         let (first, mut first_owner) =
             Logger::new_with_level_owner(first_config).expect("first logger");
         let (second, _second_owner) =
@@ -2601,7 +2653,7 @@ mod tests {
         let root = temp_path("level-poison");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         let (logger, mut owner) =
             Logger::new_with_level_owner(config).expect("construct logger with owner");
         owner
@@ -2629,7 +2681,7 @@ mod tests {
         let root = temp_path("level-overflow");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         let (logger, mut owner) =
             Logger::new_with_level_owner(config).expect("construct logger with owner");
         logger
@@ -3242,6 +3294,7 @@ mod tests {
         let root = temp_path("query-unavailable");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
+        config.enable_console_sink = true;
         let logger = Logger::new(config).expect("logger");
 
         assert!(matches!(

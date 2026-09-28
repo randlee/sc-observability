@@ -333,6 +333,50 @@ fn register_filtered(
 See [`examples/custom-sink-example/`](./examples/custom-sink-example/) for a
 runnable public-only example.
 
+### Typed Custom Sink Registration
+
+For the canonical typed 2.0 sink contract, implement `TypedLogSink` and
+register it with `LoggerBuilder::register_typed_sink`. Its `write` method
+returns `LogSinkError`, preserving a structured diagnostic and source when a
+sink operation fails:
+
+```rust,no_run
+use std::sync::Arc;
+
+use sc_observability::{LoggerBuilder, SinkHealth};
+use sc_observability::typed::TypedLogSink;
+use sc_observability_types::{LogEvent, SinkHealthState, SinkName};
+use sc_observability_types::v2::LogSinkError;
+
+struct CustomSink;
+
+impl TypedLogSink for CustomSink {
+    fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+        Ok(())
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("custom").expect("static sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+fn register_typed_sink(builder: &mut LoggerBuilder) -> Result<(), Box<dyn std::error::Error>> {
+    builder.register_typed_sink(Arc::new(CustomSink))?;
+    Ok(())
+}
+```
+
+Typed registration accepts only healthy, unique sinks. Re-registering the same
+`Arc` reports `SinkRegistrationError::Duplicate`; a degraded sink reports
+`Invalid`, and an unavailable sink reports `Closed`. Registration does not add
+a writer, flush path, or level-owner authority. See the
+[typed sink registration guide](./docs/logging/d-3-typed-sink-registration.md)
+for the full contract.
+
 ## 7. Using `Logger::health()`
 
 `Logger::health()` is the consumer-facing status snapshot for:

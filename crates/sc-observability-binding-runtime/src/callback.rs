@@ -1,6 +1,6 @@
 //! Bounded callback reservations outlive native operation slots.
 use crate::{error, sync::lock};
-use sc_observability_dto::Failure;
+use sc_observability_types::v2::SubscriberError;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
@@ -55,16 +55,24 @@ impl Dispatcher {
         self: &Arc<Self>,
         observer: ObserverPermit,
         callback: Box<dyn FnOnce() + Send>,
-    ) -> Result<Arc<Job>, Failure> {
+    ) -> Result<Arc<Job>, SubscriberError> {
         let _queue = lock(&self.queue);
         if self.closed.load(Ordering::SeqCst) {
-            return Err(error::closed());
+            return Err(error::subscriber(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+                "callback registration is closed",
+            ));
         }
         self.reserved
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
                 (count < 128).then_some(count + 1)
             })
-            .map_err(|_| error::waiters_full())?;
+            .map_err(|_| {
+                error::subscriber(
+                    sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
+                    "callback registration capacity is occupied",
+                )
+            })?;
         Ok(Arc::new(Job {
             id: self.next.fetch_add(1, Ordering::SeqCst),
             dispatcher: Arc::downgrade(self),

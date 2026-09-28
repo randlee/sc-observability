@@ -322,6 +322,7 @@ The remaining consumer-facing logging-surface follow-ups stay in
 - `examples/custom-sink-example/` must compile against the public API only so
   it continuously proves that the shipped sink extension points are sufficient
   for downstream consumers
+  - The D.17 consumer migration completes the temporary exception tracked in [the D.3 plan](plans/phase-d/sprint-d-3-typed-sink-registration.md). [`validate_repo_boundaries.sh`](../scripts/ci/validate_repo_boundaries.sh) now requires the custom-sink consumer to compile successfully, satisfying `obs-d-17#2`.
 
 ### 3.2.4 Query And Follow Extension
 

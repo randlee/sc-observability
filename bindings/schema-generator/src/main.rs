@@ -123,6 +123,28 @@ fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
         &mut entries,
         "WireEnvelopeClientStatus",
     )?;
+    register::<CanonicalDiagnosticDto>(&mut generator, &mut entries, "CanonicalDiagnosticDto")?;
+    register::<CanonicalFailureDto>(&mut generator, &mut entries, "CanonicalFailureDto")?;
+    register::<TraceContextV2Dto>(&mut generator, &mut entries, "TraceContextV2Dto")?;
+    register::<SpanLinkDto>(&mut generator, &mut entries, "SpanLinkDto")?;
+    register::<SpanKindDto>(&mut generator, &mut entries, "SpanKindDto")?;
+    register::<AggregationTemporalityDto>(
+        &mut generator,
+        &mut entries,
+        "AggregationTemporalityDto",
+    )?;
+    register::<HistogramPointDto>(&mut generator, &mut entries, "HistogramPointDto")?;
+    register::<MetricValueDto>(&mut generator, &mut entries, "MetricValueDto")?;
+    register::<MetricRecordDto>(&mut generator, &mut entries, "MetricRecordDto")?;
+    register::<SpanStatusDto>(&mut generator, &mut entries, "SpanStatusDto")?;
+    register::<SpanRecordDto>(&mut generator, &mut entries, "SpanRecordDto")?;
+    register::<SpanEventDto>(&mut generator, &mut entries, "SpanEventDto")?;
+    register::<SpanSignalDto>(&mut generator, &mut entries, "SpanSignalDto")?;
+    register::<CanonicalWireEnvelope<AdmissionDto>>(
+        &mut generator,
+        &mut entries,
+        "CanonicalWireEnvelopeAdmissionDto",
+    )?;
     Ok((generator.take_definitions(true), entries))
 }
 fn input_strict(value: &mut Value, output: bool) {
@@ -281,7 +303,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         supported(node, &defs)?;
     }
     let registry = serde_json::to_value(error_codes::REGISTRY)?;
-    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":1,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":65536,"container_depth":32,"query_limit":1000,"timeout_ms":60000,"diagnostic_string_bytes":4096,"remediation_steps":32},"defaults":{"query_limit":100,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
+    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":1,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":constants::MAX_WIRE_PAYLOAD_BYTES,"container_depth":constants::MAX_CONTAINER_DEPTH,"query_limit":constants::MAX_QUERY_LIMIT,"timeout_ms":constants::MAX_TIMEOUT_MS,"diagnostic_string_bytes":constants::MAX_DIAGNOSTIC_FIELD_BYTES,"remediation_steps":constants::MAX_REMEDIATION_STEPS},"defaults":{"query_limit":constants::DEFAULT_QUERY_LIMIT,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
     write_or_check(Path::new(&output), &canonical(&schema)?, check)?;
     write_or_check(
         Path::new(&errors_output),

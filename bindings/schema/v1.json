@@ -46,6 +46,21 @@
         }
       ]
     },
+    "InputAggregationTemporalityDto": {
+      "description": "Staged aggregation interval interpretation.",
+      "oneOf": [
+        {
+          "const": "delta",
+          "description": "Nonempty collection interval.",
+          "type": "string"
+        },
+        {
+          "const": "cumulative",
+          "description": "Sequence-start interval.",
+          "type": "string"
+        }
+      ]
+    },
     "InputAvailabilityDto": {
       "description": "Version-one AvailabilityDto wire value.",
       "oneOf": [
@@ -117,6 +132,880 @@
         "level_revision"
       ],
       "type": "object"
+    },
+    "InputCanonicalDiagnosticDto": {
+      "description": "Additive canonical diagnostic projection; source objects remain native.",
+      "properties": {
+        "at": {
+          "description": "at.",
+          "type": "string"
+        },
+        "cause": {
+          "description": "Already-redacted human-readable cause.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "description": "code.",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": {
+            "$ref": "#/$defs/InputValueDto"
+          },
+          "default": {},
+          "description": "Bounded structured details using the lossless integer codec.",
+          "type": "object"
+        },
+        "docs": {
+          "description": "Documentation reference.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "message.",
+          "type": "string"
+        },
+        "remediation": {
+          "$ref": "#/$defs/InputRemediationDto",
+          "description": "remediation."
+        }
+      },
+      "required": [
+        "at",
+        "code",
+        "message",
+        "remediation"
+      ],
+      "type": "object"
+    },
+    "InputCanonicalFailureDto": {
+      "description": "Additive operational failures preserving canonical diagnostic metadata.",
+      "oneOf": [
+        {
+          "description": "Wire validation.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "field": {
+              "description": "Wire field.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "validation",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "field"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire queue full.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "queue_full",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire below baseline.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "configured": {
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Wire configured."
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "below_baseline",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            },
+            "requested": {
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Wire requested."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "requested",
+            "configured"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire unsupported level.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "available": {
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Wire available."
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "unsupported_level",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            },
+            "requested": {
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Wire requested."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "requested",
+            "available"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire permission denied.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "permission_denied",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire closed.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "closed",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire unavailable.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "unavailable",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire io.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "io",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire timeout.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "timeout",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "operation": {
+              "description": "Wire operation.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire cancelled.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "cancelled",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "operation": {
+              "description": "Wire operation.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire unsupported version.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "unsupported_version",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "received": {
+              "description": "Wire received.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "received"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire internal.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "internal",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire unknown remote.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/InputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "unknown_remote",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/InputRemediationDto",
+              "description": "remediation."
+            },
+            "remote_kind": {
+              "description": "Wire remote kind.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "remote_kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "InputCanonicalWireEnvelope": {
+      "description": "Staged envelope with unchanged schema/version/discriminants and richer diagnostics.",
+      "oneOf": [
+        {
+          "description": "Wire ok.",
+          "properties": {
+            "kind": {
+              "const": "ok",
+              "type": "string"
+            },
+            "schema_version": {
+              "description": "Active variant schema version.",
+              "format": "uint32",
+              "maximum": 1,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "value": {
+              "$ref": "#/$defs/InputAdmissionDto",
+              "description": "Active variant value."
+            }
+          },
+          "required": [
+            "kind",
+            "schema_version",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire error.",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/InputCanonicalFailureDto",
+              "description": "Active variant error."
+            },
+            "kind": {
+              "const": "error",
+              "type": "string"
+            },
+            "schema_version": {
+              "description": "Active variant schema version.",
+              "format": "uint32",
+              "maximum": 1,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "schema_version",
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "InputChangeDiagnosticDto": {
       "description": "Version-one ChangeDiagnosticDto wire value.",
@@ -1073,6 +1962,43 @@
       ],
       "type": "object"
     },
+    "InputHistogramPointDto": {
+      "additionalProperties": false,
+      "description": "Explicit distribution; checked conversion validates cross-field invariants.",
+      "properties": {
+        "bucket_counts": {
+          "description": "One more count than bounds; canonical unsigned decimal strings.",
+          "items": {
+            "$ref": "#/$defs/InputDecimalDto"
+          },
+          "type": "array"
+        },
+        "count": {
+          "$ref": "#/$defs/InputDecimalDto",
+          "description": "Checked total sample count as a canonical unsigned decimal string."
+        },
+        "explicit_bounds": {
+          "description": "Finite, strictly increasing bounds.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "sum": {
+          "description": "Finite sample sum.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "explicit_bounds",
+        "bucket_counts",
+        "count",
+        "sum"
+      ],
+      "type": "object"
+    },
     "InputLevelChangeDto": {
       "description": "Version-one LevelChangeDto wire value.",
       "oneOf": [
@@ -1742,6 +2668,156 @@
       ],
       "type": "object"
     },
+    "InputMetricRecordDto": {
+      "additionalProperties": false,
+      "description": "Staged metric point with lossless numeric and temporal projection.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/InputValueDto"
+          },
+          "description": "Neutral attributes with tagged integer/text distinction.",
+          "type": "object"
+        },
+        "name": {
+          "description": "Validated metric name.",
+          "type": "string"
+        },
+        "service": {
+          "description": "Validated service name.",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "UTC point timestamp.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "Optional validated unit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/InputMetricValueDto",
+          "description": "Aggregated value."
+        }
+      },
+      "required": [
+        "timestamp",
+        "service",
+        "name",
+        "value",
+        "attributes"
+      ],
+      "type": "object"
+    },
+    "InputMetricValueDto": {
+      "description": "Discriminated aggregation, preserving its interval and all histogram data.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Instantaneous finite scalar.",
+          "properties": {
+            "data": {
+              "format": "double",
+              "type": "number"
+            },
+            "kind": {
+              "const": "gauge",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "data"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Finite aggregated sum.",
+          "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "monotonic": {
+                  "description": "Monotonic sequence indicator.",
+                  "type": "boolean"
+                },
+                "start_time": {
+                  "description": "UTC start of interval.",
+                  "type": "string"
+                },
+                "temporality": {
+                  "$ref": "#/$defs/InputAggregationTemporalityDto",
+                  "description": "Aggregation interpretation."
+                },
+                "value": {
+                  "description": "Sum value.",
+                  "format": "double",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "monotonic",
+                "temporality",
+                "start_time"
+              ],
+              "type": "object"
+            },
+            "kind": {
+              "const": "sum",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "data"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Full explicit histogram.",
+          "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "point": {
+                  "$ref": "#/$defs/InputHistogramPointDto",
+                  "description": "Validated distribution on checked conversion."
+                },
+                "start_time": {
+                  "description": "UTC start of interval.",
+                  "type": "string"
+                },
+                "temporality": {
+                  "$ref": "#/$defs/InputAggregationTemporalityDto",
+                  "description": "Aggregation interpretation."
+                }
+              },
+              "required": [
+                "point",
+                "temporality",
+                "start_time"
+              ],
+              "type": "object"
+            },
+            "kind": {
+              "const": "histogram",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "data"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "InputPathDto": {
       "description": "Version-one PathDto wire value.",
       "oneOf": [
@@ -2280,6 +3356,255 @@
       ],
       "type": "object"
     },
+    "InputSpanEventDto": {
+      "additionalProperties": false,
+      "description": "Span event without a lifecycle transition.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/InputValueDto"
+          },
+          "description": "Neutral attributes.",
+          "type": "object"
+        },
+        "diagnostic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputStoredDiagnosticDto"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional diagnostic."
+        },
+        "name": {
+          "description": "Event action.",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "UTC event timestamp.",
+          "type": "string"
+        },
+        "trace": {
+          "$ref": "#/$defs/InputTraceContextV2Dto",
+          "description": "W3C correlation."
+        }
+      },
+      "required": [
+        "timestamp",
+        "trace",
+        "name",
+        "attributes"
+      ],
+      "type": "object"
+    },
+    "InputSpanKindDto": {
+      "description": "Staged span role.",
+      "oneOf": [
+        {
+          "const": "internal",
+          "description": "Internal work.",
+          "type": "string"
+        },
+        {
+          "const": "server",
+          "description": "Incoming request.",
+          "type": "string"
+        },
+        {
+          "const": "client",
+          "description": "Outgoing request.",
+          "type": "string"
+        },
+        {
+          "const": "producer",
+          "description": "Message producer.",
+          "type": "string"
+        },
+        {
+          "const": "consumer",
+          "description": "Message consumer.",
+          "type": "string"
+        }
+      ]
+    },
+    "InputSpanLinkDto": {
+      "additionalProperties": false,
+      "description": "Independent link correlation without a duplicate nested trace context.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/InputValueDto"
+          },
+          "description": "Neutral attributes.",
+          "type": "object"
+        },
+        "flags": {
+          "description": "Linked flags.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "span_id": {
+          "description": "Linked span id.",
+          "type": "string"
+        },
+        "trace_id": {
+          "description": "Linked trace id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "flags",
+        "attributes"
+      ],
+      "type": "object"
+    },
+    "InputSpanRecordDto": {
+      "additionalProperties": false,
+      "description": "Raw span wire record; checked conversion replays the native typestate API.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/InputValueDto"
+          },
+          "description": "Neutral span attributes.",
+          "type": "object"
+        },
+        "diagnostic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputStoredDiagnosticDto"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional structured diagnostic."
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputDecimalDto"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present only for ended spans, represented as unsigned decimal milliseconds."
+        },
+        "kind": {
+          "$ref": "#/$defs/InputSpanKindDto",
+          "description": "Span role."
+        },
+        "links": {
+          "description": "Independent links.",
+          "items": {
+            "$ref": "#/$defs/InputSpanLinkDto"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Span action.",
+          "type": "string"
+        },
+        "service": {
+          "description": "Producing service.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/InputSpanStatusDto",
+          "description": "Outcome; active spans require Unset."
+        },
+        "timestamp": {
+          "description": "UTC start timestamp.",
+          "type": "string"
+        },
+        "trace": {
+          "$ref": "#/$defs/InputTraceContextV2Dto",
+          "description": "W3C correlation."
+        }
+      },
+      "required": [
+        "timestamp",
+        "service",
+        "name",
+        "trace",
+        "status",
+        "attributes",
+        "kind",
+        "links"
+      ],
+      "type": "object"
+    },
+    "InputSpanSignalDto": {
+      "description": "Native-compatible external state tag; never accepts an unknown state as success.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Active span; no duration.",
+          "properties": {
+            "Started": {
+              "$ref": "#/$defs/InputSpanRecordDto"
+            }
+          },
+          "required": [
+            "Started"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Point event.",
+          "properties": {
+            "Event": {
+              "$ref": "#/$defs/InputSpanEventDto"
+            }
+          },
+          "required": [
+            "Event"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Completed span with required duration.",
+          "properties": {
+            "Ended": {
+              "$ref": "#/$defs/InputSpanRecordDto"
+            }
+          },
+          "required": [
+            "Ended"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "InputSpanStatusDto": {
+      "description": "Completed or active span outcome, matching native spelling.",
+      "oneOf": [
+        {
+          "const": "Ok",
+          "description": "Successful completion.",
+          "type": "string"
+        },
+        {
+          "const": "Error",
+          "description": "Failed completion.",
+          "type": "string"
+        },
+        {
+          "const": "Unset",
+          "description": "No explicit outcome.",
+          "type": "string"
+        }
+      ]
+    },
     "InputStateTransitionDto": {
       "description": "Version-one StateTransitionDto wire record.",
       "properties": {
@@ -2509,6 +3834,40 @@
       "required": [
         "trace_id",
         "span_id"
+      ],
+      "type": "object"
+    },
+    "InputTraceContextV2Dto": {
+      "additionalProperties": false,
+      "description": "Staged trace correlation including the complete W3C flags byte.",
+      "properties": {
+        "flags": {
+          "description": "All trace flags, including reserved bits.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "parent_span_id": {
+          "description": "Optional parent span id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "span_id": {
+          "description": "Lowercase W3C span id.",
+          "type": "string"
+        },
+        "trace_id": {
+          "description": "Lowercase W3C trace id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "flags"
       ],
       "type": "object"
     },
@@ -3196,6 +4555,21 @@
         }
       ]
     },
+    "OutputAggregationTemporalityDto": {
+      "description": "Staged aggregation interval interpretation.",
+      "oneOf": [
+        {
+          "const": "delta",
+          "description": "Nonempty collection interval.",
+          "type": "string"
+        },
+        {
+          "const": "cumulative",
+          "description": "Sequence-start interval.",
+          "type": "string"
+        }
+      ]
+    },
     "OutputAvailabilityDto": {
       "description": "Version-one AvailabilityDto wire value.",
       "oneOf": [
@@ -3267,6 +4641,880 @@
         "level_revision"
       ],
       "type": "object"
+    },
+    "OutputCanonicalDiagnosticDto": {
+      "description": "Additive canonical diagnostic projection; source objects remain native.",
+      "properties": {
+        "at": {
+          "description": "at.",
+          "type": "string"
+        },
+        "cause": {
+          "description": "Already-redacted human-readable cause.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "description": "code.",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OutputValueDto"
+          },
+          "default": {},
+          "description": "Bounded structured details using the lossless integer codec.",
+          "type": "object"
+        },
+        "docs": {
+          "description": "Documentation reference.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "message.",
+          "type": "string"
+        },
+        "remediation": {
+          "$ref": "#/$defs/OutputRemediationDto",
+          "description": "remediation."
+        }
+      },
+      "required": [
+        "at",
+        "code",
+        "message",
+        "remediation"
+      ],
+      "type": "object"
+    },
+    "OutputCanonicalFailureDto": {
+      "description": "Additive operational failures preserving canonical diagnostic metadata.",
+      "oneOf": [
+        {
+          "description": "Wire validation.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "field": {
+              "description": "Wire field.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "validation",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "field"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire queue full.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "queue_full",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire below baseline.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "configured": {
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Wire configured."
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "below_baseline",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            },
+            "requested": {
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Wire requested."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "requested",
+            "configured"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire unsupported level.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "available": {
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Wire available."
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "unsupported_level",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            },
+            "requested": {
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Wire requested."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "requested",
+            "available"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire permission denied.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "permission_denied",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire closed.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "closed",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire unavailable.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "unavailable",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire io.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "io",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire timeout.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "timeout",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "operation": {
+              "description": "Wire operation.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire cancelled.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "cancelled",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "operation": {
+              "description": "Wire operation.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "operation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire unsupported version.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "unsupported_version",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "received": {
+              "description": "Wire received.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "received"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire internal.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "internal",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire unknown remote.",
+          "properties": {
+            "at": {
+              "description": "at.",
+              "type": "string"
+            },
+            "cause": {
+              "description": "Already-redacted human-readable cause.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "code": {
+              "description": "code.",
+              "type": "string"
+            },
+            "details": {
+              "additionalProperties": {
+                "$ref": "#/$defs/OutputValueDto"
+              },
+              "default": {},
+              "description": "Bounded structured details using the lossless integer codec.",
+              "type": "object"
+            },
+            "docs": {
+              "description": "Documentation reference.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "unknown_remote",
+              "type": "string"
+            },
+            "message": {
+              "description": "message.",
+              "type": "string"
+            },
+            "remediation": {
+              "$ref": "#/$defs/OutputRemediationDto",
+              "description": "remediation."
+            },
+            "remote_kind": {
+              "description": "Wire remote kind.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "at",
+            "code",
+            "message",
+            "remediation",
+            "remote_kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OutputCanonicalWireEnvelope": {
+      "description": "Staged envelope with unchanged schema/version/discriminants and richer diagnostics.",
+      "oneOf": [
+        {
+          "description": "Wire ok.",
+          "properties": {
+            "kind": {
+              "const": "ok",
+              "type": "string"
+            },
+            "schema_version": {
+              "description": "Active variant schema version.",
+              "format": "uint32",
+              "maximum": 1,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "value": {
+              "$ref": "#/$defs/OutputAdmissionDto",
+              "description": "Active variant value."
+            }
+          },
+          "required": [
+            "kind",
+            "schema_version",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Wire error.",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/OutputCanonicalFailureDto",
+              "description": "Active variant error."
+            },
+            "kind": {
+              "const": "error",
+              "type": "string"
+            },
+            "schema_version": {
+              "description": "Active variant schema version.",
+              "format": "uint32",
+              "maximum": 1,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "schema_version",
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "OutputChangeDiagnosticDto": {
       "description": "Version-one ChangeDiagnosticDto wire value.",
@@ -4225,6 +6473,43 @@
       ],
       "type": "object"
     },
+    "OutputHistogramPointDto": {
+      "additionalProperties": false,
+      "description": "Explicit distribution; checked conversion validates cross-field invariants.",
+      "properties": {
+        "bucket_counts": {
+          "description": "One more count than bounds; canonical unsigned decimal strings.",
+          "items": {
+            "$ref": "#/$defs/OutputDecimalDto"
+          },
+          "type": "array"
+        },
+        "count": {
+          "$ref": "#/$defs/OutputDecimalDto",
+          "description": "Checked total sample count as a canonical unsigned decimal string."
+        },
+        "explicit_bounds": {
+          "description": "Finite, strictly increasing bounds.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
+        "sum": {
+          "description": "Finite sample sum.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "explicit_bounds",
+        "bucket_counts",
+        "count",
+        "sum"
+      ],
+      "type": "object"
+    },
     "OutputLevelChangeDto": {
       "description": "Version-one LevelChangeDto wire value.",
       "oneOf": [
@@ -4918,6 +7203,157 @@
       ],
       "type": "object"
     },
+    "OutputMetricRecordDto": {
+      "additionalProperties": false,
+      "description": "Staged metric point with lossless numeric and temporal projection.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OutputValueDto"
+          },
+          "description": "Neutral attributes with tagged integer/text distinction.",
+          "type": "object"
+        },
+        "name": {
+          "description": "Validated metric name.",
+          "type": "string"
+        },
+        "service": {
+          "description": "Validated service name.",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "UTC point timestamp.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "Optional validated unit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/OutputMetricValueDto",
+          "description": "Aggregated value."
+        }
+      },
+      "required": [
+        "timestamp",
+        "service",
+        "name",
+        "value",
+        "unit",
+        "attributes"
+      ],
+      "type": "object"
+    },
+    "OutputMetricValueDto": {
+      "description": "Discriminated aggregation, preserving its interval and all histogram data.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Instantaneous finite scalar.",
+          "properties": {
+            "data": {
+              "format": "double",
+              "type": "number"
+            },
+            "kind": {
+              "const": "gauge",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "data"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Finite aggregated sum.",
+          "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "monotonic": {
+                  "description": "Monotonic sequence indicator.",
+                  "type": "boolean"
+                },
+                "start_time": {
+                  "description": "UTC start of interval.",
+                  "type": "string"
+                },
+                "temporality": {
+                  "$ref": "#/$defs/OutputAggregationTemporalityDto",
+                  "description": "Aggregation interpretation."
+                },
+                "value": {
+                  "description": "Sum value.",
+                  "format": "double",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "value",
+                "monotonic",
+                "temporality",
+                "start_time"
+              ],
+              "type": "object"
+            },
+            "kind": {
+              "const": "sum",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "data"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Full explicit histogram.",
+          "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "point": {
+                  "$ref": "#/$defs/OutputHistogramPointDto",
+                  "description": "Validated distribution on checked conversion."
+                },
+                "start_time": {
+                  "description": "UTC start of interval.",
+                  "type": "string"
+                },
+                "temporality": {
+                  "$ref": "#/$defs/OutputAggregationTemporalityDto",
+                  "description": "Aggregation interpretation."
+                }
+              },
+              "required": [
+                "point",
+                "temporality",
+                "start_time"
+              ],
+              "type": "object"
+            },
+            "kind": {
+              "const": "histogram",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "data"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "OutputPathDto": {
       "description": "Version-one PathDto wire value.",
       "oneOf": [
@@ -5462,6 +7898,258 @@
       ],
       "type": "object"
     },
+    "OutputSpanEventDto": {
+      "additionalProperties": false,
+      "description": "Span event without a lifecycle transition.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OutputValueDto"
+          },
+          "description": "Neutral attributes.",
+          "type": "object"
+        },
+        "diagnostic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputStoredDiagnosticDto"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional diagnostic."
+        },
+        "name": {
+          "description": "Event action.",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "UTC event timestamp.",
+          "type": "string"
+        },
+        "trace": {
+          "$ref": "#/$defs/OutputTraceContextV2Dto",
+          "description": "W3C correlation."
+        }
+      },
+      "required": [
+        "timestamp",
+        "trace",
+        "name",
+        "attributes",
+        "diagnostic"
+      ],
+      "type": "object"
+    },
+    "OutputSpanKindDto": {
+      "description": "Staged span role.",
+      "oneOf": [
+        {
+          "const": "internal",
+          "description": "Internal work.",
+          "type": "string"
+        },
+        {
+          "const": "server",
+          "description": "Incoming request.",
+          "type": "string"
+        },
+        {
+          "const": "client",
+          "description": "Outgoing request.",
+          "type": "string"
+        },
+        {
+          "const": "producer",
+          "description": "Message producer.",
+          "type": "string"
+        },
+        {
+          "const": "consumer",
+          "description": "Message consumer.",
+          "type": "string"
+        }
+      ]
+    },
+    "OutputSpanLinkDto": {
+      "additionalProperties": false,
+      "description": "Independent link correlation without a duplicate nested trace context.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OutputValueDto"
+          },
+          "description": "Neutral attributes.",
+          "type": "object"
+        },
+        "flags": {
+          "description": "Linked flags.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "span_id": {
+          "description": "Linked span id.",
+          "type": "string"
+        },
+        "trace_id": {
+          "description": "Linked trace id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "flags",
+        "attributes"
+      ],
+      "type": "object"
+    },
+    "OutputSpanRecordDto": {
+      "additionalProperties": false,
+      "description": "Raw span wire record; checked conversion replays the native typestate API.",
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/OutputValueDto"
+          },
+          "description": "Neutral span attributes.",
+          "type": "object"
+        },
+        "diagnostic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputStoredDiagnosticDto"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional structured diagnostic."
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputDecimalDto"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present only for ended spans, represented as unsigned decimal milliseconds."
+        },
+        "kind": {
+          "$ref": "#/$defs/OutputSpanKindDto",
+          "description": "Span role."
+        },
+        "links": {
+          "description": "Independent links.",
+          "items": {
+            "$ref": "#/$defs/OutputSpanLinkDto"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Span action.",
+          "type": "string"
+        },
+        "service": {
+          "description": "Producing service.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/OutputSpanStatusDto",
+          "description": "Outcome; active spans require Unset."
+        },
+        "timestamp": {
+          "description": "UTC start timestamp.",
+          "type": "string"
+        },
+        "trace": {
+          "$ref": "#/$defs/OutputTraceContextV2Dto",
+          "description": "W3C correlation."
+        }
+      },
+      "required": [
+        "timestamp",
+        "service",
+        "name",
+        "trace",
+        "status",
+        "diagnostic",
+        "attributes",
+        "duration_ms",
+        "kind",
+        "links"
+      ],
+      "type": "object"
+    },
+    "OutputSpanSignalDto": {
+      "description": "Native-compatible external state tag; never accepts an unknown state as success.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Active span; no duration.",
+          "properties": {
+            "Started": {
+              "$ref": "#/$defs/OutputSpanRecordDto"
+            }
+          },
+          "required": [
+            "Started"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Point event.",
+          "properties": {
+            "Event": {
+              "$ref": "#/$defs/OutputSpanEventDto"
+            }
+          },
+          "required": [
+            "Event"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Completed span with required duration.",
+          "properties": {
+            "Ended": {
+              "$ref": "#/$defs/OutputSpanRecordDto"
+            }
+          },
+          "required": [
+            "Ended"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OutputSpanStatusDto": {
+      "description": "Completed or active span outcome, matching native spelling.",
+      "oneOf": [
+        {
+          "const": "Ok",
+          "description": "Successful completion.",
+          "type": "string"
+        },
+        {
+          "const": "Error",
+          "description": "Failed completion.",
+          "type": "string"
+        },
+        {
+          "const": "Unset",
+          "description": "No explicit outcome.",
+          "type": "string"
+        }
+      ]
+    },
     "OutputStateTransitionDto": {
       "description": "Version-one StateTransitionDto wire record.",
       "properties": {
@@ -5703,6 +8391,41 @@
         "trace_id",
         "span_id",
         "parent_span_id"
+      ],
+      "type": "object"
+    },
+    "OutputTraceContextV2Dto": {
+      "additionalProperties": false,
+      "description": "Staged trace correlation including the complete W3C flags byte.",
+      "properties": {
+        "flags": {
+          "description": "All trace flags, including reserved bits.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "parent_span_id": {
+          "description": "Optional parent span id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "span_id": {
+          "description": "Lowercase W3C span id.",
+          "type": "string"
+        },
+        "trace_id": {
+          "description": "Lowercase W3C trace id.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "flags"
       ],
       "type": "object"
     },
@@ -6403,11 +9126,23 @@
     "InputAdmissionOperationDto": {
       "$ref": "#/$defs/InputAdmissionOperationDto"
     },
+    "InputAggregationTemporalityDto": {
+      "$ref": "#/$defs/InputAggregationTemporalityDto"
+    },
     "InputAvailabilityDto": {
       "$ref": "#/$defs/InputAvailabilityDto"
     },
     "InputBridgeHealthDto": {
       "$ref": "#/$defs/InputBridgeHealthDto"
+    },
+    "InputCanonicalDiagnosticDto": {
+      "$ref": "#/$defs/InputCanonicalDiagnosticDto"
+    },
+    "InputCanonicalFailureDto": {
+      "$ref": "#/$defs/InputCanonicalFailureDto"
+    },
+    "InputCanonicalWireEnvelopeAdmissionDto": {
+      "$ref": "#/$defs/InputCanonicalWireEnvelope"
     },
     "InputChangeDiagnosticDto": {
       "$ref": "#/$defs/InputChangeDiagnosticDto"
@@ -6453,6 +9188,9 @@
     },
     "InputHealthRequest": {
       "$ref": "#/$defs/InputHealthRequest"
+    },
+    "InputHistogramPointDto": {
+      "$ref": "#/$defs/InputHistogramPointDto"
     },
     "InputLevelChangeDto": {
       "$ref": "#/$defs/InputLevelChangeDto"
@@ -6502,6 +9240,12 @@
     "InputMaintenanceHealthDto": {
       "$ref": "#/$defs/InputMaintenanceHealthDto"
     },
+    "InputMetricRecordDto": {
+      "$ref": "#/$defs/InputMetricRecordDto"
+    },
+    "InputMetricValueDto": {
+      "$ref": "#/$defs/InputMetricValueDto"
+    },
     "InputOperationDiagnosticDto": {
       "$ref": "#/$defs/InputDiagnostic"
     },
@@ -6550,6 +9294,24 @@
     "InputSinkHealthDto": {
       "$ref": "#/$defs/InputSinkHealthDto"
     },
+    "InputSpanEventDto": {
+      "$ref": "#/$defs/InputSpanEventDto"
+    },
+    "InputSpanKindDto": {
+      "$ref": "#/$defs/InputSpanKindDto"
+    },
+    "InputSpanLinkDto": {
+      "$ref": "#/$defs/InputSpanLinkDto"
+    },
+    "InputSpanRecordDto": {
+      "$ref": "#/$defs/InputSpanRecordDto"
+    },
+    "InputSpanSignalDto": {
+      "$ref": "#/$defs/InputSpanSignalDto"
+    },
+    "InputSpanStatusDto": {
+      "$ref": "#/$defs/InputSpanStatusDto"
+    },
     "InputStateTransitionDto": {
       "$ref": "#/$defs/InputStateTransitionDto"
     },
@@ -6561,6 +9323,9 @@
     },
     "InputTraceContextDto": {
       "$ref": "#/$defs/InputTraceContextDto"
+    },
+    "InputTraceContextV2Dto": {
+      "$ref": "#/$defs/InputTraceContextV2Dto"
     },
     "InputTryLogRequest": {
       "$ref": "#/$defs/InputTryLogRequest"
@@ -6601,11 +9366,23 @@
     "OutputAdmissionOperationDto": {
       "$ref": "#/$defs/OutputAdmissionOperationDto"
     },
+    "OutputAggregationTemporalityDto": {
+      "$ref": "#/$defs/OutputAggregationTemporalityDto"
+    },
     "OutputAvailabilityDto": {
       "$ref": "#/$defs/OutputAvailabilityDto"
     },
     "OutputBridgeHealthDto": {
       "$ref": "#/$defs/OutputBridgeHealthDto"
+    },
+    "OutputCanonicalDiagnosticDto": {
+      "$ref": "#/$defs/OutputCanonicalDiagnosticDto"
+    },
+    "OutputCanonicalFailureDto": {
+      "$ref": "#/$defs/OutputCanonicalFailureDto"
+    },
+    "OutputCanonicalWireEnvelopeAdmissionDto": {
+      "$ref": "#/$defs/OutputCanonicalWireEnvelope"
     },
     "OutputChangeDiagnosticDto": {
       "$ref": "#/$defs/OutputChangeDiagnosticDto"
@@ -6651,6 +9428,9 @@
     },
     "OutputHealthRequest": {
       "$ref": "#/$defs/OutputHealthRequest"
+    },
+    "OutputHistogramPointDto": {
+      "$ref": "#/$defs/OutputHistogramPointDto"
     },
     "OutputLevelChangeDto": {
       "$ref": "#/$defs/OutputLevelChangeDto"
@@ -6700,6 +9480,12 @@
     "OutputMaintenanceHealthDto": {
       "$ref": "#/$defs/OutputMaintenanceHealthDto"
     },
+    "OutputMetricRecordDto": {
+      "$ref": "#/$defs/OutputMetricRecordDto"
+    },
+    "OutputMetricValueDto": {
+      "$ref": "#/$defs/OutputMetricValueDto"
+    },
     "OutputOperationDiagnosticDto": {
       "$ref": "#/$defs/OutputDiagnostic"
     },
@@ -6748,6 +9534,24 @@
     "OutputSinkHealthDto": {
       "$ref": "#/$defs/OutputSinkHealthDto"
     },
+    "OutputSpanEventDto": {
+      "$ref": "#/$defs/OutputSpanEventDto"
+    },
+    "OutputSpanKindDto": {
+      "$ref": "#/$defs/OutputSpanKindDto"
+    },
+    "OutputSpanLinkDto": {
+      "$ref": "#/$defs/OutputSpanLinkDto"
+    },
+    "OutputSpanRecordDto": {
+      "$ref": "#/$defs/OutputSpanRecordDto"
+    },
+    "OutputSpanSignalDto": {
+      "$ref": "#/$defs/OutputSpanSignalDto"
+    },
+    "OutputSpanStatusDto": {
+      "$ref": "#/$defs/OutputSpanStatusDto"
+    },
     "OutputStateTransitionDto": {
       "$ref": "#/$defs/OutputStateTransitionDto"
     },
@@ -6759,6 +9563,9 @@
     },
     "OutputTraceContextDto": {
       "$ref": "#/$defs/OutputTraceContextDto"
+    },
+    "OutputTraceContextV2Dto": {
+      "$ref": "#/$defs/OutputTraceContextV2Dto"
     },
     "OutputTryLogRequest": {
       "$ref": "#/$defs/OutputTryLogRequest"

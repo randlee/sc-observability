@@ -163,7 +163,7 @@ impl WriterRuntime {
                 ),
             )
         })?;
-        match rx.recv() {
+        match rx.recv_timeout(self.join_timeout) {
             Ok(Ok(())) => Ok(()),
             Ok(Err(summary)) => Err(FlushFailure::logger_flush(
                 "writer flush failed",
@@ -176,7 +176,21 @@ impl WriterRuntime {
                 ),
             )
             .cause(summary.message.clone())),
-            Err(_) => Err(FlushFailure::writer_degraded(
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(FlushFailure::writer_degraded(
+                format!(
+                    "writer thread did not complete flush within {}ms",
+                    self.join_timeout.as_millis()
+                ),
+                Remediation::recoverable(
+                    "inspect logger writer-thread health",
+                    [
+                        "inspect logger.health().writer_state",
+                        "inspect logger.health().last_writer_error",
+                        "retry the flush after the writer recovers",
+                    ],
+                ),
+            )),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(FlushFailure::writer_degraded(
                 "writer thread disconnected during flush",
                 Remediation::recoverable(
                     "inspect logger writer-thread health",
@@ -241,15 +255,11 @@ impl WriterRuntime {
             }
         }
 
-        if self.join_handle.join().is_err() {
+        if !timed_out && self.join_handle.join().is_err() {
             self.writer_tracker
                 .record_writer_failure(&ErrorContext::new(
                     error_codes::LOGGER_WRITER_DEGRADED,
-                    if timed_out {
-                        "writer thread panicked after exceeding the shutdown timeout"
-                    } else {
-                        "writer thread panicked during shutdown"
-                    },
+                    "writer thread panicked during shutdown",
                     Remediation::recoverable(
                         "restart the logger runtime",
                         [
