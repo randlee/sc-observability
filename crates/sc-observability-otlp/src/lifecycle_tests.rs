@@ -499,7 +499,7 @@ fn overlapping_shutdown_preserves_flush_failure_for_all_waiters() {
         }
         assert!(matches!(
             poll_once(&mut core.shutdown_async()),
-            Poll::Ready(Ok(()))
+            Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
         ));
         assert_eq!(flushes.load(Ordering::Acquire), 1);
         assert_eq!(shutdowns.load(Ordering::Acquire), 1);
@@ -722,13 +722,26 @@ fn failed_shutdown_is_idempotent_after_terminal_completion() {
     let Poll::Ready(result) = poll_once(&mut first) else {
         panic!("shutdown failure remained pending")
     };
+    let first_error = result.expect_err("shutdown must fail");
+    let first_diagnostic = first_error.diagnostic();
     assert_eq!(
-        result.expect_err("shutdown must fail").diagnostic().code,
+        first_diagnostic.code,
         crate::error_codes::OTLP_RUNTIME_TERMINATED
     );
 
-    let mut second = core.shutdown_async();
-    assert!(matches!(poll_once(&mut second), Poll::Ready(Ok(()))));
+    for _ in 0..2 {
+        let mut repeated = core.shutdown_async();
+        let Poll::Ready(Err(error)) = poll_once(&mut repeated) else {
+            panic!("repeated shutdown must replay the terminal failure")
+        };
+        let diagnostic = error.diagnostic();
+        assert_eq!(diagnostic.code, first_diagnostic.code);
+        assert_eq!(diagnostic.message, first_diagnostic.message);
+        assert_eq!(diagnostic.cause, first_diagnostic.cause);
+        assert_eq!(diagnostic.remediation, first_diagnostic.remediation);
+        assert_eq!(diagnostic.docs, first_diagnostic.docs);
+        assert_eq!(diagnostic.details, first_diagnostic.details);
+    }
     assert_eq!(shutdowns.load(Ordering::Acquire), 1);
 }
 

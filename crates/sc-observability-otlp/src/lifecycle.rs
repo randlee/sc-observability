@@ -306,13 +306,15 @@ impl LifecycleCore {
     /// Atomically closes admission and starts or joins the one shutdown.
     pub(crate) fn shutdown_async(&self) -> LifecycleWaiter {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
+        // A terminal operation retains its result, including failure. Rejoining
+        // must not replace that result with synthetic success after shutdown.
+        if let Some(operation) = state.shutdown.as_ref() {
+            return LifecycleWaiter::new(Arc::clone(operation));
+        }
         if state.phase == LifecycleState::Shutdown {
             let operation = Arc::new(Operation::completed(Arc::clone(&self.inner), Ok(())));
             state.shutdown = Some(Arc::clone(&operation));
             return LifecycleWaiter::new(operation);
-        }
-        if let Some(operation) = state.shutdown.as_ref() {
-            return LifecycleWaiter::new(Arc::clone(operation));
         }
         state.phase = LifecycleState::Closing;
         let cutoff = state.next_sequence;
