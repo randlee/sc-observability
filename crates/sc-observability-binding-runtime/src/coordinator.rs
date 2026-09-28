@@ -204,8 +204,7 @@ impl Coordinator {
             Backend::Core { logger, stamp, .. } => {
                 let mut stamp = stamp.clone();
                 stamp.timestamp = native::Timestamp::now_utc();
-                let event = conversion::event(event, stamp, origin)
-                    .map_err(|error| conversion::canonical(&error, conversion::Kind::Validation))?;
+                let event = conversion::event(event, stamp, origin)?;
                 let logger = logger.load_full().ok_or_else(error::closed)?;
                 logger
                     .try_log_with_outcome_typed(event)
@@ -222,10 +221,7 @@ impl Coordinator {
                     timestamp: native::Timestamp::now_utc(),
                     identity: native::ProcessIdentity::default(),
                 };
-                let event =
-                    conversion::bridge_event(conversion::event(event, stamp, origin).map_err(
-                        |error| conversion::canonical(&error, conversion::Kind::Validation),
-                    )?);
+                let event = conversion::bridge_event(conversion::event(event, stamp, origin)?);
                 control
                     .try_log(event)
                     .map(conversion::admission)

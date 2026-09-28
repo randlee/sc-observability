@@ -7,17 +7,6 @@ use sc_observability_dto as dto;
 use sc_observability_log as bridge;
 use sc_observability_types as native;
 
-fn remediation(value: &dto::RemediationDto) -> native::Remediation {
-    match value {
-        dto::RemediationDto::Recoverable { steps } => native::Remediation::Recoverable {
-            steps: native::RecoverableSteps::all(steps.clone()),
-        },
-        dto::RemediationDto::NotRecoverable { justification } => {
-            native::Remediation::not_recoverable(justification.clone())
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub(crate) enum Kind {
     Validation,
@@ -225,15 +214,8 @@ pub(crate) fn event(
     value: dto::LogEventDto,
     stamp: dto::EventStamp,
     origin: ProducerOrigin,
-) -> Result<native::LogEvent, native::v2::EventError> {
-    let mut event = dto::to_core_event(value, stamp).map_err(|error| {
-        let diagnostic = error.diagnostic();
-        crate::error::event_validation(Box::new(native::ErrorContext::new(
-            native::ErrorCode::new_owned(diagnostic.code.clone()),
-            diagnostic.message.clone(),
-            remediation(&diagnostic.remediation),
-        )))
-    })?;
+) -> Result<native::LogEvent, Failure> {
+    let mut event = dto::to_core_event(value, stamp)?;
     let (language, channel) = match origin {
         ProducerOrigin::TauriFrontend => ("typescript", "tauri"),
         ProducerOrigin::Python => ("python", "pyo3"),

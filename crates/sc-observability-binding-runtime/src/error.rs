@@ -54,10 +54,6 @@ fn context(
     Box::new(ErrorContext::new(code, message, remediation))
 }
 
-pub(crate) fn event_validation(context: Box<ErrorContext>) -> native::v2::EventError {
-    native::v2::EventError::Validation { context }
-}
-
 pub(crate) fn init_configuration_code(
     code: ErrorCode,
     message: impl Into<String>,

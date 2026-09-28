@@ -832,24 +832,31 @@ fn d15_conversion_fixture() {
         timestamp: native::Timestamp::now_utc(),
         identity: native::ProcessIdentity::default(),
     };
-    let mut invalid = event();
-    invalid.schema_version = 2;
-    let error = crate::conversion::event(invalid, stamp, ProducerOrigin::RustHost)
-        .expect_err("unsupported schema must take the production conversion error path");
-    assert_canonical_context(
-        &error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
-        0,
+    let mut invalid_target = event();
+    invalid_target.target = "invalid target".into();
+    let mut invalid_action = event();
+    invalid_action.action = "invalid action".into();
+    let mut invalid_fields = event();
+    invalid_fields.fields.insert(
+        "sc_observability.binding.language".into(),
+        dto::ValueDto::String {
+            value: "forged".into(),
+        },
     );
-    assert_failure(
-        Err::<(), _>(crate::conversion::canonical(
-            &error,
-            crate::conversion::Kind::Validation,
-        )),
-        dto::error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
-        "validation",
-        None,
-    );
+
+    for (invalid, expected_field) in [
+        (invalid_target, "target"),
+        (invalid_action, "action"),
+        (invalid_fields, "fields.sc_observability.binding.language"),
+    ] {
+        let actual = crate::conversion::event(invalid, stamp.clone(), ProducerOrigin::RustHost)
+            .expect_err("runtime conversion preserves the DTO failure");
+        assert!(matches!(
+            actual,
+            Failure::Validation { diagnostic, field }
+                if field == expected_field && !diagnostic.at.is_empty()
+        ));
+    }
 }
 
 fn d15_coordinator_fixture() {
