@@ -190,6 +190,16 @@ fn envelope<T>(result: Result<T, Failure>) -> WireEnvelope<T> {
     }
 }
 
+#[cfg(feature = "tauri")]
+fn blocking_task_failure() -> Failure {
+    Failure::Internal {
+        diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+            sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+            "the blocking Tauri operation did not complete",
+        )),
+    }
+}
+
 fn inspect(value: &Value, depth: usize, limit: usize) -> Result<(), Failure> {
     match value {
         Value::Array(values) => {
@@ -600,12 +610,19 @@ use tauri::Manager;
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-fn sc_observability_try_log<R: tauri::Runtime>(
-    window: tauri::Window<R>,
+async fn sc_observability_try_log<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
     request: Value,
-    state: tauri::State<'_, ManagedAdapter>,
-) -> WireEnvelope<AdmissionDto> {
-    state.0.try_log(window.label(), request)
+) -> Result<WireEnvelope<AdmissionDto>, WireEnvelope<AdmissionDto>> {
+    // Admission calls can enter native code and are synchronous by contract;
+    // keep them off Tauri's async executor even though the command is async.
+    let adapter = app.state::<ManagedAdapter>().0.clone();
+    let label = window.label().to_owned();
+    let result = tauri::async_runtime::spawn_blocking(move || adapter.try_log(&label, request))
+        .await
+        .unwrap_or_else(|_| envelope(Err(blocking_task_failure())));
+    Ok(result)
 }
 
 #[cfg(feature = "tauri")]
@@ -623,12 +640,19 @@ async fn sc_observability_query<R: tauri::Runtime>(
 
 #[cfg(feature = "tauri")]
 #[tauri::command]
-fn sc_observability_health<R: tauri::Runtime>(
-    window: tauri::Window<R>,
+async fn sc_observability_health<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
     request: Value,
-    state: tauri::State<'_, ManagedAdapter>,
-) -> WireEnvelope<LogHealthDto> {
-    state.0.health(window.label(), request)
+) -> Result<WireEnvelope<LogHealthDto>, WireEnvelope<LogHealthDto>> {
+    // Native health may acquire backend locks; it belongs on the blocking
+    // pool, not on the async executor thread.
+    let adapter = app.state::<ManagedAdapter>().0.clone();
+    let label = window.label().to_owned();
+    let result = tauri::async_runtime::spawn_blocking(move || adapter.health(&label, request))
+        .await
+        .unwrap_or_else(|_| envelope(Err(blocking_task_failure())));
+    Ok(result)
 }
 
 #[cfg(feature = "tauri")]
@@ -955,7 +979,10 @@ mod tests {
             .manage(ManagedAdapter(
                 Adapter::new(Arc::new(IpcBackend), policy).unwrap(),
             ))
-            .invoke_handler(tauri::generate_handler![sc_observability_health])
+            .invoke_handler(tauri::generate_handler![
+                sc_observability_try_log,
+                sc_observability_health
+            ])
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
@@ -970,6 +997,36 @@ mod tests {
                 error: tauri::ipc::CallbackFn(1),
                 url,
                 body: serde_json::json!({"request": {"schema_version": 1}}).into(),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_owned(),
+            },
+        )
+        .unwrap();
+        let value = response.deserialize::<Value>().unwrap();
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["kind"], "error");
+
+        let response = tauri::test::get_ipc_response(
+            &window,
+            tauri::webview::InvokeRequest {
+                cmd: "sc_observability_try_log".into(),
+                callback: tauri::ipc::CallbackFn(2),
+                error: tauri::ipc::CallbackFn(3),
+                url: window.url().unwrap(),
+                body: serde_json::json!({
+                    "request": {
+                        "schema_version": 1,
+                        "event": {
+                            "schema_version": 1,
+                            "level": "info",
+                            "target": "app",
+                            "action": "test",
+                            "message": "test",
+                            "fields": {}
+                        }
+                    }
+                })
+                .into(),
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_owned(),
             },
