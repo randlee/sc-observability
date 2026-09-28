@@ -142,8 +142,10 @@ impl FlushError {
     /// Returns the native-owned wire failure classification.
     #[must_use]
     pub fn failure_classification(&self) -> FailureClassification {
-        self.export_cause()
-            .map_or(FailureClassification::Io, ExportError::failure_classification)
+        self.export_cause().map_or(
+            FailureClassification::Io,
+            ExportError::failure_classification,
+        )
     }
 }
 
@@ -166,9 +168,10 @@ impl ShutdownError {
     pub fn failure_classification(&self) -> FailureClassification {
         match self {
             Self::Timeout { .. } => FailureClassification::timeout("shutdown"),
-            Self::Drain { .. } => self
-                .export_cause()
-                .map_or(FailureClassification::Io, ExportError::failure_classification),
+            Self::Drain { .. } => self.export_cause().map_or(
+                FailureClassification::Io,
+                ExportError::failure_classification,
+            ),
         }
     }
 }
@@ -351,9 +354,7 @@ impl ExportError {
             Self::BlockingBackendInAsyncContext { .. } => {
                 FailureClassification::validation("runtime")
             }
-            Self::AsyncLifecycleRequired { .. } => {
-                FailureClassification::validation("lifecycle")
-            }
+            Self::AsyncLifecycleRequired { .. } => FailureClassification::validation("lifecycle"),
             Self::RuntimeTerminated { .. } | Self::WorkerTerminated { .. } => {
                 FailureClassification::Unavailable
             }

@@ -930,16 +930,20 @@ fn canonical_failure(
         },
         core::v2::FailureClassification::QueueFull => CanonicalFailureDto::QueueFull { diagnostic },
         core::v2::FailureClassification::Closed => CanonicalFailureDto::Closed { diagnostic },
-        core::v2::FailureClassification::Unavailable => CanonicalFailureDto::Unavailable { diagnostic },
+        core::v2::FailureClassification::Unavailable => {
+            CanonicalFailureDto::Unavailable { diagnostic }
+        }
         core::v2::FailureClassification::Io => CanonicalFailureDto::Io { diagnostic },
         core::v2::FailureClassification::Timeout { operation } => CanonicalFailureDto::Timeout {
             diagnostic,
             operation: operation.into(),
         },
-        core::v2::FailureClassification::Cancelled { operation } => CanonicalFailureDto::Cancelled {
-            diagnostic,
-            operation: operation.into(),
-        },
+        core::v2::FailureClassification::Cancelled { operation } => {
+            CanonicalFailureDto::Cancelled {
+                diagnostic,
+                operation: operation.into(),
+            }
+        }
         core::v2::FailureClassification::Internal => CanonicalFailureDto::Internal { diagnostic },
     }
 }
