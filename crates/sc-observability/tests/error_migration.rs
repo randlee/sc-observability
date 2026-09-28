@@ -1,82 +1,159 @@
 use std::error::Error;
-use std::fmt;
+use std::fs;
+use std::io::Write as _;
 
+use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
 use sc_observability::error_codes;
-use sc_observability::v2::{EventError, LogSinkError, ShutdownError};
-use sc_observability::{ErrorContext, Remediation};
-use sc_observability_types::DiagnosticInfo;
+use sc_observability::*;
+use sc_observability_types::{
+    DiagnosticInfo, QueryError, QueryHealthState,
+    error_codes::{SC_LOG_QUERY_DECODE, SC_LOG_QUERY_SHUTDOWN},
+};
+use serde_json::json;
 
-#[derive(Debug)]
-struct NativeCause(&'static str);
+fn service_name() -> ServiceName {
+    ServiceName::new("error-migration").expect("static service name is valid")
+}
 
-impl fmt::Display for NativeCause {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0)
+fn event() -> LogEvent {
+    LogEvent {
+        version: SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("published schema version is valid"),
+        timestamp: Timestamp::UNIX_EPOCH,
+        level: Level::Info,
+        service: service_name(),
+        target: TargetCategory::new("app.core").expect("static target is valid"),
+        action: ActionName::new("startup").expect("static action is valid"),
+        message: Some("boot complete".to_string()),
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: Some(OutcomeLabel::new("ok").expect("static outcome is valid")),
+        diagnostic: Some(Diagnostic {
+            timestamp: Timestamp::UNIX_EPOCH,
+            code: ErrorCode::new_static("SC_TEST"),
+            message: "integration".to_string(),
+            cause: None,
+            remediation: Remediation::recoverable("retry", ["inspect log output"]),
+            docs: None,
+            details: serde_json::Map::new(),
+        }),
+        state_transition: None,
+        fields: serde_json::Map::from_iter([("attempt".to_string(), json!(1))]),
     }
 }
 
-impl Error for NativeCause {}
-
-fn context(code: sc_observability::ErrorCode, message: &'static str) -> Box<ErrorContext> {
-    Box::new(
-        ErrorContext::new(
-            code,
-            message,
-            Remediation::recoverable("retry", ["inspect the diagnostic source"]),
-        )
-        .source(Box::new(NativeCause("native cause"))),
-    )
+fn logger(root: &tempfile::TempDir) -> Logger {
+    Logger::new_typed(LoggerConfig::default_for(
+        service_name(),
+        root.path().to_path_buf(),
+    ))
+    .expect("logger starts")
 }
 
-fn assert_diagnostic_and_source(error: &(impl DiagnosticInfo + Error), code: &str) {
-    let diagnostic = error.diagnostic();
-    assert_eq!(diagnostic.code.as_str(), code);
+#[test]
+#[expect(
+    deprecated,
+    reason = "the production compatibility facade maps invalid events to EventError"
+)]
+fn logger_emit_preserves_real_event_validation_diagnostic() {
+    let root = tempfile::tempdir().expect("temporary log root");
+    let logger = logger(&root);
+    let mut invalid_event = event();
+    invalid_event.version = SchemaVersion::new("v0").expect("test version parses");
+
+    let error = logger
+        .emit(invalid_event)
+        .expect_err("Logger::emit maps the production validation failure");
+
+    assert_eq!(error.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
     assert!(matches!(
-        diagnostic.remediation,
+        error.diagnostic().remediation,
         Remediation::Recoverable { .. }
     ));
+    assert!(
+        Error::source(&error).is_some(),
+        "EventError preserves the production validation context as its source"
+    );
 
-    let cause = Error::source(error)
-        .and_then(|source| source.downcast_ref::<NativeCause>())
-        .expect("canonical context preserves the native source type");
-    assert_eq!(cause.0, "native cause");
+    let _stopped = logger.shutdown();
 }
 
 #[test]
-fn event_variants_preserve_the_canonical_cause_mapping() {
-    let validation = EventError::Validation {
-        context: context(error_codes::LOGGER_INVALID_EVENT, "event validation failed"),
-    };
-    assert_diagnostic_and_source(&validation, "SC_OBSERVABILITY_LOGGER_INVALID_EVENT");
+fn logger_follow_shutdown_updates_real_query_health() {
+    let root = tempfile::tempdir().expect("temporary log root");
+    let logger = logger(&root);
+    let mut follow = logger.follow(LogQuery::default()).expect("follow session");
+    let stopped = logger.shutdown();
 
-    let routing = EventError::Routing {
-        context: context(error_codes::LOGGER_WRITER_DEGRADED, "writer routing failed"),
-    };
-    assert_diagnostic_and_source(&routing, "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED");
+    let shutdown = follow
+        .poll()
+        .expect_err("follow observes the real shutdown path");
+    assert!(matches!(shutdown, QueryError::Shutdown));
+    assert_eq!(shutdown.code(), SC_LOG_QUERY_SHUTDOWN);
+    assert!(matches!(
+        shutdown.diagnostic().remediation,
+        Remediation::Recoverable { .. }
+    ));
+    assert!(
+        Error::source(&shutdown).is_none(),
+        "the source-free shutdown contract must not manufacture a source"
+    );
+
+    let health = follow.health();
+    assert_eq!(health.state, QueryHealthState::Unavailable);
+    assert_eq!(
+        health.last_error.expect("shutdown health summary").code,
+        Some(SC_LOG_QUERY_SHUTDOWN)
+    );
+    assert_eq!(
+        stopped.health().query.expect("stopped query health").state,
+        QueryHealthState::Unavailable
+    );
 }
 
 #[test]
-fn shutdown_timeout_and_drain_remain_distinct_named_variants() {
-    let timeout = ShutdownError::Timeout {
-        context: context(
-            error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
-            "shutdown deadline exceeded",
-        ),
-    };
-    assert_diagnostic_and_source(&timeout, "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT");
+fn logger_query_decode_preserves_source_and_records_health_summary() {
+    let root = tempfile::tempdir().expect("temporary log root");
+    let logger = logger(&root);
+    logger.log_typed(event()).expect("admit event");
+    logger.flush_typed().expect("flush event");
 
-    let drain = ShutdownError::Drain {
-        context: context(error_codes::LOGGER_WRITER_DEGRADED, "shutdown drain failed"),
-    };
-    assert_diagnostic_and_source(&drain, "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED");
-    assert!(matches!(timeout, ShutdownError::Timeout { .. }));
-    assert!(matches!(drain, ShutdownError::Drain { .. }));
-}
+    let active_path = root
+        .path()
+        .join(DEFAULT_LOG_DIR_NAME)
+        .join(format!("error-migration{DEFAULT_LOG_FILE_SUFFIX}"));
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(active_path)
+        .expect("open active log");
+    writeln!(file, "{{not-json").expect("append malformed JSONL");
 
-#[test]
-fn sink_write_variant_preserves_remediation_and_source() {
-    let error = LogSinkError::Write {
-        context: context(error_codes::LOGGER_SINK_WRITE_FAILED, "sink write failed"),
+    let decode = logger
+        .query(&LogQuery::default())
+        .expect_err("malformed persisted data fails through Logger::query");
+    let QueryError::Decode(context) = decode else {
+        panic!("expected the production query decode variant");
     };
-    assert_diagnostic_and_source(&error, "SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED");
+    assert_eq!(context.diagnostic().code, SC_LOG_QUERY_DECODE);
+    assert!(matches!(
+        context.diagnostic().remediation,
+        Remediation::Recoverable { .. }
+    ));
+    Error::source(context.as_ref())
+        .and_then(|source| source.downcast_ref::<serde_json::Error>())
+        .expect("the real decode context preserves its serde_json source");
+
+    let health = logger.health().query.expect("query health");
+    assert_eq!(health.state, QueryHealthState::Degraded);
+    assert_eq!(
+        health.last_error.expect("decode health summary").code,
+        Some(SC_LOG_QUERY_DECODE),
+        "health records the stable code; DiagnosticSummary has no source or remediation fields"
+    );
+
+    let _stopped = logger.shutdown();
 }
