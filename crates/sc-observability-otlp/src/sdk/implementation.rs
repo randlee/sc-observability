@@ -138,7 +138,7 @@ struct SdkBackend {
 /// Terminal gRPC clients. They are intentionally below the D.6 core: by the
 /// time the core invokes their lifecycle methods, every admitted send has
 /// reached a typed terminal outcome, so there is no recursive flush path.
-struct SdkTerminal {
+pub(super) struct SdkTerminal {
     logs: Mutex<LogsServiceClient<Channel>>,
     traces: Mutex<TraceServiceClient<Channel>>,
     metrics: Mutex<MetricsServiceClient<Channel>>,
@@ -188,108 +188,57 @@ impl SdkTerminal {
         &self,
         resource_logs: Vec<proto_logs::ResourceLogs>,
     ) -> Result<(), ExportError> {
-        let mut client = self.logs.lock().await;
-        let started = Instant::now();
-        let mut attempt = 0;
-        let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
-        loop {
-            let result = client
-                .export(self.request(ExportLogsServiceRequest {
+        let client = self.logs.lock().await;
+        retry_export(
+            self.retry_deadline,
+            || {
+                let request = self.request(ExportLogsServiceRequest {
                     resource_logs: resource_logs.clone(),
-                }))
-                .await;
-            match result {
-                Ok(_) => return Ok(()),
-                Err(status) => match retry_action(
-                    status.code(),
-                    attempt,
-                    started.elapsed(),
-                    self.retry_deadline,
-                    delay,
-                ) {
-                    Some(wait) => {
-                        sleep(wait).await;
-                        attempt += 1;
-                        delay = delay
-                            .saturating_mul(2)
-                            .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
-                    }
-                    None => return Err(transport_error("OTLP log export failed")),
-                },
-            }
-        }
+                });
+                let mut client = client.clone();
+                async move { client.export(request).await.map(|_| ()) }
+            },
+            "OTLP log export failed",
+        )
+        .await
     }
 
     async fn export_spans(
         &self,
         resource_spans: Vec<proto_trace::ResourceSpans>,
     ) -> Result<(), ExportError> {
-        let mut client = self.traces.lock().await;
-        let started = Instant::now();
-        let mut attempt = 0;
-        let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
-        loop {
-            let result = client
-                .export(self.request(ExportTraceServiceRequest {
+        let client = self.traces.lock().await;
+        retry_export(
+            self.retry_deadline,
+            || {
+                let request = self.request(ExportTraceServiceRequest {
                     resource_spans: resource_spans.clone(),
-                }))
-                .await;
-            match result {
-                Ok(_) => return Ok(()),
-                Err(status) => match retry_action(
-                    status.code(),
-                    attempt,
-                    started.elapsed(),
-                    self.retry_deadline,
-                    delay,
-                ) {
-                    Some(wait) => {
-                        sleep(wait).await;
-                        attempt += 1;
-                        delay = delay
-                            .saturating_mul(2)
-                            .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
-                    }
-                    None => return Err(transport_error("OTLP trace export failed")),
-                },
-            }
-        }
+                });
+                let mut client = client.clone();
+                async move { client.export(request).await.map(|_| ()) }
+            },
+            "OTLP trace export failed",
+        )
+        .await
     }
 
     async fn export_metrics(
         &self,
         resource_metrics: Vec<proto_metrics::ResourceMetrics>,
     ) -> Result<(), ExportError> {
-        let mut client = self.metrics.lock().await;
-        let started = Instant::now();
-        let mut attempt = 0;
-        let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
-        loop {
-            let result = client
-                .export(self.request(ExportMetricsServiceRequest {
+        let client = self.metrics.lock().await;
+        retry_export(
+            self.retry_deadline,
+            || {
+                let request = self.request(ExportMetricsServiceRequest {
                     resource_metrics: resource_metrics.clone(),
-                }))
-                .await;
-            match result {
-                Ok(_) => return Ok(()),
-                Err(status) => match retry_action(
-                    status.code(),
-                    attempt,
-                    started.elapsed(),
-                    self.retry_deadline,
-                    delay,
-                ) {
-                    Some(wait) => {
-                        sleep(wait).await;
-                        attempt += 1;
-                        delay = delay
-                            .saturating_mul(2)
-                            .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
-                    }
-                    None => return Err(transport_error("OTLP metric export failed")),
-                },
-            }
-        }
+                });
+                let mut client = client.clone();
+                async move { client.export(request).await.map(|_| ()) }
+            },
+            "OTLP metric export failed",
+        )
+        .await
     }
 }
 
@@ -319,6 +268,37 @@ pub(super) fn retry_action(
     let remaining = deadline.saturating_sub(elapsed);
     let wait = delay.min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
     (!wait.is_zero() && wait < remaining).then_some(wait)
+}
+
+pub(super) async fn retry_export<F, Fut>(
+    deadline: Duration,
+    mut operation: F,
+    message: &'static str,
+) -> Result<(), ExportError>
+where
+    F: FnMut() -> Fut + Send,
+    Fut: Future<Output = Result<(), tonic::Status>> + Send,
+{
+    let started = Instant::now();
+    let mut attempt = 0;
+    let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
+    loop {
+        match operation().await {
+            Ok(()) => return Ok(()),
+            Err(status) => {
+                match retry_action(status.code(), attempt, started.elapsed(), deadline, delay) {
+                    Some(wait) => {
+                        sleep(wait).await;
+                        attempt += 1;
+                        delay = delay
+                            .saturating_mul(2)
+                            .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
+                    }
+                    None => return Err(transport_error(message)),
+                }
+            }
+        }
+    }
 }
 
 impl ExporterLifecycle for SdkTerminal {

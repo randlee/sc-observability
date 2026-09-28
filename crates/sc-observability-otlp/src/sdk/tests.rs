@@ -9,6 +9,8 @@ use crate::config::{
     validated_transport_bounds,
 };
 use crate::contracts::{ExportRecord, InstrumentationScope, LogRecord, Resource};
+use crate::lifecycle::{LifecycleCore, SignalKind};
+use crate::testing::RecordingLifecycle;
 use sc_observability_types::v2::{
     AttributeValue, Attributes, FiniteF64, MetricRecord, MetricValue, TraceFlags,
 };
@@ -16,6 +18,7 @@ use sc_observability_types::{
     ActionName, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion, ServiceName, SpanId,
     TargetCategory, Timestamp, TraceContext, TraceId,
 };
+use std::sync::Arc;
 use std::time::Duration;
 use tonic::Code;
 
@@ -81,6 +84,88 @@ fn sdk_retry_exhaustion_and_deadline_are_terminal() {
             Duration::from_millis(250),
         ),
         None
+    );
+}
+
+async fn run_retry_script(
+    statuses: &[Code],
+    deadline: Duration,
+) -> (usize, Option<String>, [u64; 3]) {
+    let statuses = statuses.to_vec();
+    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let attempts_for_retry = Arc::clone(&attempts);
+    let mut next = 0;
+    let mut config = OtelConfig::new(ExporterBackend::OpenTelemetrySdk, OtlpProtocol::Grpc);
+    config.enabled = true;
+    config.timeout_ms = Some(sc_observability_types::DurationMs::from(100));
+    config.lifecycle_shutdown_timeout_ms = Some(sc_observability_types::DurationMs::from(
+        u64::try_from(deadline.as_millis()).expect("test deadline fits u64"),
+    ));
+    let bounds = validated_transport_bounds(&config).expect("retry bounds");
+    let lifecycle_core =
+        LifecycleCore::from_backend(Arc::new(RecordingLifecycle::default()), &bounds)
+            .expect("retry lifecycle");
+    let admitted = lifecycle_core
+        .admit(SignalKind::Logs, (), 1_024)
+        .expect("retry admission");
+    let result = super::implementation::retry_export(
+        deadline,
+        move || {
+            let response_code = statuses.get(next).copied().unwrap_or(Code::Unavailable);
+            next += 1;
+            attempts_for_retry.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                if response_code == Code::Ok {
+                    Ok(())
+                } else {
+                    Err(tonic::Status::new(response_code, "scripted fixture"))
+                }
+            })
+        },
+        "scripted retry fixture",
+    );
+    let runtime = super::implementation::CallerRuntime::try_capture().expect("runtime");
+    let join = runtime.spawn_export(admitted, result);
+    join.await.expect("retry task");
+    let flush = lifecycle_core.flush_async().await;
+    let status_code = flush.err().map(|error| error.code().to_string());
+    (
+        attempts.load(std::sync::atomic::Ordering::SeqCst),
+        status_code,
+        lifecycle_core.health().dropped_by_signal,
+    )
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn sdk_transport_retry_loop_exercises_attempts_and_terminal_modes() {
+    assert_eq!(
+        run_retry_script(&[Code::Unavailable, Code::Ok], Duration::from_secs(30)).await,
+        (2, None, [0, 0, 0]),
+        "transient failure must be retried once before success"
+    );
+    assert_eq!(
+        run_retry_script(&[Code::Internal], Duration::from_secs(30)).await,
+        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        "permanent failure must not be retried"
+    );
+    assert_eq!(
+        run_retry_script(&[Code::Unavailable], Duration::from_millis(100)).await,
+        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        "retry deadline must prevent a second attempt"
+    );
+    assert_eq!(
+        run_retry_script(
+            &[
+                Code::Unavailable,
+                Code::Unavailable,
+                Code::Unavailable,
+                Code::Unavailable
+            ],
+            Duration::from_secs(30),
+        )
+        .await,
+        (4, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        "max retry budget must terminate after the initial attempt plus three retries"
     );
 }
 
