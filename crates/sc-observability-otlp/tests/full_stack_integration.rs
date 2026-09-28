@@ -14,8 +14,8 @@ use sc_observability_types::typed::{
     legacy_log_projector, legacy_metric_projector, legacy_span_projector,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, LogProjector,
-    MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
+    ActionName, Diagnostic, DiagnosticInfo, DurationMs, EntityId, ErrorCode, Level, LogEvent,
+    LogProjector, MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
     ObservationFilter, OutcomeLabel, ProcessIdentity, ProjectionError, Remediation, SchemaVersion,
     ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
     StateTransition, TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext,
@@ -339,4 +339,64 @@ fn enabled_configuration_rejects_unavailable_backend() {
         error.diagnostic().code,
         sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
     );
+}
+
+#[cfg(feature = "otlp-sdk")]
+#[test]
+fn enabled_sdk_telemetry_awaits_shared_lifecycle_and_closes_admission() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("caller runtime");
+    runtime.block_on(async {
+        let telemetry = Telemetry::new_typed(enabled_telemetry_config())
+            .expect("enabled SDK telemetry is constructed on its caller runtime");
+
+        assert!(telemetry.flush_typed().is_err());
+        assert!(telemetry.shutdown_typed().is_err());
+
+        telemetry
+            .flush_async_typed()
+            .await
+            .expect("empty shared SDK lifecycle barrier completes");
+        telemetry
+            .shutdown_async_typed()
+            .await
+            .expect("shared SDK lifecycle shutdown completes");
+
+        assert!(matches!(
+            telemetry.emit_log(&log_event(service_name(), "after-shutdown")),
+            Err(sc_observability_types::TelemetryError::Shutdown { .. })
+        ));
+    });
+}
+
+#[cfg(feature = "otlp-sdk")]
+#[test]
+fn admitted_sdk_export_failure_reaches_public_health_once() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("caller runtime");
+    runtime.block_on(async {
+        let mut config = enabled_telemetry_config();
+        config.transport.endpoint =
+            Some(OtlpEndpoint::new("http://127.0.0.1:1").expect("valid unavailable endpoint"));
+        config.transport.timeout_ms = Some(DurationMs::from(1));
+        let telemetry = Telemetry::new_typed(config).expect("SDK telemetry construction");
+
+        telemetry
+            .emit_log(&log_event(service_name(), "export failure"))
+            .expect("buffer log before lifecycle barrier");
+        assert!(telemetry.flush_async_typed().await.is_err());
+
+        let health = telemetry.health();
+        assert_eq!(health.state, TelemetryHealthState::Degraded);
+        assert_eq!(health.dropped_exports_total, 1);
+        assert!(health.last_error.is_some());
+        assert_eq!(
+            health.exporter_statuses[0].state,
+            sc_observability_otlp::ExporterHealthState::Degraded
+        );
+    });
 }

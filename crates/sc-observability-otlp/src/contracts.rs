@@ -6,6 +6,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use crate::lifecycle::LifecycleHealth;
 #[cfg_attr(
     not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
     allow(
@@ -24,16 +25,29 @@ pub(crate) type LifecycleFuture =
     Pin<Box<dyn Future<Output = Result<(), ExportError>> + Send + 'static>>;
 
 /// Object-safe lifecycle operations shared by exporter backends.
-#[cfg_attr(
-    not(all(test, feature = "legacy-http-json")),
-    expect(
-        dead_code,
-        reason = "blocking lifecycle methods are currently exercised only by legacy backend tests"
-    )
-)]
 pub(crate) trait ExporterLifecycle: Send + Sync {
+    /// Returns whether this lifecycle has begun its terminal shutdown.
+    ///
+    /// A facade must use this shared state rather than maintain a second
+    /// shutdown flag that can diverge from the backend's admission barrier.
+    fn is_shutdown(&self) -> bool;
+
+    /// Returns shared lifecycle accounting when this backend owns an admission core.
+    fn lifecycle_health(&self) -> Option<LifecycleHealth> {
+        None
+    }
+
     /// Performs backend checks that are safe only outside an async lifecycle.
     fn blocking_preflight(&self) -> Result<(), ExportError>;
+
+    /// Verifies that a synchronous lifecycle operation is supported.
+    ///
+    /// This is distinct from construction preflight: an SDK backend may be
+    /// constructed on its caller runtime while requiring lifecycle completion
+    /// through its asynchronous methods.
+    fn blocking_lifecycle_preflight(&self) -> Result<(), ExportError> {
+        self.blocking_preflight()
+    }
 
     /// Flushes all work admitted before the backend's barrier.
     fn flush_async(&self) -> LifecycleFuture;

@@ -59,6 +59,18 @@ pub(crate) struct LifecycleHealth {
     pub(crate) last_error: Option<DiagnosticSummary>,
 }
 
+impl LifecycleHealth {
+    /// Returns aggregate terminal losses without counting active admissions.
+    pub(crate) fn dropped_total(&self) -> u64 {
+        self.dropped_by_signal.iter().sum()
+    }
+
+    /// Returns terminal losses for one signal family.
+    pub(crate) fn dropped_for(&self, signal: SignalKind) -> u64 {
+        self.dropped_by_signal[signal.index()]
+    }
+}
+
 /// Terminal state of the shared lifecycle machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LifecycleState {
@@ -365,13 +377,6 @@ impl LifecycleCore {
     }
 
     /// Returns a point-in-time health/accounting snapshot.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "only lifecycle tests call this internal snapshot; production facade currently projects a separate health model"
-        )
-    )]
     pub(crate) fn health(&self) -> LifecycleHealth {
         let state = self.inner.state.lock().expect("lifecycle state lock");
         LifecycleHealth {

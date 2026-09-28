@@ -38,7 +38,7 @@ use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
     LogRecord, MetricExporter, TraceExporter,
 };
-use crate::lifecycle::{LifecycleCore, SignalKind};
+use crate::lifecycle::{LifecycleCore, LifecycleState, SignalKind};
 use sc_observability_types::v2::{ExportError, MetricRecord, TelemetryError};
 use sc_observability_types::{ErrorContext, LogEvent, Remediation, error_codes};
 
@@ -353,6 +353,10 @@ impl Worker {
 }
 
 impl ExporterLifecycle for Worker {
+    fn is_shutdown(&self) -> bool {
+        self.inner.terminated.load(Ordering::Acquire) || self.inner.stop.load(Ordering::Acquire)
+    }
+
     fn blocking_preflight(&self) -> Result<(), ExportError> {
         Ok(())
     }
@@ -948,7 +952,22 @@ impl MetricExporter<ExportRecord<MetricRecord>> for OtlpHttpExporter {
 }
 
 impl ExporterLifecycle for OtlpHttpExporter {
+    fn is_shutdown(&self) -> bool {
+        self.backend.lifecycle.health().phase != LifecycleState::Open
+    }
+
+    fn lifecycle_health(&self) -> Option<crate::lifecycle::LifecycleHealth> {
+        Some(self.backend.lifecycle.health())
+    }
+
     fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn blocking_lifecycle_preflight(&self) -> Result<(), ExportError> {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err(blocking_in_async_error());
+        }
         Ok(())
     }
 

@@ -12,8 +12,9 @@
     clippy::must_use_candidate,
     reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
 )]
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
+use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::error_codes;
 use sc_observability_types::typed::EventFailure;
 #[allow(
@@ -39,6 +40,26 @@ pub struct CompleteSpan {
     pub events: Vec<SpanEvent>,
 }
 
+/// Losses caused by bounded live-span assembly.
+///
+/// The assembler never silently discards retained state: callers consume this
+/// snapshot and surface it through their health/accounting boundary.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SpanAssemblyLoss {
+    /// Started spans evicted before their matching end signal arrived.
+    pub evicted_spans: u64,
+    /// Events discarded after their span reached its bounded event capacity.
+    pub evicted_events: u64,
+}
+
+impl SpanAssemblyLoss {
+    /// Returns the total number of discarded lifecycle records.
+    #[must_use]
+    pub const fn total(self) -> u64 {
+        self.evicted_spans + self.evicted_events
+    }
+}
+
 /// Completed 2.0 span staged for the canonical OTLP exporters.
 ///
 /// The record and events retain the validated neutral model without a
@@ -62,6 +83,10 @@ pub(crate) struct V2CompleteSpan {
 pub struct SpanAssembler {
     started: HashMap<String, SpanRecord<SpanStarted>>,
     events: HashMap<String, Vec<SpanEvent>>,
+    started_order: VecDeque<String>,
+    max_live_spans: usize,
+    max_events_per_span: usize,
+    loss: SpanAssemblyLoss,
 }
 
 /// Stateful assembler for the staged validated 2.0 span contract.
@@ -82,9 +107,22 @@ pub(crate) struct V2SpanAssembler {
 impl SpanAssembler {
     /// Creates an empty assembler.
     pub fn new() -> Self {
+        Self::with_limits(MAX_OTLP_LIVE_SPANS, MAX_OTLP_EVENTS_PER_SPAN)
+    }
+
+    /// Creates an assembler with explicit bounded live-span and event limits.
+    ///
+    /// Zero limits are normalized to one so every caller retains a valid,
+    /// bounded assembly domain.
+    #[must_use]
+    pub fn with_limits(max_live_spans: usize, max_events_per_span: usize) -> Self {
         Self {
             started: HashMap::new(),
             events: HashMap::new(),
+            started_order: VecDeque::new(),
+            max_live_spans: max_live_spans.max(1),
+            max_events_per_span: max_events_per_span.max(1),
+            loss: SpanAssemblyLoss::default(),
         }
     }
 
@@ -121,7 +159,13 @@ impl SpanAssembler {
                     record.trace().trace_id.as_str(),
                     record.trace().span_id.as_str(),
                 );
+                if self.started.contains_key(&key) {
+                    self.remove_started(&key);
+                } else if self.started.len() >= self.max_live_spans {
+                    self.evict_oldest();
+                }
                 self.events.insert(key.clone(), Vec::new());
+                self.started_order.push_back(key.clone());
                 self.started.insert(key, record);
                 Ok(None)
             }
@@ -145,7 +189,12 @@ impl SpanAssembler {
                         ),
                     ))));
                 }
-                self.events.entry(key).or_default().push(event);
+                let events = self.events.entry(key).or_default();
+                if events.len() >= self.max_events_per_span {
+                    self.loss.evicted_events += 1;
+                } else {
+                    events.push(event);
+                }
                 Ok(None)
             }
             SpanSignal::Ended(record) => {
@@ -171,7 +220,7 @@ impl SpanAssembler {
                         ),
                     ))));
                 }
-                self.started.remove(&key);
+                self.remove_started(&key);
                 let events = self.events.remove(&key).expect(
                     "started span always has an event buffer; this is an internal invariant",
                 );
@@ -185,7 +234,28 @@ impl SpanAssembler {
         let dropped = self.started.len();
         self.started.clear();
         self.events.clear();
+        self.started_order.clear();
         dropped
+    }
+
+    /// Returns and clears bounded-assembly losses since the prior observation.
+    pub fn take_loss(&mut self) -> SpanAssemblyLoss {
+        std::mem::take(&mut self.loss)
+    }
+
+    fn evict_oldest(&mut self) {
+        let Some(key) = self.started_order.pop_front() else {
+            return;
+        };
+        if self.started.remove(&key).is_some() {
+            self.events.remove(&key);
+            self.loss.evicted_spans += 1;
+        }
+    }
+
+    fn remove_started(&mut self, key: &str) {
+        self.started.remove(key);
+        self.started_order.retain(|candidate| candidate != key);
     }
 
     #[cfg(test)]
