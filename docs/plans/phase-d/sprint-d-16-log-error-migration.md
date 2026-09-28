@@ -13,6 +13,6 @@ The former requirements are retained by D18: LAY-001, LAY-002, LAY-006, LAY-007,
 
 ## Preserved boundary and validation
 
-D18 consumes D12's canonical v2 error enums and `ErrorContext`; it preserves the distinct companion-only `DetachError` boundary, stable error codes, source identity, and the cause mapping `Configuration`/`Runtime`/`Drain`/`Timeout`. D2 remains the bridge artifact and D12 remains the canonical types source; their actual D18 prerequisites are preserved. D18 must run the five named log tests plus its workspace/all-features, public API, semver, and release gates. No temporary duplicate adapter is permitted.
+D18 consumes D12's canonical v2 error enums and `ErrorContext`; `error.rs` and the four implementation modules import and construct those canonical definitions directly, with no temporary tuple wrappers or parallel classifier. It preserves the distinct companion-only `DetachError` boundary, stable error codes, source identity, and the cause mapping `Configuration`/`Runtime`/`Drain`/`Timeout`. D2 remains the bridge artifact and D12 remains the canonical types source; their actual D18 prerequisites are preserved. D18 must run the five named log tests, which assert the detailed typed cause mapping, stable codes, and source identity, plus its workspace/all-features, public API, semver, and release gates. No temporary duplicate adapter is permitted.
 
 See [the proposed ownership decision](decision-d16-d18-ownership.md) for the before/after mapping, proposed bead updates, and review status.

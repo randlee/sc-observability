@@ -1317,6 +1317,37 @@ was reworded accordingly to describe the remaining validation.
   D.12 owns the types and specification, D.19/20 consume them, and D.18
   qualifies their final composition. ADR-019 remains in D.12's bead ADR list.
 
+#### ADR-019 amendment: external SDK fixture seam
+
+- **Status**: Accepted 2026-09-28 by the Phase D lead for the D.7 external
+  fixture scope; final release/API approval remains D.18's responsibility.
+- **Context**: D.7's external Tokio-hosted fixture must exercise the real SDK
+  adapter from `examples/otlp-sdk`, including signal projection, pressure,
+  deadlines, asynchronous completion and host-runtime teardown. The fixture
+  cannot use the production `Telemetry` factory without moving D.18-owned
+  facade composition into the adapter layer.
+- **Decision**: Add the non-default `sdk-test-support` feature to
+  `sc-observability-otlp`. It enables the existing `otlp-sdk` implementation
+  and exposes the unstable `sdk::fixture::SdkFixture` type through the crate
+  root only while that feature is selected. `SdkFixture` is a thin external
+  test seam over the existing crate-private `build_exporter_set` path; it
+  exposes signal export plus async flush/shutdown and requires the caller's
+  Tokio runtime. The example's `sdk-fixture` feature is the consumer-facing
+  alias for this crate feature.
+- **Scope boundary**: `sdk-test-support` is external-fixture-only, is never a
+  default feature, does not activate or alter production `Telemetry`, does not
+  add a third transport choice, and does not add dependencies beyond the
+  already reviewed `otlp-sdk` allowlist. The fixture surface is unstable test
+  support, not a released production API; D.18 owns any later facade
+  activation, compatibility decision, and final public API review.
+- **Consequences**: The D.7 fixture may prove the real adapter at the host
+  boundary without duplicating lifecycle or transport policy. The existing
+  ADR-018/019 dependency and ownership boundaries remain unchanged, and the
+  external fixture command is a required non-zero-test validation.
+- **Contracts**: LAY-005, NFR-004, NFR-007, OTLP-012, OTLP-013, OTLP-021,
+  PHD-003/004; D.7 owns the fixture implementation and D.18 owns final
+  production composition and release/API approval.
+
 ## 8. API-Design Consistency
 
 `api-design.md` matches the corrected layering:

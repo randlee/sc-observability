@@ -20,7 +20,7 @@ Adopt option A: retire D16 as an active planned sprint and make D18 the sole own
 | SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006; TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039 | D18 #1; listed in D18 requirements metadata |
 | ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-014, ADR-017, ADR-019 | D18 design/validation; listed in D18 ADR metadata |
 
-The exact five-test command is retained under D18 acceptance criteria. D18 additionally retains the workspace/all-features, public API/semver, release, and integration validation gates already assigned to it.
+The exact five-test command is retained under D18 acceptance criteria. Those tests must use direct canonical type imports and assert the detailed `Configuration`/`Runtime`/`Drain`/`Timeout` cause mapping, stable codes, and `ErrorContext` source identity; no temporary tuple wrappers or parallel classifier is permitted. D18 additionally retains the workspace/all-features, public API/semver, release, and integration validation gates already assigned to it.
 
 ## Proposed plan and Beads updates
 
