@@ -189,8 +189,8 @@ pub(crate) struct AttachmentState {
     policy: Arc<dyn BridgeEventPolicy>,
     service: ServiceName,
     identity: ProcessIdentity,
-    gate: Mutex<AttachmentGate>,
-    drained: Condvar,
+    gate: Arc<Mutex<AttachmentGate>>,
+    drained: Arc<Condvar>,
 }
 
 impl std::fmt::Debug for AttachmentState {
@@ -205,19 +205,16 @@ impl std::fmt::Debug for AttachmentState {
 }
 
 struct AttachmentCall {
-    state: Arc<AttachmentState>,
+    gate: Arc<Mutex<AttachmentGate>>,
+    drained: Arc<Condvar>,
 }
 
 impl Drop for AttachmentCall {
     fn drop(&mut self) {
-        let mut gate = self
-            .state
-            .gate
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
         gate.in_flight = gate.in_flight.saturating_sub(1);
         if gate.in_flight == 0 {
-            self.state.drained.notify_all();
+            self.drained.notify_all();
         }
     }
 }
@@ -235,7 +232,8 @@ impl AttachmentState {
             None => usize::MAX,
         };
         Some(AttachmentCall {
-            state: Arc::clone(self),
+            gate: Arc::clone(&self.gate),
+            drained: Arc::clone(&self.drained),
         })
     }
 }
@@ -332,11 +330,11 @@ pub fn attach_logger(
         logger,
         options: options.bridge,
         policy: options.policy,
-        gate: Mutex::new(AttachmentGate {
+        gate: Arc::new(Mutex::new(AttachmentGate {
             phase: AttachmentPhase::Attached,
             in_flight: 0,
-        }),
-        drained: Condvar::new(),
+        })),
+        drained: Arc::new(Condvar::new()),
     });
     let mut slot = ATTACHMENT_SLOT
         .write()
@@ -592,6 +590,7 @@ pub(crate) fn flush_attached(
             phase: crate::LifecyclePhase::Stopping,
         });
     };
+    let logger = Arc::clone(&state.logger);
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     std::thread::Builder::new()
         .name("sc-observability-log-attachment-flush".to_owned())
@@ -599,7 +598,7 @@ pub(crate) fn flush_attached(
             // Keep the attachment call alive until the helper exits.  A timed-out
             // caller must not be able to detach while this helper still owns the
             // attachment's logger reference.
-            let result = call.state.logger.flush();
+            let result = logger.flush();
             let _ = sender.send(result);
             drop(call);
         })
