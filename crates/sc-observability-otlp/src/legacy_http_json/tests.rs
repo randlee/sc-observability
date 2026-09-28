@@ -736,6 +736,25 @@ fn shutdown_cancels_an_actual_retry_backoff() {
 }
 
 #[test]
+fn retry_wait_notification_is_retained_before_receiver_waits() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let (notification_tx, notification_rx) = mpsc::channel();
+    super::implementation::install_retry_wait_hook(notification_tx);
+
+    let cancel = std::sync::atomic::AtomicBool::new(true);
+    assert!(!super::implementation::wait_cancelable(
+        Duration::ZERO,
+        &cancel
+    ));
+    super::implementation::clear_retry_wait_hook();
+
+    assert!(
+        notification_rx.try_recv().is_ok(),
+        "retry notification remains queued until the receiver waits"
+    );
+}
+
+#[test]
 fn async_shutdown_stays_responsive_during_an_in_flight_request() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
