@@ -213,6 +213,7 @@ jobs:
       - name: Run staged-package and retry idempotency tests
         run: |
           python3 -m unittest \
+            scripts.ci.tests.test_release_wheel_targets \
             scripts.ci.tests.test_prepare_release_staged_packages \
             scripts.ci.tests.test_publish_retry_idempotency
 
