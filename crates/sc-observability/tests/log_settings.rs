@@ -17,6 +17,30 @@ fn snapshot(values: &[(&str, &str)]) -> EnvSnapshot {
     )
 }
 
+#[test]
+fn settings_error_codes_match_documented_stable_names() {
+    let codes = [
+        (
+            error_codes::LOG_PREFIX_COLLISION,
+            "SC_LOG_SETTINGS_PREFIX_COLLISION",
+        ),
+        (
+            error_codes::LOG_INVALID_ENVIRONMENT,
+            "SC_LOG_SETTINGS_INVALID_ENVIRONMENT",
+        ),
+        (error_codes::LOG_UNKNOWN_KEY, "SC_LOG_SETTINGS_UNKNOWN_KEY"),
+        (
+            error_codes::LOG_INVALID_VALUE,
+            "SC_LOG_SETTINGS_INVALID_VALUE",
+        ),
+        (error_codes::LOG_RESOLUTION, "SC_LOG_SETTINGS_RESOLUTION"),
+    ];
+
+    for (code, expected) in codes {
+        assert_eq!(code.as_str(), expected);
+    }
+}
+
 fn assert_application_inventory_values(resolved: &ResolvedLogSettings) {
     let policy = resolved.retained_log_policy;
     let actual = [
