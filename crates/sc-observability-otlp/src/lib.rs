@@ -1468,17 +1468,71 @@ mod tests {
         legacy.remove_event_buffer(&key);
         typed.remove_event_buffer(&key);
 
-        let error = legacy
-            .push(SpanSignal::Ended(ended.clone()))
-            .expect_err("legacy missing event buffer");
-        let typed_error = typed
-            .push_typed(SpanSignal::Ended(ended))
-            .expect_err("typed missing event buffer");
-        assert_parity(
-            &error,
-            &typed_error,
-            "missing span event buffer for a started span",
+        let legacy_panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            legacy.push(SpanSignal::Ended(ended.clone()))
+        }));
+        let typed_panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            typed.push_typed(SpanSignal::Ended(ended))
+        }));
+        assert!(
+            legacy_panic.is_err(),
+            "legacy internal invariant must panic"
         );
+        assert!(typed_panic.is_err(), "typed internal invariant must panic");
+    }
+
+    #[test]
+    fn v1_assembly_rejects_mismatched_parent_without_losing_started_state() {
+        let trace = trace_context();
+        let mut mismatched = trace.clone();
+        mismatched.parent_span_id = Some(SpanId::new("fedcba9876543210").expect("valid parent"));
+        let started = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service_name(),
+            ActionName::new("agent.run").expect("valid action"),
+            trace,
+            Map::new(),
+        );
+        let mismatched_ended = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service_name(),
+            ActionName::new("agent.run").expect("valid action"),
+            mismatched.clone(),
+            Map::new(),
+        )
+        .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(1));
+        let bad_signals = [
+            SpanSignal::Event(SpanEvent {
+                timestamp: Timestamp::UNIX_EPOCH,
+                trace: mismatched,
+                name: ActionName::new("tool.call").expect("valid event"),
+                attributes: Map::new(),
+                diagnostic: None,
+            }),
+            SpanSignal::Ended(mismatched_ended),
+        ];
+        for signal in bad_signals {
+            let mut assembler = SpanAssembler::new();
+            assembler
+                .push_typed(SpanSignal::Started(started.clone()))
+                .expect("started");
+            let error = assembler.push_typed(signal).expect_err("parent mismatch");
+            assert_eq!(
+                error.diagnostic().code,
+                error_codes::OTLP_SPAN_ASSEMBLY_FAILED
+            );
+            let ended = started
+                .clone()
+                .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(2));
+            let complete = assembler
+                .push_typed(SpanSignal::Ended(ended))
+                .expect("valid end")
+                .expect("retained started state");
+            assert!(
+                complete.events.is_empty(),
+                "rejected event must not be buffered"
+            );
+        }
     }
 
     #[test]
