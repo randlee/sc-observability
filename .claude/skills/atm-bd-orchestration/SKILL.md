@@ -62,6 +62,12 @@ The lead is the only stack writer (`gh stack link`, `unstack`, `sync`,
 `rebase`, `merge`). quality-mgr files the finding beads from QA; the lead
 files those from a phase-end review.
 
+Before treating a finding or unresolved decision as a development stop, read
+[`blocking-findings-guidelines.md`](blocking-findings-guidelines.md). Scope the
+decision and the consequence of choosing wrong. Record decisions for the user
+or omega-prime; conservative, reversible provisional choices keep independent
+work moving. Unresolved decision beads block phase closure, not development.
+
 ## Roles
 
 | Role | Who | Prompt |
