@@ -55,6 +55,26 @@ const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(5);
 #[cfg(test)]
 static RETRY_WAIT_HOOK: OnceLock<Mutex<Option<mpsc::Sender<()>>>> = OnceLock::new();
 
+/// Per-worker gates control ordering, never the readiness result or timeout.
+#[cfg(test)]
+#[derive(Debug)]
+pub(super) struct StartupTestHooks {
+    pub(super) initialize: Mutex<Receiver<()>>,
+    pub(super) receive: Mutex<Receiver<()>>,
+    pub(super) ready: mpsc::Sender<()>,
+    pub(super) exited: mpsc::Sender<bool>,
+}
+
+#[cfg(test)]
+impl StartupTestHooks {
+    fn wait(gate: &Mutex<Receiver<()>>) {
+        gate.lock()
+            .expect("startup gate lock")
+            .recv_timeout(Duration::from_secs(10))
+            .expect("test releases startup gate");
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RetrySettings {
     max_retries: u32,
@@ -92,6 +112,8 @@ pub(crate) struct LegacyHttpJsonConfig {
     jitter_seed: u64,
     #[cfg(test)]
     retry_delay_observer: Option<SyncSender<Duration>>,
+    #[cfg(test)]
+    startup_hooks: Option<Arc<StartupTestHooks>>,
 }
 
 impl LegacyHttpJsonConfig {
@@ -129,6 +151,8 @@ impl LegacyHttpJsonConfig {
                 jitter_seed: seed_from_os(),
                 #[cfg(test)]
                 retry_delay_observer: None,
+                #[cfg(test)]
+                startup_hooks: None,
             },
             bounds,
         ))
@@ -188,10 +212,25 @@ impl Worker {
         let handshake_timeout = config
             .request_timeout
             .min(config.lifecycle_shutdown_timeout);
+        #[cfg(test)]
+        let startup_hooks = config.startup_hooks.clone();
         thread::Builder::new()
             .name("sc-otlp-legacy-http".to_owned())
-            .spawn(move || worker_main(config, data_rx, control_rx, ready_tx, worker_cancel))
+            .spawn(move || {
+                #[cfg(test)]
+                let hooks = config.startup_hooks.clone();
+                worker_main(config, data_rx, control_rx, ready_tx, &worker_cancel);
+                #[cfg(test)]
+                if let Some(hooks) = hooks {
+                    // Sent only after worker_main returns and its client drops.
+                    let _ = hooks.exited.send(worker_cancel.load(Ordering::Acquire));
+                }
+            })
             .map_err(|error| transport_error_with_source("failed to start legacy worker", error))?;
+        #[cfg(test)]
+        if let Some(hooks) = startup_hooks {
+            StartupTestHooks::wait(&hooks.receive);
+        }
         match ready_rx.recv_timeout(handshake_timeout) {
             Ok(Ok(())) => Ok(Self {
                 inner: Arc::new(WorkerInner {
@@ -205,9 +244,12 @@ impl Worker {
                 }),
             }),
             Ok(Err(error)) => Err(error),
-            Err(RecvTimeoutError::Timeout) => Err(transport_error(
-                "legacy worker construction handshake exceeded its finite deadline",
-            )),
+            Err(RecvTimeoutError::Timeout) => {
+                cancel.store(true, Ordering::Release);
+                Err(transport_error(
+                    "legacy worker construction handshake exceeded its finite deadline",
+                ))
+            }
             Err(RecvTimeoutError::Disconnected) => Err(worker_terminated_error()),
         }
     }
@@ -341,11 +383,24 @@ fn worker_main(
     data_rx: Receiver<DataCommand>,
     control_rx: Receiver<ControlCommand>,
     ready_tx: mpsc::Sender<Result<(), ExportError>>,
-    cancel: Arc<AtomicBool>,
+    cancel: &AtomicBool,
 ) {
+    #[cfg(test)]
+    if let Some(hooks) = &config.startup_hooks {
+        StartupTestHooks::wait(&hooks.initialize);
+    }
     let client = match build_client(&config) {
         Ok(client) => {
-            let _ = ready_tx.send(Ok(()));
+            // A timed-out constructor never publishes a handle. Dispose of
+            // the late client here, on its owning worker, instead of entering
+            // the command loop after startup has already been abandoned.
+            if cancel.load(Ordering::Acquire) || ready_tx.send(Ok(())).is_err() {
+                return;
+            }
+            #[cfg(test)]
+            if let Some(hooks) = &config.startup_hooks {
+                let _ = hooks.ready.send(());
+            }
             client
         }
         Err(error) => {
@@ -355,8 +410,8 @@ fn worker_main(
     };
     loop {
         if let Ok(command) = control_rx.try_recv() {
-            drain_data(&client, &config, &data_rx, &cancel);
-            if handle_control(command, &cancel) {
+            drain_data(&client, &config, &data_rx, cancel);
+            if handle_control(command, cancel) {
                 return;
             }
             continue;
@@ -367,7 +422,7 @@ fn worker_main(
                 body,
                 complete,
             }) => {
-                let outcome = send_with_retries(&client, &config, &endpoint, &body, &cancel);
+                let outcome = send_with_retries(&client, &config, &endpoint, &body, cancel);
                 complete(outcome);
             }
             Err(RecvTimeoutError::Timeout) => {}
@@ -668,6 +723,27 @@ impl OtlpHttpExporter {
     #[cfg(test)]
     pub(super) fn for_endpoint(endpoint: String) -> Result<Self, ExportError> {
         Self::for_test_config(endpoint, None, None)
+    }
+
+    /// Exercises real client construction and `Worker::start` with ordered gates.
+    #[cfg(test)]
+    pub(super) fn for_startup_test(hooks: Arc<StartupTestHooks>) -> Result<Self, ExportError> {
+        let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
+        config.enabled = true;
+        config.endpoint = Some(
+            crate::config::OtlpEndpoint::new_typed("http://127.0.0.1:1")
+                .expect("test endpoint is valid"),
+        );
+        // A queued readiness message wins even at this short boundary. The
+        // gates keep both cases independent of worker scheduling speed.
+        config.timeout_ms = Some(1_u64.into());
+        let (mut worker_config, bounds) = LegacyHttpJsonConfig::from_otel(&config)?;
+        worker_config.startup_hooks = Some(hooks);
+        let endpoint = worker_config.endpoint.clone();
+        Ok(Self {
+            backend: LegacyBackend::new(worker_config, &bounds)?,
+            endpoint,
+        })
     }
 
     /// Builds the retained backend with the configuration seams exercised by

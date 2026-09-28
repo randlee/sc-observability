@@ -22,6 +22,129 @@ use std::time::{Duration, Instant, SystemTime};
 
 static RETRY_WAIT_TEST_LOCK: Mutex<()> = Mutex::new(());
 
+// This is a test watchdog, not the production handshake deadline (1 ms).
+const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
+
+struct StartupFixture {
+    initialize: mpsc::Sender<()>,
+    receive: mpsc::Sender<()>,
+    ready: mpsc::Receiver<()>,
+    exited: mpsc::Receiver<bool>,
+    result: mpsc::Receiver<Result<OtlpHttpExporter, sc_observability_types::v2::ExportError>>,
+    constructor: thread::JoinHandle<()>,
+}
+
+impl StartupFixture {
+    fn start() -> Self {
+        let (initialize, initialize_rx) = mpsc::channel();
+        let (receive, receive_rx) = mpsc::channel();
+        let (ready_tx, ready) = mpsc::channel();
+        let (exited_tx, exited) = mpsc::channel();
+        let (result_tx, result) = mpsc::channel();
+        let hooks = Arc::new(super::implementation::StartupTestHooks {
+            initialize: Mutex::new(initialize_rx),
+            receive: Mutex::new(receive_rx),
+            ready: ready_tx,
+            exited: exited_tx,
+        });
+        let constructor = thread::spawn(move || {
+            let _ = result_tx.send(OtlpHttpExporter::for_startup_test(hooks));
+        });
+        Self {
+            initialize,
+            receive,
+            ready,
+            exited,
+            result,
+            constructor,
+        }
+    }
+}
+
+#[test]
+fn construction_handshake_timeout_cancels_startup_and_disposes_client() {
+    let fixture = StartupFixture::start();
+    // The real worker cannot initialize until after the actual timed receive
+    // expires. Holding a channel gate avoids any sleep/scheduler race.
+    fixture
+        .receive
+        .send(())
+        .expect("start timed readiness receive");
+    let result = fixture
+        .result
+        .recv_timeout(STARTUP_TEST_WATCHDOG)
+        .expect("constructor returns within watchdog while initialization is held");
+    fixture
+        .initialize
+        .send(())
+        .expect("release initializer for worker disposal");
+    let cancelled = fixture
+        .exited
+        .recv_timeout(STARTUP_TEST_WATCHDOG)
+        .expect("worker exits and drops its actual reqwest client");
+    fixture
+        .constructor
+        .join()
+        .expect("constructor thread exits");
+    let Err(sc_observability_types::v2::ExportError::Transport { context }) = result else {
+        panic!("expired construction handshake must not publish an exporter");
+    };
+    assert_eq!(
+        context.diagnostic().code,
+        sc_observability_types::error_codes::otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+    );
+    assert!(
+        context
+            .diagnostic()
+            .message
+            .contains("construction handshake")
+    );
+    assert!(
+        cancelled,
+        "expired handshake must cancel startup before returning"
+    );
+}
+
+#[test]
+fn construction_handshake_ready_before_deadline_publishes_usable_handle() {
+    let fixture = StartupFixture::start();
+    fixture
+        .initialize
+        .send(())
+        .expect("release real client initialization");
+    fixture
+        .ready
+        .recv_timeout(STARTUP_TEST_WATCHDOG)
+        .expect("actual worker queues readiness after building its client");
+    // Readiness is already queued when recv_timeout starts. Even the 1 ms
+    // boundary succeeds regardless of how long either test thread was paused.
+    fixture
+        .receive
+        .send(())
+        .expect("start timed readiness receive");
+    let exporter = fixture
+        .result
+        .recv_timeout(STARTUP_TEST_WATCHDOG)
+        .expect("constructor completes")
+        .expect("ready handshake publishes exporter");
+    exporter
+        .flush_blocking()
+        .expect("published worker handles flush");
+    exporter
+        .shutdown_blocking()
+        .expect("published worker shuts down");
+    assert!(
+        fixture
+            .exited
+            .recv_timeout(STARTUP_TEST_WATCHDOG)
+            .expect("worker disposes client on its owning thread")
+    );
+    fixture
+        .constructor
+        .join()
+        .expect("constructor thread exits");
+}
+
 fn sample_log() -> LogEvent {
     LogEvent {
         version: SchemaVersion::new("v1").expect("schema version"),

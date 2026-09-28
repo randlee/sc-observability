@@ -24,9 +24,12 @@ pub(crate) type LifecycleFuture =
     Pin<Box<dyn Future<Output = Result<(), ExportError>> + Send + 'static>>;
 
 /// Object-safe lifecycle operations shared by exporter backends.
-#[expect(
-    dead_code,
-    reason = "D.21 stages this private contract before D.6 supplies its lifecycle implementation"
+#[cfg_attr(
+    not(all(test, feature = "legacy-http-json")),
+    expect(
+        dead_code,
+        reason = "blocking lifecycle methods are currently exercised only by legacy backend tests"
+    )
 )]
 pub(crate) trait ExporterLifecycle: Send + Sync {
     /// Performs backend checks that are safe only outside an async lifecycle.
