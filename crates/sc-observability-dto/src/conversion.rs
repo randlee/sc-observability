@@ -982,7 +982,7 @@ canonical_projection!(
     FlushError,
     value,
     match value {
-        core::v2::FlushError::Drain { context } => drain_category(context),
+        core::v2::FlushError::Drain { .. } => flush_drain_category(value),
         _ => unexpected_local_failure,
     }
 );
@@ -1082,6 +1082,11 @@ fn drain_category(
     std::error::Error::source(context)
         .and_then(|source| source.downcast_ref::<core::v2::ExportError>())
         .map_or(io_failure, export_category)
+}
+fn flush_drain_category(
+    value: &core::v2::FlushError,
+) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    value.export_cause().map_or(io_failure, export_category)
 }
 canonical_projection!(ExportError, value, export_category(value));
 

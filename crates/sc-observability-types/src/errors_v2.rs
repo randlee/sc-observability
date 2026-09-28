@@ -62,6 +62,15 @@ context_error!(
 
 context_error!(FlushError, Drain => crate::error_codes::DIAGNOSTIC_INVALID);
 
+impl FlushError {
+    /// Returns the typed export cause retained by a drain failure, when present.
+    #[must_use]
+    pub fn export_cause(&self) -> Option<&ExportError> {
+        std::error::Error::source(self.context())
+            .and_then(|source| source.downcast_ref::<ExportError>())
+    }
+}
+
 context_error!(
     ShutdownError,
     Timeout => crate::error_codes::DIAGNOSTIC_INVALID,
