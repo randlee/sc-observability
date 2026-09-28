@@ -4,8 +4,8 @@ use super::implementation::{
 use crate::config::LegacyRetryPolicy;
 use crate::contracts::{ExporterLifecycle, LogExporter};
 use sc_observability_types::{
-    ActionName, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory,
-    Timestamp,
+    ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName,
+    TargetCategory, Timestamp,
 };
 use serde_json::Value;
 use std::fs;
@@ -265,29 +265,67 @@ fn safety_delta_shutdown_cancels_retry_wait() {
 #[test]
 fn provenance_pin_and_destination_disposition_are_present() {
     let manifest = include_str!("../../../../docs/plans/phase-d/legacy-otlp-provenance.json");
-    assert!(manifest.contains("7b39f4e7f72b6845edec4eab4cd671611661445f"));
-    assert!(manifest.contains("transplant-and-adapt"));
-    assert!(manifest.contains("timestamp_export_integration.rs"));
-    assert!(manifest.contains("legacy_http_json"));
-    // These are the immutable source fixture names restored below. Keeping
-    // them adjacent to the source pin gives transplant QA a readable mapping
-    // without introducing a second provenance artifact.
-    assert!(
-        [
-            "otlp_http_exporter_posts_logs_endpoint_and_header",
-            "otlp_http_exporter_loads_custom_ca_bundle",
-            "build_logs_payload_maps_service_name_severity_and_correlation_attributes",
-        ]
-        .iter()
-        .all(|fixture| !fixture.is_empty())
+    let manifest: Value = serde_json::from_str(manifest).expect("valid provenance manifest");
+    assert_eq!(
+        manifest["source_commit"],
+        "7b39f4e7f72b6845edec4eab4cd671611661445f"
     );
+
+    let destinations = [
+        (
+            "crates/sc-observability-otlp/src/lib.rs",
+            "crates/sc-observability-otlp/src/legacy_http_json/implementation.rs",
+        ),
+        (
+            "crates/sc-observability-otlp/tests/timestamp_export_integration.rs",
+            "crates/sc-observability-otlp/src/legacy_http_json/tests.rs",
+        ),
+    ];
+    for (source, destination) in destinations {
+        let entry = manifest["entries"]
+            .as_array()
+            .expect("manifest entries")
+            .iter()
+            .find(|entry| entry["source"] == source)
+            .unwrap_or_else(|| panic!("missing provenance source {source}"));
+        assert_eq!(entry["destination"], destination);
+        assert_eq!(entry["disposition"], "transplant-and-adapt");
+        assert!(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(destination)
+                .is_file(),
+            "missing provenance destination {destination}"
+        );
+    }
 }
 
 #[test]
-fn log_payload_preserves_timestamp_and_severity() {
-    let record = super::implementation::log_record(&sample_log());
+fn log_payload_preserves_service_correlation_timestamp_severity_and_body() {
+    let mut event = sample_log();
+    event.correlation_id = Some(CorrelationId::new("corr-42").expect("correlation id"));
+    let record = super::implementation::log_record(&event);
     let payload = build_logs_payload(&[record]);
-    let log = &payload["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0];
+    let resource_logs = &payload["resourceLogs"][0];
+    let log = &resource_logs["scopeLogs"][0]["logRecords"][0];
+    assert_eq!(
+        resource_logs["resource"]["attributes"][0]["key"],
+        "service.name"
+    );
+    assert_eq!(
+        resource_logs["resource"]["attributes"][0]["value"]["stringValue"],
+        "legacy-test"
+    );
+    assert!(
+        log["attributes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|attribute| {
+                attribute["key"] == "sc.observability.log.correlation_id"
+                    && attribute["value"]["stringValue"] == "corr-42"
+            })
+    );
     assert_eq!(log["timeUnixNano"], Value::String("0".to_owned()));
     assert_eq!(log["severityNumber"], 9);
     assert_eq!(log["body"]["stringValue"], "hello");

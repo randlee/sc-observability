@@ -1079,6 +1079,12 @@ fn log_json(record: LogRecord) -> Value {
         "key": "event.name",
         "value": { "stringValue": event.action.as_str() },
     }));
+    if let Some(correlation_id) = event.correlation_id {
+        attributes.push(json!({
+            "key": "sc.observability.log.correlation_id",
+            "value": { "stringValue": correlation_id.as_str() },
+        }));
+    }
     for (key, value) in event.fields {
         attributes.push(json!({ "key": key, "value": json_value_to_otlp_any(&value) }));
     }
