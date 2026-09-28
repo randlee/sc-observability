@@ -113,6 +113,17 @@ class MajorBreakTests(unittest.TestCase):
             report = json.loads((root / 'cache/public-api-semver.json').read_text())
             self.assertEqual(report['crates'][crate]['status'], 'structural-semver-failed')
 
+    def test_structural_allowlist_rejects_mixed_unapproved_diagnostics(self):
+        from validate_public_api import structural_diagnostics_are_enumerated
+        allowed = '--- failure module_missing : removed module\n'
+        self.assertTrue(structural_diagnostics_are_enumerated(
+            'sc-observability-otlp', allowed))
+        mixed = allowed + '--- failure trait_method_added : new required method\n'
+        self.assertFalse(structural_diagnostics_are_enumerated(
+            'sc-observability-otlp', mixed))
+        self.assertFalse(structural_diagnostics_are_enumerated(
+            'sc-observability-otlp', 'cargo failed: tool error\n'))
+
 
 
 if __name__ == '__main__':

@@ -381,11 +381,7 @@ fn log_record(event: &LogEvent) -> OtlpRecord<OtlpLogRecord> {
 }
 #[allow(dead_code)]
 fn span_record(span: &CompleteSpan) -> Result<OtlpRecord<OtlpCompleteSpan>, ExportError> {
-    let trace = sc_observability_types::v2::TraceContext::new(
-        span.record.trace().trace_id.clone(),
-        span.record.trace().span_id.clone(),
-        sc_observability_types::v2::TraceFlags::default(),
-    );
+    let trace = trace_context(&span.record.trace());
     let mut started = sc_observability_types::v2::SpanRecord::new(
         span.record.timestamp(),
         span.record.service().clone(),
@@ -422,11 +418,7 @@ fn span_record(span: &CompleteSpan) -> Result<OtlpRecord<OtlpCompleteSpan>, Expo
                 .iter()
                 .map(|event| sc_observability_types::v2::SpanEvent {
                     timestamp: event.timestamp,
-                    trace: sc_observability_types::v2::TraceContext::new(
-                        event.trace.trace_id.clone(),
-                        event.trace.span_id.clone(),
-                        sc_observability_types::v2::TraceFlags::default(),
-                    ),
+                    trace: trace_context(&event.trace),
                     name: event.name.clone(),
                     attributes: attributes(&event.attributes),
                     diagnostic: event.diagnostic.clone(),
@@ -434,6 +426,21 @@ fn span_record(span: &CompleteSpan) -> Result<OtlpRecord<OtlpCompleteSpan>, Expo
                 .collect(),
         },
     })
+}
+
+#[allow(dead_code)]
+fn trace_context(
+    trace: &sc_observability_types::TraceContext,
+) -> sc_observability_types::v2::TraceContext {
+    let context = sc_observability_types::v2::TraceContext::new(
+        trace.trace_id.clone(),
+        trace.span_id.clone(),
+        sc_observability_types::v2::TraceFlags::default(),
+    );
+    match trace.parent_span_id.clone() {
+        Some(parent) => context.with_parent(parent),
+        None => context,
+    }
 }
 #[allow(dead_code)]
 fn metric_record(
@@ -1196,6 +1203,19 @@ mod tests {
             span_id: SpanId::new("0123456789abcdef").expect("valid span id"),
             parent_span_id: None,
         }
+    }
+
+    #[test]
+    fn trace_projection_preserves_parent_span_identity() {
+        let parent = SpanId::new("fedcba9876543210").expect("valid parent span id");
+        let trace = TraceContext {
+            parent_span_id: Some(parent.clone()),
+            ..trace_context()
+        };
+
+        let projected = super::trace_context(&trace);
+
+        assert_eq!(projected.parent_span_id, Some(parent));
     }
 
     fn log_event(service: ServiceName, message: &str) -> LogEvent {

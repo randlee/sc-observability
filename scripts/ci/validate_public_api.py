@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import tomllib
 import subprocess
 import sys
@@ -87,6 +88,22 @@ def check_major_diff(crate: str, output: str, entries: list[dict]) -> list[str]:
         elif entry['new'] and entry['new'] not in added:
             problems.append(f"replacement differs from reviewed break: {entry['id']}")
     return problems
+
+
+def structural_diagnostics_are_enumerated(crate: str, output: str) -> bool:
+    """Accept only a complete set of explicitly approved structural failures."""
+    approved = {
+        'sc-observability-otlp': {
+            'module_missing',
+            'pub_module_level_const_missing',
+            'struct_marked_non_exhaustive',
+        },
+        'sc-observability-log': {'auto_trait_impl_removed'},
+    }.get(crate, set())
+    if not approved:
+        return False
+    failures = re.findall(r'^--- failure ([a-z0-9_]+)(?:[: ])', output, re.MULTILINE)
+    return bool(failures) and set(failures) <= approved
 
 
 def main() -> int:
@@ -185,16 +202,7 @@ def main() -> int:
                     # cannot authorize an unrelated trait or layout break.
                     if structural.returncode:
                         structural_output = structural.stdout + structural.stderr
-                        approved_structural_markers = {
-                            'sc-observability-otlp': (
-                                'module_missing',
-                                'pub_module_level_const_missing',
-                                'struct_marked_non_exhaustive',
-                            ),
-                            'sc-observability-log': ('auto_trait_impl_removed',),
-                        }
-                        allowed = approved_structural_markers.get(crate, ())
-                        if not any(marker in structural_output for marker in allowed):
+                        if not structural_diagnostics_are_enumerated(crate, structural_output):
                             status, failure = 'structural-semver-failed', True
                         else:
                             with (CACHE / log_name).open('a') as log:
