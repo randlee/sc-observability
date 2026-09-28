@@ -19,14 +19,14 @@ fn main() {
     let service = ServiceName::new("b1e-migrated").expect("valid service");
     let mut logger_config = LoggerConfig::default_for(service, root.clone());
     logger_config.enable_file_sink = false;
-    logger_config.enable_console_sink = false;
+    logger_config.enable_console_sink = true;
 
     let mut builder_config = LoggerConfig::default_for(
         ServiceName::new("b1e-migrated-builder").expect("valid service"),
         std::env::temp_dir().join("sc-observability-b1e-migrated-builder"),
     );
     builder_config.enable_file_sink = false;
-    builder_config.enable_console_sink = false;
+    builder_config.enable_console_sink = true;
     let builder = LoggerBuilder::new_typed(builder_config).expect("typed builder");
     let logger = builder.build_typed().expect("typed logger");
     logger.flush_typed().expect("typed logger flush");
@@ -39,7 +39,7 @@ fn main() {
         std::env::temp_dir().join("sc-observability-b1e-owner-legacy"),
     );
     owner_config.enable_file_sink = false;
-    owner_config.enable_console_sink = false;
+    owner_config.enable_console_sink = true;
     let (owner_logger, _owner) = Logger::new_with_level_owner(owner_config)
         .expect("supported owner constructor remains callable");
     let _ = owner_logger.shutdown();
@@ -49,7 +49,7 @@ fn main() {
         std::env::temp_dir().join("sc-observability-b1e-owner-typed"),
     );
     typed_owner_config.enable_file_sink = false;
-    typed_owner_config.enable_console_sink = false;
+    typed_owner_config.enable_console_sink = true;
     let (typed_owner_logger, _typed_owner) = Logger::new_with_level_owner_typed(typed_owner_config)
         .expect("typed owner constructor");
     let _ = typed_owner_logger.shutdown();
@@ -59,7 +59,7 @@ fn main() {
         std::env::temp_dir().join("sc-observability-b1e-builder-owner"),
     );
     owner_builder_config.enable_file_sink = false;
-    owner_builder_config.enable_console_sink = false;
+    owner_builder_config.enable_console_sink = true;
     let (builder_owner_logger, _builder_owner) = LoggerBuilder::new_typed(owner_builder_config)
         .expect("typed builder")
         .build_with_level_owner()
@@ -71,7 +71,7 @@ fn main() {
         std::env::temp_dir().join("sc-observability-b1e-builder-owner-typed"),
     );
     typed_builder_owner_config.enable_file_sink = false;
-    typed_builder_owner_config.enable_console_sink = false;
+    typed_builder_owner_config.enable_console_sink = true;
     let (typed_builder_owner_logger, _typed_builder_owner) =
         LoggerBuilder::new_typed(typed_builder_owner_config)
             .expect("typed builder")

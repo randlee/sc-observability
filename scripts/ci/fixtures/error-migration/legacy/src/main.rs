@@ -16,14 +16,14 @@ fn main() {
     let service = ServiceName::new("b1e-legacy").expect("valid service");
     let mut logger_config = LoggerConfig::default_for(service, root.clone());
     logger_config.enable_file_sink = false;
-    logger_config.enable_console_sink = false;
+    logger_config.enable_console_sink = true;
 
     let mut builder_config = LoggerConfig::default_for(
         ServiceName::new("b1e-legacy-builder").expect("valid service"),
         std::env::temp_dir().join("sc-observability-b1e-legacy-builder"),
     );
     builder_config.enable_file_sink = false;
-    builder_config.enable_console_sink = false;
+    builder_config.enable_console_sink = true;
     let builder = sc_observability::LoggerBuilder::new(builder_config)
         .expect("legacy builder remains usable with warnings");
     let _ = builder.build().shutdown();
@@ -33,7 +33,7 @@ fn main() {
         std::env::temp_dir().join("sc-observability-b1e-legacy-resolver"),
     );
     resolver_config.enable_file_sink = false;
-    resolver_config.enable_console_sink = false;
+    resolver_config.enable_console_sink = true;
     let resolver_builder = Logger::builder(resolver_config).expect("legacy logger builder");
     let _ = resolver_builder.build().shutdown();
 
