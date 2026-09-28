@@ -91,19 +91,35 @@ def check_major_diff(crate: str, output: str, entries: list[dict]) -> list[str]:
 
 
 def structural_diagnostics_are_enumerated(crate: str, output: str) -> bool:
-    """Accept only a complete set of explicitly approved structural failures."""
+    """Accept only complete, symbol-bound structural diagnostics."""
     approved = {
         'sc-observability-otlp': {
-            'module_missing',
-            'pub_module_level_const_missing',
-            'struct_marked_non_exhaustive',
+            'module_missing': ('sc_observability_otlp::constants',
+                               'sc_observability_otlp::error_codes'),
+            'pub_module_level_const_missing': ('DEFAULT_', 'TELEMETRY_'),
+            'struct_marked_non_exhaustive': ('struct OtelConfig',),
         },
-        'sc-observability-log': {'auto_trait_impl_removed'},
-    }.get(crate, set())
+        'sc-observability-log': {
+            'auto_trait_impl_removed': ('type LogControl', 'UnwindSafe', 'RefUnwindSafe'),
+        },
+    }.get(crate, {})
     if not approved:
         return False
-    failures = re.findall(r'^--- failure ([a-z0-9_]+)(?:[: ])', output, re.MULTILINE)
-    return bool(failures) and set(failures) <= approved
+    # Cargo/semver-checks execution failures are not compatibility findings
+    # and must never be hidden by a finding allowlist.
+    if re.search(r"(?im)^\s*(?:error:|could not compile|process didn't exit|command failed|thread .* panicked)", output):
+        return False
+    headers = list(re.finditer(r'^--- failure ([a-z0-9_]+)(?:[: ])', output, re.MULTILINE))
+    if not headers or any(match.group(1) not in approved for match in headers):
+        return False
+    for index, header in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(output)
+        block = output[header.start():end]
+        if not all(token in block for token in approved[header.group(1)]):
+            return False
+        if 'Description:' not in block or 'Failed in:' not in block:
+            return False
+    return True
 
 
 def main() -> int:

@@ -115,7 +115,10 @@ class MajorBreakTests(unittest.TestCase):
 
     def test_structural_allowlist_rejects_mixed_unapproved_diagnostics(self):
         from validate_public_api import structural_diagnostics_are_enumerated
-        allowed = '--- failure module_missing : removed module\n'
+        allowed = ('--- failure module_missing: removed module\n'
+                   'Description:\nremoved module\n'
+                   'Failed in:\n  mod sc_observability_otlp::constants\n'
+                   '  mod sc_observability_otlp::error_codes\n')
         self.assertTrue(structural_diagnostics_are_enumerated(
             'sc-observability-otlp', allowed))
         mixed = allowed + '--- failure trait_method_added : new required method\n'
@@ -123,6 +126,23 @@ class MajorBreakTests(unittest.TestCase):
             'sc-observability-otlp', mixed))
         self.assertFalse(structural_diagnostics_are_enumerated(
             'sc-observability-otlp', 'cargo failed: tool error\n'))
+
+    def test_structural_allowlist_rejects_mixed_execution_error(self):
+        from validate_public_api import structural_diagnostics_are_enumerated
+        finding = ('--- failure module_missing: removed module\n'
+                   'Description:\nremoved module\n'
+                   'Failed in:\n  mod sc_observability_otlp::constants\n'
+                   '  mod sc_observability_otlp::error_codes\n')
+        self.assertFalse(structural_diagnostics_are_enumerated(
+            'sc-observability-otlp', finding + 'error: rustc failed\n'))
+
+    def test_structural_allowlist_requires_approved_symbols(self):
+        from validate_public_api import structural_diagnostics_are_enumerated
+        unrelated = ('--- failure module_missing: removed module\n'
+                     'Description:\nremoved module\n'
+                     'Failed in:\n  mod sc_observability_otlp::unrelated\n')
+        self.assertFalse(structural_diagnostics_are_enumerated(
+            'sc-observability-otlp', unrelated))
 
 
 
