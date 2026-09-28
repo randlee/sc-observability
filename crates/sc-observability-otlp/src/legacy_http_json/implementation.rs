@@ -16,6 +16,8 @@ use std::fs;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
+#[cfg(test)]
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
@@ -49,6 +51,9 @@ use sc_observability_types::{ErrorContext, LogEvent, Remediation, Timestamp, err
 
 const RETRY_AFTER_HEADER_LIMIT: usize = 128;
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(5);
+
+#[cfg(test)]
+static RETRY_WAIT_HOOK: OnceLock<Mutex<Option<SyncSender<()>>>> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 struct RetrySettings {
@@ -526,6 +531,9 @@ pub(super) fn parse_retry_after(value: &str, now: SystemTime) -> Option<Duration
 }
 
 pub(super) fn wait_cancelable(duration: Duration, cancel: &AtomicBool) -> bool {
+    #[cfg(test)]
+    notify_retry_wait_started();
+
     let deadline = Instant::now() + duration;
     while !cancel.load(Ordering::Acquire) {
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -535,6 +543,29 @@ pub(super) fn wait_cancelable(duration: Duration, cancel: &AtomicBool) -> bool {
         thread::sleep(remaining.min(WORKER_POLL_INTERVAL));
     }
     false
+}
+
+#[cfg(test)]
+pub(super) fn install_retry_wait_hook(sender: SyncSender<()>) {
+    let hook = RETRY_WAIT_HOOK.get_or_init(|| Mutex::new(None));
+    *hook.lock().expect("retry wait hook lock") = Some(sender);
+}
+
+#[cfg(test)]
+pub(super) fn clear_retry_wait_hook() {
+    if let Some(hook) = RETRY_WAIT_HOOK.get() {
+        *hook.lock().expect("retry wait hook lock") = None;
+    }
+}
+
+#[cfg(test)]
+fn notify_retry_wait_started() {
+    let sender = RETRY_WAIT_HOOK
+        .get()
+        .and_then(|hook| hook.lock().expect("retry wait hook lock").clone());
+    if let Some(sender) = sender {
+        let _ = sender.try_send(());
+    }
 }
 
 fn apply_jitter(delay: Duration, percent: u8, state: &mut u64) -> Duration {

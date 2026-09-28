@@ -10,9 +10,13 @@ use serde_json::Value;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, SystemTime};
+
+static RETRY_WAIT_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn sample_log() -> LogEvent {
     LogEvent {
@@ -81,6 +85,7 @@ fn safety_delta_retry_classification_is_bounded() {
 
 #[test]
 fn safety_delta_shutdown_cancels_retry_wait() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let cancel = std::sync::atomic::AtomicBool::new(false);
     cancel.store(true, Ordering::Release);
     assert!(!super::implementation::wait_cancelable(
@@ -167,6 +172,7 @@ fn terminal_client_status_is_not_retried() {
 
 #[test]
 fn response_loss_retries_the_same_batch_without_false_success_drop() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
@@ -194,6 +200,120 @@ fn response_loss_retries_the_same_batch_without_false_success_drop() {
         .expect("response loss is retried");
     server.join().expect("join server");
     assert_eq!(calls.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn shutdown_cancels_an_actual_retry_backoff() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let request = read_request(&mut stream);
+        assert!(request.contains("\"hello\""));
+        stream
+            .write_all(
+                b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 30\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .expect("write retry response");
+    });
+    let exporter = Arc::new(
+        OtlpHttpExporter::for_endpoint(format!("http://{address}")).expect("construct exporter"),
+    );
+    let (retry_wait_tx, retry_wait_rx) = mpsc::sync_channel(0);
+    super::implementation::install_retry_wait_hook(retry_wait_tx);
+    let export = Arc::clone(&exporter);
+    let export_thread = thread::spawn(move || {
+        export.send_payload_sync(
+            "logs",
+            &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
+        )
+    });
+    retry_wait_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("request entered the retry backoff");
+    super::implementation::clear_retry_wait_hook();
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let shutdown = runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(1), exporter.shutdown_async()).await
+    });
+    assert!(shutdown.is_ok(), "shutdown did not cancel retry backoff");
+    let error = export_thread
+        .join()
+        .expect("join export thread")
+        .expect_err("shutdown must cancel the retry instead of waiting for the Retry-After delay");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::ExportError::ShutdownCancelledRetry { .. }
+    ));
+    server.join().expect("join server");
+}
+
+#[test]
+fn async_shutdown_stays_responsive_during_an_in_flight_request() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let (request_started_tx, request_started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let request = read_request(&mut stream);
+        assert!(request.contains("\"hello\""));
+        request_started_tx.send(()).expect("signal request start");
+        release_rx.recv().expect("release request");
+    });
+    let exporter = Arc::new(
+        OtlpHttpExporter::for_endpoint(format!("http://{address}")).expect("construct exporter"),
+    );
+    let export = Arc::clone(&exporter);
+    let export_thread = thread::spawn(move || {
+        export.send_payload_sync(
+            "logs",
+            &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
+        )
+    });
+    request_started_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("request entered the server");
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let (marker_tx, _marker_rx) = tokio::sync::oneshot::channel();
+    let (responsive, _shutdown_result) = runtime.block_on(async {
+        let shutdown = exporter.shutdown_async();
+        tokio::pin!(shutdown);
+        let marker = async {
+            tokio::task::yield_now().await;
+            let _ = marker_tx.send(());
+        };
+        tokio::pin!(marker);
+        tokio::select! {
+            () = &mut marker => {
+                release_tx.send(()).expect("release in-flight request");
+                (true, shutdown.await)
+            }
+            result = &mut shutdown => (false, result),
+        }
+    });
+    assert!(
+        responsive,
+        "async shutdown blocked the executor while the request was in flight"
+    );
+    let error = export_thread
+        .join()
+        .expect("join export thread")
+        .expect_err("shutdown must cancel the in-flight request retry");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::ExportError::ShutdownCancelledRetry { .. }
+    ));
+    server.join().expect("join server");
 }
 
 #[test]
