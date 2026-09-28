@@ -1,6 +1,7 @@
 import unittest
+from unittest import mock
 
-from validate_binding_runtime_dependencies import validate_consumer_manifest
+import validate_binding_runtime_dependencies as validator
 
 TAURI_BOUNDARY = {
     "owner_package": "sc-observability-tauri",
@@ -23,11 +24,11 @@ class ConsumerEdgeFixtures(unittest.TestCase):
             "sc-observability-types": {"package": "sc-observability-types"},
         }
     }
-    validate_consumer_manifest(allowed, "sc-observability-tauri", boundary=TAURI_BOUNDARY)
+    validator.validate_consumer_manifest(allowed, "sc-observability-tauri", boundary=TAURI_BOUNDARY)
 
     forbidden = {"dependencies": {**allowed["dependencies"], "bad": {"package": "sc-observability"}}}
     with self.assertRaisesRegex(ValueError, "first-party edge drift"):
-      validate_consumer_manifest(forbidden, "sc-observability-tauri", boundary=TAURI_BOUNDARY)
+      validator.validate_consumer_manifest(forbidden, "sc-observability-tauri", boundary=TAURI_BOUNDARY)
 
   def test_resolves_workspace_aliases_in_target_and_dev_edges(self):
     workspace = {"workspace": {"dependencies": {
@@ -42,7 +43,7 @@ class ConsumerEdgeFixtures(unittest.TestCase):
         }}},
         "dev-dependencies": {"types_alias": {"workspace": True}},
     }
-    validate_consumer_manifest(manifest, "sc-observability-tauri", workspace, TAURI_BOUNDARY)
+    validator.validate_consumer_manifest(manifest, "sc-observability-tauri", workspace, TAURI_BOUNDARY)
 
   def test_rejects_renamed_workspace_edge(self):
     workspace = {"workspace": {"dependencies": {
@@ -58,7 +59,7 @@ class ConsumerEdgeFixtures(unittest.TestCase):
         "dev-dependencies": {"types_alias": {"workspace": True}},
     }
     with self.assertRaisesRegex(ValueError, "first-party edge drift"):
-      validate_consumer_manifest(manifest, "sc-observability-tauri", workspace, TAURI_BOUNDARY)
+      validator.validate_consumer_manifest(manifest, "sc-observability-tauri", workspace, TAURI_BOUNDARY)
 
   def test_boundary_manifest_controls_expected_edges(self):
     allowed = {
@@ -73,4 +74,16 @@ class ConsumerEdgeFixtures(unittest.TestCase):
         "sc-observability-dto",
     ]}}
     with self.assertRaisesRegex(ValueError, "first-party edge drift"):
-      validate_consumer_manifest(allowed, "sc-observability-tauri", boundary=boundary)
+      validator.validate_consumer_manifest(allowed, "sc-observability-tauri", boundary=boundary)
+
+  def test_missing_consumer_boundary_manifest_fails_closed(self):
+    original_loader = validator.load_boundary_manifest
+
+    def missing_tauri_manifest(package):
+      if package == "sc-observability-tauri":
+        return None
+      return original_loader(package)
+
+    with mock.patch.object(validator, "load_boundary_manifest", side_effect=missing_tauri_manifest):
+      with self.assertRaisesRegex(ValueError, "sc-observability-tauri boundary manifest is missing"):
+        validator.main()
