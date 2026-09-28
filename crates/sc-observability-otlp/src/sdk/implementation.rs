@@ -94,7 +94,7 @@ pub(crate) struct SdkAdapterSet {
 /// runtime. Connection values are already validated; this function never
 /// consults `OTEL_*` defaults and never creates a runtime.
 pub(crate) fn build_exporter_set(
-    connection: ValidatedBackendConnection,
+    connection: &ValidatedBackendConnection,
     bounds: &ValidatedTransportBounds,
 ) -> Result<SdkAdapterSet, ExportError> {
     let runtime = CallerRuntime::try_capture().ok_or_else(runtime_required_error)?;
@@ -141,7 +141,7 @@ struct SdkTerminal {
 
 impl SdkTerminal {
     fn new(
-        connection: ValidatedBackendConnection,
+        connection: &ValidatedBackendConnection,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
         if connection.ca_file().is_some() {

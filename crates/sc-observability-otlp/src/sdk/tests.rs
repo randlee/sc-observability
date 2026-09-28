@@ -42,7 +42,7 @@ fn sdk_constructor_builds_one_shared_admission_core_from_explicit_connection() {
     let connection = validated_backend_connection(&config).expect("connection");
 
     runtime.block_on(async move {
-        let adapter = build_exporter_set(connection, &bounds).expect("SDK adapter set");
+        let adapter = build_exporter_set(&connection, &bounds).expect("SDK adapter set");
         assert_eq!(adapter.lifecycle.health().admitted_records, 0);
         // The handoff returns both capabilities and the exact core that the
         // capabilities delegate to; no second core is constructed here.
