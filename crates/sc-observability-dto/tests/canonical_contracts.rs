@@ -71,6 +71,42 @@ fn canonical_error_projection_preserves_context() {
         }
     ));
 }
+
+#[test]
+fn shared_failure_shape_preserves_each_diagnostic_contract_losslessly() {
+    let legacy_wire = json!({
+        "kind": "queue_full",
+        "at": "2024-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": { "kind": "recoverable", "steps": ["retry later"] }
+    });
+    let canonical_wire = json!({
+        "kind": "queue_full",
+        "at": "2024-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": { "kind": "recoverable", "steps": ["retry later"] },
+        "cause": "bounded producer queue",
+        "docs": "https://example.test/queue-full",
+        "details": { "capacity": { "kind": "integer", "value": "64" } }
+    });
+
+    let legacy: Failure = serde_json::from_value(legacy_wire.clone()).unwrap();
+    let canonical: CanonicalFailureDto = serde_json::from_value(canonical_wire.clone()).unwrap();
+
+    assert_eq!(serde_json::to_value(legacy).unwrap(), legacy_wire);
+    assert_eq!(serde_json::to_value(&canonical).unwrap(), canonical_wire);
+    assert_eq!(
+        canonical.diagnostic().cause.as_deref(),
+        Some("bounded producer queue")
+    );
+    assert_eq!(
+        canonical.diagnostic().docs.as_deref(),
+        Some("https://example.test/queue-full")
+    );
+    assert!(canonical.diagnostic().details.contains_key("capacity"));
+}
 #[test]
 fn histogram_conversion_is_lossless() {
     let mut wire = fixture("MetricRecordDto");
