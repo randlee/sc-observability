@@ -45,6 +45,19 @@ D.7 owns only `sdk/implementation.rs`, `sdk/tests.rs`, `examples/otlp-sdk/Cargo.
 
 The adapter delegates retry exclusively to the pinned official SDK, sets validated builder values explicitly, never lets ambient `OTEL_*` defaults override them, and never creates a hidden runtime or substitutes no-op. It preserves D.12 typed terminal/deadline/accounting results at its supported external consumer boundary; expected failures remain results rather than panics or false success (ADR-014).
 
+## Implementation matrix (reissued completion)
+
+| Deliverable | Concrete source | Evidence |
+| --- | --- | --- |
+| D1: pinned, caller-owned SDK transport | `sdk/implementation.rs`: `SdkTerminal` owns per-signal generated tonic clients; `sdk/mod.rs` re-exports the crate-private constructor | `cargo test -p sc-observability-otlp --lib sdk::tests --features otlp-sdk --locked` |
+| D2: lossless neutral signal projection | `project_logs`, `project_spans`, and `project_metrics` emit OTLP protobuf collector requests after resource/scope grouping | `sdk::tests::{resource_grouping_keeps_each_resource_and_its_record_order,metric_projection_keeps_resource_scope_and_histogram_distribution}` |
+| D3: one D.6 admission/lifecycle domain | `LifecycleCore::from_backend` owns only the terminal backend; `build_exporter_set` creates that core before adapters, and adapters admit then schedule via the caller Tokio handle | `sdk::tests::sdk_constructor_builds_one_shared_admission_core_from_explicit_connection` and lifecycle regression suite |
+| D4: hosted consumer handoff | `examples/otlp-sdk` remains the Tokio-hosted configuration consumer; the crate-private constructor is deliberately activated only by D.18 | `cargo check --manifest-path examples/otlp-sdk/Cargo.toml --locked` |
+
+The generated-client transport remains feature-isolated under the reviewed
+ADR-019 allowlist. D.18 retains root-facade activation and D.9 retains
+collector equivalence; neither is claimed by this matrix.
+
 ## Handoff from obs-d-21 (wave 1)
 
 Consume D.21’s sanity-gated interfaces without altering its module or manifest ownership.

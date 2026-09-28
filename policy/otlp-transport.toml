@@ -21,7 +21,13 @@ default_features = false
 [transport.opentelemetry-proto]
 version = "=0.33.0"
 backends = ["otlp-sdk"]
-features = ["gen-tonic-messages", "trace", "metrics", "logs"]
+features = ["gen-tonic", "trace", "metrics", "logs"]
+default_features = false
+
+[transport.tonic]
+version = "=0.14.6"
+backends = ["otlp-sdk"]
+features = ["transport"]
 default_features = false
 
 [transport.reqwest]
