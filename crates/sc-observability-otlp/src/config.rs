@@ -723,7 +723,7 @@ impl QueueByteCapacity {
 pub(crate) struct BoundedPercent(u8);
 
 #[cfg_attr(
-    not(test),
+    all(not(test), not(feature = "legacy-http-json")),
     expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl BoundedPercent {
@@ -764,20 +764,56 @@ pub(crate) struct ValidatedTransportBounds {
 /// ambient `OTEL_*` configuration.
 #[derive(Debug, Clone)]
 pub(crate) struct ValidatedBackendConnection {
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(
+            dead_code,
+            reason = "D.21 connection endpoint is consumed by enabled backends"
+        )
+    )]
     endpoint: OtlpEndpoint,
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(
+            dead_code,
+            reason = "D.21 connection auth is consumed by enabled backends"
+        )
+    )]
     auth_header: Option<AuthHeader>,
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(
+            dead_code,
+            reason = "D.21 connection CA is consumed by enabled backends"
+        )
+    )]
     ca_file: Option<PathBuf>,
 }
 
 impl ValidatedBackendConnection {
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(
+            dead_code,
+            reason = "D.21 endpoint view is consumed by enabled backends"
+        )
+    )]
     pub(crate) fn endpoint(&self) -> &OtlpEndpoint {
         &self.endpoint
     }
 
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(dead_code, reason = "D.21 auth view is consumed by enabled backends")
+    )]
     pub(crate) fn auth_header(&self) -> Option<&AuthHeader> {
         self.auth_header.as_ref()
     }
 
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(dead_code, reason = "D.21 CA view is consumed by enabled backends")
+    )]
     pub(crate) fn ca_file(&self) -> Option<&PathBuf> {
         self.ca_file.as_ref()
     }
@@ -793,6 +829,16 @@ impl ValidatedTransportBounds {
     pub(crate) const fn queue_byte_capacity(&self) -> QueueByteCapacity {
         self.queue_byte_capacity
     }
+    #[cfg_attr(
+        all(
+            not(test),
+            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
+        ),
+        allow(
+            dead_code,
+            reason = "D.21 request timeout is consumed by enabled backends"
+        )
+    )]
     pub(crate) const fn request_timeout(&self) -> PositiveDuration {
         self.request_timeout
     }
@@ -806,8 +852,11 @@ impl ValidatedTransportBounds {
 
 /// Backend-specific state; SDK and disabled transports cannot carry retry policy.
 #[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    all(not(test), not(feature = "legacy-http-json")),
+    allow(
+        dead_code,
+        reason = "D.21 legacy retry state is consumed by the legacy backend"
+    )
 )]
 #[derive(Debug)]
 pub(crate) enum BackendTransportBounds {
@@ -828,8 +877,8 @@ pub(crate) struct RetryPolicy {
 }
 
 #[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    not(feature = "legacy-http-json"),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl RetryPolicy {
     pub(crate) const fn max_retries(&self) -> u32 {

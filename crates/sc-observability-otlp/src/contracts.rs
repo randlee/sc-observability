@@ -6,6 +6,13 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+#[cfg_attr(
+    not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+    allow(
+        unused_imports,
+        reason = "D.21 contracts are consumed by enabled backends"
+    )
+)]
 pub(crate) use sc_observability_types::otlp::{
     OtlpCompleteSpan as CompleteSpan, OtlpInstrumentationScope as InstrumentationScope,
     OtlpLogRecord as LogRecord, OtlpRecord as ExportRecord, OtlpResource as Resource,

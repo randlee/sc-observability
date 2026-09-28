@@ -1,7 +1,7 @@
 use super::implementation::{
     OtlpHttpExporter, build_logs_payload, normalize_logs_endpoint, parse_retry_after,
 };
-use crate::contracts::LogExporter;
+use crate::contracts::{ExporterLifecycle, LogExporter};
 use sc_observability_types::{
     ActionName, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory,
     Timestamp,
@@ -163,4 +163,50 @@ fn terminal_client_status_is_not_retried() {
     ));
     server.join().expect("join server");
     assert_eq!(calls.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn response_loss_retries_the_same_batch_without_false_success_drop() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_server = Arc::clone(&calls);
+    let server = thread::spawn(move || {
+        for attempt in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let request = read_request(&mut stream);
+            assert!(request.contains("\"hello\""));
+            calls_server.fetch_add(1, Ordering::Relaxed);
+            if attempt == 1 {
+                stream
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    .expect("write retry response");
+            }
+        }
+    });
+    let exporter =
+        OtlpHttpExporter::for_endpoint(format!("http://{address}")).expect("construct exporter");
+    exporter
+        .send_payload_sync(
+            "logs",
+            &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
+        )
+        .expect("response loss is retried");
+    server.join().expect("join server");
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn blocking_lifecycle_is_rejected_from_entered_tokio() {
+    let exporter = OtlpHttpExporter::for_endpoint("http://127.0.0.1:4318".to_owned())
+        .expect("construct exporter");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let error = runtime.block_on(async { exporter.flush_blocking() });
+    assert!(matches!(
+        error,
+        Err(sc_observability_types::v2::ExportError::BlockingBackendInAsyncContext { .. })
+    ));
 }

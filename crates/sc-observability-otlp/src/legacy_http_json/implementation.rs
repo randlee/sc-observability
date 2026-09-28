@@ -29,7 +29,7 @@ use serde_json::{Value, json};
 
 use crate::config::{
     AuthHeader, BackendTransportBounds, OtelConfig, RetryPolicy, ValidatedTransportBounds,
-    validated_transport_bounds,
+    validated_backend_connection, validated_transport_bounds,
 };
 #[cfg(test)]
 use crate::config::{ExporterBackend, OtlpProtocol};
@@ -96,25 +96,24 @@ impl LegacyHttpJsonConfig {
             validated_transport_bounds(config).map_err(|error| ExportError::Transport {
                 context: error.into_context(),
             })?;
+        let connection =
+            validated_backend_connection(config).map_err(|error| ExportError::Transport {
+                context: error.into_context(),
+            })?;
         let BackendTransportBounds::Legacy(policy) = bounds.backend() else {
             return Err(transport_error(
                 "legacy HTTP/JSON configuration was not validated for the legacy backend",
             ));
         };
-        let endpoint = config
-            .endpoint
-            .as_ref()
-            .map(ToString::to_string)
-            .ok_or_else(|| transport_error("legacy HTTP/JSON endpoint is missing"))?;
+        let endpoint = connection.endpoint().as_str().to_owned();
         Ok((
             Self {
                 endpoint: endpoint.trim_end_matches('/').to_owned(),
-                auth_header: config
-                    .auth_header
-                    .as_ref()
+                auth_header: connection
+                    .auth_header()
                     .map(AuthHeader::as_str)
                     .map(str::to_owned),
-                ca_file: config.ca_file.clone(),
+                ca_file: connection.ca_file().cloned(),
                 insecure_skip_verify: config.insecure_skip_verify,
                 request_timeout: bounds.request_timeout().get(),
                 lifecycle_flush_timeout: bounds.lifecycle().flush().get(),
