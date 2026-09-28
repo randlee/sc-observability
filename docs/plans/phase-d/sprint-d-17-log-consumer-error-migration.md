@@ -12,7 +12,7 @@ Generated projection of `obs-d-17`; the bead is authoritative.
 - Target boundary: log consumer migration
 - Branch: `sprint/d-17-log-consumer-error-migration`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-17-log-consumer-error-migration`
-- PR target (merge order only): `sprint/d-16-log-error-migration`
+- PR target (merge order only): `sprint/d-15-binding-runtime-error-migration`
 - Blocked by: `obs-d-12-sanity, obs-d-13-sanity`
 - Requirements: DOC-003, LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-002, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-046, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, OOS-001, OOS-002, OOS-003, OOS-004, OOS-005, OOS-006, OOS-007, OOS-008, OTLP-006, OTLP-007, PHB-002, PHB-010, PHB-011, PHB-012, PHD-001, PHD-002, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
 - ADRs: ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-008, ADR-009, ADR-010, ADR-014, ADR-017, ADR-018, ADR-019
@@ -31,7 +31,7 @@ Generated projection of `obs-d-17`; the bead is authoritative.
 
 ## This Sprint Does Not Close
 
-Log-crate internal construction is `obs-d-16`; bridge implementation is `obs-d-2`; workspace API/release evidence is `obs-d-18`.
+Log-crate canonical-error activation is `obs-d-18` through the proposed D16 absorption; bridge implementation is `obs-d-2`; workspace API/release evidence is `obs-d-18`.
 The sprint document is supporting context and is not a separate closure gate.
 
 
