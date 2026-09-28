@@ -40,7 +40,7 @@ use sc_observability_types::otlp::{
 };
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{ConfigFailure, ExportError};
-#[allow(
+#[expect(
     deprecated,
     reason = "telemetry retains legacy error names in its published compatibility signatures"
 )]
@@ -590,7 +590,7 @@ fn unsupported_backend(
 
 impl Telemetry {
     /// Creates a telemetry runtime through the validated exporter factory.
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
     )]
@@ -611,7 +611,7 @@ impl Telemetry {
     }
 
     #[cfg(test)]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "test exporter injection retains the legacy InitError comparison boundary"
     )]
@@ -750,7 +750,7 @@ impl Telemetry {
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility lifecycle method keeps the published FlushError signature"
     )]
@@ -835,7 +835,7 @@ impl Telemetry {
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing the final shutdown
     /// error state.
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
     )]

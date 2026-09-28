@@ -32,10 +32,6 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-#[allow(
-    deprecated,
-    reason = "the facade retains legacy error names in its public compatibility signatures"
-)]
 use sc_observability::{
     LogError, Logger, LoggerConfig, QueueCapacity, RetainedLogPolicy, Running, Stopped,
 };
@@ -43,7 +39,7 @@ use sc_observability_types::v2::{
     FlushError as CanonicalFlushError, InitError as CanonicalInitError,
     ShutdownError as CanonicalShutdownError,
 };
-#[allow(
+#[expect(
     deprecated,
     reason = "the facade retains legacy error names in its published compatibility signatures"
 )]
@@ -58,7 +54,7 @@ pub use sc_observability_types::{
     ObservabilityHealthReport, ObservationError, ObservationHealthState,
 };
 
-#[allow(
+#[expect(
     deprecated,
     reason = "the 1.x facade remains a narrow compatibility boundary until D.18 activates canonical exports"
 )]
@@ -66,7 +62,7 @@ fn legacy_init_error(error: CanonicalInitError) -> InitError {
     InitError(error.into_context())
 }
 
-#[allow(
+#[expect(
     deprecated,
     reason = "the 1.x facade remains a narrow compatibility boundary until D.18 activates canonical exports"
 )]
@@ -74,7 +70,7 @@ fn legacy_flush_error(error: CanonicalFlushError) -> FlushError {
     FlushError(error.into_context())
 }
 
-#[allow(
+#[expect(
     deprecated,
     reason = "the 1.x facade remains a narrow compatibility boundary until D.18 activates canonical exports"
 )]
@@ -269,7 +265,7 @@ enum LoggerHandle {
     Stopped(Logger<Stopped>),
 }
 
-#[allow(
+#[expect(
     deprecated,
     reason = "routing keeps the published SubscriberError callback boundary"
 )]
