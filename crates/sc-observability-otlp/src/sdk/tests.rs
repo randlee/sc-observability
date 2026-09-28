@@ -1,16 +1,19 @@
 //! Focused caller-runtime tests for the official SDK adapter.
 
 use super::build_exporter_set;
-use super::implementation::{CallerRuntime, group_by_resource, project_metrics};
+use super::implementation::{CallerRuntime, group_by_resource, project_logs, project_metrics};
 use crate::config::{
     ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, validated_backend_connection,
     validated_transport_bounds,
 };
-use crate::contracts::{ExportRecord, InstrumentationScope, Resource};
+use crate::contracts::{ExportRecord, InstrumentationScope, LogRecord, Resource};
 use sc_observability_types::v2::{
-    AttributeValue, Attributes, FiniteF64, MetricRecord, MetricValue,
+    AttributeValue, Attributes, FiniteF64, MetricRecord, MetricValue, TraceFlags,
 };
-use sc_observability_types::{MetricName, ServiceName, Timestamp};
+use sc_observability_types::{
+    ActionName, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion, ServiceName, SpanId,
+    TargetCategory, Timestamp, TraceContext, TraceId,
+};
 
 #[test]
 fn sdk_adapter_requires_an_entered_caller_runtime() {
@@ -91,6 +94,90 @@ fn resource_grouping_keeps_each_resource_and_its_record_order() {
     assert_eq!(groups[0].scopes[0].records, vec![1, 3]);
     assert_eq!(groups[1].resource, second);
     assert_eq!(groups[1].scopes[0].records, vec![2]);
+}
+
+fn log_record(parent_span_id: Option<SpanId>) -> ExportRecord<LogRecord> {
+    ExportRecord {
+        resource: Resource {
+            attributes: Attributes::from([(
+                "resource.id".to_owned(),
+                AttributeValue::String("logs".to_owned()),
+            )]),
+            schema_url: None,
+        },
+        scope: InstrumentationScope::default(),
+        record: LogRecord {
+            event: LogEvent {
+                version: SchemaVersion::new("v1").expect("valid schema version"),
+                timestamp: Timestamp::UNIX_EPOCH,
+                level: Level::Info,
+                service: ServiceName::new("sdk-test").expect("valid service"),
+                target: TargetCategory::new("sdk.test").expect("valid target"),
+                action: ActionName::new("log.emitted").expect("valid action"),
+                message: Some("preserve correlation".to_owned()),
+                identity: ProcessIdentity::default(),
+                trace: Some(TraceContext {
+                    trace_id: TraceId::new("0123456789abcdef0123456789abcdef")
+                        .expect("valid trace id"),
+                    span_id: SpanId::new("0123456789abcdef").expect("valid span id"),
+                    parent_span_id,
+                }),
+                request_id: None,
+                correlation_id: None,
+                outcome: None,
+                diagnostic: None,
+                state_transition: None,
+                fields: serde_json::Map::new(),
+            },
+            trace_flags: TraceFlags::new(0x01),
+            attributes: Attributes::new(),
+        },
+    }
+}
+
+#[test]
+fn log_projection_preserves_parent_span_id_and_absent_parent_behavior() {
+    let parent = SpanId::new("fedcba9876543210").expect("valid parent span id");
+    let with_parent = project_logs(&[log_record(Some(parent.clone()))]);
+    let with_parent = &with_parent[0].scope_logs[0].log_records[0];
+    let parent_attribute = with_parent
+        .attributes
+        .iter()
+        .find(|attribute| attribute.key == "sc.observability.log.parent_span_id")
+        .expect("parent span id attribute");
+    assert_eq!(
+        parent_attribute
+            .value
+            .as_ref()
+            .and_then(|value| value.value.as_ref()),
+        Some(
+            &opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(
+                parent.as_str().to_owned(),
+            ),
+        )
+    );
+    assert_eq!(
+        with_parent.trace_id,
+        vec![
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
+            0xcd, 0xef
+        ]
+    );
+    assert_eq!(
+        with_parent.span_id,
+        vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]
+    );
+
+    let without_parent = project_logs(&[log_record(None)]);
+    let without_parent = &without_parent[0].scope_logs[0].log_records[0];
+    assert!(
+        !without_parent
+            .attributes
+            .iter()
+            .any(|attribute| attribute.key == "sc.observability.log.parent_span_id")
+    );
+    assert_eq!(without_parent.trace_id, with_parent.trace_id);
+    assert_eq!(without_parent.span_id, with_parent.span_id);
 }
 
 #[test]

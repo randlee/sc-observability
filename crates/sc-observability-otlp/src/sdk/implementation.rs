@@ -586,6 +586,12 @@ fn project_log(log: LogRecord) -> proto_logs::LogRecord {
     let (trace_id, span_id) = event.trace.as_ref().map_or_else(
         || (Vec::new(), Vec::new()),
         |trace| {
+            if let Some(parent_span_id) = trace.parent_span_id.as_ref() {
+                attributes.insert(
+                    "sc.observability.log.parent_span_id".to_owned(),
+                    AttributeValue::String(parent_span_id.as_str().to_owned()),
+                );
+            }
             (
                 decode_hex(trace.trace_id.as_str()),
                 decode_hex(trace.span_id.as_str()),
