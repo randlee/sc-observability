@@ -15,7 +15,6 @@ use sc_observability_types::typed::InitFailure;
     reason = "the builder retains InitError in its published compatibility signature"
 )]
 use sc_observability_types::{ErrorContext, InitError, Remediation};
-use thiserror::Error;
 
 use crate::typed::{TypedLogSink, legacy_sink};
 use crate::{
@@ -46,29 +45,8 @@ pub struct LoggerBuilder {
     typed_sinks: Vec<Arc<dyn TypedLogSink>>,
 }
 
-/// A typed sink could not be added to a logger builder.
-#[derive(Debug, Error)]
-pub enum SinkRegistrationError {
-    /// The same typed sink instance was already registered.
-    #[error("{0}")]
-    Duplicate(#[source] Box<ErrorContext>),
-    /// The sink is degraded and cannot be registered.
-    #[error("{0}")]
-    Invalid(#[source] Box<ErrorContext>),
-    /// The sink is unavailable and therefore closed to registration.
-    #[error("{0}")]
-    Closed(#[source] Box<ErrorContext>),
-}
-
-impl SinkRegistrationError {
-    /// Returns the stable diagnostic context for this registration failure.
-    #[must_use]
-    pub fn context(&self) -> &ErrorContext {
-        match self {
-            Self::Duplicate(context) | Self::Invalid(context) | Self::Closed(context) => context,
-        }
-    }
-}
+/// Compatibility name for canonical, macro-generated initialization failures.
+pub type SinkRegistrationError = InitFailure;
 
 impl LoggerBuilder {
     /// Creates a builder with the configured built-in sinks.
@@ -146,9 +124,8 @@ impl LoggerBuilder {
     ///
     /// # Errors
     ///
-    /// Returns [`SinkRegistrationError::Duplicate`] for the same typed sink
-    /// instance, [`SinkRegistrationError::Invalid`] for a degraded sink, and
-    /// [`SinkRegistrationError::Closed`] for an unavailable sink.
+    /// Returns a canonical initialization failure with a stable registration code
+    /// when the sink is duplicated, degraded, or unavailable.
     pub fn register_typed_sink(
         &mut self,
         sink: Arc<dyn TypedLogSink>,
@@ -158,22 +135,20 @@ impl LoggerBuilder {
             .iter()
             .any(|registered| Arc::ptr_eq(registered, &sink))
         {
-            return Err(SinkRegistrationError::Duplicate(Box::new(
-                ErrorContext::new(
-                    error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE,
-                    "typed sink is already registered",
-                    Remediation::recoverable(
-                        "register each typed sink instance only once",
-                        ["remove the duplicate registration"],
-                    ),
+            return Err(InitFailure::from_context(Box::new(ErrorContext::new(
+                error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE,
+                "typed sink is already registered",
+                Remediation::recoverable(
+                    "register each typed sink instance only once",
+                    ["remove the duplicate registration"],
                 ),
-            )));
+            ))));
         }
 
         match sink.health().state {
             SinkHealthState::Healthy => {}
             SinkHealthState::DegradedDropping => {
-                return Err(SinkRegistrationError::Invalid(Box::new(ErrorContext::new(
+                return Err(InitFailure::from_context(Box::new(ErrorContext::new(
                     error_codes::SC_LOG_SINK_REGISTRATION_INVALID,
                     "typed sink is degraded and cannot be registered",
                     Remediation::recoverable(
@@ -183,7 +158,7 @@ impl LoggerBuilder {
                 ))));
             }
             SinkHealthState::Unavailable => {
-                return Err(SinkRegistrationError::Closed(Box::new(ErrorContext::new(
+                return Err(InitFailure::from_context(Box::new(ErrorContext::new(
                     error_codes::SC_LOG_SINK_REGISTRATION_CLOSED,
                     "typed sink is unavailable and closed to registration",
                     Remediation::recoverable(

@@ -41,6 +41,20 @@ fn settings_error_codes_match_documented_stable_names() {
     }
 }
 
+#[test]
+fn empty_default_root_reports_resolution_failure() {
+    let error = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: LogSettings::default(),
+        application_env: None,
+        default_root: PathBuf::new(),
+    })
+    .expect_err("empty effective default root cannot be resolved");
+
+    assert!(matches!(error, LogSettingsError::Resolution { .. }));
+    assert_eq!(error.code().as_str(), "SC_LOG_SETTINGS_RESOLUTION");
+}
+
 fn assert_application_inventory_values(resolved: &ResolvedLogSettings) {
     let policy = resolved.retained_log_policy;
     let actual = [

@@ -32,7 +32,9 @@ pub struct LogRoot(PathBuf);
 impl LogRoot {
     pub(crate) fn new(path: PathBuf) -> Result<Self, LogSettingsError> {
         if path.as_os_str().is_empty() {
-            return Err(LogSettingsError::invalid_value("logRoot must not be empty"));
+            return Err(LogSettingsError::resolution(
+                "resolved logRoot must not be empty",
+            ));
         }
         Ok(Self(path))
     }
@@ -162,6 +164,19 @@ impl LogSettingsError {
                 Remediation::recoverable(
                     "correct the supplied logging setting",
                     std::iter::empty::<String>(),
+                ),
+            )),
+        }
+    }
+
+    pub(crate) fn resolution(message: impl Into<String>) -> Self {
+        Self::Resolution {
+            context: Box::new(ErrorContext::new(
+                error_codes::LOG_RESOLUTION,
+                message,
+                Remediation::recoverable(
+                    "provide a valid effective logging configuration",
+                    ["set a non-empty default log root or override it with a valid root"],
                 ),
             )),
         }

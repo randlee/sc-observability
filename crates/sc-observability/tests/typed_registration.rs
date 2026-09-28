@@ -10,6 +10,8 @@ use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::v2::LogSinkError;
 use serde_json::Map;
 
+fn assert_diagnostic_info<T: DiagnosticInfo>(_: &T) {}
+
 struct RecordingTypedSink {
     writes: AtomicUsize,
     flushes: AtomicUsize,
@@ -158,9 +160,9 @@ fn typed_registration_reports_duplicate_invalid_and_closed_sinks() {
     let Err(error) = builder.register_typed_sink(duplicate) else {
         panic!("duplicate typed sink must fail");
     };
-    assert!(matches!(&error, SinkRegistrationError::Duplicate(_)));
+    assert_diagnostic_info(&error);
     assert_eq!(
-        error.context().diagnostic().code,
+        error.diagnostic().code,
         error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE
     );
 
@@ -169,9 +171,9 @@ fn typed_registration_reports_duplicate_invalid_and_closed_sinks() {
     let Err(error) = builder.register_typed_sink(invalid) else {
         panic!("degraded typed sink must fail");
     };
-    assert!(matches!(&error, SinkRegistrationError::Invalid(_)));
+    assert_diagnostic_info(&error);
     assert_eq!(
-        error.context().diagnostic().code,
+        error.diagnostic().code,
         error_codes::SC_LOG_SINK_REGISTRATION_INVALID
     );
 
@@ -180,9 +182,9 @@ fn typed_registration_reports_duplicate_invalid_and_closed_sinks() {
     let Err(error) = builder.register_typed_sink(closed) else {
         panic!("unavailable typed sink must fail");
     };
-    assert!(matches!(&error, SinkRegistrationError::Closed(_)));
+    assert_diagnostic_info(&error);
     assert_eq!(
-        error.context().diagnostic().code,
+        error.diagnostic().code,
         error_codes::SC_LOG_SINK_REGISTRATION_CLOSED
     );
 }
