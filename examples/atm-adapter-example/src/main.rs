@@ -143,7 +143,7 @@ fn build_observability(
     };
 
     let telemetry_config = telemetry_config_from_env(service.clone())?;
-    let telemetry = Arc::new(Telemetry::new_typed(telemetry_config)?);
+    let telemetry = Arc::new(Telemetry::new(telemetry_config)?);
 
     let runtime = Observability::builder(observability_config)
         .register_projection(
@@ -171,17 +171,17 @@ fn build_observability(
 
     emit_example_sequence(&runtime, service, mode)?;
     runtime.flush()?;
-    telemetry.flush_typed()?;
+    telemetry.flush()?;
 
     match mode {
         RunMode::Normal => {
-            telemetry.shutdown_typed()?;
+            telemetry.shutdown()?;
             runtime.shutdown()?;
         }
         RunMode::FailOpen => {
             // OTLP-009: this path intentionally leaves one started span without a
             // matching end so shutdown drops it and records fail-open export loss.
-            let _ = telemetry.shutdown_typed();
+            let _ = telemetry.shutdown();
             runtime.shutdown()?;
         }
     }

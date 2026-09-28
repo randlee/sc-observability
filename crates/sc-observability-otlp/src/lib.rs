@@ -38,7 +38,9 @@ use config::{validate_config_typed, validated_transport_bounds};
 use sc_observability_types::otlp::{
     OtlpCompleteSpan, OtlpInstrumentationScope, OtlpLogRecord, OtlpRecord, OtlpResource,
 };
-use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
+#[cfg(test)]
+use sc_observability_types::typed::InitFailure;
+use sc_observability_types::typed::{EventFailure, FlushFailure, ShutdownFailure};
 use sc_observability_types::v2::{ConfigFailure, ExportError};
 use sc_observability_types::{
     DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
@@ -586,33 +588,19 @@ fn unsupported_backend(
 
 impl Telemetry {
     /// Creates a telemetry runtime through the validated exporter factory.
-    #[expect(
-        deprecated,
-        reason = "retained compatibility constructor keeps the published InitError signature"
-    )]
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use Telemetry::new_typed(); see migrate-error-api.md."
-    )]
     pub fn new(config: TelemetryConfig) -> Result<Self, InitError> {
-        Self::new_typed(config).map_err(|failure| InitError::Runtime {
-            context: failure.into_context(),
-        })
-    }
-
-    /// Creates a telemetry runtime with neutral initialization failures.
-    pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
-        let bounds = validated_telemetry_bounds(&config)?;
-        let exporters = exporter_factory(&config, &bounds)
-            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+        let bounds =
+            validated_telemetry_bounds(&config).map_err(|failure| InitError::Configuration {
+                context: failure.into_context(),
+            })?;
+        let exporters =
+            exporter_factory(&config, &bounds).map_err(|error| InitError::Configuration {
+                context: error.into_context(),
+            })?;
         Ok(Self::new_with_validated_exporter_set(config, exporters))
     }
 
     #[cfg(test)]
-    #[expect(
-        deprecated,
-        reason = "test exporter injection retains the legacy InitError comparison boundary"
-    )]
     fn new_with_exporters(
         config: TelemetryConfig,
         log_exporter: Arc<dyn LogExporter<LogEvent>>,
@@ -752,23 +740,7 @@ impl Telemetry {
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
-    #[expect(
-        deprecated,
-        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
-    )]
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use Telemetry::flush_typed(); see migrate-error-api.md."
-    )]
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.flush_typed().map_err(|failure| FlushError::Drain {
-            context: failure.into_context(),
-        })
-    }
-
-    /// Flushes telemetry with a neutral flush failure while retaining fail-open
-    /// exporter semantics.
-    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
         let _ = self.flush_outcome();
         Ok(())
     }
@@ -839,16 +811,8 @@ impl Telemetry {
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing the final shutdown
     /// error state.
-    #[expect(
-        deprecated,
-        reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
-    )]
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use Telemetry::shutdown_typed(); see migrate-error-api.md."
-    )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
-        self.shutdown_typed()
+        self.shutdown_with_failure()
             .map_err(|failure| ShutdownError::Drain {
                 context: failure.into_context(),
             })
@@ -861,7 +825,7 @@ impl Telemetry {
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing final state.
-    pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
+    fn shutdown_with_failure(&self) -> Result<(), ShutdownFailure> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
@@ -1328,7 +1292,7 @@ mod tests {
         let Err(legacy) = Telemetry::new(config.clone()) else {
             panic!("legacy invalid config should fail");
         };
-        let Err(typed) = Telemetry::new_typed(config) else {
+        let Err(typed) = Telemetry::new(config) else {
             panic!("typed invalid config should fail");
         };
 
@@ -1382,7 +1346,7 @@ mod tests {
             );
         }
 
-        let Err(constructor_error) = Telemetry::new_typed(telemetry_config()) else {
+        let Err(constructor_error) = Telemetry::new(telemetry_config()) else {
             panic!("the retained constructor preserves the factory diagnostic");
         };
         #[cfg(not(feature = "otlp-sdk"))]
@@ -1545,7 +1509,7 @@ mod tests {
             .blocking_preflight()
             .expect("disabled lifecycle");
 
-        let telemetry = Telemetry::new_typed(config).expect("disabled telemetry");
+        let telemetry = Telemetry::new(config).expect("disabled telemetry");
         telemetry
             .exporters
             .lifecycle
@@ -1838,7 +1802,7 @@ mod tests {
             .emit_span(&SpanSignal::Started(started))
             .expect("typed started");
         legacy.shutdown().expect("legacy shutdown");
-        typed.shutdown_typed().expect("typed shutdown");
+        typed.shutdown().expect("typed shutdown");
 
         let legacy_health = legacy.health();
         let typed_health = typed.health();
@@ -1920,9 +1884,10 @@ mod tests {
         );
         let original_timestamp = context.diagnostic().timestamp;
         let original_backtrace_ptr = std::ptr::from_ref(context.backtrace());
-        let original_source = std::error::Error::source(context.as_ref())
-            .expect("test context has a native source") as *const _
-            as *const ();
+        let original_source = std::ptr::from_ref(
+            std::error::Error::source(context.as_ref()).expect("test context has a native source"),
+        )
+        .cast::<()>();
         let failure = EventFailure::from_context(context);
 
         let TelemetryError::ExportFailure(exported) = export_failure_from_event(failure) else {
@@ -1938,7 +1903,7 @@ mod tests {
         let source =
             std::error::Error::source(exported.context()).expect("source must be preserved");
         assert!(std::ptr::eq(
-            source as *const _ as *const (),
+            std::ptr::from_ref(source).cast::<()>(),
             original_source
         ));
         assert_eq!(source.to_string(), "orphaned span event source");
@@ -2095,7 +2060,7 @@ mod tests {
         typed.emit_span(&ended).expect("typed ended");
         typed.emit_metric(&metric_record()).expect("typed metric");
         legacy.flush().expect("legacy fail-open flush");
-        typed.flush_typed().expect("typed fail-open flush");
+        typed.flush().expect("typed fail-open flush");
         assert!(
             legacy
                 .health()
@@ -2136,7 +2101,7 @@ mod tests {
         typed.emit_span(&ended).expect("typed ended");
         typed.emit_metric(&metric_record()).expect("typed metric");
         legacy.flush().expect("legacy recovery flush");
-        typed.flush_typed().expect("typed recovery flush");
+        typed.flush().expect("typed recovery flush");
         assert!(
             legacy
                 .health()
@@ -2189,7 +2154,7 @@ mod tests {
         };
 
         legacy.shutdown().expect("legacy shutdown");
-        typed.shutdown_typed().expect("typed shutdown");
+        typed.shutdown().expect("typed shutdown");
 
         assert!(matches!(
             legacy.emit_log(&log_event(service_name(), "after-shutdown")),
@@ -2282,11 +2247,9 @@ mod tests {
     fn typed_telemetry_lifecycle_preserves_fail_open_and_repeat_shutdown() {
         let telemetry = test_telemetry_typed(telemetry_config());
 
-        telemetry
-            .flush_typed()
-            .expect("typed flush remains fail-open");
-        telemetry.shutdown_typed().expect("typed first shutdown");
-        telemetry.shutdown_typed().expect("typed repeated shutdown");
+        telemetry.flush().expect("typed flush remains fail-open");
+        telemetry.shutdown().expect("typed first shutdown");
+        telemetry.shutdown().expect("typed repeated shutdown");
     }
 
     #[test]
@@ -2321,7 +2284,7 @@ mod tests {
             .shutdown()
             .expect_err("legacy shutdown should surface flush failures");
         let typed_error = typed
-            .shutdown_typed()
+            .shutdown()
             .expect_err("typed shutdown should surface flush failures");
         assert_eq!(
             legacy_error.diagnostic().code,
@@ -2421,7 +2384,7 @@ mod tests {
             .shutdown()
             .expect_err("legacy shutdown should retain the exporter failure");
         let typed_error = typed
-            .shutdown_typed()
+            .shutdown()
             .expect_err("typed shutdown should retain the exporter failure");
         assert_custom_source(&legacy_error, &legacy);
         assert_custom_source(&typed_error, &typed);
@@ -2494,7 +2457,7 @@ mod tests {
             .shutdown()
             .expect_err("legacy shutdown should report final export failure");
         let typed_error = typed
-            .shutdown_typed()
+            .shutdown()
             .expect_err("typed shutdown should report final export failure");
         assert_baseline_summary(&legacy_error, &legacy);
         assert_baseline_summary(&typed_error, &typed);
@@ -2512,6 +2475,6 @@ mod tests {
         );
 
         legacy.shutdown().expect("legacy repeated shutdown");
-        typed.shutdown_typed().expect("typed repeated shutdown");
+        typed.shutdown().expect("typed repeated shutdown");
     }
 }

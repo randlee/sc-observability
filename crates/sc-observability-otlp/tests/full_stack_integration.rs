@@ -14,8 +14,8 @@ use sc_observability_types::typed::{
     legacy_log_projector, legacy_metric_projector, legacy_span_projector,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, DiagnosticInfo, DurationMs, EntityId, ErrorCode, Level, LogEvent,
-    LogProjector, MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
+    ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, LogProjector,
+    MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
     ObservationFilter, OutcomeLabel, ProcessIdentity, ProjectionError, Remediation, SchemaVersion,
     ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
     StateTransition, TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext,
@@ -284,8 +284,7 @@ fn builder_registration_attaches_logs_spans_and_metrics() {
 
 #[test]
 fn typed_projector_inputs_forward_through_retained_registration() {
-    let telemetry =
-        Arc::new(Telemetry::new_typed(disabled_telemetry_config()).expect("typed telemetry"));
+    let telemetry = Arc::new(Telemetry::new(disabled_telemetry_config()).expect("typed telemetry"));
     let root = temp_root("typed-integration");
     let config = ObservabilityConfig::default_for(
         ToolName::new("test-service").expect("valid tool"),
@@ -308,7 +307,7 @@ fn typed_projector_inputs_forward_through_retained_registration() {
         .expect("runtime");
 
     runtime.emit(observation()).expect("emit");
-    telemetry.flush_typed().expect("typed flush");
+    telemetry.flush().expect("typed flush");
 
     let log_path = root
         .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
@@ -326,7 +325,7 @@ fn typed_projector_inputs_forward_through_retained_registration() {
 
 #[test]
 fn enabled_configuration_rejects_unavailable_backend() {
-    let Err(error) = Telemetry::new_typed(enabled_telemetry_config()) else {
+    let Err(error) = Telemetry::new(enabled_telemetry_config()) else {
         panic!("enabled configuration must not receive a fallback exporter");
     };
 

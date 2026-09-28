@@ -208,10 +208,6 @@ enum LoggerHandle {
     Stopped(Logger<Stopped>),
 }
 
-#[expect(
-    deprecated,
-    reason = "routing keeps the published SubscriberError callback boundary"
-)]
 type SubscriberDispatchFn =
     dyn Fn(&dyn Any) -> Result<DispatchMatch, SubscriberError> + Send + Sync + 'static;
 type ProjectionDispatchFn =

@@ -19,16 +19,15 @@
 
 use std::sync::Arc;
 
-use crate::{Telemetry, error_codes};
+use crate::Telemetry;
 use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
     typed_log_projector, typed_metric_projector, typed_span_projector,
 };
 use sc_observability_types::v2::{MetricRecord as V2MetricRecord, SpanSignal as V2SpanSignal};
 use sc_observability_types::{
-    ErrorContext, LogEvent, LogProjector, MetricProjector, MetricRecord, Observable, Observation,
-    ObservationFilter, ProjectionError, ProjectionRegistration, Remediation, SpanProjector,
-    SpanSignal,
+    LogEvent, LogProjector, MetricProjector, MetricRecord, Observable, Observation,
+    ObservationFilter, ProjectionError, ProjectionRegistration, SpanProjector, SpanSignal,
 };
 
 /// Carries one validated 2.0 metric into the OTLP implementation layer.
