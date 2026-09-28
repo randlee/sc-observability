@@ -271,7 +271,7 @@ impl Drop for LogAttachment {
         let Some(state) = self.state.take() else {
             return;
         };
-        let _ = close_attachment(&state, Duration::from_secs(2), true);
+        let _ = close_attachment(&state, crate::DEFAULT_DROP_SHUTDOWN_TIMEOUT, true);
     }
 }
 
