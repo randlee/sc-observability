@@ -259,6 +259,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Provision immutable legacy OTLP provenance source
+        run: python3 scripts/ci/provision_legacy_otlp_provenance.py
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
