@@ -55,7 +55,7 @@ macro_rules! context_error {
     ($name:ident, $($variant:ident => $code:expr),+ $(,)?) => {
         #[doc = concat!("Canonical ", stringify!($name), " with preserved diagnostic context.")]
         #[non_exhaustive]
-        #[derive(Debug, PartialEq, Serialize, Deserialize, thiserror::Error)]
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, thiserror::Error)]
         #[serde(tag = "kind", rename_all = "snake_case")]
         pub enum $name {
             $(
@@ -221,7 +221,7 @@ impl LogSinkError {
 
 /// Canonical export failures with preserved diagnostic context.
 #[non_exhaustive]
-#[derive(Debug, PartialEq, Serialize, Deserialize, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ExportError {
     /// Transport failure; preserves its underlying registered diagnostic code.

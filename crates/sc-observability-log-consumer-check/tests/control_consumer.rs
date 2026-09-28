@@ -61,12 +61,7 @@ fn consumer_reads_health_and_flushes_through_control_only() {
     guard.shutdown(Duration::from_secs(5)).unwrap();
 
     let stopped = read_status(&control, Duration::from_secs(1));
-    assert!(matches!(
-        stopped.flush,
-        Err(FlushError::NotRunning {
-            phase: LifecyclePhase::Stopped,
-        })
-    ));
+    assert!(matches!(stopped.flush, Err(FlushError::Drain { .. })));
     assert!(matches!(
         stopped.health,
         Ok(report) if report.lifecycle == LifecyclePhase::Stopped

@@ -140,6 +140,16 @@ pub struct ErrorContext {
     source: Option<Arc<dyn std::error::Error + Send + Sync + 'static>>,
 }
 
+impl Clone for ErrorContext {
+    fn clone(&self) -> Self {
+        Self {
+            diagnostic: self.diagnostic.clone(),
+            backtrace: capture_backtrace(),
+            source: self.source.clone(),
+        }
+    }
+}
+
 impl PartialEq for ErrorContext {
     fn eq(&self, other: &Self) -> bool {
         self.diagnostic == other.diagnostic
