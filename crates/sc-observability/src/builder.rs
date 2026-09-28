@@ -207,7 +207,7 @@ impl LoggerBuilder {
     /// [`Self::build_typed`].
     pub fn build(self) -> Logger<Running> {
         self.build_typed()
-            .expect("existing infallible builder expects writer thread startup")
+            .expect("operating system could not start the writer thread")
     }
 
     /// Finalizes construction with a recoverable typed startup failure.
