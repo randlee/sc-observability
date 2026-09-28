@@ -35,7 +35,7 @@ that assigned it.
 
 With `S=.claude/skills/atm-bd-orchestration/scripts`:
 
-Reject any PR unless it is registered in gh-stack or its base branch is `develop` or matches `integrate/*`.
+Unless the PR targets `develop` or `integrate/*`, use `/sc-gh-stack-view` (`gh stack view --json` plus current GitHub mergeability) and reject the PR if it is not registered in gh-stack or its stack is not mergeable.
 1. Run the ready check, claim the task bead, and start the active task.
 2. Run:
 
