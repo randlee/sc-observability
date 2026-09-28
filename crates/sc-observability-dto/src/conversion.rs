@@ -918,175 +918,106 @@ pub fn from_canonical_diagnostic(
     Ok(result)
 }
 
-// Matching the canonical cause enum is the mapping; codes are preserved as data.
+/// Builds the canonical wire failure from the single native classification authority.
+fn canonical_failure(
+    diagnostic: Box<CanonicalDiagnosticDto>,
+    classification: core::v2::FailureClassification,
+) -> CanonicalFailureDto {
+    match classification {
+        core::v2::FailureClassification::Validation { field } => CanonicalFailureDto::Validation {
+            diagnostic,
+            field: field.into(),
+        },
+        core::v2::FailureClassification::QueueFull => CanonicalFailureDto::QueueFull { diagnostic },
+        core::v2::FailureClassification::Closed => CanonicalFailureDto::Closed { diagnostic },
+        core::v2::FailureClassification::Unavailable => CanonicalFailureDto::Unavailable { diagnostic },
+        core::v2::FailureClassification::Io => CanonicalFailureDto::Io { diagnostic },
+        core::v2::FailureClassification::Timeout { operation } => CanonicalFailureDto::Timeout {
+            diagnostic,
+            operation: operation.into(),
+        },
+        core::v2::FailureClassification::Cancelled { operation } => CanonicalFailureDto::Cancelled {
+            diagnostic,
+            operation: operation.into(),
+        },
+        core::v2::FailureClassification::Internal => CanonicalFailureDto::Internal { diagnostic },
+    }
+}
+
+/// Builds the legacy wire failure from the single native classification authority.
+///
+/// The legacy and canonical representations intentionally remain distinct so
+/// their JSON shapes stay lossless and backwards compatible.
+pub fn failure_from_diagnostic(
+    diagnostic: Diagnostic,
+    classification: core::v2::FailureClassification,
+) -> Failure {
+    if let Err(error) = validate_diagnostic(&diagnostic, "response.error") {
+        return error;
+    }
+    let diagnostic = Box::new(diagnostic);
+    match classification {
+        core::v2::FailureClassification::Validation { field } => Failure::Validation {
+            diagnostic,
+            field: field.into(),
+        },
+        core::v2::FailureClassification::QueueFull => Failure::QueueFull { diagnostic },
+        core::v2::FailureClassification::Closed => Failure::Closed { diagnostic },
+        core::v2::FailureClassification::Unavailable => Failure::Unavailable { diagnostic },
+        core::v2::FailureClassification::Io => Failure::Io { diagnostic },
+        core::v2::FailureClassification::Timeout { operation } => Failure::Timeout {
+            diagnostic,
+            operation: operation.into(),
+        },
+        core::v2::FailureClassification::Cancelled { operation } => Failure::Cancelled {
+            diagnostic,
+            operation: operation.into(),
+        },
+        core::v2::FailureClassification::Internal => Failure::Internal { diagnostic },
+    }
+}
+
+/// Projects a native diagnostic through its native-owned wire classification.
+#[must_use]
+pub fn failure_from_classification(
+    value: &core::Diagnostic,
+    classification: core::v2::FailureClassification,
+) -> Failure {
+    failure_from_diagnostic(
+        Diagnostic {
+            at: value.timestamp.to_string(),
+            code: value.code.as_str().into(),
+            message: value.message.clone(),
+            remediation: value.remediation.clone().into(),
+        },
+        classification,
+    )
+}
+
 macro_rules! canonical_projection {
-    ($ty:ident, $value:ident, $body:expr) => {
+    ($ty:ident) => {
         impl TryFrom<&core::v2::$ty> for CanonicalFailureDto {
             type Error = Failure;
-            fn try_from($value: &core::v2::$ty) -> Result<Self, Self::Error> {
-                let diagnostic = Box::new(from_canonical_diagnostic($value.diagnostic())?);
-                let category: fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto = $body;
-                Ok(category(diagnostic))
+            fn try_from(value: &core::v2::$ty) -> Result<Self, Self::Error> {
+                Ok(canonical_failure(
+                    Box::new(from_canonical_diagnostic(value.diagnostic())?),
+                    value.failure_classification(),
+                ))
             }
         }
     };
 }
-fn validation_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    CanonicalFailureDto::Validation {
-        diagnostic,
-        field: "input".into(),
-    }
-}
-fn unavailable_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    CanonicalFailureDto::Unavailable { diagnostic }
-}
-fn io_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    CanonicalFailureDto::Io { diagnostic }
-}
-fn timeout_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    CanonicalFailureDto::Timeout {
-        diagnostic,
-        operation: "lifecycle".into(),
-    }
-}
-fn unexpected_local_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    CanonicalFailureDto::Internal { diagnostic }
-}
-canonical_projection!(
-    IdentityError,
-    value,
-    match value {
-        core::v2::IdentityError::Process { .. } => validation_failure,
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    InitError,
-    value,
-    match value {
-        core::v2::InitError::Configuration { .. } => validation_failure,
-        core::v2::InitError::Runtime { .. } => unavailable_failure,
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    EventError,
-    value,
-    match value {
-        core::v2::EventError::Validation { .. } => validation_failure,
-        core::v2::EventError::Routing { .. } => unavailable_failure,
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    FlushError,
-    value,
-    match value {
-        core::v2::FlushError::Drain { .. } => flush_drain_category(value),
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    ShutdownError,
-    value,
-    match value {
-        core::v2::ShutdownError::Timeout { .. } => timeout_failure,
-        core::v2::ShutdownError::Drain { .. } => shutdown_drain_category(value),
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    ProjectionError,
-    value,
-    match value {
-        core::v2::ProjectionError::Projection { .. } => validation_failure,
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    SubscriberError,
-    value,
-    match value {
-        core::v2::SubscriberError::Subscriber { .. } => unavailable_failure,
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    LogSinkError,
-    value,
-    match value {
-        core::v2::LogSinkError::Write { .. } | core::v2::LogSinkError::Flush { .. } => io_failure,
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    MetricModelError,
-    value,
-    match value {
-        core::v2::MetricModelError::InvalidHistogram { .. }
-        | core::v2::MetricModelError::InvalidTemporality { .. }
-        | core::v2::MetricModelError::InvalidInterval { .. } => validation_failure,
-        _ => unexpected_local_failure,
-    }
-);
-canonical_projection!(
-    ConfigFailure,
-    value,
-    match value {
-        core::v2::ConfigFailure::ZeroDuration { .. } => validation_failure,
-        core::v2::ConfigFailure::DurationOverflow { .. } => validation_failure,
-        core::v2::ConfigFailure::InvalidBoundOrdering { .. } => validation_failure,
-        core::v2::ConfigFailure::InvalidJitterPercent { .. } => validation_failure,
-        core::v2::ConfigFailure::InvalidQueueCapacity { .. } => validation_failure,
-        core::v2::ConfigFailure::InvalidQueueByteCapacity { .. } => validation_failure,
-        core::v2::ConfigFailure::ConfigFieldNotApplicable { .. } => validation_failure,
-        core::v2::ConfigFailure::InsecureTransportRejected { .. } => validation_failure,
-        core::v2::ConfigFailure::InvalidEndpoint { .. } => validation_failure,
-        core::v2::ConfigFailure::InvalidHeader { .. } => validation_failure,
-        core::v2::ConfigFailure::TransportConstructionFailed { .. } => validation_failure,
-        core::v2::ConfigFailure::UnsupportedBackend { .. } => validation_failure,
-        core::v2::ConfigFailure::UnsupportedProtocol { .. } => validation_failure,
-        core::v2::ConfigFailure::TokioRuntimeRequired { .. } => validation_failure,
-        _ => unexpected_local_failure,
-    }
-);
-fn export_category(
-    value: &core::v2::ExportError,
-) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    match value {
-        core::v2::ExportError::Transport { .. } => io_failure,
-        core::v2::ExportError::BlockingBackendInAsyncContext { .. } => validation_failure,
-        core::v2::ExportError::AsyncLifecycleRequired { .. } => validation_failure,
-        core::v2::ExportError::RuntimeTerminated { .. } => unavailable_failure,
-        core::v2::ExportError::LifecycleTimeout { .. } => timeout_failure,
-        core::v2::ExportError::QueueFull { .. } => {
-            |diagnostic| CanonicalFailureDto::QueueFull { diagnostic }
-        }
-        core::v2::ExportError::WorkerTerminated { .. } => unavailable_failure,
-        core::v2::ExportError::ShutdownCancelledRetry { .. } => {
-            |diagnostic| CanonicalFailureDto::Cancelled {
-                diagnostic,
-                operation: "shutdown".into(),
-            }
-        }
-        core::v2::ExportError::RetryDeadlineExhausted { .. } => timeout_failure,
-        core::v2::ExportError::NonRetryableHttpStatus { .. } => io_failure,
-        core::v2::ExportError::RetryAttemptsExhausted { .. } => io_failure,
-        core::v2::ExportError::TerminalExportFailure { .. } => io_failure,
-        _ => unexpected_local_failure,
-    }
-}
-fn flush_drain_category(
-    value: &core::v2::FlushError,
-) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    value.export_cause().map_or(io_failure, export_category)
-}
-fn shutdown_drain_category(
-    value: &core::v2::ShutdownError,
-) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    value.export_cause().map_or(io_failure, export_category)
-}
-canonical_projection!(ExportError, value, export_category(value));
+canonical_projection!(IdentityError);
+canonical_projection!(InitError);
+canonical_projection!(EventError);
+canonical_projection!(FlushError);
+canonical_projection!(ShutdownError);
+canonical_projection!(ProjectionError);
+canonical_projection!(SubscriberError);
+canonical_projection!(LogSinkError);
+canonical_projection!(MetricModelError);
+canonical_projection!(ConfigFailure);
+canonical_projection!(ExportError);
 
 #[cfg(test)]
 mod export_projection_tests {
@@ -1126,23 +1057,15 @@ impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
             core::v2::TelemetryError::Shutdown { context } => Ok(Self::Closed {
                 diagnostic: Box::new(from_canonical_diagnostic(context.diagnostic())?),
             }),
-            _ => Ok(unexpected_local_failure(Box::new(
-                from_canonical_diagnostic(value.diagnostic())?,
-            ))),
+            _ => Ok(canonical_failure(
+                Box::new(from_canonical_diagnostic(value.diagnostic())?),
+                core::v2::FailureClassification::Internal,
+            )),
         }
     }
 }
 fn model_failure(error: core::v2::MetricModelError) -> Failure {
-    let d = error.diagnostic();
-    Failure::Validation {
-        diagnostic: Box::new(Diagnostic {
-            at: d.timestamp.to_string(),
-            code: d.code.as_str().into(),
-            message: d.message.clone(),
-            remediation: d.remediation.clone().into(),
-        }),
-        field: "metric".into(),
-    }
+    failure_from_classification(error.diagnostic(), error.failure_classification())
 }
 fn finite(value: f64, field: &str) -> Result<core::v2::FiniteF64, Failure> {
     checked(core::v2::FiniteF64::new(value), field)

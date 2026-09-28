@@ -2,6 +2,45 @@
 use crate::{Diagnostic, DiagnosticInfo, ErrorContext, sealed};
 use serde::{Deserialize, Serialize};
 
+/// Wire failure category and its native-owned, operation-specific context.
+///
+/// This deliberately records only stable contract terms.  Boundary crates use
+/// it to select their legacy or canonical wire representation without
+/// re-deciding a native error's meaning or inventing a field name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FailureClassification {
+    /// Invalid caller-controlled input identified by its real input field.
+    Validation { field: &'static str },
+    /// A bounded queue cannot accept more work.
+    QueueFull,
+    /// The requested lifecycle operation is no longer available.
+    Closed,
+    /// A dependency or runtime is unavailable.
+    Unavailable,
+    /// An I/O or transport operation failed.
+    Io,
+    /// An operation exceeded its deadline.
+    Timeout { operation: &'static str },
+    /// An operation was cancelled during controlled shutdown.
+    Cancelled { operation: &'static str },
+    /// A local invariant or unexpected implementation failure occurred.
+    Internal,
+}
+
+impl FailureClassification {
+    /// Creates a validation classification for the exact native input field.
+    #[must_use]
+    pub const fn validation(field: &'static str) -> Self {
+        Self::Validation { field }
+    }
+
+    /// Creates a timeout classification for the exact native operation.
+    #[must_use]
+    pub const fn timeout(operation: &'static str) -> Self {
+        Self::Timeout { operation }
+    }
+}
+
 // Every case owns the original context, including its typed source and backtrace.
 macro_rules! context_error {
     ($name:ident, $($variant:ident => $code:expr),+ $(,)?) => {
@@ -48,17 +87,47 @@ macro_rules! context_error {
 
 context_error!(IdentityError, Process => crate::error_codes::IDENTITY_RESOLUTION_FAILED);
 
+impl IdentityError {
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        FailureClassification::validation("process")
+    }
+}
+
 context_error!(
     InitError,
     Configuration => crate::error_codes::DIAGNOSTIC_INVALID,
     Runtime => crate::error_codes::DIAGNOSTIC_INVALID
 );
 
+impl InitError {
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        match self {
+            Self::Configuration { .. } => FailureClassification::validation("configuration"),
+            Self::Runtime { .. } => FailureClassification::Unavailable,
+        }
+    }
+}
+
 context_error!(
     EventError,
     Validation => crate::error_codes::DIAGNOSTIC_INVALID,
     Routing => crate::error_codes::DIAGNOSTIC_INVALID
 );
+
+impl EventError {
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        match self {
+            Self::Validation { .. } => FailureClassification::validation("event"),
+            Self::Routing { .. } => FailureClassification::Unavailable,
+        }
+    }
+}
 
 context_error!(FlushError, Drain => crate::error_codes::DIAGNOSTIC_INVALID);
 
@@ -68,6 +137,13 @@ impl FlushError {
     pub fn export_cause(&self) -> Option<&ExportError> {
         std::error::Error::source(self.context())
             .and_then(|source| source.downcast_ref::<ExportError>())
+    }
+
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub fn failure_classification(&self) -> FailureClassification {
+        self.export_cause()
+            .map_or(FailureClassification::Io, ExportError::failure_classification)
     }
 }
 
@@ -84,17 +160,52 @@ impl ShutdownError {
         std::error::Error::source(self.context())
             .and_then(|source| source.downcast_ref::<ExportError>())
     }
+
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub fn failure_classification(&self) -> FailureClassification {
+        match self {
+            Self::Timeout { .. } => FailureClassification::timeout("shutdown"),
+            Self::Drain { .. } => self
+                .export_cause()
+                .map_or(FailureClassification::Io, ExportError::failure_classification),
+        }
+    }
 }
 
 context_error!(ProjectionError, Projection => crate::error_codes::DIAGNOSTIC_INVALID);
 
+impl ProjectionError {
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        FailureClassification::validation("projection")
+    }
+}
+
 context_error!(SubscriberError, Subscriber => crate::error_codes::DIAGNOSTIC_INVALID);
+
+impl SubscriberError {
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        FailureClassification::Unavailable
+    }
+}
 
 context_error!(
     LogSinkError,
     Write => crate::error_codes::DIAGNOSTIC_INVALID,
     Flush => crate::error_codes::DIAGNOSTIC_INVALID
 );
+
+impl LogSinkError {
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        FailureClassification::Io
+    }
+}
 
 /// Canonical export failures with preserved diagnostic context.
 #[non_exhaustive]
@@ -229,6 +340,31 @@ impl ExportError {
             Self::TerminalExportFailure { .. } => crate::error_codes::otlp::OTLP_EXPORT_TERMINAL,
         }
     }
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        match self {
+            Self::Transport { .. }
+            | Self::NonRetryableHttpStatus { .. }
+            | Self::RetryAttemptsExhausted { .. }
+            | Self::TerminalExportFailure { .. } => FailureClassification::Io,
+            Self::BlockingBackendInAsyncContext { .. } => {
+                FailureClassification::validation("runtime")
+            }
+            Self::AsyncLifecycleRequired { .. } => {
+                FailureClassification::validation("lifecycle")
+            }
+            Self::RuntimeTerminated { .. } | Self::WorkerTerminated { .. } => {
+                FailureClassification::Unavailable
+            }
+            Self::LifecycleTimeout { .. } => FailureClassification::timeout("lifecycle"),
+            Self::QueueFull { .. } => FailureClassification::QueueFull,
+            Self::ShutdownCancelledRetry { .. } => FailureClassification::Cancelled {
+                operation: "shutdown",
+            },
+            Self::RetryDeadlineExhausted { .. } => FailureClassification::timeout("retry"),
+        }
+    }
     /// Takes the original boxed context, preserving source identity and backtrace.
     #[must_use]
     pub fn into_context(self) -> Box<ErrorContext> {
@@ -273,12 +409,47 @@ context_error!(
     TokioRuntimeRequired => crate::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
 );
 
+impl ConfigFailure {
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        let field = match self {
+            Self::ZeroDuration { .. } | Self::DurationOverflow { .. } => "duration",
+            Self::InvalidBoundOrdering { .. } => "bounds",
+            Self::InvalidJitterPercent { .. } => "jitter_percent",
+            Self::InvalidQueueCapacity { .. } => "queue_capacity",
+            Self::InvalidQueueByteCapacity { .. } => "queue_byte_capacity",
+            Self::ConfigFieldNotApplicable { .. } => "config",
+            Self::InsecureTransportRejected { .. } | Self::InvalidEndpoint { .. } => "endpoint",
+            Self::InvalidHeader { .. } => "headers",
+            Self::TransportConstructionFailed { .. } => "transport",
+            Self::UnsupportedBackend { .. } => "backend",
+            Self::UnsupportedProtocol { .. } => "protocol",
+            Self::TokioRuntimeRequired { .. } => "runtime",
+        };
+        FailureClassification::validation(field)
+    }
+}
+
 context_error!(
     MetricModelError,
     InvalidHistogram => crate::error_codes::SC_METRIC_INVALID_HISTOGRAM,
     InvalidTemporality => crate::error_codes::SC_METRIC_INVALID_TEMPORALITY,
     InvalidInterval => crate::error_codes::SC_METRIC_INVALID_INTERVAL
 );
+
+impl MetricModelError {
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        let field = match self {
+            Self::InvalidHistogram { .. } => "histogram",
+            Self::InvalidTemporality { .. } => "temporality",
+            Self::InvalidInterval { .. } => "interval",
+        };
+        FailureClassification::validation(field)
+    }
+}
 
 /// Telemetry admission guard or the precise canonical export failure.
 #[non_exhaustive]
@@ -326,6 +497,14 @@ impl TelemetryError {
         match self {
             Self::Shutdown { .. } => crate::error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN,
             Self::ExportFailure(error) => error.code(),
+        }
+    }
+    /// Returns the native-owned wire failure classification.
+    #[must_use]
+    pub const fn failure_classification(&self) -> FailureClassification {
+        match self {
+            Self::Shutdown { .. } => FailureClassification::Closed,
+            Self::ExportFailure(error) => error.failure_classification(),
         }
     }
 }

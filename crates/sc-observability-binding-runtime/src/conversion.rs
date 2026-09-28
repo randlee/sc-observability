@@ -7,16 +7,8 @@ use sc_observability_dto as dto;
 use sc_observability_log as bridge;
 use sc_observability_types as native;
 
-#[derive(Clone, Copy)]
-pub(crate) enum Kind {
-    Validation,
-    QueueFull,
-    Closed,
-    Unavailable,
-    Io,
-    Timeout,
-    Internal,
-}
+/// Native-owned failure classification reused at the sole binding-to-wire boundary.
+pub(crate) type Kind = native::v2::FailureClassification;
 pub(crate) fn diagnostic(value: &native::Diagnostic) -> Diagnostic {
     Diagnostic {
         at: value.timestamp.to_string(),
@@ -26,25 +18,7 @@ pub(crate) fn diagnostic(value: &native::Diagnostic) -> Diagnostic {
     }
 }
 fn failure(diagnostic: Diagnostic, kind: Kind) -> Failure {
-    if let Err(error) = dto::validate_diagnostic(&diagnostic, "response.error") {
-        return error;
-    }
-    let diagnostic = Box::new(diagnostic);
-    match kind {
-        Kind::Validation => Failure::Validation {
-            diagnostic,
-            field: "event".into(),
-        },
-        Kind::QueueFull => Failure::QueueFull { diagnostic },
-        Kind::Closed => Failure::Closed { diagnostic },
-        Kind::Unavailable => Failure::Unavailable { diagnostic },
-        Kind::Io => Failure::Io { diagnostic },
-        Kind::Timeout => Failure::Timeout {
-            diagnostic,
-            operation: "native_operation".into(),
-        },
-        Kind::Internal => Failure::Internal { diagnostic },
-    }
+    dto::failure_from_diagnostic(diagnostic, kind)
 }
 pub(crate) fn context(value: &native::Diagnostic, kind: Kind) -> Failure {
     failure(diagnostic(value), kind)
@@ -84,7 +58,7 @@ pub(crate) fn core_admission(value: sc_observability::TryLogFailure) -> Failure 
             let kind = if error.kind() == native::typed::EventFailureKind::Closed {
                 Kind::Closed
             } else {
-                Kind::Validation
+                Kind::validation("event")
             };
             let typed = native::v2::EventError::Validation {
                 context: error.into_context(),
@@ -93,7 +67,7 @@ pub(crate) fn core_admission(value: sc_observability::TryLogFailure) -> Failure 
         }
         E::QueueFull(error) => context(error.diagnostic(), Kind::QueueFull),
         E::WriterDegraded(error) => context(error.diagnostic(), Kind::Unavailable),
-        E::ShutdownTimedOut(error) => context(error.diagnostic(), Kind::Timeout),
+        E::ShutdownTimedOut(error) => context(error.diagnostic(), Kind::timeout("shutdown")),
         _ => crate::error::internal("unrecognized native admission variant"),
     }
 }
@@ -108,7 +82,7 @@ pub(crate) fn core_flush(error: native::typed::FlushFailure) -> (native::v2::Flu
 }
 pub(crate) fn query(error: &native::QueryError) -> Failure {
     let kind = match &error {
-        native::QueryError::InvalidQuery(_) => Kind::Validation,
+        native::QueryError::InvalidQuery(_) => Kind::validation("query"),
         native::QueryError::Shutdown => Kind::Closed,
         native::QueryError::Unavailable(_) => Kind::Unavailable,
         _ => Kind::Io,
@@ -123,7 +97,7 @@ pub(crate) fn bridge_flush(error: bridge::FlushError) -> Failure {
         E::HelperLost { diagnostic } => operation(diagnostic, Kind::Internal),
         other => {
             let kind = match &other {
-                E::TimedOut { .. } => Kind::Timeout,
+                E::TimedOut { .. } => Kind::timeout("flush"),
                 E::InProgress => Kind::QueueFull,
                 _ => Kind::Closed,
             };
@@ -148,13 +122,13 @@ pub(crate) fn bridge_control(error: bridge::ControlError) -> Failure {
 pub(crate) fn bridge_admission(error: bridge::EmitError) -> Failure {
     use bridge::EmitError as E;
     match error {
-        E::InvalidEvent { diagnostic } => operation(diagnostic, Kind::Validation),
+        E::InvalidEvent { diagnostic } => operation(diagnostic, Kind::validation("event")),
         E::QueueFull { diagnostic } => operation(diagnostic, Kind::QueueFull),
         E::WriterDegraded { diagnostic } => operation(diagnostic, Kind::Unavailable),
-        E::ShutdownTimedOut { diagnostic } => operation(diagnostic, Kind::Timeout),
+        E::ShutdownTimedOut { diagnostic } => operation(diagnostic, Kind::timeout("shutdown")),
         other => {
             let kind = match &other {
-                E::InvalidField { .. } => Kind::Validation,
+                E::InvalidField { .. } => Kind::validation("event"),
                 E::NotRunning { .. } => Kind::Closed,
                 _ => Kind::Internal,
             };
