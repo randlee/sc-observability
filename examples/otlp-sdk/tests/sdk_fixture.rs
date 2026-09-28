@@ -11,6 +11,7 @@ use sc_observability_otlp::{
     ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, SdkFixture,
     TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
+use sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL;
 use sc_observability_types::otlp::{
     OtlpCompleteSpan, OtlpInstrumentationScope, OtlpLogRecord, OtlpRecord, OtlpResource,
 };
@@ -173,9 +174,18 @@ async fn external_fixture_drives_all_signals_and_host_lifecycle() {
         .expect("schedule metric");
 
     // The closed loopback endpoint supplies a deterministic terminal transport
-    // result. Flush/shutdown still wait through the same caller-runtime core.
-    fixture.flush().await.expect("ordered async flush");
-    fixture.shutdown().await.expect("host runtime teardown");
+    // failure. Both barriers must surface that typed outcome after waiting
+    // through the same caller-runtime admission core.
+    let flush = fixture
+        .flush()
+        .await
+        .expect_err("ordered async flush reports the admitted RPC failure");
+    assert_eq!(flush.diagnostic().code, OTLP_EXPORT_TERMINAL);
+    let shutdown = fixture
+        .shutdown()
+        .await
+        .expect_err("shutdown preserves the admitted RPC failure");
+    assert_eq!(shutdown.diagnostic().code, OTLP_EXPORT_TERMINAL);
 }
 
 #[tokio::test(flavor = "current_thread")]

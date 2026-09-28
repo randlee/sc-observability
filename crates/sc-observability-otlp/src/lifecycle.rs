@@ -133,6 +133,7 @@ struct CoreState {
     dropped_by_signal: [u64; 3],
     degraded: bool,
     last_error: Option<DiagnosticSummary>,
+    terminal_failure: Option<(u64, ErrorSnapshot)>,
     flush: Option<Arc<Operation>>,
     shutdown: Option<Arc<Operation>>,
     barrier_wakers: Vec<Waker>,
@@ -199,6 +200,7 @@ impl LifecycleCore {
                     dropped_by_signal: [0; 3],
                     degraded: false,
                     last_error: None,
+                    terminal_failure: None,
                     flush: None,
                     shutdown: None,
                     barrier_wakers: Vec::new(),
@@ -354,6 +356,7 @@ impl LifecycleInner {
         state.admitted_bytes = state.admitted_bytes.saturating_sub(bytes);
         if let Err(error) = result {
             Self::record_drop(&mut state, signal, Some(&error));
+            state.terminal_failure = Some((sequence, ErrorSnapshot::from_error(&error)));
         }
         let waiters = std::mem::take(&mut state.barrier_wakers);
         drop(state);
@@ -513,6 +516,16 @@ impl Operation {
             return Poll::Pending;
         }
 
+        let admission_failure = self
+            .inner
+            .state
+            .lock()
+            .expect("lifecycle state lock")
+            .terminal_failure
+            .as_ref()
+            .filter(|(sequence, _)| *sequence <= self.cutoff)
+            .map(|(_, error)| error.clone());
+
         let mut future = {
             let mut operation_state = self.state.lock().expect("operation state lock");
             match std::mem::replace(&mut *operation_state, OperationState::Pending) {
@@ -550,6 +563,10 @@ impl Operation {
                 Poll::Pending
             }
             Poll::Ready(result) => {
+                let result = match result {
+                    Ok(()) => admission_failure.map_or(Ok(()), |error| Err(error.to_error())),
+                    Err(error) => Err(error),
+                };
                 self.finish(result);
                 Poll::Ready(self.completed_result().expect("operation completed"))
             }

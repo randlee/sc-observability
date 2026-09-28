@@ -332,6 +332,38 @@ fn ordered_flush_waits_for_prior_admission_and_preserves_payload() {
 }
 
 #[test]
+fn ordered_flush_returns_admitted_export_failure_and_keeps_success_control() {
+    let (core, _, _, released) = default_fixture();
+    let admitted = core
+        .admit(SignalKind::Logs, (), 1)
+        .expect("admit log before transport failure");
+    admitted.complete(Err(runtime_terminated()));
+    released.store(true, Ordering::Release);
+
+    let mut flush = core.flush_async();
+    let Poll::Ready(result) = poll_once(&mut flush) else {
+        panic!("flush must complete after the admitted export finishes")
+    };
+    assert_eq!(
+        result
+            .expect_err("admitted transport failure must reach flush")
+            .diagnostic()
+            .code,
+        crate::error_codes::OTLP_RUNTIME_TERMINATED
+    );
+    assert!(core.health().degraded);
+
+    let (control, _, _, released) = default_fixture();
+    let admitted = control
+        .admit(SignalKind::Logs, (), 1)
+        .expect("admit success-control log");
+    admitted.complete(Ok(()));
+    released.store(true, Ordering::Release);
+    let mut flush = control.flush_async();
+    assert!(matches!(poll_once(&mut flush), Poll::Ready(Ok(()))));
+}
+
+#[test]
 fn ordered_barrier_wakes_after_its_last_admission_finishes() {
     let (core, _, _, released) = default_fixture();
     let admitted = core
