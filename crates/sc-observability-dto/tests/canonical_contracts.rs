@@ -167,6 +167,82 @@ fn unknown_errors_remain_tagged_failures() {
 }
 
 #[test]
+fn native_non_exhaustive_error_fallbacks_remain_internal() {
+    // The source error enums are non-exhaustive, so a downstream test cannot
+    // honestly construct a future native variant. Keep this cross-crate
+    // contract check at the conversion boundary instead: every wildcard that
+    // receives a future local variant must preserve its diagnostic as
+    // `Internal`, not mislabel it as a remote discriminant.
+    let source = include_str!("../src/conversion.rs");
+    for error in [
+        "IdentityError",
+        "InitError",
+        "EventError",
+        "FlushError",
+        "ShutdownError",
+        "ProjectionError",
+        "SubscriberError",
+        "LogSinkError",
+        "MetricModelError",
+        "ConfigFailure",
+    ] {
+        let prefix = format!("canonical_projection!(\n    {error},");
+        let projection = source
+            .split_once(&prefix)
+            .unwrap_or_else(|| panic!("missing {error} canonical projection"))
+            .1
+            .split_once("\n);")
+            .expect("canonical projection terminator")
+            .0;
+        assert!(
+            projection.contains("_ => unexpected_local_failure,"),
+            "{error} must classify future native variants at the internal boundary"
+        );
+        assert!(
+            !projection.contains("UnknownRemote"),
+            "{error} must reserve unknown_remote for decoded wire discriminants"
+        );
+    }
+
+    let export_projection = source
+        .split_once("fn export_category")
+        .expect("export category conversion")
+        .1
+        .split_once("\nfn drain_category")
+        .expect("export category terminator")
+        .0;
+    let telemetry_projection = source
+        .split_once("impl TryFrom<&core::v2::TelemetryError>")
+        .expect("telemetry conversion")
+        .1
+        .split_once("\nfn model_failure")
+        .expect("telemetry conversion terminator")
+        .0;
+    for (name, projection) in [
+        ("ExportError", export_projection),
+        ("TelemetryError", telemetry_projection),
+    ] {
+        assert!(
+            projection.contains("unexpected_local_failure"),
+            "{name} must classify future native variants at the internal boundary"
+        );
+        assert!(
+            !projection.contains("UnknownRemote"),
+            "{name} must reserve unknown_remote for decoded wire discriminants"
+        );
+    }
+
+    let fallback = source
+        .split_once("fn unexpected_local_failure")
+        .expect("local fallback helper")
+        .1
+        .split_once("canonical_projection!")
+        .expect("first canonical projection")
+        .0;
+    assert!(fallback.contains("CanonicalFailureDto::Internal"));
+}
+
+#[test]
 fn nested_export_timeout_keeps_lifecycle_category_and_code() {
     let code = core::error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT;
     let context = || {
