@@ -1,14 +1,16 @@
+#![deny(deprecated)]
+
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use sc_observability::typed::TypedLogSink;
 use sc_observability::v2::LogSinkError;
-#[allow(deprecated)]
 use sc_observability::{
     ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent, LogFilter,
-    LogSink, LoggerBuilder, LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel,
-    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState,
-    SinkName, SinkRegistration, TargetCategory, Timestamp, WriterState,
+    LoggerBuilder, LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity,
+    Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName,
+    SinkRegistration, TargetCategory, Timestamp, WriterState,
 };
 use serde_json::json;
 
@@ -66,7 +68,6 @@ impl AuditSink {
         }
     }
 
-    #[allow(deprecated)]
     fn mark_failure<E>(&self, error: E, operation: SinkOperation) -> LogSinkError
     where
         E: std::error::Error + Send + Sync + 'static,
@@ -103,8 +104,7 @@ impl AuditSink {
     }
 }
 
-#[allow(deprecated)]
-impl LogSink for AuditSink {
+impl TypedLogSink for AuditSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         let mut stderr = io::stderr().lock();
         writeln!(
@@ -199,7 +199,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ))?;
 
     builder.register_sink(
-        SinkRegistration::new(Arc::new(AuditSink::new())).with_filter(Arc::new(AuditOnly)),
+        SinkRegistration::new(sc_observability::typed::legacy_sink(Arc::new(
+            AuditSink::new(),
+        )))
+        .with_filter(Arc::new(AuditOnly)),
     );
     let logger = builder.build_typed()?;
 
