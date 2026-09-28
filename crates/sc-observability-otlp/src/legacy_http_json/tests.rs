@@ -541,7 +541,7 @@ fn shutdown_cancels_an_actual_retry_backoff() {
     let exporter = Arc::new(
         OtlpHttpExporter::for_endpoint(format!("http://{address}")).expect("construct exporter"),
     );
-    let (retry_wait_tx, retry_wait_rx) = mpsc::sync_channel(0);
+    let (retry_wait_tx, retry_wait_rx) = mpsc::channel();
     super::implementation::install_retry_wait_hook(retry_wait_tx);
     let export = Arc::clone(&exporter);
     let export_thread = thread::spawn(move || {

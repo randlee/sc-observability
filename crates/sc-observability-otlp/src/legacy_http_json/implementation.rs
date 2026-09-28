@@ -53,7 +53,7 @@ const RETRY_AFTER_HEADER_LIMIT: usize = 128;
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 #[cfg(test)]
-static RETRY_WAIT_HOOK: OnceLock<Mutex<Option<SyncSender<()>>>> = OnceLock::new();
+static RETRY_WAIT_HOOK: OnceLock<Mutex<Option<mpsc::Sender<()>>>> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 struct RetrySettings {
@@ -576,7 +576,7 @@ fn wait_cancelable_with_observer(
 }
 
 #[cfg(test)]
-pub(super) fn install_retry_wait_hook(sender: SyncSender<()>) {
+pub(super) fn install_retry_wait_hook(sender: mpsc::Sender<()>) {
     let hook = RETRY_WAIT_HOOK.get_or_init(|| Mutex::new(None));
     *hook.lock().expect("retry wait hook lock") = Some(sender);
 }
@@ -594,7 +594,7 @@ fn notify_retry_wait_started() {
         .get()
         .and_then(|hook| hook.lock().expect("retry wait hook lock").clone());
     if let Some(sender) = sender {
-        let _ = sender.try_send(());
+        let _ = sender.send(());
     }
 }
 
