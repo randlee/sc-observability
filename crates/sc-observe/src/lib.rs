@@ -197,7 +197,7 @@ impl ObservabilityConfig {
         config.queue_capacity =
             QueueCapacity::new(self.queue_capacity).ok_or_else(|| CanonicalInitError::Runtime {
                 context: Box::new(ErrorContext::new(
-                    error_codes::OBSERVABILITY_INIT_FAILED,
+                    sc_observability::error_codes::LOGGER_INIT_FAILED,
                     "queue capacity must be greater than zero",
                     Remediation::recoverable(
                         "set the observation queue capacity to a positive value",
