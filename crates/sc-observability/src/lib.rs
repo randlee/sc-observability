@@ -1038,6 +1038,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn settings_json_parse_failure_preserves_serde_source() {
+        let snapshot = EnvSnapshot::from_pairs([(
+            std::ffi::OsString::from("SC_LOG_ROTATION_MAX_FILES"),
+            std::ffi::OsString::from("not-json"),
+        )]);
+        let error = LogSettings::from_env(
+            &snapshot,
+            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+        )
+        .expect_err("invalid JSON must fail");
+
+        assert_eq!(error.code(), error_codes::LOG_INVALID_VALUE);
+        assert!(
+            std::error::Error::source(&error)
+                .expect("serde parse source must be preserved")
+                .to_string()
+                .contains("expected")
+        );
+    }
+
     fn log_event_with_request(
         service_name: ServiceName,
         request_id: &str,
