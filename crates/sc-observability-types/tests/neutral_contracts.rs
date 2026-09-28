@@ -294,6 +294,22 @@ fn telemetry_shutdown_preserves_context_and_diagnostic() {
 }
 
 #[test]
+fn cloned_canonical_error_preserves_source_identity() {
+    let original = FlushError::Drain {
+        context: context(error_codes::VALUE_VALIDATION_FAILED),
+    };
+    let cloned = original.clone();
+    let original_source = std::error::Error::source(original.context())
+        .expect("original context must retain its source");
+    let cloned_source = std::error::Error::source(cloned.context())
+        .expect("cloned context must retain its source");
+
+    assert!(std::ptr::eq(original_source, cloned_source));
+    assert_eq!(original_source.to_string(), "sentinel source");
+    assert_eq!(cloned_source.to_string(), "sentinel source");
+}
+
+#[test]
 fn stable_failure_codes() {
     let mut seen = std::collections::HashSet::new();
     for code in error_codes::ALL {

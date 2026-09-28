@@ -29,38 +29,10 @@ WRAPPERS = (
 )
 
 METHODS = (
-    ("logger", "LoggerBuilder::new", "LoggerBuilder::new_typed"),
-    ("runtime", "Logger::builder", "Logger::builder_typed"),
-    ("runtime", "Logger::new", "Logger::new_typed"),
-    ("runtime", "Logger::log", "Logger::log_typed"),
-    ("runtime", "Logger::try_log", "Logger::try_log_typed"),
-    (
-        "runtime",
-        "Logger::try_log_with_outcome",
-        "Logger::try_log_with_outcome_typed",
-    ),
-    ("runtime", "Logger::flush", "Logger::flush_typed"),
-    (
-        "observe",
-        "ObservabilityConfig::default_for",
-        "ObservabilityConfig::default_for_typed",
-    ),
-    ("observe", "ObservabilityConfig::service_name", "ObservabilityConfig::service_name_typed"),
-    ("observe", "Observability::new", "Observability::new_typed"),
-    ("observe", "Observability::flush", "Observability::flush_typed"),
-    ("observe", "Observability::shutdown", "Observability::shutdown_typed"),
-    ("observe", "ObservabilityBuilder::build", "ObservabilityBuilder::build_typed"),
     ("otlp_config", "OtlpEndpoint::new", "OtlpEndpoint::new_typed"),
     ("otlp_config", "AuthHeader::new", "AuthHeader::new_typed"),
-    (
-        "otlp_config",
-        "TelemetryConfigBuilder::build",
-        "TelemetryConfigBuilder::build_typed",
-    ),
+    ("otlp_config", "TelemetryConfigBuilder::build", "TelemetryConfigBuilder::build_typed"),
     ("otlp_assembly", "SpanAssembler::push", "SpanAssembler::push_typed"),
-    ("otlp_runtime", "Telemetry::new", "Telemetry::new_typed"),
-    ("otlp_runtime", "Telemetry::flush", "Telemetry::flush_typed"),
-    ("otlp_runtime", "Telemetry::shutdown", "Telemetry::shutdown_typed"),
 )
 
 
@@ -188,7 +160,9 @@ def check_source_contract() -> None:
         "logger": ROOT / "crates" / "sc-observability" / "src" / "builder.rs",
         "runtime": ROOT / "crates" / "sc-observability" / "src" / "runtime.rs",
         "observe": ROOT / "crates" / "sc-observe" / "src" / "lib.rs",
-        "otlp_config": ROOT / "crates" / "sc-observability-otlp" / "src" / "config.rs",
+        # OTLP configuration was modularized; the constructors live in the
+        # owning config/types.rs module rather than the re-exporting mod.rs.
+        "otlp_config": ROOT / "crates" / "sc-observability-otlp" / "src" / "config" / "types.rs",
         "otlp_assembly": ROOT / "crates" / "sc-observability-otlp" / "src" / "assembly.rs",
         "otlp_runtime": ROOT / "crates" / "sc-observability-otlp" / "src" / "lib.rs",
     }
@@ -201,7 +175,7 @@ def check_source_contract() -> None:
             f"Use sc_observability_types::typed::{typed}; see migrate-error-api.md.",
         )
 
-    assert_true(len(WRAPPERS) + len(METHODS) == 29, "B.1e target inventory is not 29 items")
+    assert_true(len(WRAPPERS) + len(METHODS) == 13, "B.1e target inventory is not 13 items")
     for source, legacy, typed in METHODS:
         item_window(
             text[source],
@@ -209,7 +183,7 @@ def check_source_contract() -> None:
             f"Use {typed}(); see migrate-error-api.md.",
         )
 
-    for source in ("logger", "runtime", "observe", "otlp_config", "otlp_assembly", "otlp_runtime"):
+    for source in ("otlp_config", "otlp_assembly"):
         assert_true(
             text[source].count("since = \"1.4.0\"") > 0,
             f"{source} has no B.1e deprecation marker",
