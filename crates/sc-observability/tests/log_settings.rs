@@ -4,7 +4,8 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 
 use sc_observability::{
-    EnvSnapshot, LogSettings, LogSettingsError, LogSettingsInputs, RetainedLogPolicy, error_codes,
+    EnvSnapshot, LogSettings, LogSettingsError, LogSettingsInputs, ResolvedLogSettings,
+    RetainedLogPolicy, error_codes,
 };
 use sc_observability_types::{EnvPrefix, LevelFilter, ServiceName};
 
@@ -14,6 +15,76 @@ fn snapshot(values: &[(&str, &str)]) -> EnvSnapshot {
             .iter()
             .map(|(key, value)| (OsString::from(*key), OsString::from(*value))),
     )
+}
+
+fn assert_application_inventory_values(resolved: &ResolvedLogSettings) {
+    let policy = resolved.retained_log_policy;
+    let actual = [
+        ("level", format!("{:?}", resolved.level), "Error".to_owned()),
+        (
+            "log root (the JSON exception)",
+            resolved.log_root.as_ref().display().to_string(),
+            "/json".to_owned(),
+        ),
+        (
+            "file sink",
+            resolved.enable_file_sink.to_string(),
+            "true".to_owned(),
+        ),
+        (
+            "console sink",
+            resolved.enable_console_sink.to_string(),
+            "false".to_owned(),
+        ),
+        (
+            "rotation bytes",
+            policy.rotation_max_bytes.as_u64().to_string(),
+            "48".to_owned(),
+        ),
+        (
+            "rotation files",
+            policy.rotation_max_files.as_usize().to_string(),
+            "4".to_owned(),
+        ),
+        (
+            "retention age",
+            policy
+                .retention_max_age
+                .as_duration()
+                .as_millis()
+                .to_string(),
+            "3000".to_owned(),
+        ),
+        (
+            "maintenance cadence",
+            policy
+                .maintenance_cadence
+                .as_duration()
+                .as_millis()
+                .to_string(),
+            "300".to_owned(),
+        ),
+        (
+            "writer shutdown timeout",
+            policy
+                .writer_shutdown_timeout
+                .as_duration()
+                .as_millis()
+                .to_string(),
+            "300".to_owned(),
+        ),
+        (
+            "maintenance maximum work",
+            policy
+                .maintenance_max_work_per_pass
+                .expect("application policy value")
+                .to_string(),
+            "3".to_owned(),
+        ),
+    ];
+    for (field, actual, expected) in actual {
+        assert_eq!(actual, expected, "{field} must use its documented layer");
+    }
 }
 
 #[test]
@@ -132,73 +203,7 @@ fn every_inventory_row_obeys_all_four_resolution_layers() {
         default_root: PathBuf::from("/default"),
     })
     .expect("all layers resolve");
-    let policy = resolved.retained_log_policy;
-    let actual = [
-        ("level", format!("{:?}", resolved.level), "Error".to_owned()),
-        (
-            "log root (the JSON exception)",
-            resolved.log_root.as_ref().display().to_string(),
-            "/json".to_owned(),
-        ),
-        (
-            "file sink",
-            resolved.enable_file_sink.to_string(),
-            "true".to_owned(),
-        ),
-        (
-            "console sink",
-            resolved.enable_console_sink.to_string(),
-            "false".to_owned(),
-        ),
-        (
-            "rotation bytes",
-            policy.rotation_max_bytes.as_u64().to_string(),
-            "48".to_owned(),
-        ),
-        (
-            "rotation files",
-            policy.rotation_max_files.as_usize().to_string(),
-            "4".to_owned(),
-        ),
-        (
-            "retention age",
-            policy
-                .retention_max_age
-                .as_duration()
-                .as_millis()
-                .to_string(),
-            "3000".to_owned(),
-        ),
-        (
-            "maintenance cadence",
-            policy
-                .maintenance_cadence
-                .as_duration()
-                .as_millis()
-                .to_string(),
-            "300".to_owned(),
-        ),
-        (
-            "writer shutdown timeout",
-            policy
-                .writer_shutdown_timeout
-                .as_duration()
-                .as_millis()
-                .to_string(),
-            "300".to_owned(),
-        ),
-        (
-            "maintenance maximum work",
-            policy
-                .maintenance_max_work_per_pass
-                .expect("application policy value")
-                .to_string(),
-            "3".to_owned(),
-        ),
-    ];
-    for (field, actual, expected) in actual {
-        assert_eq!(actual, expected, "{field} must use its documented layer");
-    }
+    assert_application_inventory_values(&resolved);
 }
 
 #[test]
