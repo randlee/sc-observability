@@ -13,9 +13,9 @@ Generated projection of `obs-d-18`; the bead is authoritative.
 - Branch: `sprint/d-18-integration-and-public-api`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-18-integration-and-public-api`
 - PR target (merge order only): `sprint/d-20-language-binding-migration`
-- Blocked by: `obs-d-2-sanity`, `obs-d-3-sanity`, `obs-d-21-sanity`, `obs-d-20-sanity`, `obs-d-16-sanity`, `obs-d-1-sanity`, `obs-d-10-sanity`, `obs-d-17-sanity`, `obs-d-14-sanity`, `obs-d-6-sanity`, `obs-d-4-sanity`, `obs-d-19-sanity`, `obs-d-5-sanity`, `obs-d-15-sanity`, `obs-d-8-sanity`, `obs-d-7-sanity`
-- Requirements: LAY-003, LAY-004, LAY-005, LOG-004, LOG-007, LOG-009, LOG-010, LOG-014, LOG-015, LOG-023, LOG-037, LOG-042, LOG-046, LOG-047, LOG-048, NFR-003, NFR-007, NFR-008, NFR-010, NFR-011, NFR-012, OBS-004, OBS-007, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-024, OTLP-001, OTLP-002, OTLP-005, OTLP-006, OTLP-007, OTLP-011, OTLP-012, OTLP-015, OTLP-017, OTLP-019, OTLP-021, OTLP-023, PHB-006, PHB-010, PHB-011, PHB-012, PHB-013, PHB-014, PHC-002, PHC-004, PHD-001, PHD-002, PHD-003, PHD-004, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-020, TYP-021, TYP-023, TYP-024, TYP-030
-- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-006, ADR-010, ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018, ADR-019
+- Blocked by: `obs-d-2-sanity`, `obs-d-3-sanity`, `obs-d-21-sanity`, `obs-d-20-sanity`, `obs-d-1-sanity`, `obs-d-10-sanity`, `obs-d-17-sanity`, `obs-d-14-sanity`, `obs-d-6-sanity`, `obs-d-4-sanity`, `obs-d-19-sanity`, `obs-d-5-sanity`, `obs-d-15-sanity`, `obs-d-8-sanity`, `obs-d-7-sanity`
+- Requirements: LAY-001, LAY-002, LAY-003, LAY-004, LAY-005, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-009, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-042, LOG-046, LOG-047, LOG-048, NFR-001, NFR-002, NFR-003, NFR-005, NFR-006, NFR-007, NFR-008, NFR-009, NFR-010, NFR-011, NFR-012, OBS-004, OBS-007, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-024, OTLP-001, OTLP-002, OTLP-005, OTLP-006, OTLP-007, OTLP-011, OTLP-012, OTLP-015, OTLP-017, OTLP-019, OTLP-021, OTLP-023, PHB-002, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, PHB-012, PHB-013, PHB-014, PHC-002, PHC-004, PHD-001, PHD-002, PHD-003, PHD-004, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-020, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
+- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-009, ADR-010, ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
   - `CHANGELOG.md`
   - `RELEASE-NOTES*.md`
@@ -92,6 +92,8 @@ Activate the composed 2.0 library surface after the implementation sanity gates;
 ## Deliverables
 
 1. Activate the canonical 2.0 re-exports and remove transitional 1.x wrappers/classification/adapters using the recorded contract/implementation-to-integration handoffs. Compile all crate and binding consumers; preserve typed source/remediation and neutral model fields.
+   - Absorb the unfinished D16 log-error migration: change `IdentityError`, `InitError`, `FlushError`, and `ShutdownError` uses in `control.rs`, `error.rs`, `handle.rs`, and `mapping.rs` to D12's canonical named variants. Preserve stable codes and `ErrorContext` source identity; retain the companion-only `DetachError` boundary.
+   - Retype exactly `api_freeze`, `flush_single_flight`, `init_runtime_start`, `shutdown_timeout`, and `static_level_cap` to assert canonical variants, stable codes, and `ErrorContext` source identity. This is D18-owned completion work, not evidence that D16 passed.
 
 2. Compose the completed lifecycle, projectors and SDK/legacy implementations through D.21's private ExporterSet factory. Keep the exporter set/traits private; public Telemetry construction must fail for unsupported enabled transports and must never choose the disabled no-op path.
 
@@ -158,9 +160,9 @@ Created by obs-d-17, owned here from wave 3. Consume its completed sanity-gated 
 - `examples/custom-sink-example/src/main.rs`
 - `examples/tauri-logging/src-tauri/src/main.rs`
 
-## Handoff from obs-d-16 (wave 2)
+## Proposed absorption of obs-d-16 canonical log-error work
 
-Created by obs-d-16, owned here from wave 3. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
+Per the proposed [`obs-decision-d16-d18-ownership` option A](decision-d16-d18-ownership.md), D16 is not treated as a completed producer and `obs-d-16-sanity` is not a D18 prerequisite. D18 directly owns the unfinished canonical migration below, including its requirements, ADR ties, validation, and final compatibility retirement. The actual prerequisites remain D12's canonical error contract and D2's bridge artifact, which D18 already consumes. No temporary duplicate adapter or waiver is authorized.
 
 - `crates/sc-observability-log/src/control.rs`
 - `crates/sc-observability-log/src/error.rs`
@@ -273,6 +275,7 @@ Consume obs-d-21-sanity for OTLP contracts, module registration and atomic works
 ## Acceptance criteria
 
 - [ ] `cargo check --workspace --locked`, `cargo check --workspace --all-features --locked`, `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked` pass after canonical activation/removal; workspace clippy/rustdoc and existing boundary gates pass (#1/#5).
+- [ ] `cargo test -p sc-observability-log --test api_freeze --test flush_single_flight --test init_runtime_start --test shutdown_timeout --test static_level_cap --locked` proves the absorbed D16 call sites use canonical named variants with stable codes and `ErrorContext` source identity (#1).
 - [ ] `cargo test -p sc-observability-otlp --test composition --features otlp-sdk,legacy-http-json --locked` runs enabled_transport_never_noop, disabled_no_network, unsupported_selection_is_error and private_exporter_composition, asserting actual constructor selection rather than only successful compilation (#2).
 - [ ] Release inventory enumerates every publishable crate/binding and six Python platforms with no omissions/duplicates; version literals match Cargo's 2.0 value. Approval JSON names each public break and its contract/ADR; changelog/release notes agree. Existing version/docs/release inventory validators pass, not merely file-existence checks (#3).
 - [ ] `python3 scripts/ci/validate_public_api_semver.py` passes the complete consumed break manifest and fails with one observed break omitted in scratch; only then generate/review the 2.0 baseline. `python3 scripts/ci/validate_error_migration.py` passes migrated sources and asserts the intended old-source failure (#4).
