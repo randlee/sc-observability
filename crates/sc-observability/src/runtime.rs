@@ -28,7 +28,7 @@ use crate::maintenance::{
 };
 use crate::redact::{redact_bearer_token_text, redact_string_value};
 use crate::settings::{LOG_ENV_NAMESPACE_SUFFIX, SHARED_ENV_PREFIX};
-use crate::sinks::JsonlFileSink;
+use crate::sinks::{JsonlFileSink, validate_event_size};
 use crate::{
     EnvSnapshot, LevelOwner, LogError, LogEvent, LogFailure, LogRoot, LogSettings,
     LogSettingsError, LogSettingsInputs, Logger, LoggerConfig, RedactionPolicy,
@@ -869,7 +869,9 @@ impl Logger<Running> {
             return Ok(None);
         }
         drop(control);
-        Ok(Some(self.redact_event(event)))
+        let event = self.redact_event(event);
+        validate_event_size(&event)?;
+        Ok(Some(event))
     }
 
     fn redact_event(&self, event: LogEvent) -> LogEvent {
@@ -1026,7 +1028,7 @@ impl<State> Logger<State> {
                 .clone()
                 .unwrap_or(WriterHealthSnapshot {
                     queue_depth: 0,
-                    queue_capacity: self.config.queue_capacity as u64,
+                    queue_capacity: self.config.queue_capacity.get() as u64,
                     queue_high_water_mark: 0,
                     queue_full_drops_total: 0,
                     writer_state: WriterState::Stopped,

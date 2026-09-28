@@ -74,7 +74,7 @@ fn config() -> (tempfile::TempDir, sc_observability::LoggerConfig) {
         root.path().into(),
     );
     config.enable_console_sink = false;
-    config.queue_capacity = 4096;
+    config.queue_capacity = sc_observability::QueueCapacity::new(4096).expect("positive capacity");
     config.process_identity = native::ProcessIdentityPolicy::Fixed {
         hostname: Some("host".into()),
         pid: Some(123),
@@ -214,7 +214,6 @@ const CASES: &[&str] = &[
     "worker1_rollback",
     "worker2_rollback",
     "worker3_rollback",
-    "core_start_rollback",
     "concurrent_timer",
     "observer_bounds",
     "callback_bounds",
@@ -263,7 +262,6 @@ fn contract_matrix() {
             "worker1_rollback" => spawn_rollback(1),
             "worker2_rollback" => spawn_rollback(2),
             "worker3_rollback" => spawn_rollback(3),
-            "core_start_rollback" => core_start_rollback(),
             "concurrent_timer" => concurrent_timer(),
             "observer_bounds" => observer_bounds(),
             "callback_bounds" => callback_bounds(),
@@ -326,14 +324,6 @@ fn spawn_rollback(index: usize) {
     );
     crate::spawn::wait_live(usize::from(index != 0));
     crate::spawn::fail_at(usize::MAX);
-    let (_root, owner, _backend) = core();
-    stop(&owner);
-}
-fn core_start_rollback() {
-    let (_root, mut config) = config();
-    config.queue_capacity = 0;
-    assert!(create_core_backend(config).is_err());
-    crate::spawn::wait_live(1);
     let (_root, owner, _backend) = core();
     stop(&owner);
 }
@@ -697,7 +687,8 @@ fn core_with_sink(
 
 fn core_admission_and_flush_faults() {
     let (_root, mut logger_config) = config();
-    logger_config.queue_capacity = 1;
+    logger_config.queue_capacity =
+        sc_observability::QueueCapacity::new(1).expect("positive capacity");
     let gate = Gate::new();
     let _release = Release(gate.clone());
     let (owner, backend) = core_with_sink(

@@ -80,15 +80,6 @@ impl LoggerBuilder {
 
     /// Creates a builder with the configured built-in sinks and typed failures.
     pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
-        if config.queue_capacity == 0 {
-            return Err(InitFailure::logger_initialization(
-                "logger queue capacity must be greater than zero",
-                Remediation::recoverable(
-                    "set LoggerConfig.queue_capacity to a positive value before constructing the logger",
-                    ["increase queue_capacity to at least 1"],
-                ),
-            ));
-        }
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let mut sinks = Vec::new();
         let mut file_sink = None;
@@ -237,7 +228,7 @@ impl LoggerBuilder {
             sinks.clone(),
             file_sink,
             retained_log_policy,
-            config.queue_capacity,
+            config.queue_capacity.get(),
             #[cfg(test)]
             config.maintenance_test_pass_delay,
             #[cfg(test)]
