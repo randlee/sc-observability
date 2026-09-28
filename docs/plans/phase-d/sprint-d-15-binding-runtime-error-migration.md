@@ -70,6 +70,10 @@ tagged-DTO assertions for these mappings.
 
 The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
+The retained DTO `Diagnostic` schema has no details field, so canonical source
+chains remain in the native error for Rust callers and are deliberately not
+serialized across this boundary.
+
 ## Handoff to obs-d-18 (wave 3)
 
 Created/staged by `obs-d-15`, owned by `obs-d-18` from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion and final compatibility retirement.

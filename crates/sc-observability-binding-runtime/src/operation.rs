@@ -214,16 +214,7 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
                     }
                 }),
             )
-            .map_err(|error| {
-                let kind = if error.diagnostic().code.as_str()
-                    == sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED
-                {
-                    crate::conversion::Kind::Closed
-                } else {
-                    crate::conversion::Kind::QueueFull
-                };
-                crate::conversion::canonical(&error, kind)
-            })?;
+            .map_err(|(error, kind)| crate::conversion::canonical(&error, kind))?;
         let id = self.inner.next.fetch_add(1, Ordering::SeqCst);
         {
             let mut observers = lock(&self.inner.observers);

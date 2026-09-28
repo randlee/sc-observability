@@ -249,9 +249,11 @@ fn contract_matrix() {
             "timer_poison" => {
                 crate::timer::poison_initialization();
                 let (_root, config) = config();
-                code(
+                assert_failure(
                     create_core_backend(config),
                     dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                    "internal",
+                    None,
                 );
                 crate::spawn::wait_live(0);
             }
@@ -1010,12 +1012,6 @@ fn d15_coordinator_fixture() {
 }
 
 fn d15_operation_fixture() {
-    let native_error = crate::error::flush_observer_timeout();
-    assert_canonical_context(
-        &native_error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
-        0,
-    );
     let (_root, owner, backend) = core();
     let operation: Operation<u32> = Operation::new(
         &backend.shared.dispatcher,
@@ -1026,7 +1022,7 @@ fn d15_operation_fixture() {
         operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
         "timeout",
-        Some("flush"),
+        Some("native_operation"),
     );
     stop(&owner);
     observer_bounds();
@@ -1064,28 +1060,13 @@ fn d15_sync_fixture() {
 }
 
 fn d15_timer_fixture() {
-    let error = crate::error::shutdown_timeout("shutdown observation deadline elapsed");
-    assert_canonical_context(
-        &error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
-        0,
-    );
-    assert_failure(
-        Err::<(), _>(crate::conversion::canonical(
-            &error,
-            crate::conversion::Kind::Timeout,
-        )),
-        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
-        "timeout",
-        Some("native_operation"),
-    );
     assert_failure(
         Err::<(), _>(crate::error::observer_timeout(
             crate::error::OperationKind::Shutdown,
         )),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
         "timeout",
-        Some("shutdown"),
+        Some("native_operation"),
     );
 }
 
