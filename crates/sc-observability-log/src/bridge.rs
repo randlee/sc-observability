@@ -512,50 +512,13 @@ pub(crate) fn submit_control(
             phase: crate::LifecyclePhase::Stopping,
         });
     };
-    let mut fields = serde_json::Map::new();
-    let mut raw_keys = std::collections::BTreeMap::new();
-    for (raw, value) in event.fields {
-        let key = mapping::field_key_label(&raw)
-            .map_err(|error| EmitError::InvalidField {
-                raw_key: raw.clone(),
-                reason: match error {
-                    mapping::LabelError::Empty { .. } | mapping::LabelError::Rejected { .. } => {
-                        crate::FieldKeyError::Empty
-                    }
-                    mapping::LabelError::ReservedPrefix { .. } => {
-                        crate::FieldKeyError::ReservedPrefix
-                    }
-                },
-            })?
-            .into_owned();
-        if let Some(other_raw_key) = raw_keys.insert(key.clone(), raw.clone()) {
-            return Err(EmitError::InvalidField {
-                raw_key: raw,
-                reason: crate::FieldKeyError::Collision { other_raw_key },
-            });
-        }
-        fields.insert(key, value);
-    }
-    let observation = sc_observability_types::Observation::new(state.service.clone(), ());
-    let assembled = LogEvent {
-        version: observation.version,
-        timestamp: observation.timestamp,
-        level: event.level,
-        service: state.service.clone(),
-        target: event.target,
-        action: event
-            .action
-            .unwrap_or_else(|| state.options.default_action.clone()),
-        message: event.message,
-        identity: state.identity.clone(),
-        trace: event.trace.or_else(crate::context::current_trace),
-        request_id: event.request_id,
-        correlation_id: event.correlation_id,
-        outcome: event.outcome,
-        diagnostic: None,
-        state_transition: None,
-        fields,
-    };
+    let mut assembled = crate::control::assemble_event(
+        event,
+        &state.service,
+        &state.identity,
+        &state.options.default_action,
+    )?;
+    assembled.trace = assembled.trace.or_else(crate::context::current_trace);
     if let BridgeEventDecision::Reject(reason) = state.policy.decide(&assembled) {
         return Err(EmitError::InvalidEvent {
             diagnostic: policy_diagnostic(reason),

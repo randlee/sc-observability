@@ -140,7 +140,12 @@ impl LogControl {
                 return Err(not_running());
             }
             let installed = handle::current_installed().ok_or_else(not_running)?;
-            let event = direct_event(event, &installed)?;
+            let event = assemble_event(
+                event,
+                &installed.service,
+                &installed.identity,
+                &installed.options.default_action,
+            )?;
             installed
                 .logger
                 .try_log_with_outcome(event)
@@ -173,9 +178,11 @@ impl LogControl {
     }
 }
 
-fn direct_event(
+pub(crate) fn assemble_event(
     event: BridgeEvent,
-    installed: &handle::Installed,
+    service: &sc_observability_types::ServiceName,
+    identity: &sc_observability_types::ProcessIdentity,
+    default_action: &sc_observability_types::ActionName,
 ) -> Result<sc_observability_types::LogEvent, EmitError> {
     let mut fields = serde_json::Map::new();
     let mut raw_keys = std::collections::BTreeMap::new();
@@ -199,18 +206,16 @@ fn direct_event(
         }
         fields.insert(key, value);
     }
-    let observation = sc_observability_types::Observation::new(installed.service.clone(), ());
+    let observation = sc_observability_types::Observation::new(service.clone(), ());
     Ok(sc_observability_types::LogEvent {
         version: observation.version,
         timestamp: observation.timestamp,
         level: event.level,
-        service: installed.service.clone(),
+        service: service.clone(),
         target: event.target,
-        action: event
-            .action
-            .unwrap_or_else(|| installed.options.default_action.clone()),
+        action: event.action.unwrap_or_else(|| default_action.clone()),
         message: event.message,
-        identity: installed.identity.clone(),
+        identity: identity.clone(),
         trace: event.trace.or_else(crate::context::current_trace),
         request_id: event.request_id,
         correlation_id: event.correlation_id,
