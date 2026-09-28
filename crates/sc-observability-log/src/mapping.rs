@@ -403,10 +403,6 @@ pub(crate) fn assemble_event(
 }
 
 #[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "legacy identity wrapper assertions cover the copied bridge compatibility contract"
-)]
 mod tests {
     use std::sync::Arc;
 

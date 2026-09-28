@@ -43,10 +43,6 @@ impl SignalKind {
 }
 
 /// Snapshot of lifecycle state and fail-open accounting for health surfaces.
-#[allow(
-    dead_code,
-    reason = "D.18 exposes lifecycle health through the public facade"
-)]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LifecycleHealth {
     /// Current lifecycle phase.
@@ -369,9 +365,12 @@ impl LifecycleCore {
     }
 
     /// Returns a point-in-time health/accounting snapshot.
-    #[allow(
-        dead_code,
-        reason = "D.18 exposes lifecycle health through the public facade"
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "only lifecycle tests call this internal snapshot; production facade currently projects a separate health model"
+        )
     )]
     pub(crate) fn health(&self) -> LifecycleHealth {
         let state = self.inner.state.lock().expect("lifecycle state lock");
