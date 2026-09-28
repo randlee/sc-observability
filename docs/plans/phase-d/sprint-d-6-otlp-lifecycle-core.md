@@ -66,6 +66,11 @@ D.6 configuration, constants, or facade ownership.
 - [ ] Deliverable 4: `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass.
 - [ ] D.6 does not close SDK/legacy transport behavior or public-facade integration; D.7/D.8 and D.18 own those outcomes.
 
+The D18 handoff retains QA-1 verification that the legacy facade state is
+actually retired in favor of `LifecycleCore`, and that any live retained V1
+span assembler is bounded with eviction/loss accounting before removal. These
+are integration evidence items, not additional D6 acceptance gates.
+
 ## Implementation notes
 
 The staged lifecycle core now provides the shared contract for D.7/D.8:

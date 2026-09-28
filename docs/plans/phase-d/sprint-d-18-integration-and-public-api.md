@@ -108,6 +108,19 @@ Activate the composed 2.0 library surface after the implementation sanity gates;
 
 D.9 owns hermetic dual-collector equivalence and operational recipes; obs-d-10 owns the folded Python distribution/metadata qualification track. No publication/tagging is authorized.
 
+## Retained lifecycle QA-1 checks
+
+The D6 finding sweep carries two explicit QA-1 checks into this sprint's
+integration review. First, the legacy `AtomicBool`/`Mutex<TelemetryRuntime>`
+facade must be actually retired, and
+`tests/full_stack_integration.rs` must exercise the single `LifecycleCore`
+shutdown authority; the existing handoff is an obligation, not a new gate or
+tracking bead. Second, any live retained V1 `SpanAssembler` must have a
+bounded span/event cap with explicit eviction and loss accounting before the
+unbounded path is removed or declared unreachable. D9/D18 records the cap,
+eviction, and loss evidence; this sweep does not invent a separate acceptance
+mechanism.
+
 ## Design
 
 ## Composition and retirement
