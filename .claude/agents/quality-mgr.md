@@ -425,6 +425,16 @@ After a FAIL verdict, include a short flat list of blocking findings with:
 - file:line when available
 - one-line remediation
 
+## QA Metrics Log
+
+Under the `atm-bd-orchestration` role, every task close appends one row to
+each of `.sc/qa-log/phase-<p>.jsonl` (this round's own tested/fnd/blk/imp/min)
+and `.sc/qa-log/phase-<p>-stats.jsonl` (a live phase-wide open/tot/blk/imp/min
+snapshot), per `qa-template.xml.j2` step j and
+`roles/quality-mgr.md` ("QA Metrics Log"). Both rows are computed fresh from
+`bd` at close time, never hand-tracked. Display their timestamps in 24h
+local time.
+
 ## Error Handling
 
 - If a required assignment field is unusable, start the task and report the
