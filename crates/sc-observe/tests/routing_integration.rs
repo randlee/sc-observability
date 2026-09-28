@@ -296,7 +296,7 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
 
     let typed_root = temp_path("fanout-typed");
     let typed_config =
-        ObservabilityConfig::default_for_typed(tool_name(), typed_root.clone()).expect("config");
+        ObservabilityConfig::default_for(tool_name(), typed_root.clone()).expect("config");
     let typed = Observability::builder(typed_config)
         .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
             id: "subscriber",
@@ -315,7 +315,7 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
                     count: metric_count.clone(),
                 })),
         )
-        .build_typed()
+        .build()
         .expect("typed runtime");
 
     legacy.emit(observation()).expect("legacy emit");
@@ -351,7 +351,7 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
     assert!(legacy_contents.contains("\"action\":\"observation.received\""));
     assert!(typed_contents.contains("\"action\":\"observation.received\""));
     legacy.shutdown().expect("legacy shutdown");
-    typed.shutdown_typed().expect("typed shutdown");
+    typed.shutdown().expect("typed shutdown");
 }
 
 #[test]

@@ -202,7 +202,7 @@ fn paired_subscriber_runtimes(
         typed_builder = typed_builder.register_subscriber(registration);
     }
     let legacy = legacy_builder.build().expect("legacy runtime");
-    let typed = typed_builder.build_typed().expect("typed runtime");
+    let typed = typed_builder.build().expect("typed runtime");
     (legacy, typed)
 }
 
@@ -219,7 +219,7 @@ fn paired_projection_runtimes(
     let typed = Observability::builder(config(&format!("{name}-typed")))
         .register_subscriber(subscriber)
         .register_projection(projection)
-        .build_typed()
+        .build()
         .expect("typed runtime");
     (legacy, typed)
 }
@@ -560,7 +560,7 @@ fn typed_routes_execute_real_subscriber_and_projector_adapters() {
     let log_calls = Arc::new(AtomicUsize::new(0));
     let span_calls = Arc::new(AtomicUsize::new(0));
     let metric_calls = Arc::new(AtomicUsize::new(0));
-    let config = sc_observe::ObservabilityConfig::default_for_typed(
+    let config = sc_observe::ObservabilityConfig::default_for(
         ToolName::new("typed-observe").expect("valid tool"),
         root.clone(),
     )
@@ -586,11 +586,11 @@ fn typed_routes_execute_real_subscriber_and_projector_adapters() {
                     },
                 ))),
         )
-        .build_typed()
+        .build()
         .expect("typed runtime");
 
     runtime.emit(observation()).expect("typed emit");
-    runtime.flush_typed().expect("typed flush");
+    runtime.flush().expect("typed flush");
     assert_eq!(subscriber_calls.load(Ordering::SeqCst), 1);
     assert_eq!(log_calls.load(Ordering::SeqCst), 1);
     assert_eq!(span_calls.load(Ordering::SeqCst), 1);
@@ -606,8 +606,8 @@ fn typed_routes_execute_real_subscriber_and_projector_adapters() {
     assert!(contents.contains("observation.received"));
     assert!(contents.contains("received"));
 
-    runtime.shutdown_typed().expect("typed shutdown");
-    runtime.shutdown_typed().expect("repeated typed shutdown");
+    runtime.shutdown().expect("typed shutdown");
+    runtime.shutdown().expect("repeated typed shutdown");
 }
 
 #[test]
@@ -634,14 +634,14 @@ fn paired_projection_routes_preserve_output_family_invocation_counts() {
     legacy.emit(observation()).expect("legacy emit");
     legacy.flush().expect("legacy flush");
     typed.emit(observation()).expect("typed emit");
-    typed.flush_typed().expect("typed flush");
+    typed.flush().expect("typed flush");
 
     assert_eq!(subscriber_calls.load(Ordering::SeqCst), 2);
     assert_eq!(log_calls.load(Ordering::SeqCst), 2);
     assert_eq!(span_calls.load(Ordering::SeqCst), 2);
     assert_eq!(metric_calls.load(Ordering::SeqCst), 2);
     legacy.shutdown().expect("legacy shutdown");
-    typed.shutdown_typed().expect("typed shutdown");
+    typed.shutdown().expect("typed shutdown");
 }
 
 #[test]
@@ -659,8 +659,8 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     let Err(legacy_new) = Observability::new(legacy_config) else {
         panic!("legacy new without routes must fail");
     };
-    let Err(new_empty) = Observability::new_typed(typed_config) else {
-        panic!("new_typed without routes must fail");
+    let Err(new_empty) = Observability::new(typed_config) else {
+        panic!("new without routes must fail");
     };
     assert!(matches!(
         &legacy_new,
@@ -673,13 +673,13 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     assert_eq!(legacy_new.diagnostic().code, new_empty.diagnostic().code);
 
     let Err(empty) = Observability::builder(
-        sc_observe::ObservabilityConfig::default_for_typed(
+        sc_observe::ObservabilityConfig::default_for(
             ToolName::new("typed-observe").expect("valid tool"),
             temp_path("empty"),
         )
         .expect("typed config"),
     )
-    .build_typed() else {
+    .build() else {
         panic!("empty routes must fail");
     };
     assert!(matches!(&empty, CanonicalInitError::Configuration { .. }));
@@ -690,7 +690,7 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     )
     .expect("legacy config");
     legacy_config.queue_capacity = 0;
-    let mut typed_config = sc_observe::ObservabilityConfig::default_for_typed(
+    let mut typed_config = sc_observe::ObservabilityConfig::default_for(
         ToolName::new("typed-observe").expect("valid tool"),
         temp_path("typed-logger-failure"),
     )
@@ -708,7 +708,7 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     };
     let Err(typed_logger_failure) = Observability::builder(typed_config)
         .register_subscriber(registration)
-        .build_typed()
+        .build()
     else {
         panic!("typed zero queue capacity must fail");
     };

@@ -167,22 +167,22 @@ fn build_observability(
                     }),
                 )),
         )
-        .build_typed()?;
+        .build()?;
 
     emit_example_sequence(&runtime, service, mode)?;
-    runtime.flush_typed()?;
+    runtime.flush()?;
     telemetry.flush_typed()?;
 
     match mode {
         RunMode::Normal => {
             telemetry.shutdown_typed()?;
-            runtime.shutdown_typed()?;
+            runtime.shutdown()?;
         }
         RunMode::FailOpen => {
             // OTLP-009: this path intentionally leaves one started span without a
             // matching end so shutdown drops it and records fail-open export loss.
             let _ = telemetry.shutdown_typed();
-            runtime.shutdown_typed()?;
+            runtime.shutdown()?;
         }
     }
 
@@ -430,24 +430,19 @@ where
     }
 }
 
-// `Telemetry::emit_*` currently exposes the retained root `TelemetryError`
-// compatibility boundary. The canonical v2 error is staged in the producer's
-// lifecycle core, but its public facade is not activated until obs-d-18.
-// Keep this adapter explicitly legacy-named so this consumer does not claim a
-// v2 contract that the dependency does not yet expose.
+// The ATM adapter's projector callback still uses the typed extension trait;
+// move the canonical telemetry context through that boundary unchanged.
 fn legacy_telemetry_to_projection_failure(
     error: sc_observability_types::TelemetryError,
 ) -> ProjectionFailure {
     match error {
-        sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionFailure::telemetry_closed(
-                "telemetry runtime is shut down",
-                Remediation::not_recoverable("do not project telemetry after shutdown"),
-            )
-        }
-        sc_observability_types::TelemetryError::ExportFailure(context) => {
+        sc_observability_types::TelemetryError::Shutdown { context } => {
             ProjectionFailure::from_context(context)
         }
+        sc_observability_types::TelemetryError::ExportFailure(error) => {
+            ProjectionFailure::from_context(error.into_context())
+        }
+        other => ProjectionFailure::from_context(other.into_context()),
     }
 }
 
