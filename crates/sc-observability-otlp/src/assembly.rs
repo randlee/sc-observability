@@ -106,6 +106,11 @@ impl SpanAssembler {
     }
 
     /// Pushes one lifecycle signal through the assembler with a neutral failure.
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal lifecycle bookkeeping loses the event buffer paired
+    /// with a started span; that condition indicates corrupted assembler state.
     pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure> {
         match signal {
             SpanSignal::Started(record) => {
