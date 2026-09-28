@@ -689,6 +689,9 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::Duration;
 
+    #[cfg(feature = "fault-injection")]
+    use sc_observability_types::{DiagnosticInfo, typed::LogSinkFailure};
+
     struct TestRoot(tempfile::TempDir);
 
     impl TestRoot {
