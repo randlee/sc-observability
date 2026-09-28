@@ -109,7 +109,7 @@ source = "bindings/python/sc-observability-py"
 cargo_manifest = "bindings/python/sc-observability-py/Cargo.toml"
 module_path = "bindings/python/sc-observability-py/python/sc_observability"
 sdist = true
-wheels = [{ id = "linux-x86_64", os = "ubuntu-latest", target = "x86_64-unknown-linux-gnu", platform = "manylinux_2_28_x86_64", manylinux = "2_28" }, { id = "linux-aarch64", os = "ubuntu-24.04-arm", target = "aarch64-unknown-linux-gnu", platform = "manylinux_2_28_aarch64", manylinux = "2_28" }, { id = "macos-x86_64", os = "macos-15-intel", target = "x86_64-apple-darwin", platform = "macosx_10_13_x86_64", deployment_target = "10.13" }, { id = "macos-arm64", os = "macos-latest", target = "aarch64-apple-darwin", platform = "macosx_11_0_arm64", deployment_target = "11.0" }, { id = "windows-x86_64", os = "windows-2022", target = "x86_64-pc-windows-msvc", platform = "win_amd64" }]
+wheels = [{ id = "linux-x86_64", os = "ubuntu-latest", target = "x86_64-unknown-linux-gnu", platform = "manylinux_2_28_x86_64", manylinux = "2_28" }, { id = "linux-aarch64", os = "ubuntu-24.04-arm", target = "aarch64-unknown-linux-gnu", platform = "manylinux_2_28_aarch64", manylinux = "2_28" }, { id = "macos-x86_64", os = "macos-15-intel", target = "x86_64-apple-darwin", platform = "macosx_10_13_x86_64", deployment_target = "10.13" }, { id = "macos-arm64", os = "macos-latest", target = "aarch64-apple-darwin", platform = "macosx_11_0_arm64", deployment_target = "11.0" }, { id = "windows-x86_64", os = "windows-2022", target = "x86_64-pc-windows-msvc", platform = "win_amd64" }, { id = "windows-arm64", os = "windows-11-arm", target = "aarch64-pc-windows-msvc", platform = "win_arm64" }]
 
 [channels.pypi]
 workflow = "pypi-publish.yml"
