@@ -1,10 +1,12 @@
 # Error API migration to 2.0
 
 This is the ADR-017 replacement contract, not the historical Phase B additive
-`*_typed` rollout. D18 owns final public re-export activation and removal.
-Until that implementation is qualified, the branch may still expose retained
-1.x wrappers alongside `sc_observability_types::v2`. Do not interpret this guide
-as evidence that every deletion or consumer fixture has already passed.
+`*_typed` rollout. D18 activates the canonical root re-exports and removes the
+duplicate logger error/method surfaces. New and migrated callers use
+`Logger::new`, `LoggerBuilder::new`, `LoggerBuilder::build`, `Logger::log`,
+`Logger::try_log`, `Logger::try_log_with_outcome`, and `Logger::flush`; these
+methods return the canonical errors directly. The suffixed `*_typed` logger
+methods and their parallel legacy wrappers are not part of the 2.0 API.
 
 ## Nine wrapper families
 
@@ -52,8 +54,8 @@ fn drain_failure(context: Box<ErrorContext>) -> FlushError {
 }
 ```
 
-After canonical activation, change the import to the approved root re-export.
-For logging lifecycle calls, distinguish invalid configuration from runtime
+The canonical types are root re-exports. For logging lifecycle calls,
+distinguish invalid configuration from runtime
 startup failure, flush drain failure from shutdown timeout, and shutdown drain
 failure from timeout. The five D18 log regressions (`api_freeze`,
 `flush_single_flight`, `init_runtime_start`, `shutdown_timeout`,
@@ -80,12 +82,11 @@ or add ATM-specific payload handling to shared crates.
 
 ## Call-site and wire migration
 
-For canonical 2.0, use the final owner methods and named errors; the old
-warning-only recipe of changing every call to `*_typed` is historical 1.x
-advice. D18 must remove superseded typed/legacy duplicates after consumers
-move, rather than retaining two permanent surfaces. Preserve logger admission,
-flush, shutdown ownership and typed terminal outcomes while changing error
-handling.
+For canonical 2.0, use the final owner methods and named errors. Do not retain
+parallel legacy and `*_typed` methods: migrate callers to the unsuffixed
+canonical signatures and remove the superseded duplicates. Preserve logger
+admission, flush, shutdown ownership and terminal outcomes while changing
+error handling.
 
 Update language projections through the existing canonical DTO/schema path.
 Preserve stable code, remediation and source projection; do not derive the

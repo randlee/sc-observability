@@ -215,9 +215,9 @@ impl Coordinator {
                 let event = conversion::event(event, stamp, origin)?;
                 let logger = logger.load_full().ok_or_else(error::closed)?;
                 logger
-                    .try_log_with_outcome_typed(event)
+                    .try_log_with_outcome(event)
                     .map(conversion::admission)
-                    .map_err(conversion::core_admission)
+                    .map_err(|error| conversion::core_admission(&error))
             }
             Backend::Bridge(control) => {
                 // Conversion-only envelope is discarded; the bridge supplies its
@@ -356,13 +356,15 @@ impl Coordinator {
                             Backend::Core { logger, .. } => logger
                                 .load_full()
                                 .ok_or_else(error::closed)?
-                                .flush_typed()
+                                .flush()
                                 .map_err(|error| {
                                     let (typed, kind) = conversion::core_flush(error);
                                     conversion::canonical(&typed, kind)
                                 })?,
                             Backend::Bridge(control) => {
-                                control.flush(timeout).map_err(conversion::bridge_flush)?;
+                                control
+                                    .flush(timeout)
+                                    .map_err(|error| conversion::bridge_flush(&error))?;
                             }
                         }
                         Ok(CompletionDto::Completed)
@@ -536,8 +538,8 @@ fn core_parts(
         pid: stamp.identity.pid,
     };
     let (logger, level) =
-        Logger::new_with_level_owner_typed(config).map_err(|e| native::v2::InitError::Runtime {
-            context: e.into_context(),
+        Logger::new_with_level_owner(config).map_err(|error| native::v2::InitError::Runtime {
+            context: error.into_context(),
         })?;
     Ok((stamp, logger, level))
 }

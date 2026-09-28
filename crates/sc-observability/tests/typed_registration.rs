@@ -98,7 +98,7 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
     let registration_sink = Arc::new(RecordingTypedSink::default());
     let builder_sink = Arc::new(RecordingTypedSink::default());
     let chained_sink = Arc::new(RecordingTypedSink::default());
-    let mut builder = LoggerBuilder::new_typed(config()).expect("valid builder");
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
 
     builder.register_sink(
         SinkRegistration::typed(registration_sink.clone()).with_filter(Arc::new(AllowInfo)),
@@ -109,9 +109,9 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
         .register_typed_sink(chained_sink.clone())
         .expect("chained typed registration");
 
-    let logger = builder.build_typed().expect("build typed logger");
-    logger.log_typed(event()).expect("admit event");
-    logger.flush_typed().expect("flush typed sinks");
+    let logger = builder.build().expect("build typed logger");
+    logger.log(event()).expect("admit event");
+    logger.flush().expect("flush typed sinks");
 
     for sink in [&registration_sink, &builder_sink, &chained_sink] {
         assert_eq!(sink.writes.load(Ordering::SeqCst), 1);
@@ -124,8 +124,8 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
 
 #[test]
 fn builder_rejects_zero_sinks_at_build_and_accepts_a_registered_sink() {
-    let zero_sink = LoggerBuilder::new_typed(config()).expect("valid zero-sink builder");
-    let Err(error) = zero_sink.build_typed() else {
+    let zero_sink = LoggerBuilder::new(config()).expect("valid zero-sink builder");
+    let Err(error) = zero_sink.build() else {
         panic!("zero-sink logger construction must fail");
     };
     assert_eq!(
@@ -140,19 +140,19 @@ fn builder_rejects_zero_sinks_at_build_and_accepts_a_registered_sink() {
             .contains("at least one registered sink")
     );
 
-    let mut valid = LoggerBuilder::new_typed(config()).expect("valid builder");
+    let mut valid = LoggerBuilder::new(config()).expect("valid builder");
     valid
         .register_typed_sink(Arc::new(RecordingTypedSink::default()))
         .expect("register a healthy sink");
     let logger = valid
-        .build_typed()
+        .build()
         .expect("a registered sink should permit construction");
     logger.shutdown();
 }
 
 #[test]
 fn typed_registration_reports_duplicate_invalid_and_closed_sinks() {
-    let mut builder = LoggerBuilder::new_typed(config()).expect("valid builder");
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
     let duplicate = Arc::new(RecordingTypedSink::default());
     builder
         .register_typed_sink(duplicate.clone())

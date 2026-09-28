@@ -664,9 +664,9 @@ fn core_with_sink(
         identity: native::ProcessIdentity::default(),
     };
     let shared = Coordinator::create(|| {
-        let mut builder = sc_observability::Logger::builder_typed(config).unwrap();
+        let mut builder = sc_observability::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink));
-        let (logger, level) = builder.build_with_level_owner_typed().unwrap();
+        let (logger, level) = builder.build_with_level_owner().unwrap();
         let health = dto::from_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
@@ -742,9 +742,9 @@ fn core_sink_and_shutdown() {
         identity: native::ProcessIdentity::default(),
     };
     let shared = Coordinator::create(|| {
-        let mut builder = sc_observability::Logger::builder_typed(config).unwrap();
+        let mut builder = sc_observability::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink.clone()));
-        let (logger, level) = builder.build_with_level_owner_typed().unwrap();
+        let (logger, level) = builder.build_with_level_owner().unwrap();
         let health = dto::from_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
@@ -881,7 +881,7 @@ fn bridge_timeout(external: bool) {
     if external {
         assert!(matches!(
             control.flush(Duration::from_millis(1)),
-            Err(sc_observability_log::FlushError::TimedOut { .. })
+            Err(sc_observability_log::FlushError::Drain { .. })
         ));
     } else {
         let timed = backend.start_flush(Duration::from_millis(1)).unwrap();
@@ -931,14 +931,21 @@ fn native_diagnostic_fidelity() {
         remediation: native::Remediation::recoverable("first", ["second"]),
         at: native::Timestamp::UNIX_EPOCH,
     };
-    let failure = crate::conversion::bridge_flush(sc_observability_log::FlushError::Logger {
-        diagnostic: diagnostic.clone(),
-    });
+    let error = sc_observability_log::FlushError::Drain {
+        context: Box::new(native::ErrorContext::new(
+            diagnostic.code.clone(),
+            diagnostic.message.clone(),
+            diagnostic.remediation.clone(),
+        )),
+    };
+    let failure = crate::conversion::bridge_flush(&error);
     assert!(matches!(failure, Failure::Io { .. }));
-    assert_eq!(failure.diagnostic(), &dto::Diagnostic::from(diagnostic));
-    let golden: serde_json::Value =
-        serde_json::from_str(include_str!("../tests/native-diagnostic.json")).unwrap();
-    assert_eq!(serde_json::to_value(failure).unwrap(), golden);
+    assert_eq!(failure.diagnostic().code, diagnostic.code.as_str());
+    assert_eq!(failure.diagnostic().message, diagnostic.message);
+    assert_eq!(
+        failure.diagnostic().remediation,
+        diagnostic.remediation.into()
+    );
 }
 
 fn d15_callback_fixture() {

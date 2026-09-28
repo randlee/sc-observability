@@ -37,7 +37,7 @@ fn owned_init_excludes_host_attachment() {
 
     let host_root = tempfile::tempdir().expect("host temp root");
     let host = Arc::new(
-        sc_observability::Logger::new_typed(LoggerConfig::default_for(
+        sc_observability::Logger::new(LoggerConfig::default_for(
             ServiceName::new("attached-conflict").expect("service"),
             host_root.path().to_path_buf(),
         ))

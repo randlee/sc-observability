@@ -158,12 +158,24 @@ impl FixtureLogAttachment {
         let state = Arc::clone(&slot.state);
         let mut slot_state = state.lock().expect("fixture state lock");
         if slot_state.foreign_logger_installed {
-            return Err(InitError::ForeignLoggerInstalled);
+            return Err(InitError::Configuration {
+                context: Box::new(ErrorContext::new(
+                    ErrorCode::new_static("SC_LOG_FOREIGN_LOGGER_INSTALLED"),
+                    "foreign logger installed",
+                    Remediation::not_recoverable("remove the competing logger"),
+                )),
+            });
         }
         match slot_state.slot {
             FixtureSlotState::Empty => slot_state.slot = FixtureSlotState::Attached,
             FixtureSlotState::Owned | FixtureSlotState::Attached | FixtureSlotState::Closing => {
-                return Err(InitError::AlreadyInitialized);
+                return Err(InitError::Configuration {
+                    context: Box::new(ErrorContext::new(
+                        ErrorCode::new_static("SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED"),
+                        "logger already initialized",
+                        Remediation::not_recoverable("reuse the existing logger owner"),
+                    )),
+                });
             }
         }
         drop(slot_state);
@@ -330,10 +342,11 @@ fn foreign_logger_rejected() {
         FixtureSlotState::Closing,
     ] {
         let slot = FixtureBridgeSlot::with_state(state);
-        assert!(matches!(
-            FixtureLogAttachment::attach(&slot),
-            Err(InitError::AlreadyInitialized)
-        ));
+        let error = FixtureLogAttachment::attach(&slot).unwrap_err();
+        assert_eq!(
+            error.diagnostic().code.as_str(),
+            "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED"
+        );
     }
 
     let foreign_logger_slot = FixtureBridgeSlot::with_foreign_logger();
@@ -342,10 +355,11 @@ fn foreign_logger_rejected() {
         "SC_LOG_FOREIGN_LOGGER_INSTALLED",
         &Remediation::recoverable("remove the competing logger", ["use the logger owner"]),
     );
-    assert!(matches!(
-        FixtureLogAttachment::attach(&foreign_logger_slot),
-        Err(InitError::ForeignLoggerInstalled)
-    ));
+    let error = FixtureLogAttachment::attach(&foreign_logger_slot).unwrap_err();
+    assert_eq!(
+        error.diagnostic().code.as_str(),
+        "SC_LOG_FOREIGN_LOGGER_INSTALLED"
+    );
 }
 
 #[test]

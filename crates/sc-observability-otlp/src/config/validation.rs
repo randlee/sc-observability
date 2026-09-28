@@ -412,12 +412,18 @@ impl RetryPolicy {
 pub(crate) fn validated_transport_bounds(
     config: &OtelConfig,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "validation intentionally reads retained retry compatibility fields"
+    )]
     let direct_legacy_fields = config.max_retries.is_some()
         || config.initial_backoff_ms.is_some()
         || config.max_backoff_ms.is_some();
     let legacy_retry_field = first_legacy_retry_field(config);
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "validation intentionally constructs the retained retry compatibility policy"
+    )]
     let direct_retry = LegacyRetryPolicy {
         max_retries: config.max_retries,
         initial_backoff_ms: config.initial_backoff_ms,

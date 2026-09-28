@@ -205,10 +205,6 @@ struct TestBlockingSink {
 }
 
 #[cfg(feature = "test-hooks")]
-#[allow(
-    deprecated,
-    reason = "the test-only sink implements the published compatibility trait signature"
-)]
 impl sc_observability::LogSink for TestBlockingSink {
     fn write(
         &self,
@@ -257,23 +253,16 @@ pub fn create_test_blocking_core_backend(
             timestamp: sc_observability_types::Timestamp::now_utc(),
             identity: sc_observability_types::ProcessIdentity::default(),
         };
-        let mut builder = sc_observability::Logger::builder_typed(config).map_err(|error| {
-            let typed = sc_observability_types::v2::InitError::Runtime {
-                context: error.into_context(),
-            };
-            conversion::canonical(&typed, conversion::Kind::Internal)
-        })?;
+        let mut builder = sc_observability::Logger::builder(config)
+            .map_err(|error| conversion::canonical(&error, conversion::Kind::Internal))?;
         builder.register_sink(sc_observability::SinkRegistration::new(Arc::new(
             TestBlockingSink {
                 gate: gate_for_sink,
             },
         )));
-        let (logger, level) = builder.build_with_level_owner_typed().map_err(|error| {
-            let typed = sc_observability_types::v2::InitError::Runtime {
-                context: error.into_context(),
-            };
-            conversion::canonical(&typed, conversion::Kind::Internal)
-        })?;
+        let (logger, level) = builder
+            .build_with_level_owner()
+            .map_err(|error| conversion::canonical(&error, conversion::Kind::Internal))?;
         Ok((stamp, logger, level))
     })?;
     Ok((

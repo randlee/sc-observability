@@ -74,7 +74,9 @@ fn run_child(root: &Path) {
     println!(
         "{RESULT_PREFIX}{}",
         json!({
-            "reinit_code": reinit.code(),
+            "reinit_code": reinit.diagnostic().code.as_str(),
+            "post_stop_code": post_stop.code().as_str(),
+            "flush_code": flush.diagnostic().code.as_str(),
             "foreign_logger_rejected": log::set_boxed_logger(Box::new(ForeignLogger)).is_err(),
             "post_stop": post_stop,
             "flush": flush,
@@ -132,7 +134,9 @@ fn run_parent() {
     );
     assert_eq!(result["foreign_logger_rejected"], true);
     assert_eq!(result["post_stop"]["kind"], "not_running");
-    assert_eq!(result["flush"]["kind"], "not_running");
+    assert_eq!(result["post_stop_code"], "SC_OBSERVABILITY_LOG_NOT_RUNNING");
+    assert_eq!(result["flush"]["kind"], "drain");
+    assert_eq!(result["flush_code"], "SC_OBSERVABILITY_LOG_NOT_RUNNING");
     assert_eq!(result["health"]["lifecycle"], "stopped");
     let path = PathBuf::from(result["active_log_path"].as_str().unwrap());
     let contents = std::fs::read_to_string(path).unwrap();

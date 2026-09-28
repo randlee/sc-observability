@@ -87,20 +87,6 @@ pub(crate) fn init_runtime_internal(message: impl Into<String>) -> native::v2::I
     }
 }
 
-pub(crate) fn flush_drain(source: Box<native::ErrorContext>) -> native::v2::FlushError {
-    let (code, message, remediation) = {
-        let diagnostic = source.diagnostic();
-        (
-            diagnostic.code.clone(),
-            diagnostic.message.clone(),
-            diagnostic.remediation.clone(),
-        )
-    };
-    let sink = native::v2::LogSinkError::Flush { context: source };
-    let context = Box::new(ErrorContext::new(code, message, remediation).source(Box::new(sink)));
-    native::v2::FlushError::Drain { context }
-}
-
 fn registry_remediation(code: &'static str) -> Remediation {
     let entry = codes::REGISTRY
         .iter()

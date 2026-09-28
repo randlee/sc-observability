@@ -47,7 +47,7 @@ fn event() -> LogEvent {
 }
 
 fn logger(root: &tempfile::TempDir) -> Logger {
-    Logger::new_typed(LoggerConfig::default_for(
+    Logger::new(LoggerConfig::default_for(
         service_name(),
         root.path().to_path_buf(),
     ))
@@ -119,8 +119,8 @@ fn logger_follow_shutdown_updates_real_query_health() {
 fn logger_query_decode_preserves_source_and_records_health_summary() {
     let root = tempfile::tempdir().expect("temporary log root");
     let logger = logger(&root);
-    logger.log_typed(event()).expect("admit event");
-    logger.flush_typed().expect("flush event");
+    logger.log(event()).expect("admit event");
+    logger.flush().expect("flush event");
 
     let active_path = root
         .path()

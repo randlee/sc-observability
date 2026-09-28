@@ -95,7 +95,7 @@ fn logger() -> Arc<sc_observability::Logger> {
     // leaking only this test's temporary directory handle.
     let root = Box::leak(Box::new(root));
     Arc::new(
-        sc_observability::Logger::new_typed(LoggerConfig::default_for(
+        sc_observability::Logger::new(LoggerConfig::default_for(
             ServiceName::new("attachment").expect("service"),
             root.path().to_path_buf(),
         ))
@@ -113,11 +113,11 @@ fn recording_logger() -> (Arc<sc_observability::Logger>, Arc<Mutex<Vec<LogEvent>
     config.enable_file_sink = false;
     config.enable_console_sink = false;
     let events = Arc::new(Mutex::new(Vec::new()));
-    let mut builder = sc_observability::LoggerBuilder::new_typed(config).expect("builder");
+    let mut builder = sc_observability::LoggerBuilder::new(config).expect("builder");
     builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
-    let logger = builder.build_typed().expect("host logger");
+    let logger = builder.build().expect("host logger");
     (Arc::new(logger), events)
 }
 
@@ -175,11 +175,11 @@ fn blocking_logger(
     );
     config.enable_file_sink = false;
     config.enable_console_sink = false;
-    let mut builder = sc_observability::LoggerBuilder::new_typed(config).expect("builder");
+    let mut builder = sc_observability::LoggerBuilder::new(config).expect("builder");
     builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink::new(
         entered, release,
     ))));
-    Arc::new(builder.build_typed().expect("host logger"))
+    Arc::new(builder.build().expect("host logger"))
 }
 
 fn event() -> BridgeEvent {
@@ -286,10 +286,12 @@ fn timed_out_flush_keeps_attachment_owned_logger_until_helper_drains() {
     ));
 
     release_tx.send(()).expect("release flush");
-    assert!(matches!(
-        flush.join().expect("flush worker"),
-        Err(FlushError::TimedOut { .. })
-    ));
+    let error = flush.join().expect("flush worker").unwrap_err();
+    assert!(matches!(error, FlushError::Drain { .. }));
+    assert_eq!(
+        error.diagnostic().code.as_str(),
+        "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT"
+    );
     attachment
         .detach(Duration::from_secs(2))
         .expect("drained flush detaches");
@@ -309,19 +311,22 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         Err(DetachError::ForeignLoggerInstalled { .. })
     ));
     let stale = first.control();
-    assert!(matches!(
-        sc_observability_log::init(
-            LoggerConfig::default_for(
-                ServiceName::new("owned-conflict").expect("service"),
-                std::env::temp_dir().join("owned-conflict"),
-            ),
-            BridgeOptions {
-                default_action: ActionName::new("log.record").expect("action"),
-                parse_bracket_action: false,
-            },
+    let init_error = sc_observability_log::init(
+        LoggerConfig::default_for(
+            ServiceName::new("owned-conflict").expect("service"),
+            std::env::temp_dir().join("owned-conflict"),
         ),
-        Err(InitError::AlreadyInitialized)
-    ));
+        BridgeOptions {
+            default_action: ActionName::new("log.record").expect("action"),
+            parse_bracket_action: false,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(init_error, InitError::Configuration { .. }));
+    assert_eq!(
+        init_error.diagnostic().code.as_str(),
+        "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED"
+    );
     first.detach(Duration::from_secs(2)).expect("first detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("first detach releases logger"));
     host.shutdown();
@@ -332,10 +337,11 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         stale.try_log(event()),
         Err(sc_observability_log::EmitError::NotInstalled)
     ));
-    assert!(matches!(
-        stale.flush(Duration::ZERO),
-        Err(FlushError::NotInstalled)
-    ));
+    let flush_error = stale.flush(Duration::ZERO).unwrap_err();
+    assert_eq!(
+        flush_error.diagnostic().code.as_str(),
+        "SC_LOG_DETACH_NOT_INSTALLED"
+    );
     second
         .control()
         .try_log(event())
@@ -372,10 +378,11 @@ fn dropped_attachment_finishes_detaching_when_last_call_drains() {
         stale.try_log(event()),
         Err(sc_observability_log::EmitError::NotInstalled)
     ));
-    assert!(matches!(
-        stale.flush(Duration::ZERO),
-        Err(FlushError::NotInstalled)
-    ));
+    let flush_error = stale.flush(Duration::ZERO).unwrap_err();
+    assert_eq!(
+        flush_error.diagnostic().code.as_str(),
+        "SC_LOG_DETACH_NOT_INSTALLED"
+    );
     assert!(matches!(
         attach_logger(Arc::clone(&host), options(Arc::new(Admit))),
         Err(DetachError::ForeignLoggerInstalled { .. })
@@ -495,7 +502,7 @@ fn flush_detach_race_releases_all_logger_arcs_before_success() {
             .unwrap_or_else(|_| panic!("detach returned with helper-owned logger"));
         assert!(matches!(
             flush.join().expect("flush caller"),
-            Ok(()) | Err(FlushError::TimedOut { .. })
+            Ok(()) | Err(FlushError::Drain { .. })
         ));
         host.shutdown();
     }

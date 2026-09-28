@@ -30,13 +30,14 @@ fn capped_release_rejects_trace_before_install_then_allows_info() {
     );
     capped.level = LevelFilter::Trace;
     capped.enable_console_sink = false;
-    assert!(matches!(
-        sc_observability_log::init(capped, options.clone()),
-        Err(InitError::UnsupportedLevel {
-            configured: LevelFilter::Trace,
-            available: LevelFilter::Info,
-        })
-    ));
+    let error = sc_observability_log::init(capped, options.clone()).unwrap_err();
+    assert!(matches!(error, InitError::Configuration { .. }));
+    assert_eq!(
+        error.diagnostic().code.as_str(),
+        "SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL"
+    );
+    assert!(error.diagnostic().message.contains("Trace"));
+    assert!(error.diagnostic().message.contains("Info"));
 
     let mut supported = LoggerConfig::default_for(
         ServiceName::new("static-cap").unwrap(),

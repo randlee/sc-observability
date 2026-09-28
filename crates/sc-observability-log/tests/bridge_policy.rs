@@ -120,11 +120,11 @@ fn attach_with_config(
     );
     configure(&mut config);
     let events = Arc::new(Mutex::new(Vec::new()));
-    let mut builder = sc_observability::LoggerBuilder::new_typed(config).expect("builder");
+    let mut builder = sc_observability::LoggerBuilder::new(config).expect("builder");
     builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
-    let logger = Arc::new(builder.build_typed().expect("host logger"));
+    let logger = Arc::new(builder.build().expect("host logger"));
     // Keep the host Arc in the attachment fixture; successful detach proves
     // that the attachment itself released its Arc in the lifecycle fixture.
     let options = AttachmentOptions::new(

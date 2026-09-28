@@ -2,7 +2,6 @@
 use crate::ProducerOrigin;
 use dto::{Diagnostic, Failure};
 use native::DiagnosticInfo;
-use native::typed::ClassifiedError;
 use sc_observability_dto as dto;
 use sc_observability_log as bridge;
 use sc_observability_types as native;
@@ -51,34 +50,22 @@ pub(crate) fn admission(value: native::AdmissionOutcome) -> dto::AdmissionDto {
         native::AdmissionOutcome::Filtered => dto::AdmissionDto::Filtered,
     }
 }
-pub(crate) fn core_admission(value: sc_observability::TryLogFailure) -> Failure {
-    use sc_observability::TryLogFailure as E;
-    match value {
-        E::InvalidEvent(error) => {
-            let kind = if error.kind() == native::typed::EventFailureKind::Closed {
-                Kind::Closed
-            } else {
-                Kind::validation("event")
-            };
-            let typed = native::v2::EventError::Validation {
-                context: error.into_context(),
-            };
-            canonical(&typed, kind)
-        }
-        E::QueueFull(error) => context(error.diagnostic(), Kind::QueueFull),
-        E::WriterDegraded(error) => context(error.diagnostic(), Kind::Unavailable),
-        E::ShutdownTimedOut(error) => context(error.diagnostic(), Kind::timeout("shutdown")),
-        _ => crate::error::internal("unrecognized native admission variant"),
-    }
-}
-pub(crate) fn core_flush(error: native::typed::FlushFailure) -> (native::v2::FlushError, Kind) {
-    use native::typed::FlushFailureKind as K;
-    let kind = match error.kind() {
-        K::Closed => Kind::Closed,
-        K::WriterDegraded => Kind::Unavailable,
-        _ => Kind::Io,
+pub(crate) fn core_admission(value: &native::EventError) -> Failure {
+    let diagnostic = value.diagnostic();
+    let kind = match &value {
+        native::EventError::Validation { .. } => value.failure_classification(),
+        native::EventError::Routing { .. } => match diagnostic.code.as_str() {
+            "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => Kind::QueueFull,
+            "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => Kind::timeout("shutdown"),
+            _ => Kind::Unavailable,
+        },
+        _ => Kind::Internal,
     };
-    (crate::error::flush_drain(error.into_context()), kind)
+    canonical(value, kind)
+}
+pub(crate) fn core_flush(error: native::FlushError) -> (native::FlushError, Kind) {
+    let kind = error.failure_classification();
+    (error, kind)
 }
 pub(crate) fn query(error: &native::QueryError) -> Failure {
     let kind = match &error {
@@ -89,21 +76,16 @@ pub(crate) fn query(error: &native::QueryError) -> Failure {
     };
     context(error.diagnostic(), kind)
 }
-pub(crate) fn bridge_flush(error: bridge::FlushError) -> Failure {
-    use bridge::FlushError as E;
-    match error {
-        E::Logger { diagnostic } => operation(diagnostic, Kind::Io),
-        E::HelperSpawn { diagnostic } => operation(diagnostic, Kind::Unavailable),
-        E::HelperLost { diagnostic } => operation(diagnostic, Kind::Internal),
-        other => {
-            let kind = match &other {
-                E::TimedOut { .. } => Kind::timeout("flush"),
-                E::InProgress => Kind::QueueFull,
-                _ => Kind::Closed,
-            };
-            boundary_native(other.code(), other.to_string(), other.remediation(), kind)
-        }
-    }
+pub(crate) fn bridge_flush(error: &bridge::FlushError) -> Failure {
+    let kind = match error.diagnostic().code.as_str() {
+        "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT" => Kind::timeout("flush"),
+        "SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS" => Kind::QueueFull,
+        "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED" => Kind::Unavailable,
+        "SC_OBSERVABILITY_LOG_HELPER_LOST" => Kind::Internal,
+        "SC_OBSERVABILITY_LOG_NOT_RUNNING" | "SC_LOG_DETACH_NOT_INSTALLED" => Kind::Closed,
+        _ => error.failure_classification(),
+    };
+    canonical(error, kind)
 }
 pub(crate) fn bridge_control(error: bridge::ControlError) -> Failure {
     match error {

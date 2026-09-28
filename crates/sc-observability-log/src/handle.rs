@@ -18,7 +18,7 @@ use crate::{
     DropCause, DroppedEvents, FlushError, ShutdownError, ShutdownOutcome, ShutdownReport,
     UnconfirmedShutdown, health,
 };
-use sc_observability::TryLogError;
+use sc_observability::EventError;
 
 /// A rejected submission: every failure of the guarded core maps to exactly one [`DropCause`].
 ///
@@ -160,6 +160,55 @@ static SHUTDOWN_COORDINATOR: OnceLock<ShutdownCoordinator> = OnceLock::new();
 static FAIL_NEXT_COORDINATOR_RESERVATION: AtomicBool = AtomicBool::new(false);
 
 type ShutdownCommand = Box<dyn FnOnce() + Send + 'static>;
+
+enum ShutdownWorkerOutcome {
+    Completed(Result<(), sc_observability_types::FlushError>),
+    Panicked,
+}
+
+#[allow(
+    deprecated,
+    reason = "the copied bridge preserves its legacy logger flush/shutdown boundary"
+)]
+fn shutdown_command(
+    installed: Arc<Installed>,
+    result_tx: mpsc::SyncSender<ShutdownWorkerOutcome>,
+) -> ShutdownCommand {
+    Box::new(move || {
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            #[cfg(test)]
+            run_shutdown_work_hook();
+            let sole = take_sole(installed);
+            let logger = take_sole(sole.logger);
+            let flushed = logger.flush();
+            let stopped = logger.shutdown();
+            health::store_level_state(stopped.level_state());
+            if let Some(report) = health::read_report(&stopped) {
+                health::store_report(report);
+            }
+            let outcome = match &flushed {
+                Ok(()) => ShutdownOutcome::Stopped,
+                Err(source) => ShutdownOutcome::StoppedWithFlushError {
+                    diagnostic: diagnostic(source.diagnostic().code.clone(), source.to_string()),
+                },
+            };
+            save_shutdown(outcome, BridgeLifecycle::Stopped);
+            flushed
+        }));
+        let outcome = if let Ok(flushed) = result {
+            ShutdownWorkerOutcome::Completed(flushed)
+        } else {
+            save_unconfirmed(UnconfirmedShutdown::HelperLost {
+                diagnostic: diagnostic(
+                    crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
+                    "the reserved shutdown worker panicked before completion".to_owned(),
+                ),
+            });
+            ShutdownWorkerOutcome::Panicked
+        };
+        let _ = result_tx.send(outcome);
+    })
+}
 
 #[cfg(feature = "test_hooks")]
 struct SaveShutdownHook {
@@ -538,10 +587,13 @@ pub(crate) fn submit_to(
         .logger
         .try_log_with_outcome(event)
         .map_err(|error| match error {
-            TryLogError::QueueFull(_) => DropCause::QueueFull,
-            TryLogError::InvalidEvent(_) => DropCause::InvalidEvent,
-            TryLogError::WriterDegraded(_) => DropCause::WriterDegraded,
-            TryLogError::ShutdownTimedOut(_) => DropCause::ShutdownTimedOut,
+            EventError::Validation { .. } => DropCause::InvalidEvent,
+            EventError::Routing { context } => match context.diagnostic().code.as_str() {
+                "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => DropCause::QueueFull,
+                "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => DropCause::ShutdownTimedOut,
+                _ => DropCause::WriterDegraded,
+            },
+            _ => DropCause::WriterDegraded,
         })
 }
 
@@ -717,7 +769,7 @@ pub(crate) fn take_sole<T>(mut shared: Arc<T>) -> T {
 /// The caller waits at most `timeout`. The helper itself has no deadline: an
 /// `Arc<Installed>` clone held past `timeout` (a detached `flush` helper, or a
 /// submission blocked in a sink or redactor) makes the caller return
-/// `ShutdownError::TimedOut` while the detached helper keeps waiting. When it
+/// `ShutdownError::Timeout` while the detached helper keeps waiting. When it
 /// completes late it stores the final health report and publishes
 /// `BridgeLifecycle::Stopped`, so the late completion is observable.
 #[allow(
@@ -728,11 +780,6 @@ pub(crate) fn shutdown_installed(
     installed: Arc<Installed>,
     timeout: Duration,
 ) -> Result<(), ShutdownError> {
-    enum WorkerOutcome {
-        Completed(Result<(), sc_observability_types::FlushError>),
-        Panicked,
-    }
-
     let Some(coordinator) = shutdown_coordinator() else {
         let source =
             std::io::Error::other("shutdown coordinator was not reserved at initialization");
@@ -742,49 +789,20 @@ pub(crate) fn shutdown_installed(
                 source.to_string(),
             ),
         });
-        return Err(ShutdownError::HelperSpawn {
-            diagnostic: diagnostic(
+        return Err(crate::error::shutdown_drain(
+            crate::error::operation_context_with_source(
                 crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
                 source.to_string(),
+                crate::Remediation::not_recoverable(
+                    "inspect resource availability and retained shutdown health",
+                ),
+                source,
             ),
-        });
+        ));
     };
     let work = coordinator.work.clone();
     let (result_tx, result_rx) = mpsc::sync_channel(1);
-    let command: ShutdownCommand = Box::new(move || {
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            #[cfg(test)]
-            run_shutdown_work_hook();
-            let sole = take_sole(installed);
-            let logger = take_sole(sole.logger);
-            let flushed = logger.flush();
-            let stopped = logger.shutdown();
-            health::store_level_state(stopped.level_state());
-            if let Some(report) = health::read_report(&stopped) {
-                health::store_report(report);
-            }
-            let outcome = match &flushed {
-                Ok(()) => ShutdownOutcome::Stopped,
-                Err(source) => ShutdownOutcome::StoppedWithFlushError {
-                    diagnostic: diagnostic(source.diagnostic().code.clone(), source.to_string()),
-                },
-            };
-            save_shutdown(outcome, BridgeLifecycle::Stopped);
-            flushed
-        }));
-        let outcome = if let Ok(flushed) = result {
-            WorkerOutcome::Completed(flushed)
-        } else {
-            save_unconfirmed(UnconfirmedShutdown::HelperLost {
-                diagnostic: diagnostic(
-                    crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-                    "the reserved shutdown worker panicked before completion".to_owned(),
-                ),
-            });
-            WorkerOutcome::Panicked
-        };
-        let _ = result_tx.send(outcome);
-    });
+    let command = shutdown_command(installed, result_tx);
     if let Err(error) = work.send(command) {
         let source = std::io::Error::other(error.to_string());
         save_unconfirmed(UnconfirmedShutdown::HelperSpawn {
@@ -793,40 +811,56 @@ pub(crate) fn shutdown_installed(
                 source.to_string(),
             ),
         });
-        return Err(ShutdownError::HelperSpawn {
-            diagnostic: diagnostic(
+        return Err(crate::error::shutdown_drain(
+            crate::error::operation_context_with_source(
                 crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
                 source.to_string(),
+                crate::Remediation::not_recoverable(
+                    "inspect resource availability and retained shutdown health",
+                ),
+                source,
             ),
-        });
+        ));
     }
     match result_rx.recv_timeout(timeout) {
-        Ok(WorkerOutcome::Completed(Ok(()))) => Ok(()),
-        Ok(WorkerOutcome::Completed(Err(source))) => Err(ShutdownError::FinalFlush {
-            diagnostic: crate::error::diagnostic_from_info(&source),
-        }),
-        Ok(WorkerOutcome::Panicked) | Err(RecvTimeoutError::Disconnected) => {
+        Ok(ShutdownWorkerOutcome::Completed(Ok(()))) => Ok(()),
+        Ok(ShutdownWorkerOutcome::Completed(Err(source))) => {
+            Err(crate::error::shutdown_drain(source.into_context()))
+        }
+        Ok(ShutdownWorkerOutcome::Panicked) | Err(RecvTimeoutError::Disconnected) => {
             save_unconfirmed(UnconfirmedShutdown::HelperLost {
                 diagnostic: diagnostic(
                     crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
                     "the reserved shutdown worker ended without a result".to_owned(),
                 ),
             });
-            Err(ShutdownError::HelperLost {
-                diagnostic: diagnostic(
+            Err(crate::error::shutdown_drain(
+                crate::error::operation_context(
                     crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-                    "the reserved shutdown worker ended without a result".to_owned(),
+                    "the reserved shutdown worker ended without a result",
+                    crate::Remediation::not_recoverable(
+                        "inspect retained lifecycle and health; completion is unconfirmed",
+                    ),
                 ),
-            })
+            ))
         }
-        Err(RecvTimeoutError::Timeout) => Err(ShutdownError::TimedOut { timeout }),
+        Err(RecvTimeoutError::Timeout) => Err(crate::error::shutdown_timeout(
+            crate::error::operation_context(
+                crate::error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT,
+                format!("shutdown did not complete within {timeout:?}"),
+                crate::Remediation::recoverable(
+                    "observe the existing shutdown",
+                    ["wait for completion"],
+                ),
+            ),
+        )),
     }
 }
 
 /// `LogGuard::shutdown` and `Drop for LogGuard` both call this once.
 ///
 /// The lifecycle is `ShuttingDown` from the first statement. When this returns
-/// it is `Stopped` for every result except `ShutdownError::TimedOut`, which
+/// it is `Stopped` for every result except `ShutdownError::Timeout`, which
 /// leaves `ShutdownTimedOut` until the detached helper completes and publishes
 /// `Stopped` (see [`shutdown_installed`]).
 pub(crate) fn shutdown_sequence(timeout: Duration) -> Result<(), ShutdownError> {
@@ -865,13 +899,15 @@ pub(crate) fn current_installed() -> Option<Arc<Installed>> {
 /// `LogGuard::flush` / `LogControl::flush`: the helper owns an `Arc` clone until
 /// sc-observability's flush returns.
 ///
-/// An empty slot means shutdown has taken the logger: `FlushError::NotRunning`. A
+/// An empty slot means shutdown has taken the logger and returns `FlushError::Drain`
+/// with a stable not-running diagnostic. A
 /// flush whose helper already holds its clone when shutdown starts is awaited by
 /// the shutdown's `take_sole`, within the shutdown's own timeout.
 ///
 /// At most one flush helper runs at a time. While one is running (also after its
 /// caller timed out and detached it), a new flush spawns nothing and returns
-/// `FlushError::InProgress`, so a stuck sink cannot accumulate helper threads.
+/// `FlushError::Drain` with the stable in-progress diagnostic, so a stuck sink cannot
+/// accumulate helper threads.
 #[allow(
     deprecated,
     reason = "the copied bridge preserves its legacy bounded flush boundary"
@@ -880,17 +916,28 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
     #[cfg(test)]
     record_native_flush_call();
     if lifecycle() != BridgeLifecycle::Running {
-        return Err(FlushError::NotRunning {
-            phase: lifecycle_phase(),
-        });
+        return Err(crate::error::flush_drain(crate::error::operation_context(
+            crate::error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING,
+            format!("logger is not running: {:?}", lifecycle_phase()),
+            crate::Remediation::not_recoverable("the lifecycle owner has stopped the logger"),
+        )));
     }
     let Some(installed) = current_installed() else {
-        return Err(FlushError::NotRunning {
-            phase: lifecycle_phase(),
-        });
+        return Err(crate::error::flush_drain(crate::error::operation_context(
+            crate::error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING,
+            format!("logger is not running: {:?}", lifecycle_phase()),
+            crate::Remediation::not_recoverable("the lifecycle owner has stopped the logger"),
+        )));
     };
     let Some(flight) = Flight::claim(&FLUSH_IN_FLIGHT) else {
-        return Err(FlushError::InProgress);
+        return Err(crate::error::flush_drain(crate::error::operation_context(
+            crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS,
+            "a previous flush is still running; no new flush was started",
+            crate::Remediation::recoverable(
+                "wait for the existing flush before retrying",
+                ["observe writer health"],
+            ),
+        )));
     };
     let flush = move || {
         // Released when the flush returns or unwinds, before the result is sent.
@@ -899,22 +946,32 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
     };
     match run_bounded(timeout, flush) {
         Ok(Ok(())) => Ok(()),
-        Ok(Err(source)) => Err(FlushError::Logger {
-            diagnostic: crate::error::diagnostic_from_info(&source),
-        }),
-        Err(BoundedError::TimedOut) => Err(FlushError::TimedOut { timeout }),
-        Err(BoundedError::Spawn { source }) => Err(FlushError::HelperSpawn {
-            diagnostic: diagnostic(
+        Ok(Err(source)) => Err(crate::error::flush_drain(source.into_context())),
+        Err(BoundedError::TimedOut) => {
+            Err(crate::error::flush_drain(crate::error::operation_context(
+                crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT,
+                format!("flush did not complete within {timeout:?}"),
+                crate::Remediation::recoverable(
+                    "retry flush later or raise its bounded timeout",
+                    ["inspect writer health"],
+                ),
+            )))
+        }
+        Err(BoundedError::Spawn { source }) => Err(crate::error::flush_drain(
+            crate::error::operation_context_with_source(
                 crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
                 source.to_string(),
+                crate::Remediation::not_recoverable("inspect resource availability"),
+                source,
             ),
-        }),
-        Err(BoundedError::WorkerLost) => Err(FlushError::HelperLost {
-            diagnostic: diagnostic(
+        )),
+        Err(BoundedError::WorkerLost) => {
+            Err(crate::error::flush_drain(crate::error::operation_context(
                 crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-                "the flush helper ended without a result".to_owned(),
-            ),
-        }),
+                "the flush helper ended without a result",
+                crate::Remediation::not_recoverable("inspect retained lifecycle and health"),
+            )))
+        }
     }
 }
 
@@ -959,7 +1016,11 @@ mod tests {
     fn native_flush_counter_positive_control_and_facade_zero_proof() {
         reset_native_flush_calls();
         let result = flush_installed(Duration::from_millis(1));
-        assert!(matches!(result, Err(FlushError::NotRunning { .. })));
+        assert!(matches!(result, Err(FlushError::Drain { .. })));
+        assert_eq!(
+            result.unwrap_err().diagnostic().code,
+            crate::error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING
+        );
         assert_eq!(native_flush_calls(), 1);
 
         reset_native_flush_calls();
@@ -1096,7 +1157,7 @@ mod tests {
         ));
         assert!(matches!(
             owner.join(),
-            Ok(Err(ShutdownError::TimedOut { .. }))
+            Ok(Err(ShutdownError::Timeout { .. }))
         ));
         assert!(release.release().is_ok());
         assert!(matches!(

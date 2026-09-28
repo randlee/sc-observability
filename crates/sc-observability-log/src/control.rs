@@ -271,20 +271,22 @@ fn diagnostic_from_context(
     }
 }
 
-pub(crate) fn core_emit_error(error: &sc_observability::TryLogError) -> EmitError {
+pub(crate) fn core_emit_error(error: &sc_observability::EventError) -> EmitError {
     match error {
-        sc_observability::TryLogError::InvalidEvent(source) => EmitError::InvalidEvent {
-            diagnostic: crate::error::diagnostic_from_info(source),
+        sc_observability::EventError::Validation { context } => EmitError::InvalidEvent {
+            diagnostic: diagnostic_from_context(context),
         },
-        sc_observability::TryLogError::QueueFull(source) => EmitError::QueueFull {
-            diagnostic: diagnostic_from_context(source),
-        },
-        sc_observability::TryLogError::WriterDegraded(source) => EmitError::WriterDegraded {
-            diagnostic: diagnostic_from_context(source),
-        },
-        sc_observability::TryLogError::ShutdownTimedOut(source) => EmitError::ShutdownTimedOut {
-            diagnostic: diagnostic_from_context(source),
-        },
+        sc_observability::EventError::Routing { context } => {
+            let diagnostic = diagnostic_from_context(context);
+            match diagnostic.code.as_str() {
+                "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => EmitError::QueueFull { diagnostic },
+                "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => {
+                    EmitError::ShutdownTimedOut { diagnostic }
+                }
+                _ => EmitError::WriterDegraded { diagnostic },
+            }
+        }
+        _ => EmitError::Panicked,
     }
 }
 

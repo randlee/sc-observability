@@ -503,10 +503,15 @@ pub(crate) fn submit_parts_if_attached(
     Ok(match state.logger.try_log_with_outcome(event) {
         Ok(outcome) => Ok(outcome),
         Err(error) => Err(match error {
-            sc_observability::TryLogError::QueueFull(_) => DropCause::QueueFull,
-            sc_observability::TryLogError::InvalidEvent(_) => DropCause::InvalidEvent,
-            sc_observability::TryLogError::WriterDegraded(_) => DropCause::WriterDegraded,
-            sc_observability::TryLogError::ShutdownTimedOut(_) => DropCause::ShutdownTimedOut,
+            sc_observability::EventError::Validation { .. } => DropCause::InvalidEvent,
+            sc_observability::EventError::Routing { context } => {
+                match context.diagnostic().code.as_str() {
+                    "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => DropCause::QueueFull,
+                    "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => DropCause::ShutdownTimedOut,
+                    _ => DropCause::WriterDegraded,
+                }
+            }
+            _ => DropCause::WriterDegraded,
         }),
     })
 }
@@ -543,7 +548,8 @@ pub(crate) fn flush_attached(
     saved: &Weak<AttachmentState>,
     timeout: Duration,
 ) -> Result<(), crate::FlushError> {
-    let call = enter_attachment(Some(saved)).ok_or(crate::FlushError::NotInstalled)?;
+    let call = enter_attachment(Some(saved))
+        .ok_or_else(|| attachment_flush_error("saved attachment is not installed"))?;
     flush_call(call, timeout)
 }
 
@@ -559,43 +565,49 @@ fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), crate::Flus
             drop(call);
             let _ = sender.send(result);
         })
-        .map_err(|source| crate::FlushError::HelperSpawn {
-            diagnostic: OperationDiagnostic {
-                code: crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
-                message: source.to_string(),
-                remediation: Remediation::recoverable(
-                    "retry the bounded attachment flush",
-                    std::iter::empty::<String>(),
-                ),
-                at: Timestamp::now_utc(),
-            },
+        .map_err(|source| {
+            crate::error::flush_drain(crate::error::operation_context_with_source(
+                crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
+                source.to_string(),
+                Remediation::not_recoverable("inspect thread resource availability"),
+                source,
+            ))
         })?;
     match receiver.recv_timeout(timeout) {
         Ok(Ok(())) => Ok(()),
-        Ok(Err(source)) => Err(crate::FlushError::Logger {
-            diagnostic: crate::error::diagnostic_from_info(&source),
-        }),
+        Ok(Err(source)) => Err(crate::error::flush_drain(source.into_context())),
         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            Err(crate::FlushError::TimedOut { timeout })
+            Err(crate::error::flush_drain(crate::error::operation_context(
+                crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT,
+                format!("attachment flush did not complete within {timeout:?}"),
+                Remediation::recoverable(
+                    "retry after inspecting host logger health",
+                    ["use a bounded timeout"],
+                ),
+            )))
         }
         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            Err(crate::FlushError::HelperLost {
-                diagnostic: OperationDiagnostic {
-                    code: crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-                    message: "attachment flush helper ended without a result".to_owned(),
-                    remediation: Remediation::not_recoverable(
-                        "inspect host logger health before retrying",
-                    ),
-                    at: Timestamp::now_utc(),
-                },
-            })
+            Err(crate::error::flush_drain(crate::error::operation_context(
+                crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
+                "attachment flush helper ended without a result",
+                Remediation::not_recoverable("inspect host logger health before retrying"),
+            )))
         }
     }
 }
 
 pub(crate) fn flush_current_attachment(timeout: Duration) -> Result<(), crate::FlushError> {
-    let call = enter_attachment(None).ok_or(crate::FlushError::NotInstalled)?;
+    let call = enter_attachment(None)
+        .ok_or_else(|| attachment_flush_error("no logger attachment is installed"))?;
     flush_call(call, timeout)
+}
+
+fn attachment_flush_error(message: &str) -> crate::FlushError {
+    crate::error::flush_drain(crate::error::operation_context(
+        crate::error_codes::SC_LOG_DETACH_NOT_INSTALLED,
+        message,
+        Remediation::not_recoverable("attach a logger before requesting a flush"),
+    ))
 }
 
 pub(crate) fn mark_owned_running() {

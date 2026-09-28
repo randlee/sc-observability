@@ -50,7 +50,8 @@
 //!
 //! - **Install once, process-global.** [`init`] succeeds at most once per
 //!   process. The `log` facade has no uninstall API, so after shutdown the
-//!   bridge can be neither reinstalled ([`InitError::AlreadyInitialized`]) nor
+//!   bridge can be neither reinstalled (a configuration error with the
+//!   `SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED` diagnostic) nor
 //!   replaced by another `log::Log`.
 //! - **One lifecycle owner.** [`LogGuard`] is not `Clone`; only
 //!   [`LogGuard::shutdown`] (or, as a fallback, `Drop for LogGuard`) stops the
@@ -69,7 +70,7 @@
 //!   process identity (resolved once at `init`), trace context, redaction and
 //!   sink routing are filled by the bridge; no producer can supply them.
 //! - **Timeout versus final stop.** A shutdown that returns
-//!   [`ShutdownError::TimedOut`] leaves [`LifecyclePhase::Stopping`] while a
+//!   [`ShutdownError::Timeout`] leaves [`LifecyclePhase::Stopping`] while a
 //!   detached helper finishes; late completion is observable as
 //!   [`LifecyclePhase::Stopped`]. `Stopped` is final.
 //! - **Serializable contracts.** [`BridgeHealthReport`] (versioned by
@@ -329,11 +330,10 @@ impl LogGuard {
     ///
     /// # Errors
     ///
-    /// Returns [`FlushError::TimedOut`] when the writer does not acknowledge within
-    /// `timeout` (the helper is detached), [`FlushError::Logger`] when a sink flush
-    /// fails, and [`FlushError::HelperSpawn`] / [`FlushError::HelperLost`] when the
-    /// helper thread cannot start or ends without a result.
-    /// [`FlushError::NotRunning`] cannot occur while the guard is alive.
+    /// Returns [`FlushError::Drain`] with stable diagnostic codes for timeout,
+    /// writer, lifecycle, or helper failures. A timed-out helper is detached and
+    /// retains the logger until it completes. Every error preserves its context
+    /// and any underlying source.
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
         handle::flush_installed(timeout)
     }
@@ -345,12 +345,11 @@ impl LogGuard {
     ///
     /// # Errors
     ///
-    /// Returns [`ShutdownError::TimedOut`] when sole ownership, the final flush and
+    /// Returns [`ShutdownError::Timeout`] when sole ownership, the final flush and
     /// the writer join do not finish within `timeout` (a detached helper keeps
     /// going; the lifecycle is `Stopping` until it completes and publishes
-    /// `Stopped`), [`ShutdownError::FinalFlush`] when the final flush fails (the
-    /// logger is still shut down), and [`ShutdownError::HelperSpawn`] /
-    /// [`ShutdownError::HelperLost`] for helper thread failures.
+    /// `Stopped`), or [`ShutdownError::Drain`] for final-flush and helper failures
+    /// (the original diagnostic and source are preserved).
     pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError> {
         self.shut_down = true;
         handle::shutdown_sequence(timeout)
@@ -403,18 +402,21 @@ impl Drop for LogGuard {
 ///
 /// # Errors
 ///
-/// - [`InitError::AlreadyInitialized`] when `init` already succeeded, is running
-///   concurrently, or earlier returned `ForeignLoggerInstalled`.
-/// - [`InitError::ForeignLoggerInstalled`] when another `log::Log` is installed.
-/// - [`InitError::IdentityResolution`] when the configured resolver fails or
-///   automatic hostname discovery cannot produce a hostname (retry allowed).
-/// - [`InitError::Logger`] when `Logger::new` fails (retry allowed).
+/// - `InitError::Configuration` with a stable diagnostic code when the facade
+///   is already initialized, another logger is installed, or the level cap is
+///   unsupported.
+/// - `InitError::Runtime` with the originating diagnostic and source when
+///   identity resolution, logger construction, or lifecycle startup fails.
 pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError> {
     if let Err(available) = ensure_static_level(config.level) {
-        return Err(InitError::UnsupportedLevel {
-            configured: config.level,
-            available,
-        });
+        return Err(error::init_configuration(
+            error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL,
+            format!(
+                "configured level {:?} exceeds available static level {available:?}",
+                config.level
+            ),
+            Remediation::not_recoverable("choose a startup level supported by this executable"),
+        ));
     }
     if INSTALLED
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -422,14 +424,20 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
     {
         // Covers a live guard, a guard already shut down (the facade logger cannot be
         // uninstalled), and an own init running concurrently on another thread.
-        return Err(InitError::AlreadyInitialized);
+        return Err(error::init_configuration(
+            error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED,
+            "sc-observability-log is already initialized in this process",
+            Remediation::not_recoverable(
+                "keep the existing LogGuard; the global facade cannot be replaced",
+            ),
+        ));
     }
     let identity = match mapping::resolve_identity(&config.process_identity) {
         Ok(identity) => identity,
         Err(source) => {
             INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
-            return Err(InitError::IdentityResolution {
-                diagnostic: error::diagnostic_from_info(&source),
+            return Err(InitError::Runtime {
+                context: source.into_context(),
             });
         }
     };
@@ -438,24 +446,19 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
         Ok(logger) => logger,
         Err(source) => {
             INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
-            return Err(InitError::Logger {
-                diagnostic: error::diagnostic_from_info(&source),
-            });
+            return Err(source);
         }
     };
     if let Err(source) = handle::reserve_shutdown_coordinator() {
         INSTALLED.store(false, Ordering::SeqCst);
-        return Err(InitError::RuntimeStart {
-            diagnostic: OperationDiagnostic {
-                code: error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED,
-                message: source.to_string(),
-                remediation: Remediation::recoverable(
-                    "retry initialization after restoring thread resources",
-                    std::iter::empty::<String>(),
-                ),
-                at: Timestamp::now_utc(),
-            },
-        });
+        return Err(error::init_runtime(
+            error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED,
+            source.to_string(),
+            Remediation::recoverable(
+                "retry initialization after restoring thread resources",
+                std::iter::empty::<String>(),
+            ),
+        ));
     }
     let initial_report = logger.health();
     let active_log_path = enable_file_sink.then(|| initial_report.active_log_path.clone());
@@ -471,7 +474,11 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
         // rest of the process, so no retry can succeed. Later calls return
         // AlreadyInitialized without building and tearing down another Logger.
         let _ = handle::shutdown_installed(installed, DEFAULT_DROP_SHUTDOWN_TIMEOUT);
-        return Err(InitError::ForeignLoggerInstalled);
+        return Err(error::init_configuration(
+            error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED,
+            "another log::Log implementation is already installed",
+            Remediation::not_recoverable("choose one application logger before startup"),
+        ));
     }
     // The facade stays at Trace so compiled debug/trace sites survive. The core
     // LevelOwner is the sole runtime filter for direct, facade, and macro paths.

@@ -33,7 +33,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use sc_observability::{
-    LogError, Logger, LoggerConfig, QueueCapacity, RetainedLogPolicy, Running, Stopped,
+    EventError, Logger, LoggerConfig, QueueCapacity, RetainedLogPolicy, Running, Stopped,
 };
 #[cfg(test)]
 use sc_observability_types::v2::{
@@ -41,10 +41,9 @@ use sc_observability_types::v2::{
     ShutdownError as CanonicalShutdownError,
 };
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
-    ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
-    ServiceName, ShutdownError, SubscriberError, SubscriberRegistration, TelemetryHealthState,
-    ToolName,
+    DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError, ObservabilityHealthProvider,
+    Observable, Observation, ProjectionRegistration, Remediation, ServiceName, ShutdownError,
+    SubscriberError, SubscriberRegistration, TelemetryHealthState, ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -226,13 +225,8 @@ struct ProjectionDispatchResult {
     last_error: Option<DiagnosticSummary>,
 }
 
-fn log_error_summary(error: &LogError) -> DiagnosticSummary {
-    match error {
-        LogError::InvalidEvent(error) => DiagnosticSummary::from(error.diagnostic()),
-        LogError::WriterDegraded(error) | LogError::ShutdownTimedOut(error) => {
-            DiagnosticSummary::from(error.diagnostic())
-        }
-    }
+fn log_error_summary(error: &EventError) -> DiagnosticSummary {
+    DiagnosticSummary::from(error.diagnostic())
 }
 
 impl Observability {
@@ -363,11 +357,7 @@ impl Observability {
                 .expect("observability logger poisoned");
         }
         match &*logger {
-            LoggerHandle::Running(logger) => {
-                logger.flush_typed().map_err(|error| FlushError::Drain {
-                    context: error.into_context(),
-                })
-            }
+            LoggerHandle::Running(logger) => logger.flush(),
             LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => Ok(()),
         }
     }
@@ -577,12 +567,11 @@ impl ObservabilityBuilder {
                         Ok(events) => {
                             result.matched = true;
                             for event in events {
-                                if let Err(err) = logger.log_typed(event) {
-                                    let err: LogError = err.into();
+                                if let Err(err) = logger.log(event) {
                                     record_failure(log_error_summary(&err));
                                 }
                             }
-                            if let Err(err) = logger.flush_typed() {
+                            if let Err(err) = logger.flush() {
                                 record_failure(DiagnosticSummary::from(err.diagnostic()));
                             }
                         }
@@ -624,11 +613,7 @@ impl ObservabilityBuilder {
                 )),
             });
         }
-        let logger = Logger::new_typed(self.config.logger_config()?).map_err(|error| {
-            InitError::Runtime {
-                context: error.into_context(),
-            }
-        })?;
+        let logger = Logger::new(self.config.logger_config()?)?;
         Ok(Observability {
             logger: Mutex::new(LoggerHandle::Running(logger)),
             logger_changed: Condvar::new(),
@@ -1342,7 +1327,7 @@ mod tests {
             entered: entered_tx,
             release: Mutex::new(release_rx),
         })));
-        let logger = builder.build();
+        let logger = builder.build().expect("built logger");
         logger.flush().expect_err("seed logging failure counter");
         seed_rx
             .recv_timeout(Duration::from_secs(2))
@@ -1656,7 +1641,7 @@ mod tests {
                 flush_calls: flush_calls.clone(),
                 flush_completed,
             })));
-            let logger = builder.build();
+            let logger = builder.build().expect("built logger");
 
             let runtime = Observability {
                 logger: Mutex::new(LoggerHandle::Running(logger)),
