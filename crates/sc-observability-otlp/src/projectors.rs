@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(projected.trace().flags.bits(), 0xa5);
         assert_eq!(projected.links().len(), 1);
         assert_eq!(projected.status(), SpanStatus::Ok);
-        assert_eq!(projected.duration_ms(), Some(DurationMs::from(9)));
+        assert_eq!(projected.duration_ms(), DurationMs::from(9));
     }
 
     #[test]
@@ -396,7 +396,7 @@ mod tests {
         let start = Timestamp::UNIX_EPOCH;
         let end = one_second_after_epoch();
         let point = HistogramPoint::try_new(
-            vec![1.0, 10.0],
+            vec![FiniteF64::new(1.0).unwrap(), FiniteF64::new(10.0).unwrap()],
             vec![2, 3, 5],
             10,
             FiniteF64::new(37.5).expect("finite histogram sum"),
@@ -424,7 +424,10 @@ mod tests {
             panic!("histogram must not be replaced with a scalar placeholder");
         };
         assert_eq!(projected_point, &point);
-        assert_eq!(projected_point.explicit_bounds(), &[1.0, 10.0]);
+        assert_eq!(
+            projected_point.explicit_bounds(),
+            &[FiniteF64::new(1.0).unwrap(), FiniteF64::new(10.0).unwrap()]
+        );
         assert_eq!(projected_point.bucket_counts(), &[2, 3, 5]);
         assert_eq!(projected_point.count(), 10);
         assert!((projected_point.sum().get() - 37.5).abs() < f64::EPSILON);

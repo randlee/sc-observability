@@ -36,9 +36,7 @@ fn assert_diagnostic_and_source(error: &(impl DiagnosticInfo + Error), code: &st
         Remediation::Recoverable { .. }
     ));
 
-    let context = Error::source(error).expect("canonical error exposes its context");
-    let cause = context
-        .source()
+    let cause = Error::source(error)
         .and_then(|source| source.downcast_ref::<NativeCause>())
         .expect("canonical context preserves the native source type");
     assert_eq!(cause.0, "native cause");

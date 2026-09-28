@@ -158,7 +158,7 @@ fn preserved_records() -> (ExportRecord<CompleteSpan>, ExportRecord<MetricRecord
             MetricName::new("latency").expect("valid metric"),
             MetricValue::Histogram {
                 point: HistogramPoint::try_new(
-                    vec![1.0],
+                    vec![FiniteF64::new(1.0).unwrap()],
                     vec![1, 2],
                     3,
                     FiniteF64::new(5.0).expect("finite histogram sum"),
@@ -302,7 +302,7 @@ fn ordered_flush_waits_for_prior_admission_and_preserves_payload() {
     let MetricValue::Histogram { point, .. } = admitted_metric.get().record.value() else {
         panic!("metric payload lost its histogram variant")
     };
-    assert_eq!(point.explicit_bounds(), &[1.0]);
+    assert_eq!(point.explicit_bounds(), &[FiniteF64::new(1.0).unwrap()]);
     assert_eq!(point.bucket_counts(), &[1, 2]);
     assert_eq!(point.count(), 3);
     assert!((point.sum().get() - 5.0).abs() < f64::EPSILON);
@@ -342,7 +342,7 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
     };
     assert!(matches!(
         closed,
-        sc_observability_types::v2::TelemetryError::Shutdown
+        sc_observability_types::v2::TelemetryError::Shutdown { .. }
     ));
     assert_eq!(core.health().phase, LifecycleState::Shutdown);
     assert_eq!(core.health().dropped_by_signal, [3, 0, 0]);
@@ -393,7 +393,7 @@ fn cancelled_waiter_can_be_replaced_without_duplicate_shutdown() {
 #[test]
 fn lifecycle_deadline_and_runtime_termination_are_typed() {
     let transport = OtelConfig {
-        timeout_ms: 1.into(),
+        timeout_ms: Some(1.into()),
         lifecycle_flush_timeout_ms: Some(2.into()),
         lifecycle_shutdown_timeout_ms: Some(2.into()),
         ..OtelConfig::default()

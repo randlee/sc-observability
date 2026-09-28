@@ -165,10 +165,10 @@ impl LifecycleCore {
         Ok(Self {
             inner: Arc::new(LifecycleInner {
                 exporters,
-                queue_capacity: bounds.queue_capacity,
-                queue_byte_capacity: bounds.queue_byte_capacity,
-                flush_timeout: bounds.lifecycle_flush_timeout,
-                shutdown_timeout: bounds.lifecycle_shutdown_timeout,
+                queue_capacity: bounds.queue_capacity().get(),
+                queue_byte_capacity: bounds.queue_byte_capacity().get(),
+                flush_timeout: bounds.lifecycle().flush().get(),
+                shutdown_timeout: bounds.lifecycle().shutdown().get(),
                 state: Mutex::new(CoreState {
                     phase: LifecycleState::Open,
                     next_sequence: 0,
@@ -197,7 +197,13 @@ impl LifecycleCore {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
         if state.phase != LifecycleState::Open {
             LifecycleInner::record_drop(&mut state, signal, None);
-            return Err(TelemetryError::Shutdown);
+            return Err(TelemetryError::Shutdown {
+                context: Box::new(ErrorContext::new(
+                    error_codes::OTLP_TELEMETRY_SHUTDOWN,
+                    "telemetry runtime is shut down",
+                    Remediation::recoverable("Construct a new telemetry instance", [] as [&str; 0]),
+                )),
+            });
         }
         if state.admitted_records >= self.inner.queue_capacity
             || state

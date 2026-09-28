@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -27,6 +28,10 @@ class GenerationProofTests(unittest.TestCase):
             target = self.root / path
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / path, target)
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        for path in self.evidence['inputs']:
+            subprocess.run(['git', 'hash-object', '-w', path], cwd=self.root,
+                           check=True, capture_output=True)
 
     def validate(self):
         with patch.object(VALIDATOR, 'ROOT', self.root), contextlib.redirect_stdout(io.StringIO()):

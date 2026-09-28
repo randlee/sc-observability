@@ -83,7 +83,14 @@ fn histogram_conversion_is_lossless() {
         } => {
             assert_eq!(point.count(), u64::MAX);
             assert_eq!(point.bucket_counts(), [1, 2, u64::MAX - 3]);
-            assert_eq!(point.explicit_bounds(), [1.0, 2.0]);
+            assert_eq!(
+                point
+                    .explicit_bounds()
+                    .iter()
+                    .map(|v| v.get())
+                    .collect::<Vec<_>>(),
+                [1.0, 2.0]
+            );
             assert_eq!(point.sum().get(), 12.0);
             assert_eq!(*temporality, v2::AggregationTemporality::Delta);
             assert_eq!(*start_time, core::Timestamp::UNIX_EPOCH);
@@ -112,7 +119,7 @@ fn span_flags_links_duration_and_typestate_round_trip() {
     let wire = fixture("SpanSignalDto");
     let span = decode_span(wire.clone()).unwrap();
     if let v2::SpanSignal::Ended(record) = &span {
-        assert_eq!(record.duration_ms().unwrap().as_u64(), u64::MAX);
+        assert_eq!(record.duration_ms().as_u64(), u64::MAX);
         assert_eq!(record.trace().flags.bits(), 131);
         assert_eq!(record.links()[0].flags.bits(), 131);
         assert_eq!(record.kind(), v2::SpanKind::Server);

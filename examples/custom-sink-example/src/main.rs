@@ -2,13 +2,13 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use sc_observability::v2::LogSinkError;
 #[allow(deprecated)]
 use sc_observability::{
-    ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent,
-    LogFilter, LogSink, LogSinkError, LoggerBuilder, LoggerConfig, OutcomeLabel,
+    ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent, LogFilter,
+    LogSink, LoggerBuilder, LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel,
     ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState,
     SinkName, SinkRegistration, TargetCategory, Timestamp, WriterState,
-    OBSERVATION_ENVELOPE_VERSION,
 };
 use serde_json::json;
 
@@ -92,7 +92,14 @@ impl AuditSink {
         let mut health = self.health.lock().expect("custom sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
         health.last_error = Some(DiagnosticSummary::from(context.diagnostic()));
-        LogSinkError(Box::new(context))
+        match operation {
+            SinkOperation::Write => LogSinkError::Write {
+                context: Box::new(context),
+            },
+            SinkOperation::Flush => LogSinkError::Flush {
+                context: Box::new(context),
+            },
+        }
     }
 }
 
@@ -186,8 +193,10 @@ fn build_health_event(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("custom-sink-example")?;
     let root = std::env::temp_dir().join("sc-observability-custom-sink-example");
-    let mut builder =
-        LoggerBuilder::new_typed(LoggerConfig::default_for(service.clone(), PathBuf::from(root)))?;
+    let mut builder = LoggerBuilder::new_typed(LoggerConfig::default_for(
+        service.clone(),
+        PathBuf::from(root),
+    ))?;
 
     builder.register_sink(
         SinkRegistration::new(Arc::new(AuditSink::new())).with_filter(Arc::new(AuditOnly)),
@@ -228,7 +237,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 json!(health.active_log_path.display().to_string()),
             ),
             (FIELD_QUEUE_DEPTH.to_string(), json!(health.queue_depth)),
-            (FIELD_QUEUE_CAPACITY.to_string(), json!(health.queue_capacity)),
+            (
+                FIELD_QUEUE_CAPACITY.to_string(),
+                json!(health.queue_capacity),
+            ),
             (
                 FIELD_QUEUE_HIGH_WATER.to_string(),
                 json!(health.queue_high_water_mark),
@@ -237,7 +249,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 FIELD_QUEUE_FULL_DROPS.to_string(),
                 json!(health.queue_full_drops_total),
             ),
-            (FIELD_STATE.to_string(), json!(format!("{:?}", health.state))),
+            (
+                FIELD_STATE.to_string(),
+                json!(format!("{:?}", health.state)),
+            ),
             (
                 FIELD_WRITER_STATE.to_string(),
                 json!(format!("{:?}", health.writer_state)),
@@ -280,7 +295,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             serde_json::Map::from_iter([
                 (
                     FIELD_WRITER_ERROR_CODE.to_string(),
-                    json!(error.code.as_ref().map(|code| code.as_str()).unwrap_or("<no-code>")),
+                    json!(
+                        error
+                            .code
+                            .as_ref()
+                            .map(|code| code.as_str())
+                            .unwrap_or("<no-code>")
+                    ),
                 ),
                 (
                     FIELD_WRITER_ERROR_MESSAGE.to_string(),
@@ -303,7 +324,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             MESSAGE_SINK_HEALTH,
             serde_json::Map::from_iter([
                 (FIELD_SINK_NAME.to_string(), json!(sink.name.as_str())),
-                (FIELD_SINK_STATE.to_string(), json!(format!("{:?}", sink.state))),
+                (
+                    FIELD_SINK_STATE.to_string(),
+                    json!(format!("{:?}", sink.state)),
+                ),
             ]),
         ))?;
     }

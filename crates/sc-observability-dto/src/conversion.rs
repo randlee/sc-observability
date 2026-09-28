@@ -1043,19 +1043,9 @@ impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
     fn try_from(value: &core::v2::TelemetryError) -> Result<Self, Self::Error> {
         match value {
             core::v2::TelemetryError::ExportFailure(error) => Self::try_from(error),
-            core::v2::TelemetryError::Shutdown => {
-                let context = core::ErrorContext::new(
-                    core::error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN,
-                    "telemetry runtime is shut down",
-                    core::Remediation::recoverable(
-                        "Construct a new telemetry instance",
-                        [] as [&str; 0],
-                    ),
-                );
-                Ok(Self::Closed {
-                    diagnostic: Box::new(from_canonical_diagnostic(context.diagnostic())?),
-                })
-            }
+            core::v2::TelemetryError::Shutdown { context } => Ok(Self::Closed {
+                diagnostic: Box::new(from_canonical_diagnostic(context.diagnostic())?),
+            }),
             _ => Err(invalid_input("error", "unknown telemetry failure variant")),
         }
     }
@@ -1120,7 +1110,11 @@ impl TryFrom<HistogramPointDto> for core::v2::HistogramPoint {
     type Error = Failure;
     fn try_from(value: HistogramPointDto) -> Result<Self, Self::Error> {
         Self::try_new(
-            value.explicit_bounds,
+            value
+                .explicit_bounds
+                .into_iter()
+                .map(|v| finite(v, "explicit_bounds"))
+                .collect::<Result<_, _>>()?,
             value
                 .bucket_counts
                 .into_iter()
@@ -1135,7 +1129,7 @@ impl TryFrom<HistogramPointDto> for core::v2::HistogramPoint {
 impl From<&core::v2::HistogramPoint> for HistogramPointDto {
     fn from(value: &core::v2::HistogramPoint) -> Self {
         Self {
-            explicit_bounds: value.explicit_bounds().to_vec(),
+            explicit_bounds: value.explicit_bounds().iter().map(|v| v.get()).collect(),
             bucket_counts: value.bucket_counts().iter().map(|v| (*v).into()).collect(),
             count: value.count().into(),
             sum: value.sum().get(),
@@ -1394,7 +1388,7 @@ impl TryFrom<SpanSignalDto> for core::v2::SpanSignal {
         }
     }
 }
-fn span_record<S>(
+fn span_record<S: core::v2::SpanState>(
     v: &core::v2::SpanRecord<S>,
     duration: Option<core::DurationMs>,
 ) -> Result<SpanRecordDto, Failure> {
@@ -1420,7 +1414,9 @@ impl TryFrom<&core::v2::SpanSignal> for SpanSignalDto {
     fn try_from(v: &core::v2::SpanSignal) -> Result<Self, Self::Error> {
         match v {
             core::v2::SpanSignal::Started(v) => Ok(Self::Started(span_record(v, None)?)),
-            core::v2::SpanSignal::Ended(v) => Ok(Self::Ended(span_record(v, v.duration_ms())?)),
+            core::v2::SpanSignal::Ended(v) => {
+                Ok(Self::Ended(span_record(v, Some(v.duration_ms()))?))
+            }
             core::v2::SpanSignal::Event(v) => Ok(Self::Event(SpanEventDto {
                 timestamp: v.timestamp.to_string(),
                 trace: (&v.trace).into(),

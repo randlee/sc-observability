@@ -205,10 +205,10 @@ fn assert_metric_model_failure(
     expected: &sc_observability_types::ErrorCode,
 ) {
     assert_eq!(&error.diagnostic().code, expected);
-    let context = std::error::Error::source(&error).expect("preserved error context source");
+    assert_eq!(error.context().diagnostic(), error.diagnostic());
     assert!(
-        std::error::Error::source(context).is_none(),
-        "the stable model error retains exactly its original context"
+        std::error::Error::source(error).is_none(),
+        "transparent model error has no source when its context has none"
     );
 }
 
@@ -228,7 +228,7 @@ fn one_second_after_epoch() -> Timestamp {
 #[test]
 fn metric_model_failures_match_types_owned_registry_and_preserve_source() {
     let invalid_histogram = HistogramPoint::try_new(
-        vec![1.0],
+        vec![FiniteF64::new(1.0).expect("finite bound")],
         vec![1],
         1,
         FiniteF64::new(1.0).expect("finite value"),

@@ -1706,22 +1706,21 @@ mod tests {
 
     #[test]
     fn flush_forwards_logger_flush_behavior_directly() {
+        use sc_observability_types::v2::LogSinkError;
+
         struct FlushFailSink {
             flush_calls: Arc<AtomicU64>,
             flush_completed: std::sync::mpsc::Sender<()>,
         }
 
         impl LogSink for FlushFailSink {
-            fn write(
-                &self,
-                _event: &LogEvent,
-            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
                 Ok(())
             }
 
-            fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            fn flush(&self) -> Result<(), LogSinkError> {
                 let call = self.flush_calls.fetch_add(1, Ordering::SeqCst);
-                let result = Err(sc_observability_types::v2::LogSinkError::Flush {
+                let result = Err(LogSinkError::Flush {
                     context: Box::new(ErrorContext::new(
                         sc_observability::error_codes::LOGGER_FLUSH_FAILED,
                         "flush failed",

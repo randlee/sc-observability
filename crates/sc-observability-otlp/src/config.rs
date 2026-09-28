@@ -692,10 +692,6 @@ pub(crate) fn validated_telemetry_bounds(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PositiveDuration(Duration);
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 impl PositiveDuration {
     pub(crate) const fn get(self) -> Duration {
         self.0
@@ -743,10 +739,6 @@ pub(crate) struct LifecycleBounds {
     shutdown: PositiveDuration,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 impl LifecycleBounds {
     pub(crate) const fn flush(&self) -> PositiveDuration {
         self.flush

@@ -371,7 +371,7 @@ mod tests {
         assert_eq!(complete.record.kind(), SpanKind::Client);
         assert_eq!(complete.record.trace().flags.bits(), 0xa5);
         assert_eq!(complete.record.links().len(), 1);
-        assert_eq!(complete.record.duration_ms(), Some(DurationMs::from(17)));
+        assert_eq!(complete.record.duration_ms(), DurationMs::from(17));
         assert_eq!(complete.events, vec![event]);
     }
 

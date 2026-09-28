@@ -193,7 +193,8 @@ fn typed_registration_adapter_preserves_failure_diagnostic_and_source() {
         std::error::Error::source(&error)
             .map(ToString::to_string)
             .as_deref(),
-        Some("typed sink write failed; caused by: typed source")
+        Some("typed source")
     );
+    assert!(std::error::Error::source(&error).unwrap().is::<io::Error>());
     assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
 }

@@ -96,13 +96,6 @@ pub(crate) trait MetricExporter<T = ExportRecord<MetricRecord>>: Send + Sync {
 }
 
 /// Backend-neutral set of private exporter capabilities.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "D.21 stages the set before D.7 and D.8 supply backend constructors"
-    )
-)]
 pub(crate) struct ExporterSet<
     L = ExportRecord<LogRecord>,
     S = ExportRecord<CompleteSpan>,

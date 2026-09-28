@@ -715,10 +715,6 @@ mod sealed_emitters {
     dead_code,
     reason = "crate-local emitter trait is intentionally available for logging-only injection"
 )]
-#[expect(
-    deprecated,
-    reason = "the crate-local compatibility emitter retains the deprecated legacy EventError boundary"
-)]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError>;
 }
