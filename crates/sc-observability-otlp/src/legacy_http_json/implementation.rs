@@ -1,1 +1,1086 @@
-//! Legacy HTTP/JSON implementation placeholder owned by obs-d-8.
+//! Blocking legacy OTLP/HTTP JSON transport.
+//!
+//! This module retains the immutable legacy request and payload behavior while
+//! applying only the four authorized safety deltas: retry classification,
+//! bounded server pacing/jitter, cancellation-aware retry waits, and an
+//! overall retry-sequence deadline. The blocking client is owned exclusively
+//! by one private worker thread.
+
+#![allow(
+    dead_code,
+    reason = "D.18 wires this staged legacy backend into the facade after D.8"
+)]
+
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime};
+
+use reqwest::blocking::{Client, ClientBuilder};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
+use serde_json::{Value, json};
+
+use crate::config::{
+    AuthHeader, BackendTransportBounds, OtelConfig, RetryPolicy, validated_transport_bounds,
+};
+use crate::contracts::{
+    CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
+    LogRecord, MetricExporter, Resource, TraceExporter,
+};
+use sc_observability_types::otlp::{
+    OtlpLogRecord, OtlpResource, group_records_by_resource_and_scope,
+};
+use sc_observability_types::v2::{
+    AggregationTemporality, AttributeValue, ExportError, MetricRecord, MetricValue, SpanKind,
+    SpanStatus,
+};
+use sc_observability_types::{ErrorContext, LogEvent, Remediation, Timestamp, error_codes};
+
+const RETRY_AFTER_HEADER_LIMIT: usize = 128;
+const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(5);
+
+#[derive(Debug, Clone)]
+struct RetrySettings {
+    max_retries: u32,
+    initial_backoff: Duration,
+    max_backoff: Duration,
+    sequence_timeout: Duration,
+    retry_after_cap: Duration,
+    jitter_percent: u8,
+}
+
+impl RetrySettings {
+    fn from_policy(policy: &RetryPolicy) -> Self {
+        Self {
+            max_retries: policy.max_retries(),
+            initial_backoff: policy.initial_backoff().get(),
+            max_backoff: policy.max_backoff().get(),
+            sequence_timeout: policy.sequence_timeout().get(),
+            retry_after_cap: policy.retry_after_cap().get(),
+            jitter_percent: policy.jitter().get(),
+        }
+    }
+}
+
+/// Validated inputs needed by the legacy worker.
+#[derive(Debug, Clone)]
+pub(crate) struct LegacyHttpJsonConfig {
+    endpoint: String,
+    auth_header: Option<String>,
+    ca_file: Option<PathBuf>,
+    insecure_skip_verify: bool,
+    request_timeout: Duration,
+    lifecycle_flush_timeout: Duration,
+    lifecycle_shutdown_timeout: Duration,
+    retry: RetrySettings,
+    jitter_seed: u64,
+}
+
+impl LegacyHttpJsonConfig {
+    /// Builds a worker configuration from D21's already-validated contract.
+    pub(crate) fn from_otel(config: &OtelConfig) -> Result<Self, ExportError> {
+        let bounds =
+            validated_transport_bounds(config).map_err(|error| ExportError::Transport {
+                context: error.into_context(),
+            })?;
+        let BackendTransportBounds::Legacy(policy) = bounds.backend() else {
+            return Err(transport_error(
+                "legacy HTTP/JSON configuration was not validated for the legacy backend",
+            ));
+        };
+        let endpoint = config
+            .endpoint
+            .as_ref()
+            .map(ToString::to_string)
+            .ok_or_else(|| transport_error("legacy HTTP/JSON endpoint is missing"))?;
+        Ok(Self {
+            endpoint: endpoint.trim_end_matches('/').to_owned(),
+            auth_header: config
+                .auth_header
+                .as_ref()
+                .map(AuthHeader::as_str)
+                .map(str::to_owned),
+            ca_file: config.ca_file.clone(),
+            insecure_skip_verify: config.insecure_skip_verify,
+            request_timeout: bounds.request_timeout().get(),
+            lifecycle_flush_timeout: bounds.lifecycle().flush().get(),
+            lifecycle_shutdown_timeout: bounds.lifecycle().shutdown().get(),
+            retry: RetrySettings::from_policy(policy),
+            jitter_seed: seed_from_os(),
+        })
+    }
+
+    #[cfg(test)]
+    fn for_endpoint(endpoint: String) -> Self {
+        Self {
+            endpoint: endpoint.trim_end_matches('/').to_owned(),
+            auth_header: None,
+            ca_file: None,
+            insecure_skip_verify: false,
+            request_timeout: Duration::from_secs(2),
+            lifecycle_flush_timeout: Duration::from_secs(2),
+            lifecycle_shutdown_timeout: Duration::from_secs(2),
+            retry: RetrySettings {
+                max_retries: 2,
+                initial_backoff: Duration::from_millis(5),
+                max_backoff: Duration::from_millis(25),
+                sequence_timeout: Duration::from_millis(250),
+                retry_after_cap: Duration::from_millis(50),
+                jitter_percent: 0,
+            },
+            jitter_seed: 0x9e37_79b9_7f4a_7c15,
+        }
+    }
+}
+
+enum DataCommand {
+    Export {
+        endpoint: String,
+        body: String,
+        result: mpsc::Sender<Result<(), ExportError>>,
+    },
+}
+
+enum ControlCommand {
+    Flush {
+        result: mpsc::Sender<Result<(), ExportError>>,
+    },
+    Shutdown {
+        result: Option<mpsc::Sender<Result<(), ExportError>>>,
+    },
+}
+
+struct WorkerInner {
+    data_tx: SyncSender<DataCommand>,
+    control_tx: SyncSender<ControlCommand>,
+    send_lock: Mutex<()>,
+    cancel: Arc<AtomicBool>,
+    terminated: AtomicBool,
+    lifecycle_flush_timeout: Duration,
+    lifecycle_shutdown_timeout: Duration,
+}
+
+impl Drop for WorkerInner {
+    fn drop(&mut self) {
+        self.cancel.store(true, Ordering::Release);
+        let _ = self
+            .control_tx
+            .try_send(ControlCommand::Shutdown { result: None });
+    }
+}
+
+#[derive(Clone)]
+struct Worker {
+    inner: Arc<WorkerInner>,
+}
+
+impl Worker {
+    fn start(config: LegacyHttpJsonConfig) -> Result<Self, ExportError> {
+        let (data_tx, data_rx) = mpsc::sync_channel(64);
+        let (control_tx, control_rx) = mpsc::sync_channel(1);
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let worker_cancel = Arc::clone(&cancel);
+        let flush_timeout = config.lifecycle_flush_timeout;
+        let shutdown_timeout = config.lifecycle_shutdown_timeout;
+        thread::Builder::new()
+            .name("sc-otlp-legacy-http".to_owned())
+            .spawn(move || worker_main(config, data_rx, control_rx, ready_tx, worker_cancel))
+            .map_err(|error| transport_error_with_source("failed to start legacy worker", error))?;
+        match ready_rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => Ok(Self {
+                inner: Arc::new(WorkerInner {
+                    data_tx,
+                    control_tx,
+                    send_lock: Mutex::new(()),
+                    cancel,
+                    terminated: AtomicBool::new(false),
+                    lifecycle_flush_timeout: flush_timeout,
+                    lifecycle_shutdown_timeout: shutdown_timeout,
+                }),
+            }),
+            Ok(Err(error)) => Err(error),
+            Err(RecvTimeoutError::Timeout) => Err(transport_error(
+                "legacy worker construction handshake exceeded its finite deadline",
+            )),
+            Err(RecvTimeoutError::Disconnected) => Err(worker_terminated_error()),
+        }
+    }
+
+    fn export(&self, endpoint: String, body: String) -> Result<(), ExportError> {
+        if self.inner.terminated.load(Ordering::Acquire) {
+            return Err(worker_terminated_error());
+        }
+        let _guard = self
+            .inner
+            .send_lock
+            .lock()
+            .expect("legacy worker send lock");
+        let (result_tx, result_rx) = mpsc::channel();
+        match self.inner.data_tx.try_send(DataCommand::Export {
+            endpoint,
+            body,
+            result: result_tx,
+        }) {
+            Ok(()) => result_rx
+                .recv_timeout(self.inner.lifecycle_shutdown_timeout)
+                .unwrap_or_else(|_| Err(worker_terminated_error())),
+            Err(TrySendError::Full(_)) => Err(queue_full_error()),
+            Err(TrySendError::Disconnected(_)) => {
+                self.inner.terminated.store(true, Ordering::Release);
+                Err(worker_terminated_error())
+            }
+        }
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
+        let _guard = self
+            .inner
+            .send_lock
+            .lock()
+            .expect("legacy worker control lock");
+        let (tx, rx) = mpsc::channel();
+        self.inner
+            .control_tx
+            .send(ControlCommand::Flush { result: tx })
+            .map_err(|_| worker_terminated_error())?;
+        rx.recv_timeout(self.inner.lifecycle_flush_timeout)
+            .unwrap_or_else(|_| Err(worker_terminated_error()))
+    }
+
+    fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        self.inner.cancel.store(true, Ordering::Release);
+        let _guard = self
+            .inner
+            .send_lock
+            .lock()
+            .expect("legacy worker control lock");
+        let (tx, rx) = mpsc::channel();
+        self.inner
+            .control_tx
+            .send(ControlCommand::Shutdown { result: Some(tx) })
+            .map_err(|_| worker_terminated_error())?;
+        rx.recv_timeout(self.inner.lifecycle_shutdown_timeout)
+            .unwrap_or_else(|_| Err(worker_terminated_error()))
+    }
+}
+
+fn worker_main(
+    config: LegacyHttpJsonConfig,
+    data_rx: Receiver<DataCommand>,
+    control_rx: Receiver<ControlCommand>,
+    ready_tx: mpsc::Sender<Result<(), ExportError>>,
+    cancel: Arc<AtomicBool>,
+) {
+    let client = match build_client(&config) {
+        Ok(client) => {
+            let _ = ready_tx.send(Ok(()));
+            client
+        }
+        Err(error) => {
+            let _ = ready_tx.send(Err(error));
+            return;
+        }
+    };
+    loop {
+        if let Ok(command) = control_rx.try_recv() {
+            drain_data(&client, &config, &data_rx, &cancel);
+            if handle_control(command, &cancel) {
+                return;
+            }
+            continue;
+        }
+        match data_rx.recv_timeout(WORKER_POLL_INTERVAL) {
+            Ok(DataCommand::Export {
+                endpoint,
+                body,
+                result,
+            }) => {
+                let outcome = send_with_retries(&client, &config, &endpoint, &body, &cancel);
+                let _ = result.send(outcome);
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => return,
+        }
+    }
+}
+
+fn drain_data(
+    client: &Client,
+    config: &LegacyHttpJsonConfig,
+    data_rx: &Receiver<DataCommand>,
+    cancel: &AtomicBool,
+) {
+    while let Ok(DataCommand::Export {
+        endpoint,
+        body,
+        result,
+    }) = data_rx.try_recv()
+    {
+        let outcome = send_with_retries(client, config, &endpoint, &body, cancel);
+        let _ = result.send(outcome);
+    }
+}
+
+fn handle_control(command: ControlCommand, cancel: &AtomicBool) -> bool {
+    match command {
+        ControlCommand::Flush { result } => {
+            let _ = result.send(Ok(()));
+            false
+        }
+        ControlCommand::Shutdown { result } => {
+            cancel.store(true, Ordering::Release);
+            if let Some(result) = result {
+                let _ = result.send(Ok(()));
+            }
+            true
+        }
+    }
+}
+
+fn build_client(config: &LegacyHttpJsonConfig) -> Result<Client, ExportError> {
+    let mut builder = ClientBuilder::new().timeout(config.request_timeout);
+    if config.insecure_skip_verify {
+        builder = builder.danger_accept_invalid_certs(true);
+    }
+    if let Some(path) = &config.ca_file {
+        let raw = fs::read(path)
+            .map_err(|error| transport_error_with_source("failed to read CA bundle", error))?;
+        let cert = reqwest::Certificate::from_pem(&raw)
+            .or_else(|_| reqwest::Certificate::from_der(&raw))
+            .map_err(|error| transport_error_with_source("failed to parse CA bundle", error))?;
+        builder = builder.add_root_certificate(cert);
+    }
+    if let Some(raw) = &config.auth_header {
+        let (name, value) = parse_auth_header(raw)?;
+        let mut headers = HeaderMap::new();
+        headers.insert(name, value);
+        builder = builder.default_headers(headers);
+    }
+    builder
+        .build()
+        .map_err(|error| transport_error_with_source("failed to build HTTP client", error))
+}
+
+fn parse_auth_header(raw: &str) -> Result<(HeaderName, HeaderValue), ExportError> {
+    let Some((name, value)) = raw.split_once(':') else {
+        return Err(transport_error(
+            "authorization header must use `name: value` syntax",
+        ));
+    };
+    let name = HeaderName::from_bytes(name.trim().as_bytes())
+        .map_err(|error| transport_error_with_source("invalid authorization header name", error))?;
+    let value = HeaderValue::from_str(value.trim()).map_err(|error| {
+        transport_error_with_source("invalid authorization header value", error)
+    })?;
+    Ok((name, value))
+}
+
+fn send_with_retries(
+    client: &Client,
+    config: &LegacyHttpJsonConfig,
+    endpoint: &str,
+    body: &str,
+    cancel: &AtomicBool,
+) -> Result<(), ExportError> {
+    let started = Instant::now();
+    let mut attempt = 0_u32;
+    let mut fallback = config.retry.initial_backoff;
+    let mut rng = config.jitter_seed;
+    loop {
+        if cancel.load(Ordering::Acquire) {
+            return Err(shutdown_cancelled_error());
+        }
+        let remaining = config
+            .retry
+            .sequence_timeout
+            .saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            return Err(retry_deadline_error());
+        }
+        let response = client
+            .post(endpoint)
+            .header(CONTENT_TYPE, "application/json")
+            .body(body.to_owned())
+            .send();
+        match response {
+            Ok(response) if response.status().is_success() => return Ok(()),
+            Ok(response) => {
+                let status = response.status();
+                if !is_retryable_status(status) {
+                    return Err(non_retryable_status_error(status.as_u16()));
+                }
+                if attempt >= config.retry.max_retries {
+                    return Err(retry_attempts_exhausted_error(status.as_u16()));
+                }
+                let server_delay = response
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| parse_retry_after(value, SystemTime::now()))
+                    .map(|delay| delay.min(config.retry.retry_after_cap));
+                let delay = server_delay.unwrap_or(fallback.min(config.retry.max_backoff));
+                let delay =
+                    apply_jitter(delay, config.retry.jitter_percent, &mut rng).min(remaining);
+                if !wait_cancelable(delay, cancel) {
+                    return Err(shutdown_cancelled_error());
+                }
+            }
+            Err(error) => {
+                if attempt >= config.retry.max_retries {
+                    return Err(retry_attempts_exhausted_with_source(error));
+                }
+                let delay = apply_jitter(
+                    fallback.min(config.retry.max_backoff).min(remaining),
+                    config.retry.jitter_percent,
+                    &mut rng,
+                );
+                if !wait_cancelable(delay, cancel) {
+                    return Err(shutdown_cancelled_error());
+                }
+            }
+        }
+        attempt = attempt.saturating_add(1);
+        fallback = fallback.saturating_mul(2).min(config.retry.max_backoff);
+    }
+}
+
+fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::REQUEST_TIMEOUT
+        || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || status.is_server_error()
+}
+
+pub(super) fn parse_retry_after(value: &str, now: SystemTime) -> Option<Duration> {
+    let value = value.trim();
+    if value.len() > RETRY_AFTER_HEADER_LIMIT {
+        return None;
+    }
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Some(Duration::from_secs(seconds));
+    }
+    let date = httpdate::parse_http_date(value).ok()?;
+    date.duration_since(now).ok()
+}
+
+fn wait_cancelable(duration: Duration, cancel: &AtomicBool) -> bool {
+    let deadline = Instant::now() + duration;
+    while !cancel.load(Ordering::Acquire) {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return true;
+        }
+        thread::sleep(remaining.min(WORKER_POLL_INTERVAL));
+    }
+    false
+}
+
+fn apply_jitter(delay: Duration, percent: u8, state: &mut u64) -> Duration {
+    if percent == 0 || delay.is_zero() {
+        return delay;
+    }
+    *state = state
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1);
+    let spread = (delay.as_millis() * u128::from(percent as u32)) / 100;
+    let span = spread.saturating_mul(2).saturating_add(1);
+    let offset = (*state % span.min(u128::from(u64::MAX)) as u64) as i128 - spread as i128;
+    let millis = (delay.as_millis() as i128 + offset).max(1) as u128;
+    Duration::from_millis(millis.min(u128::from(u64::MAX)) as u64)
+}
+
+fn seed_from_os() -> u64 {
+    let mut seed = [0_u8; 8];
+    if getrandom::fill(&mut seed).is_ok() {
+        return u64::from_le_bytes(seed);
+    }
+    0xa5a5_5a5a_1234_5678
+}
+
+/// Legacy exporter shared by all three OTLP signal families.
+pub(crate) struct OtlpHttpExporter {
+    worker: Worker,
+    endpoint: String,
+}
+
+impl OtlpHttpExporter {
+    /// Creates the legacy exporter from D21's validated transport config.
+    pub(crate) fn from_config(config: &OtelConfig) -> Result<Self, ExportError> {
+        let worker_config = LegacyHttpJsonConfig::from_otel(config)?;
+        let endpoint = worker_config.endpoint.clone();
+        Ok(Self {
+            worker: Worker::start(worker_config)?,
+            endpoint,
+        })
+    }
+
+    #[cfg(test)]
+    pub(super) fn for_endpoint(endpoint: String) -> Result<Self, ExportError> {
+        let config = LegacyHttpJsonConfig::for_endpoint(endpoint.clone());
+        Ok(Self {
+            worker: Worker::start(config)?,
+            endpoint,
+        })
+    }
+
+    fn send_payload(&self, signal: &str, payload: Value) -> Result<(), ExportError> {
+        let endpoint = normalize_signal_endpoint(&self.endpoint, signal);
+        self.worker.export(endpoint, payload.to_string())
+    }
+}
+
+impl LogExporter<LogEvent> for OtlpHttpExporter {
+    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
+        let records = batch.iter().map(log_record).collect::<Vec<_>>();
+        self.send_payload("logs", build_logs_payload(&records))
+    }
+}
+
+impl LogExporter<ExportRecord<LogRecord>> for OtlpHttpExporter {
+    fn export_logs(&self, batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
+        self.send_payload("logs", build_logs_payload(batch))
+    }
+}
+
+impl TraceExporter<CompleteSpan> for OtlpHttpExporter {
+    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
+        let records = batch.iter().map(span_record).collect::<Vec<_>>();
+        self.send_payload("traces", build_traces_payload(&records))
+    }
+}
+
+impl TraceExporter<ExportRecord<CompleteSpan>> for OtlpHttpExporter {
+    fn export_spans(&self, batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
+        self.send_payload("traces", build_traces_payload(batch))
+    }
+}
+
+impl MetricExporter<MetricRecord> for OtlpHttpExporter {
+    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
+        let records = batch.iter().map(metric_record).collect::<Vec<_>>();
+        self.send_payload("metrics", build_metrics_payload(&records))
+    }
+}
+
+impl MetricExporter<ExportRecord<MetricRecord>> for OtlpHttpExporter {
+    fn export_metrics(&self, batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
+        self.send_payload("metrics", build_metrics_payload(batch))
+    }
+}
+
+impl ExporterLifecycle for OtlpHttpExporter {
+    fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn flush_async(&self) -> LifecycleFuture {
+        let worker = self.worker.clone();
+        Box::pin(async move {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            thread::spawn(move || {
+                let _ = tx.send(worker.flush_blocking());
+            });
+            rx.await.unwrap_or_else(|_| Err(worker_terminated_error()))
+        })
+    }
+
+    fn shutdown_async(&self) -> LifecycleFuture {
+        let worker = self.worker.clone();
+        Box::pin(async move {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            thread::spawn(move || {
+                let _ = tx.send(worker.shutdown_blocking());
+            });
+            rx.await.unwrap_or_else(|_| Err(worker_terminated_error()))
+        })
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err(blocking_in_async_error());
+        }
+        self.worker.flush_blocking()
+    }
+
+    fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err(blocking_in_async_error());
+        }
+        self.worker.shutdown_blocking()
+    }
+}
+
+/// Builds the crate-private exporter set consumed by the D18 facade handoff.
+pub(crate) fn build_exporter_set(config: &OtelConfig) -> Result<ExporterSet, ExportError> {
+    let exporter = Arc::new(OtlpHttpExporter::from_config(config)?);
+    Ok(ExporterSet {
+        logs: exporter.clone(),
+        traces: exporter.clone(),
+        metrics: exporter.clone(),
+        lifecycle: exporter,
+    })
+}
+
+pub(super) fn log_record(event: &LogEvent) -> ExportRecord<LogRecord> {
+    ExportRecord {
+        resource: Resource {
+            attributes: BTreeMap::from_iter([(
+                "service.name".to_owned(),
+                AttributeValue::String(event.service.as_str().to_owned()),
+            )]),
+            schema_url: None,
+        },
+        scope: Default::default(),
+        record: OtlpLogRecord {
+            event: event.clone(),
+            trace_flags: event
+                .trace
+                .as_ref()
+                .map_or(Default::default(), |_| Default::default()),
+            attributes: BTreeMap::new(),
+        },
+    }
+}
+
+fn span_record(span: &CompleteSpan) -> ExportRecord<CompleteSpan> {
+    ExportRecord {
+        resource: Resource {
+            attributes: BTreeMap::from_iter([(
+                "service.name".to_owned(),
+                AttributeValue::String(span.record.service().as_str().to_owned()),
+            )]),
+            schema_url: None,
+        },
+        scope: Default::default(),
+        record: span.clone(),
+    }
+}
+
+fn metric_record(metric: &MetricRecord) -> ExportRecord<MetricRecord> {
+    ExportRecord {
+        resource: Resource {
+            attributes: BTreeMap::from_iter([(
+                "service.name".to_owned(),
+                AttributeValue::String(metric.service().as_str().to_owned()),
+            )]),
+            schema_url: None,
+        },
+        scope: Default::default(),
+        record: metric.clone(),
+    }
+}
+
+pub(super) fn build_logs_payload(records: &[ExportRecord<LogRecord>]) -> Value {
+    let resource_logs = group_records_by_resource_and_scope(records)
+        .into_iter()
+        .map(|group| {
+            json!({
+                "resource": resource_json(&group.resource),
+                "scopeLogs": group.scopes.into_iter().map(|scope| json!({
+                    "scope": scope_json(&scope.scope),
+                    "logRecords": scope.records.into_iter().map(log_json).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({ "resourceLogs": resource_logs })
+}
+
+fn build_traces_payload(records: &[ExportRecord<CompleteSpan>]) -> Value {
+    let resource_spans = group_records_by_resource_and_scope(records)
+        .into_iter()
+        .map(|group| {
+            json!({
+                "resource": resource_json(&group.resource),
+                "scopeSpans": group.scopes.into_iter().map(|scope| json!({
+                    "scope": scope_json(&scope.scope),
+                    "spans": scope.records.into_iter().map(span_json).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({ "resourceSpans": resource_spans })
+}
+
+fn build_metrics_payload(records: &[ExportRecord<MetricRecord>]) -> Value {
+    let resource_metrics = group_records_by_resource_and_scope(records)
+        .into_iter()
+        .map(|group| {
+            json!({
+                "resource": resource_json(&group.resource),
+                "scopeMetrics": group.scopes.into_iter().map(|scope| json!({
+                    "scope": scope_json(&scope.scope),
+                    "metrics": scope.records.into_iter().map(metric_json).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({ "resourceMetrics": resource_metrics })
+}
+
+fn resource_json(resource: &OtlpResource) -> Value {
+    json!({
+        "attributes": resource.attributes.iter().map(|(key, value)| json!({
+            "key": key,
+            "value": attribute_json(value),
+        })).collect::<Vec<_>>(),
+        "schemaUrl": resource.schema_url,
+    })
+}
+
+fn scope_json(scope: &crate::contracts::InstrumentationScope) -> Value {
+    json!({
+        "name": scope.name,
+        "version": scope.version,
+        "attributes": scope.attributes.iter().map(|(key, value)| json!({
+            "key": key,
+            "value": attribute_json(value),
+        })).collect::<Vec<_>>(),
+        "schemaUrl": scope.schema_url,
+    })
+}
+
+fn log_json(record: LogRecord) -> Value {
+    let event = record.event;
+    let mut attributes = record
+        .attributes
+        .iter()
+        .map(|(key, value)| json!({ "key": key, "value": attribute_json(value) }))
+        .collect::<Vec<_>>();
+    attributes.push(json!({
+        "key": "log.target",
+        "value": { "stringValue": event.target.as_str() },
+    }));
+    attributes.push(json!({
+        "key": "event.name",
+        "value": { "stringValue": event.action.as_str() },
+    }));
+    for (key, value) in event.fields {
+        attributes.push(json!({ "key": key, "value": json_value_to_otlp_any(&value) }));
+    }
+    if let Some(trace) = event.trace {
+        attributes.push(json!({
+            "key": "trace_id",
+            "value": { "stringValue": trace.trace_id.as_str() },
+        }));
+        attributes.push(json!({
+            "key": "span_id",
+            "value": { "stringValue": trace.span_id.as_str() },
+        }));
+    }
+    let (severity_number, severity_text) = severity_fields(event.level);
+    json!({
+        "timeUnixNano": timestamp_nanos(event.timestamp),
+        "body": { "stringValue": event.message.unwrap_or_else(|| event.action.as_str().to_owned()) },
+        "severityNumber": severity_number,
+        "severityText": severity_text,
+        "attributes": attributes,
+    })
+}
+
+fn span_json(span: CompleteSpan) -> Value {
+    let record = span.record;
+    let trace = record.trace();
+    let mut result = json!({
+        "traceId": trace.trace_id.as_str(),
+        "spanId": trace.span_id.as_str(),
+        "name": record.name().as_str(),
+        "kind": span_kind_number(record.kind()),
+        "startTimeUnixNano": timestamp_nanos(record.timestamp()),
+        "endTimeUnixNano": timestamp_nanos_with_duration(record.timestamp(), record.duration_ms().as_u64()),
+        "status": { "code": span_status_number(record.status()) },
+        "attributes": record.attributes().iter().map(|(key, value)| json!({
+            "key": key,
+            "value": attribute_json(value),
+        })).collect::<Vec<_>>(),
+        "events": span.events.into_iter().map(|event| json!({
+            "timeUnixNano": timestamp_nanos(event.timestamp),
+            "name": event.name.as_str(),
+            "attributes": event.attributes.iter().map(|(key, value)| json!({
+                "key": key,
+                "value": attribute_json(value),
+            })).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+    });
+    if let Some(parent) = &trace.parent_span_id {
+        result["parentSpanId"] = json!(parent.as_str());
+    }
+    result
+}
+
+fn metric_json(metric: MetricRecord) -> Value {
+    let attrs = metric
+        .attributes()
+        .iter()
+        .map(|(key, value)| json!({ "key": key, "value": attribute_json(value) }))
+        .collect::<Vec<_>>();
+    let point_time = timestamp_nanos(metric.timestamp());
+    let data_point =
+        |value: f64| json!({ "attributes": attrs, "timeUnixNano": point_time, "asDouble": value });
+    let mut result = json!({
+        "name": metric.name().as_str(),
+        "unit": metric.unit().map(ToString::to_string).unwrap_or_default(),
+    });
+    match metric.value() {
+        MetricValue::Gauge(value) => {
+            result["gauge"] = json!({ "dataPoints": [data_point(value.get())] });
+        }
+        MetricValue::Sum {
+            value,
+            monotonic,
+            temporality,
+            start_time,
+        } => {
+            let mut point = data_point(value.get());
+            point["startTimeUnixNano"] = json!(timestamp_nanos(*start_time));
+            result["sum"] = json!({
+                "aggregationTemporality": temporality_number(*temporality),
+                "isMonotonic": monotonic,
+                "dataPoints": [point],
+            });
+        }
+        MetricValue::Histogram {
+            point,
+            temporality,
+            start_time,
+        } => {
+            result["histogram"] = json!({
+                "aggregationTemporality": temporality_number(*temporality),
+                "dataPoints": [{
+                    "attributes": attrs,
+                    "startTimeUnixNano": timestamp_nanos(*start_time),
+                    "timeUnixNano": point_time,
+                    "count": point.count(),
+                    "sum": point.sum().get(),
+                    "bucketCounts": point.bucket_counts(),
+                    "explicitBounds": point.explicit_bounds().iter().map(|bound| bound.get()).collect::<Vec<_>>(),
+                }],
+            });
+        }
+        _ => {}
+    }
+    result
+}
+
+fn attribute_json(value: &AttributeValue) -> Value {
+    match value {
+        AttributeValue::Bool(value) => json!({ "boolValue": value }),
+        AttributeValue::Int(value) => json!({ "intValue": value.to_string() }),
+        AttributeValue::UInt(value) => json!({ "intValue": value.to_string() }),
+        AttributeValue::Float(value) => json!({ "doubleValue": value.get() }),
+        AttributeValue::String(value) => json!({ "stringValue": value }),
+        AttributeValue::Null => json!({ "stringValue": "null" }),
+        AttributeValue::Array(values) => json!({
+            "arrayValue": { "values": values.iter().map(attribute_json).collect::<Vec<_>>() }
+        }),
+        AttributeValue::Object(values) => json!({
+            "kvlistValue": { "values": values.iter().map(|(key, value)| json!({
+                "key": key,
+                "value": attribute_json(value),
+            })).collect::<Vec<_>>() }
+        }),
+        _ => json!({ "stringValue": "unsupported" }),
+    }
+}
+
+fn json_value_to_otlp_any(value: &Value) -> Value {
+    match value {
+        Value::Null => json!({ "stringValue": "null" }),
+        Value::Bool(value) => json!({ "boolValue": value }),
+        Value::Number(value) if value.is_i64() => {
+            json!({ "intValue": value.as_i64().unwrap_or_default().to_string() })
+        }
+        Value::Number(value) if value.is_u64() => {
+            json!({ "intValue": value.as_u64().unwrap_or_default().to_string() })
+        }
+        Value::Number(value) => json!({ "doubleValue": value.as_f64().unwrap_or_default() }),
+        Value::String(value) => json!({ "stringValue": value }),
+        Value::Array(values) => json!({
+            "arrayValue": { "values": values.iter().map(json_value_to_otlp_any).collect::<Vec<_>>() }
+        }),
+        Value::Object(values) => json!({
+            "kvlistValue": { "values": values.iter().map(|(key, value)| json!({
+                "key": key,
+                "value": json_value_to_otlp_any(value),
+            })).collect::<Vec<_>>() }
+        }),
+    }
+}
+
+fn timestamp_nanos(timestamp: Timestamp) -> String {
+    timestamp.into_inner().unix_timestamp_nanos().to_string()
+}
+
+fn timestamp_nanos_with_duration(timestamp: Timestamp, duration_ms: u64) -> String {
+    (timestamp.into_inner().unix_timestamp_nanos() + i128::from(duration_ms) * 1_000_000)
+        .to_string()
+}
+
+fn severity_fields(level: sc_observability_types::Level) -> (u32, &'static str) {
+    match level {
+        sc_observability_types::Level::Trace => (1, "TRACE"),
+        sc_observability_types::Level::Debug => (5, "DEBUG"),
+        sc_observability_types::Level::Info => (9, "INFO"),
+        sc_observability_types::Level::Warn => (13, "WARN"),
+        sc_observability_types::Level::Error => (17, "ERROR"),
+    }
+}
+
+fn span_kind_number(kind: SpanKind) -> u8 {
+    match kind {
+        SpanKind::Internal => 1,
+        SpanKind::Server => 2,
+        SpanKind::Client => 3,
+        SpanKind::Producer => 4,
+        SpanKind::Consumer => 5,
+        _ => 0,
+    }
+}
+
+fn span_status_number(status: SpanStatus) -> &'static str {
+    match status {
+        SpanStatus::Unset => "STATUS_CODE_UNSET",
+        SpanStatus::Ok => "STATUS_CODE_OK",
+        SpanStatus::Error => "STATUS_CODE_ERROR",
+    }
+}
+
+fn temporality_number(temporality: AggregationTemporality) -> u8 {
+    match temporality {
+        AggregationTemporality::Delta => 1,
+        AggregationTemporality::Cumulative => 2,
+        _ => 0,
+    }
+}
+
+pub(super) fn normalize_logs_endpoint(endpoint: &str) -> String {
+    normalize_signal_endpoint(endpoint, "logs")
+}
+
+fn normalize_signal_endpoint(endpoint: &str, signal: &str) -> String {
+    let endpoint = endpoint.trim_end_matches('/');
+    let suffix = format!("/v1/{signal}");
+    if endpoint.ends_with(&suffix) {
+        endpoint.to_owned()
+    } else {
+        format!("{endpoint}{suffix}")
+    }
+}
+
+fn transport_error(message: &str) -> ExportError {
+    ExportError::Transport {
+        context: Box::new(ErrorContext::new(
+            error_codes::otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
+            message,
+            Remediation::recoverable("inspect the OTLP transport configuration", [] as [&str; 0]),
+        )),
+    }
+}
+
+fn transport_error_with_source(
+    message: &str,
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> ExportError {
+    ExportError::Transport {
+        context: Box::new(
+            ErrorContext::new(
+                error_codes::otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
+                message,
+                Remediation::recoverable(
+                    "inspect the OTLP transport configuration",
+                    [] as [&str; 0],
+                ),
+            )
+            .source(Box::new(error)),
+        ),
+    }
+}
+
+fn error_with_code(code: sc_observability_types::ErrorCode, message: &str) -> ErrorContext {
+    ErrorContext::new(
+        code,
+        message,
+        Remediation::recoverable("inspect telemetry health and retry", [] as [&str; 0]),
+    )
+}
+
+fn worker_terminated_error() -> ExportError {
+    ExportError::WorkerTerminated {
+        context: Box::new(error_with_code(
+            error_codes::otlp::OTLP_WORKER_TERMINATED,
+            "legacy HTTP worker terminated",
+        )),
+    }
+}
+
+fn queue_full_error() -> ExportError {
+    ExportError::QueueFull {
+        context: Box::new(error_with_code(
+            error_codes::otlp::OTLP_QUEUE_FULL,
+            "legacy HTTP worker admission is full",
+        )),
+    }
+}
+
+fn shutdown_cancelled_error() -> ExportError {
+    ExportError::ShutdownCancelledRetry {
+        context: Box::new(error_with_code(
+            error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
+            "legacy retry was cancelled by shutdown",
+        )),
+    }
+}
+
+fn retry_deadline_error() -> ExportError {
+    ExportError::RetryDeadlineExhausted {
+        context: Box::new(error_with_code(
+            error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED,
+            "legacy retry sequence exceeded its deadline",
+        )),
+    }
+}
+
+fn retry_attempts_exhausted_error(status: u16) -> ExportError {
+    ExportError::RetryAttemptsExhausted {
+        context: Box::new(error_with_code(
+            error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
+            &format!(
+                "legacy collector returned retryable HTTP status {status} until attempts were exhausted"
+            ),
+        )),
+    }
+}
+
+fn retry_attempts_exhausted_with_source(error: reqwest::Error) -> ExportError {
+    ExportError::RetryAttemptsExhausted {
+        context: Box::new(
+            error_with_code(
+                error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
+                "legacy transport retries were exhausted",
+            )
+            .source(Box::new(error)),
+        ),
+    }
+}
+
+fn non_retryable_status_error(status: u16) -> ExportError {
+    ExportError::NonRetryableHttpStatus {
+        context: Box::new(error_with_code(
+            error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL,
+            &format!("legacy collector returned terminal HTTP status {status}"),
+        )),
+    }
+}
+
+fn blocking_in_async_error() -> ExportError {
+    ExportError::BlockingBackendInAsyncContext {
+        context: Box::new(error_with_code(
+            error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT,
+            "blocking legacy lifecycle cannot run from an entered Tokio runtime",
+        )),
+    }
+}
