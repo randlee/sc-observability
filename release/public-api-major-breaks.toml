@@ -11,7 +11,7 @@ old = "pub fn sc_observability_dto::from_core_health(sc_observability_types::hea
 new = "pub fn sc_observability_dto::from_core_health(sc_observability_types::health::LoggingHealthReport, sc_observability_types::level::LevelState) -> sc_observability_dto::LogHealthDto"
 reason = "Document the health API return-value simplification; callers now handle the canonical DTO directly."
 authority = "ADR-017; obs-d-18"
-migration = "docs/migration.md#from_core_health_returns_the_health_value"
+migration = "docs/migration.md#from_core_health-returns-the-health-value"
 
 [[breaks]]
 id = "sc-observability-log-001"

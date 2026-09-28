@@ -1,0 +1,13 @@
+    Building sc-observability-log v2.0.0 (current)
+       Built [   7.024s] (current)
+     Parsing sc-observability-log v2.0.0 (current)
+      Parsed [   0.007s] (current)
+    Building sc-observability-log v1.4.1 (baseline)
+       Built [  10.040s] (baseline)
+     Parsing sc-observability-log v1.4.1 (baseline)
+      Parsed [   0.005s] (baseline)
+    Checking sc-observability-log v1.4.1 -> v2.0.0 (assume minor change)
+     Checked [   0.007s] 196 checks: 195 pass, 1 fail, 0 warn, 57 skip
+
+     Summary semver requires new major version: 1 major and 0 minor checks failed
+    Finished [  18.145s] sc-observability-log

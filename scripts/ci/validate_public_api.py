@@ -90,36 +90,72 @@ def check_major_diff(crate: str, output: str, entries: list[dict]) -> list[str]:
     return problems
 
 
-def structural_diagnostics_are_enumerated(crate: str, output: str) -> bool:
-    """Accept only complete, symbol-bound structural diagnostics."""
-    approved = {
-        'sc-observability-otlp': {
-            'module_missing': ('sc_observability_otlp::constants',
-                               'sc_observability_otlp::error_codes'),
-            'pub_module_level_const_missing': ('DEFAULT_', 'TELEMETRY_'),
-            'struct_marked_non_exhaustive': ('struct OtelConfig',),
-        },
-        'sc-observability-log': {
-            'auto_trait_impl_removed': ('type LogControl', 'UnwindSafe', 'RefUnwindSafe'),
-        },
-    }.get(crate, {})
-    if not approved:
+def approved_structural_items(crate: str, entries: list[dict]) -> set[tuple[str, ...]]:
+    """Project exact reviewed API lines into cargo-semver-checks diagnostic tuples."""
+    approved = set()
+    for entry in entries:
+        if entry['crate'] != crate:
+            continue
+        old, new = entry['old'], entry['new']
+        module = re.fullmatch(r'pub mod (sc_observability_otlp::(?:constants|error_codes))', old)
+        constant = re.fullmatch(r'pub const sc_observability_otlp::(constants|error_codes)::([A-Z_]+): .+', old)
+        trait = re.fullmatch(r'impl core::panic::unwind_safe::(RefUnwindSafe|UnwindSafe) for sc_observability_log::LogControl', old)
+        if module and not new:
+            approved.add(('module_missing', module[1]))
+        elif constant and not new:
+            approved.add(('pub_module_level_const_missing', constant[2], constant[1] + '.rs'))
+        elif trait and new == old.replace('impl ', 'impl !', 1):
+            approved.add(('auto_trait_impl_removed', 'LogControl', trait[1]))
+        elif (old == 'pub struct sc_observability_otlp::OtelConfig'
+              and new == '#[non_exhaustive] ' + old):
+            approved.add(('struct_marked_non_exhaustive', 'OtelConfig'))
+    return approved
+
+
+def structural_diagnostics_are_enumerated(crate: str, output: str, entries: list[dict],
+                                           returncode: int, stderr: str = '') -> bool:
+    """Require exact coverage of every finding in real cargo-semver-checks stdout.
+
+    Findings exit with status 1. Crashes/signals and build errors cannot become
+    approved breaks, even when they also emit a complete approved diagnostic.
+    Progress on stderr is kept separate from the strictly parsed finding rows.
+    """
+    approved = approved_structural_items(crate, entries)
+    if returncode != 1 or not approved:
         return False
-    # Cargo/semver-checks execution failures are not compatibility findings
-    # and must never be hidden by a finding allowlist.
-    if re.search(r"(?im)^\s*(?:error:|could not compile|process didn't exit|command failed|thread .* panicked)", output):
+    if re.search(r"(?im)^\s*(?:error(?:\[|:)|could not compile|process didn't exit|command failed|thread .* panicked)", output + stderr):
         return False
-    headers = list(re.finditer(r'^--- failure ([a-z0-9_]+)(?:[: ])', output, re.MULTILINE))
-    if not headers or any(match.group(1) not in approved for match in headers):
+    if re.search(r'(?m)^\s*(?:--- failure |Failed in:)', stderr):
+        return False  # Findings belong on stdout; never ignore extra stderr rows.
+    patterns = {
+        'module_missing': r'  mod (sc_observability_otlp::[a-z_]+), previously in file .+:[0-9]+',
+        'pub_module_level_const_missing': r'  ([A-Z_]+) in file .*/sc-observability-otlp-1\.4\.1/src/([^/]+\.rs):[0-9]+',
+        'struct_marked_non_exhaustive': r'  struct ([A-Za-z_][A-Za-z_0-9]*) in .*/crates/sc-observability-otlp/src/config\.rs:[0-9]+',
+        'auto_trait_impl_removed': r'  type ([A-Za-z_][A-Za-z_0-9]*) is no longer ([A-Za-z_][A-Za-z_0-9]*), in .*/crates/sc-observability-log/src/control\.rs:[0-9]+',
+    }
+    # Split only on complete, unindented headers. Any stray or malformed header
+    # remains in a row/description and fails validation below.
+    blocks = re.split(r'(?m)^--- failure ', output.strip())
+    if blocks[0] or len(blocks) == 1:
         return False
-    for index, header in enumerate(headers):
-        end = headers[index + 1].start() if index + 1 < len(headers) else len(output)
-        block = output[header.start():end]
-        if not all(token in block for token in approved[header.group(1)]):
+    observed, rules = set(), set()
+    for block in blocks[1:]:
+        match = re.fullmatch(r'([a-z0-9_]+): [^\n]+ ---\n\nDescription:\n(.+?)\n\nFailed in:\n(.+?)\s*', block, re.DOTALL)
+        if not match or match[1] not in patterns or match[1] in rules:
             return False
-        if 'Description:' not in block or 'Failed in:' not in block:
+        rule, description, rows = match.groups()
+        if '---' in description or 'Failed in:' in description:
             return False
-    return True
+        rules.add(rule)
+        for row in rows.splitlines():
+            item = re.fullmatch(patterns[rule], row)
+            if not item:
+                return False
+            key = (rule, *item.groups())
+            if key in observed or key not in approved:
+                return False
+            observed.add(key)
+    return observed == approved
 
 
 def main() -> int:
@@ -217,8 +253,8 @@ def main() -> int:
                     # all other structural failures fatal: the textual diff
                     # cannot authorize an unrelated trait or layout break.
                     if structural.returncode:
-                        structural_output = structural.stdout + structural.stderr
-                        if not structural_diagnostics_are_enumerated(crate, structural_output):
+                        if not structural_diagnostics_are_enumerated(
+                                crate, structural.stdout, entries, structural.returncode, structural.stderr):
                             status, failure = 'structural-semver-failed', True
                         else:
                             with (CACHE / log_name).open('a') as log:
