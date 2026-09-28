@@ -51,14 +51,15 @@ fn resource_grouping_keeps_each_resource_and_its_record_order() {
         },
         ExportRecord {
             resource: first.clone(),
-            scope,
+            scope: scope.clone(),
             record: 3_u8,
         },
     ]);
 
     assert_eq!(groups.len(), 2);
     assert_eq!(groups[0].resource, first);
-    assert_eq!(groups[0].records, vec![1, 3]);
+    assert_eq!(groups[0].scopes[0].scope, scope);
+    assert_eq!(groups[0].scopes[0].records, vec![1, 3]);
     assert_eq!(groups[1].resource, second);
-    assert_eq!(groups[1].records, vec![2]);
+    assert_eq!(groups[1].scopes[0].records, vec![2]);
 }

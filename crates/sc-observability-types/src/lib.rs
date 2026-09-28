@@ -14,6 +14,7 @@ mod events;
 mod health;
 mod level;
 mod metric;
+pub mod otlp;
 mod primitives;
 mod process;
 mod projection;

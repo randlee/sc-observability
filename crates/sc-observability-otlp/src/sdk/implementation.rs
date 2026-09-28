@@ -15,8 +15,9 @@ use std::future::Future;
 
 use tokio::runtime::Handle;
 
-use crate::contracts::{ExportRecord, Resource};
+use crate::contracts::{ExportRecord, InstrumentationScope, Resource};
 use crate::lifecycle::Admitted;
+use sc_observability_types::otlp::group_records_by_resource_and_scope;
 use sc_observability_types::v2::ExportError;
 
 /// Caller-owned runtime used for asynchronous OTLP export futures.
@@ -64,7 +65,16 @@ impl CallerRuntime {
 pub(crate) struct ResourceGroup<T> {
     /// Shared resource for every record in this group.
     pub(crate) resource: Resource,
-    /// Records belonging to that resource, preserving input order.
+    /// Ordered instrumentation-scope subgroups for that resource.
+    pub(crate) scopes: Vec<ScopeGroup<T>>,
+}
+
+/// One instrumentation-scope-homogeneous export group.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ScopeGroup<T> {
+    /// Shared instrumentation scope for every record in the group.
+    pub(crate) scope: InstrumentationScope,
+    /// Records belonging to that scope, preserving input order.
     pub(crate) records: Vec<T>,
 }
 
@@ -72,19 +82,18 @@ pub(crate) struct ResourceGroup<T> {
 /// resource. This is intentionally transport-neutral so it applies to logs,
 /// spans, and metrics alike.
 pub(crate) fn group_by_resource<T: Clone>(batch: &[ExportRecord<T>]) -> Vec<ResourceGroup<T>> {
-    let mut groups = Vec::new();
-    for item in batch {
-        if let Some(group) = groups
-            .iter_mut()
-            .find(|group: &&mut ResourceGroup<T>| group.resource == item.resource)
-        {
-            group.records.push(item.record.clone());
-        } else {
-            groups.push(ResourceGroup {
-                resource: item.resource.clone(),
-                records: vec![item.record.clone()],
-            });
-        }
-    }
-    groups
+    group_records_by_resource_and_scope(batch)
+        .into_iter()
+        .map(|group| ResourceGroup {
+            resource: group.resource,
+            scopes: group
+                .scopes
+                .into_iter()
+                .map(|scope| ScopeGroup {
+                    scope: scope.scope,
+                    records: scope.records,
+                })
+                .collect(),
+        })
+        .collect()
 }
