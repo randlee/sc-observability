@@ -1,8 +1,9 @@
 //! Caller-runtime scheduling primitives for the future OTLP wire adapter.
 //!
-//! The pinned official SDK cannot publicly construct lossless span events,
-//! links, or pre-aggregated metric requests. A proposed replacement projects
-//! all signals to OTLP protobuf requests. These primitives deliberately contain
+//! The pinned official SDK can construct span events and links through its
+//! public surface, but cannot construct the pre-aggregated metric requests
+//! required by this contract. The approved adapter therefore projects all
+//! signals to OTLP protobuf requests. These primitives deliberately contain
 //! no SDK-specific record construction, so either transport retains the
 //! caller-runtime, admission, and resource-grouping invariants.
 
@@ -13,14 +14,19 @@
 
 use std::future::Future;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use tonic::Request;
 use tonic::metadata::MetadataValue;
 use tonic::transport::{Channel, Endpoint};
 
 use crate::config::{ValidatedBackendConnection, ValidatedTransportBounds};
+use crate::constants::{
+    DEFAULT_OTLP_INITIAL_BACKOFF_MS, DEFAULT_OTLP_MAX_BACKOFF_MS, DEFAULT_OTLP_MAX_RETRIES,
+};
 use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
     LifecycleFuture, LogExporter, LogRecord, MetricExporter, Resource, TraceExporter,
@@ -137,6 +143,7 @@ struct SdkTerminal {
     traces: Mutex<TraceServiceClient<Channel>>,
     metrics: Mutex<MetricsServiceClient<Channel>>,
     auth_header: Option<MetadataValue<tonic::metadata::Ascii>>,
+    retry_deadline: Duration,
 }
 
 impl SdkTerminal {
@@ -163,6 +170,7 @@ impl SdkTerminal {
             traces: Mutex::new(TraceServiceClient::new(channel.clone())),
             metrics: Mutex::new(MetricsServiceClient::new(channel)),
             auth_header,
+            retry_deadline: bounds.lifecycle().shutdown().get(),
         })
     }
 
@@ -180,40 +188,137 @@ impl SdkTerminal {
         &self,
         resource_logs: Vec<proto_logs::ResourceLogs>,
     ) -> Result<(), ExportError> {
-        self.logs
-            .lock()
-            .await
-            .export(self.request(ExportLogsServiceRequest { resource_logs }))
-            .await
-            .map(|_| ())
-            .map_err(|_| transport_error("OTLP log export failed"))
+        let mut client = self.logs.lock().await;
+        let started = Instant::now();
+        let mut attempt = 0;
+        let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
+        loop {
+            let result = client
+                .export(self.request(ExportLogsServiceRequest {
+                    resource_logs: resource_logs.clone(),
+                }))
+                .await;
+            match result {
+                Ok(_) => return Ok(()),
+                Err(status) => match retry_action(
+                    status.code(),
+                    attempt,
+                    started.elapsed(),
+                    self.retry_deadline,
+                    delay,
+                ) {
+                    Some(wait) => {
+                        sleep(wait).await;
+                        attempt += 1;
+                        delay = delay
+                            .saturating_mul(2)
+                            .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
+                    }
+                    None => return Err(transport_error("OTLP log export failed")),
+                },
+            }
+        }
     }
 
     async fn export_spans(
         &self,
         resource_spans: Vec<proto_trace::ResourceSpans>,
     ) -> Result<(), ExportError> {
-        self.traces
-            .lock()
-            .await
-            .export(self.request(ExportTraceServiceRequest { resource_spans }))
-            .await
-            .map(|_| ())
-            .map_err(|_| transport_error("OTLP trace export failed"))
+        let mut client = self.traces.lock().await;
+        let started = Instant::now();
+        let mut attempt = 0;
+        let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
+        loop {
+            let result = client
+                .export(self.request(ExportTraceServiceRequest {
+                    resource_spans: resource_spans.clone(),
+                }))
+                .await;
+            match result {
+                Ok(_) => return Ok(()),
+                Err(status) => match retry_action(
+                    status.code(),
+                    attempt,
+                    started.elapsed(),
+                    self.retry_deadline,
+                    delay,
+                ) {
+                    Some(wait) => {
+                        sleep(wait).await;
+                        attempt += 1;
+                        delay = delay
+                            .saturating_mul(2)
+                            .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
+                    }
+                    None => return Err(transport_error("OTLP trace export failed")),
+                },
+            }
+        }
     }
 
     async fn export_metrics(
         &self,
         resource_metrics: Vec<proto_metrics::ResourceMetrics>,
     ) -> Result<(), ExportError> {
-        self.metrics
-            .lock()
-            .await
-            .export(self.request(ExportMetricsServiceRequest { resource_metrics }))
-            .await
-            .map(|_| ())
-            .map_err(|_| transport_error("OTLP metric export failed"))
+        let mut client = self.metrics.lock().await;
+        let started = Instant::now();
+        let mut attempt = 0;
+        let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
+        loop {
+            let result = client
+                .export(self.request(ExportMetricsServiceRequest {
+                    resource_metrics: resource_metrics.clone(),
+                }))
+                .await;
+            match result {
+                Ok(_) => return Ok(()),
+                Err(status) => match retry_action(
+                    status.code(),
+                    attempt,
+                    started.elapsed(),
+                    self.retry_deadline,
+                    delay,
+                ) {
+                    Some(wait) => {
+                        sleep(wait).await;
+                        attempt += 1;
+                        delay = delay
+                            .saturating_mul(2)
+                            .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
+                    }
+                    None => return Err(transport_error("OTLP metric export failed")),
+                },
+            }
+        }
     }
+}
+
+/// Mirrors the pinned SDK's tonic classification and retry limits. In
+/// particular, `RESOURCE_EXHAUSTED` is terminal without `RetryInfo` (which is not
+/// exposed by the direct tonic dependency); all other decisions match the
+/// pinned OTLP implementation's code classification.
+pub(super) fn retry_action(
+    code: tonic::Code,
+    attempt: u32,
+    elapsed: Duration,
+    deadline: Duration,
+    delay: Duration,
+) -> Option<Duration> {
+    let retryable = matches!(
+        code,
+        tonic::Code::Cancelled
+            | tonic::Code::Unavailable
+            | tonic::Code::DeadlineExceeded
+            | tonic::Code::Aborted
+            | tonic::Code::OutOfRange
+            | tonic::Code::DataLoss
+    );
+    if !retryable || attempt >= DEFAULT_OTLP_MAX_RETRIES {
+        return None;
+    }
+    let remaining = deadline.saturating_sub(elapsed);
+    let wait = delay.min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
+    (!wait.is_zero() && wait < remaining).then_some(wait)
 }
 
 impl ExporterLifecycle for SdkTerminal {

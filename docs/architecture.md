@@ -1348,6 +1348,26 @@ was reworded accordingly to describe the remaining validation.
   PHD-003/004; D.7 owns the fixture implementation and D.18 owns final
   production composition and release/API approval.
 
+#### ADR-019 amendment: conservative transport-local retry bridge
+
+- **Status**: Accepted 2026-09-28 by the Phase D lead for the D.7 completion
+  layer; this does not revise the original ADR-019 acceptance.
+- **Context**: The pinned official SDK exposes public span event/link
+  construction but not the pre-aggregated metric construction required by the
+  neutral contract. Replacing the lossless protobuf transport would therefore
+  lose supported data or add an unreviewed dependency/API seam.
+- **Decision**: Keep the raw tonic transport and add a bounded, transport-local
+  retry loop. It mirrors the pinned SDK's tonic classification (including
+  terminal `RESOURCE_EXHAUSTED` without RetryInfo), uses the existing finite
+  retry limits/backoff constants and validated lifecycle shutdown deadline, and
+  preserves one typed terminal result through the D.6 admission path. No new
+  configuration knobs, dependencies, public APIs, or runtime are introduced.
+  The bridge is provisional pending a public lossless SDK path.
+- **Consequences**: transient gRPC failures can recover without duplicate
+  admission/accounting; permanent failures, retry exhaustion, and deadline
+  exhaustion remain redacted `OTLP_EXPORT_TERMINAL` transport results. D.18
+  retains final facade activation and any future SDK-path replacement.
+
 ## 8. API-Design Consistency
 
 `api-design.md` matches the corrected layering:

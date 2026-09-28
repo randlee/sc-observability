@@ -1,7 +1,9 @@
 //! Focused caller-runtime tests for the official SDK adapter.
 
 use super::build_exporter_set;
-use super::implementation::{CallerRuntime, group_by_resource, project_logs, project_metrics};
+use super::implementation::{
+    CallerRuntime, group_by_resource, project_logs, project_metrics, retry_action,
+};
 use crate::config::{
     ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, validated_backend_connection,
     validated_transport_bounds,
@@ -14,10 +16,72 @@ use sc_observability_types::{
     ActionName, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion, ServiceName, SpanId,
     TargetCategory, Timestamp, TraceContext, TraceId,
 };
+use std::time::Duration;
+use tonic::Code;
 
 #[test]
 fn sdk_adapter_requires_an_entered_caller_runtime() {
     assert!(CallerRuntime::try_capture().is_none());
+}
+
+#[test]
+fn sdk_retry_transient_failure_gets_bounded_retry_then_success_can_stop() {
+    let wait = retry_action(
+        Code::Unavailable,
+        0,
+        Duration::from_millis(1),
+        Duration::from_secs(30),
+        Duration::from_millis(250),
+    );
+    assert_eq!(wait, Some(Duration::from_millis(250)));
+    assert_eq!(
+        retry_action(
+            Code::Ok,
+            0,
+            Duration::from_millis(1),
+            Duration::from_secs(30),
+            Duration::from_millis(250),
+        ),
+        None
+    );
+}
+
+#[test]
+fn sdk_retry_permanent_failure_never_retries() {
+    assert_eq!(
+        retry_action(
+            Code::Internal,
+            0,
+            Duration::from_millis(1),
+            Duration::from_secs(30),
+            Duration::from_millis(250),
+        ),
+        None
+    );
+}
+
+#[test]
+fn sdk_retry_exhaustion_and_deadline_are_terminal() {
+    assert_eq!(
+        retry_action(
+            Code::Unavailable,
+            crate::constants::DEFAULT_OTLP_MAX_RETRIES,
+            Duration::from_millis(1),
+            Duration::from_secs(30),
+            Duration::from_millis(250),
+        ),
+        None
+    );
+    assert_eq!(
+        retry_action(
+            Code::Unavailable,
+            0,
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+            Duration::from_millis(250),
+        ),
+        None
+    );
 }
 
 #[test]
