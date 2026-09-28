@@ -608,6 +608,132 @@ impl sc_observability::LogSink for HeldSink {
         }
     }
 }
+
+struct BlockingWriteSink {
+    gate: Arc<Gate>,
+}
+
+#[allow(
+    deprecated,
+    reason = "test sink preserves the public legacy LogSink trait"
+)]
+impl sc_observability::LogSink for BlockingWriteSink {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
+        self.gate.arrive();
+        Ok(())
+    }
+
+    fn health(&self) -> native::SinkHealth {
+        native::SinkHealth {
+            name: native::SinkName::new("blocking-write").unwrap(),
+            state: native::SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+struct FlushFailSink;
+
+#[allow(
+    deprecated,
+    reason = "test sink preserves the public legacy LogSink trait"
+)]
+impl sc_observability::LogSink for FlushFailSink {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
+        Ok(())
+    }
+
+    fn flush(&self) -> Result<(), native::v2::LogSinkError> {
+        Err(native::v2::LogSinkError::Flush {
+            context: Box::new(native::ErrorContext::new(
+                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                "test sink intentionally fails flush",
+                native::Remediation::recoverable("retry after repairing the sink", ["retry"]),
+            )),
+        })
+    }
+
+    fn health(&self) -> native::SinkHealth {
+        native::SinkHealth {
+            name: native::SinkName::new("flush-fail").unwrap(),
+            state: native::SinkHealthState::DegradedDropping,
+            last_error: None,
+        }
+    }
+}
+
+fn core_with_sink(
+    config: sc_observability::LoggerConfig,
+    sink: Arc<dyn sc_observability::LogSink>,
+) -> (CoreLoggerOwner, CoreLoggerBackend) {
+    let stamp = dto::EventStamp {
+        service: config.service_name.clone(),
+        timestamp: native::Timestamp::now_utc(),
+        identity: native::ProcessIdentity::default(),
+    };
+    let shared = Coordinator::create(|| {
+        let mut builder = sc_observability::Logger::builder_typed(config).unwrap();
+        builder.register_sink(sc_observability::SinkRegistration::new(sink));
+        let (logger, level) = builder.build_with_level_owner_typed().unwrap();
+        let health = dto::from_core_health(logger.health(), logger.level_state()).unwrap();
+        Ok((
+            Backend::Core {
+                logger: arc_swap::ArcSwapOption::from(Some(Arc::new(logger))),
+                level: Mutex::new(level),
+                stamp,
+            },
+            health,
+        ))
+    })
+    .unwrap();
+    let owner = CoreLoggerOwner {
+        shared: shared.clone(),
+    };
+    let backend = CoreLoggerBackend { shared };
+    (owner, backend)
+}
+
+fn core_admission_and_flush_faults() {
+    let (_root, mut logger_config) = config();
+    logger_config.queue_capacity = 1;
+    let gate = Gate::new();
+    let _release = Release(gate.clone());
+    let (owner, backend) = core_with_sink(
+        logger_config,
+        Arc::new(BlockingWriteSink { gate: gate.clone() }),
+    );
+
+    assert!(matches!(
+        backend.try_log(event(), ProducerOrigin::RustHost),
+        Ok(AdmissionDto::Accepted)
+    ));
+    gate.entered(1);
+    assert!(matches!(
+        backend.try_log(event(), ProducerOrigin::RustHost),
+        Ok(AdmissionDto::Accepted)
+    ));
+    assert_failure(
+        backend.try_log(event(), ProducerOrigin::RustHost),
+        sc_observability::error_codes::LOGGER_QUEUE_FULL.as_str(),
+        "queue_full",
+        None,
+    );
+    gate.release();
+    stop(&owner);
+
+    let (_root, config) = config();
+    let (owner, backend) = core_with_sink(config, Arc::new(FlushFailSink));
+    let flush = backend.start_flush(Duration::from_secs(1)).unwrap();
+    assert_failure(
+        flush.wait(Duration::from_secs(2)),
+        sc_observability::error_codes::LOGGER_FLUSH_FAILED.as_str(),
+        "io",
+        None,
+    );
+    let _ = owner.shutdown(Duration::from_secs(2));
+    crate::spawn::wait_live(1);
+}
+
 fn core_sink_and_shutdown() {
     let (_root, config) = config();
     let gate = Gate::new();
@@ -872,25 +998,7 @@ fn d15_conversion_fixture() {
 }
 
 fn d15_coordinator_fixture() {
-    let error = crate::error::flush_drain(Box::new(native::ErrorContext::new(
-        native::ErrorCode::new_static(dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL),
-        "sink flush failed",
-        native::Remediation::not_recoverable("inspect sink health"),
-    )));
-    assert_canonical_context(
-        &error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-        1,
-    );
-    assert_failure(
-        Err::<(), _>(crate::conversion::canonical(
-            &error,
-            crate::conversion::Kind::Io,
-        )),
-        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-        "io",
-        None,
-    );
+    core_admission_and_flush_faults();
     core_sink_and_shutdown();
 }
 
