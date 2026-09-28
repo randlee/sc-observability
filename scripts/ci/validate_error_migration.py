@@ -35,6 +35,18 @@ METHODS = (
     ("otlp_assembly", "SpanAssembler::push", "SpanAssembler::push_typed"),
 )
 
+# D18 keeps one unsuffixed constructor/operation seam.  The old suffixed
+# methods are deliberately checked as an absence contract: leaving one public
+# sibling behind creates a second API rather than a migration path.
+OBSOLETE_TYPED_METHODS = (
+    ("otlp_config", "pub fn new_typed("),
+    ("otlp_config", "pub fn build_typed("),
+    ("otlp_assembly", "pub fn push_typed("),
+    ("otlp_runtime", "pub fn new_typed("),
+    ("otlp_runtime", "pub fn flush_typed("),
+    ("otlp_runtime", "pub fn shutdown_typed("),
+)
+
 
 def migration_notes() -> tuple[str, ...]:
     wrapper_notes = tuple(
@@ -181,6 +193,12 @@ def check_source_contract() -> None:
             text[source],
             f"pub fn {legacy.rsplit('::', 1)[1]}(",
             f"Use {typed}(); see migrate-error-api.md.",
+        )
+
+    for source, marker in OBSOLETE_TYPED_METHODS:
+        assert_true(
+            marker not in text[source],
+            f"{source} retains obsolete public typed sibling {marker}",
         )
 
     for source in ("otlp_config", "otlp_assembly"):
