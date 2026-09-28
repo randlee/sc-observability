@@ -25,8 +25,10 @@ redaction or accounting system.
 Each attachment control carries only a weak token for its originating
 attachment. Admission and bounded flush therefore remain tied to that
 attachment; after detach, including after a later reattachment, stale
-controls return a typed not-running result rather than silently routing
-through the current global slot. A timed-out flush keeps its in-flight call
+controls return the preserved `NotRunning` operation result and record the
+canonical `DropCause::NotInstalled` accounting bucket rather than silently
+routing through the current global slot. This is the explicit ADR-019
+compatibility amendment for the retained control error labels. A timed-out flush keeps its in-flight call
 and attachment logger reference until the helper exits, so a successful retry
 is the point at which `Arc::try_unwrap` can recover host ownership.
 The public integration fixtures in `bridge_attachment.rs` and
@@ -35,3 +37,11 @@ direct/macro routing, policy allowlisting, bounded payload rejection, host
 redaction, policy panic, foreign-facade rejection, init/attach exclusion,
 concurrent detach timeout/retry, reattachment, stale controls, and host
 ownership recovery.
+
+## Tracing-bridge ownership
+
+The `log` facade and a `tracing` bridge are separate foreign logger owners. An
+application may compose them only by selecting one process-global owner and
+routing the other facade into it; `attach_logger` never installs or shuts down
+a tracing subscriber. Hosts must install their tracing bridge before choosing
+the owner, or explicitly detach the attachment before transferring ownership.

@@ -54,6 +54,16 @@ pub enum PolicyRejection {
     Invalid,
 }
 
+impl PolicyRejection {
+    fn remediation(self) -> &'static str {
+        match self {
+            Self::Denied => "adjust the host allowlist or route the event to an admitted target",
+            Self::PayloadTooLarge => "reduce the event payload before submitting it",
+            Self::Invalid => "correct the event fields and resubmit the event",
+        }
+    }
+}
+
 /// Options for a non-owning host attachment.
 #[non_exhaustive]
 pub struct AttachmentOptions {
@@ -218,7 +228,9 @@ impl AttachmentState {
         if gate.phase != AttachmentPhase::Attached {
             return None;
         }
-        gate.in_flight += 1;
+        // Treat counter exhaustion as an unbounded drain. A sentinel avoids
+        // wrapping to zero and allowing detach to release an active call.
+        gate.in_flight = gate.in_flight.checked_add(1).unwrap_or(usize::MAX);
         Some(AttachmentCall {
             state: Arc::clone(self),
         })
@@ -397,8 +409,9 @@ fn infer_service(logger: &sc_observability::Logger) -> ServiceName {
         .and_then(|name| name.to_str())
         .and_then(|name| name.strip_suffix(".log.jsonl"))
         .unwrap_or("attached");
-    ServiceName::new(candidate)
-        .unwrap_or_else(|_| ServiceName::new("attached").expect("literal service"))
+    ServiceName::new(candidate).unwrap_or_else(|_| {
+        ServiceName::new("attached").unwrap_or_else(|_| unreachable!("validated service literal"))
+    })
 }
 
 fn context(code: ErrorCode, message: &str, remediation: &str) -> ErrorContext {
@@ -413,10 +426,7 @@ fn policy_diagnostic(reason: PolicyRejection) -> OperationDiagnostic {
     OperationDiagnostic {
         code: crate::error_codes::SC_OBSERVABILITY_LOG_INVALID_FIELD,
         message: format!("host bridge policy rejected event: {reason:?}"),
-        remediation: Remediation::recoverable(
-            "adjust the host bridge policy or event payload",
-            std::iter::empty::<String>(),
-        ),
+        remediation: Remediation::recoverable(reason.remediation(), std::iter::empty::<String>()),
         at: Timestamp::now_utc(),
     }
 }
