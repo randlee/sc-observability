@@ -465,5 +465,86 @@
         ]
       }
     }
+  },
+  {
+    "id": "canonical-envelope-unknown-error-kind",
+    "operation": "canonical_envelope",
+    "result": "decoded",
+    "value": {
+      "schema_version": 1,
+      "kind": "error",
+      "error": {
+        "kind": "future_export_failure",
+        "at": "1970-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": {"kind": "recoverable", "steps": ["retry later"]},
+        "cause": "bounded cause",
+        "docs": "https://example.test/recovery",
+        "details": {"depth": {"kind": "integer", "value": "18446744073709551615"}}
+      }
+    },
+    "expected": {
+      "schema_version": 1,
+      "kind": "error",
+      "error": {
+        "kind": "unknown_remote",
+        "remote_kind": "future_export_failure",
+        "at": "1970-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": {"kind": "recoverable", "steps": ["retry later"]},
+        "cause": "bounded cause",
+        "docs": "https://example.test/recovery",
+        "details": {"depth": {"kind": "integer", "value": "18446744073709551615"}}
+      }
+    }
+  },
+  {
+    "id": "canonical-envelope-malformed-missing-error",
+    "operation": "canonical_envelope",
+    "result": "rejected",
+    "value": {"schema_version": 1, "kind": "error"},
+    "expected_error": {
+      "kind": "validation",
+      "at": "1970-01-01T00:00:00Z",
+      "code": "SC_OBSERVABILITY_BINDING_INVALID_INPUT",
+      "message": "malformed canonical envelope",
+      "field": "response",
+      "remediation": {"kind": "recoverable", "steps": ["correct response"]}
+    }
+  },
+  {
+    "id": "canonical-envelope-typed-queue-full-context",
+    "operation": "canonical_envelope",
+    "result": "decoded",
+    "value": {
+      "schema_version": 1,
+      "kind": "error",
+      "error": {
+        "kind": "queue_full",
+        "at": "1970-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": {"kind": "recoverable", "steps": ["retry later"]},
+        "cause": "bounded cause",
+        "docs": "https://example.test/recovery",
+        "details": {"depth": {"kind": "integer", "value": "18446744073709551615"}}
+      }
+    },
+    "expected": {
+      "schema_version": 1,
+      "kind": "error",
+      "error": {
+        "kind": "queue_full",
+        "at": "1970-01-01T00:00:00Z",
+        "code": "OTLP_QUEUE_FULL",
+        "message": "queue full",
+        "remediation": {"kind": "recoverable", "steps": ["retry later"]},
+        "cause": "bounded cause",
+        "docs": "https://example.test/recovery",
+        "details": {"depth": {"kind": "integer", "value": "18446744073709551615"}}
+      }
+    }
   }
 ]

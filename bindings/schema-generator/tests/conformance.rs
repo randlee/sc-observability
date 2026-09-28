@@ -113,6 +113,28 @@ fn semantic_negatives_have_exact_failure_kinds_and_codes() {
         serde_json::from_str(include_str!("../../conformance/v1/conversion-cases.json")).unwrap();
     for case in cases {
         let value = case["value"].clone();
+        if case["operation"] == "canonical_envelope" {
+            match case["result"].as_str().unwrap() {
+                "decoded" => {
+                    let decoded = decode_canonical_envelope::<AdmissionDto>(value)
+                        .unwrap_or_else(|error| panic!("{}: {error:?}", case["id"]));
+                    assert_eq!(
+                        serde_json::to_value(decoded).unwrap(),
+                        case["expected"],
+                        "{}",
+                        case["id"]
+                    );
+                }
+                "rejected" => {
+                    let error = decode_canonical_envelope::<AdmissionDto>(value)
+                        .expect_err("malformed canonical envelope must be rejected");
+                    assert_eq!(error.diagnostic().code, case["expected_error"]["code"]);
+                    assert_eq!(serde_json::to_value(error).unwrap()["kind"], case["expected_error"]["kind"]);
+                }
+                result => panic!("unknown canonical-envelope result: {result}"),
+            }
+            continue;
+        }
         let error = match case["operation"].as_str().unwrap() {
             "metric" => decode_metric(value).unwrap_err(),
             "span" => decode_span(value).unwrap_err(),
