@@ -255,15 +255,11 @@ impl WriterRuntime {
             }
         }
 
-        if self.join_handle.join().is_err() {
+        if !timed_out && self.join_handle.join().is_err() {
             self.writer_tracker
                 .record_writer_failure(&ErrorContext::new(
                     error_codes::LOGGER_WRITER_DEGRADED,
-                    if timed_out {
-                        "writer thread panicked after exceeding the shutdown timeout"
-                    } else {
-                        "writer thread panicked during shutdown"
-                    },
+                    "writer thread panicked during shutdown",
                     Remediation::recoverable(
                         "restart the logger runtime",
                         [

@@ -1935,7 +1935,7 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_records_join_timeout_but_waits_for_join() {
+    fn shutdown_returns_after_join_timeout_without_waiting_for_blocked_writer() {
         let root = temp_path("shutdown-maintenance-timeout");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
@@ -1971,18 +1971,21 @@ mod tests {
             ),
             "expected shutdown to record the configured timeout while maintenance is gated"
         );
-        assert!(
-            !shutdown_finished.load(Ordering::SeqCst),
-            "shutdown must remain blocked until the maintenance gate is released"
+        wait_for(
+            || shutdown_finished.load(Ordering::SeqCst),
+            "shutdown must return after the configured timeout without joining the blocked writer",
         );
-        release_test_pass_delay(&signal);
         let stopped = shutdown
             .join()
-            .expect("shutdown thread should complete after the maintenance gate is released");
+            .expect("shutdown thread should complete after the configured timeout");
         let maintenance = stopped.health().maintenance.expect("maintenance health");
-        assert_eq!(maintenance.state, MaintenanceWorkerState::Stopped);
         assert!(maintenance.last_error.is_some());
         assert_eq!(stopped.health().writer_state, WriterState::Degraded);
+        assert!(
+            signal.is_active(),
+            "shutdown returned before the blocked writer left its maintenance pass"
+        );
+        release_test_pass_delay(&signal);
     }
 
     #[test]
