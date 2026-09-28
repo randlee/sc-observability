@@ -230,7 +230,10 @@ impl AttachmentState {
         }
         // Treat counter exhaustion as an unbounded drain. A sentinel avoids
         // wrapping to zero and allowing detach to release an active call.
-        gate.in_flight = gate.in_flight.checked_add(1).unwrap_or(usize::MAX);
+        gate.in_flight = match gate.in_flight.checked_add(1) {
+            Some(next) => next,
+            None => usize::MAX,
+        };
         Some(AttachmentCall {
             state: Arc::clone(self),
         })
