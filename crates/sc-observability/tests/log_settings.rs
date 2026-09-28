@@ -87,6 +87,228 @@ fn precedence_root_exception_and_conversion_preserve_defaults() {
 }
 
 #[test]
+fn every_inventory_row_obeys_all_four_resolution_layers() {
+    let file: LogSettings = serde_json::from_str(
+        r#"{"level":"Warn","logRoot":"/json","enableFileSink":true,"enableConsoleSink":false,"retainedLogPolicy":{"rotation_max_bytes":12,"rotation_max_files":2,"retention_max_age":1000,"maintenance_cadence":100,"writer_shutdown_timeout":100,"maintenance_max_work_per_pass":1}}"#,
+    )
+    .expect("JSON inventory row values");
+    let shared = LogSettings::from_env(
+        &snapshot(&[
+            ("SC_LOG_LEVEL", "Debug"),
+            ("SC_LOG_ROOT", "/shared"),
+            ("SC_LOG_FILE", "false"),
+            ("SC_LOG_CONSOLE", "true"),
+            ("SC_LOG_ROTATION_MAX_BYTES", "24"),
+            ("SC_LOG_ROTATION_MAX_FILES", "3"),
+            ("SC_LOG_RETENTION_MAX_AGE_MS", "2000"),
+            ("SC_LOG_MAINTENANCE_CADENCE_MS", "200"),
+            ("SC_LOG_WRITER_SHUTDOWN_TIMEOUT_MS", "200"),
+            ("SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS", "2"),
+        ]),
+        EnvPrefix::new("SC").expect("valid prefix"),
+    )
+    .expect("shared environment inventory rows");
+    let application = LogSettings::from_env(
+        &snapshot(&[
+            ("APP_LOG_LEVEL", "Error"),
+            ("APP_LOG_ROOT", "/application"),
+            ("APP_LOG_FILE", "true"),
+            ("APP_LOG_CONSOLE", "false"),
+            ("APP_LOG_ROTATION_MAX_BYTES", "48"),
+            ("APP_LOG_ROTATION_MAX_FILES", "4"),
+            ("APP_LOG_RETENTION_MAX_AGE_MS", "3000"),
+            ("APP_LOG_MAINTENANCE_CADENCE_MS", "300"),
+            ("APP_LOG_WRITER_SHUTDOWN_TIMEOUT_MS", "300"),
+            ("APP_LOG_MAINTENANCE_MAX_WORK_PER_PASS", "3"),
+        ]),
+        EnvPrefix::new("APP").expect("valid prefix"),
+    )
+    .expect("application environment inventory rows");
+
+    let resolved = LogSettings::resolve(LogSettingsInputs {
+        file: Some(file),
+        shared_env: shared,
+        application_env: Some(application),
+        default_root: PathBuf::from("/default"),
+    })
+    .expect("all layers resolve");
+    let policy = resolved.retained_log_policy;
+    let actual = [
+        ("level", format!("{:?}", resolved.level), "Error".to_owned()),
+        (
+            "log root (the JSON exception)",
+            resolved.log_root.as_ref().display().to_string(),
+            "/json".to_owned(),
+        ),
+        (
+            "file sink",
+            resolved.enable_file_sink.to_string(),
+            "true".to_owned(),
+        ),
+        (
+            "console sink",
+            resolved.enable_console_sink.to_string(),
+            "false".to_owned(),
+        ),
+        (
+            "rotation bytes",
+            policy.rotation_max_bytes.as_u64().to_string(),
+            "48".to_owned(),
+        ),
+        (
+            "rotation files",
+            policy.rotation_max_files.as_usize().to_string(),
+            "4".to_owned(),
+        ),
+        (
+            "retention age",
+            policy
+                .retention_max_age
+                .as_duration()
+                .as_millis()
+                .to_string(),
+            "3000".to_owned(),
+        ),
+        (
+            "maintenance cadence",
+            policy
+                .maintenance_cadence
+                .as_duration()
+                .as_millis()
+                .to_string(),
+            "300".to_owned(),
+        ),
+        (
+            "writer shutdown timeout",
+            policy
+                .writer_shutdown_timeout
+                .as_duration()
+                .as_millis()
+                .to_string(),
+            "300".to_owned(),
+        ),
+        (
+            "maintenance maximum work",
+            policy
+                .maintenance_max_work_per_pass
+                .expect("application policy value")
+                .to_string(),
+            "3".to_owned(),
+        ),
+    ];
+    for (field, actual, expected) in actual {
+        assert_eq!(actual, expected, "{field} must use its documented layer");
+    }
+}
+
+#[test]
+fn a_higher_environment_policy_replaces_json_policy_atomically() {
+    let file: LogSettings = serde_json::from_str(
+        r#"{"retainedLogPolicy":{"rotation_max_bytes":12,"rotation_max_files":2,"retention_max_age":1000,"maintenance_cadence":100,"writer_shutdown_timeout":100,"maintenance_max_work_per_pass":1}}"#,
+    )
+    .expect("JSON policy");
+    let shared = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_ROTATION_MAX_FILES", "9")]),
+        EnvPrefix::new("SC").expect("valid prefix"),
+    )
+    .expect("shared policy override");
+    let resolved = LogSettings::resolve(LogSettingsInputs {
+        file: Some(file),
+        shared_env: shared,
+        application_env: None,
+        default_root: PathBuf::from("/default"),
+    })
+    .expect("policy resolution");
+
+    assert_eq!(
+        resolved.retained_log_policy.rotation_max_files.as_usize(),
+        9
+    );
+    assert_eq!(
+        resolved.retained_log_policy.rotation_max_bytes,
+        RetainedLogPolicy::default().rotation_max_bytes,
+        "the higher policy replaces, rather than field-merges with, JSON",
+    );
+}
+
+#[test]
+fn settings_reject_invalid_values_duplicates_and_unknown_json_fields() {
+    let invalid_rows = [
+        ("SC_LOG_FILE", "not-a-bool"),
+        ("SC_LOG_LEVEL", "not-a-level"),
+        ("SC_LOG_MAINTENANCE_CADENCE_MS", "0"),
+    ];
+    for (key, value) in invalid_rows {
+        let error = LogSettings::from_env(
+            &snapshot(&[(key, value)]),
+            EnvPrefix::new("SC").expect("valid prefix"),
+        )
+        .expect_err("invalid inventory value must fail");
+        assert_eq!(error.code(), error_codes::LOG_INVALID_VALUE, "{key}");
+    }
+
+    let duplicate = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_LEVEL", "Info"), ("sc_log_level", "Debug")]),
+        EnvPrefix::new("SC").expect("valid prefix"),
+    )
+    .expect_err("case-folded duplicate must fail");
+    assert_eq!(duplicate.code(), error_codes::LOG_INVALID_ENVIRONMENT);
+
+    assert!(serde_json::from_str::<LogSettings>(r#"{"unknownSetting":true}"#).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn rejects_non_utf8_value_in_selected_namespace() {
+    let snapshot = EnvSnapshot::from_pairs([(
+        OsString::from("SC_LOG_LEVEL"),
+        OsString::from_vec(b"\xFF".to_vec()),
+    )]);
+    let error = LogSettings::from_env(&snapshot, EnvPrefix::new("SC").unwrap()).unwrap_err();
+    assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
+}
+
+#[test]
+fn settings_conversion_preserves_every_non_inventory_default() {
+    let service = ServiceName::new("settings-test").expect("valid service");
+    let root = PathBuf::from("/default");
+    let config = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: LogSettings::default(),
+        application_env: None,
+        default_root: root.clone(),
+    })
+    .expect("defaults resolve")
+    .into_logger_config(service.clone());
+    let defaults = sc_observability::LoggerConfig::default_for(service, root);
+
+    assert_eq!(config.service_name, defaults.service_name);
+    assert_eq!(config.log_root, defaults.log_root);
+    assert_eq!(config.queue_capacity, defaults.queue_capacity);
+    assert_eq!(
+        config.redaction.denylist_keys,
+        defaults.redaction.denylist_keys
+    );
+    assert_eq!(
+        config.redaction.redact_bearer_tokens,
+        defaults.redaction.redact_bearer_tokens
+    );
+    assert!(config.redaction.custom_redactors.is_empty());
+    assert!(defaults.redaction.custom_redactors.is_empty());
+    assert!(matches!(
+        config.process_identity,
+        sc_observability_types::ProcessIdentityPolicy::Auto
+    ));
+    assert!(matches!(
+        defaults.process_identity,
+        sc_observability_types::ProcessIdentityPolicy::Auto
+    ));
+    assert_eq!(config.enable_file_sink, defaults.enable_file_sink);
+    assert_eq!(config.enable_console_sink, defaults.enable_console_sink);
+    assert_eq!(config.retained_log_policy, defaults.retained_log_policy);
+}
+
+#[test]
 fn rejects_empty_unknown_case_and_prefix_collision() {
     let empty = LogSettings::from_env(
         &snapshot(&[("SC_LOG_ROOT", "")]),
