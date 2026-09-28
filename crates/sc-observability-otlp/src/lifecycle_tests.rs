@@ -10,6 +10,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::config::{OtelConfig, validated_transport_bounds};
+use crate::constants::MAX_OTLP_RECORD_BYTES;
 use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
     LifecycleFuture, Resource,
@@ -686,6 +687,22 @@ fn byte_capacity_rejects_when_record_capacity_remains() {
 }
 
 #[test]
+fn admission_rejects_a_record_above_the_per_record_limit() {
+    let (core, _, _, _) = default_fixture();
+
+    assert!(matches!(
+        core.admit(SignalKind::Logs, (), MAX_OTLP_RECORD_BYTES + 1),
+        Err(sc_observability_types::v2::TelemetryError::ExportFailure(
+            ExportError::QueueFull { .. }
+        ))
+    ));
+    let health = core.health();
+    assert_eq!(health.admitted_records, 0);
+    assert_eq!(health.admitted_bytes, 0);
+    assert_eq!(health.dropped_by_signal, [1, 0, 0]);
+}
+
+#[test]
 fn repeated_shutdown_uses_one_backend_operation() {
     let (core, _, shutdowns, released) = default_fixture();
     let mut first = core.shutdown_async();
@@ -713,6 +730,29 @@ fn failed_shutdown_is_idempotent_after_terminal_completion() {
     let mut second = core.shutdown_async();
     assert!(matches!(poll_once(&mut second), Poll::Ready(Ok(()))));
     assert_eq!(shutdowns.load(Ordering::Acquire), 1);
+}
+
+#[test]
+fn shared_failed_operation_reconstructs_equivalent_results_for_each_waiter() {
+    let (core, _, _, _) = fixture(Some(runtime_terminated), &OtelConfig::default());
+    let mut first = core.flush_async();
+    let mut second = core.flush_async();
+
+    let Poll::Ready(Err(first_error)) = poll_once(&mut first) else {
+        panic!("first shared waiter did not receive the terminal failure")
+    };
+    let Poll::Ready(Err(second_error)) = poll_once(&mut second) else {
+        panic!("second shared waiter did not receive the terminal failure")
+    };
+
+    let first_diagnostic = first_error.diagnostic();
+    let second_diagnostic = second_error.diagnostic();
+    assert_eq!(first_diagnostic.code, second_diagnostic.code);
+    assert_eq!(first_diagnostic.message, second_diagnostic.message);
+    assert_eq!(first_diagnostic.cause, second_diagnostic.cause);
+    assert_eq!(first_diagnostic.remediation, second_diagnostic.remediation);
+    assert_eq!(first_diagnostic.docs, second_diagnostic.docs);
+    assert_eq!(first_diagnostic.details, second_diagnostic.details);
 }
 
 #[test]

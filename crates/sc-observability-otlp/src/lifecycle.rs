@@ -4,21 +4,17 @@
 //! protocol.  Exporters provide the two asynchronous lifecycle futures while
 //! this module owns the short admission critical section, ordered barriers,
 //! bounded admission, and terminal accounting.
-#![allow(
-    dead_code,
-    reason = "D.18 integrates this staged lifecycle core into the public facade"
-)]
-
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::config::ValidatedTransportBounds;
+use crate::constants::MAX_OTLP_RECORD_BYTES;
 use crate::contracts::{ExporterSet, LifecycleFuture};
 use crate::error_codes;
 use sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED;
@@ -47,6 +43,10 @@ impl SignalKind {
 }
 
 /// Snapshot of lifecycle state and fail-open accounting for health surfaces.
+#[allow(
+    dead_code,
+    reason = "D.18 exposes lifecycle health through the public facade"
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LifecycleHealth {
     /// Current lifecycle phase.
@@ -168,6 +168,7 @@ impl LifecycleCore {
     /// Constructs the state machine from D.21's validated, backend-neutral
     /// bounds.  Exporter preflight is intentionally performed before any
     /// state becomes visible to callers.
+    #[allow(dead_code, reason = "D.18 constructs the staged lifecycle core")]
     pub(crate) fn new(
         exporters: ExporterSet,
         bounds: &ValidatedTransportBounds,
@@ -241,6 +242,11 @@ impl LifecycleCore {
                     Remediation::recoverable("Construct a new telemetry instance", [] as [&str; 0]),
                 )),
             });
+        }
+        if bytes > MAX_OTLP_RECORD_BYTES {
+            let error = queue_full_error();
+            LifecycleInner::record_drop(&mut state, signal, Some(&error));
+            return Err(TelemetryError::ExportFailure(error));
         }
         if state.admitted_records >= self.inner.queue_capacity
             || state
@@ -361,6 +367,10 @@ impl LifecycleCore {
     }
 
     /// Returns a point-in-time health/accounting snapshot.
+    #[allow(
+        dead_code,
+        reason = "D.18 exposes lifecycle health through the public facade"
+    )]
     pub(crate) fn health(&self) -> LifecycleHealth {
         let state = self.inner.state.lock().expect("lifecycle state lock");
         LifecycleHealth {
@@ -437,7 +447,13 @@ struct Operation {
     failure: Mutex<Option<ErrorSnapshot>>,
     waiters: Mutex<Vec<Waker>>,
     timer_started: AtomicBool,
+    timer_signal: Arc<TimerSignal>,
     polling: AtomicBool,
+}
+
+struct TimerSignal {
+    completed: Mutex<bool>,
+    wake: Condvar,
 }
 
 enum OperationState {
@@ -448,6 +464,9 @@ enum OperationState {
 
 struct Completion {
     snapshot: Option<ErrorSnapshot>,
+    // The first observer receives the original typed error (including its
+    // source and construction backtrace); later observers reconstruct from
+    // the stable diagnostic snapshot because ExportError is not Clone.
     original: Mutex<Option<ExportError>>,
 }
 
@@ -489,6 +508,10 @@ impl Operation {
             failure: Mutex::new(failure),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(false),
+            timer_signal: Arc::new(TimerSignal {
+                completed: Mutex::new(false),
+                wake: Condvar::new(),
+            }),
             polling: AtomicBool::new(false),
         }
     }
@@ -505,6 +528,10 @@ impl Operation {
             failure: Mutex::new(None),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(true),
+            timer_signal: Arc::new(TimerSignal {
+                completed: Mutex::new(true),
+                wake: Condvar::new(),
+            }),
             polling: AtomicBool::new(false),
         }
     }
@@ -656,17 +683,41 @@ impl Operation {
         let weak = Arc::downgrade(self);
         let deadline = self.deadline;
         let timer_waker = waker.clone();
+        let timer_signal = Arc::clone(&self.timer_signal);
         thread::spawn(move || {
-            let now = Instant::now();
-            if deadline > now {
-                thread::sleep(deadline - now);
-            }
-            timer_waker.wake_by_ref();
-            if let Some(operation) = weak.upgrade() {
-                let waiters =
-                    std::mem::take(&mut *operation.waiters.lock().expect("operation waiters lock"));
-                for waiter in waiters {
-                    waiter.wake();
+            let mut completed = timer_signal.completed.lock().expect("operation timer lock");
+            while !*completed {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    drop(completed);
+                    timer_waker.wake_by_ref();
+                    if let Some(operation) = weak.upgrade() {
+                        let waiters = std::mem::take(
+                            &mut *operation.waiters.lock().expect("operation waiters lock"),
+                        );
+                        for waiter in waiters {
+                            waiter.wake();
+                        }
+                    }
+                    return;
+                }
+                let (next, timeout) = timer_signal
+                    .wake
+                    .wait_timeout(completed, remaining)
+                    .expect("operation timer wait");
+                completed = next;
+                if timeout.timed_out() && !*completed {
+                    drop(completed);
+                    timer_waker.wake_by_ref();
+                    if let Some(operation) = weak.upgrade() {
+                        let waiters = std::mem::take(
+                            &mut *operation.waiters.lock().expect("operation waiters lock"),
+                        );
+                        for waiter in waiters {
+                            waiter.wake();
+                        }
+                    }
+                    return;
                 }
             }
         });
@@ -684,6 +735,9 @@ impl Operation {
         let OperationState::Complete(completion) = &*state else {
             return None;
         };
+        // This is intentionally a take-once accessor: preserving the original
+        // error for one waiter retains its source/backtrace; all later waiters
+        // receive a typed reconstruction from the shared diagnostic snapshot.
         Some(
             match completion.original.lock().expect("completion lock").take() {
                 Some(error) => Err(error),
@@ -703,18 +757,19 @@ impl Operation {
         }
         *state = OperationState::Complete(Arc::clone(&completion));
         drop(state);
+        *self
+            .timer_signal
+            .completed
+            .lock()
+            .expect("operation timer lock") = true;
+        self.timer_signal.wake.notify_one();
         if self.kind == OperationKind::Shutdown {
             self.inner.state.lock().expect("lifecycle state lock").phase = LifecycleState::Shutdown;
         }
-        if let Some(error) = completion
-            .original
-            .lock()
-            .expect("completion lock")
-            .as_ref()
-        {
+        if let Some(snapshot) = &completion.snapshot {
             let mut lifecycle_state = self.inner.state.lock().expect("lifecycle state lock");
             lifecycle_state.degraded = true;
-            lifecycle_state.last_error = Some(DiagnosticSummary::from(error.diagnostic()));
+            lifecycle_state.last_error = Some(DiagnosticSummary::from(&snapshot.diagnostic));
         }
         let waiters = std::mem::take(&mut *self.waiters.lock().expect("operation waiters lock"));
         for waiter in waiters {
