@@ -783,10 +783,6 @@ impl ValidatedBackendConnection {
     }
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 impl ValidatedTransportBounds {
     pub(crate) const fn protocol(&self) -> OtlpProtocol {
         self.protocol
@@ -992,6 +988,10 @@ pub(crate) fn validated_transport_bounds(
 /// Returns the connection values only after the transport's ordinary ordered
 /// validation has succeeded. Enabled factories need an explicit endpoint and
 /// must never reconstruct it from environment defaults.
+#[allow(
+    dead_code,
+    reason = "D.18 consumes the validated SDK connection view during facade composition"
+)]
 pub(crate) fn validated_backend_connection(
     config: &OtelConfig,
 ) -> Result<ValidatedBackendConnection, ConfigFailure> {
