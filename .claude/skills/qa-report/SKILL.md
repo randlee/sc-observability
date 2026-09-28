@@ -14,8 +14,9 @@ close. Read-only; writes nothing.
    (`phase-<p>.jsonl`, "Log B") and its cumulative stats sibling
    (`phase-<p>-stats.jsonl`, "Log A"), one pair per phase found. If neither
    exists, say so and stop.
-2. For each phase, render two tables, oldest row first, every row included
-   (no truncation, no summarizing):
+2. For each phase, render two tables, newest row first, every row included
+   (no truncation, no summarizing). Sort Log A by `snapshot_at` descending
+   and Log B by `completed_at` descending; display the local-time columns:
    - **Log A — cumulative phase-stats** (`phase-<p>-stats.jsonl`): columns
      `snapshot_local`, `tot`, `open`, `blk`, `imp`, `min`, `trigger_task`.
    - **Log B — per-round events** (`phase-<p>.jsonl`): columns
