@@ -1586,6 +1586,43 @@ mod tests {
     }
 
     #[test]
+    fn flush_times_out_when_writer_is_blocked() {
+        let root = temp_path("flush-writer-timeout");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.retained_log_policy.writer_shutdown_timeout = join_ms(10);
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let logger = Logger::new_typed(config).expect("logger");
+
+        logger.log(log_event(service_name())).expect("initial log");
+        assert!(
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::is_active
+            ),
+            "expected maintenance worker to enter the delayed test pass"
+        );
+
+        let started = Instant::now();
+        let error = logger
+            .flush_typed()
+            .expect_err("flush must not wait indefinitely for a blocked writer");
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "flush should return within the configured timeout"
+        );
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_WRITER_DEGRADED);
+        assert_eq!(logger.health().state, LoggingHealthState::DegradedDropping);
+
+        release_test_pass_delay(&signal);
+        let _stopped = logger.shutdown();
+    }
+
+    #[test]
     fn default_log_path_uses_service_scoped_layout() {
         let service = ServiceName::new("custom-service").expect("valid service");
         let log_root = PathBuf::from("observability-root");
