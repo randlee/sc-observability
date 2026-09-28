@@ -146,10 +146,7 @@ impl LogControl {
                 &installed.identity,
                 &installed.options.default_action,
             )?;
-            installed
-                .logger
-                .try_log_with_outcome(event)
-                .map_err(|error| core_emit_error(&error))
+            submit_event(&installed.logger, event)
         })
     }
 
@@ -176,6 +173,19 @@ impl LogControl {
             }
         })
     }
+}
+
+#[allow(
+    deprecated,
+    reason = "shared admission retains the legacy core boundary until D18"
+)]
+pub(crate) fn submit_event(
+    logger: &sc_observability::Logger,
+    event: sc_observability_types::LogEvent,
+) -> Result<EmitOutcome, EmitError> {
+    logger
+        .try_log_with_outcome(event)
+        .map_err(|error| core_emit_error(&error))
 }
 
 pub(crate) fn assemble_event(

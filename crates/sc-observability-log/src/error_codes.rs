@@ -70,8 +70,14 @@ pub const SC_OBSERVABILITY_LOG_SHUTDOWN_NOT_STARTED: ErrorCode =
 pub const SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS");
 
+/// A host bridge policy rejected an assembled event before logger admission.
+/// Recovery: follow the policy-specific diagnostic steps and resubmit explicitly.
+pub const SC_OBSERVABILITY_LOG_POLICY_REJECTED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOG_POLICY_REJECTED");
+
 /// Every code defined by this crate, in declaration order.
 pub const ALL: &[ErrorCode] = &[
+    SC_OBSERVABILITY_LOG_POLICY_REJECTED,
     SC_LOG_DETACH_TIMEOUT,
     SC_LOG_DETACH_NOT_INSTALLED,
     SC_LOG_FOREIGN_LOGGER_INSTALLED,
@@ -125,7 +131,7 @@ mod tests {
             );
             assert!(seen.insert(code.as_str()), "duplicate code {code}");
         }
-        assert_eq!(ALL.len(), 19);
+        assert_eq!(ALL.len(), 20);
     }
 
     #[test]

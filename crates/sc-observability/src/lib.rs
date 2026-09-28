@@ -599,6 +599,14 @@ pub struct Logger<State = Running> {
     state: PhantomData<State>,
 }
 
+impl<State> Logger<State> {
+    /// Returns the configured service identity, independent of sink layout.
+    #[must_use]
+    pub fn service_name(&self) -> &ServiceName {
+        &self.config.service_name
+    }
+}
+
 /// Weak authority for changing one running logger's effective level.
 ///
 /// The owner deliberately retains no writer, sender, or logger handle. Dropping
