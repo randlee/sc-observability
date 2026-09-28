@@ -3,7 +3,18 @@ use crate::constants::{
     MAX_CONTAINER_DEPTH, MAX_DIAGNOSTIC_FIELD_BYTES, MAX_QUERY_LIMIT, MAX_REMEDIATION_STEPS,
     MAX_TIMEOUT_MS, MAX_WIRE_PAYLOAD_BYTES,
 };
-use crate::*;
+use crate::error_codes;
+use crate::{
+    AdmissionDto, AggregationTemporalityDto, AvailabilityDto, CanonicalDiagnosticDto,
+    CanonicalFailureDto, CanonicalWireEnvelope, ChangeDiagnosticDto, Diagnostic,
+    DiagnosticSummaryDto, Failure, HistogramPointDto, LevelChangeDto, LevelChangeSourceDto,
+    LevelDto, LevelFilterDto, LevelRequestDto, LevelStateDto, LogEventDto, LogHealthDto,
+    LogOrderDto, LogQueryDto, LogSnapshotDto, LoggingHealthDto, MaintenanceHealthDto,
+    MetricRecordDto, MetricValueDto, PathDto, ProcessIdentityDto, QueryHealthDto, QueryStateDto,
+    RemediationDto, SinkHealthDto, SpanEventDto, SpanKindDto, SpanLinkDto, SpanRecordDto,
+    SpanSignalDto, SpanStatusDto, StateTransitionDto, StoredDiagnosticDto, StoredEventDto,
+    TraceContextDto, TraceContextV2Dto, ValueDto, WireEnvelope, WorkerStateDto,
+};
 use sc_observability_types as core;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
@@ -659,16 +670,13 @@ pub fn from_logging_health(v: core::LoggingHealthReport) -> LoggingHealthDto {
     }
 }
 /// Projects an independent core logger without inventing bridge state.
-pub fn from_core_health(
-    value: core::LoggingHealthReport,
-    level: core::LevelState,
-) -> Result<LogHealthDto, Failure> {
-    Ok(LogHealthDto {
+pub fn from_core_health(value: core::LoggingHealthReport, level: core::LevelState) -> LogHealthDto {
+    LogHealthDto {
         schema_version: 1,
         logging: from_logging_health(value),
         bridge: None,
         level_state: level.into(),
-    })
+    }
 }
 /// Preserves the committed level change and diagnostic admission outcome.
 pub fn from_level_change(value: core::LevelChange) -> Result<LevelChangeDto, Failure> {
@@ -941,18 +949,15 @@ fn timeout_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureD
         operation: "lifecycle".into(),
     }
 }
-fn unknown_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    CanonicalFailureDto::UnknownRemote {
-        diagnostic,
-        remote_kind: "unknown_canonical_cause".into(),
-    }
+fn unexpected_local_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    CanonicalFailureDto::Internal { diagnostic }
 }
 canonical_projection!(
     IdentityError,
     value,
     match value {
         core::v2::IdentityError::Process { .. } => validation_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -961,7 +966,7 @@ canonical_projection!(
     match value {
         core::v2::InitError::Configuration { .. } => validation_failure,
         core::v2::InitError::Runtime { .. } => unavailable_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -970,7 +975,7 @@ canonical_projection!(
     match value {
         core::v2::EventError::Validation { .. } => validation_failure,
         core::v2::EventError::Routing { .. } => unavailable_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -978,7 +983,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::FlushError::Drain { context } => drain_category(context),
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -987,7 +992,7 @@ canonical_projection!(
     match value {
         core::v2::ShutdownError::Timeout { .. } => timeout_failure,
         core::v2::ShutdownError::Drain { context } => drain_category(context),
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -995,7 +1000,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::ProjectionError::Projection { .. } => validation_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -1003,7 +1008,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::SubscriberError::Subscriber { .. } => unavailable_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -1011,7 +1016,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::LogSinkError::Write { .. } | core::v2::LogSinkError::Flush { .. } => io_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -1021,7 +1026,7 @@ canonical_projection!(
         core::v2::MetricModelError::InvalidHistogram { .. }
         | core::v2::MetricModelError::InvalidTemporality { .. }
         | core::v2::MetricModelError::InvalidInterval { .. } => validation_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -1042,7 +1047,7 @@ canonical_projection!(
         core::v2::ConfigFailure::UnsupportedBackend { .. } => validation_failure,
         core::v2::ConfigFailure::UnsupportedProtocol { .. } => validation_failure,
         core::v2::ConfigFailure::TokioRuntimeRequired { .. } => validation_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 fn export_category(
@@ -1068,7 +1073,7 @@ fn export_category(
         core::v2::ExportError::NonRetryableHttpStatus { .. } => io_failure,
         core::v2::ExportError::RetryAttemptsExhausted { .. } => io_failure,
         core::v2::ExportError::TerminalExportFailure { .. } => io_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 }
 fn drain_category(
@@ -1080,6 +1085,36 @@ fn drain_category(
 }
 canonical_projection!(ExportError, value, export_category(value));
 
+#[cfg(test)]
+mod export_projection_tests {
+    use super::*;
+
+    #[test]
+    fn queue_full_projects_to_queue_full_with_its_diagnostic() {
+        let error = core::v2::ExportError::QueueFull {
+            context: Box::new(core::ErrorContext::new(
+                core::error_codes::otlp::OTLP_QUEUE_FULL,
+                "queue full in unit regression",
+                core::Remediation::recoverable("retry later", ["inspect health"]),
+            )),
+        };
+
+        let projected = CanonicalFailureDto::try_from(&error).expect("conversion succeeds");
+        assert!(matches!(projected, CanonicalFailureDto::QueueFull { .. }));
+        let diagnostic = projected.diagnostic();
+        assert_eq!(diagnostic.diagnostic.code, "OTLP_QUEUE_FULL");
+        assert_eq!(
+            diagnostic.diagnostic.message,
+            "queue full in unit regression"
+        );
+        assert!(matches!(
+            &diagnostic.diagnostic.remediation,
+            RemediationDto::Recoverable { steps }
+                if steps.iter().any(|step| step == "inspect health")
+        ));
+    }
+}
+
 impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
     type Error = Failure;
     fn try_from(value: &core::v2::TelemetryError) -> Result<Self, Self::Error> {
@@ -1088,7 +1123,9 @@ impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
             core::v2::TelemetryError::Shutdown { context } => Ok(Self::Closed {
                 diagnostic: Box::new(from_canonical_diagnostic(context.diagnostic())?),
             }),
-            _ => Err(invalid_input("error", "unknown telemetry failure variant")),
+            _ => Ok(unexpected_local_failure(Box::new(
+                from_canonical_diagnostic(value.diagnostic())?,
+            ))),
         }
     }
 }

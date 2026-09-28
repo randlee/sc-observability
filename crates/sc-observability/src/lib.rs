@@ -975,26 +975,19 @@ mod tests {
 
     #[cfg(unix)]
     fn recreate_with_distinct_unix_identity(active_path: &Path) {
+        // Keep the old inode allocated while installing the replacement. This
+        // makes a distinct identity deterministic instead of depending on the
+        // filesystem's inode-reuse timing after unlink.
+        let retained_previous = fs::File::open(active_path).expect("open active log");
         let previous_identity = unix_file_identity(active_path);
         fs::remove_file(active_path).expect("remove active log");
-
-        let active_name = active_path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .expect("active log file name");
-
-        for attempt in 0..256 {
-            let replacement =
-                active_path.with_file_name(format!("{active_name}.replacement-{attempt}"));
-            fs::File::create(&replacement).expect("create replacement file");
-            if unix_file_identity(&replacement) != previous_identity {
-                fs::rename(&replacement, active_path).expect("install replacement active log");
-                return;
-            }
-            fs::remove_file(&replacement).expect("remove reused replacement inode");
-        }
-
-        panic!("failed to create replacement active log with distinct Unix identity");
+        fs::File::create(active_path).expect("recreate active log");
+        assert_ne!(
+            unix_file_identity(active_path),
+            previous_identity,
+            "retained old inode makes replacement identity distinct"
+        );
+        drop(retained_previous);
     }
 
     #[cfg(not(unix))]
@@ -1043,6 +1036,27 @@ mod tests {
                 ("secret".to_string(), json!("raw")),
             ]),
         }
+    }
+
+    #[test]
+    fn settings_json_parse_failure_preserves_serde_source() {
+        let snapshot = EnvSnapshot::from_pairs([(
+            std::ffi::OsString::from("SC_LOG_ROTATION_MAX_FILES"),
+            std::ffi::OsString::from("not-json"),
+        )]);
+        let error = LogSettings::from_env(
+            &snapshot,
+            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+        )
+        .expect_err("invalid JSON must fail");
+
+        assert_eq!(error.code(), error_codes::LOG_INVALID_VALUE);
+        assert!(
+            std::error::Error::source(&error)
+                .expect("serde parse source must be preserved")
+                .to_string()
+                .contains("expected")
+        );
     }
 
     fn log_event_with_request(

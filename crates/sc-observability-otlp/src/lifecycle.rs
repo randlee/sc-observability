@@ -133,18 +133,28 @@ struct CoreState {
     dropped_by_signal: [u64; 3],
     degraded: bool,
     last_error: Option<DiagnosticSummary>,
+    // Failures completed outside an active barrier belong to the next window.
+    // Each window needs only one representative error, not a history of admissions.
+    pending_failure: Option<ErrorSnapshot>,
     flush: Option<Arc<Operation>>,
     shutdown: Option<Arc<Operation>>,
     barrier_wakers: Vec<Waker>,
 }
 
 struct LifecycleInner {
-    exporters: ExporterSet,
+    /// The terminal backend runs only after the core's admission barrier.
+    ///
+    /// Signal adapters deliberately are not retained here: they themselves
+    /// hold this core in order to admit work. Retaining the full exporter set
+    /// would create a lifecycle recursion during flush/shutdown.
+    terminal_backend: Arc<dyn crate::contracts::ExporterLifecycle>,
     queue_capacity: usize,
     queue_byte_capacity: usize,
     flush_timeout: Duration,
     shutdown_timeout: Duration,
     state: Mutex<CoreState>,
+    #[cfg(test)]
+    barrier_registration_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 /// Shared lifecycle core consumed by backend adapters and the future facade.
@@ -161,10 +171,24 @@ impl LifecycleCore {
         exporters: ExporterSet,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
-        exporters.lifecycle.blocking_preflight()?;
+        Self::from_backend(exporters.lifecycle, bounds)
+    }
+
+    /// Constructs the admission/barrier core around the terminal backend.
+    ///
+    /// Backend adapters are intentionally constructed *after* this method
+    /// returns and retain a clone of the resulting core. This preserves one
+    /// canonical admission/accounting domain without requiring a second core
+    /// or making a terminal lifecycle call recursively re-enter its own
+    /// barrier.
+    pub(crate) fn from_backend(
+        terminal_backend: Arc<dyn crate::contracts::ExporterLifecycle>,
+        bounds: &ValidatedTransportBounds,
+    ) -> Result<Self, ExportError> {
+        terminal_backend.blocking_preflight()?;
         Ok(Self {
             inner: Arc::new(LifecycleInner {
-                exporters,
+                terminal_backend,
                 queue_capacity: bounds.queue_capacity().get(),
                 queue_byte_capacity: bounds.queue_byte_capacity().get(),
                 flush_timeout: bounds.lifecycle().flush().get(),
@@ -178,12 +202,24 @@ impl LifecycleCore {
                     dropped_by_signal: [0; 3],
                     degraded: false,
                     last_error: None,
+                    pending_failure: None,
                     flush: None,
                     shutdown: None,
                     barrier_wakers: Vec::new(),
                 }),
+                #[cfg(test)]
+                barrier_registration_hook: Mutex::new(None),
             }),
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_barrier_registration_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *self
+            .inner
+            .barrier_registration_hook
+            .lock()
+            .expect("barrier registration hook lock") = Some(Arc::new(hook));
     }
 
     /// Admits a payload while holding the admission lock only long enough to
@@ -242,18 +278,23 @@ impl LifecycleCore {
     }
 
     /// Starts or joins the ordered flush barrier.
+    ///
+    /// A new barrier consumes previously unreported admission failures. All
+    /// waiters on that barrier receive the same result; later successful
+    /// windows can succeed without erasing cumulative health diagnostics.
     pub(crate) fn flush_async(&self) -> LifecycleWaiter {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
         if let Some(operation) = state.flush.as_ref().filter(|op| !op.is_complete()) {
             return LifecycleWaiter::new(Arc::clone(operation));
         }
-        let cutoff = state.next_sequence.saturating_sub(1);
+        let cutoff = state.next_sequence;
         let operation = Arc::new(Operation::new(
             Arc::clone(&self.inner),
             OperationKind::Flush,
             cutoff,
             self.inner.flush_timeout,
             None,
+            state.pending_failure.take(),
         ));
         state.flush = Some(Arc::clone(&operation));
         LifecycleWaiter::new(operation)
@@ -271,7 +312,7 @@ impl LifecycleCore {
             return LifecycleWaiter::new(Arc::clone(operation));
         }
         state.phase = LifecycleState::Closing;
-        let cutoff = state.next_sequence.saturating_sub(1);
+        let cutoff = state.next_sequence;
         let precondition = state.flush.clone().filter(|op| !op.is_complete());
         let operation = Arc::new(Operation::new(
             Arc::clone(&self.inner),
@@ -279,6 +320,7 @@ impl LifecycleCore {
             cutoff,
             self.inner.shutdown_timeout,
             precondition,
+            state.pending_failure.take(),
         ));
         state.shutdown = Some(Arc::clone(&operation));
         LifecycleWaiter::new(operation)
@@ -322,6 +364,18 @@ impl LifecycleInner {
         state.admitted_bytes = state.admitted_bytes.saturating_sub(bytes);
         if let Err(error) = result {
             Self::record_drop(&mut state, signal, Some(&error));
+            let snapshot = ErrorSnapshot::from_error(&error);
+            // A shutdown can overlap the current flush; both must retain an
+            // in-scope failure. An out-of-scope completion cannot overwrite it.
+            let mut captured = false;
+            for operation in [&state.flush, &state.shutdown].into_iter().flatten() {
+                if sequence < operation.cutoff {
+                    captured |= operation.record_failure(&snapshot);
+                }
+            }
+            if !captured {
+                state.pending_failure.get_or_insert(snapshot);
+            }
         }
         let waiters = std::mem::take(&mut state.barrier_wakers);
         drop(state);
@@ -340,10 +394,13 @@ enum OperationKind {
 struct Operation {
     inner: Arc<LifecycleInner>,
     kind: OperationKind,
+    // Exclusive admission bound: an empty window must exclude sequence zero.
     cutoff: u64,
     deadline: Instant,
     precondition: Option<Arc<Operation>>,
     state: Mutex<OperationState>,
+    // Shared by admission completion and all waiters, retained across backend polls.
+    failure: Mutex<Option<ErrorSnapshot>>,
     waiters: Mutex<Vec<Waker>>,
     timer_started: AtomicBool,
     polling: AtomicBool,
@@ -386,6 +443,7 @@ impl Operation {
         cutoff: u64,
         timeout: Duration,
         precondition: Option<Arc<Operation>>,
+        failure: Option<ErrorSnapshot>,
     ) -> Self {
         Self {
             inner,
@@ -394,6 +452,7 @@ impl Operation {
             deadline: Instant::now() + timeout,
             precondition,
             state: Mutex::new(OperationState::Pending),
+            failure: Mutex::new(failure),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(false),
             polling: AtomicBool::new(false),
@@ -409,10 +468,27 @@ impl Operation {
             deadline: Instant::now(),
             precondition: None,
             state: Mutex::new(OperationState::Complete(Arc::new(completion))),
+            failure: Mutex::new(None),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(true),
             polling: AtomicBool::new(false),
         }
+    }
+
+    /// Records an error only while the operation can still report it.
+    ///
+    /// Lock order is core state, operation state, then failure. No operation
+    /// state guard is held while acquiring the core lock in `finish`.
+    fn record_failure(&self, error: &ErrorSnapshot) -> bool {
+        let state = self.state.lock().expect("operation state lock");
+        if matches!(*state, OperationState::Complete(_)) {
+            return false;
+        }
+        self.failure
+            .lock()
+            .expect("operation failure lock")
+            .get_or_insert_with(|| error.clone());
+        true
     }
 
     fn is_complete(&self) -> bool {
@@ -446,26 +522,45 @@ impl Operation {
             return Poll::Ready(self.completed_result().expect("operation completed"));
         }
 
-        if let Some(precondition) = &self.precondition
-            && precondition.poll(context).is_pending()
-        {
-            self.register_waiter(context.waker());
-            return Poll::Pending;
+        if let Some(precondition) = &self.precondition {
+            match precondition.poll(context) {
+                Poll::Pending => {
+                    self.register_waiter(context.waker());
+                    return Poll::Pending;
+                }
+                Poll::Ready(Err(error)) => {
+                    self.record_failure(&ErrorSnapshot::from_error(&error));
+                }
+                Poll::Ready(Ok(())) => {}
+            }
         }
 
-        {
-            let state = self.inner.state.lock().expect("lifecycle state lock");
-            if state.active.range(..=self.cutoff).next().is_some() {
-                drop(state);
-                self.inner
-                    .state
+        let waiting_for_admissions = {
+            let mut state = self.inner.state.lock().expect("lifecycle state lock");
+            if state.active.range(..self.cutoff).next().is_some() {
+                #[cfg(test)]
+                if let Some(hook) = self
+                    .inner
+                    .barrier_registration_hook
                     .lock()
-                    .expect("lifecycle state lock")
-                    .barrier_wakers
-                    .push(context.waker().clone());
-                self.register_waiter(context.waker());
-                return Poll::Pending;
+                    .expect("barrier registration hook lock")
+                    .take()
+                {
+                    hook();
+                }
+                // Register while holding the same mutex used to observe active
+                // admissions. Otherwise the last admission can complete after
+                // the observation but before registration, leaving this barrier
+                // asleep until its deadline.
+                state.barrier_wakers.push(context.waker().clone());
+                true
+            } else {
+                false
             }
+        };
+        if waiting_for_admissions {
+            self.register_waiter(context.waker());
+            return Poll::Pending;
         }
 
         let mut future = {
@@ -473,8 +568,8 @@ impl Operation {
             match std::mem::replace(&mut *operation_state, OperationState::Pending) {
                 OperationState::Pending => {
                     let future = match self.kind {
-                        OperationKind::Flush => self.inner.exporters.lifecycle.flush_async(),
-                        OperationKind::Shutdown => self.inner.exporters.lifecycle.shutdown_async(),
+                        OperationKind::Flush => self.inner.terminal_backend.flush_async(),
+                        OperationKind::Shutdown => self.inner.terminal_backend.shutdown_async(),
                     };
                     *operation_state = OperationState::Running(future);
                     match std::mem::replace(&mut *operation_state, OperationState::Pending) {
@@ -505,6 +600,15 @@ impl Operation {
                 Poll::Pending
             }
             Poll::Ready(result) => {
+                let result = match result {
+                    Ok(()) => self
+                        .failure
+                        .lock()
+                        .expect("operation failure lock")
+                        .as_ref()
+                        .map_or(Ok(()), |error| Err(error.to_error())),
+                    Err(error) => Err(error),
+                };
                 self.finish(result);
                 Poll::Ready(self.completed_result().expect("operation completed"))
             }

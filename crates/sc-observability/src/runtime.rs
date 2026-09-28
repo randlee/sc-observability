@@ -241,9 +241,10 @@ where
 {
     let encoded = serde_json::to_string(value).expect("str serializes");
     serde_json::from_str(&encoded).map_err(|error| {
-        LogSettingsError::invalid_value(format!(
-            "invalid logging environment value for {key}: {error}"
-        ))
+        LogSettingsError::invalid_value_with_source(
+            format!("invalid logging environment value for {key}"),
+            error,
+        )
     })
 }
 
@@ -252,9 +253,10 @@ where
     T: serde::de::DeserializeOwned,
 {
     serde_json::from_str(value).map_err(|error| {
-        LogSettingsError::invalid_value(format!(
-            "invalid logging environment value for {key}: {error}"
-        ))
+        LogSettingsError::invalid_value_with_source(
+            format!("invalid logging environment value for {key}"),
+            error,
+        )
     })
 }
 

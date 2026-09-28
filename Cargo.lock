@@ -471,6 +471,7 @@ dependencies = [
  "http",
  "http-body",
  "httparse",
+ "httpdate",
  "itoa",
  "pin-project-lite",
  "smallvec",
@@ -901,6 +902,20 @@ dependencies = [
 [[package]]
 name = "otlp-legacy-example"
 version = "2.0.0"
+dependencies = [
+ "sc-observability-otlp",
+ "sc-observability-types",
+]
+
+[[package]]
+name = "otlp-sdk-example"
+version = "2.0.0"
+dependencies = [
+ "sc-observability-otlp",
+ "sc-observability-types",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "parking_lot"
@@ -1560,6 +1575,7 @@ dependencies = [
  "httpdate",
  "opentelemetry",
  "opentelemetry-otlp",
+ "opentelemetry-proto",
  "opentelemetry_sdk",
  "reqwest 0.12.28",
  "sc-observability",
@@ -1568,6 +1584,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "tonic",
 ]
 
 [[package]]
@@ -2062,6 +2079,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bytes",
+ "h2",
  "http",
  "http-body",
  "http-body-util",
@@ -2070,6 +2088,7 @@ dependencies = [
  "hyper-util",
  "percent-encoding",
  "pin-project",
+ "socket2",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",

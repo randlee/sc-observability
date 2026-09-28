@@ -296,6 +296,10 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
     let host = logger();
     let mut first =
         attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("first attach");
+    assert!(matches!(
+        attach_logger(Arc::clone(&host), options(Arc::new(Admit))),
+        Err(DetachError::ForeignLoggerInstalled { .. })
+    ));
     let stale = first.control();
     assert!(matches!(
         sc_observability_log::init(

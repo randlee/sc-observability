@@ -204,8 +204,7 @@ impl Coordinator {
             Backend::Core { logger, stamp, .. } => {
                 let mut stamp = stamp.clone();
                 stamp.timestamp = native::Timestamp::now_utc();
-                let event = conversion::event(event, stamp, origin)
-                    .map_err(|error| conversion::canonical(&error, conversion::Kind::Validation))?;
+                let event = conversion::event(event, stamp, origin)?;
                 let logger = logger.load_full().ok_or_else(error::closed)?;
                 logger
                     .try_log_with_outcome_typed(event)
@@ -222,10 +221,7 @@ impl Coordinator {
                     timestamp: native::Timestamp::now_utc(),
                     identity: native::ProcessIdentity::default(),
                 };
-                let event =
-                    conversion::bridge_event(conversion::event(event, stamp, origin).map_err(
-                        |error| conversion::canonical(&error, conversion::Kind::Validation),
-                    )?);
+                let event = conversion::bridge_event(conversion::event(event, stamp, origin)?);
                 control
                     .try_log(event)
                     .map(conversion::admission)
@@ -241,11 +237,11 @@ impl Coordinator {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &self.backend {
                 Backend::Core { logger, .. } => {
                     let logger = logger.load_full().ok_or_else(error::closed)?;
-                    dto::from_core_health(logger.health(), logger.level_state())
+                    Ok(dto::from_core_health(logger.health(), logger.level_state()))
                 }
-                Backend::Bridge(control) => {
-                    conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)
-                }
+                Backend::Bridge(control) => Ok(conversion::bridge_health(
+                    control.health().map_err(conversion::bridge_control)?,
+                )),
             }))
             .unwrap_or_else(|_| Err(error::internal("native health panicked")));
         if let Ok(health) = &result {
@@ -418,11 +414,14 @@ impl Coordinator {
                         error::internal("active native reference survived admission drain")
                     })?;
                     let stopped = logger.shutdown();
-                    dto::from_core_health(stopped.health(), stopped.level_state())
+                    Ok(dto::from_core_health(
+                        stopped.health(),
+                        stopped.level_state(),
+                    ))
                 }
-                Backend::Bridge(control) => {
-                    conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)
-                }
+                Backend::Bridge(control) => Ok(conversion::bridge_health(
+                    control.health().map_err(conversion::bridge_control)?,
+                )),
             }))
             .unwrap_or_else(|_| {
                 let error = error::shutdown_drain("native shutdown panicked");
@@ -430,6 +429,8 @@ impl Coordinator {
             });
         let result = if self.failed.load(Ordering::SeqCst) {
             let error = error::shutdown_drain("helper failure prevents confirmed shutdown");
+            #[cfg(test)]
+            self.record_shutdown_source_chain(&error);
             Err(conversion::canonical(&error, conversion::Kind::Internal))
         } else {
             result
@@ -439,6 +440,16 @@ impl Coordinator {
         }
         self.shutdown.complete(result, || {});
         self.dispatcher.close();
+    }
+    #[cfg(test)]
+    fn record_shutdown_source_chain(&self, error: &native::v2::ShutdownError) {
+        let mut chain = Vec::new();
+        let mut source = std::error::Error::source(error);
+        while let Some(cause) = source {
+            chain.push(cause.to_string());
+            source = std::error::Error::source(cause);
+        }
+        *lock(&self.hooks.shutdown_source_chain) = Some(chain);
     }
     pub(crate) fn level(
         &self,
@@ -531,7 +542,7 @@ fn core_from_factory(
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let (stamp, logger, level) = build()?;
-        let health = dto::from_core_health(logger.health(), logger.level_state())?;
+        let health = dto::from_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: ArcSwapOption::from(Some(Arc::new(logger))),
@@ -547,7 +558,7 @@ pub(crate) fn bridge(
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let health =
-            conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)?;
+            conversion::bridge_health(control.health().map_err(conversion::bridge_control)?);
         Ok((Backend::Bridge(control), health))
     })
 }
@@ -559,4 +570,5 @@ pub(crate) struct TestHooks {
     pub(crate) query: Mutex<Option<Arc<crate::tests::Gate>>>,
     pub(crate) flush: Mutex<Option<Arc<crate::tests::Gate>>>,
     pub(crate) crash: AtomicBool,
+    pub(crate) shutdown_source_chain: Mutex<Option<Vec<String>>>,
 }

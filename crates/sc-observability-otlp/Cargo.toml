@@ -11,7 +11,10 @@ description = "Standalone OTLP export adapter for sc-observability."
 
 [features]
 default = []
-otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:tokio"]
+otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic"]
+# Unstable, non-default support for the D.7 external consumer fixture. This
+# deliberately does not activate the production Telemetry factory (D.18).
+sdk-test-support = ["otlp-sdk"]
 legacy-http-json = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:tokio"]
 
 [dependencies]
@@ -22,6 +25,8 @@ sc-observability-types.workspace = true
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
+opentelemetry-proto = { workspace = true, optional = true }
+tonic = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 httpdate = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true }

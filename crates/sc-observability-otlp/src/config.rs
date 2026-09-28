@@ -723,7 +723,7 @@ impl QueueByteCapacity {
 pub(crate) struct BoundedPercent(u8);
 
 #[cfg_attr(
-    not(test),
+    all(not(test), not(feature = "legacy-http-json")),
     expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl BoundedPercent {
@@ -759,10 +759,66 @@ pub(crate) struct ValidatedTransportBounds {
     backend: BackendTransportBounds,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
+/// Connection values admitted by the same validation path as transport
+/// bounds. Backend constructors consume this view instead of consulting
+/// ambient `OTEL_*` configuration.
+#[derive(Debug, Clone)]
+pub(crate) struct ValidatedBackendConnection {
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(
+            dead_code,
+            reason = "D.21 connection endpoint is consumed by enabled backends"
+        )
+    )]
+    endpoint: OtlpEndpoint,
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(
+            dead_code,
+            reason = "D.21 connection auth is consumed by enabled backends"
+        )
+    )]
+    auth_header: Option<AuthHeader>,
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(
+            dead_code,
+            reason = "D.21 connection CA is consumed by enabled backends"
+        )
+    )]
+    ca_file: Option<PathBuf>,
+}
+
+impl ValidatedBackendConnection {
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(
+            dead_code,
+            reason = "D.21 endpoint view is consumed by enabled backends"
+        )
+    )]
+    pub(crate) fn endpoint(&self) -> &OtlpEndpoint {
+        &self.endpoint
+    }
+
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(dead_code, reason = "D.21 auth view is consumed by enabled backends")
+    )]
+    pub(crate) fn auth_header(&self) -> Option<&AuthHeader> {
+        self.auth_header.as_ref()
+    }
+
+    #[cfg_attr(
+        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        allow(dead_code, reason = "D.21 CA view is consumed by enabled backends")
+    )]
+    pub(crate) fn ca_file(&self) -> Option<&PathBuf> {
+        self.ca_file.as_ref()
+    }
+}
+
 impl ValidatedTransportBounds {
     pub(crate) const fn protocol(&self) -> OtlpProtocol {
         self.protocol
@@ -773,6 +829,16 @@ impl ValidatedTransportBounds {
     pub(crate) const fn queue_byte_capacity(&self) -> QueueByteCapacity {
         self.queue_byte_capacity
     }
+    #[cfg_attr(
+        all(
+            not(test),
+            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
+        ),
+        allow(
+            dead_code,
+            reason = "D.21 request timeout is consumed by enabled backends"
+        )
+    )]
     pub(crate) const fn request_timeout(&self) -> PositiveDuration {
         self.request_timeout
     }
@@ -786,8 +852,11 @@ impl ValidatedTransportBounds {
 
 /// Backend-specific state; SDK and disabled transports cannot carry retry policy.
 #[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    all(not(test), not(feature = "legacy-http-json")),
+    allow(
+        dead_code,
+        reason = "D.21 legacy retry state is consumed by the legacy backend"
+    )
 )]
 #[derive(Debug)]
 pub(crate) enum BackendTransportBounds {
@@ -808,8 +877,8 @@ pub(crate) struct RetryPolicy {
 }
 
 #[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    not(feature = "legacy-http-json"),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl RetryPolicy {
     pub(crate) const fn max_retries(&self) -> u32 {
@@ -962,6 +1031,30 @@ pub(crate) fn validated_transport_bounds(
             shutdown: lifecycle_shutdown_timeout,
         },
         backend,
+    })
+}
+
+/// Returns the connection values only after the transport's ordinary ordered
+/// validation has succeeded. Enabled factories need an explicit endpoint and
+/// must never reconstruct it from environment defaults.
+#[allow(
+    dead_code,
+    reason = "D.18 consumes the validated SDK connection view during facade composition"
+)]
+pub(crate) fn validated_backend_connection(
+    config: &OtelConfig,
+) -> Result<ValidatedBackendConnection, ConfigFailure> {
+    let _ = validated_transport_bounds(config)?;
+    let endpoint = config.endpoint.clone().ok_or_else(|| {
+        invalid_endpoint(
+            "enabled telemetry requires an endpoint",
+            "set OtelConfig.endpoint before constructing the backend",
+        )
+    })?;
+    Ok(ValidatedBackendConnection {
+        endpoint,
+        auth_header: config.auth_header.clone(),
+        ca_file: config.ca_file.clone(),
     })
 }
 

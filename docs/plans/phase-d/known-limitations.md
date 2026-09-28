@@ -31,3 +31,14 @@ cargo test --locked -p sc-observability-dto --test canonical_contracts \
 A future change must define and implement attribute projection in both directions,
 including native signed/unsigned integer distinctions, before enabling that test.
 No converter redesign is required by this Phase D disposition.
+
+## Future non-exhaustive native error variants
+
+`sc-observability-types` exposes the native error enums as `#[non_exhaustive]`.
+At this revision, all 12 `ExportError` variants have explicit DTO mappings, so
+downstream or integration tests cannot safely construct a future variant to
+exercise the local wildcard-to-`Internal` fallback. The fallback remains in the
+production match arms for variants added in a later revision; executable
+coverage for such a variant must be added with that variant's producer. This
+limitation does not affect decoded unknown wire discriminants, which retain the
+separate `UnknownRemote` result and are covered by the existing contract test.

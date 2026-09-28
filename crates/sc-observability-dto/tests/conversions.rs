@@ -217,8 +217,9 @@ fn malformed_unknown_and_oversized_remote_errors_differ() {
 #[test]
 fn paths_keep_absence_and_non_unicode() {
     assert_eq!(from_path(None), PathDto::Absent);
-    assert!(to_path("", std::path::Path::new("/tmp")).is_err());
-    assert!(to_path("a\0b", std::path::Path::new("/tmp")).is_err());
+    let temp_dir = std::env::temp_dir();
+    assert!(to_path("", &temp_dir).is_err());
+    assert!(to_path("a\0b", &temp_dir).is_err());
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStringExt;
@@ -370,15 +371,16 @@ fn complete_health_projection_and_unsigned_wire_counters() {
         }),
         last_error: Some(summary),
     };
-    let dto = from_core_health(
+    let project_health: fn(core::LoggingHealthReport, core::LevelState) -> LogHealthDto =
+        from_core_health;
+    let dto = project_health(
         native,
         core::LevelState {
             configured_level: core::LevelFilter::Info,
             effective_level: core::LevelFilter::Debug,
             revision: u64::MAX,
         },
-    )
-    .unwrap();
+    );
     let mut value = serde_json::to_value(&dto).unwrap();
     assert_eq!(value["logging"].as_object().unwrap().len(), 14);
     assert_eq!(

@@ -6,59 +6,30 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use sc_observability_types::LogEvent;
-use sc_observability_types::v2::{
-    Attributes, ExportError, MetricRecord, SpanEnded, SpanEvent, SpanRecord, TraceFlags,
+#[cfg_attr(
+    not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+    allow(
+        unused_imports,
+        reason = "D.21 contracts are consumed by enabled backends"
+    )
+)]
+pub(crate) use sc_observability_types::otlp::{
+    OtlpCompleteSpan as CompleteSpan, OtlpInstrumentationScope as InstrumentationScope,
+    OtlpLogRecord as LogRecord, OtlpRecord as ExportRecord, OtlpResource as Resource,
 };
-
-/// Resource identity and schema retained separately from signal attributes.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct Resource {
-    pub(crate) attributes: Attributes,
-    pub(crate) schema_url: Option<String>,
-}
-
-/// Instrumentation scope identity and attributes shared by each exported record.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct InstrumentationScope {
-    pub(crate) name: String,
-    pub(crate) version: Option<String>,
-    pub(crate) schema_url: Option<String>,
-    pub(crate) attributes: Attributes,
-}
-
-/// Neutral signal plus its lossless resource and instrumentation context.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ExportRecord<T> {
-    pub(crate) resource: Resource,
-    pub(crate) scope: InstrumentationScope,
-    pub(crate) record: T,
-}
-
-/// Existing neutral log payload enriched with v2 flags and typed attributes.
-/// `trace_flags` describes `event.trace`; it never invents a trace when absent.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct LogRecord {
-    pub(crate) event: LogEvent,
-    pub(crate) trace_flags: TraceFlags,
-    pub(crate) attributes: Attributes,
-}
-
-/// Completed v2 span and its ordered events; started spans cannot be exported.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct CompleteSpan {
-    pub(crate) record: SpanRecord<SpanEnded>,
-    pub(crate) events: Vec<SpanEvent>,
-}
+use sc_observability_types::v2::{ExportError, MetricRecord};
 
 /// Object-safe asynchronous lifecycle result used by both backend adapters.
 pub(crate) type LifecycleFuture =
     Pin<Box<dyn Future<Output = Result<(), ExportError>> + Send + 'static>>;
 
 /// Object-safe lifecycle operations shared by exporter backends.
-#[expect(
-    dead_code,
-    reason = "D.21 stages this private contract before D.6 supplies its lifecycle implementation"
+#[cfg_attr(
+    not(all(test, feature = "legacy-http-json")),
+    expect(
+        dead_code,
+        reason = "blocking lifecycle methods are currently exercised only by legacy backend tests"
+    )
 )]
 pub(crate) trait ExporterLifecycle: Send + Sync {
     /// Performs backend checks that are safe only outside an async lifecycle.

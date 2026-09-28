@@ -1,3 +1,4 @@
+use crate::constants::{MAX_OBSERVATION_TIMEOUT, MAX_OBSERVATION_TIMEOUT_MS};
 use sc_observability_dto::{Failure, boundary_diagnostic, error_codes as codes};
 use sc_observability_types::{self as native, ErrorCode, ErrorContext, Remediation};
 use std::time::Duration;
@@ -52,10 +53,6 @@ fn context(
     remediation: Remediation,
 ) -> Box<ErrorContext> {
     Box::new(ErrorContext::new(code, message, remediation))
-}
-
-pub(crate) fn event_validation(context: Box<ErrorContext>) -> native::v2::EventError {
-    native::v2::EventError::Validation { context }
 }
 
 pub(crate) fn init_configuration_code(
@@ -178,10 +175,10 @@ pub(crate) fn observer_timeout(kind: OperationKind) -> Failure {
 }
 
 pub(crate) fn duration(value: Duration) -> Result<(), Failure> {
-    if value > Duration::from_secs(60) || !value.subsec_nanos().is_multiple_of(1_000_000) {
+    if value > MAX_OBSERVATION_TIMEOUT || !value.subsec_nanos().is_multiple_of(1_000_000) {
         return Err(sc_observability_dto::invalid_input(
             "timeout_ms",
-            "timeout must be integral milliseconds in 0..60000",
+            format!("timeout must be integral milliseconds in 0..{MAX_OBSERVATION_TIMEOUT_MS}"),
         ));
     }
     Ok(())

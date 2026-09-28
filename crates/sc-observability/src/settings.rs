@@ -167,6 +167,28 @@ impl LogSettingsError {
         }
     }
 
+    /// Preserves a parser failure while retaining the stable settings category.
+    pub(crate) fn invalid_value_with_source(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        let cause = source.to_string();
+        Self::InvalidValue {
+            context: Box::new(
+                ErrorContext::new(
+                    error_codes::LOG_INVALID_VALUE,
+                    message,
+                    Remediation::recoverable(
+                        "correct the supplied logging setting",
+                        std::iter::empty::<String>(),
+                    ),
+                )
+                .cause(cause)
+                .source(Box::new(source)),
+            ),
+        }
+    }
+
     pub(crate) fn environment(message: impl Into<String>) -> Self {
         Self::InvalidEnvironment {
             context: Box::new(ErrorContext::new(
