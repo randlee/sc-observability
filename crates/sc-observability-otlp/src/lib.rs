@@ -381,7 +381,7 @@ fn log_record(event: &LogEvent) -> OtlpRecord<OtlpLogRecord> {
 }
 #[allow(dead_code)]
 fn span_record(span: &CompleteSpan) -> Result<OtlpRecord<OtlpCompleteSpan>, ExportError> {
-    let trace = trace_context(&span.record.trace());
+    let trace = trace_context(span.record.trace());
     let mut started = sc_observability_types::v2::SpanRecord::new(
         span.record.timestamp(),
         span.record.service().clone(),
