@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 use crate::config::ValidatedTransportBounds;
 use crate::contracts::{ExporterSet, LifecycleFuture};
 use crate::error_codes;
+use sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED;
 use sc_observability_types::v2::{ExportError, TelemetryError};
 use sc_observability_types::{DiagnosticSummary, ErrorContext, Remediation};
 
@@ -120,8 +121,8 @@ impl Drop for AdmissionPermit {
 }
 
 struct AdmissionMeta {
-    _signal: SignalKind,
-    _bytes: usize,
+    signal: SignalKind,
+    bytes: usize,
 }
 
 struct CoreState {
@@ -256,13 +257,9 @@ impl LifecycleCore {
         state.next_sequence = state.next_sequence.saturating_add(1);
         state.admitted_records += 1;
         state.admitted_bytes += bytes;
-        state.active.insert(
-            sequence,
-            AdmissionMeta {
-                _signal: signal,
-                _bytes: bytes,
-            },
-        );
+        state
+            .active
+            .insert(sequence, AdmissionMeta { signal, bytes });
         drop(state);
 
         Ok(Admitted {
@@ -324,6 +321,43 @@ impl LifecycleCore {
         ));
         state.shutdown = Some(Arc::clone(&operation));
         LifecycleWaiter::new(operation)
+    }
+
+    /// Abandons all admitted work when the final backend handle is dropped.
+    ///
+    /// This is deliberately separate from explicit shutdown: dropping a
+    /// handle cannot await the worker, but it must still close admission and
+    /// publish the same terminal accounting to retained health/barrier
+    /// observers. Admission permits that complete later see their sequence
+    /// removed and therefore cannot count the record twice.
+    pub(crate) fn abandon(&self) {
+        let worker_error = worker_terminated_error();
+        let mut state = self.inner.state.lock().expect("lifecycle state lock");
+        if state.phase == LifecycleState::Shutdown && state.active.is_empty() {
+            return;
+        }
+        state.phase = LifecycleState::Shutdown;
+        let active = std::mem::take(&mut state.active);
+        for (sequence, metadata) in active {
+            state.admitted_records = state.admitted_records.saturating_sub(1);
+            state.admitted_bytes = state.admitted_bytes.saturating_sub(metadata.bytes);
+            LifecycleInner::record_drop(&mut state, metadata.signal, Some(&worker_error));
+            let snapshot = ErrorSnapshot::from_error(&worker_error);
+            let mut captured = false;
+            for operation in [&state.flush, &state.shutdown].into_iter().flatten() {
+                if sequence < operation.cutoff {
+                    captured |= operation.record_failure(&snapshot);
+                }
+            }
+            if !captured {
+                state.pending_failure.get_or_insert(snapshot);
+            }
+        }
+        let waiters = std::mem::take(&mut state.barrier_wakers);
+        drop(state);
+        for waiter in waiters {
+            waiter.wake();
+        }
     }
 
     /// Returns a point-in-time health/accounting snapshot.
@@ -809,6 +843,19 @@ fn terminal_drop_error() -> ExportError {
             "admitted telemetry reached a terminal outcome without completion",
             Remediation::recoverable(
                 "inspect telemetry health and exporter terminal state",
+                std::iter::empty::<String>(),
+            ),
+        )),
+    }
+}
+
+fn worker_terminated_error() -> ExportError {
+    ExportError::WorkerTerminated {
+        context: Box::new(ErrorContext::new(
+            OTLP_WORKER_TERMINATED,
+            "OTLP worker terminated while abandoning admitted telemetry",
+            Remediation::recoverable(
+                "inspect telemetry health and construct a new exporter",
                 std::iter::empty::<String>(),
             ),
         )),

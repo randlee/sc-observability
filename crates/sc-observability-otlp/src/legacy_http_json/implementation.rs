@@ -19,7 +19,7 @@ use std::pin::Pin;
 #[cfg(test)]
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
@@ -111,7 +111,7 @@ pub(crate) struct LegacyHttpJsonConfig {
     retry: RetrySettings,
     jitter_seed: u64,
     #[cfg(test)]
-    retry_delay_observer: Option<SyncSender<Duration>>,
+    retry_delay_observer: Option<Sender<Duration>>,
     #[cfg(test)]
     startup_hooks: Option<Arc<StartupTestHooks>>,
 }
@@ -181,6 +181,7 @@ struct WorkerInner {
     control_tx: SyncSender<ControlCommand>,
     send_lock: Mutex<()>,
     cancel: Arc<AtomicBool>,
+    stop: Arc<AtomicBool>,
     terminated: AtomicBool,
     lifecycle_flush_timeout: Duration,
     lifecycle_shutdown_timeout: Duration,
@@ -189,6 +190,7 @@ struct WorkerInner {
 impl Drop for WorkerInner {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Release);
+        self.stop.store(true, Ordering::Release);
         let _ = self
             .control_tx
             .try_send(ControlCommand::Shutdown { result: None });
@@ -207,6 +209,8 @@ impl Worker {
         let (ready_tx, ready_rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = Arc::clone(&cancel);
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = Arc::clone(&stop);
         let flush_timeout = config.lifecycle_flush_timeout;
         let shutdown_timeout = config.lifecycle_shutdown_timeout;
         let handshake_timeout = config
@@ -219,7 +223,14 @@ impl Worker {
             .spawn(move || {
                 #[cfg(test)]
                 let hooks = config.startup_hooks.clone();
-                worker_main(config, data_rx, control_rx, ready_tx, &worker_cancel);
+                worker_main(
+                    config,
+                    data_rx,
+                    control_rx,
+                    ready_tx,
+                    &worker_cancel,
+                    &worker_stop,
+                );
                 #[cfg(test)]
                 if let Some(hooks) = hooks {
                     // Sent only after worker_main returns and its client drops.
@@ -238,6 +249,7 @@ impl Worker {
                     control_tx,
                     send_lock: Mutex::new(()),
                     cancel,
+                    stop,
                     terminated: AtomicBool::new(false),
                     lifecycle_flush_timeout: flush_timeout,
                     lifecycle_shutdown_timeout: shutdown_timeout,
@@ -303,6 +315,11 @@ impl Worker {
 
     fn cancel(&self) {
         self.inner.cancel.store(true, Ordering::Release);
+    }
+
+    fn stop(&self) {
+        self.inner.cancel.store(true, Ordering::Release);
+        self.inner.stop.store(true, Ordering::Release);
     }
 
     fn flush_blocking(&self) -> Result<(), ExportError> {
@@ -384,6 +401,7 @@ fn worker_main(
     control_rx: Receiver<ControlCommand>,
     ready_tx: mpsc::Sender<Result<(), ExportError>>,
     cancel: &AtomicBool,
+    stop: &AtomicBool,
 ) {
     #[cfg(test)]
     if let Some(hooks) = &config.startup_hooks {
@@ -409,6 +427,12 @@ fn worker_main(
         }
     };
     loop {
+        // Cancellation is the persistent stop intent used by final-handle
+        // abandonment. Do not rely solely on the capacity-one control slot:
+        // it may already contain a flush command.
+        if stop.load(Ordering::Acquire) {
+            return;
+        }
         if let Ok(command) = control_rx.try_recv() {
             drain_data(&client, &config, &data_rx, cancel);
             if handle_control(command, cancel) {
@@ -607,7 +631,7 @@ fn wait_for_retry(config: &LegacyHttpJsonConfig, duration: Duration, cancel: &At
 fn wait_cancelable_with_observer(
     duration: Duration,
     cancel: &AtomicBool,
-    observer: Option<&SyncSender<Duration>>,
+    observer: Option<&Sender<Duration>>,
 ) -> bool {
     #[cfg(not(test))]
     let _ = observer;
@@ -615,7 +639,10 @@ fn wait_cancelable_with_observer(
     {
         notify_retry_wait_started();
         if let Some(sender) = observer {
-            let _ = sender.try_send(duration);
+            // std::sync::mpsc::Sender is unbounded, so send is nonblocking
+            // for this test-only notification and cannot lose a pre-wait
+            // event to a zero-capacity rendezvous race.
+            let _ = sender.send(duration);
         }
     }
 
@@ -703,6 +730,23 @@ impl LegacyBackend {
     }
 }
 
+impl Drop for LegacyBackend {
+    fn drop(&mut self) {
+        // The lifecycle core retains a Worker clone, so WorkerInner::drop is
+        // not the final-handle boundary. Abandon shared admissions first,
+        // then persist cancellation and best-effort wake the worker. The
+        // worker loop also observes cancellation while idle, so a saturated
+        // control slot cannot lose the stop intent.
+        self.lifecycle.abandon();
+        self.worker.stop();
+        let _ = self
+            .worker
+            .inner
+            .control_tx
+            .try_send(ControlCommand::Shutdown { result: None });
+    }
+}
+
 /// Legacy exporter shared by all three OTLP signal families.
 pub(crate) struct OtlpHttpExporter {
     backend: Arc<LegacyBackend>,
@@ -777,7 +821,7 @@ impl OtlpHttpExporter {
         endpoint: String,
         retry: crate::config::LegacyRetryPolicy,
         jitter_seed: u64,
-        retry_delay_observer: Option<SyncSender<Duration>>,
+        retry_delay_observer: Option<Sender<Duration>>,
     ) -> Result<Self, ExportError> {
         let sequence_timeout_ms = retry.retry_sequence_timeout_ms.map_or(3_000, u64::from);
         let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
@@ -828,6 +872,11 @@ impl OtlpHttpExporter {
     ) -> Result<(), ExportError> {
         let endpoint = normalize_signal_endpoint(&self.endpoint, signal);
         self.backend.worker.export(endpoint, payload.to_string())
+    }
+
+    #[cfg(test)]
+    pub(super) fn lifecycle_for_test(&self) -> LifecycleCore {
+        self.backend.lifecycle.clone()
     }
 }
 

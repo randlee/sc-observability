@@ -3,6 +3,7 @@ use super::implementation::{
 };
 use crate::config::LegacyRetryPolicy;
 use crate::contracts::{ExporterLifecycle, LogExporter};
+use crate::lifecycle::LifecycleState;
 use sc_observability_types::{
     ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName,
     TargetCategory, Timestamp,
@@ -519,7 +520,7 @@ fn loopback_retry_after_is_capped_before_the_next_request() {
             stream.write_all(response).expect("write response");
         }
     });
-    let (delay_tx, delay_rx) = mpsc::sync_channel(0);
+    let (delay_tx, delay_rx) = mpsc::channel();
     let exporter = OtlpHttpExporter::for_endpoint_with_retry(
         format!("http://{address}"),
         retry_policy(1, 5, 50, 500, 20, 0),
@@ -559,7 +560,7 @@ fn loopback_fallback_jitter_preserves_an_ordered_retry_sequence() {
             stream.write_all(response).expect("write response");
         }
     });
-    let (delay_tx, delay_rx) = mpsc::sync_channel(0);
+    let (delay_tx, delay_rx) = mpsc::channel();
     let exporter = OtlpHttpExporter::for_endpoint_with_retry(
         format!("http://{address}"),
         retry_policy(2, 20, 40, 500, 100, 50),
@@ -586,6 +587,82 @@ fn loopback_fallback_jitter_preserves_an_ordered_retry_sequence() {
         "unexpected second fallback delay: {second_delay:?}"
     );
     assert_eq!(calls.load(Ordering::Relaxed), 3);
+}
+
+fn drop_without_shutdown_abandons_pending_admission(entered_tokio: bool) {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let request = read_request(&mut stream);
+        assert!(request.contains("\"hello\""));
+        stream
+            .write_all(
+                b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 30\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .expect("write retry response");
+    });
+    let (retry_wait_tx, retry_wait_rx) = mpsc::channel();
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry(
+        format!("http://{address}"),
+        retry_policy(3, 100, 200, 5_000, 4_000, 0),
+        1,
+        Some(retry_wait_tx),
+    )
+    .expect("construct exporter");
+    let lifecycle = exporter.lifecycle_for_test();
+    exporter
+        .export_logs(&[sample_log()])
+        .expect("admit log before final-handle drop");
+    retry_wait_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("request entered retained retry wait");
+
+    let flush = exporter.flush_async();
+    let flush_thread = thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("flush runtime");
+        runtime.block_on(flush)
+    });
+    if entered_tokio {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        runtime.block_on(async {
+            drop(exporter);
+            tokio::task::yield_now().await;
+        });
+    } else {
+        drop(exporter);
+    }
+
+    let outcome = flush_thread.join().expect("join flush observer");
+    assert!(matches!(
+        outcome,
+        Err(sc_observability_types::v2::ExportError::WorkerTerminated { .. })
+    ));
+    let health = lifecycle.health();
+    assert_eq!(health.phase, LifecycleState::Shutdown);
+    assert_eq!(health.admitted_records, 0);
+    assert_eq!(health.admitted_bytes, 0);
+    assert_eq!(health.dropped_by_signal, [1, 0, 0]);
+    // A second retained observation is stable and does not count again.
+    assert_eq!(lifecycle.health().dropped_by_signal, [1, 0, 0]);
+    server.join().expect("join server");
+}
+
+#[test]
+fn drop_without_shutdown_abandons_pending_admission_on_plain_thread() {
+    drop_without_shutdown_abandons_pending_admission(false);
+}
+
+#[test]
+fn drop_without_shutdown_abandons_pending_admission_in_entered_tokio() {
+    drop_without_shutdown_abandons_pending_admission(true);
 }
 
 #[test]
