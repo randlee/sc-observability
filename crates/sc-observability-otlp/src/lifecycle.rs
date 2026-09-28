@@ -133,7 +133,9 @@ struct CoreState {
     dropped_by_signal: [u64; 3],
     degraded: bool,
     last_error: Option<DiagnosticSummary>,
-    terminal_failure: Option<(u64, ErrorSnapshot)>,
+    // Failures completed outside an active barrier belong to the next window.
+    // Each window needs only one representative error, not a history of admissions.
+    pending_failure: Option<ErrorSnapshot>,
     flush: Option<Arc<Operation>>,
     shutdown: Option<Arc<Operation>>,
     barrier_wakers: Vec<Waker>,
@@ -200,7 +202,7 @@ impl LifecycleCore {
                     dropped_by_signal: [0; 3],
                     degraded: false,
                     last_error: None,
-                    terminal_failure: None,
+                    pending_failure: None,
                     flush: None,
                     shutdown: None,
                     barrier_wakers: Vec::new(),
@@ -276,18 +278,23 @@ impl LifecycleCore {
     }
 
     /// Starts or joins the ordered flush barrier.
+    ///
+    /// A new barrier consumes previously unreported admission failures. All
+    /// waiters on that barrier receive the same result; later successful
+    /// windows can succeed without erasing cumulative health diagnostics.
     pub(crate) fn flush_async(&self) -> LifecycleWaiter {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
         if let Some(operation) = state.flush.as_ref().filter(|op| !op.is_complete()) {
             return LifecycleWaiter::new(Arc::clone(operation));
         }
-        let cutoff = state.next_sequence.saturating_sub(1);
+        let cutoff = state.next_sequence;
         let operation = Arc::new(Operation::new(
             Arc::clone(&self.inner),
             OperationKind::Flush,
             cutoff,
             self.inner.flush_timeout,
             None,
+            state.pending_failure.take(),
         ));
         state.flush = Some(Arc::clone(&operation));
         LifecycleWaiter::new(operation)
@@ -305,7 +312,7 @@ impl LifecycleCore {
             return LifecycleWaiter::new(Arc::clone(operation));
         }
         state.phase = LifecycleState::Closing;
-        let cutoff = state.next_sequence.saturating_sub(1);
+        let cutoff = state.next_sequence;
         let precondition = state.flush.clone().filter(|op| !op.is_complete());
         let operation = Arc::new(Operation::new(
             Arc::clone(&self.inner),
@@ -313,6 +320,7 @@ impl LifecycleCore {
             cutoff,
             self.inner.shutdown_timeout,
             precondition,
+            state.pending_failure.take(),
         ));
         state.shutdown = Some(Arc::clone(&operation));
         LifecycleWaiter::new(operation)
@@ -356,7 +364,18 @@ impl LifecycleInner {
         state.admitted_bytes = state.admitted_bytes.saturating_sub(bytes);
         if let Err(error) = result {
             Self::record_drop(&mut state, signal, Some(&error));
-            state.terminal_failure = Some((sequence, ErrorSnapshot::from_error(&error)));
+            let snapshot = ErrorSnapshot::from_error(&error);
+            // A shutdown can overlap the current flush; both must retain an
+            // in-scope failure. An out-of-scope completion cannot overwrite it.
+            let mut captured = false;
+            for operation in [&state.flush, &state.shutdown].into_iter().flatten() {
+                if sequence < operation.cutoff {
+                    captured |= operation.record_failure(&snapshot);
+                }
+            }
+            if !captured {
+                state.pending_failure.get_or_insert(snapshot);
+            }
         }
         let waiters = std::mem::take(&mut state.barrier_wakers);
         drop(state);
@@ -375,10 +394,13 @@ enum OperationKind {
 struct Operation {
     inner: Arc<LifecycleInner>,
     kind: OperationKind,
+    // Exclusive admission bound: an empty window must exclude sequence zero.
     cutoff: u64,
     deadline: Instant,
     precondition: Option<Arc<Operation>>,
     state: Mutex<OperationState>,
+    // Shared by admission completion and all waiters, retained across backend polls.
+    failure: Mutex<Option<ErrorSnapshot>>,
     waiters: Mutex<Vec<Waker>>,
     timer_started: AtomicBool,
     polling: AtomicBool,
@@ -421,6 +443,7 @@ impl Operation {
         cutoff: u64,
         timeout: Duration,
         precondition: Option<Arc<Operation>>,
+        failure: Option<ErrorSnapshot>,
     ) -> Self {
         Self {
             inner,
@@ -429,6 +452,7 @@ impl Operation {
             deadline: Instant::now() + timeout,
             precondition,
             state: Mutex::new(OperationState::Pending),
+            failure: Mutex::new(failure),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(false),
             polling: AtomicBool::new(false),
@@ -444,10 +468,27 @@ impl Operation {
             deadline: Instant::now(),
             precondition: None,
             state: Mutex::new(OperationState::Complete(Arc::new(completion))),
+            failure: Mutex::new(None),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(true),
             polling: AtomicBool::new(false),
         }
+    }
+
+    /// Records an error only while the operation can still report it.
+    ///
+    /// Lock order is core state, operation state, then failure. No operation
+    /// state guard is held while acquiring the core lock in `finish`.
+    fn record_failure(&self, error: &ErrorSnapshot) -> bool {
+        let state = self.state.lock().expect("operation state lock");
+        if matches!(*state, OperationState::Complete(_)) {
+            return false;
+        }
+        self.failure
+            .lock()
+            .expect("operation failure lock")
+            .get_or_insert_with(|| error.clone());
+        true
     }
 
     fn is_complete(&self) -> bool {
@@ -481,16 +522,22 @@ impl Operation {
             return Poll::Ready(self.completed_result().expect("operation completed"));
         }
 
-        if let Some(precondition) = &self.precondition
-            && precondition.poll(context).is_pending()
-        {
-            self.register_waiter(context.waker());
-            return Poll::Pending;
+        if let Some(precondition) = &self.precondition {
+            match precondition.poll(context) {
+                Poll::Pending => {
+                    self.register_waiter(context.waker());
+                    return Poll::Pending;
+                }
+                Poll::Ready(Err(error)) => {
+                    self.record_failure(&ErrorSnapshot::from_error(&error));
+                }
+                Poll::Ready(Ok(())) => {}
+            }
         }
 
         let waiting_for_admissions = {
             let mut state = self.inner.state.lock().expect("lifecycle state lock");
-            if state.active.range(..=self.cutoff).next().is_some() {
+            if state.active.range(..self.cutoff).next().is_some() {
                 #[cfg(test)]
                 if let Some(hook) = self
                     .inner
@@ -515,16 +562,6 @@ impl Operation {
             self.register_waiter(context.waker());
             return Poll::Pending;
         }
-
-        let admission_failure = self
-            .inner
-            .state
-            .lock()
-            .expect("lifecycle state lock")
-            .terminal_failure
-            .as_ref()
-            .filter(|(sequence, _)| *sequence <= self.cutoff)
-            .map(|(_, error)| error.clone());
 
         let mut future = {
             let mut operation_state = self.state.lock().expect("operation state lock");
@@ -564,7 +601,12 @@ impl Operation {
             }
             Poll::Ready(result) => {
                 let result = match result {
-                    Ok(()) => admission_failure.map_or(Ok(()), |error| Err(error.to_error())),
+                    Ok(()) => self
+                        .failure
+                        .lock()
+                        .expect("operation failure lock")
+                        .as_ref()
+                        .map_or(Ok(()), |error| Err(error.to_error())),
                     Err(error) => Err(error),
                 };
                 self.finish(result);

@@ -259,6 +259,9 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
     };
     let bounds = validated_transport_bounds(&OtelConfig::default()).expect("test bounds");
     let core = LifecycleCore::new(exporters, &bounds).expect("test lifecycle core");
+    core.admit(SignalKind::Logs, (), 1)
+        .unwrap()
+        .complete(Err(runtime_terminated()));
     let mut first = core.flush_async();
     let mut second = core.flush_async();
 
@@ -287,11 +290,17 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
     }
     let flushes_before_release = flushes.load(Ordering::Acquire);
     released.store(true, Ordering::Release);
-    assert!(first_thread.join().expect("first waiter thread").is_ready());
+    assert!(matches!(
+        first_thread.join().expect("first waiter thread"),
+        Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
+    ));
     let (mut second, second_result) = second_thread.join().expect("second waiter thread");
     assert!(second_result.is_pending());
     assert_eq!(flushes_before_release, 1);
-    assert!(poll_once(&mut second).is_ready());
+    assert!(matches!(
+        poll_once(&mut second),
+        Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
+    ));
 }
 
 #[test]
@@ -361,6 +370,194 @@ fn ordered_flush_returns_admitted_export_failure_and_keeps_success_control() {
     released.store(true, Ordering::Release);
     let mut flush = control.flush_async();
     assert!(matches!(poll_once(&mut flush), Poll::Ready(Ok(()))));
+}
+
+#[test]
+fn consumed_failure_does_not_poison_later_successful_windows() {
+    let (core, flushes, shutdowns, released) = default_fixture();
+    core.admit(SignalKind::Logs, (), 1)
+        .unwrap()
+        .complete(Err(runtime_terminated()));
+    let mut first = core.flush_async();
+    let mut shared = core.flush_async();
+    assert!(poll_once(&mut first).is_pending());
+    released.store(true, Ordering::Release);
+    for waiter in [&mut first, &mut shared] {
+        assert!(matches!(
+            poll_once(waiter),
+            Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
+        ));
+    }
+    core.admit(SignalKind::Logs, (), 1)
+        .unwrap()
+        .complete(Ok(()));
+    assert!(matches!(
+        poll_once(&mut core.flush_async()),
+        Poll::Ready(Ok(()))
+    ));
+    assert!(matches!(
+        poll_once(&mut core.shutdown_async()),
+        Poll::Ready(Ok(()))
+    ));
+    assert_eq!(flushes.load(Ordering::Acquire), 2);
+    assert_eq!(shutdowns.load(Ordering::Acquire), 1);
+    assert!(
+        core.health().degraded,
+        "health retains historical degradation"
+    );
+    assert_eq!(core.health().dropped_by_signal, [1, 0, 0]);
+}
+
+#[test]
+fn failures_on_both_sides_of_cutoff_survive_either_completion_order() {
+    for later_completes_first in [false, true] {
+        let (core, _, _, released) = default_fixture();
+        let earlier = core.admit(SignalKind::Logs, (), 1).unwrap();
+        let mut first = core.flush_async();
+        let later = core.admit(SignalKind::Traces, (), 1).unwrap();
+        if later_completes_first {
+            later.complete(Err(admission_timeout()));
+            earlier.complete(Err(runtime_terminated()));
+        } else {
+            earlier.complete(Err(runtime_terminated()));
+            later.complete(Err(admission_timeout()));
+        }
+        released.store(true, Ordering::Release);
+        assert!(matches!(
+            poll_once(&mut first),
+            Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
+        ));
+        assert!(matches!(
+            poll_once(&mut core.flush_async()),
+            Poll::Ready(Err(ExportError::LifecycleTimeout { .. }))
+        ));
+        assert!(matches!(
+            poll_once(&mut core.flush_async()),
+            Poll::Ready(Ok(()))
+        ));
+        assert!(matches!(
+            poll_once(&mut core.shutdown_async()),
+            Poll::Ready(Ok(()))
+        ));
+    }
+}
+
+#[test]
+fn pending_backend_retains_window_failure_after_waiter_cancellation() {
+    let (core, flushes, _, released) = default_fixture();
+    let earlier = core.admit(SignalKind::Logs, (), 1).unwrap();
+    let mut first = core.flush_async();
+    earlier.complete(Err(runtime_terminated()));
+    assert!(
+        poll_once(&mut first).is_pending(),
+        "backend is still pending"
+    );
+    core.admit(SignalKind::Traces, (), 1)
+        .unwrap()
+        .complete(Err(admission_timeout()));
+    drop(first);
+    let mut replacement = core.flush_async();
+    released.store(true, Ordering::Release);
+    assert!(matches!(
+        poll_once(&mut replacement),
+        Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
+    ));
+    assert_eq!(flushes.load(Ordering::Acquire), 1);
+    assert!(matches!(
+        poll_once(&mut core.flush_async()),
+        Poll::Ready(Err(ExportError::LifecycleTimeout { .. }))
+    ));
+}
+
+#[test]
+fn overlapping_shutdown_preserves_flush_failure_for_all_waiters() {
+    // Exercise failure captured before shutdown as well as completion while
+    // both operations are active. Shutdown must inherit its flush precondition.
+    for complete_before_shutdown in [false, true] {
+        let (core, flushes, shutdowns, released) = default_fixture();
+        let admission = core.admit(SignalKind::Logs, (), 1).unwrap();
+        let mut flush = core.flush_async();
+        let admission = if complete_before_shutdown {
+            admission.complete(Err(runtime_terminated()));
+            None
+        } else {
+            Some(admission)
+        };
+        let mut shutdown = core.shutdown_async();
+        let mut shared_shutdown = core.shutdown_async();
+        if let Some(admission) = admission {
+            admission.complete(Err(runtime_terminated()));
+        }
+        assert!(poll_once(&mut shutdown).is_pending());
+        released.store(true, Ordering::Release);
+        for waiter in [&mut shutdown, &mut shared_shutdown, &mut flush] {
+            assert!(matches!(
+                poll_once(waiter),
+                Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
+            ));
+        }
+        assert!(matches!(
+            poll_once(&mut core.shutdown_async()),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(flushes.load(Ordering::Acquire), 1);
+        assert_eq!(shutdowns.load(Ordering::Acquire), 1);
+    }
+}
+
+#[test]
+fn empty_flush_excludes_first_later_admission() {
+    let (core, flushes, _, released) = default_fixture();
+    let mut empty = core.flush_async();
+    let later = core.admit(SignalKind::Logs, (), 1).unwrap();
+    released.store(true, Ordering::Release);
+    assert!(matches!(poll_once(&mut empty), Poll::Ready(Ok(()))));
+    assert_eq!(flushes.load(Ordering::Acquire), 1);
+    later.complete(Err(runtime_terminated()));
+    assert!(matches!(
+        poll_once(&mut core.flush_async()),
+        Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
+    ));
+}
+
+#[test]
+fn admission_failure_after_timed_out_window_reaches_next_barrier() {
+    let transport = OtelConfig {
+        timeout_ms: Some(1.into()),
+        lifecycle_flush_timeout_ms: Some(2.into()),
+        ..OtelConfig::default()
+    };
+    let (core, _, _, released) = fixture(None, &transport);
+    let admission = core.admit(SignalKind::Logs, (), 1).unwrap();
+    let mut expired = core.flush_async();
+    thread::sleep(Duration::from_millis(5));
+    assert!(matches!(
+        poll_once(&mut expired),
+        Poll::Ready(Err(ExportError::LifecycleTimeout { .. }))
+    ));
+    admission.complete(Err(runtime_terminated()));
+    released.store(true, Ordering::Release);
+    assert!(matches!(
+        poll_once(&mut core.flush_async()),
+        Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
+    ));
+    assert!(matches!(
+        poll_once(&mut core.flush_async()),
+        Poll::Ready(Ok(()))
+    ));
+}
+
+fn admission_timeout() -> ExportError {
+    ExportError::LifecycleTimeout {
+        context: Box::new(sc_observability_types::ErrorContext::new(
+            crate::error_codes::OTLP_LIFECYCLE_TIMEOUT,
+            "test admission timed out",
+            sc_observability_types::Remediation::recoverable(
+                "retry the export",
+                std::iter::empty::<String>(),
+            ),
+        )),
+    }
 }
 
 #[test]

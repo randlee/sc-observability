@@ -183,18 +183,17 @@ async fn external_fixture_drives_all_signals_and_host_lifecycle() {
         .expect("schedule metric");
 
     // The closed loopback endpoint supplies a deterministic terminal transport
-    // failure. Both barriers must surface that typed outcome after waiting
-    // through the same caller-runtime admission core.
+    // failure. Flush reports that window through the caller-runtime admission
+    // core; the following empty shutdown window must not repeat its failure.
     let flush = fixture
         .flush()
         .await
         .expect_err("ordered async flush reports the admitted RPC failure");
     assert_eq!(flush.diagnostic().code, OTLP_EXPORT_TERMINAL);
-    let shutdown = fixture
+    fixture
         .shutdown()
         .await
-        .expect_err("shutdown preserves the admitted RPC failure");
-    assert_eq!(shutdown.diagnostic().code, OTLP_EXPORT_TERMINAL);
+        .expect("shutdown starts a clean window after flush reported the RPC failure");
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -251,9 +250,8 @@ async fn external_fixture_exercises_request_deadline_terminal_outcome() {
         .expect_err("held request must preserve its typed terminal outcome");
     assert_eq!(flush.diagnostic().code, OTLP_EXPORT_TERMINAL);
 
-    let shutdown = fixture
+    fixture
         .shutdown()
         .await
-        .expect_err("shutdown preserves the admitted terminal outcome");
-    assert_eq!(shutdown.diagnostic().code, OTLP_EXPORT_TERMINAL);
+        .expect("shutdown starts a clean window after flush reported the request deadline");
 }
