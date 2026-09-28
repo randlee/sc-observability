@@ -62,6 +62,9 @@ pub use config::{
 };
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
+#[cfg(feature = "sdk-test-support")]
+#[doc(inline)]
+pub use sdk::SdkFixture;
 
 use contracts::{ExporterLifecycle, LifecycleFuture, LogExporter, MetricExporter, TraceExporter};
 
