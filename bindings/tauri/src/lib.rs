@@ -8,10 +8,10 @@ use sc_observability_dto::{
     TryLogRequest, WireEnvelope, decode_event, decode_query, decode_timeout, is_protected_key,
     normalize_field_key,
 };
+use sc_observability_types::v2;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
-use sc_observability_types::v2;
 
 const SCHEMA_VERSION: u32 = 1;
 const MAX_REQUEST_BYTES: usize = 65_536;
@@ -60,7 +60,11 @@ impl AdapterPolicy {
                 ));
             }
         }
-        if self.redacted_field_keys.iter().any(|key| is_protected_key(key)) {
+        if self
+            .redacted_field_keys
+            .iter()
+            .any(|key| is_protected_key(key))
+        {
             return Err(invalid(
                 "policy.redacted_field_keys",
                 "protected provenance keys are host-owned",
@@ -142,20 +146,26 @@ fn inspect(value: &Value, depth: usize, limit: usize) -> Result<(), Failure> {
             if depth >= limit {
                 return Err(invalid("request", "maximum container depth is 32"));
             }
-            values.iter().try_for_each(|item| inspect(item, depth + 1, limit))
+            values
+                .iter()
+                .try_for_each(|item| inspect(item, depth + 1, limit))
         }
         Value::Object(values) => {
             if depth >= limit {
                 return Err(invalid("request", "maximum container depth is 32"));
             }
-            values.values().try_for_each(|item| inspect(item, depth + 1, limit))
+            values
+                .values()
+                .try_for_each(|item| inspect(item, depth + 1, limit))
         }
         _ => Ok(()),
     }
 }
 
 fn strict_object(value: &Value, allowed: &[&str], field: &str) -> Result<(), Failure> {
-    let object = value.as_object().ok_or_else(|| invalid(field, "request must be an object"))?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid(field, "request must be an object"))?;
     if object.keys().any(|key| !allowed.contains(&key.as_str())) {
         return Err(invalid(field, "unknown field"));
     }
@@ -163,8 +173,13 @@ fn strict_object(value: &Value, allowed: &[&str], field: &str) -> Result<(), Fai
 }
 
 fn strict_value(value: &Value, field: &str) -> Result<(), Failure> {
-    let object = value.as_object().ok_or_else(|| invalid(field, "value must be a tagged object"))?;
-    let kind = object.get("kind").and_then(Value::as_str).ok_or_else(|| invalid(field, "value kind is required"))?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid(field, "value must be a tagged object"))?;
+    let kind = object
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid(field, "value kind is required"))?;
     let allowed = match kind {
         "null" => &["kind"][..],
         "boolean" | "string" | "integer" | "float" | "array" | "object" => &["kind", "value"][..],
@@ -172,10 +187,21 @@ fn strict_value(value: &Value, field: &str) -> Result<(), Failure> {
     };
     strict_object(value, allowed, field)?;
     match kind {
-        "array" => object.get("value").and_then(Value::as_array).ok_or_else(|| invalid(field, "array value is required"))?
-            .iter().enumerate().try_for_each(|(index, child)| strict_value(child, &format!("{field}.value[{index}]")))?,
-        "object" => object.get("value").and_then(Value::as_object).ok_or_else(|| invalid(field, "object value is required"))?
-            .iter().try_for_each(|(key, child)| strict_value(child, &format!("{field}.value.{key}")))?,
+        "array" => object
+            .get("value")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid(field, "array value is required"))?
+            .iter()
+            .enumerate()
+            .try_for_each(|(index, child)| {
+                strict_value(child, &format!("{field}.value[{index}]"))
+            })?,
+        "object" => object
+            .get("value")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid(field, "object value is required"))?
+            .iter()
+            .try_for_each(|(key, child)| strict_value(child, &format!("{field}.value.{key}")))?,
         _ => {}
     }
     Ok(())
@@ -185,21 +211,68 @@ fn strict_request(value: &Value, operation: &str) -> Result<(), Failure> {
     match operation {
         "try_log" => {
             strict_object(value, &["schema_version", "event"], "request")?;
-            let event = value.get("event").ok_or_else(|| invalid("event", "event is required"))?;
-            strict_object(event, &["schema_version", "level", "target", "action", "message", "trace", "request_id", "correlation_id", "outcome", "fields"], "event")?;
+            let event = value
+                .get("event")
+                .ok_or_else(|| invalid("event", "event is required"))?;
+            strict_object(
+                event,
+                &[
+                    "schema_version",
+                    "level",
+                    "target",
+                    "action",
+                    "message",
+                    "trace",
+                    "request_id",
+                    "correlation_id",
+                    "outcome",
+                    "fields",
+                ],
+                "event",
+            )?;
             if let Some(fields) = event.get("fields") {
-                fields.as_object().ok_or_else(|| invalid("event.fields", "fields must be an object"))?
-                    .iter().try_for_each(|(key, value)| strict_value(value, &format!("event.fields.{key}")))?;
+                fields
+                    .as_object()
+                    .ok_or_else(|| invalid("event.fields", "fields must be an object"))?
+                    .iter()
+                    .try_for_each(|(key, value)| {
+                        strict_value(value, &format!("event.fields.{key}"))
+                    })?;
             }
         }
         "query" => {
             strict_object(value, &["schema_version", "query"], "request")?;
-            let query = value.get("query").ok_or_else(|| invalid("query", "query is required"))?;
-            strict_object(query, &["schema_version", "service", "levels", "target", "action", "request_id", "correlation_id", "since", "until", "field_matches", "limit", "order"], "query")?;
+            let query = value
+                .get("query")
+                .ok_or_else(|| invalid("query", "query is required"))?;
+            strict_object(
+                query,
+                &[
+                    "schema_version",
+                    "service",
+                    "levels",
+                    "target",
+                    "action",
+                    "request_id",
+                    "correlation_id",
+                    "since",
+                    "until",
+                    "field_matches",
+                    "limit",
+                    "order",
+                ],
+                "query",
+            )?;
             if let Some(matches) = query.get("field_matches").and_then(Value::as_array) {
                 for (index, entry) in matches.iter().enumerate() {
-                    strict_object(entry, &["field", "value"], &format!("query.field_matches[{index}]"))?;
-                    if let Some(value) = entry.get("value") { strict_value(value, &format!("query.field_matches[{index}].value"))?; }
+                    strict_object(
+                        entry,
+                        &["field", "value"],
+                        &format!("query.field_matches[{index}]"),
+                    )?;
+                    if let Some(value) = entry.get("value") {
+                        strict_value(value, &format!("query.field_matches[{index}].value"))?;
+                    }
                 }
             }
         }
@@ -262,7 +335,9 @@ fn redact_value(value: &mut sc_observability_dto::ValueDto, keys: &BTreeSet<Stri
     if let sc_observability_dto::ValueDto::Object { value: object } = value {
         for (key, child) in object.iter_mut() {
             if keys.contains(key)
-                || keys.iter().any(|configured| normalize_field_key(configured) == normalize_field_key(key))
+                || keys
+                    .iter()
+                    .any(|configured| normalize_field_key(configured) == normalize_field_key(key))
             {
                 *child = sc_observability_dto::ValueDto::String {
                     value: REDACTED.to_owned(),
@@ -342,11 +417,9 @@ impl Adapter {
         authorize(&self.policy, window)?;
         schema(&value, "request")?;
         let request: QueryRequest = parse(value, &self.policy, "request", "query")?;
-        let query = decode_query(
-            serde_json::to_value(request.query).map_err(|error| {
-                invalid("query", format!("query could not be serialized: {error}"))
-            })?,
-        )?;
+        let query = decode_query(serde_json::to_value(request.query).map_err(|error| {
+            invalid("query", format!("query could not be serialized: {error}"))
+        })?)?;
         if let Some(target) = &query.target
             && !self.policy.allowed_targets.contains(target)
         {
@@ -407,7 +480,8 @@ impl Adapter {
     ) -> Result<sc_observability_dto::CompletionDto, Failure> {
         authorize(&self.policy, window)?;
         schema(&value, "request")?;
-        let request: sc_observability_dto::FlushRequest = parse(value, &self.policy, "request", "flush")?;
+        let request: sc_observability_dto::FlushRequest =
+            parse(value, &self.policy, "request", "flush")?;
         let timeout = decode_timeout(Value::from(request.timeout_ms))?;
         self.backend
             .start_flush(Duration::from_millis(u64::from(timeout)))?
@@ -461,7 +535,10 @@ async fn sc_observability_query<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     request: Value,
 ) -> WireEnvelope<LogSnapshotDto> {
-    app.state::<ManagedAdapter>().0.query(window.label(), request).await
+    app.state::<ManagedAdapter>()
+        .0
+        .query(window.label(), request)
+        .await
 }
 
 #[cfg(feature = "tauri")]
@@ -481,7 +558,10 @@ async fn sc_observability_flush<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     request: Value,
 ) -> WireEnvelope<sc_observability_dto::CompletionDto> {
-    app.state::<ManagedAdapter>().0.flush(window.label(), request).await
+    app.state::<ManagedAdapter>()
+        .0
+        .flush(window.label(), request)
+        .await
 }
 
 #[cfg(test)]
@@ -496,7 +576,10 @@ mod tests {
             context: Box::new(sc_observability_types::ErrorContext::new(
                 sc_observability_types::error_codes::VALUE_VALIDATION_FAILED,
                 "invalid event",
-                sc_observability_types::Remediation::recoverable("correct the event", [] as [&str; 0]),
+                sc_observability_types::Remediation::recoverable(
+                    "correct the event",
+                    [] as [&str; 0],
+                ),
             )),
         };
         let projected = project_canonical_event(&event);
@@ -528,28 +611,36 @@ mod tests {
 
     impl HostLoggingBackend for IpcBackend {
         fn try_log(&self, _: LogEventDto, _: ProducerOrigin) -> Result<AdmissionDto, Failure> {
-            Err(Failure::Internal { diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
-                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-                "test backend",
-            )) })
+            Err(Failure::Internal {
+                diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                    sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                    "test backend",
+                )),
+            })
         }
         fn start_query(&self, _: LogQueryDto) -> Result<Operation<LogSnapshotDto>, Failure> {
-            Err(Failure::Internal { diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
-                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-                "test backend",
-            )) })
+            Err(Failure::Internal {
+                diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                    sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                    "test backend",
+                )),
+            })
         }
         fn health(&self) -> Result<LogHealthDto, Failure> {
-            Err(Failure::Internal { diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
-                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-                "test backend",
-            )) })
+            Err(Failure::Internal {
+                diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                    sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                    "test backend",
+                )),
+            })
         }
         fn start_flush(&self, _: Duration) -> Result<Operation<CompletionDto>, Failure> {
-            Err(Failure::Internal { diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
-                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-                "test backend",
-            )) })
+            Err(Failure::Internal {
+                diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                    sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                    "test backend",
+                )),
+            })
         }
     }
     #[test]
@@ -578,7 +669,9 @@ mod tests {
                 redacted_field_keys: BTreeSet::new(),
             }
         };
-        assert!(matches!(policy.validate(), Err(Failure::Validation { ref field, .. }) if field == "policy.allowed_window_labels"));
+        assert!(
+            matches!(policy.validate(), Err(Failure::Validation { ref field, .. }) if field == "policy.allowed_window_labels")
+        );
         let policy = AdapterPolicy {
             allowed_targets: ["bad target".into()].into(),
             ..AdapterPolicy {
@@ -653,19 +746,23 @@ mod tests {
             (0..count).fold(leaf, |value, _| serde_json::json!({"child": value}))
         }
 
-        assert!(inspect(
-            &nested_objects(31, Value::Object(Default::default())),
-            0,
-            MAX_DEPTH
-        )
-        .is_ok());
+        assert!(
+            inspect(
+                &nested_objects(31, Value::Object(Default::default())),
+                0,
+                MAX_DEPTH
+            )
+            .is_ok()
+        );
         assert!(inspect(&nested_objects(32, Value::Null), 0, MAX_DEPTH).is_ok());
-        assert!(inspect(
-            &nested_objects(32, Value::Object(Default::default())),
-            0,
-            MAX_DEPTH
-        )
-        .is_err());
+        assert!(
+            inspect(
+                &nested_objects(32, Value::Object(Default::default())),
+                0,
+                MAX_DEPTH
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -690,27 +787,46 @@ mod tests {
         });
         let overhead = serde_json::to_vec(&request).unwrap().len();
         request["event"]["message"] = serde_json::json!("x".repeat(MAX_REQUEST_BYTES - overhead));
-        assert_eq!(serde_json::to_vec(&request).unwrap().len(), MAX_REQUEST_BYTES);
+        assert_eq!(
+            serde_json::to_vec(&request).unwrap().len(),
+            MAX_REQUEST_BYTES
+        );
         let result = adapter.try_log("main", request);
         assert!(matches!(
             result,
-            WireEnvelope::Error { error: Failure::Internal { .. }, .. }
+            WireEnvelope::Error {
+                error: Failure::Internal { .. },
+                ..
+            }
         ));
     }
 
     #[test]
     fn redaction_replaces_nested_keys() {
         let mut value = sc_observability_dto::ValueDto::Object {
-            value: [("password".to_owned(), sc_observability_dto::ValueDto::String {
-                value: "secret".to_owned(),
-            })].into_iter().collect(),
+            value: [(
+                "password".to_owned(),
+                sc_observability_dto::ValueDto::String {
+                    value: "secret".to_owned(),
+                },
+            )]
+            .into_iter()
+            .collect(),
         };
         redact_value(&mut value, &BTreeSet::from(["password".to_owned()]));
-        assert_eq!(value, sc_observability_dto::ValueDto::Object {
-            value: [("password".to_owned(), sc_observability_dto::ValueDto::String {
-                value: REDACTED.to_owned(),
-            })].into_iter().collect(),
-        });
+        assert_eq!(
+            value,
+            sc_observability_dto::ValueDto::Object {
+                value: [(
+                    "password".to_owned(),
+                    sc_observability_dto::ValueDto::String {
+                        value: REDACTED.to_owned(),
+                    }
+                )]
+                .into_iter()
+                .collect(),
+            }
+        );
     }
 
     #[cfg(feature = "tauri")]
@@ -724,11 +840,15 @@ mod tests {
             redacted_field_keys: BTreeSet::new(),
         };
         let app = tauri::test::mock_builder()
-            .manage(ManagedAdapter(Adapter::new(Arc::new(IpcBackend), policy).unwrap()))
+            .manage(ManagedAdapter(
+                Adapter::new(Arc::new(IpcBackend), policy).unwrap(),
+            ))
             .invoke_handler(tauri::generate_handler![sc_observability_health])
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
-        let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
+        let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
         let url = window.url().unwrap();
         let response = tauri::test::get_ipc_response(
             &window,
@@ -741,7 +861,8 @@ mod tests {
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_owned(),
             },
-        ).unwrap();
+        )
+        .unwrap();
         let value = response.deserialize::<Value>().unwrap();
         assert_eq!(value["schema_version"], 1);
         assert_eq!(value["kind"], "error");

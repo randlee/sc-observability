@@ -64,6 +64,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.94.1"
+          components: rustfmt
+      - name: Check standalone Tauri formatting
+        run: cargo fmt --manifest-path bindings/tauri/Cargo.toml -- --check
+      - name: Test standalone Tauri adapter
+        run: cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test
       - name: Install isolation helper
         run: |
           sudo apt-get update

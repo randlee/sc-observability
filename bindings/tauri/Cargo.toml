@@ -10,6 +10,16 @@ description = "Tauri host adapter for sc-observability language bindings"
 
 [workspace]
 
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+pedantic = "warn"
+
+[lints]
+workspace = true
+
 [features]
 default = ["tauri"]
 tauri = ["dep:tauri"]
