@@ -52,7 +52,7 @@ The adapter delegates retry exclusively to the pinned official SDK, sets validat
 | D1: pinned, caller-owned SDK transport | `sdk/implementation.rs`: `SdkTerminal` owns per-signal generated tonic clients; `sdk/mod.rs` re-exports the crate-private constructor | `cargo test -p sc-observability-otlp --lib sdk::tests --features otlp-sdk --locked` |
 | D2: lossless neutral signal projection | `project_logs`, `project_spans`, and `project_metrics` emit OTLP protobuf collector requests after resource/scope grouping | `sdk::tests::{resource_grouping_keeps_each_resource_and_its_record_order,metric_projection_keeps_resource_scope_and_histogram_distribution}` |
 | D3: one D.6 admission/lifecycle domain | `LifecycleCore::from_backend` owns only the terminal backend; `build_exporter_set` creates that core before adapters, and adapters admit then schedule via the caller Tokio handle | `sdk::tests::sdk_constructor_builds_one_shared_admission_core_from_explicit_connection` and lifecycle regression suite |
-| D4: hosted consumer handoff | `examples/otlp-sdk` remains the Tokio-hosted configuration consumer; the crate-private constructor is deliberately activated only by D.18 | `cargo check --manifest-path examples/otlp-sdk/Cargo.toml --locked` |
+| D4: hosted consumer handoff | `examples/otlp-sdk` remains the Tokio-hosted configuration consumer; the crate-private constructor is deliberately activated only by D.18 | `cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked` runs signal, pressure, host-lifecycle, and held-request request-deadline fixtures |
 
 The generated-client transport remains feature-isolated under the reviewed
 ADR-019 allowlist. D.18 retains root-facade activation and D.9 retains
@@ -74,7 +74,7 @@ batch-processor behavior.
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability-otlp --lib sdk::tests --features otlp-sdk --locked` runs all signal mappings, retry-deadline/terminal, explicit-config-vs-env, queue-pressure, shutdown and caller-runtime teardown tests (D1–D3).
-- [ ] `cargo check --manifest-path examples/otlp-sdk/Cargo.toml --locked` passes the Tokio-hosted 2.0 consumer against contract interfaces (D4).
+- [ ] `cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked` runs the external Tokio-hosted D4 fixture (non-zero test count), including signal mappings, queue pressure, async completion, host-runtime teardown, and a held-request assertion of the configured request deadline.
 - [ ] This sprint does not close real shared-core composition or dual collector equivalence; D.18/D.9 do.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
