@@ -101,15 +101,30 @@ pub(crate) fn flush_drain(source: Box<native::ErrorContext>) -> native::v2::Flus
     native::v2::FlushError::Drain { context }
 }
 
-pub(crate) fn subscriber(code: &str, message: impl Into<String>) -> native::v2::SubscriberError {
+fn registry_remediation(code: &'static str) -> Remediation {
+    let entry = codes::REGISTRY
+        .iter()
+        .find(|entry| entry.code == code)
+        .expect("binding runtime codes are registered by the DTO boundary");
+    Remediation::recoverable(entry.remediation, std::iter::empty::<String>())
+}
+
+pub(crate) fn subscriber_closed(message: impl Into<String>) -> native::v2::SubscriberError {
     native::v2::SubscriberError::Subscriber {
         context: context(
-            ErrorCode::new_owned(code),
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_CLOSED),
             message,
-            Remediation::recoverable(
-                "retry the subscription after the backend is available",
-                std::iter::empty::<String>(),
-            ),
+            registry_remediation(codes::SC_OBSERVABILITY_BINDING_CLOSED),
+        ),
+    }
+}
+
+pub(crate) fn subscriber_waiters_full(message: impl Into<String>) -> native::v2::SubscriberError {
+    native::v2::SubscriberError::Subscriber {
+        context: context(
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL),
+            message,
+            registry_remediation(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL),
         ),
     }
 }

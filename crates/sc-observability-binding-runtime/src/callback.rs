@@ -59,10 +59,7 @@ impl Dispatcher {
         let _queue = lock(&self.queue);
         if self.closed.load(Ordering::SeqCst) {
             return Err((
-                error::subscriber(
-                    sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
-                    "callback registration is closed",
-                ),
+                error::subscriber_closed("callback registration is closed"),
                 Kind::Closed,
             ));
         }
@@ -72,10 +69,7 @@ impl Dispatcher {
             })
             .map_err(|_| {
                 (
-                    error::subscriber(
-                        sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-                        "callback registration capacity is occupied",
-                    ),
+                    error::subscriber_waiters_full("callback registration capacity is occupied"),
                     Kind::QueueFull,
                 )
             })?;

@@ -942,24 +942,37 @@ fn native_diagnostic_fidelity() {
 }
 
 fn d15_callback_fixture() {
-    let error = crate::error::subscriber(
-        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-        "callback registration capacity is occupied",
-    );
-    assert_canonical_context(
-        &error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-        0,
-    );
-    assert_failure(
-        Err::<(), _>(crate::conversion::canonical(
-            &error,
+    let cases = [
+        (
+            crate::error::subscriber_closed("callback registration is closed"),
+            dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+            crate::conversion::Kind::Closed,
+            "closed",
+        ),
+        (
+            crate::error::subscriber_waiters_full("callback registration capacity is occupied"),
+            dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
             crate::conversion::Kind::QueueFull,
-        )),
-        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-        "queue_full",
-        None,
-    );
+            "queue_full",
+        ),
+    ];
+    for (error, code, kind, wire_kind) in cases {
+        assert_canonical_context(&error, code, 0);
+        let registry = dto::error_codes::REGISTRY
+            .iter()
+            .find(|entry| entry.code == code)
+            .expect("subscriber code is registered");
+        assert_eq!(
+            error.diagnostic().remediation,
+            native::Remediation::recoverable(registry.remediation, std::iter::empty::<String>()),
+        );
+        assert_failure(
+            Err::<(), _>(crate::conversion::canonical(&error, kind)),
+            code,
+            wire_kind,
+            None,
+        );
+    }
     callback_bounds();
 }
 
