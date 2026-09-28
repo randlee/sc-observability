@@ -637,12 +637,28 @@ impl OtlpHttpExporter {
 
     #[cfg(test)]
     pub(super) fn for_endpoint(endpoint: String) -> Result<Self, ExportError> {
+        Self::for_test_config(endpoint, None, None)
+    }
+
+    /// Builds the retained backend with the configuration seams exercised by
+    /// the immutable D.8 transport fixtures. This is test-only so production
+    /// construction continues to enter solely through D21's validated config.
+    #[cfg(test)]
+    pub(super) fn for_test_config(
+        endpoint: String,
+        auth_header: Option<&str>,
+        ca_file: Option<PathBuf>,
+    ) -> Result<Self, ExportError> {
         let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
         config.enabled = true;
         config.endpoint = Some(
             crate::config::OtlpEndpoint::new_typed(endpoint.clone())
                 .expect("loopback test endpoint is valid"),
         );
+        config.auth_header = auth_header.map(|header| {
+            AuthHeader::new_typed(header).expect("test authorization header is valid")
+        });
+        config.ca_file = ca_file;
         let (worker_config, bounds) = LegacyHttpJsonConfig::from_otel(&config)?;
         Ok(Self {
             backend: LegacyBackend::new(worker_config, &bounds)?,
