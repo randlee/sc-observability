@@ -659,16 +659,13 @@ pub fn from_logging_health(v: core::LoggingHealthReport) -> LoggingHealthDto {
     }
 }
 /// Projects an independent core logger without inventing bridge state.
-pub fn from_core_health(
-    value: core::LoggingHealthReport,
-    level: core::LevelState,
-) -> Result<LogHealthDto, Failure> {
-    Ok(LogHealthDto {
+pub fn from_core_health(value: core::LoggingHealthReport, level: core::LevelState) -> LogHealthDto {
+    LogHealthDto {
         schema_version: 1,
         logging: from_logging_health(value),
         bridge: None,
         level_state: level.into(),
-    })
+    }
 }
 /// Preserves the committed level change and diagnostic admission outcome.
 pub fn from_level_change(value: core::LevelChange) -> Result<LevelChangeDto, Failure> {
