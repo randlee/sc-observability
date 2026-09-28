@@ -1,7 +1,6 @@
 #![deny(deprecated)]
 
 use std::io::{self, Write};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use sc_observability::typed::TypedLogSink;
@@ -193,10 +192,7 @@ fn build_health_event(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("custom-sink-example")?;
     let root = std::env::temp_dir().join("sc-observability-custom-sink-example");
-    let mut builder = LoggerBuilder::new_typed(LoggerConfig::default_for(
-        service.clone(),
-        PathBuf::from(root),
-    ))?;
+    let mut builder = LoggerBuilder::new_typed(LoggerConfig::default_for(service.clone(), root))?;
 
     builder.register_sink(
         SinkRegistration::new(sc_observability::typed::legacy_sink(Arc::new(
