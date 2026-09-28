@@ -28,12 +28,16 @@ mod sdk;
 mod constants;
 mod error_codes;
 
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use config::{BackendTransportBounds, ValidatedTransportBounds, validated_telemetry_bounds};
 #[cfg(test)]
 use config::{validate_config_typed, validated_transport_bounds};
+use sc_observability_types::otlp::{
+    OtlpCompleteSpan, OtlpInstrumentationScope, OtlpLogRecord, OtlpRecord, OtlpResource,
+};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{ConfigFailure, ExportError};
 #[allow(
@@ -42,7 +46,7 @@ use sc_observability_types::v2::{ConfigFailure, ExportError};
 )]
 use sc_observability_types::{
     DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
-    ObservabilityHealthProvider, Remediation, ShutdownError, SinkName, SpanSignal,
+    ObservabilityHealthProvider, Remediation, ServiceName, ShutdownError, SinkName, SpanSignal,
     telemetry_health_provider_sealed,
 };
 #[doc(inline)]
@@ -200,7 +204,10 @@ impl ExporterLifecycle for DisabledLifecycle {
 /// exporter shape. Protocol, feature, and caller-runtime availability are
 /// deliberately checked here, after the configuration's normative ordered
 /// validation, so an unavailable backend cannot mask a malformed config.
-fn exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
+fn exporter_factory(
+    config: &TelemetryConfig,
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
     match bounds.backend() {
         BackendTransportBounds::Disabled => Ok(ExporterSet {
             logs: Arc::new(DisabledLogExporter),
@@ -208,12 +215,16 @@ fn exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, Co
             metrics: Arc::new(DisabledMetricExporter),
             lifecycle: Arc::new(DisabledLifecycle),
         }),
-        BackendTransportBounds::Sdk => sdk_exporter_factory(bounds),
-        BackendTransportBounds::Legacy(_) => legacy_exporter_factory(bounds),
+        BackendTransportBounds::Sdk => sdk_exporter_factory(config, bounds),
+        BackendTransportBounds::Legacy(_) => legacy_exporter_factory(config, bounds),
     }
 }
 
-fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
+#[allow(unused_variables)]
+fn sdk_exporter_factory(
+    config: &TelemetryConfig,
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
     if !matches!(
         bounds.protocol(),
         config::OtlpProtocol::Grpc | config::OtlpProtocol::HttpBinary
@@ -251,11 +262,10 @@ fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet
                 ),
             });
         }
-        Err(unsupported_backend(
-            config::ExporterBackend::OpenTelemetrySdk,
-            "otlp-sdk",
-            "SDK adapter implementation is not installed yet",
-        ))
+        let connection = config::validated_backend_connection(&config.transport)?;
+        sdk::build_exporter_set(&connection, bounds)
+            .map(|adapter| raw_exporter_set(adapter.exporters))
+            .map_err(transport_construction_failure)
     }
 
     #[cfg(not(feature = "otlp-sdk"))]
@@ -266,7 +276,9 @@ fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet
     ))
 }
 
+#[allow(unused_variables)]
 fn legacy_exporter_factory(
+    config: &TelemetryConfig,
     bounds: &ValidatedTransportBounds,
 ) -> Result<ExporterSet, ConfigFailure> {
     if bounds.protocol() != config::OtlpProtocol::HttpJson {
@@ -279,11 +291,9 @@ fn legacy_exporter_factory(
 
     #[cfg(feature = "legacy-http-json")]
     {
-        Err(unsupported_backend(
-            config::ExporterBackend::LegacyHttpJson,
-            "legacy-http-json",
-            "legacy HTTP/JSON adapter implementation is not installed yet",
-        ))
+        legacy_http_json::build_exporter_set(&config.transport)
+            .map(raw_exporter_set)
+            .map_err(transport_construction_failure)
     }
 
     #[cfg(not(feature = "legacy-http-json"))]
@@ -292,6 +302,235 @@ fn legacy_exporter_factory(
         "legacy-http-json",
         "the legacy-http-json feature is disabled",
     ))
+}
+
+#[allow(dead_code)]
+fn raw_exporter_set(exporters: contracts::ExporterSet) -> ExporterSet {
+    ExporterSet {
+        logs: Arc::new(RawLogExporter {
+            inner: exporters.logs,
+        }),
+        traces: Arc::new(RawTraceExporter {
+            inner: exporters.traces,
+        }),
+        metrics: Arc::new(RawMetricExporter {
+            inner: exporters.metrics,
+        }),
+        lifecycle: exporters.lifecycle,
+    }
+}
+
+#[allow(dead_code)]
+struct RawLogExporter {
+    inner: Arc<dyn LogExporter>,
+}
+impl LogExporter<LogEvent> for RawLogExporter {
+    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
+        self.inner
+            .export_logs(&batch.iter().map(log_record).collect::<Vec<_>>())
+    }
+}
+#[allow(dead_code)]
+struct RawTraceExporter {
+    inner: Arc<dyn TraceExporter>,
+}
+impl TraceExporter<CompleteSpan> for RawTraceExporter {
+    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
+        let records = batch
+            .iter()
+            .map(span_record)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.inner.export_spans(&records)
+    }
+}
+#[allow(dead_code)]
+struct RawMetricExporter {
+    inner: Arc<dyn MetricExporter>,
+}
+impl MetricExporter<MetricRecord> for RawMetricExporter {
+    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
+        let records = batch
+            .iter()
+            .map(metric_record)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.inner.export_metrics(&records)
+    }
+}
+
+#[allow(dead_code)]
+fn resource(service: &ServiceName) -> OtlpResource {
+    OtlpResource {
+        attributes: BTreeMap::from_iter([(
+            "service.name".to_owned(),
+            sc_observability_types::v2::AttributeValue::String(service.as_str().to_owned()),
+        )]),
+        schema_url: None,
+    }
+}
+#[allow(dead_code)]
+fn log_record(event: &LogEvent) -> OtlpRecord<OtlpLogRecord> {
+    OtlpRecord {
+        resource: resource(&event.service),
+        scope: OtlpInstrumentationScope::default(),
+        record: OtlpLogRecord {
+            event: event.clone(),
+            trace_flags: sc_observability_types::v2::TraceFlags::default(),
+            attributes: BTreeMap::new(),
+        },
+    }
+}
+#[allow(dead_code)]
+fn span_record(span: &CompleteSpan) -> Result<OtlpRecord<OtlpCompleteSpan>, ExportError> {
+    let trace = sc_observability_types::v2::TraceContext::new(
+        span.record.trace().trace_id.clone(),
+        span.record.trace().span_id.clone(),
+        sc_observability_types::v2::TraceFlags::default(),
+    );
+    let mut started = sc_observability_types::v2::SpanRecord::new(
+        span.record.timestamp(),
+        span.record.service().clone(),
+        span.record.name().clone(),
+        trace,
+        attributes(span.record.attributes()),
+    );
+    if let Some(diagnostic) = span.record.diagnostic().cloned() {
+        started = started.with_diagnostic(diagnostic);
+    }
+    let duration = span
+        .record
+        .duration_ms()
+        .ok_or_else(|| transport_error("completed span has no duration"))?;
+    let ended = started.end(
+        match span.record.status() {
+            sc_observability_types::SpanStatus::Ok => sc_observability_types::v2::SpanStatus::Ok,
+            sc_observability_types::SpanStatus::Error => {
+                sc_observability_types::v2::SpanStatus::Error
+            }
+            sc_observability_types::SpanStatus::Unset => {
+                sc_observability_types::v2::SpanStatus::Unset
+            }
+        },
+        duration,
+    );
+    Ok(OtlpRecord {
+        resource: resource(span.record.service()),
+        scope: OtlpInstrumentationScope::default(),
+        record: OtlpCompleteSpan {
+            record: ended,
+            events: span
+                .events
+                .iter()
+                .map(|event| sc_observability_types::v2::SpanEvent {
+                    timestamp: event.timestamp,
+                    trace: sc_observability_types::v2::TraceContext::new(
+                        event.trace.trace_id.clone(),
+                        event.trace.span_id.clone(),
+                        sc_observability_types::v2::TraceFlags::default(),
+                    ),
+                    name: event.name.clone(),
+                    attributes: attributes(&event.attributes),
+                    diagnostic: event.diagnostic.clone(),
+                })
+                .collect(),
+        },
+    })
+}
+#[allow(dead_code)]
+fn metric_record(
+    metric: &MetricRecord,
+) -> Result<OtlpRecord<sc_observability_types::v2::MetricRecord>, ExportError> {
+    let value = match metric.kind {
+        sc_observability_types::MetricKind::Gauge => {
+            sc_observability_types::v2::MetricValue::Gauge(
+                sc_observability_types::v2::FiniteF64::new(metric.value)
+                    .map_err(|_| transport_error("non-finite metric value"))?,
+            )
+        }
+        sc_observability_types::MetricKind::Counter => {
+            sc_observability_types::v2::MetricValue::Sum {
+                value: sc_observability_types::v2::FiniteF64::new(metric.value)
+                    .map_err(|_| transport_error("non-finite metric value"))?,
+                monotonic: true,
+                temporality: sc_observability_types::v2::AggregationTemporality::Cumulative,
+                start_time: metric.timestamp,
+            }
+        }
+        sc_observability_types::MetricKind::Histogram => {
+            return Err(transport_error(
+                "legacy scalar histogram cannot be projected to the canonical histogram contract",
+            ));
+        }
+    };
+    let record = sc_observability_types::v2::MetricRecord::try_new(
+        metric.timestamp,
+        metric.service.clone(),
+        metric.name.clone(),
+        value,
+    )
+    .map_err(|_| transport_error("metric violates canonical interval contract"))?
+    .with_unit(metric.unit.clone())
+    .with_attributes(attributes(&metric.attributes));
+    Ok(OtlpRecord {
+        resource: resource(&metric.service),
+        scope: OtlpInstrumentationScope::default(),
+        record,
+    })
+}
+#[allow(dead_code)]
+fn attributes(
+    values: &serde_json::Map<String, serde_json::Value>,
+) -> sc_observability_types::v2::Attributes {
+    values
+        .iter()
+        .map(|(key, value)| (key.clone(), attribute(value)))
+        .collect()
+}
+#[allow(dead_code)]
+fn attribute(value: &serde_json::Value) -> sc_observability_types::v2::AttributeValue {
+    use sc_observability_types::v2::{AttributeValue, FiniteF64};
+    match value {
+        serde_json::Value::Null => AttributeValue::Null,
+        serde_json::Value::Bool(v) => AttributeValue::Bool(*v),
+        serde_json::Value::Number(v) => v
+            .as_i64()
+            .map(AttributeValue::Int)
+            .or_else(|| v.as_u64().map(AttributeValue::UInt))
+            .or_else(|| {
+                v.as_f64()
+                    .and_then(|n| FiniteF64::new(n).ok())
+                    .map(AttributeValue::Float)
+            })
+            .unwrap_or(AttributeValue::Null),
+        serde_json::Value::String(v) => AttributeValue::String(v.clone()),
+        serde_json::Value::Array(v) => AttributeValue::Array(v.iter().map(attribute).collect()),
+        serde_json::Value::Object(v) => AttributeValue::Object(attributes(v)),
+    }
+}
+#[allow(dead_code)]
+fn transport_error(message: &str) -> ExportError {
+    ExportError::TerminalExportFailure {
+        context: Box::new(ErrorContext::new(
+            sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL,
+            message,
+            Remediation::not_recoverable("correct the signal before exporting"),
+        )),
+    }
+}
+#[allow(dead_code)]
+fn transport_construction_failure(error: ExportError) -> ConfigFailure {
+    ConfigFailure::TransportConstructionFailed {
+        context: Box::new(
+            ErrorContext::new(
+                sc_observability_types::error_codes::otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
+                "the selected exporter transport could not be constructed",
+                Remediation::recoverable(
+                    "correct the transport configuration",
+                    ["inspect the preserved exporter failure cause"],
+                ),
+            )
+            .source(Box::new(error)),
+        ),
+    }
 }
 
 fn unsupported_protocol(
@@ -319,6 +558,7 @@ fn unsupported_protocol(
     }
 }
 
+#[cfg(any(not(feature = "otlp-sdk"), not(feature = "legacy-http-json")))]
 fn unsupported_backend(
     backend: config::ExporterBackend,
     feature: &str,
@@ -358,7 +598,7 @@ impl Telemetry {
     /// Creates a telemetry runtime with neutral initialization failures.
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
         let bounds = validated_telemetry_bounds(&config)?;
-        let exporters = exporter_factory(&bounds)
+        let exporters = exporter_factory(&config, &bounds)
             .map_err(|error| InitFailure::from_context(error.into_context()))?;
         Ok(Self::new_with_validated_exporter_set(config, exporters))
     }
@@ -1071,7 +1311,7 @@ mod tests {
     fn enabled_backend_factory_returns_canonical_unsupported_backend() {
         let config = telemetry_config();
         let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
-        let Err(factory_error) = exporter_factory(&bounds) else {
+        let Err(factory_error) = exporter_factory(&config, &bounds) else {
             panic!("an enabled backend needs an installed implementation");
         };
         #[cfg(not(feature = "otlp-sdk"))]
@@ -1169,7 +1409,7 @@ mod tests {
         invalid_config.transport.protocol = OtlpProtocol::HttpBinary;
         let bounds = validated_transport_bounds(&invalid_config.transport)
             .expect("configuration bounds precede backend availability");
-        let Err(protocol_error) = exporter_factory(&bounds) else {
+        let Err(protocol_error) = exporter_factory(&invalid_config, &bounds) else {
             panic!("the legacy HTTP/JSON backend must reject a binary protocol");
         };
         assert!(matches!(
@@ -1187,21 +1427,23 @@ mod tests {
 
         let config = legacy_telemetry_config(OtlpProtocol::HttpJson);
         let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
-        let Err(backend_error) = exporter_factory(&bounds) else {
-            panic!("the configured legacy backend remains unavailable");
-        };
-        assert!(matches!(
-            backend_error,
-            ConfigFailure::UnsupportedBackend { .. }
-        ));
-        assert_eq!(
-            backend_error.diagnostic().code,
-            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
-        );
-        assert_eq!(
-            backend_error.diagnostic().details["feature"].as_str(),
-            Some("legacy-http-json")
-        );
+        #[cfg(feature = "legacy-http-json")]
+        {
+            let exporters = exporter_factory(&config, &bounds)
+                .expect("the configured legacy backend is composed when enabled");
+            exporters.lifecycle.blocking_preflight().expect("preflight");
+        }
+        #[cfg(not(feature = "legacy-http-json"))]
+        {
+            let backend_error = match exporter_factory(&config, &bounds) {
+                Ok(_) => panic!("the disabled legacy feature must reject construction"),
+                Err(error) => error,
+            };
+            assert!(matches!(
+                backend_error,
+                ConfigFailure::UnsupportedBackend { .. }
+            ));
+        }
     }
 
     #[test]
@@ -1209,7 +1451,7 @@ mod tests {
         let mut config = telemetry_config();
         config.transport.protocol = OtlpProtocol::HttpJson;
         let bounds = validated_transport_bounds(&config.transport).expect("valid bounds");
-        let Err(error) = exporter_factory(&bounds) else {
+        let Err(error) = exporter_factory(&config, &bounds) else {
             panic!("SDK has no HTTP/JSON transport");
         };
         assert!(matches!(error, ConfigFailure::UnsupportedProtocol { .. }));
@@ -1228,7 +1470,7 @@ mod tests {
     fn sdk_factory_requires_a_caller_tokio_runtime_after_feature_checks() {
         let config = telemetry_config();
         let bounds = validated_transport_bounds(&config.transport).expect("valid bounds");
-        let Err(error) = exporter_factory(&bounds) else {
+        let Err(error) = exporter_factory(&config, &bounds) else {
             panic!("no caller runtime is entered");
         };
         assert!(matches!(error, ConfigFailure::TokioRuntimeRequired { .. }));
@@ -1242,14 +1484,9 @@ mod tests {
             .build()
             .expect("runtime");
         runtime.block_on(async {
-            let Err(error) = exporter_factory(&bounds) else {
-                panic!("D.7 owns the real SDK exporter implementation");
-            };
-            assert!(matches!(error, ConfigFailure::UnsupportedBackend { .. }));
-            assert_eq!(
-                error.diagnostic().details["availability"].as_str(),
-                Some("SDK adapter implementation is not installed yet")
-            );
+            let exporters = exporter_factory(&config, &bounds)
+                .expect("the SDK adapter is composed when a caller runtime is entered");
+            exporters.lifecycle.blocking_preflight().expect("preflight");
         });
     }
 
@@ -1259,7 +1496,7 @@ mod tests {
             .build()
             .expect("disabled configuration is valid");
         let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
-        let exporters = exporter_factory(&bounds).expect("disabled factory set");
+        let exporters = exporter_factory(&config, &bounds).expect("disabled factory set");
         exporters.logs.export_logs(&[]).expect("disabled logs");
         exporters.traces.export_spans(&[]).expect("disabled traces");
         exporters
