@@ -251,27 +251,27 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaises(DistributionError):
             fault_paths({'fault_pytest_paths': ['tests/']})
 
-    def test_policy_preserves_base_and_d18_arm64_matrix_sizes(self):
+    def test_policy_has_six_platforms_and_29_native_cells(self):
         path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
         policy = json.loads(path.read_text(encoding='utf-8'))
         self.assertEqual(policy['interpreters'], ['3.10', '3.11', '3.12', '3.13', '3.14'])
         self.assertEqual({p['id'] for p in policy['platforms']},
-                         {'macos-arm64', 'macos-x86_64', 'linux-x86_64', 'linux-aarch64', 'windows-x86_64'})
-        self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 25)
-        policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
-                                    'wheel_platform': 'win_arm64',
-                                    'rust_target': 'aarch64-pc-windows-msvc',
-                                    'build_python': '3.11',
-                                    'interpreters': ['3.11', '3.12', '3.13', '3.14']})
+                         {'macos-arm64', 'macos-x86_64', 'linux-x86_64', 'linux-aarch64',
+                          'windows-x86_64', 'windows-arm64'})
+        self.assertEqual(len(policy['platforms']), 6)
+        arm64 = next(p for p in policy['platforms'] if p['id'] == 'windows-arm64')
+        self.assertEqual(arm64['interpreters'], ['3.11', '3.12', '3.13', '3.14'])
+        self.assertEqual(arm64['build_python'], '3.11')
+        self.assertEqual(arm64['native_cells'], 4)
+        self.assertEqual(policy['native_installed_suite_cells'], 29)
+        for platform in policy['platforms']:
+            if platform['id'] != 'windows-arm64':
+                self.assertEqual(platform.get('interpreters', policy['interpreters']),
+                                 policy['interpreters'])
         self.assertEqual(sum(len(p.get('interpreters', policy['interpreters'])) for p in policy['platforms']), 29)
 
     def _six_platform_aggregate_fixture(self, root: Path):
         policy = json.loads((Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json').read_text())
-        policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
-                                    'wheel_platform': 'win_arm64',
-                                    'rust_target': 'aarch64-pc-windows-msvc',
-                                    'build_python': '3.11',
-                                    'interpreters': ['3.11', '3.12', '3.13', '3.14']})
         policy_path = root / 'policy.json'
         policy_path.write_text(json.dumps(policy))
         sdist = root / 'fixture.tar.gz'
@@ -376,8 +376,13 @@ class DistributionTests(unittest.TestCase):
     def test_aggregate_rejects_five_platform_policy(self):
         from validate_python_distribution import aggregate
         policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
+        policy = json.loads(policy_path.read_text(encoding='utf-8'))
+        policy['platforms'] = [p for p in policy['platforms'] if p['id'] != 'windows-arm64']
+        self.assertEqual(len(policy['platforms']), 5)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            policy_path = root / 'five-platform-policy.json'
+            policy_path.write_text(json.dumps(policy))
             sdist = root / 'fixture.tar.gz'
             sdist.write_bytes(b'fixture')
             with self.assertRaisesRegex(DistributionError, 'exactly six platforms, six builds and 29'):
@@ -424,7 +429,6 @@ class DistributionTests(unittest.TestCase):
                         (directory / 'cell-result.json').write_text(json.dumps(record))
                 with self.assertRaisesRegex(
                         DistributionError,
-                        'aggregate requires exactly six platforms, six builds and 29|'
                         'missing interpreter-matched embedded-host execution'):
                     aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
 
@@ -432,11 +436,6 @@ class DistributionTests(unittest.TestCase):
         from validate_python_distribution import aggregate
         policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
         policy = json.loads(policy_path.read_text(encoding='utf-8'))
-        policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
-                                    'wheel_platform': 'win_arm64',
-                                    'rust_target': 'aarch64-pc-windows-msvc',
-                                    'build_python': '3.11',
-                                    'interpreters': ['3.11', '3.12', '3.13', '3.14']})
         expected_messages = {
             'missing': 'exactly six builds and 29 installed-suite cells are required',
             'duplicate': 'matrix contains missing, duplicate or unsupported cells',
