@@ -36,7 +36,8 @@ that assigned it.
 With `S=.claude/skills/atm-bd-orchestration/scripts`:
 
 Unless the PR targets `develop` or `integrate/*`, use `/sc-gh-stack-view` (`gh stack view --json` plus current GitHub mergeability) and reject the PR if it is not registered in gh-stack or its stack is not mergeable.
-1. Run the ready check, claim the task bead, and start the active task.
+1. Set `run_started_at=$(date +%s)`, run the ready check, claim the task
+   bead, and start the active task.
 2. Run:
 
    ```bash
@@ -83,6 +84,30 @@ The parent cannot close until every child closes.
 After a second FAIL of the same checked bead, report `SANITY.ROUND_CAP` to the
 lead with the undone deliverable numbers. Do not dispatch a third sanity round
 without a lead ruling.
+
+## Mandatory Run Status Table
+
+After every terminal PASS or FAIL close succeeds, append the completed run to
+the repository-local, ignored ledger and render its newest ten rows. Do not
+run this for a refusal. Use the completion vars produced by `sanity-merge`:
+
+```bash
+iteration=$(atm task events "$task" --all --json \
+  | jq '[.events[] | select(.event == "completed")] | length')
+$S/sanity-run-history \
+  --vars "$scratch/sanity-$task-vars.json" --task "$task" --bead "$checked_bead" \
+  --pr-number "$pr_number" --iteration "$iteration" --started-at "$run_started_at" \
+  --output "$scratch/sanity-$task-table-vars.json" --limit 10
+sc-compose render --strict \
+  --file .claude/skills/atm-bd-orchestration/templates/sanity-run-table.md.j2 \
+  --var-file "$scratch/sanity-$task-table-vars.json" \
+  > "$scratch/sanity-$task-table.md"
+```
+
+Print that table in the user-visible completion summary. It is not an ATM
+message to the lead. A ledger or render failure must not change a completed
+sanity verdict; report that operational failure in the completion summary.
+The `.sc/sanity-log/` ledger is runtime state and must never be committed.
 
 ## Constraints
 
