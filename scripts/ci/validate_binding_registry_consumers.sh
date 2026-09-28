@@ -221,6 +221,7 @@ python3 -m venv "$PY_VENV"
 "$PY_VENV/bin/python" -m pip install --quiet "$WHEEL_PATH" pytest==9.1.1
 TESTS_COPY="$TMP_ROOT/py-tests"
 cp -R bindings/python/sc-observability-py/tests "$TESTS_COPY"
+"$PY_VENV/bin/python" scripts/ci/stage_python_conformance.py --source . --tests "$TESTS_COPY"
 rm -rf "$TESTS_COPY/typing"  # mypy strict-typing gate is B.4's own scope (validate_python_bindings.sh), not this validator's
 # The production wheel deliberately omits the private native test hooks used by
 # test_runtime_faults.py.  Keep that suite out of the public consumer proof;
