@@ -378,7 +378,7 @@ where
         for event in &events {
             self.telemetry
                 .emit_log(event)
-                .map_err(telemetry_to_projection_failure)?;
+                .map_err(legacy_telemetry_to_projection_failure)?;
         }
         Ok(events)
     }
@@ -401,7 +401,7 @@ where
         for span in &spans {
             self.telemetry
                 .emit_span(span)
-                .map_err(telemetry_to_projection_failure)?;
+                .map_err(legacy_telemetry_to_projection_failure)?;
         }
         Ok(spans)
     }
@@ -424,13 +424,18 @@ where
         for metric in &metrics {
             self.telemetry
                 .emit_metric(metric)
-                .map_err(telemetry_to_projection_failure)?;
+                .map_err(legacy_telemetry_to_projection_failure)?;
         }
         Ok(metrics)
     }
 }
 
-fn telemetry_to_projection_failure(
+// `Telemetry::emit_*` currently exposes the retained root `TelemetryError`
+// compatibility boundary. The canonical v2 error is staged in the producer's
+// lifecycle core, but its public facade is not activated until obs-d-18.
+// Keep this adapter explicitly legacy-named so this consumer does not claim a
+// v2 contract that the dependency does not yet expose.
+fn legacy_telemetry_to_projection_failure(
     error: sc_observability_types::TelemetryError,
 ) -> ProjectionFailure {
     match error {

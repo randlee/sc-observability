@@ -41,9 +41,17 @@ The sprint document is supporting context and is not a separate closure gate.
 
 Use `obs-d-12`'s cause mapping and `obs-d-13` canonical sink contract (ADR-017, ADR-019, PHD-001). A sink write/flush produces `LogSinkError::Write/Flush` respectively; shutdown deadline produces `Timeout` and other drain/provider failure `Drain`. Preserve `TelemetryError::Shutdown` and exact typed `ExportError` runtime sources; do not invent `ExportError::Lifecycle`.
 
+The ATM example is intentionally still on the retained root `TelemetryError`
+compatibility boundary: the current public OTLP `emit_*` methods return that
+type, while the canonical v2 `TelemetryError` is only staged in the
+crate-private lifecycle core. This sprint does not claim v2 OTLP facade
+consumption; obs-d-18 owns activating those public signatures and the eventual
+consumer migration. The ATM adapter is therefore explicitly named
+`legacy_telemetry_to_projection_failure` until that handoff is complete.
+
 Consumed artifacts: obs-d-12's canonical error enums under the v2 module path and its ErrorContext contract, plus obs-d-13's canonical sink contract.
 
-Dependency routes: log-consumer-check depends only on `sc-observability-log` and uses its canonical type re-exports (preserve macro hygiene; no direct macros/types dependency is added). `custom-sink-example` reaches `LogSinkError` through core; `atm-adapter-example` reaches OTLP error contracts through its existing core/types/OTLP dependencies; `tauri-logging` uses its existing bridge/runtime edges. D.12 alone adjusts a Cargo dependency if needed; this bead edits source and compile fixtures only. No dependency from a lower crate to OTLP or DTO to runtime is introduced. Public examples use existing strong constructors and mandatory-remediation `ErrorContext`, with bounded details and retained sources.
+Dependency routes: log-consumer-check depends only on `sc-observability-log` and uses its canonical type re-exports (preserve macro hygiene; no direct macros/types dependency is added). `custom-sink-example` reaches `LogSinkError` through core; `atm-adapter-example` reaches the retained OTLP compatibility error through its existing core/types/OTLP dependencies and defers v2 facade consumption to obs-d-18; `tauri-logging` uses its existing bridge/runtime edges. D.12 alone adjusts a Cargo dependency if needed; this bead edits source and compile fixtures only. No dependency from a lower crate to OTLP or DTO to runtime is introduced. Public examples use existing strong constructors and mandatory-remediation `ErrorContext`, with bounded details and retained sources.
 
 ## Canonical boundary and handoff
 
