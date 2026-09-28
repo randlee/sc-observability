@@ -1,6 +1,7 @@
 //! Saved completion is independent of observer and callback ownership.
 use crate::{
     callback::{Dispatcher, Job, ObserverPermit},
+    constants::MAX_OBSERVATION_TIMEOUT,
     error,
     sync::{Signal, lock},
     timer::TimerService,
@@ -179,7 +180,7 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
         &self,
         timeout: Duration,
     ) -> impl Future<Output = Result<T, Failure>> + Send + 'static {
-        let deadline = Instant::now() + timeout.min(Duration::from_secs(60));
+        let deadline = Instant::now() + timeout.min(MAX_OBSERVATION_TIMEOUT);
         let registration = error::duration(timeout).and_then(|()| {
             if self.observed(deadline).is_some() {
                 Ok(None)

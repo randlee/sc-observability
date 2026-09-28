@@ -3,6 +3,7 @@
 //! Backend handles admit work without owning shutdown. Only `CoreLoggerOwner`
 //! holds core shutdown and level-mutation authority; bridge owners stay with hosts.
 mod callback;
+mod constants;
 mod conversion;
 mod coordinator;
 mod error;
