@@ -9,4 +9,4 @@ if __name__ == '__main__':
     for subcommand, package in (('semver-checks', 'cargo-semver-checks'), ('public-api', 'cargo-public-api')):
         if subprocess.run(['cargo', subcommand, '--version'], capture_output=True).returncode:
             subprocess.run(['cargo', '+stable', 'install', package, '--locked'], check=True)
-    raise SystemExit(subprocess.call([sys.executable, str(root / 'scripts/ci/validate_public_api.py'), 'semver'], cwd=root))
+    raise SystemExit(subprocess.call([sys.executable, str(root / 'scripts/ci/validate_public_api.py'), 'semver', *sys.argv[1:]], cwd=root))

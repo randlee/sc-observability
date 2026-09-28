@@ -24,7 +24,16 @@ approved compatibility decision and corresponding validator expectations.
 
 ## API and migration evidence
 
-The canonical 2.0 break manifest remains `release/public-api-policy.json`.
+The enumerated 2.0 break manifest is `release/public-api-major-breaks.toml`.
+`release/public-api-policy.json` defines the crate inventory and frozen 1.4.1
+baselines; it is not the break manifest.
 Migration guidance is maintained in `docs/migration-guide.md`,
 `docs/migration.md`, and `docs/migrate-error-api.md`; these documents describe
 the accepted contract but do not authorize publication.
+
+The manifest currently records the observed `from_core_health` return change
+from `Result<LogHealthDto, Failure>` to direct `LogHealthDto`. Additional
+canonical activation/removal breaks must be individually enumerated and
+reviewed as D18 lands. Full semver qualification, final API approvals,
+canonical migration fixture activation, and real composed binding tests remain
+D18 obligations; this release-governance layer does not claim them complete.

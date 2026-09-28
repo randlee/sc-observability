@@ -1,0 +1,14 @@
+# Exact observed changes against the published frozen 1.4.1 API.
+# Other D18 changes must be enumerated and reviewed as activation lands.
+schema_version = 1
+baseline_version = "1.4.1"
+candidate_version = "2.0.0"
+
+[[breaks]]
+id = "dto-from-core-health-infallible"
+crate = "sc-observability-dto"
+old = "pub fn sc_observability_dto::from_core_health(sc_observability_types::health::LoggingHealthReport, sc_observability_types::level::LevelState) -> core::result::Result<sc_observability_dto::LogHealthDto, sc_observability_dto::Failure>"
+new = "pub fn sc_observability_dto::from_core_health(sc_observability_types::health::LoggingHealthReport, sc_observability_types::level::LevelState) -> sc_observability_dto::LogHealthDto"
+reason = "Project validated core health directly without an impossible conversion failure; callers remove Result handling."
+authority = "ADR-017; obs-d-19-qa-f9-qa-f1 retained D18 API approval obligation"
+migration = "docs/migration.md#from_core_health-returns-the-health-value"
