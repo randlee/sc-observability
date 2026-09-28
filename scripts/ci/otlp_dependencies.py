@@ -16,6 +16,14 @@ def validate_transport_dependencies(root: Path) -> set[str]:
     locked = {(p["name"], p["version"]) for p in load("Cargo.lock")["package"]}
     features = manifest["features"]
 
+    # Validate the reviewed SDK closure first. A dependency can later become a
+    # direct, policy-governed transport (for example tonic for generated OTLP
+    # clients); that must not change this invariant's diagnostic or let a
+    # missing reviewed transitive pin be masked by a per-transport comparison.
+    for name, version in document["sdk_transport_lock"].items():
+        if (name, version) not in locked:
+            raise SystemExit(f"OTLP SDK transport {name}: reviewed lock pin {version} missing")
+
     def activated(feature, visited=None):
         visited = set() if visited is None else visited
         if feature in visited:
@@ -58,7 +66,4 @@ def validate_transport_dependencies(root: Path) -> set[str]:
         for backend in ("otlp-sdk", "legacy-http-json"):
             if (name in activated(backend)) != (backend in rule["backends"]):
                 raise SystemExit(prefix + f"incorrect binding to {backend}")
-    for name, version in document["sdk_transport_lock"].items():
-        if (name, version) not in locked:
-            raise SystemExit(f"OTLP SDK transport {name}: reviewed lock pin {version} missing")
     return set(policy)
