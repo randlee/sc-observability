@@ -12,20 +12,38 @@
 )]
 
 use std::future::Future;
+use std::sync::Arc;
 
 use tokio::runtime::Handle;
+use tokio::sync::Mutex;
+use tonic::Request;
+use tonic::metadata::MetadataValue;
+use tonic::transport::{Channel, Endpoint};
 
-use crate::contracts::{CompleteSpan, ExportRecord, InstrumentationScope, LogRecord, Resource};
-use crate::lifecycle::Admitted;
+use crate::config::{ValidatedBackendConnection, ValidatedTransportBounds};
+use crate::contracts::{
+    CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
+    LifecycleFuture, LogExporter, LogRecord, MetricExporter, Resource, TraceExporter,
+};
+use crate::lifecycle::{Admitted, LifecycleCore, SignalKind};
 use sc_observability_types::otlp::group_records_by_resource_and_scope;
 use sc_observability_types::v2::{
     AggregationTemporality, AttributeValue, Attributes, ExportError, MetricRecord, MetricValue,
-    SpanKind, SpanStatus,
+    SpanKind, SpanStatus, TelemetryError,
 };
+use sc_observability_types::{ErrorContext, Remediation};
 
 use opentelemetry_proto::tonic::{
-    common::v1 as proto_common, logs::v1 as proto_logs, metrics::v1 as proto_metrics,
-    resource::v1 as proto_resource, trace::v1 as proto_trace,
+    collector::{
+        logs::v1::{ExportLogsServiceRequest, logs_service_client::LogsServiceClient},
+        metrics::v1::{ExportMetricsServiceRequest, metrics_service_client::MetricsServiceClient},
+        trace::v1::{ExportTraceServiceRequest, trace_service_client::TraceServiceClient},
+    },
+    common::v1 as proto_common,
+    logs::v1 as proto_logs,
+    metrics::v1 as proto_metrics,
+    resource::v1 as proto_resource,
+    trace::v1 as proto_trace,
 };
 
 /// Caller-owned runtime used for asynchronous OTLP export futures.
@@ -61,6 +79,320 @@ impl CallerRuntime {
         self.handle.spawn(async move {
             let _value = admitted.complete(export.await);
         })
+    }
+}
+
+/// The one backend hand-off D.18 consumes: a concrete exporter set and the
+/// same D.6 core held by every signal adapter. Keeping both together prevents
+/// a second admission domain from being created by composition code.
+pub(crate) struct SdkAdapterSet {
+    pub(crate) exporters: ExporterSet,
+    pub(crate) lifecycle: LifecycleCore,
+}
+
+/// Builds the lossless gRPC/protobuf SDK transport on the caller's Tokio
+/// runtime. Connection values are already validated; this function never
+/// consults `OTEL_*` defaults and never creates a runtime.
+pub(crate) fn build_exporter_set(
+    connection: ValidatedBackendConnection,
+    bounds: &ValidatedTransportBounds,
+) -> Result<SdkAdapterSet, ExportError> {
+    let runtime = CallerRuntime::try_capture().ok_or_else(runtime_required_error)?;
+    let terminal = Arc::new(SdkTerminal::new(connection, bounds)?);
+    let lifecycle = LifecycleCore::from_backend(terminal.clone(), bounds)?;
+    let backend = Arc::new(SdkBackend {
+        runtime,
+        lifecycle: lifecycle.clone(),
+        terminal,
+    });
+
+    Ok(SdkAdapterSet {
+        exporters: ExporterSet {
+            logs: Arc::new(SdkLogExporter {
+                backend: Arc::clone(&backend),
+            }),
+            traces: Arc::new(SdkTraceExporter {
+                backend: Arc::clone(&backend),
+            }),
+            metrics: Arc::new(SdkMetricExporter { backend }),
+            lifecycle: Arc::new(SdkLifecycle {
+                lifecycle: lifecycle.clone(),
+            }),
+        },
+        lifecycle,
+    })
+}
+
+struct SdkBackend {
+    runtime: CallerRuntime,
+    lifecycle: LifecycleCore,
+    terminal: Arc<SdkTerminal>,
+}
+
+/// Terminal gRPC clients. They are intentionally below the D.6 core: by the
+/// time the core invokes their lifecycle methods, every admitted send has
+/// reached a typed terminal outcome, so there is no recursive flush path.
+struct SdkTerminal {
+    logs: Mutex<LogsServiceClient<Channel>>,
+    traces: Mutex<TraceServiceClient<Channel>>,
+    metrics: Mutex<MetricsServiceClient<Channel>>,
+    auth_header: Option<MetadataValue<tonic::metadata::Ascii>>,
+}
+
+impl SdkTerminal {
+    fn new(
+        connection: ValidatedBackendConnection,
+        bounds: &ValidatedTransportBounds,
+    ) -> Result<Self, ExportError> {
+        if connection.ca_file().is_some() {
+            return Err(transport_error(
+                "custom OTLP CA files are not implemented for the SDK transport",
+            ));
+        }
+        let endpoint = Endpoint::from_shared(connection.endpoint().as_str().to_owned())
+            .map_err(|_| transport_error("validated OTLP endpoint is not a usable gRPC URI"))?
+            .timeout(bounds.request_timeout().get());
+        let channel = endpoint.connect_lazy();
+        let auth_header = connection
+            .auth_header()
+            .map(|header| header.as_str().parse())
+            .transpose()
+            .map_err(|_| transport_error("OTLP authorization header is not valid gRPC metadata"))?;
+        Ok(Self {
+            logs: Mutex::new(LogsServiceClient::new(channel.clone())),
+            traces: Mutex::new(TraceServiceClient::new(channel.clone())),
+            metrics: Mutex::new(MetricsServiceClient::new(channel)),
+            auth_header,
+        })
+    }
+
+    fn request<T>(&self, message: T) -> Request<T> {
+        let mut request = Request::new(message);
+        if let Some(header) = &self.auth_header {
+            request
+                .metadata_mut()
+                .insert("authorization", header.clone());
+        }
+        request
+    }
+
+    async fn export_logs(
+        &self,
+        resource_logs: Vec<proto_logs::ResourceLogs>,
+    ) -> Result<(), ExportError> {
+        self.logs
+            .lock()
+            .await
+            .export(self.request(ExportLogsServiceRequest { resource_logs }))
+            .await
+            .map(|_| ())
+            .map_err(|_| transport_error("OTLP log export failed"))
+    }
+
+    async fn export_spans(
+        &self,
+        resource_spans: Vec<proto_trace::ResourceSpans>,
+    ) -> Result<(), ExportError> {
+        self.traces
+            .lock()
+            .await
+            .export(self.request(ExportTraceServiceRequest { resource_spans }))
+            .await
+            .map(|_| ())
+            .map_err(|_| transport_error("OTLP trace export failed"))
+    }
+
+    async fn export_metrics(
+        &self,
+        resource_metrics: Vec<proto_metrics::ResourceMetrics>,
+    ) -> Result<(), ExportError> {
+        self.metrics
+            .lock()
+            .await
+            .export(self.request(ExportMetricsServiceRequest { resource_metrics }))
+            .await
+            .map(|_| ())
+            .map_err(|_| transport_error("OTLP metric export failed"))
+    }
+}
+
+impl ExporterLifecycle for SdkTerminal {
+    fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn flush_async(&self) -> LifecycleFuture {
+        // D.6 has already waited for every admitted RPC before reaching this
+        // terminal transport. gRPC has no independent batch processor to
+        // flush, so completion here means the terminal client is still usable.
+        Box::pin(async { Ok(()) })
+    }
+
+    fn shutdown_async(&self) -> LifecycleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
+        Err(async_lifecycle_required_error())
+    }
+
+    fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        Err(async_lifecycle_required_error())
+    }
+}
+
+struct SdkLifecycle {
+    lifecycle: LifecycleCore,
+}
+
+impl ExporterLifecycle for SdkLifecycle {
+    fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn flush_async(&self) -> LifecycleFuture {
+        let lifecycle = self.lifecycle.clone();
+        Box::pin(async move { lifecycle.flush_async().await })
+    }
+
+    fn shutdown_async(&self) -> LifecycleFuture {
+        let lifecycle = self.lifecycle.clone();
+        Box::pin(async move { lifecycle.shutdown_async().await })
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
+        Err(async_lifecycle_required_error())
+    }
+
+    fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        Err(async_lifecycle_required_error())
+    }
+}
+
+struct SdkLogExporter {
+    backend: Arc<SdkBackend>,
+}
+
+impl LogExporter for SdkLogExporter {
+    fn export_logs(&self, batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
+        schedule(
+            &self.backend,
+            SignalKind::Logs,
+            batch,
+            project_logs,
+            |terminal, request| async move { terminal.export_logs(request).await },
+        )
+    }
+}
+
+struct SdkTraceExporter {
+    backend: Arc<SdkBackend>,
+}
+
+impl TraceExporter for SdkTraceExporter {
+    fn export_spans(&self, batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
+        schedule(
+            &self.backend,
+            SignalKind::Traces,
+            batch,
+            project_spans,
+            |terminal, request| async move { terminal.export_spans(request).await },
+        )
+    }
+}
+
+struct SdkMetricExporter {
+    backend: Arc<SdkBackend>,
+}
+
+impl MetricExporter for SdkMetricExporter {
+    fn export_metrics(&self, batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
+        schedule(
+            &self.backend,
+            SignalKind::Metrics,
+            batch,
+            project_metrics,
+            |terminal, request| async move { terminal.export_metrics(request).await },
+        )
+    }
+}
+
+fn schedule<T, R, P, E, F>(
+    backend: &Arc<SdkBackend>,
+    signal: SignalKind,
+    batch: &[ExportRecord<T>],
+    project: P,
+    export: E,
+) -> Result<(), ExportError>
+where
+    T: Clone + Send + 'static,
+    P: Fn(&[ExportRecord<T>]) -> Vec<R>,
+    R: Send + 'static,
+    E: Fn(Arc<SdkTerminal>, Vec<R>) -> F,
+    F: Future<Output = Result<(), ExportError>> + Send + 'static,
+{
+    // The shared admission core tracks a conservative bounded payload budget
+    // before projection; the transport owns the exact protobuf allocation.
+    let bytes = batch.len().saturating_mul(1_024);
+    let admitted = backend
+        .lifecycle
+        .admit(signal, batch.to_vec(), bytes)
+        .map_err(telemetry_error_to_export_error)?;
+    let request = project(admitted.get());
+    let terminal = Arc::clone(&backend.terminal);
+    backend
+        .runtime
+        .spawn_export(admitted, export(terminal, request));
+    Ok(())
+}
+
+fn runtime_required_error() -> ExportError {
+    ExportError::RuntimeTerminated {
+        context: Box::new(ErrorContext::new(
+            crate::error_codes::OTLP_EXPORT_TERMINAL,
+            "the OTLP SDK backend requires an entered caller Tokio runtime",
+            Remediation::recoverable(
+                "construct the SDK adapter inside the host Tokio runtime",
+                [] as [&str; 0],
+            ),
+        )),
+    }
+}
+
+fn async_lifecycle_required_error() -> ExportError {
+    ExportError::AsyncLifecycleRequired {
+        context: Box::new(ErrorContext::new(
+            crate::error_codes::OTLP_EXPORT_TERMINAL,
+            "the Tokio SDK backend lifecycle must be awaited",
+            Remediation::recoverable("use the asynchronous lifecycle operation", [] as [&str; 0]),
+        )),
+    }
+}
+
+fn transport_error(message: &str) -> ExportError {
+    ExportError::Transport {
+        context: Box::new(ErrorContext::new(
+            crate::error_codes::OTLP_EXPORT_TERMINAL,
+            message,
+            Remediation::recoverable(
+                "verify the explicit OTLP endpoint and collector availability",
+                [] as [&str; 0],
+            ),
+        )),
+    }
+}
+
+fn telemetry_error_to_export_error(error: TelemetryError) -> ExportError {
+    match error {
+        TelemetryError::ExportFailure(error) => error,
+        TelemetryError::Shutdown { context } => ExportError::TerminalExportFailure { context },
+        _ => ExportError::TerminalExportFailure {
+            context: Box::new(ErrorContext::new(
+                crate::error_codes::OTLP_EXPORT_TERMINAL,
+                "OTLP admission failed before export scheduling",
+                Remediation::recoverable("inspect telemetry lifecycle health", [] as [&str; 0]),
+            )),
+        },
     }
 }
 

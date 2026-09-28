@@ -759,6 +759,30 @@ pub(crate) struct ValidatedTransportBounds {
     backend: BackendTransportBounds,
 }
 
+/// Connection values admitted by the same validation path as transport
+/// bounds. Backend constructors consume this view instead of consulting
+/// ambient `OTEL_*` configuration.
+#[derive(Debug, Clone)]
+pub(crate) struct ValidatedBackendConnection {
+    endpoint: OtlpEndpoint,
+    auth_header: Option<AuthHeader>,
+    ca_file: Option<PathBuf>,
+}
+
+impl ValidatedBackendConnection {
+    pub(crate) fn endpoint(&self) -> &OtlpEndpoint {
+        &self.endpoint
+    }
+
+    pub(crate) fn auth_header(&self) -> Option<&AuthHeader> {
+        self.auth_header.as_ref()
+    }
+
+    pub(crate) fn ca_file(&self) -> Option<&PathBuf> {
+        self.ca_file.as_ref()
+    }
+}
+
 #[cfg_attr(
     not(test),
     expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
@@ -962,6 +986,26 @@ pub(crate) fn validated_transport_bounds(
             shutdown: lifecycle_shutdown_timeout,
         },
         backend,
+    })
+}
+
+/// Returns the connection values only after the transport's ordinary ordered
+/// validation has succeeded. Enabled factories need an explicit endpoint and
+/// must never reconstruct it from environment defaults.
+pub(crate) fn validated_backend_connection(
+    config: &OtelConfig,
+) -> Result<ValidatedBackendConnection, ConfigFailure> {
+    let _ = validated_transport_bounds(config)?;
+    let endpoint = config.endpoint.clone().ok_or_else(|| {
+        invalid_endpoint(
+            "enabled telemetry requires an endpoint",
+            "set OtelConfig.endpoint before constructing the backend",
+        )
+    })?;
+    Ok(ValidatedBackendConnection {
+        endpoint,
+        auth_header: config.auth_header.clone(),
+        ca_file: config.ca_file.clone(),
     })
 }
 

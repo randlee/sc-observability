@@ -139,7 +139,12 @@ struct CoreState {
 }
 
 struct LifecycleInner {
-    exporters: ExporterSet,
+    /// The terminal backend runs only after the core's admission barrier.
+    ///
+    /// Signal adapters deliberately are not retained here: they themselves
+    /// hold this core in order to admit work. Retaining the full exporter set
+    /// would create a lifecycle recursion during flush/shutdown.
+    terminal_backend: Arc<dyn crate::contracts::ExporterLifecycle>,
     queue_capacity: usize,
     queue_byte_capacity: usize,
     flush_timeout: Duration,
@@ -163,10 +168,24 @@ impl LifecycleCore {
         exporters: ExporterSet,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
-        exporters.lifecycle.blocking_preflight()?;
+        Self::from_backend(exporters.lifecycle, bounds)
+    }
+
+    /// Constructs the admission/barrier core around the terminal backend.
+    ///
+    /// Backend adapters are intentionally constructed *after* this method
+    /// returns and retain a clone of the resulting core. This preserves one
+    /// canonical admission/accounting domain without requiring a second core
+    /// or making a terminal lifecycle call recursively re-enter its own
+    /// barrier.
+    pub(crate) fn from_backend(
+        terminal_backend: Arc<dyn crate::contracts::ExporterLifecycle>,
+        bounds: &ValidatedTransportBounds,
+    ) -> Result<Self, ExportError> {
+        terminal_backend.blocking_preflight()?;
         Ok(Self {
             inner: Arc::new(LifecycleInner {
-                exporters,
+                terminal_backend,
                 queue_capacity: bounds.queue_capacity().get(),
                 queue_byte_capacity: bounds.queue_byte_capacity().get(),
                 flush_timeout: bounds.lifecycle().flush().get(),
@@ -499,8 +518,8 @@ impl Operation {
             match std::mem::replace(&mut *operation_state, OperationState::Pending) {
                 OperationState::Pending => {
                     let future = match self.kind {
-                        OperationKind::Flush => self.inner.exporters.lifecycle.flush_async(),
-                        OperationKind::Shutdown => self.inner.exporters.lifecycle.shutdown_async(),
+                        OperationKind::Flush => self.inner.terminal_backend.flush_async(),
+                        OperationKind::Shutdown => self.inner.terminal_backend.shutdown_async(),
                     };
                     *operation_state = OperationState::Running(future);
                     match std::mem::replace(&mut *operation_state, OperationState::Pending) {

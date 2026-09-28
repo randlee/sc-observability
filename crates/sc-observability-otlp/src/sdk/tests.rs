@@ -1,6 +1,11 @@
 //! Focused caller-runtime tests for the official SDK adapter.
 
+use super::build_exporter_set;
 use super::implementation::{CallerRuntime, group_by_resource, project_metrics};
+use crate::config::{
+    ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, validated_backend_connection,
+    validated_transport_bounds,
+};
 use crate::contracts::{ExportRecord, InstrumentationScope, Resource};
 use sc_observability_types::v2::{
     AttributeValue, Attributes, FiniteF64, MetricRecord, MetricValue,
@@ -21,6 +26,27 @@ fn sdk_adapter_captures_the_entered_caller_runtime() {
 
     runtime.block_on(async {
         assert!(CallerRuntime::try_capture().is_some());
+    });
+}
+
+#[test]
+fn sdk_constructor_builds_one_shared_admission_core_from_explicit_connection() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("test runtime");
+    let mut config = OtelConfig::new(ExporterBackend::OpenTelemetrySdk, OtlpProtocol::Grpc);
+    config.enabled = true;
+    config.endpoint = Some(OtlpEndpoint::new_typed("http://127.0.0.1:4317").expect("endpoint"));
+    let bounds = validated_transport_bounds(&config).expect("bounds");
+    let connection = validated_backend_connection(&config).expect("connection");
+
+    runtime.block_on(async move {
+        let adapter = build_exporter_set(connection, &bounds).expect("SDK adapter set");
+        assert_eq!(adapter.lifecycle.health().admitted_records, 0);
+        // The handoff returns both capabilities and the exact core that the
+        // capabilities delegate to; no second core is constructed here.
+        let _ = adapter.exporters.lifecycle.flush_async().await;
     });
 }
 
