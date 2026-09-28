@@ -145,6 +145,8 @@ struct LifecycleInner {
     flush_timeout: Duration,
     shutdown_timeout: Duration,
     state: Mutex<CoreState>,
+    #[cfg(test)]
+    barrier_registration_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 /// Shared lifecycle core consumed by backend adapters and the future facade.
@@ -182,8 +184,19 @@ impl LifecycleCore {
                     shutdown: None,
                     barrier_wakers: Vec::new(),
                 }),
+                #[cfg(test)]
+                barrier_registration_hook: Mutex::new(None),
             }),
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_barrier_registration_hook(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *self
+            .inner
+            .barrier_registration_hook
+            .lock()
+            .expect("barrier registration hook lock") = Some(Arc::new(hook));
     }
 
     /// Admits a payload while holding the admission lock only long enough to
@@ -453,19 +466,32 @@ impl Operation {
             return Poll::Pending;
         }
 
-        {
-            let state = self.inner.state.lock().expect("lifecycle state lock");
+        let waiting_for_admissions = {
+            let mut state = self.inner.state.lock().expect("lifecycle state lock");
             if state.active.range(..=self.cutoff).next().is_some() {
-                drop(state);
-                self.inner
-                    .state
+                #[cfg(test)]
+                if let Some(hook) = self
+                    .inner
+                    .barrier_registration_hook
                     .lock()
-                    .expect("lifecycle state lock")
-                    .barrier_wakers
-                    .push(context.waker().clone());
-                self.register_waiter(context.waker());
-                return Poll::Pending;
+                    .expect("barrier registration hook lock")
+                    .take()
+                {
+                    hook();
+                }
+                // Register while holding the same mutex used to observe active
+                // admissions. Otherwise the last admission can complete after
+                // the observation but before registration, leaving this barrier
+                // asleep until its deadline.
+                state.barrier_wakers.push(context.waker().clone());
+                true
+            } else {
+                false
             }
+        };
+        if waiting_for_admissions {
+            self.register_waiter(context.waker());
+            return Poll::Pending;
         }
 
         let mut future = {

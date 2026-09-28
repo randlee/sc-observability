@@ -3,8 +3,8 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Barrier, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
 use std::time::Duration;
@@ -216,9 +216,24 @@ impl Wake for NoopWake {
     fn wake(self: Arc<Self>) {}
 }
 
+struct CountingWake {
+    wakes: AtomicUsize,
+}
+
+impl Wake for CountingWake {
+    fn wake(self: Arc<Self>) {
+        self.wakes.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
 fn poll_once<F: Future + Unpin>(future: &mut F) -> Poll<F::Output> {
     let waker = Waker::from(Arc::new(NoopWake));
     let mut context = Context::from_waker(&waker);
+    Pin::new(future).poll(&mut context)
+}
+
+fn poll_with_waker<F: Future + Unpin>(future: &mut F, waker: &Waker) -> Poll<F::Output> {
+    let mut context = Context::from_waker(waker);
     Pin::new(future).poll(&mut context)
 }
 
@@ -314,6 +329,51 @@ fn ordered_flush_waits_for_prior_admission_and_preserves_payload() {
     released.store(true, Ordering::Release);
     assert!(poll_once(&mut flush).is_ready());
     assert_eq!(flushes.load(Ordering::Acquire), 1);
+}
+
+#[test]
+fn ordered_barrier_wakes_after_its_last_admission_finishes() {
+    let (core, _, _, released) = default_fixture();
+    let admitted = core
+        .admit(SignalKind::Logs, (), 1)
+        .expect("admit log record");
+    let (completion_attempt_tx, completion_attempt_rx) = mpsc::channel();
+    let completion_started = Arc::new(Barrier::new(2));
+    let completion_started_for_thread = Arc::clone(&completion_started);
+    let (completion_done_tx, completion_done_rx) = mpsc::channel();
+    let completion_thread = thread::spawn(move || {
+        completion_attempt_rx
+            .recv()
+            .expect("registration hook signals completion attempt");
+        completion_started_for_thread.wait();
+        admitted.complete(Ok(()));
+        completion_done_tx
+            .send(())
+            .expect("test observes completed admission");
+    });
+    core.set_barrier_registration_hook(move || {
+        completion_attempt_tx
+            .send(())
+            .expect("start completion while the admission mutex is held");
+        completion_started.wait();
+    });
+    let mut flush = core.flush_async();
+    let wake_counter = Arc::new(CountingWake {
+        wakes: AtomicUsize::new(0),
+    });
+    let waker = Waker::from(Arc::clone(&wake_counter));
+
+    assert!(poll_with_waker(&mut flush, &waker).is_pending());
+    assert_eq!(wake_counter.wakes.load(Ordering::Acquire), 0);
+
+    completion_done_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("completion proceeds after waker registration");
+    completion_thread.join().expect("completion thread");
+    assert_eq!(wake_counter.wakes.load(Ordering::Acquire), 1);
+
+    released.store(true, Ordering::Release);
+    assert!(poll_with_waker(&mut flush, &waker).is_ready());
 }
 
 #[test]
