@@ -1300,9 +1300,9 @@ impl TryFrom<core::v2::SpanKind> for SpanKindDto {
     }
 }
 enum_map!(SpanStatusDto, SpanStatus, Ok, Error, Unset);
-fn stored_diagnostic(value: &core::Diagnostic) -> Result<StoredDiagnosticDto, Failure> {
-    let v = from_canonical_diagnostic(value)?;
-    Ok(StoredDiagnosticDto {
+/// Preserves the canonical diagnostic payload in the retained stored-diagnostic shape.
+fn stored_diagnostic_dto(v: CanonicalDiagnosticDto) -> StoredDiagnosticDto {
+    StoredDiagnosticDto {
         timestamp: v.diagnostic.at,
         code: v.diagnostic.code,
         message: v.diagnostic.message,
@@ -1310,7 +1310,10 @@ fn stored_diagnostic(value: &core::Diagnostic) -> Result<StoredDiagnosticDto, Fa
         cause: v.cause,
         docs: v.docs,
         details: v.details,
-    })
+    }
+}
+fn stored_diagnostic(value: &core::Diagnostic) -> Result<StoredDiagnosticDto, Failure> {
+    Ok(stored_diagnostic_dto(from_canonical_diagnostic(value)?))
 }
 fn native_diagnostic(value: StoredDiagnosticDto) -> Result<core::Diagnostic, Failure> {
     let remediation = match value.remediation {
@@ -1468,15 +1471,7 @@ pub fn decode_canonical_envelope<T: DeserializeOwned>(
             }
             let error: CanonicalFailureDto = decode(raw, "response.error")?;
             let d = error.diagnostic();
-            native_diagnostic(StoredDiagnosticDto {
-                timestamp: d.diagnostic.at.clone(),
-                code: d.diagnostic.code.clone(),
-                message: d.diagnostic.message.clone(),
-                remediation: d.diagnostic.remediation.clone(),
-                cause: d.cause.clone(),
-                docs: d.docs.clone(),
-                details: d.details.clone(),
-            })?;
+            native_diagnostic(stored_diagnostic_dto(d.clone()))?;
             Ok(CanonicalWireEnvelope::Error {
                 schema_version,
                 error,
