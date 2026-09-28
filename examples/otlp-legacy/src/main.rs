@@ -1,3 +1,28 @@
-//! Placeholder for the D.8 legacy HTTP/JSON OTLP example.
+//! Minimal D.21 legacy HTTP/JSON configuration fixture.
 
-fn main() {}
+use sc_observability_otlp::{
+    ExporterBackend, LogsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, TelemetryConfigBuilder,
+};
+use sc_observability_types::ServiceName;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut transport = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
+    transport.enabled = true;
+    transport.endpoint = Some(OtlpEndpoint::new_typed("http://127.0.0.1:4318")?);
+
+    let config = TelemetryConfigBuilder::new(ServiceName::new("otlp-legacy-example")?)
+        .with_transport(transport)
+        .enable_logs(LogsConfig::default())
+        .build_typed()?;
+
+    println!(
+        "validated legacy OTLP/HTTP JSON contract for {} at {}",
+        config.service_name,
+        config
+            .transport
+            .endpoint
+            .as_ref()
+            .expect("fixture endpoint")
+    );
+    Ok(())
+}

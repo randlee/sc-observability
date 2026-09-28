@@ -64,6 +64,41 @@ fn retry_after_accepts_delta_seconds_and_bounded_dates() {
 }
 
 #[test]
+fn safety_delta_retry_classification_is_bounded() {
+    assert!(super::implementation::is_retryable_status(
+        reqwest::StatusCode::REQUEST_TIMEOUT
+    ));
+    assert!(super::implementation::is_retryable_status(
+        reqwest::StatusCode::TOO_MANY_REQUESTS
+    ));
+    assert!(super::implementation::is_retryable_status(
+        reqwest::StatusCode::INTERNAL_SERVER_ERROR
+    ));
+    assert!(!super::implementation::is_retryable_status(
+        reqwest::StatusCode::BAD_REQUEST
+    ));
+}
+
+#[test]
+fn safety_delta_shutdown_cancels_retry_wait() {
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    cancel.store(true, Ordering::Release);
+    assert!(!super::implementation::wait_cancelable(
+        Duration::from_secs(30),
+        &cancel
+    ));
+}
+
+#[test]
+fn provenance_pin_and_destination_disposition_are_present() {
+    let manifest = include_str!("../../../../docs/plans/phase-d/legacy-otlp-provenance.json");
+    assert!(manifest.contains("7b39f4e7f72b6845edec4eab4cd671611661445f"));
+    assert!(manifest.contains("transplant-and-adapt"));
+    assert!(manifest.contains("timestamp_export_integration.rs"));
+    assert!(manifest.contains("legacy_http_json"));
+}
+
+#[test]
 fn log_payload_preserves_timestamp_and_severity() {
     let record = super::implementation::log_record(&sample_log());
     let payload = build_logs_payload(&[record]);
@@ -117,7 +152,10 @@ fn terminal_client_status_is_not_retried() {
     let exporter =
         OtlpHttpExporter::for_endpoint(format!("http://{address}")).expect("construct exporter");
     let error = exporter
-        .export_logs(&[sample_log()])
+        .send_payload_sync(
+            "logs",
+            &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
+        )
         .expect_err("400 is terminal");
     assert!(matches!(
         error,

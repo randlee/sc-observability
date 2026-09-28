@@ -902,6 +902,10 @@ dependencies = [
 [[package]]
 name = "otlp-legacy-example"
 version = "2.0.0"
+dependencies = [
+ "sc-observability-otlp",
+ "sc-observability-types",
+]
 
 [[package]]
 name = "otlp-sdk-example"

@@ -9,5 +9,9 @@ homepage.workspace = true
 authors.workspace = true
 publish = false
 
+[dependencies]
+sc-observability-otlp = { workspace = true, features = ["legacy-http-json"] }
+sc-observability-types.workspace = true
+
 [lints]
 workspace = true
