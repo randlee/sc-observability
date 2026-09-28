@@ -65,6 +65,28 @@ class MajorBreakTests(unittest.TestCase):
         output = self.report().replace('-' + self.OLD + '\n', '')
         self.assertEqual(check_major_diff('sc-observability-dto', output, []), [])
 
+    def test_normalization_requires_an_explicit_root_for_derived_rows(self):
+        from validate_public_api import normalize_removed_items
+        root = 'pub enum sc_observability_types::LegacyError'
+        entries = [{'old': root}]
+        items = {
+            root,
+            'pub sc_observability_types::LegacyError::OldVariant',
+            'impl core::fmt::Debug for sc_observability_types::LegacyError',
+            'pub fn sc_observability_types::LegacyError::old_method(&self) -> ()',
+            'pub fn sc_observability_types::Unrelated::keep(&self) -> ()',
+        }
+        normalized = normalize_removed_items(items, entries)
+        self.assertEqual(
+            normalized,
+            {'pub fn sc_observability_types::Unrelated::keep(&self) -> ()', root},
+        )
+
+    def test_normalization_does_not_waive_unlisted_generated_impls(self):
+        from validate_public_api import normalize_removed_items
+        items = {'impl custom::Trait for crate::Type'}
+        self.assertEqual(normalize_removed_items(items, []), items)
+
     def test_invalid_manifest_baseline_and_duplicate_entries_fail_closed(self):
         import tempfile
         from validate_public_api import major_breaks

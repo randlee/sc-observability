@@ -127,7 +127,7 @@ def normalize_removed_items(items: set[str], entries: list[dict]) -> set[str]:
         method = re.match(r"pub (?:unsafe )?fn [^:]+::([A-Za-z_][A-Za-z_0-9]*)\(", item)
         if method and method.group(1) in _DERIVED_METHODS:
             continue
-        owner = re.match(r"(?:pub (?:enum|struct|type|fn)|impl) ([^:]+::[^:]+)", item)
+        owner = re.match(r"(?:pub (?:enum|struct|type|fn)?\s*|impl )([^:]+::[^:]+)", item)
         if owner and any(
             item_owner == root or item_owner.startswith(root + "::")
             for root in removed_roots
