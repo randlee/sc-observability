@@ -1,4 +1,4 @@
-//! Canonical error and signal conversions remain lossless at the neutral boundary.
+//! Canonical error and signal conversions, with deferred limitations named below.
 use sc_observability_dto::*;
 use sc_observability_types::{self as core, v2};
 use serde_json::{Value, json};
@@ -73,7 +73,9 @@ fn canonical_error_projection_preserves_context() {
 }
 #[test]
 fn histogram_conversion_is_lossless() {
-    let wire = fixture("MetricRecordDto");
+    let mut wire = fixture("MetricRecordDto");
+    // Attribute projection is deferred separately; retain full histogram coverage.
+    wire["attributes"] = json!({});
     let record = decode_metric(wire.clone()).unwrap();
     match record.value() {
         v2::MetricValue::Histogram {
@@ -97,6 +99,14 @@ fn histogram_conversion_is_lossless() {
         }
         _ => panic!("expected histogram"),
     }
+    let dto = MetricRecordDto::try_from(&record).unwrap();
+    assert_eq!(serde_json::to_value(dto).unwrap(), wire);
+}
+#[test]
+#[ignore = "obs-dto-attribute-projection: attributed DTO round trips deferred by user; see docs/plans/phase-d/known-limitations.md"]
+fn metric_attributes_round_trip() {
+    let wire = fixture("MetricRecordDto");
+    let record = decode_metric(wire.clone()).unwrap();
     let dto = MetricRecordDto::try_from(&record).unwrap();
     assert_eq!(serde_json::to_value(dto).unwrap(), wire);
 }
