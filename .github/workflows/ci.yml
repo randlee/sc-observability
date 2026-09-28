@@ -282,6 +282,9 @@ jobs:
       - name: Run workspace tests
         run: cargo test --locked --workspace --all-targets
 
+      - name: Run external OTLP SDK fixture
+        run: cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked
+
       - name: Run workspace doctests
         run: cargo test --locked --workspace --doc
 

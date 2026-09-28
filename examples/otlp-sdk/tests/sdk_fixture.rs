@@ -24,12 +24,21 @@ use sc_observability_types::{
     ServiceName, SpanId, SpanStatus, TargetCategory, Timestamp, TraceContext as LogTraceContext,
     TraceId,
 };
+use std::io::Read;
+use std::net::TcpListener;
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 fn fixture_config(queue_byte_capacity: usize) -> TelemetryConfig {
+    fixture_config_for_endpoint(queue_byte_capacity, "http://127.0.0.1:9")
+}
+
+fn fixture_config_for_endpoint(queue_byte_capacity: usize, endpoint: &str) -> TelemetryConfig {
     let mut transport = OtelConfig::new(ExporterBackend::OpenTelemetrySdk, OtlpProtocol::Grpc);
     transport.enabled = true;
     transport.endpoint =
-        Some(OtlpEndpoint::new_typed("http://127.0.0.1:9").expect("fixture endpoint"));
+        Some(OtlpEndpoint::new_typed(endpoint.to_owned()).expect("fixture endpoint"));
     transport.queue_capacity = Some(8);
     transport.queue_byte_capacity = Some(queue_byte_capacity);
     transport.timeout_ms = Some(DurationMs::from(10));
@@ -203,4 +212,49 @@ async fn external_fixture_enforces_record_and_byte_pressure() {
         .shutdown()
         .await
         .expect("teardown after pressure refusal");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn external_fixture_exercises_request_deadline() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind deadline listener");
+    let address = listener.local_addr().expect("deadline listener address");
+    let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept deadline request");
+        let mut request_prefix = [0_u8; 1];
+        stream
+            .read_exact(&mut request_prefix)
+            .expect("read the started deadline request");
+        accepted_tx.send(()).expect("signal request acceptance");
+        release_rx.recv().expect("release held deadline request");
+    });
+
+    let endpoint = format!("http://{address}");
+    let fixture = SdkFixture::new(&fixture_config_for_endpoint(8 * 1_024, &endpoint))
+        .expect("fixture adapter");
+    fixture
+        .export_logs(&[log_record()])
+        .expect("schedule deadline request");
+    tokio::time::timeout(Duration::from_secs(1), accepted_rx)
+        .await
+        .expect("SDK did not open the deadline request in time")
+        .expect("deadline server dropped its acceptance signal");
+    tokio::task::yield_now().await;
+
+    let started = Instant::now();
+    tokio::time::timeout(Duration::from_secs(1), fixture.flush())
+        .await
+        .expect("request deadline must complete before the test bound")
+        .expect("held request must complete through the configured deadline");
+    assert!(
+        started.elapsed() >= Duration::from_millis(5),
+        "flush completed before the configured 10ms request deadline"
+    );
+    release_tx.send(()).expect("release deadline request");
+    fixture
+        .shutdown()
+        .await
+        .expect("shutdown after the bounded request deadline");
+    server.join().expect("join deadline server");
 }
