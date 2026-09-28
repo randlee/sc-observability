@@ -257,24 +257,12 @@ impl JsonlFileSink {
     where
         E: std::error::Error + Send + Sync + 'static,
     {
-        let message = error.to_string();
-        let diagnostic = diagnostic_for_sink_failure(message.clone());
-        let mut health = self.health.write().expect("file sink health poisoned");
-        health.state = SinkHealthState::DegradedDropping;
-        health.last_error = Some(DiagnosticSummary::from(&diagnostic));
-        LogSinkError::Write {
-            context: Box::new(
-                ErrorContext::new(
-                    error_codes::LOGGER_SINK_WRITE_FAILED,
-                    "jsonl file sink write failed",
-                    Remediation::not_recoverable(
-                        "repair or replace the failed standalone sink before retrying the write",
-                    ),
-                )
-                .cause(message)
-                .source(Box::new(error)),
-            ),
-        }
+        sink_write_failure(
+            &self.health,
+            "file sink health poisoned",
+            "jsonl file sink write failed",
+            error,
+        )
     }
 
     fn mark_maintenance_failure(&self, error: LogSinkError) -> LogSinkError {
@@ -454,24 +442,12 @@ impl ConsoleSink {
     where
         E: std::error::Error + Send + Sync + 'static,
     {
-        let message = error.to_string();
-        let diagnostic = diagnostic_for_sink_failure(message.clone());
-        let mut health = self.health.write().expect("console sink health poisoned");
-        health.state = SinkHealthState::DegradedDropping;
-        health.last_error = Some(DiagnosticSummary::from(&diagnostic));
-        LogSinkError::Write {
-            context: Box::new(
-                ErrorContext::new(
-                    error_codes::LOGGER_SINK_WRITE_FAILED,
-                    "console sink write failed",
-                    Remediation::not_recoverable(
-                        "repair or replace the failed standalone sink before retrying the write",
-                    ),
-                )
-                .cause(message)
-                .source(Box::new(error)),
-            ),
-        }
+        sink_write_failure(
+            &self.health,
+            "console sink health poisoned",
+            "console sink write failed",
+            error,
+        )
     }
 }
 
@@ -631,6 +607,35 @@ pub(crate) fn diagnostic_for_sink_failure(message: impl Into<Cow<'static, str>>)
     }
 }
 
+fn sink_write_failure<E>(
+    health: &RwLock<SinkHealth>,
+    health_lock_context: &'static str,
+    error_message: &'static str,
+    error: E,
+) -> LogSinkError
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    let message = error.to_string();
+    let diagnostic = diagnostic_for_sink_failure(message.clone());
+    let mut health = health.write().expect(health_lock_context);
+    health.state = SinkHealthState::DegradedDropping;
+    health.last_error = Some(DiagnosticSummary::from(&diagnostic));
+    LogSinkError::Write {
+        context: Box::new(
+            ErrorContext::new(
+                error_codes::LOGGER_SINK_WRITE_FAILED,
+                error_message,
+                Remediation::not_recoverable(
+                    "repair or replace the failed standalone sink before retrying the write",
+                ),
+            )
+            .cause(message)
+            .source(Box::new(error)),
+        ),
+    }
+}
+
 #[cfg(feature = "fault-injection")]
 fn fault_injection_error_context(state: SinkHealthState) -> ErrorContext {
     let forced_state = match state {
@@ -693,6 +698,14 @@ mod tests {
     use sc_observability_types::{DiagnosticInfo, typed::LogSinkFailure};
 
     struct TestRoot(tempfile::TempDir);
+
+    struct FailingConsoleWriter;
+
+    impl ConsoleWriter for FailingConsoleWriter {
+        fn write_line(&self, _: &str) -> std::io::Result<()> {
+            Err(std::io::Error::other("injected console write failure"))
+        }
+    }
 
     impl TestRoot {
         fn path_buf(&self) -> PathBuf {
@@ -856,6 +869,19 @@ mod tests {
         );
         assert!(std::error::Error::source(&typed_error).is_some());
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+
+        let console = ConsoleSink::from_writer(Box::new(FailingConsoleWriter));
+        let console_error = console.write(&log_event()).expect_err("write failure");
+        assert_eq!(
+            console_error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert_eq!(
+            console_error.diagnostic().remediation,
+            error.diagnostic().remediation
+        );
+        assert!(std::error::Error::source(&console_error).is_some());
+        assert_eq!(console.health().state, SinkHealthState::DegradedDropping);
     }
 
     #[test]
