@@ -33,6 +33,7 @@ The ATM task supplies `checked-bead`, `worktree`, `branch`, `commit`, `base`,
 and `lint-command`; the task id is the sanity bead. With
 `S=.claude/skills/atm-bd-orchestration/scripts`:
 
+Reject any PR unless it is registered in gh-stack or its base branch is `develop` or matches `integrate/*`.
 1. Run the ready check, claim the task bead, and start the active task.
 2. Run:
 
