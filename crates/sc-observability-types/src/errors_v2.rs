@@ -77,6 +77,15 @@ context_error!(
     Drain => crate::error_codes::DIAGNOSTIC_INVALID
 );
 
+impl ShutdownError {
+    /// Returns the typed export cause retained by a drain failure, when present.
+    #[must_use]
+    pub fn export_cause(&self) -> Option<&ExportError> {
+        std::error::Error::source(self.context())
+            .and_then(|source| source.downcast_ref::<ExportError>())
+    }
+}
+
 context_error!(ProjectionError, Projection => crate::error_codes::DIAGNOSTIC_INVALID);
 
 context_error!(SubscriberError, Subscriber => crate::error_codes::DIAGNOSTIC_INVALID);

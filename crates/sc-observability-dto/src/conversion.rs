@@ -991,7 +991,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::ShutdownError::Timeout { .. } => timeout_failure,
-        core::v2::ShutdownError::Drain { context } => drain_category(context),
+        core::v2::ShutdownError::Drain { .. } => shutdown_drain_category(value),
         _ => unexpected_local_failure,
     }
 );
@@ -1076,15 +1076,13 @@ fn export_category(
         _ => unexpected_local_failure,
     }
 }
-fn drain_category(
-    context: &core::ErrorContext,
-) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    std::error::Error::source(context)
-        .and_then(|source| source.downcast_ref::<core::v2::ExportError>())
-        .map_or(io_failure, export_category)
-}
 fn flush_drain_category(
     value: &core::v2::FlushError,
+) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    value.export_cause().map_or(io_failure, export_category)
+}
+fn shutdown_drain_category(
+    value: &core::v2::ShutdownError,
 ) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
     value.export_cause().map_or(io_failure, export_category)
 }
