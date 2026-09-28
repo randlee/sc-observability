@@ -6,6 +6,7 @@ use std::sync::{Arc, RwLock};
 
 use sc_observability::typed::{TypedLogSink, legacy_sink};
 use sc_observability::*;
+use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::v2::LogSinkError;
 use serde_json::Map;
 
@@ -117,6 +118,34 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
         assert_eq!(sink.flushes.load(Ordering::SeqCst), 1);
         assert_eq!(sink.health_snapshot().state, SinkHealthState::Healthy);
     }
+}
+
+#[test]
+fn builder_rejects_zero_sinks_at_build_and_accepts_a_registered_sink() {
+    let zero_sink = LoggerBuilder::new_typed(config()).expect("valid zero-sink builder");
+    let Err(error) = zero_sink.build_typed() else {
+        panic!("zero-sink logger construction must fail");
+    };
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::LOGGER_INIT_FAILED,
+        "zero-sink construction should use the logger initialization diagnostic"
+    );
+    assert!(
+        error
+            .diagnostic()
+            .message
+            .contains("at least one registered sink")
+    );
+
+    let mut valid = LoggerBuilder::new_typed(config()).expect("valid builder");
+    valid
+        .register_typed_sink(Arc::new(RecordingTypedSink::default()))
+        .expect("register a healthy sink");
+    let logger = valid
+        .build_typed()
+        .expect("a registered sink should permit construction");
+    logger.shutdown();
 }
 
 #[test]

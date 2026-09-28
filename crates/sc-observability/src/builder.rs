@@ -241,6 +241,18 @@ impl LoggerBuilder {
             sinks,
             typed_sinks: _,
         } = self;
+        if sinks.is_empty() {
+            return Err(InitFailure::logger_initialization(
+                "logger must have at least one registered sink",
+                Remediation::recoverable(
+                    "enable a built-in sink or register a sink before building the logger",
+                    [
+                        "set LoggerConfig.enable_file_sink or enable_console_sink to true",
+                        "register a sink with LoggerBuilder::register_sink",
+                    ],
+                ),
+            ));
+        }
         let config = Arc::new(config);
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let query_available = active_log_path.exists() || config.enable_file_sink;

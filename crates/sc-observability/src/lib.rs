@@ -2133,7 +2133,7 @@ mod tests {
         let root = temp_path("typed-admission");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         config.level = LevelFilter::Off;
         let logger = Logger::new_typed(config).expect("typed logger");
 
@@ -2160,7 +2160,7 @@ mod tests {
         let root = temp_path("typed-accepted-admission");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         let logger = Logger::new_typed(config).expect("typed logger");
         assert_eq!(
             logger
@@ -2403,7 +2403,7 @@ mod tests {
         let root = temp_path("writer-start-failure");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         config.writer_start_should_fail = true;
 
         let Err(error) = Logger::new_with_level_owner(config) else {
@@ -2423,7 +2423,7 @@ mod tests {
         let root = temp_path("typed-writer-start-failure");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         config.writer_start_should_fail = true;
 
         let Err(error) = Logger::new_with_level_owner_typed(config) else {
@@ -2444,7 +2444,7 @@ mod tests {
         let root = temp_path("level-owner");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         config.level = LevelFilter::Info;
         let (logger, mut owner) =
             Logger::new_with_level_owner(config).expect("construct logger with owner");
@@ -2509,7 +2509,7 @@ mod tests {
             let root = temp_path(name);
             let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
             config.enable_file_sink = false;
-            config.enable_console_sink = false;
+            config.enable_console_sink = true;
             let (logger, owner) =
                 Logger::new_with_level_owner(config).expect("construct logger with owner");
             let logger = Arc::new(logger);
@@ -2576,7 +2576,7 @@ mod tests {
         let root = temp_path("typed-admission-flush-concurrency");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         let logger = Arc::new(Logger::new_typed(config).expect("typed logger"));
         let barrier = Arc::new(Barrier::new(3));
         let (flush_tx, flush_rx) = mpsc::channel();
@@ -2624,10 +2624,10 @@ mod tests {
         let second_root = temp_path("level-isolation-second");
         let mut first_config = LoggerConfig::default_for(service_name(), first_root.path_buf());
         first_config.enable_file_sink = false;
-        first_config.enable_console_sink = false;
+        first_config.enable_console_sink = true;
         let mut second_config = LoggerConfig::default_for(service_name(), second_root.path_buf());
         second_config.enable_file_sink = false;
-        second_config.enable_console_sink = false;
+        second_config.enable_console_sink = true;
         let (first, mut first_owner) =
             Logger::new_with_level_owner(first_config).expect("first logger");
         let (second, _second_owner) =
@@ -2653,7 +2653,7 @@ mod tests {
         let root = temp_path("level-poison");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         let (logger, mut owner) =
             Logger::new_with_level_owner(config).expect("construct logger with owner");
         owner
@@ -2681,7 +2681,7 @@ mod tests {
         let root = temp_path("level-overflow");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        config.enable_console_sink = false;
+        config.enable_console_sink = true;
         let (logger, mut owner) =
             Logger::new_with_level_owner(config).expect("construct logger with owner");
         logger
@@ -3294,6 +3294,7 @@ mod tests {
         let root = temp_path("query-unavailable");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
+        config.enable_console_sink = true;
         let logger = Logger::new(config).expect("logger");
 
         assert!(matches!(
