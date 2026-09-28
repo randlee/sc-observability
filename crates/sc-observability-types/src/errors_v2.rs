@@ -10,7 +10,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FailureClassification {
     /// Invalid caller-controlled input identified by its real input field.
-    Validation { field: &'static str },
+    Validation {
+        /// Exact native input field that failed validation.
+        field: &'static str,
+    },
     /// A bounded queue cannot accept more work.
     QueueFull,
     /// The requested lifecycle operation is no longer available.
@@ -20,9 +23,15 @@ pub enum FailureClassification {
     /// An I/O or transport operation failed.
     Io,
     /// An operation exceeded its deadline.
-    Timeout { operation: &'static str },
+    Timeout {
+        /// Exact native operation that exceeded its deadline.
+        operation: &'static str,
+    },
     /// An operation was cancelled during controlled shutdown.
-    Cancelled { operation: &'static str },
+    Cancelled {
+        /// Exact native operation cancelled during shutdown.
+        operation: &'static str,
+    },
     /// A local invariant or unexpected implementation failure occurred.
     Internal,
 }
