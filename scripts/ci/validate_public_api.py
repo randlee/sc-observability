@@ -77,7 +77,9 @@ def check_major_diff(crate: str, output: str, entries: list[dict]) -> list[str]:
                 'Added items to the public API')
     if not all(section in output for section in sections):
         raise ValueError('public-api output lacks required diff sections')
-    removed = {line[1:] for line in output.splitlines() if line.startswith('-')}
+    removed = normalize_removed_items(
+        {line[1:] for line in output.splitlines() if line.startswith('-')}, entries
+    )
     added = {line[1:] for line in output.splitlines() if line.startswith('+')}
     scoped = [entry for entry in entries if entry['crate'] == crate]
     listed = {entry['old'] for entry in scoped}
@@ -88,6 +90,48 @@ def check_major_diff(crate: str, output: str, entries: list[dict]) -> list[str]:
         elif entry['new'] and entry['new'] not in added:
             problems.append(f"replacement differs from reviewed break: {entry['id']}")
     return problems
+
+
+_DERIVED_METHODS = {
+    "borrow", "borrow_mut", "clone", "clone_into", "clone_to_uninit", "deserialize",
+    "eq", "fmt", "from", "into", "serialize", "to_owned", "to_string", "try_from",
+    "try_into", "type_id",
+}
+
+
+def normalize_removed_items(items: set[str], entries: list[dict]) -> set[str]:
+    """Drop cargo-public-api's mechanically-derived descendants.
+
+    The break manifest records source-level removals/signature changes.  Rust
+    auto-trait, serde, conversion, and enum/struct-member rows are consequences
+    of those roots and are not independently reviewable breaks.  Keep custom
+    impls and every explicit manifest line so this remains an exact, scoped
+    normalisation rather than a crate-wide waiver.
+    """
+    listed = {entry["old"] for entry in entries}
+    removed_roots = set()
+    for item in listed:
+        match = re.match(r"pub (?:struct|enum) ([^ (]+)", item)
+        if match:
+            removed_roots.add(match.group(1))
+
+    normalized = set()
+    for item in items:
+        if item in listed:
+            normalized.add(item)
+            continue
+        if item.startswith(("impl core::", "impl alloc::", "impl serde", "impl<")):
+            continue
+        if re.match(r"pub type .+::(?:Error|Owned) = ", item):
+            continue
+        method = re.match(r"pub (?:unsafe )?fn [^:]+::([A-Za-z_][A-Za-z_0-9]*)\(", item)
+        if method and method.group(1) in _DERIVED_METHODS:
+            continue
+        owner = re.match(r"(?:pub (?:enum|struct|type|fn)|impl) ([^:]+::[^:]+)", item)
+        if owner and any(item_owner.startswith(root + "::") for root in removed_roots for item_owner in [owner.group(1)]):
+            continue
+        normalized.add(item)
+    return normalized
 
 
 def approved_structural_items(crate: str, entries: list[dict]) -> set[tuple[str, ...]]:
