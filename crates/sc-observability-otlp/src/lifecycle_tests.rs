@@ -364,8 +364,12 @@ fn ordered_barrier_wakes_after_its_last_admission_finishes() {
     let waker = Waker::from(Arc::clone(&wake_counter));
 
     assert!(poll_with_waker(&mut flush, &waker).is_pending());
-    assert_eq!(wake_counter.wakes.load(Ordering::Acquire), 0);
 
+    // `poll_with_waker` releases the admission mutex before it returns, so
+    // completion may legitimately wake immediately. The hook/barrier above
+    // already proves completion attempted while that mutex was held; assert
+    // the one required wake after completion instead of observing a racy
+    // pre-completion count here.
     completion_done_rx
         .recv_timeout(Duration::from_secs(1))
         .expect("completion proceeds after waker registration");
