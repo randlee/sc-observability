@@ -13,6 +13,7 @@ from pathlib import Path
 import tomli_w
 from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source, runtime_options, fault_paths
 from python_arm64 import apply_windows_arm64_overlay
+from stage_python_conformance import stage_conformance
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
@@ -106,6 +107,7 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     for relative in ('python', 'tests', 'examples'):
         if (project / relative).is_dir():
             copy_tracked_tree(source, PROJECT / relative, staging / relative)
+    stage_conformance(source, staging / 'tests')
     shutil.copyfile(source / 'LICENSE', staging / 'LICENSE')
     (staging / 'qualification-suite.json').write_text(json.dumps(suite, indent=2) + '\n')
     embedding = confined(source, suite['embedding_manifest'])

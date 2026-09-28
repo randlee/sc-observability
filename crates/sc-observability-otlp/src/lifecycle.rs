@@ -4,23 +4,20 @@
 //! protocol.  Exporters provide the two asynchronous lifecycle futures while
 //! this module owns the short admission critical section, ordered barriers,
 //! bounded admission, and terminal accounting.
-#![allow(
-    dead_code,
-    reason = "D.18 integrates this staged lifecycle core into the public facade"
-)]
-
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::config::ValidatedTransportBounds;
+use crate::constants::MAX_OTLP_RECORD_BYTES;
 use crate::contracts::{ExporterSet, LifecycleFuture};
 use crate::error_codes;
+use sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED;
 use sc_observability_types::v2::{ExportError, TelemetryError};
 use sc_observability_types::{DiagnosticSummary, ErrorContext, Remediation};
 
@@ -46,6 +43,10 @@ impl SignalKind {
 }
 
 /// Snapshot of lifecycle state and fail-open accounting for health surfaces.
+#[allow(
+    dead_code,
+    reason = "D.18 exposes lifecycle health through the public facade"
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LifecycleHealth {
     /// Current lifecycle phase.
@@ -120,8 +121,8 @@ impl Drop for AdmissionPermit {
 }
 
 struct AdmissionMeta {
-    _signal: SignalKind,
-    _bytes: usize,
+    signal: SignalKind,
+    bytes: usize,
 }
 
 struct CoreState {
@@ -167,6 +168,7 @@ impl LifecycleCore {
     /// Constructs the state machine from D.21's validated, backend-neutral
     /// bounds.  Exporter preflight is intentionally performed before any
     /// state becomes visible to callers.
+    #[allow(dead_code, reason = "D.18 constructs the staged lifecycle core")]
     pub(crate) fn new(
         exporters: ExporterSet,
         bounds: &ValidatedTransportBounds,
@@ -241,6 +243,11 @@ impl LifecycleCore {
                 )),
             });
         }
+        if bytes > MAX_OTLP_RECORD_BYTES {
+            let error = queue_full_error();
+            LifecycleInner::record_drop(&mut state, signal, Some(&error));
+            return Err(TelemetryError::ExportFailure(error));
+        }
         if state.admitted_records >= self.inner.queue_capacity
             || state
                 .admitted_bytes
@@ -256,13 +263,9 @@ impl LifecycleCore {
         state.next_sequence = state.next_sequence.saturating_add(1);
         state.admitted_records += 1;
         state.admitted_bytes += bytes;
-        state.active.insert(
-            sequence,
-            AdmissionMeta {
-                _signal: signal,
-                _bytes: bytes,
-            },
-        );
+        state
+            .active
+            .insert(sequence, AdmissionMeta { signal, bytes });
         drop(state);
 
         Ok(Admitted {
@@ -303,13 +306,15 @@ impl LifecycleCore {
     /// Atomically closes admission and starts or joins the one shutdown.
     pub(crate) fn shutdown_async(&self) -> LifecycleWaiter {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
+        // A terminal operation retains its result, including failure. Rejoining
+        // must not replace that result with synthetic success after shutdown.
+        if let Some(operation) = state.shutdown.as_ref() {
+            return LifecycleWaiter::new(Arc::clone(operation));
+        }
         if state.phase == LifecycleState::Shutdown {
             let operation = Arc::new(Operation::completed(Arc::clone(&self.inner), Ok(())));
             state.shutdown = Some(Arc::clone(&operation));
             return LifecycleWaiter::new(operation);
-        }
-        if let Some(operation) = state.shutdown.as_ref() {
-            return LifecycleWaiter::new(Arc::clone(operation));
         }
         state.phase = LifecycleState::Closing;
         let cutoff = state.next_sequence;
@@ -326,7 +331,48 @@ impl LifecycleCore {
         LifecycleWaiter::new(operation)
     }
 
+    /// Abandons all admitted work when the final backend handle is dropped.
+    ///
+    /// This is deliberately separate from explicit shutdown: dropping a
+    /// handle cannot await the worker, but it must still close admission and
+    /// publish the same terminal accounting to retained health/barrier
+    /// observers. Admission permits that complete later see their sequence
+    /// removed and therefore cannot count the record twice.
+    pub(crate) fn abandon(&self) {
+        let worker_error = worker_terminated_error();
+        let mut state = self.inner.state.lock().expect("lifecycle state lock");
+        if state.phase == LifecycleState::Shutdown && state.active.is_empty() {
+            return;
+        }
+        state.phase = LifecycleState::Shutdown;
+        let active = std::mem::take(&mut state.active);
+        for (sequence, metadata) in active {
+            state.admitted_records = state.admitted_records.saturating_sub(1);
+            state.admitted_bytes = state.admitted_bytes.saturating_sub(metadata.bytes);
+            LifecycleInner::record_drop(&mut state, metadata.signal, Some(&worker_error));
+            let snapshot = ErrorSnapshot::from_error(&worker_error);
+            let mut captured = false;
+            for operation in [&state.flush, &state.shutdown].into_iter().flatten() {
+                if sequence < operation.cutoff {
+                    captured |= operation.record_failure(&snapshot);
+                }
+            }
+            if !captured {
+                state.pending_failure.get_or_insert(snapshot);
+            }
+        }
+        let waiters = std::mem::take(&mut state.barrier_wakers);
+        drop(state);
+        for waiter in waiters {
+            waiter.wake();
+        }
+    }
+
     /// Returns a point-in-time health/accounting snapshot.
+    #[allow(
+        dead_code,
+        reason = "D.18 exposes lifecycle health through the public facade"
+    )]
     pub(crate) fn health(&self) -> LifecycleHealth {
         let state = self.inner.state.lock().expect("lifecycle state lock");
         LifecycleHealth {
@@ -403,7 +449,13 @@ struct Operation {
     failure: Mutex<Option<ErrorSnapshot>>,
     waiters: Mutex<Vec<Waker>>,
     timer_started: AtomicBool,
+    timer_signal: Arc<TimerSignal>,
     polling: AtomicBool,
+}
+
+struct TimerSignal {
+    completed: Mutex<bool>,
+    wake: Condvar,
 }
 
 enum OperationState {
@@ -414,6 +466,9 @@ enum OperationState {
 
 struct Completion {
     snapshot: Option<ErrorSnapshot>,
+    // The first observer receives the original typed error (including its
+    // source and construction backtrace); later observers reconstruct from
+    // the stable diagnostic snapshot because ExportError is not Clone.
     original: Mutex<Option<ExportError>>,
 }
 
@@ -455,6 +510,10 @@ impl Operation {
             failure: Mutex::new(failure),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(false),
+            timer_signal: Arc::new(TimerSignal {
+                completed: Mutex::new(false),
+                wake: Condvar::new(),
+            }),
             polling: AtomicBool::new(false),
         }
     }
@@ -471,6 +530,10 @@ impl Operation {
             failure: Mutex::new(None),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(true),
+            timer_signal: Arc::new(TimerSignal {
+                completed: Mutex::new(true),
+                wake: Condvar::new(),
+            }),
             polling: AtomicBool::new(false),
         }
     }
@@ -622,17 +685,41 @@ impl Operation {
         let weak = Arc::downgrade(self);
         let deadline = self.deadline;
         let timer_waker = waker.clone();
+        let timer_signal = Arc::clone(&self.timer_signal);
         thread::spawn(move || {
-            let now = Instant::now();
-            if deadline > now {
-                thread::sleep(deadline - now);
-            }
-            timer_waker.wake_by_ref();
-            if let Some(operation) = weak.upgrade() {
-                let waiters =
-                    std::mem::take(&mut *operation.waiters.lock().expect("operation waiters lock"));
-                for waiter in waiters {
-                    waiter.wake();
+            let mut completed = timer_signal.completed.lock().expect("operation timer lock");
+            while !*completed {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    drop(completed);
+                    timer_waker.wake_by_ref();
+                    if let Some(operation) = weak.upgrade() {
+                        let waiters = std::mem::take(
+                            &mut *operation.waiters.lock().expect("operation waiters lock"),
+                        );
+                        for waiter in waiters {
+                            waiter.wake();
+                        }
+                    }
+                    return;
+                }
+                let (next, timeout) = timer_signal
+                    .wake
+                    .wait_timeout(completed, remaining)
+                    .expect("operation timer wait");
+                completed = next;
+                if timeout.timed_out() && !*completed {
+                    drop(completed);
+                    timer_waker.wake_by_ref();
+                    if let Some(operation) = weak.upgrade() {
+                        let waiters = std::mem::take(
+                            &mut *operation.waiters.lock().expect("operation waiters lock"),
+                        );
+                        for waiter in waiters {
+                            waiter.wake();
+                        }
+                    }
+                    return;
                 }
             }
         });
@@ -650,6 +737,9 @@ impl Operation {
         let OperationState::Complete(completion) = &*state else {
             return None;
         };
+        // This is intentionally a take-once accessor: preserving the original
+        // error for one waiter retains its source/backtrace; all later waiters
+        // receive a typed reconstruction from the shared diagnostic snapshot.
         Some(
             match completion.original.lock().expect("completion lock").take() {
                 Some(error) => Err(error),
@@ -669,18 +759,19 @@ impl Operation {
         }
         *state = OperationState::Complete(Arc::clone(&completion));
         drop(state);
+        *self
+            .timer_signal
+            .completed
+            .lock()
+            .expect("operation timer lock") = true;
+        self.timer_signal.wake.notify_one();
         if self.kind == OperationKind::Shutdown {
             self.inner.state.lock().expect("lifecycle state lock").phase = LifecycleState::Shutdown;
         }
-        if let Some(error) = completion
-            .original
-            .lock()
-            .expect("completion lock")
-            .as_ref()
-        {
+        if let Some(snapshot) = &completion.snapshot {
             let mut lifecycle_state = self.inner.state.lock().expect("lifecycle state lock");
             lifecycle_state.degraded = true;
-            lifecycle_state.last_error = Some(DiagnosticSummary::from(error.diagnostic()));
+            lifecycle_state.last_error = Some(DiagnosticSummary::from(&snapshot.diagnostic));
         }
         let waiters = std::mem::take(&mut *self.waiters.lock().expect("operation waiters lock"));
         for waiter in waiters {
@@ -809,6 +900,19 @@ fn terminal_drop_error() -> ExportError {
             "admitted telemetry reached a terminal outcome without completion",
             Remediation::recoverable(
                 "inspect telemetry health and exporter terminal state",
+                std::iter::empty::<String>(),
+            ),
+        )),
+    }
+}
+
+fn worker_terminated_error() -> ExportError {
+    ExportError::WorkerTerminated {
+        context: Box::new(ErrorContext::new(
+            OTLP_WORKER_TERMINATED,
+            "OTLP worker terminated while abandoning admitted telemetry",
+            Remediation::recoverable(
+                "inspect telemetry health and construct a new exporter",
                 std::iter::empty::<String>(),
             ),
         )),

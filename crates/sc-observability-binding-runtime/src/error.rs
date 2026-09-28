@@ -55,22 +55,6 @@ fn context(
     Box::new(ErrorContext::new(code, message, remediation))
 }
 
-pub(crate) fn init_configuration_code(
-    code: ErrorCode,
-    message: impl Into<String>,
-) -> native::v2::InitError {
-    native::v2::InitError::Configuration {
-        context: context(
-            code,
-            message,
-            Remediation::recoverable(
-                "correct the binding runtime configuration",
-                std::iter::empty::<String>(),
-            ),
-        ),
-    }
-}
-
 pub(crate) fn init_runtime(
     message: impl Into<String>,
     source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
@@ -91,6 +75,18 @@ pub(crate) fn init_runtime(
     native::v2::InitError::Runtime { context }
 }
 
+pub(crate) fn init_runtime_internal(message: impl Into<String>) -> native::v2::InitError {
+    native::v2::InitError::Runtime {
+        context: context(
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_INTERNAL),
+            message,
+            Remediation::not_recoverable(
+                "restart the binding runtime after resolving the poisoned state",
+            ),
+        ),
+    }
+}
+
 pub(crate) fn flush_drain(source: Box<native::ErrorContext>) -> native::v2::FlushError {
     let (code, message, remediation) = {
         let diagnostic = source.diagnostic();
@@ -105,28 +101,30 @@ pub(crate) fn flush_drain(source: Box<native::ErrorContext>) -> native::v2::Flus
     native::v2::FlushError::Drain { context }
 }
 
-pub(crate) fn subscriber(code: &str, message: impl Into<String>) -> native::v2::SubscriberError {
+fn registry_remediation(code: &'static str) -> Remediation {
+    let entry = codes::REGISTRY
+        .iter()
+        .find(|entry| entry.code == code)
+        .expect("binding runtime codes are registered by the DTO boundary");
+    Remediation::recoverable(entry.remediation, std::iter::empty::<String>())
+}
+
+pub(crate) fn subscriber_closed(message: impl Into<String>) -> native::v2::SubscriberError {
     native::v2::SubscriberError::Subscriber {
         context: context(
-            ErrorCode::new_owned(code),
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_CLOSED),
             message,
-            Remediation::recoverable(
-                "retry the subscription after the backend is available",
-                std::iter::empty::<String>(),
-            ),
+            registry_remediation(codes::SC_OBSERVABILITY_BINDING_CLOSED),
         ),
     }
 }
 
-pub(crate) fn shutdown_timeout(message: impl Into<String>) -> native::v2::ShutdownError {
-    native::v2::ShutdownError::Timeout {
+pub(crate) fn subscriber_waiters_full(message: impl Into<String>) -> native::v2::SubscriberError {
+    native::v2::SubscriberError::Subscriber {
         context: context(
-            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_TIMEOUT),
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL),
             message,
-            Remediation::recoverable(
-                "wait for the existing shutdown operation",
-                std::iter::empty::<String>(),
-            ),
+            registry_remediation(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL),
         ),
     }
 }
@@ -141,37 +139,9 @@ pub(crate) fn shutdown_drain(message: impl Into<String>) -> native::v2::Shutdown
     }
 }
 
-pub(crate) fn flush_observer_timeout() -> native::v2::FlushError {
-    native::v2::FlushError::Drain {
-        context: context(
-            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_TIMEOUT),
-            "flush observation deadline elapsed",
-            Remediation::recoverable(
-                "wait for the existing flush operation",
-                std::iter::empty::<String>(),
-            ),
-        ),
-    }
-}
-
 pub(crate) fn observer_timeout(kind: OperationKind) -> Failure {
-    match kind {
-        OperationKind::Flush => {
-            let error = flush_observer_timeout();
-            Failure::Timeout {
-                diagnostic: Box::new(crate::conversion::diagnostic(error.diagnostic())),
-                operation: "flush".into(),
-            }
-        }
-        OperationKind::Shutdown => {
-            let error = shutdown_timeout("shutdown observation deadline elapsed");
-            Failure::Timeout {
-                diagnostic: Box::new(crate::conversion::diagnostic(error.diagnostic())),
-                operation: "shutdown".into(),
-            }
-        }
-        OperationKind::Query => timeout(),
-    }
+    let _ = kind;
+    timeout()
 }
 
 pub(crate) fn duration(value: Duration) -> Result<(), Failure> {

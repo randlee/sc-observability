@@ -12,6 +12,12 @@ import {
   type JsonTransport,
   type Result,
 } from "./index";
+import { validate } from "./generated/index";
+
+declare function require(id: string): unknown;
+const { readFileSync } = require("node:fs") as {
+  readFileSync(path: string, encoding: "utf8"): string;
+};
 
 declare const process: { exitCode: number };
 
@@ -31,6 +37,45 @@ const transport: JsonTransport = {
 };
 
 async function main(): Promise<void> {
+  const conversionCases = JSON.parse(
+    readFileSync("../../bindings/conformance/v1/conversion-cases.json", "utf8"),
+  ) as Array<Record<string, unknown>>;
+  for (const testCase of conversionCases.filter((item) => item.operation === "canonical_envelope")) {
+    if (testCase.result === "decoded") {
+      assert(
+        validate("OutputCanonicalWireEnvelopeAdmissionDto", testCase.expected),
+        `${String(testCase.id)} did not match its generated canonical envelope model`,
+      );
+      const expected = testCase.expected as {
+        kind: string;
+        error?: { kind: string; remote_kind?: string; cause?: string; docs?: string; details?: Record<string, unknown> };
+      };
+      if (expected.kind !== "error" || !expected.error) {
+        throw new Error(`${String(testCase.id)} lacked an error envelope`);
+      }
+      if (testCase.id === "canonical-envelope-unknown-error-kind") {
+        assert(expected.error.kind === "unknown_remote" &&
+          expected.error.remote_kind === "future_export_failure",
+        "unknown canonical failure kind was not retained as unknown_remote");
+      }
+      if (testCase.id === "canonical-envelope-typed-queue-full-context") {
+        assert(expected.error.kind === "queue_full" && expected.error.cause === "bounded cause" &&
+          expected.error.docs === "https://example.test/recovery" &&
+          expected.error.details?.depth !== undefined,
+        "typed operational failure lost cause/docs/details");
+      }
+    } else {
+      assert(
+        !validate("InputCanonicalWireEnvelopeAdmissionDto", testCase.value),
+        `${String(testCase.id)} malformed envelope unexpectedly matched its generated input model`,
+      );
+      assert(
+        validate("OutputFailure", testCase.expected_error),
+        `${String(testCase.id)} failure did not match its generated failure model`,
+      );
+    }
+  }
+
   assert(canonicalErrorCode("EventError::Validation") === "SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED",
     "canonical v2 event name did not retain its stable code");
   assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED") === "EventError::Validation",

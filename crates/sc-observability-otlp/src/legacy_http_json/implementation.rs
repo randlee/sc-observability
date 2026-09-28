@@ -11,7 +11,6 @@
     reason = "D.18 wires this staged legacy backend into the facade after D.8"
 )]
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::future::Future;
 use std::path::PathBuf;
@@ -19,7 +18,7 @@ use std::pin::Pin;
 #[cfg(test)]
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
@@ -27,7 +26,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::config::{
     AuthHeader, BackendTransportBounds, OtelConfig, RetryPolicy, ValidatedTransportBounds,
@@ -37,17 +36,16 @@ use crate::config::{
 use crate::config::{ExporterBackend, OtlpProtocol};
 use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
-    LogRecord, MetricExporter, Resource, TraceExporter,
+    LogRecord, MetricExporter, TraceExporter,
 };
 use crate::lifecycle::{LifecycleCore, SignalKind};
-use sc_observability_types::otlp::{
-    OtlpLogRecord, OtlpResource, group_records_by_resource_and_scope,
-};
-use sc_observability_types::v2::{
-    AggregationTemporality, AttributeValue, ExportError, MetricRecord, MetricValue, SpanKind,
-    SpanStatus, TelemetryError, TraceFlags,
-};
-use sc_observability_types::{ErrorContext, LogEvent, Remediation, Timestamp, error_codes};
+use sc_observability_types::v2::{ExportError, MetricRecord, TelemetryError};
+use sc_observability_types::{ErrorContext, LogEvent, Remediation, error_codes};
+
+// Preserve the existing sibling-test paths while sharing the payload module
+// with transport submission; no public or crate-private exporter API changes.
+pub(super) use super::payload::{build_logs_payload, log_record};
+use super::payload::{build_metrics_payload, build_traces_payload, metric_record, span_record};
 
 const RETRY_AFTER_HEADER_LIMIT: usize = 128;
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(5);
@@ -111,7 +109,7 @@ pub(crate) struct LegacyHttpJsonConfig {
     retry: RetrySettings,
     jitter_seed: u64,
     #[cfg(test)]
-    retry_delay_observer: Option<SyncSender<Duration>>,
+    retry_delay_observer: Option<Sender<Duration>>,
     #[cfg(test)]
     startup_hooks: Option<Arc<StartupTestHooks>>,
 }
@@ -181,6 +179,7 @@ struct WorkerInner {
     control_tx: SyncSender<ControlCommand>,
     send_lock: Mutex<()>,
     cancel: Arc<AtomicBool>,
+    stop: Arc<AtomicBool>,
     terminated: AtomicBool,
     lifecycle_flush_timeout: Duration,
     lifecycle_shutdown_timeout: Duration,
@@ -189,6 +188,7 @@ struct WorkerInner {
 impl Drop for WorkerInner {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Release);
+        self.stop.store(true, Ordering::Release);
         let _ = self
             .control_tx
             .try_send(ControlCommand::Shutdown { result: None });
@@ -207,6 +207,8 @@ impl Worker {
         let (ready_tx, ready_rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let worker_cancel = Arc::clone(&cancel);
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = Arc::clone(&stop);
         let flush_timeout = config.lifecycle_flush_timeout;
         let shutdown_timeout = config.lifecycle_shutdown_timeout;
         let handshake_timeout = config
@@ -219,7 +221,14 @@ impl Worker {
             .spawn(move || {
                 #[cfg(test)]
                 let hooks = config.startup_hooks.clone();
-                worker_main(config, data_rx, control_rx, ready_tx, &worker_cancel);
+                worker_main(
+                    config,
+                    data_rx,
+                    control_rx,
+                    ready_tx,
+                    &worker_cancel,
+                    &worker_stop,
+                );
                 #[cfg(test)]
                 if let Some(hooks) = hooks {
                     // Sent only after worker_main returns and its client drops.
@@ -238,6 +247,7 @@ impl Worker {
                     control_tx,
                     send_lock: Mutex::new(()),
                     cancel,
+                    stop,
                     terminated: AtomicBool::new(false),
                     lifecycle_flush_timeout: flush_timeout,
                     lifecycle_shutdown_timeout: shutdown_timeout,
@@ -303,6 +313,11 @@ impl Worker {
 
     fn cancel(&self) {
         self.inner.cancel.store(true, Ordering::Release);
+    }
+
+    fn stop(&self) {
+        self.inner.cancel.store(true, Ordering::Release);
+        self.inner.stop.store(true, Ordering::Release);
     }
 
     fn flush_blocking(&self) -> Result<(), ExportError> {
@@ -384,6 +399,7 @@ fn worker_main(
     control_rx: Receiver<ControlCommand>,
     ready_tx: mpsc::Sender<Result<(), ExportError>>,
     cancel: &AtomicBool,
+    stop: &AtomicBool,
 ) {
     #[cfg(test)]
     if let Some(hooks) = &config.startup_hooks {
@@ -409,6 +425,12 @@ fn worker_main(
         }
     };
     loop {
+        // Cancellation is the persistent stop intent used by final-handle
+        // abandonment. Do not rely solely on the capacity-one control slot:
+        // it may already contain a flush command.
+        if stop.load(Ordering::Acquire) {
+            return;
+        }
         if let Ok(command) = control_rx.try_recv() {
             drain_data(&client, &config, &data_rx, cancel);
             if handle_control(command, cancel) {
@@ -607,7 +629,7 @@ fn wait_for_retry(config: &LegacyHttpJsonConfig, duration: Duration, cancel: &At
 fn wait_cancelable_with_observer(
     duration: Duration,
     cancel: &AtomicBool,
-    observer: Option<&SyncSender<Duration>>,
+    observer: Option<&Sender<Duration>>,
 ) -> bool {
     #[cfg(not(test))]
     let _ = observer;
@@ -615,7 +637,10 @@ fn wait_cancelable_with_observer(
     {
         notify_retry_wait_started();
         if let Some(sender) = observer {
-            let _ = sender.try_send(duration);
+            // std::sync::mpsc::Sender is unbounded, so send is nonblocking
+            // for this test-only notification and cannot lose a pre-wait
+            // event to a zero-capacity rendezvous race.
+            let _ = sender.send(duration);
         }
     }
 
@@ -703,6 +728,23 @@ impl LegacyBackend {
     }
 }
 
+impl Drop for LegacyBackend {
+    fn drop(&mut self) {
+        // The lifecycle core retains a Worker clone, so WorkerInner::drop is
+        // not the final-handle boundary. Abandon shared admissions first,
+        // then persist cancellation and best-effort wake the worker. The
+        // worker loop also observes cancellation while idle, so a saturated
+        // control slot cannot lose the stop intent.
+        self.lifecycle.abandon();
+        self.worker.stop();
+        let _ = self
+            .worker
+            .inner
+            .control_tx
+            .try_send(ControlCommand::Shutdown { result: None });
+    }
+}
+
 /// Legacy exporter shared by all three OTLP signal families.
 pub(crate) struct OtlpHttpExporter {
     backend: Arc<LegacyBackend>,
@@ -777,7 +819,7 @@ impl OtlpHttpExporter {
         endpoint: String,
         retry: crate::config::LegacyRetryPolicy,
         jitter_seed: u64,
-        retry_delay_observer: Option<SyncSender<Duration>>,
+        retry_delay_observer: Option<Sender<Duration>>,
     ) -> Result<Self, ExportError> {
         let sequence_timeout_ms = retry.retry_sequence_timeout_ms.map_or(3_000, u64::from);
         let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
@@ -828,6 +870,11 @@ impl OtlpHttpExporter {
     ) -> Result<(), ExportError> {
         let endpoint = normalize_signal_endpoint(&self.endpoint, signal);
         self.backend.worker.export(endpoint, payload.to_string())
+    }
+
+    #[cfg(test)]
+    pub(super) fn lifecycle_for_test(&self) -> LifecycleCore {
+        self.backend.lifecycle.clone()
     }
 }
 
@@ -943,344 +990,6 @@ pub(crate) fn build_exporter_set(config: &OtelConfig) -> Result<ExporterSet, Exp
         metrics: exporter.clone(),
         lifecycle: exporter,
     })
-}
-
-pub(super) fn log_record(event: &LogEvent) -> ExportRecord<LogRecord> {
-    ExportRecord {
-        resource: Resource {
-            attributes: BTreeMap::from_iter([(
-                "service.name".to_owned(),
-                AttributeValue::String(event.service.as_str().to_owned()),
-            )]),
-            schema_url: None,
-        },
-        scope: crate::contracts::InstrumentationScope::default(),
-        record: OtlpLogRecord {
-            event: event.clone(),
-            trace_flags: event
-                .trace
-                .as_ref()
-                .map_or(TraceFlags::default(), |_| TraceFlags::default()),
-            attributes: BTreeMap::new(),
-        },
-    }
-}
-
-fn span_record(span: &CompleteSpan) -> ExportRecord<CompleteSpan> {
-    ExportRecord {
-        resource: Resource {
-            attributes: BTreeMap::from_iter([(
-                "service.name".to_owned(),
-                AttributeValue::String(span.record.service().as_str().to_owned()),
-            )]),
-            schema_url: None,
-        },
-        scope: crate::contracts::InstrumentationScope::default(),
-        record: span.clone(),
-    }
-}
-
-fn metric_record(metric: &MetricRecord) -> ExportRecord<MetricRecord> {
-    ExportRecord {
-        resource: Resource {
-            attributes: BTreeMap::from_iter([(
-                "service.name".to_owned(),
-                AttributeValue::String(metric.service().as_str().to_owned()),
-            )]),
-            schema_url: None,
-        },
-        scope: crate::contracts::InstrumentationScope::default(),
-        record: metric.clone(),
-    }
-}
-
-pub(super) fn build_logs_payload(records: &[ExportRecord<LogRecord>]) -> Value {
-    let resource_logs = group_records_by_resource_and_scope(records)
-        .into_iter()
-        .map(|group| {
-            json!({
-                "resource": resource_json(&group.resource),
-                "scopeLogs": group.scopes.into_iter().map(|scope| json!({
-                    "scope": scope_json(&scope.scope),
-                    "logRecords": scope.records.into_iter().map(log_json).collect::<Vec<_>>(),
-                })).collect::<Vec<_>>(),
-            })
-        })
-        .collect::<Vec<_>>();
-    json!({ "resourceLogs": resource_logs })
-}
-
-fn build_traces_payload(records: &[ExportRecord<CompleteSpan>]) -> Value {
-    let resource_spans = group_records_by_resource_and_scope(records)
-        .into_iter()
-        .map(|group| {
-            json!({
-                "resource": resource_json(&group.resource),
-                "scopeSpans": group.scopes.into_iter().map(|scope| json!({
-                    "scope": scope_json(&scope.scope),
-                    "spans": scope.records.into_iter().map(span_json).collect::<Vec<_>>(),
-                })).collect::<Vec<_>>(),
-            })
-        })
-        .collect::<Vec<_>>();
-    json!({ "resourceSpans": resource_spans })
-}
-
-fn build_metrics_payload(records: &[ExportRecord<MetricRecord>]) -> Value {
-    let resource_metrics = group_records_by_resource_and_scope(records)
-        .into_iter()
-        .map(|group| {
-            json!({
-                "resource": resource_json(&group.resource),
-                "scopeMetrics": group.scopes.into_iter().map(|scope| json!({
-                    "scope": scope_json(&scope.scope),
-                    "metrics": scope.records.iter().map(metric_json).collect::<Vec<_>>(),
-                })).collect::<Vec<_>>(),
-            })
-        })
-        .collect::<Vec<_>>();
-    json!({ "resourceMetrics": resource_metrics })
-}
-
-fn resource_json(resource: &OtlpResource) -> Value {
-    json!({
-        "attributes": resource.attributes.iter().map(|(key, value)| json!({
-            "key": key,
-            "value": attribute_json(value),
-        })).collect::<Vec<_>>(),
-        "schemaUrl": resource.schema_url,
-    })
-}
-
-fn scope_json(scope: &crate::contracts::InstrumentationScope) -> Value {
-    json!({
-        "name": scope.name,
-        "version": scope.version,
-        "attributes": scope.attributes.iter().map(|(key, value)| json!({
-            "key": key,
-            "value": attribute_json(value),
-        })).collect::<Vec<_>>(),
-        "schemaUrl": scope.schema_url,
-    })
-}
-
-fn log_json(record: LogRecord) -> Value {
-    let event = record.event;
-    let mut attributes = record
-        .attributes
-        .iter()
-        .map(|(key, value)| json!({ "key": key, "value": attribute_json(value) }))
-        .collect::<Vec<_>>();
-    attributes.push(json!({
-        "key": "log.target",
-        "value": { "stringValue": event.target.as_str() },
-    }));
-    attributes.push(json!({
-        "key": "event.name",
-        "value": { "stringValue": event.action.as_str() },
-    }));
-    if let Some(correlation_id) = event.correlation_id {
-        attributes.push(json!({
-            "key": "sc.observability.log.correlation_id",
-            "value": { "stringValue": correlation_id.as_str() },
-        }));
-    }
-    for (key, value) in event.fields {
-        attributes.push(json!({ "key": key, "value": json_value_to_otlp_any(&value) }));
-    }
-    if let Some(trace) = event.trace {
-        attributes.push(json!({
-            "key": "trace_id",
-            "value": { "stringValue": trace.trace_id.as_str() },
-        }));
-        attributes.push(json!({
-            "key": "span_id",
-            "value": { "stringValue": trace.span_id.as_str() },
-        }));
-    }
-    let (severity_number, severity_text) = severity_fields(event.level);
-    json!({
-        "timeUnixNano": timestamp_nanos(event.timestamp),
-        "body": { "stringValue": event.message.unwrap_or_else(|| event.action.as_str().to_owned()) },
-        "severityNumber": severity_number,
-        "severityText": severity_text,
-        "attributes": attributes,
-    })
-}
-
-fn span_json(span: CompleteSpan) -> Value {
-    let record = span.record;
-    let trace = record.trace();
-    let mut result = json!({
-        "traceId": trace.trace_id.as_str(),
-        "spanId": trace.span_id.as_str(),
-        "name": record.name().as_str(),
-        "kind": span_kind_number(record.kind()),
-        "startTimeUnixNano": timestamp_nanos(record.timestamp()),
-        "endTimeUnixNano": timestamp_nanos_with_duration(record.timestamp(), record.duration_ms().as_u64()),
-        "status": { "code": span_status_number(record.status()) },
-        "attributes": record.attributes().iter().map(|(key, value)| json!({
-            "key": key,
-            "value": attribute_json(value),
-        })).collect::<Vec<_>>(),
-        "events": span.events.into_iter().map(|event| json!({
-            "timeUnixNano": timestamp_nanos(event.timestamp),
-            "name": event.name.as_str(),
-            "attributes": event.attributes.iter().map(|(key, value)| json!({
-                "key": key,
-                "value": attribute_json(value),
-            })).collect::<Vec<_>>(),
-        })).collect::<Vec<_>>(),
-    });
-    if let Some(parent) = &trace.parent_span_id {
-        result["parentSpanId"] = json!(parent.as_str());
-    }
-    result
-}
-
-fn metric_json(metric: &MetricRecord) -> Value {
-    let attrs = metric
-        .attributes()
-        .iter()
-        .map(|(key, value)| json!({ "key": key, "value": attribute_json(value) }))
-        .collect::<Vec<_>>();
-    let point_time = timestamp_nanos(metric.timestamp());
-    let data_point =
-        |value: f64| json!({ "attributes": attrs, "timeUnixNano": point_time, "asDouble": value });
-    let mut result = json!({
-        "name": metric.name().as_str(),
-        "unit": metric.unit().map(ToString::to_string).unwrap_or_default(),
-    });
-    match metric.value() {
-        MetricValue::Gauge(value) => {
-            result["gauge"] = json!({ "dataPoints": [data_point(value.get())] });
-        }
-        MetricValue::Sum {
-            value,
-            monotonic,
-            temporality,
-            start_time,
-        } => {
-            let mut point = data_point(value.get());
-            point["startTimeUnixNano"] = json!(timestamp_nanos(*start_time));
-            result["sum"] = json!({
-                "aggregationTemporality": temporality_number(*temporality),
-                "isMonotonic": monotonic,
-                "dataPoints": [point],
-            });
-        }
-        MetricValue::Histogram {
-            point,
-            temporality,
-            start_time,
-        } => {
-            result["histogram"] = json!({
-                "aggregationTemporality": temporality_number(*temporality),
-                "dataPoints": [{
-                    "attributes": attrs,
-                    "startTimeUnixNano": timestamp_nanos(*start_time),
-                    "timeUnixNano": point_time,
-                    "count": point.count(),
-                    "sum": point.sum().get(),
-                    "bucketCounts": point.bucket_counts(),
-                    "explicitBounds": point.explicit_bounds().iter().map(|bound| bound.get()).collect::<Vec<_>>(),
-                }],
-            });
-        }
-        _ => {}
-    }
-    result
-}
-
-fn attribute_json(value: &AttributeValue) -> Value {
-    match value {
-        AttributeValue::Bool(value) => json!({ "boolValue": value }),
-        AttributeValue::Int(value) => json!({ "intValue": value.to_string() }),
-        AttributeValue::UInt(value) => json!({ "intValue": value.to_string() }),
-        AttributeValue::Float(value) => json!({ "doubleValue": value.get() }),
-        AttributeValue::String(value) => json!({ "stringValue": value }),
-        AttributeValue::Null => json!({ "stringValue": "null" }),
-        AttributeValue::Array(values) => json!({
-            "arrayValue": { "values": values.iter().map(attribute_json).collect::<Vec<_>>() }
-        }),
-        AttributeValue::Object(values) => json!({
-            "kvlistValue": { "values": values.iter().map(|(key, value)| json!({
-                "key": key,
-                "value": attribute_json(value),
-            })).collect::<Vec<_>>() }
-        }),
-        _ => json!({ "stringValue": "unsupported" }),
-    }
-}
-
-fn json_value_to_otlp_any(value: &Value) -> Value {
-    match value {
-        Value::Null => json!({ "stringValue": "null" }),
-        Value::Bool(value) => json!({ "boolValue": value }),
-        Value::Number(value) if value.is_i64() => {
-            json!({ "intValue": value.as_i64().unwrap_or_default().to_string() })
-        }
-        Value::Number(value) if value.is_u64() => {
-            json!({ "intValue": value.as_u64().unwrap_or_default().to_string() })
-        }
-        Value::Number(value) => json!({ "doubleValue": value.as_f64().unwrap_or_default() }),
-        Value::String(value) => json!({ "stringValue": value }),
-        Value::Array(values) => json!({
-            "arrayValue": { "values": values.iter().map(json_value_to_otlp_any).collect::<Vec<_>>() }
-        }),
-        Value::Object(values) => json!({
-            "kvlistValue": { "values": values.iter().map(|(key, value)| json!({
-                "key": key,
-                "value": json_value_to_otlp_any(value),
-            })).collect::<Vec<_>>() }
-        }),
-    }
-}
-
-fn timestamp_nanos(timestamp: Timestamp) -> String {
-    timestamp.into_inner().unix_timestamp_nanos().to_string()
-}
-
-fn timestamp_nanos_with_duration(timestamp: Timestamp, duration_ms: u64) -> String {
-    (timestamp.into_inner().unix_timestamp_nanos() + i128::from(duration_ms) * 1_000_000)
-        .to_string()
-}
-
-fn severity_fields(level: sc_observability_types::Level) -> (u32, &'static str) {
-    match level {
-        sc_observability_types::Level::Trace => (1, "TRACE"),
-        sc_observability_types::Level::Debug => (5, "DEBUG"),
-        sc_observability_types::Level::Info => (9, "INFO"),
-        sc_observability_types::Level::Warn => (13, "WARN"),
-        sc_observability_types::Level::Error => (17, "ERROR"),
-    }
-}
-
-fn span_kind_number(kind: SpanKind) -> u8 {
-    match kind {
-        SpanKind::Internal => 1,
-        SpanKind::Server => 2,
-        SpanKind::Client => 3,
-        SpanKind::Producer => 4,
-        SpanKind::Consumer => 5,
-        _ => 0,
-    }
-}
-
-fn span_status_number(status: SpanStatus) -> &'static str {
-    match status {
-        SpanStatus::Unset => "STATUS_CODE_UNSET",
-        SpanStatus::Ok => "STATUS_CODE_OK",
-        SpanStatus::Error => "STATUS_CODE_ERROR",
-    }
-}
-
-fn temporality_number(temporality: AggregationTemporality) -> u8 {
-    match temporality {
-        AggregationTemporality::Delta => 1,
-        AggregationTemporality::Cumulative => 2,
-        _ => 0,
-    }
 }
 
 pub(super) fn normalize_logs_endpoint(endpoint: &str) -> String {

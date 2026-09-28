@@ -78,3 +78,7 @@ facade remains untouched until the D.18 activation handoff. Validation passed:
 the focused assembly/projector/parity tests, `cargo check --workspace
 --all-features --locked`, `cargo test --workspace --locked`, and `just
 validate`.
+
+The retained V1 assembler's unbounded-state finding is carried to D9/D18 for
+the named QA-1 cap/eviction/loss review; D5 does not claim to remediate or
+close that integration finding.

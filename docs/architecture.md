@@ -700,6 +700,7 @@ Important boundary:
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 | `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError`/`DetachError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
 | `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
+| `sc-observability-schema` | `sc-observability-dto` (with the `schema-gen` feature) | runtime crates, binding runtimes, and host/framework crates | isolated, unpublished schema-generator crate under `bindings/schema-generator/`; emits schema artifacts from DTO wire types |
 | `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
 | `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
 
@@ -1238,6 +1239,25 @@ in [the CI policy](ci-policy.md).
   capabilities. It compiles downstream open-trait implementations with
   deprecated usage denied. It does not reimplement runtime mappings or remove
   1.x wrappers; obs-d-18 owns final removal and semver/release gates.
+- **Decision — facade event-error boundary**: `LogEmitter::emit_log` returns
+  the canonical `v2::EventError`, whose signature cannot carry the separate
+  `v2::ShutdownError::{Timeout, Drain}` variants. At this boundary only, a
+  disconnected writer's admission failure (`LogError::WriterDegraded`) is
+  projected to `EventError::Routing` with its diagnostic context preserved.
+  The compatibility match also retains a `LogError::ShutdownTimedOut` arm,
+  but the current public logger cannot reach it through `LogEmitter`: only
+  `WriterRuntime::shutdown(self)` records the timeout, and its caller
+  `Logger::shutdown(self)` consumes the running logger and returns
+  `Logger<Stopped>`, which does not implement `LogEmitter`. Actual shutdown
+  timeouts are retained in the stopped logger's health, not returned as
+  `ShutdownError` by this API. A sink drain failure is likewise not itself
+  an emitter admission failure. The real-path regressions cover writer
+  disconnection through the emitter and timeout diagnostics through stopped
+  health; they do not manufacture a running logger after shutdown.
+- **Decision — staged core exports**: the core crate temporarily re-exports
+  only the v2 `EventError` and `LogSinkError` types consumed by its owned
+  implementation. The remaining v2 error contracts stay owned by
+  `sc-observability-types` until D.18 activates the canonical root exports.
 - **Consequences**: Contract ownership is independent in wave 1. Shared
   artifacts have producer/consumer handoffs, and backend implementations use
   the common lifecycle. No new boundary-rule framework is authorized. Cargo

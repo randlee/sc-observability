@@ -45,7 +45,7 @@ Result: TypeAlias = Ok[T] | Err
 
 class _NativeReadable(Protocol):
     def log(self, payload: str) -> str: ...
-    def query(self, payload: str) -> str: ...
+    def query(self, payload: str, timeout: str) -> str: ...
     def health(self) -> str: ...
     def flush(self, timeout: str) -> str: ...
 
@@ -107,6 +107,18 @@ class LogQuery:
     order: Literal["oldest_first", "newest_first"] = "oldest_first"
 
 
+@dataclass(frozen=True)
+class AdapterPolicy:
+    """Caller-selected query and input limits, capped by the shared DTO guard."""
+
+    query_timeout_ms: int = 2_000
+    max_request_bytes: int = 65_536
+    max_depth: int = 32
+
+
+_DEFAULT_ADAPTER_POLICY = AdapterPolicy()
+
+
 def _at() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -158,9 +170,11 @@ def _normalised_key(key: str) -> str:
     )
 
 
-def _value(value: object, path: str, seen: set[int], depth: int = 0) -> Result[dict[str, object]]:
-    if depth >= 32:
-        return Err(_failure(path, "maximum container depth is 32"))
+def _value(
+    value: object, path: str, seen: set[int], max_depth: int, depth: int = 0
+) -> Result[dict[str, object]]:
+    if depth >= max_depth:
+        return Err(_failure(path, f"maximum container depth is {max_depth}"))
     if value is None:
         return Ok({"kind": "null"})
     if type(value) is bool:
@@ -184,7 +198,7 @@ def _value(value: object, path: str, seen: set[int], depth: int = 0) -> Result[d
         try:
             array_values: list[object] = []
             for index, item in enumerate(array):
-                child = _value(item, f"{path}[{index}]", seen, depth + 1)
+                child = _value(item, f"{path}[{index}]", seen, max_depth, depth + 1)
                 if isinstance(child, Err):
                     return child
                 array_values.append(child.value)
@@ -210,7 +224,7 @@ def _value(value: object, path: str, seen: set[int], depth: int = 0) -> Result[d
                     return Err(_failure(path, "object keys must be strings"))
                 if _normalised_key(key).startswith("sc_observability.binding."):
                     return Err(_failure(f"{path}.{key}", "reserved binding provenance field"))
-                child = _value(item, f"{path}.{key}", seen, depth + 1)
+                child = _value(item, f"{path}.{key}", seen, max_depth, depth + 1)
                 if isinstance(child, Err):
                     return child
                 object_values[key] = child.value
@@ -220,14 +234,14 @@ def _value(value: object, path: str, seen: set[int], depth: int = 0) -> Result[d
     return Err(_failure(path, f"unsupported value type {type(value).__name__}"))
 
 
-def _event(event: object) -> Result[dict[str, object]]:
+def _event(event: object, max_depth: int = 32) -> Result[dict[str, object]]:
     try:
-        return _event_checked(event)
+        return _event_checked(event, max_depth)
     except BaseException as error:  # foreign dataclass subclass/accessor
         return Err(_internal(f"could not inspect event input: {_foreign_message(error)}"))
 
 
-def _event_checked(event: object) -> Result[dict[str, object]]:
+def _event_checked(event: object, max_depth: int) -> Result[dict[str, object]]:
     if not isinstance(event, LogEvent):
         return Err(_failure("event", "expected LogEvent"))
     if type(event.level) is not str or event.level not in ("trace", "debug", "info", "warn", "error"):
@@ -272,7 +286,7 @@ def _event_checked(event: object) -> Result[dict[str, object]]:
             return Err(_failure("fields", "object keys must be strings"))
         if _normalised_key(key).startswith("sc_observability.binding."):
             return Err(_failure(f"fields.{key}", "reserved binding provenance field"))
-        encoded = _value(value, f"fields.{key}", set())
+        encoded = _value(value, f"fields.{key}", set(), max_depth)
         if isinstance(encoded, Err):
             return encoded
         fields[key] = encoded.value
@@ -290,14 +304,14 @@ def _event_checked(event: object) -> Result[dict[str, object]]:
     })
 
 
-def _query(query: object) -> Result[dict[str, object]]:
+def _query(query: object, max_depth: int = 32) -> Result[dict[str, object]]:
     try:
-        return _query_checked(query)
+        return _query_checked(query, max_depth)
     except BaseException as error:  # foreign dataclass subclass/accessor
         return Err(_internal(f"could not inspect query input: {_foreign_message(error)}"))
 
 
-def _query_checked(query: object) -> Result[dict[str, object]]:
+def _query_checked(query: object, max_depth: int) -> Result[dict[str, object]]:
     if not isinstance(query, LogQuery):
         return Err(_failure("query", "expected LogQuery"))
     if type(query.limit) is not int or not 1 <= query.limit <= 1000:
@@ -328,7 +342,7 @@ def _query_checked(query: object) -> Result[dict[str, object]]:
             return Err(_failure(f"field_matches[{index}]", "expected FieldMatch"))
         if type(match.field) is not str or not match.field:
             return Err(_failure(f"field_matches[{index}].field", "expected a nonempty string"))
-        encoded = _value(match.value, f"field_matches[{index}].value", set())
+        encoded = _value(match.value, f"field_matches[{index}].value", set(), max_depth)
         if isinstance(encoded, Err):
             return encoded
         matches.append({"field": match.field, "value": encoded.value})
@@ -352,6 +366,33 @@ def _timeout(timeout_ms: object) -> Result[str]:
     if type(timeout_ms) is not int or not 0 <= timeout_ms <= 60_000:
         return Err(_failure("timeout_ms", "expected integer milliseconds in 0..60000"))
     return Ok(json.dumps(timeout_ms))
+
+
+def _adapter_policy(policy: object) -> Result[AdapterPolicy]:
+    try:
+        return _adapter_policy_checked(policy)
+    except BaseException as error:
+        return Err(_internal(f"could not inspect adapter policy: {_foreign_message(error)}"))
+
+
+def _adapter_policy_checked(policy: object) -> Result[AdapterPolicy]:
+    if not isinstance(policy, AdapterPolicy):
+        return Err(_failure("policy", "expected AdapterPolicy"))
+    if type(policy.max_request_bytes) is not int or not 1 <= policy.max_request_bytes <= 65_536:
+        return Err(_failure("policy.max_request_bytes", "expected an integer in 1..65536"))
+    if type(policy.max_depth) is not int or not 1 <= policy.max_depth <= 32:
+        return Err(_failure("policy.max_depth", "expected an integer in 1..32"))
+    timeout = _timeout(policy.query_timeout_ms)
+    if isinstance(timeout, Err):
+        return Err(_failure("policy.query_timeout_ms", "expected integer milliseconds in 0..60000"))
+    return Ok(policy)
+
+
+def _payload(value: dict[str, object], policy: AdapterPolicy, field: str) -> Result[str]:
+    payload = json.dumps(value, separators=(",", ":"))
+    if len(payload.encode("utf-8")) > policy.max_request_bytes:
+        return Err(_failure(field, "request exceeds configured size limit"))
+    return Ok(payload)
 
 
 def _level_filter(level: object) -> Result[str]:
@@ -443,18 +484,26 @@ class Logger:
     def __init__(self, native: _NativeOwned) -> None:
         self._native = native
 
-    def log(self, event: LogEvent) -> Result[generated.Admission]:
+    def log(
+        self, event: LogEvent, policy: AdapterPolicy = _DEFAULT_ADAPTER_POLICY
+    ) -> Result[generated.Admission]:
         from .context import _inherit_event
+        checked_policy = _adapter_policy(policy)
+        if isinstance(checked_policy, Err):
+            return checked_policy
         inherited = _inherit_event(event)
         if isinstance(inherited, Err):
             return inherited
-        encoded = _event(inherited.value)
+        encoded = _event(inherited.value, checked_policy.value.max_depth)
         if isinstance(encoded, Err):
             return encoded
+        payload = _payload(encoded.value, checked_policy.value, "event")
+        if isinstance(payload, Err):
+            return payload
         return _typed(
             _native_call(
                 "OutputResultDtoAdmissionDto",
-                lambda: self._native.log(json.dumps(encoded.value, separators=(",", ":"))),
+                lambda: self._native.log(payload.value),
             )
         )
 
@@ -468,14 +517,25 @@ class Logger:
         from .async_logging import _flush_async
         return await _flush_async(self._native, timeout_ms)
 
-    def query(self, query: LogQuery) -> Result[generated.LogSnapshot]:
-        encoded = _query(query)
+    def query(
+        self, query: LogQuery, policy: AdapterPolicy = _DEFAULT_ADAPTER_POLICY
+    ) -> Result[generated.LogSnapshot]:
+        checked_policy = _adapter_policy(policy)
+        if isinstance(checked_policy, Err):
+            return checked_policy
+        encoded = _query(query, checked_policy.value.max_depth)
         if isinstance(encoded, Err):
             return encoded
+        payload = _payload(encoded.value, checked_policy.value, "query")
+        if isinstance(payload, Err):
+            return payload
+        timeout = _timeout(checked_policy.value.query_timeout_ms)
+        if isinstance(timeout, Err):
+            return timeout
         return _typed(
             _native_call(
                 "OutputResultDtoLogSnapshotDto",
-                lambda: self._native.query(json.dumps(encoded.value, separators=(",", ":"))),
+                lambda: self._native.query(payload.value, timeout.value),
             )
         )
 
@@ -529,18 +589,26 @@ class AttachedLogger:
     def __init__(self, native: _NativeReadable) -> None:
         self._native = native
 
-    def log(self, event: LogEvent) -> Result[generated.Admission]:
+    def log(
+        self, event: LogEvent, policy: AdapterPolicy = _DEFAULT_ADAPTER_POLICY
+    ) -> Result[generated.Admission]:
         from .context import _inherit_event
+        checked_policy = _adapter_policy(policy)
+        if isinstance(checked_policy, Err):
+            return checked_policy
         inherited = _inherit_event(event)
         if isinstance(inherited, Err):
             return inherited
-        encoded = _event(inherited.value)
+        encoded = _event(inherited.value, checked_policy.value.max_depth)
         if isinstance(encoded, Err):
             return encoded
+        payload = _payload(encoded.value, checked_policy.value, "event")
+        if isinstance(payload, Err):
+            return payload
         return _typed(
             _native_call(
                 "OutputResultDtoAdmissionDto",
-                lambda: self._native.log(json.dumps(encoded.value, separators=(",", ":"))),
+                lambda: self._native.log(payload.value),
             )
         )
 
@@ -554,14 +622,25 @@ class AttachedLogger:
         from .async_logging import _flush_async
         return await _flush_async(self._native, timeout_ms)
 
-    def query(self, query: LogQuery) -> Result[generated.LogSnapshot]:
-        encoded = _query(query)
+    def query(
+        self, query: LogQuery, policy: AdapterPolicy = _DEFAULT_ADAPTER_POLICY
+    ) -> Result[generated.LogSnapshot]:
+        checked_policy = _adapter_policy(policy)
+        if isinstance(checked_policy, Err):
+            return checked_policy
+        encoded = _query(query, checked_policy.value.max_depth)
         if isinstance(encoded, Err):
             return encoded
+        payload = _payload(encoded.value, checked_policy.value, "query")
+        if isinstance(payload, Err):
+            return payload
+        timeout = _timeout(checked_policy.value.query_timeout_ms)
+        if isinstance(timeout, Err):
+            return timeout
         return _typed(
             _native_call(
                 "OutputResultDtoLogSnapshotDto",
-                lambda: self._native.query(json.dumps(encoded.value, separators=(",", ":"))),
+                lambda: self._native.query(payload.value, timeout.value),
             )
         )
 

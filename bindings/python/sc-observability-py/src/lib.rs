@@ -442,10 +442,12 @@ fn start_flush_backend(
     timeout: &str,
 ) -> (Option<Py<NativeFlushOperation>>, String) {
     let operation = parse_timeout(timeout).and_then(|timeout| {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            backend.start_flush(timeout)
-        }))
-        .unwrap_or_else(|_| Err(internal_failure("native flush start panicked")))
+        py.detach(|| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                backend.start_flush(timeout)
+            }))
+            .unwrap_or_else(|_| Err(internal_failure("native flush start panicked")))
+        })
     });
     match operation {
         Ok(operation) => match Py::new(py, NativeFlushOperation { operation }) {
@@ -647,13 +649,22 @@ fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str
     result_json(result.map_err(project_event_failure))
 }
 
-fn query_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, query: &str) -> String {
-    let result = parse_value(query, "query")
-        .and_then(sc_observability_dto::decode_query)
-        .and_then(|query: LogQueryDto| {
+fn query_backend(
+    backend: Arc<dyn HostLoggingBackend>,
+    py: Python<'_>,
+    query: &str,
+    timeout: &str,
+) -> String {
+    let result = parse_timeout(timeout)
+        .and_then(|timeout| {
+            parse_value(query, "query")
+                .and_then(sc_observability_dto::decode_query)
+                .map(|query| (query, timeout))
+        })
+        .and_then(|(query, timeout): (LogQueryDto, Duration)| {
             py.detach(move || {
                 let operation = backend.start_query(query)?;
-                operation.wait(Duration::from_millis(2_000))
+                operation.wait(timeout)
             })
         });
     result_json(result)
@@ -738,16 +749,19 @@ impl NativeLogger {
         })
     }
 
-    fn query(&self, py: Python<'_>, query: &str) -> String {
+    fn query(&self, py: Python<'_>, query: &str, timeout: &str) -> String {
         contained_json(|| match test_fault("query") {
-            Ok(()) => query_backend(Arc::new(self.backend.clone()), py, query),
+            Ok(()) => query_backend(Arc::new(self.backend.clone()), py, query, timeout),
             Err(error) => result_json::<()>(Err(error)),
         })
     }
 
-    fn health(&self) -> String {
+    fn health(&self, py: Python<'_>) -> String {
         contained_json(|| match test_fault("health") {
-            Ok(()) => result_json(self.backend.health().map_err(project_runtime_failure)),
+            Ok(()) => {
+                let backend = self.backend.clone();
+                result_json(py.detach(move || backend.health().map_err(project_runtime_failure)))
+            }
             Err(error) => result_json::<()>(Err(error)),
         })
     }
@@ -849,16 +863,19 @@ impl NativeAttachedLogger {
         })
     }
 
-    fn query(&self, py: Python<'_>, query: &str) -> String {
+    fn query(&self, py: Python<'_>, query: &str, timeout: &str) -> String {
         contained_json(|| match test_fault("query") {
-            Ok(()) => query_backend(self.backend.clone(), py, query),
+            Ok(()) => query_backend(self.backend.clone(), py, query, timeout),
             Err(error) => result_json::<()>(Err(error)),
         })
     }
 
-    fn health(&self) -> String {
+    fn health(&self, py: Python<'_>) -> String {
         contained_json(|| match test_fault("health") {
-            Ok(()) => result_json(self.backend.health().map_err(project_runtime_failure)),
+            Ok(()) => {
+                let backend = self.backend.clone();
+                result_json(py.detach(move || backend.health().map_err(project_runtime_failure)))
+            }
             Err(error) => result_json::<()>(Err(error)),
         })
     }
@@ -1301,18 +1318,18 @@ mod tests {
                 .is_ok();
             let attached_revision = attached
                 .borrow(py)
-                .health()
+                .health(py)
                 .contains("\"effective_level\":\"debug\"")
                 && attached
                     .borrow(py)
-                    .health()
+                    .health(py)
                     .contains("\"level_revision\":\"1\"");
             let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
             let closed = attached
                 .borrow(py)
                 .log(py, event)
                 .contains(sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED);
-            let retained_health = attached.borrow(py).health().contains("\"kind\":\"ok\"");
+            let retained_health = attached.borrow(py).health(py).contains("\"kind\":\"ok\"");
             missing_is_tagged
                 && admitted
                 && level_changed
@@ -1493,7 +1510,7 @@ mod tests {
             attached
                 .bind(py)
                 .borrow()
-                .health()
+                .health(py)
                 .contains("\"kind\":\"ok\"")
         });
         assert!(active && stopped && retained);

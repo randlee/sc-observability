@@ -184,7 +184,7 @@
       "type": "object"
     },
     "InputCanonicalFailureDto": {
-      "description": "Additive operational failures preserving canonical diagnostic metadata.",
+      "description": "Version-one Failure wire value.",
       "oneOf": [
         {
           "description": "Wire validation.",
@@ -951,7 +951,7 @@
       ]
     },
     "InputCanonicalWireEnvelope": {
-      "description": "Staged envelope with unchanged schema/version/discriminants and richer diagnostics.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
           "description": "Wire ok.",
@@ -4693,7 +4693,7 @@
       "type": "object"
     },
     "OutputCanonicalFailureDto": {
-      "description": "Additive operational failures preserving canonical diagnostic metadata.",
+      "description": "Version-one Failure wire value.",
       "oneOf": [
         {
           "description": "Wire validation.",
@@ -5460,7 +5460,7 @@
       ]
     },
     "OutputCanonicalWireEnvelope": {
-      "description": "Staged envelope with unchanged schema/version/discriminants and richer diagnostics.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
           "description": "Wire ok.",

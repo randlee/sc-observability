@@ -10,6 +10,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::config::{OtelConfig, validated_transport_bounds};
+use crate::constants::MAX_OTLP_RECORD_BYTES;
 use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
     LifecycleFuture, Resource,
@@ -498,7 +499,7 @@ fn overlapping_shutdown_preserves_flush_failure_for_all_waiters() {
         }
         assert!(matches!(
             poll_once(&mut core.shutdown_async()),
-            Poll::Ready(Ok(()))
+            Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
         ));
         assert_eq!(flushes.load(Ordering::Acquire), 1);
         assert_eq!(shutdowns.load(Ordering::Acquire), 1);
@@ -642,6 +643,66 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
 }
 
 #[test]
+fn byte_capacity_rejects_when_record_capacity_remains() {
+    let transport = OtelConfig {
+        queue_capacity: Some(4),
+        queue_byte_capacity: Some(4),
+        ..OtelConfig::default()
+    };
+    let (core, _, _, released) = fixture(None, &transport);
+    let admitted = core
+        .admit(SignalKind::Logs, (), 3)
+        .expect("admit below the byte capacity");
+    let before_rejection = core.health();
+    assert_eq!(before_rejection.admitted_records, 1);
+    assert_eq!(before_rejection.admitted_bytes, 3);
+
+    let Err(rejected) = core.admit(SignalKind::Logs, (), 2) else {
+        panic!("byte capacity must reject while record capacity remains")
+    };
+    assert_eq!(rejected.code(), crate::error_codes::OTLP_QUEUE_FULL);
+
+    let after_rejection = core.health();
+    assert_eq!(
+        after_rejection.admitted_records,
+        before_rejection.admitted_records
+    );
+    assert_eq!(
+        after_rejection.admitted_bytes,
+        before_rejection.admitted_bytes
+    );
+    assert_eq!(after_rejection.dropped_by_signal, [1, 0, 0]);
+    assert!(after_rejection.degraded);
+
+    admitted.complete(Ok(()));
+    let after_completion = core.health();
+    assert_eq!(after_completion.admitted_records, 0);
+    assert_eq!(after_completion.admitted_bytes, 0);
+    assert_eq!(after_completion.dropped_by_signal, [1, 0, 0]);
+
+    released.store(true, Ordering::Release);
+    let mut shutdown = core.shutdown_async();
+    assert!(poll_once(&mut shutdown).is_ready());
+    assert_eq!(core.health().phase, LifecycleState::Shutdown);
+}
+
+#[test]
+fn admission_rejects_a_record_above_the_per_record_limit() {
+    let (core, _, _, _) = default_fixture();
+
+    assert!(matches!(
+        core.admit(SignalKind::Logs, (), MAX_OTLP_RECORD_BYTES + 1),
+        Err(sc_observability_types::v2::TelemetryError::ExportFailure(
+            ExportError::QueueFull { .. }
+        ))
+    ));
+    let health = core.health();
+    assert_eq!(health.admitted_records, 0);
+    assert_eq!(health.admitted_bytes, 0);
+    assert_eq!(health.dropped_by_signal, [1, 0, 0]);
+}
+
+#[test]
 fn repeated_shutdown_uses_one_backend_operation() {
     let (core, _, shutdowns, released) = default_fixture();
     let mut first = core.shutdown_async();
@@ -661,14 +722,50 @@ fn failed_shutdown_is_idempotent_after_terminal_completion() {
     let Poll::Ready(result) = poll_once(&mut first) else {
         panic!("shutdown failure remained pending")
     };
+    let first_error = result.expect_err("shutdown must fail");
+    let first_diagnostic = first_error.diagnostic();
     assert_eq!(
-        result.expect_err("shutdown must fail").diagnostic().code,
+        first_diagnostic.code,
         crate::error_codes::OTLP_RUNTIME_TERMINATED
     );
 
-    let mut second = core.shutdown_async();
-    assert!(matches!(poll_once(&mut second), Poll::Ready(Ok(()))));
+    for _ in 0..2 {
+        let mut repeated = core.shutdown_async();
+        let Poll::Ready(Err(error)) = poll_once(&mut repeated) else {
+            panic!("repeated shutdown must replay the terminal failure")
+        };
+        let diagnostic = error.diagnostic();
+        assert_eq!(diagnostic.code, first_diagnostic.code);
+        assert_eq!(diagnostic.message, first_diagnostic.message);
+        assert_eq!(diagnostic.cause, first_diagnostic.cause);
+        assert_eq!(diagnostic.remediation, first_diagnostic.remediation);
+        assert_eq!(diagnostic.docs, first_diagnostic.docs);
+        assert_eq!(diagnostic.details, first_diagnostic.details);
+    }
     assert_eq!(shutdowns.load(Ordering::Acquire), 1);
+}
+
+#[test]
+fn shared_failed_operation_reconstructs_equivalent_results_for_each_waiter() {
+    let (core, _, _, _) = fixture(Some(runtime_terminated), &OtelConfig::default());
+    let mut first = core.flush_async();
+    let mut second = core.flush_async();
+
+    let Poll::Ready(Err(first_error)) = poll_once(&mut first) else {
+        panic!("first shared waiter did not receive the terminal failure")
+    };
+    let Poll::Ready(Err(second_error)) = poll_once(&mut second) else {
+        panic!("second shared waiter did not receive the terminal failure")
+    };
+
+    let first_diagnostic = first_error.diagnostic();
+    let second_diagnostic = second_error.diagnostic();
+    assert_eq!(first_diagnostic.code, second_diagnostic.code);
+    assert_eq!(first_diagnostic.message, second_diagnostic.message);
+    assert_eq!(first_diagnostic.cause, second_diagnostic.cause);
+    assert_eq!(first_diagnostic.remediation, second_diagnostic.remediation);
+    assert_eq!(first_diagnostic.docs, second_diagnostic.docs);
+    assert_eq!(first_diagnostic.details, second_diagnostic.details);
 }
 
 #[test]

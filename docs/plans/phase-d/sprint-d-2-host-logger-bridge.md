@@ -102,3 +102,6 @@ Consume obs-d-13's frozen concrete attachment signature specification and obs-d-
   `bridge_foreign` and `bridge_owned` fixtures cover facade ownership.
 - D5: controls retain a weak token for their originating attachment, and the
   attachment suite covers reattachment plus rejection of stale controls.
+- Compatibility amendment: stale controls preserve the existing `NotRunning`
+  operation label while recording `DropCause::NotInstalled` exactly once;
+  this is the ADR-019 runtime-slot interpretation used by the retained API.

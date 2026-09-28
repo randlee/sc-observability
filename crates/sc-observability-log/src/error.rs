@@ -63,6 +63,10 @@ pub enum FieldKeyError {
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum EmitError {
+    /// The saved attachment no longer occupies the bridge slot.
+    #[error("logger attachment is not installed")]
+    NotInstalled,
+
     /// A producer field cannot be represented safely.
     #[error("invalid field {raw_key:?}: {reason}")]
     InvalidField {
@@ -202,6 +206,7 @@ impl EmitError {
     #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
+            Self::NotInstalled => error_codes::SC_LOG_DETACH_NOT_INSTALLED,
             Self::InvalidField { .. } => error_codes::SC_OBSERVABILITY_LOG_INVALID_FIELD,
             Self::InvalidEvent { diagnostic }
             | Self::QueueFull { diagnostic }
@@ -217,6 +222,13 @@ impl EmitError {
     #[must_use]
     pub fn remediation(&self) -> Remediation {
         match self {
+            Self::NotInstalled => Remediation::recoverable(
+                "the saved attachment no longer occupies the bridge slot",
+                [
+                    "discard the stale control",
+                    "obtain a control from the current attachment",
+                ],
+            ),
             Self::InvalidEvent { diagnostic }
             | Self::QueueFull { diagnostic }
             | Self::WriterDegraded { diagnostic }
@@ -336,6 +348,10 @@ pub enum InitError {
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum FlushError {
+    /// The saved attachment no longer occupies the bridge slot.
+    #[error("logger attachment is not installed")]
+    NotInstalled,
+
     /// The writer did not acknowledge the flush within `timeout`.
     #[error("flush did not complete within {timeout:?}")]
     TimedOut {
@@ -448,6 +464,7 @@ impl FlushError {
     #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
+            Self::NotInstalled => error_codes::SC_LOG_DETACH_NOT_INSTALLED,
             Self::TimedOut { .. } => error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT,
             Self::Logger { diagnostic } => diagnostic.code.clone(),
             Self::HelperSpawn { .. } => error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
@@ -461,6 +478,13 @@ impl FlushError {
     #[must_use]
     pub fn remediation(&self) -> Remediation {
         match self {
+            Self::NotInstalled => Remediation::recoverable(
+                "the saved attachment no longer occupies the bridge slot",
+                [
+                    "discard the stale control",
+                    "obtain a control from the current attachment",
+                ],
+            ),
             Self::TimedOut { .. } => Remediation::recoverable(
                 "retry the flush later or raise the timeout",
                 ["a shutdown before the detached flush returns reports ShutdownError::TimedOut"],
@@ -907,6 +931,18 @@ mod tests {
                 diagnostic: diagnostic(),
             },
             error_codes::SC_OBSERVABILITY_LOG_STATUS_UNAVAILABLE
+        );
+    }
+
+    #[test]
+    fn stale_attachment_errors_are_typed_and_round_trip() {
+        assert_operation_contract!(
+            EmitError::NotInstalled,
+            error_codes::SC_LOG_DETACH_NOT_INSTALLED
+        );
+        assert_operation_contract!(
+            FlushError::NotInstalled,
+            error_codes::SC_LOG_DETACH_NOT_INSTALLED
         );
     }
 

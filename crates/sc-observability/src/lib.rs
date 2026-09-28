@@ -32,6 +32,7 @@ mod sinks;
 pub mod typed;
 
 use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, Weak};
@@ -72,10 +73,7 @@ pub use sc_observability_types::{
 /// original diagnostic context or typed source.
 pub mod v2 {
     #[doc(inline)]
-    pub use sc_observability_types::v2::{
-        ConfigFailure, EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError,
-        MetricModelError, ProjectionError, ShutdownError, SubscriberError, TelemetryError,
-    };
+    pub use sc_observability_types::v2::{EventError, LogSinkError};
 }
 #[allow(
     deprecated,
@@ -480,6 +478,34 @@ impl SinkRegistration {
     }
 }
 
+/// A logger's queue capacity, guaranteed to be greater than zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QueueCapacity(NonZeroUsize);
+
+impl QueueCapacity {
+    /// Creates a queue capacity when `value` is positive.
+    #[must_use]
+    pub const fn new(value: usize) -> Option<Self> {
+        match NonZeroUsize::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    /// Returns the number of records this queue can hold.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0.get()
+    }
+}
+
+impl Default for QueueCapacity {
+    fn default() -> Self {
+        Self::new(constants::DEFAULT_LOG_QUEUE_CAPACITY)
+            .expect("default logger queue capacity must be positive")
+    }
+}
+
 /// Public configuration for the lightweight logging runtime.
 #[derive(Debug)]
 pub struct LoggerConfig {
@@ -490,7 +516,7 @@ pub struct LoggerConfig {
     /// Minimum severity level emitted by the logger.
     pub level: LevelFilter,
     /// Bounded writer-thread queue capacity for admitted log records.
-    pub queue_capacity: usize,
+    pub queue_capacity: QueueCapacity,
     /// Retained-log rotation, pruning, and background maintenance settings.
     pub retained_log_policy: RetainedLogPolicy,
     /// Redaction policy applied before sink fan-out.
@@ -531,7 +557,7 @@ impl LoggerConfig {
             service_name,
             log_root: resolved_log_root,
             level: LevelFilter::Info,
-            queue_capacity: constants::DEFAULT_LOG_QUEUE_CAPACITY,
+            queue_capacity: QueueCapacity::default(),
             retained_log_policy: RetainedLogPolicy::default(),
             redaction: RedactionPolicy {
                 redact_bearer_tokens: true,
@@ -571,6 +597,14 @@ pub struct Logger<State = Running> {
     diagnostic_admitter: Option<DiagnosticAdmitter>,
     level_control: Arc<Mutex<LevelControl>>,
     state: PhantomData<State>,
+}
+
+impl<State> Logger<State> {
+    /// Returns the configured service identity, independent of sink layout.
+    #[must_use]
+    pub fn service_name(&self) -> &ServiceName {
+        &self.config.service_name
+    }
 }
 
 /// Weak authority for changing one running logger's effective level.
@@ -711,9 +745,12 @@ mod sealed_emitters {
     pub trait Sealed {}
 }
 
-#[expect(
-    dead_code,
-    reason = "crate-local emitter trait is intentionally available for logging-only injection"
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "crate-local emitter trait is intentionally available for logging-only injection"
+    )
 )]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError>;
@@ -1237,7 +1274,10 @@ mod tests {
         let root = temp_path("defaults");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
         assert_eq!(config.level, LevelFilter::Info);
-        assert_eq!(config.queue_capacity, constants::DEFAULT_LOG_QUEUE_CAPACITY);
+        assert_eq!(
+            config.queue_capacity.get(),
+            constants::DEFAULT_LOG_QUEUE_CAPACITY
+        );
         assert_eq!(
             config.retained_log_policy.rotation_max_bytes,
             ByteCount::from_bytes(constants::DEFAULT_ROTATION_MAX_BYTES)
@@ -1995,6 +2035,14 @@ mod tests {
         let maintenance = stopped.health().maintenance.expect("maintenance health");
         assert!(maintenance.last_error.is_some());
         assert_eq!(stopped.health().writer_state, WriterState::Degraded);
+        let timeout = stopped
+            .health()
+            .last_writer_error
+            .expect("actual writer shutdown timeout is retained in stopped health");
+        assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
+        assert_eq!(timeout.message, "writer thread did not stop within 10ms");
+        // Shutdown consumes Logger<Running>. The returned Logger<Stopped>
+        // exposes this diagnostic through health, not through LogEmitter.
         assert!(
             signal.is_active(),
             "shutdown returned before the blocked writer left its maintenance pass"
@@ -2006,7 +2054,7 @@ mod tests {
     fn try_log_reports_queue_full_on_saturated_queue() {
         let root = temp_path("try-log-queue-full");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.queue_capacity = 1;
+        config.queue_capacity = QueueCapacity::new(1).expect("positive queue capacity");
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
@@ -2103,6 +2151,45 @@ mod tests {
             error_codes::LOGGER_WRITER_DEGRADED
         );
 
+        // Exercise both admission boundaries after a real worker failure,
+        // rather than constructing an error and testing a conversion alone.
+        let LogError::WriterDegraded(legacy_context) = logger
+            .log(log_event(service_name()))
+            .expect_err("legacy admission observes the disconnected writer")
+        else {
+            panic!("disconnected writer must retain its admission failure kind");
+        };
+        let v2::EventError::Routing { context } = logger
+            .emit_log(log_event(service_name()))
+            .expect_err("canonical emitter observes the disconnected writer")
+        else {
+            panic!("writer admission failure must map to EventError::Routing");
+        };
+        let diagnostic = context.diagnostic();
+        let original = legacy_context.diagnostic();
+        assert_eq!(diagnostic.code, error_codes::LOGGER_WRITER_DEGRADED);
+        assert_eq!(diagnostic.code, original.code);
+        assert_eq!(diagnostic.message, original.message);
+        assert_eq!(diagnostic.remediation, original.remediation);
+        assert_eq!(diagnostic.cause, original.cause);
+        assert_eq!(diagnostic.docs, original.docs);
+        assert_eq!(diagnostic.details, original.details);
+        // Separate admissions create their own diagnostic timestamps.
+        assert_eq!(
+            diagnostic.message,
+            "writer thread disconnected while admitting log work"
+        );
+        assert_eq!(
+            diagnostic.remediation,
+            Remediation::recoverable(
+                "inspect logger writer-thread health",
+                [
+                    "inspect logger.health().writer_state",
+                    "inspect logger.health().last_writer_error",
+                ],
+            )
+        );
+
         // Consume the runtime after the intentionally panicked worker has
         // been observed. Its completion channel is already disconnected, so
         // shutdown joins the terminated worker without an unbounded wait.
@@ -2110,36 +2197,9 @@ mod tests {
     }
 
     #[test]
-    fn logger_builder_rejects_zero_queue_capacity() {
-        let root = temp_path("zero-queue-capacity");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.queue_capacity = 0;
-
-        let Err(error) = Logger::builder(config) else {
-            panic!("zero queue capacity should fail");
-        };
-
-        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
-        assert!(
-            error
-                .diagnostic()
-                .message
-                .contains("queue capacity must be greater than zero")
-        );
-    }
-
-    #[test]
-    fn typed_builder_rejects_zero_queue_capacity_with_the_same_diagnostic() {
-        let root = temp_path("typed-zero-queue-capacity");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.queue_capacity = 0;
-
-        let Err(error) = Logger::builder_typed(config) else {
-            panic!("zero queue capacity should fail");
-        };
-
-        assert_eq!(error.kind(), InitFailureKind::LoggerInitialization);
-        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
+    fn queue_capacity_rejects_zero_at_construction() {
+        assert!(QueueCapacity::new(0).is_none());
+        assert_eq!(QueueCapacity::new(1).expect("positive").get(), 1);
     }
 
     #[test]
@@ -2817,7 +2877,7 @@ mod tests {
     fn saturated_diagnostic_queue_keeps_the_level_change_committed() {
         let root = temp_path("level-diagnostic-saturation");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.queue_capacity = 1;
+        config.queue_capacity = QueueCapacity::new(1).expect("positive queue capacity");
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());

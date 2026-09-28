@@ -74,7 +74,7 @@ fn config() -> (tempfile::TempDir, sc_observability::LoggerConfig) {
         root.path().into(),
     );
     config.enable_console_sink = false;
-    config.queue_capacity = 4096;
+    config.queue_capacity = sc_observability::QueueCapacity::new(4096).expect("positive capacity");
     config.process_identity = native::ProcessIdentityPolicy::Fixed {
         hostname: Some("host".into()),
         pid: Some(123),
@@ -214,7 +214,6 @@ const CASES: &[&str] = &[
     "worker1_rollback",
     "worker2_rollback",
     "worker3_rollback",
-    "core_start_rollback",
     "concurrent_timer",
     "observer_bounds",
     "callback_bounds",
@@ -249,9 +248,11 @@ fn contract_matrix() {
             "timer_poison" => {
                 crate::timer::poison_initialization();
                 let (_root, config) = config();
-                code(
+                assert_failure(
                     create_core_backend(config),
                     dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                    "internal",
+                    None,
                 );
                 crate::spawn::wait_live(0);
             }
@@ -261,7 +262,6 @@ fn contract_matrix() {
             "worker1_rollback" => spawn_rollback(1),
             "worker2_rollback" => spawn_rollback(2),
             "worker3_rollback" => spawn_rollback(3),
-            "core_start_rollback" => core_start_rollback(),
             "concurrent_timer" => concurrent_timer(),
             "observer_bounds" => observer_bounds(),
             "callback_bounds" => callback_bounds(),
@@ -324,14 +324,6 @@ fn spawn_rollback(index: usize) {
     );
     crate::spawn::wait_live(usize::from(index != 0));
     crate::spawn::fail_at(usize::MAX);
-    let (_root, owner, _backend) = core();
-    stop(&owner);
-}
-fn core_start_rollback() {
-    let (_root, mut config) = config();
-    config.queue_capacity = 0;
-    assert!(create_core_backend(config).is_err());
-    crate::spawn::wait_live(1);
     let (_root, owner, _backend) = core();
     stop(&owner);
 }
@@ -695,7 +687,8 @@ fn core_with_sink(
 
 fn core_admission_and_flush_faults() {
     let (_root, mut logger_config) = config();
-    logger_config.queue_capacity = 1;
+    logger_config.queue_capacity =
+        sc_observability::QueueCapacity::new(1).expect("positive capacity");
     let gate = Gate::new();
     let _release = Release(gate.clone());
     let (owner, backend) = core_with_sink(
@@ -949,24 +942,37 @@ fn native_diagnostic_fidelity() {
 }
 
 fn d15_callback_fixture() {
-    let error = crate::error::subscriber(
-        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-        "callback registration capacity is occupied",
-    );
-    assert_canonical_context(
-        &error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-        0,
-    );
-    assert_failure(
-        Err::<(), _>(crate::conversion::canonical(
-            &error,
+    let cases = [
+        (
+            crate::error::subscriber_closed("callback registration is closed"),
+            dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+            crate::conversion::Kind::Closed,
+            "closed",
+        ),
+        (
+            crate::error::subscriber_waiters_full("callback registration capacity is occupied"),
+            dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
             crate::conversion::Kind::QueueFull,
-        )),
-        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-        "queue_full",
-        None,
-    );
+            "queue_full",
+        ),
+    ];
+    for (error, code, kind, wire_kind) in cases {
+        assert_canonical_context(&error, code, 0);
+        let registry = dto::error_codes::REGISTRY
+            .iter()
+            .find(|entry| entry.code == code)
+            .expect("subscriber code is registered");
+        assert_eq!(
+            error.diagnostic().remediation,
+            native::Remediation::recoverable(registry.remediation, std::iter::empty::<String>()),
+        );
+        assert_failure(
+            Err::<(), _>(crate::conversion::canonical(&error, kind)),
+            code,
+            wire_kind,
+            None,
+        );
+    }
     callback_bounds();
 }
 
@@ -1010,12 +1016,6 @@ fn d15_coordinator_fixture() {
 }
 
 fn d15_operation_fixture() {
-    let native_error = crate::error::flush_observer_timeout();
-    assert_canonical_context(
-        &native_error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
-        0,
-    );
     let (_root, owner, backend) = core();
     let operation: Operation<u32> = Operation::new(
         &backend.shared.dispatcher,
@@ -1026,7 +1026,7 @@ fn d15_operation_fixture() {
         operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
         "timeout",
-        Some("flush"),
+        Some("native_operation"),
     );
     stop(&owner);
     observer_bounds();
@@ -1064,28 +1064,13 @@ fn d15_sync_fixture() {
 }
 
 fn d15_timer_fixture() {
-    let error = crate::error::shutdown_timeout("shutdown observation deadline elapsed");
-    assert_canonical_context(
-        &error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
-        0,
-    );
-    assert_failure(
-        Err::<(), _>(crate::conversion::canonical(
-            &error,
-            crate::conversion::Kind::Timeout,
-        )),
-        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
-        "timeout",
-        Some("native_operation"),
-    );
     assert_failure(
         Err::<(), _>(crate::error::observer_timeout(
             crate::error::OperationKind::Shutdown,
         )),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
         "timeout",
-        Some("shutdown"),
+        Some("native_operation"),
     );
 }
 

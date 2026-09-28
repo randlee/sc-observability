@@ -234,3 +234,69 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
     assert!(!output.contains("message-secret"));
     assert!(!output.contains("field-secret"));
 }
+
+struct Reject(PolicyRejection);
+impl BridgeEventPolicy for Reject {
+    fn decide(&self, _: &LogEvent) -> BridgeEventDecision {
+        BridgeEventDecision::Reject(self.0)
+    }
+}
+
+#[test]
+fn every_policy_reason_has_concrete_steps_and_facade_diagnostics() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    let mut messages = std::collections::HashSet::new();
+    let mut remedies = std::collections::HashSet::new();
+    for reason in [
+        PolicyRejection::Denied,
+        PolicyRejection::PayloadTooLarge,
+        PolicyRejection::Invalid,
+    ] {
+        let (mut attachment, host, events) = attach_with(Arc::new(Reject(reason)));
+        let control = attachment.control();
+        let before = control
+            .dropped_events()
+            .get(sc_observability_log::DropCause::InvalidEvent);
+        assert!(attachment.last_policy_rejection().is_none());
+        log::info!(target: "policy::test", "facade policy rejection");
+        let retained = attachment
+            .last_policy_rejection()
+            .expect("facade diagnostic retained");
+        let error = control.try_log(event()).expect_err("policy rejection");
+        assert_eq!(
+            error.code(),
+            sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_POLICY_REJECTED
+        );
+        let sc_observability_log::EmitError::InvalidEvent { diagnostic } = error else {
+            panic!("typed diagnostic")
+        };
+        assert!(
+            messages.insert(diagnostic.message.clone()),
+            "reason retained in diagnostic"
+        );
+        let sc_observability_types::Remediation::Recoverable { steps } = &diagnostic.remediation
+        else {
+            panic!("recoverable policy")
+        };
+        assert!(!steps.steps().is_empty());
+        assert!(steps.steps().iter().all(|step| !step.trim().is_empty()));
+        assert!(
+            remedies.insert(steps.steps()[0].clone()),
+            "variant-specific recovery"
+        );
+        assert_eq!(retained.code, diagnostic.code);
+        assert_eq!(retained.message, diagnostic.message);
+        assert_eq!(retained.remediation, diagnostic.remediation);
+        assert_eq!(
+            control
+                .dropped_events()
+                .get(sc_observability_log::DropCause::InvalidEvent),
+            before + 2
+        );
+        assert!(events.lock().expect("events").is_empty());
+        attachment.detach(Duration::from_secs(2)).expect("detach");
+        Arc::try_unwrap(host)
+            .unwrap_or_else(|_| panic!("host released"))
+            .shutdown();
+    }
+}

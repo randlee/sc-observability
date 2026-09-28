@@ -69,6 +69,13 @@ jobs:
           path: target
           key: ubuntu-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
+      # Retire with obs-d-18 when the deprecated legacy types are removed.
+      - name: Check deprecated lint policies in external examples
+        run: python3 scripts/ci/check_external_example_deprecated.py
+
+      - name: Check standalone custom sink example
+        run: cargo check --locked --manifest-path examples/custom-sink-example/Cargo.toml
+
       - name: Run clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
@@ -251,6 +258,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+
+      - name: Provision immutable legacy OTLP provenance source
+        run: python3 scripts/ci/provision_legacy_otlp_provenance.py
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

@@ -17,6 +17,44 @@ fn snapshot(values: &[(&str, &str)]) -> EnvSnapshot {
     )
 }
 
+#[test]
+fn settings_error_codes_match_documented_stable_names() {
+    let codes = [
+        (
+            error_codes::LOG_PREFIX_COLLISION,
+            "SC_LOG_SETTINGS_PREFIX_COLLISION",
+        ),
+        (
+            error_codes::LOG_INVALID_ENVIRONMENT,
+            "SC_LOG_SETTINGS_INVALID_ENVIRONMENT",
+        ),
+        (error_codes::LOG_UNKNOWN_KEY, "SC_LOG_SETTINGS_UNKNOWN_KEY"),
+        (
+            error_codes::LOG_INVALID_VALUE,
+            "SC_LOG_SETTINGS_INVALID_VALUE",
+        ),
+        (error_codes::LOG_RESOLUTION, "SC_LOG_SETTINGS_RESOLUTION"),
+    ];
+
+    for (code, expected) in codes {
+        assert_eq!(code.as_str(), expected);
+    }
+}
+
+#[test]
+fn empty_default_root_reports_resolution_failure() {
+    let error = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: LogSettings::default(),
+        application_env: None,
+        default_root: PathBuf::new(),
+    })
+    .expect_err("empty effective default root cannot be resolved");
+
+    assert!(matches!(error, LogSettingsError::Resolution { .. }));
+    assert_eq!(error.code().as_str(), "SC_LOG_SETTINGS_RESOLUTION");
+}
+
 fn assert_application_inventory_values(resolved: &ResolvedLogSettings) {
     let policy = resolved.retained_log_policy;
     let actual = [
@@ -317,7 +355,7 @@ fn precedence_root_exception_and_conversion_preserve_defaults() {
     let config = resolved.into_logger_config(ServiceName::new("settings-test").unwrap());
     assert_eq!(config.level, LevelFilter::Error);
     assert_eq!(
-        config.queue_capacity,
+        config.queue_capacity.get(),
         sc_observability::constants::DEFAULT_LOG_QUEUE_CAPACITY
     );
     assert!(config.redaction.redact_bearer_tokens);

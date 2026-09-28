@@ -145,7 +145,54 @@ fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
         &mut entries,
         "CanonicalWireEnvelopeAdmissionDto",
     )?;
-    Ok((generator.take_definitions(true), entries))
+    let mut defs = generator.take_definitions(true);
+    // Public schema names survive internal aliases to shared generic DTOs.
+    for (entrypoint, public_name) in [
+        ("CanonicalFailureDto", "CanonicalFailureDto"),
+        ("CanonicalWireEnvelopeAdmissionDto", "CanonicalWireEnvelope"),
+    ] {
+        let reference = entries[entrypoint]["$ref"]
+            .as_str()
+            .ok_or_else(|| format!("missing definition reference for {entrypoint}"))?
+            .to_owned();
+        let generated_name = reference
+            .strip_prefix("#/$defs/")
+            .ok_or("non-local reference")?;
+        if generated_name == public_name {
+            continue;
+        }
+        if defs.contains_key(public_name) {
+            return Err(format!("public schema name collision: {public_name}").into());
+        }
+        let definition = defs
+            .remove(generated_name)
+            .ok_or_else(|| format!("missing definition: {generated_name}"))?;
+        defs.insert(public_name.into(), definition);
+        let public_reference = format!("#/$defs/{public_name}");
+        for node in defs.values_mut().chain(entries.values_mut()) {
+            rename_reference(node, &reference, &public_reference);
+        }
+    }
+    Ok((defs, entries))
+}
+fn rename_reference(value: &mut Value, old: &str, new: &str) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                if key == "$ref" && child.as_str() == Some(old) {
+                    *child = Value::String(new.into());
+                } else {
+                    rename_reference(child, old, new);
+                }
+            }
+        }
+        Value::Array(values) => {
+            for child in values {
+                rename_reference(child, old, new);
+            }
+        }
+        _ => {}
+    }
 }
 fn input_strict(value: &mut Value, output: bool) {
     if let Some(map) = value.as_object_mut()

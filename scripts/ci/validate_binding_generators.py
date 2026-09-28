@@ -20,6 +20,21 @@ def main():
         if actual!=case['valid']:raise AssertionError(f'schema fixture mismatch: {case["id"]}')
     generated=ROOT/'bindings/python/sc-observability-py/python/sc_observability/generated/__init__.py'
     spec=importlib.util.spec_from_file_location('binding_generated',generated);module=importlib.util.module_from_spec(spec);sys.modules[spec.name]=module;spec.loader.exec_module(module)
+    # Canonical aliases are public APIs even when Rust shares generic implementations.
+    typescript=(ROOT/'bindings/typescript/src/generated/index.ts').read_text(encoding='utf-8')
+    for prefix in ('Input', 'Output'):
+        for name in ('CanonicalFailureDto', 'CanonicalWireEnvelope'):
+            public_name=prefix+name
+            assert public_name in schema['$defs'], f'missing public schema definition: {public_name}'
+            assert f'export type {public_name} =' in typescript, f'missing TypeScript export: {public_name}'
+        for name in ('CanonicalFailure', 'CanonicalWireEnvelope', 'CanonicalWireEnvelopeAdmission'):
+            assert hasattr(module,prefix+name), f'missing Python export: {prefix+name}'
+        for variant in ('Validation', 'QueueFull', 'BelowBaseline', 'UnsupportedLevel',
+                        'PermissionDenied', 'Closed', 'Unavailable', 'Io', 'Timeout',
+                        'Cancelled', 'UnsupportedVersion', 'Internal', 'UnknownRemote'):
+            assert hasattr(module,prefix+'CanonicalFailure'+variant)
+        for variant in ('Ok', 'Error'):
+            assert hasattr(module,prefix+'CanonicalWireEnvelope'+variant)
     for case in cases:
         try:module.validate_wire(case['entrypoint'],case['value']);actual=True
         except ValueError:actual=False

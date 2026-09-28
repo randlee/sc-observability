@@ -209,6 +209,14 @@ fn attachment_routes_direct_and_macro_calls_and_recovers_host_ownership() {
     control.flush(Duration::from_secs(2)).expect("flush");
     let events = events.lock().expect("recording lock");
     assert_eq!(events.len(), 2, "direct and macro events share one sink");
+    for event in events.iter() {
+        assert_eq!(
+            &event.service,
+            host.service_name(),
+            "service comes from configuration with file sink disabled"
+        );
+        assert_eq!(event.service.as_str(), "attachment-recording");
+    }
     assert!(
         events
             .iter()
@@ -252,7 +260,7 @@ fn timeout_retains_attachment_for_retry_and_stale_control_is_rejected() {
         .expect("retry detach");
     assert!(matches!(
         control.try_log(event()),
-        Err(sc_observability_log::EmitError::NotRunning { .. })
+        Err(sc_observability_log::EmitError::NotInstalled)
     ));
 
     let host =
@@ -322,7 +330,11 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
     let mut second = attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("reattach");
     assert!(matches!(
         stale.try_log(event()),
-        Err(sc_observability_log::EmitError::NotRunning { .. })
+        Err(sc_observability_log::EmitError::NotInstalled)
+    ));
+    assert!(matches!(
+        stale.flush(Duration::ZERO),
+        Err(FlushError::NotInstalled)
     ));
     second
         .control()
@@ -333,4 +345,158 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         .expect("second detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("second detach releases logger"));
     host.shutdown();
+}
+
+#[test]
+fn dropped_attachment_finishes_detaching_when_last_call_drains() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let host = logger();
+    let attachment = attach_logger(
+        Arc::clone(&host),
+        options(Arc::new(Blocking {
+            entered: Mutex::new(Some(entered_tx)),
+            release: Mutex::new(Some(release_rx)),
+        })),
+    )
+    .expect("attach");
+    let stale = attachment.control();
+    let control = stale.clone();
+    let worker = std::thread::spawn(move || control.try_log(event()));
+    entered_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("entered policy");
+    drop(attachment); // Bounded drop expires while the policy is held.
+    assert!(matches!(
+        stale.try_log(event()),
+        Err(sc_observability_log::EmitError::NotInstalled)
+    ));
+    assert!(matches!(
+        stale.flush(Duration::ZERO),
+        Err(FlushError::NotInstalled)
+    ));
+    assert!(matches!(
+        attach_logger(Arc::clone(&host), options(Arc::new(Admit))),
+        Err(DetachError::ForeignLoggerInstalled { .. })
+    ));
+    release_tx.send(()).expect("release call");
+    worker
+        .join()
+        .expect("worker")
+        .expect("entered call completes");
+    let host =
+        Arc::try_unwrap(host).unwrap_or_else(|_| panic!("last call releases abandoned attachment"));
+    let host = Arc::new(host);
+    let mut next = attach_logger(Arc::clone(&host), options(Arc::new(Admit)))
+        .expect("reattach after last call");
+    next.detach(Duration::ZERO).expect("detach next");
+    Arc::try_unwrap(host)
+        .unwrap_or_else(|_| panic!("next releases host"))
+        .shutdown();
+}
+
+#[test]
+fn detach_max_duration_waits_for_entered_call_without_overflow() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let host = logger();
+    let mut attachment = attach_logger(
+        Arc::clone(&host),
+        options(Arc::new(Blocking {
+            entered: Mutex::new(Some(entered_tx)),
+            release: Mutex::new(Some(release_rx)),
+        })),
+    )
+    .expect("attach");
+    let control = attachment.control();
+    let worker = std::thread::spawn(move || control.try_log(event()));
+    entered_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("entered policy");
+    let (done_tx, done_rx) = mpsc::channel();
+    let closer = std::thread::spawn(move || {
+        done_tx
+            .send(attachment.detach(Duration::MAX))
+            .expect("completion receiver");
+    });
+    assert!(matches!(
+        done_rx.recv_timeout(Duration::from_millis(20)),
+        Err(mpsc::RecvTimeoutError::Timeout)
+    ));
+    release_tx.send(()).expect("release call");
+    done_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("detach completion")
+        .expect("unbounded drain");
+    closer.join().expect("closer did not panic");
+    worker.join().expect("worker").expect("event");
+    Arc::try_unwrap(host)
+        .unwrap_or_else(|_| panic!("detach releases host"))
+        .shutdown();
+}
+
+#[test]
+fn logging_detach_race_releases_all_logger_arcs_before_success() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    let mut host = logger();
+    for _ in 0..100 {
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let mut attachment = attach_logger(
+            Arc::clone(&host),
+            options(Arc::new(Blocking {
+                entered: Mutex::new(Some(entered_tx)),
+                release: Mutex::new(Some(release_rx)),
+            })),
+        )
+        .expect("attach");
+        let control = attachment.control();
+        let worker = std::thread::spawn(move || control.try_log(event()));
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("entered policy");
+        release_tx
+            .send(())
+            .expect("release call concurrently with detach");
+        attachment.detach(Duration::from_secs(2)).expect("detach");
+        // Deliberately check before joining: detach itself must guarantee release.
+        host = Arc::new(
+            Arc::try_unwrap(host)
+                .unwrap_or_else(|_| panic!("detach returned with call-owned logger")),
+        );
+        worker.join().expect("worker").expect("event");
+    }
+    Arc::try_unwrap(host)
+        .unwrap_or_else(|_| panic!("host ownership"))
+        .shutdown();
+}
+
+#[test]
+fn flush_detach_race_releases_all_logger_arcs_before_success() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    for _ in 0..32 {
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let host = blocking_logger(entered_tx, release_rx);
+        let mut attachment =
+            attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach");
+        let control = attachment.control();
+        let flush = std::thread::spawn(move || control.flush(Duration::ZERO));
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("flush entered sink");
+        release_tx
+            .send(())
+            .expect("release helper concurrently with detach");
+        attachment.detach(Duration::from_secs(2)).expect("detach");
+        let host = Arc::try_unwrap(host)
+            .unwrap_or_else(|_| panic!("detach returned with helper-owned logger"));
+        assert!(matches!(
+            flush.join().expect("flush caller"),
+            Ok(()) | Err(FlushError::TimedOut { .. })
+        ));
+        host.shutdown();
+    }
 }

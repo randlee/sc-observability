@@ -19,8 +19,6 @@ use sc_observability_dto::{
     AdmissionDto, CompletionDto, Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto,
     LogSnapshotDto,
 };
-#[cfg(feature = "test-hooks")]
-use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::{LevelChangeSource, LevelFilter};
 use std::sync::{Arc, atomic::Ordering};
 use std::time::Duration;
@@ -260,7 +258,10 @@ pub fn create_test_blocking_core_backend(
             identity: sc_observability_types::ProcessIdentity::default(),
         };
         let mut builder = sc_observability::Logger::builder_typed(config).map_err(|error| {
-            conversion::context(error.diagnostic(), conversion::Kind::Unavailable)
+            let typed = sc_observability_types::v2::InitError::Runtime {
+                context: error.into_context(),
+            };
+            conversion::canonical(&typed, conversion::Kind::Internal)
         })?;
         builder.register_sink(sc_observability::SinkRegistration::new(Arc::new(
             TestBlockingSink {
@@ -268,7 +269,10 @@ pub fn create_test_blocking_core_backend(
             },
         )));
         let (logger, level) = builder.build_with_level_owner_typed().map_err(|error| {
-            conversion::context(error.diagnostic(), conversion::Kind::Unavailable)
+            let typed = sc_observability_types::v2::InitError::Runtime {
+                context: error.into_context(),
+            };
+            conversion::canonical(&typed, conversion::Kind::Internal)
         })?;
         Ok((stamp, logger, level))
     })?;

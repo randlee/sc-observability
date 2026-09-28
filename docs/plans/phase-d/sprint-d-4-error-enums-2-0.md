@@ -89,3 +89,19 @@ production completion.
   qualification, compatibility retirement, D.3's `sinks.rs` migration, or
   changes in another sprint's construction files; those owners and obs-d-18
   close them.
+
+## Finding amendments
+
+- The `LogEmitter::emit_log` signature returns `v2::EventError`, so it cannot
+  carry `v2::ShutdownError::{Timeout, Drain}` directly. The accepted ADR-017
+  boundary mapping for a disconnected writer's admission failure is
+  `EventError::Routing` with its diagnostic context preserved. The retained
+  timeout match arm is not reachable through this emitter in the current
+  public API: shutdown consumes `Logger<Running>` and returns
+  `Logger<Stopped>`, whose health retains the timeout diagnostic and which
+  does not implement `LogEmitter`. Regression coverage exercises the actual
+  writer disconnection and stopped-health timeout paths; it does not claim
+  that a sink drain failure or shutdown timeout can be emitted after shutdown.
+- The staged core `v2` module exports only `EventError` and `LogSinkError`,
+  the contracts consumed by this layer. D.18 owns activation of the complete
+  canonical root export surface and removal of this temporary staging seam.

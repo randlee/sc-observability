@@ -4,8 +4,8 @@
     reason = "D2 binds the retained bridge compatibility methods until the D18 migration"
 )]
 
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{Arc, Condvar, Mutex, PoisonError, RwLock, Weak};
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
 use crate::control::BridgeEvent;
@@ -23,8 +23,23 @@ const MODE_CLOSING: u8 = 3;
 const MODE_STOPPED: u8 = 4;
 const MODE_DETACHED: u8 = 5;
 
-static BRIDGE_MODE: AtomicU8 = AtomicU8::new(MODE_EMPTY);
-static ATTACHMENT_SLOT: RwLock<Option<Arc<AttachmentState>>> = RwLock::new(None);
+// One authority for attachment lifecycle, slot membership, and entered calls.
+// Never acquire this lock while holding a logger lock or invoking host callbacks.
+// INSTALLED only records permanent facade installation; it is never drain state.
+struct AttachmentRegistry {
+    mode: u8,
+    state: Option<Arc<AttachmentState>>,
+    in_flight: usize,
+    abandoned: bool,
+}
+
+static ATTACHMENT: Mutex<AttachmentRegistry> = Mutex::new(AttachmentRegistry {
+    mode: MODE_EMPTY,
+    state: None,
+    in_flight: 0,
+    abandoned: false,
+});
+static DRAINED: Condvar = Condvar::new();
 
 /// Open host policy evaluated after bridge event assembly and before logger admission.
 pub trait BridgeEventPolicy: Send + Sync {
@@ -52,6 +67,24 @@ pub enum PolicyRejection {
     PayloadTooLarge,
     /// The assembled event was otherwise invalid for the host policy.
     Invalid,
+}
+
+impl PolicyRejection {
+    fn message(self) -> &'static str {
+        match self {
+            Self::Denied => "host bridge policy denied the event",
+            Self::PayloadTooLarge => "host bridge policy rejected an oversized payload",
+            Self::Invalid => "host bridge policy rejected an invalid event",
+        }
+    }
+
+    fn remediation(self) -> &'static str {
+        match self {
+            Self::Denied => "adjust the host allowlist or route the event to an admitted target",
+            Self::PayloadTooLarge => "reduce the event payload before submitting it",
+            Self::Invalid => "correct the event fields and resubmit the event",
+        }
+    }
 }
 
 /// Options for a non-owning host attachment.
@@ -159,19 +192,6 @@ impl DetachError {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AttachmentPhase {
-    Attached,
-    Closing,
-    Detached,
-}
-
-#[derive(Debug)]
-struct AttachmentGate {
-    phase: AttachmentPhase,
-    in_flight: usize,
-}
-
 /// Shared state retained by an attachment, its controls, and in-flight calls.
 pub(crate) struct AttachmentState {
     pub(crate) logger: Arc<sc_observability::Logger>,
@@ -179,8 +199,7 @@ pub(crate) struct AttachmentState {
     policy: Arc<dyn BridgeEventPolicy>,
     service: ServiceName,
     identity: ProcessIdentity,
-    gate: Mutex<AttachmentGate>,
-    drained: Condvar,
+    last_policy_rejection: Mutex<Option<OperationDiagnostic>>,
 }
 
 impl std::fmt::Debug for AttachmentState {
@@ -194,35 +213,54 @@ impl std::fmt::Debug for AttachmentState {
     }
 }
 
+// Rust drops fields in declaration order: release the call's logger ownership
+// before decrementing the drain count, including on callback panic and helpers.
 struct AttachmentCall {
     state: Arc<AttachmentState>,
+    _completion: AttachmentCompletion,
 }
 
-impl Drop for AttachmentCall {
+struct AttachmentCompletion;
+
+impl Drop for AttachmentCompletion {
     fn drop(&mut self) {
-        let mut gate = self
-            .state
-            .gate
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        gate.in_flight = gate.in_flight.saturating_sub(1);
-        if gate.in_flight == 0 {
-            self.state.drained.notify_all();
-        }
+        let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
+        registry.in_flight -= 1;
+        let retired = if registry.in_flight == 0 {
+            let retired = if registry.mode == MODE_CLOSING && registry.abandoned {
+                registry.mode = MODE_DETACHED;
+                registry.state.take()
+            } else {
+                None
+            };
+            DRAINED.notify_all();
+            retired
+        } else {
+            None
+        };
+        drop(registry);
+        // A policy or logger destructor may invoke host code; never run it
+        // under the lifecycle mutex.
+        drop(retired);
     }
 }
 
-impl AttachmentState {
-    fn enter(self: &Arc<Self>) -> Option<AttachmentCall> {
-        let mut gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        if gate.phase != AttachmentPhase::Attached {
-            return None;
-        }
-        gate.in_flight += 1;
-        Some(AttachmentCall {
-            state: Arc::clone(self),
-        })
+fn enter_attachment(saved: Option<&Weak<AttachmentState>>) -> Option<AttachmentCall> {
+    let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
+    if registry.mode != MODE_ATTACHED {
+        return None;
     }
+    let state = registry.state.as_ref()?;
+    if saved.is_some_and(|saved| !Weak::ptr_eq(saved, &Arc::downgrade(state))) {
+        return None;
+    }
+    let next = registry.in_flight.checked_add(1)?;
+    let state = Arc::clone(state);
+    registry.in_flight = next;
+    Some(AttachmentCall {
+        state,
+        _completion: AttachmentCompletion,
+    })
 }
 
 /// Non-owning attachment handle. It never owns shutdown or level authority.
@@ -247,6 +285,18 @@ impl LogAttachment {
         self.state
             .as_ref()
             .map_or_else(LogControl::stale_attachment, LogControl::for_attachment)
+    }
+
+    /// Returns the latest policy rejection from direct, facade, or macro admission.
+    #[must_use]
+    pub fn last_policy_rejection(&self) -> Option<OperationDiagnostic> {
+        self.state.as_ref().and_then(|state| {
+            state
+                .last_policy_rejection
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone()
+        })
     }
 
     /// Closes admission, drains entered calls, and releases attachment references.
@@ -285,7 +335,8 @@ pub fn attach_logger(
     logger: Arc<sc_observability::Logger>,
     options: AttachmentOptions,
 ) -> Result<LogAttachment, DetachError> {
-    let mode = BRIDGE_MODE.load(Ordering::SeqCst);
+    let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
+    let mode = registry.mode;
     if !matches!(mode, MODE_EMPTY | MODE_DETACHED) {
         return Err(DetachError::foreign_logger_installed());
     }
@@ -302,14 +353,14 @@ pub fn attach_logger(
     }
     if first_facade {
         if log::set_boxed_logger(Box::new(Bridge)).is_err() {
-            BRIDGE_MODE.store(MODE_STOPPED, Ordering::SeqCst);
+            registry.mode = MODE_STOPPED;
             return Err(DetachError::foreign_logger_installed());
         }
         log::set_max_level(log::LevelFilter::Trace);
     }
 
     let state = Arc::new(AttachmentState {
-        service: infer_service(&logger),
+        service: logger.service_name().clone(),
         identity: ProcessIdentity {
             hostname: None,
             pid: Some(std::process::id()),
@@ -317,20 +368,11 @@ pub fn attach_logger(
         logger,
         options: options.bridge,
         policy: options.policy,
-        gate: Mutex::new(AttachmentGate {
-            phase: AttachmentPhase::Attached,
-            in_flight: 0,
-        }),
-        drained: Condvar::new(),
+        last_policy_rejection: Mutex::new(None),
     });
-    let mut slot = ATTACHMENT_SLOT
-        .write()
-        .unwrap_or_else(PoisonError::into_inner);
-    if slot.is_some() {
-        return Err(DetachError::foreign_logger_installed());
-    }
-    *slot = Some(Arc::clone(&state));
-    BRIDGE_MODE.store(MODE_ATTACHED, Ordering::SeqCst);
+    registry.state = Some(Arc::clone(&state));
+    registry.mode = MODE_ATTACHED;
+    registry.abandoned = false;
     Ok(LogAttachment { state: Some(state) })
 }
 
@@ -339,135 +381,115 @@ fn close_attachment(
     timeout: Duration,
     dropping: bool,
 ) -> Result<(), DetachError> {
+    let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
+    if registry.mode != MODE_ATTACHED
+        || !registry
+            .state
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, state))
     {
-        let mut slot = ATTACHMENT_SLOT
-            .write()
-            .unwrap_or_else(PoisonError::into_inner);
-        let Some(current) = slot.as_ref() else {
-            return Err(DetachError::not_installed());
-        };
-        if !Arc::ptr_eq(current, state) {
-            return Err(DetachError::not_installed());
-        }
-        let mut gate = state.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        if gate.phase != AttachmentPhase::Attached {
-            return Err(DetachError::not_installed());
-        }
-        gate.phase = AttachmentPhase::Closing;
-        slot.take();
-        BRIDGE_MODE.store(MODE_CLOSING, Ordering::SeqCst);
+        return Err(DetachError::not_installed());
     }
-
-    let deadline = Instant::now() + timeout;
-    let mut gate = state.gate.lock().unwrap_or_else(PoisonError::into_inner);
-    while gate.in_flight != 0 {
-        let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
-            break;
-        };
-        let (next, result) = state
-            .drained
-            .wait_timeout(gate, remaining)
-            .unwrap_or_else(PoisonError::into_inner);
-        gate = next;
-        if result.timed_out() {
-            break;
+    registry.mode = MODE_CLOSING;
+    // Overflow means no representable deadline: wait until the entered calls
+    // drain rather than panic or truncate the caller's requested duration.
+    let deadline = Instant::now().checked_add(timeout);
+    while registry.in_flight != 0 {
+        if let Some(deadline) = deadline {
+            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+                break;
+            };
+            let (next, result) = DRAINED
+                .wait_timeout(registry, remaining)
+                .unwrap_or_else(PoisonError::into_inner);
+            registry = next;
+            if result.timed_out() {
+                break;
+            }
+        } else {
+            registry = DRAINED
+                .wait(registry)
+                .unwrap_or_else(PoisonError::into_inner);
         }
     }
-    if gate.in_flight != 0 {
-        if !dropping {
-            gate.phase = AttachmentPhase::Attached;
-            drop(gate);
-            *ATTACHMENT_SLOT
-                .write()
-                .unwrap_or_else(PoisonError::into_inner) = Some(Arc::clone(state));
-            BRIDGE_MODE.store(MODE_ATTACHED, Ordering::SeqCst);
+    if registry.in_flight != 0 {
+        if dropping {
+            // The last call completes the transition after this handle goes away.
+            registry.abandoned = true;
+        } else {
+            registry.mode = MODE_ATTACHED;
         }
         return Err(DetachError::timeout());
     }
-    gate.phase = AttachmentPhase::Detached;
-    drop(gate);
-    BRIDGE_MODE.store(MODE_DETACHED, Ordering::SeqCst);
+    registry.state.take();
+    registry.mode = MODE_DETACHED;
     Ok(())
-}
-
-fn infer_service(logger: &sc_observability::Logger) -> ServiceName {
-    let path = logger.health().active_log_path;
-    let candidate = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|name| name.strip_suffix(".log.jsonl"))
-        .unwrap_or("attached");
-    ServiceName::new(candidate)
-        .unwrap_or_else(|_| ServiceName::new("attached").expect("literal service"))
 }
 
 fn context(code: ErrorCode, message: &str, remediation: &str) -> ErrorContext {
     ErrorContext::new(
         code,
         message,
-        Remediation::recoverable(remediation, std::iter::empty::<String>()),
+        Remediation::recoverable(message, [remediation]),
     )
 }
 
 fn policy_diagnostic(reason: PolicyRejection) -> OperationDiagnostic {
     OperationDiagnostic {
-        code: crate::error_codes::SC_OBSERVABILITY_LOG_INVALID_FIELD,
-        message: format!("host bridge policy rejected event: {reason:?}"),
+        code: crate::error_codes::SC_OBSERVABILITY_LOG_POLICY_REJECTED,
+        message: reason.message().to_owned(),
         remediation: Remediation::recoverable(
-            "adjust the host bridge policy or event payload",
-            std::iter::empty::<String>(),
+            reason.remediation(),
+            ["resubmit the corrected event explicitly"],
         ),
         at: Timestamp::now_utc(),
     }
 }
 
-fn policy_allows(state: &AttachmentState, event: &LogEvent) -> Result<(), DropCause> {
+fn policy_allows(state: &AttachmentState, event: &LogEvent) -> Result<(), EmitError> {
     match state.policy.decide(event) {
         BridgeEventDecision::Admit => Ok(()),
-        BridgeEventDecision::Reject(_) => Err(DropCause::InvalidEvent),
+        BridgeEventDecision::Reject(reason) => {
+            let diagnostic = policy_diagnostic(reason);
+            *state
+                .last_policy_rejection
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner) = Some(diagnostic.clone());
+            Err(EmitError::InvalidEvent { diagnostic })
+        }
     }
 }
 
 pub(crate) fn attached_enabled(level: sc_observability_types::Level) -> Option<bool> {
-    let state = ATTACHMENT_SLOT
-        .read()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()?;
-    let effective = state.logger.level_state().effective_level;
-    Some(
-        effective != sc_observability_types::LevelFilter::Off
-            && level_rank(level) >= filter_rank(effective),
-    )
+    let call = enter_attachment(None)?;
+    Some(handle::level_enabled(
+        level,
+        call.state.logger.level_state().effective_level,
+    ))
 }
 
 pub(crate) fn attached_options() -> Option<crate::BridgeOptions> {
-    ATTACHMENT_SLOT
-        .read()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-        .map(|state| state.options.clone())
+    let registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
+    (registry.mode == MODE_ATTACHED)
+        .then(|| registry.state.as_ref().map(|state| state.options.clone()))
+        .flatten()
 }
 
 pub(crate) fn is_attached() -> bool {
-    ATTACHMENT_SLOT
-        .read()
+    ATTACHMENT
+        .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .is_some()
+        .mode
+        == MODE_ATTACHED
 }
 
 pub(crate) fn submit_parts_if_attached(
     parts: crate::__private::EventParts,
 ) -> Result<Result<AdmissionOutcome, DropCause>, Box<crate::__private::EventParts>> {
-    let Some(state) = ATTACHMENT_SLOT
-        .read()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
-    else {
+    let Some(call) = enter_attachment(None) else {
         return Err(Box::new(parts));
     };
-    let Some(_call) = state.enter() else {
-        return Ok(Err(DropCause::NotInstalled));
-    };
+    let state = &call.state;
     let mut event = mapping::assemble_event(
         parts,
         &state.service,
@@ -475,8 +497,8 @@ pub(crate) fn submit_parts_if_attached(
         &state.options.default_action,
     );
     event.trace = crate::context::current_trace();
-    if let Err(cause) = policy_allows(&state, &event) {
-        return Ok(Err(cause));
+    if let Err(cause) = policy_allows(state, &event) {
+        return Ok(Err(handle::Rejection::drop_cause(&cause)));
     }
     Ok(match state.logger.try_log_with_outcome(event) {
         Ok(outcome) => Ok(outcome),
@@ -493,92 +515,39 @@ pub(crate) fn submit_control(
     saved: &Weak<AttachmentState>,
     event: BridgeEvent,
 ) -> Result<AdmissionOutcome, EmitError> {
-    let state = saved.upgrade().ok_or(EmitError::NotRunning {
-        phase: crate::LifecyclePhase::Stopped,
-    })?;
-    let Some(_call) = state.enter() else {
-        return Err(EmitError::NotRunning {
-            phase: crate::LifecyclePhase::Stopping,
-        });
-    };
-    let mut fields = serde_json::Map::new();
-    let mut raw_keys = std::collections::BTreeMap::new();
-    for (raw, value) in event.fields {
-        let key = mapping::field_key_label(&raw)
-            .map_err(|error| EmitError::InvalidField {
-                raw_key: raw.clone(),
-                reason: match error {
-                    mapping::LabelError::Empty { .. } | mapping::LabelError::Rejected { .. } => {
-                        crate::FieldKeyError::Empty
-                    }
-                    mapping::LabelError::ReservedPrefix { .. } => {
-                        crate::FieldKeyError::ReservedPrefix
-                    }
-                },
-            })?
-            .into_owned();
-        if let Some(other_raw_key) = raw_keys.insert(key.clone(), raw.clone()) {
-            return Err(EmitError::InvalidField {
-                raw_key: raw,
-                reason: crate::FieldKeyError::Collision { other_raw_key },
-            });
-        }
-        fields.insert(key, value);
-    }
-    let observation = sc_observability_types::Observation::new(state.service.clone(), ());
-    let assembled = LogEvent {
-        version: observation.version,
-        timestamp: observation.timestamp,
-        level: event.level,
-        service: state.service.clone(),
-        target: event.target,
-        action: event
-            .action
-            .unwrap_or_else(|| state.options.default_action.clone()),
-        message: event.message,
-        identity: state.identity.clone(),
-        trace: event.trace.or_else(crate::context::current_trace),
-        request_id: event.request_id,
-        correlation_id: event.correlation_id,
-        outcome: event.outcome,
-        diagnostic: None,
-        state_transition: None,
-        fields,
-    };
-    if let BridgeEventDecision::Reject(reason) = state.policy.decide(&assembled) {
-        return Err(EmitError::InvalidEvent {
-            diagnostic: policy_diagnostic(reason),
-        });
-    }
-    state
-        .logger
-        .try_log_with_outcome(assembled)
-        .map_err(|error| crate::control::core_emit_error(&error))
+    let call = enter_attachment(Some(saved)).ok_or(EmitError::NotInstalled)?;
+    submit_attachment_event(&call.state, event)
+}
+
+fn submit_attachment_event(
+    state: &AttachmentState,
+    event: BridgeEvent,
+) -> Result<AdmissionOutcome, EmitError> {
+    let mut assembled = crate::control::assemble_event(
+        event,
+        &state.service,
+        &state.identity,
+        &state.options.default_action,
+    )?;
+    assembled.trace = assembled.trace.or_else(crate::context::current_trace);
+    policy_allows(state, &assembled)?;
+    crate::control::submit_event(&state.logger, assembled)
 }
 
 pub(crate) fn submit_current_control(event: BridgeEvent) -> Result<AdmissionOutcome, EmitError> {
-    let state = ATTACHMENT_SLOT
-        .read()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
-        .ok_or(EmitError::NotRunning {
-            phase: crate::LifecyclePhase::Stopped,
-        })?;
-    submit_control(&Arc::downgrade(&state), event)
+    let call = enter_attachment(None).ok_or(EmitError::NotInstalled)?;
+    submit_attachment_event(&call.state, event)
 }
 
 pub(crate) fn flush_attached(
     saved: &Weak<AttachmentState>,
     timeout: Duration,
 ) -> Result<(), crate::FlushError> {
-    let state = saved.upgrade().ok_or(crate::FlushError::NotRunning {
-        phase: crate::LifecyclePhase::Stopped,
-    })?;
-    let Some(call) = state.enter() else {
-        return Err(crate::FlushError::NotRunning {
-            phase: crate::LifecyclePhase::Stopping,
-        });
-    };
+    let call = enter_attachment(Some(saved)).ok_or(crate::FlushError::NotInstalled)?;
+    flush_call(call, timeout)
+}
+
+fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), crate::FlushError> {
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     std::thread::Builder::new()
         .name("sc-observability-log-attachment-flush".to_owned())
@@ -587,8 +556,8 @@ pub(crate) fn flush_attached(
             // caller must not be able to detach while this helper still owns the
             // attachment's logger reference.
             let result = call.state.logger.flush();
-            let _ = sender.send(result);
             drop(call);
+            let _ = sender.send(result);
         })
         .map_err(|source| crate::FlushError::HelperSpawn {
             diagnostic: OperationDiagnostic {
@@ -625,44 +594,21 @@ pub(crate) fn flush_attached(
 }
 
 pub(crate) fn flush_current_attachment(timeout: Duration) -> Result<(), crate::FlushError> {
-    let state = ATTACHMENT_SLOT
-        .read()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
-        .ok_or(crate::FlushError::NotRunning {
-            phase: crate::LifecyclePhase::Stopped,
-        })?;
-    flush_attached(&Arc::downgrade(&state), timeout)
+    let call = enter_attachment(None).ok_or(crate::FlushError::NotInstalled)?;
+    flush_call(call, timeout)
 }
 
 pub(crate) fn mark_owned_running() {
-    BRIDGE_MODE.store(MODE_OWNED, Ordering::SeqCst);
+    ATTACHMENT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .mode = MODE_OWNED;
 }
 
 pub(crate) fn mark_owned_stopped() {
-    if BRIDGE_MODE.load(Ordering::SeqCst) == MODE_OWNED {
-        BRIDGE_MODE.store(MODE_STOPPED, Ordering::SeqCst);
-    }
-}
-
-fn level_rank(level: sc_observability_types::Level) -> u8 {
-    match level {
-        sc_observability_types::Level::Trace => 0,
-        sc_observability_types::Level::Debug => 1,
-        sc_observability_types::Level::Info => 2,
-        sc_observability_types::Level::Warn => 3,
-        sc_observability_types::Level::Error => 4,
-    }
-}
-
-fn filter_rank(level: sc_observability_types::LevelFilter) -> u8 {
-    match level {
-        sc_observability_types::LevelFilter::Trace => 0,
-        sc_observability_types::LevelFilter::Debug => 1,
-        sc_observability_types::LevelFilter::Info => 2,
-        sc_observability_types::LevelFilter::Warn => 3,
-        sc_observability_types::LevelFilter::Error => 4,
-        sc_observability_types::LevelFilter::Off => 5,
+    let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
+    if registry.mode == MODE_OWNED {
+        registry.mode = MODE_STOPPED;
     }
 }
 

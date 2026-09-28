@@ -55,7 +55,7 @@ impl Rejection for crate::EmitError {
             Self::QueueFull { .. } => DropCause::QueueFull,
             Self::WriterDegraded { .. } => DropCause::WriterDegraded,
             Self::ShutdownTimedOut { .. } => DropCause::ShutdownTimedOut,
-            Self::NotRunning { .. } => DropCause::NotInstalled,
+            Self::NotRunning { .. } | Self::NotInstalled => DropCause::NotInstalled,
             Self::Reentrant => DropCause::ReentrantEmit,
             Self::Panicked => DropCause::LoggerPanicked,
         }
@@ -428,6 +428,13 @@ pub(crate) fn core_enabled(level: sc_observability_types::Level) -> bool {
         return false;
     };
     let effective = installed.logger.level_state().effective_level;
+    level_enabled(level, effective)
+}
+
+pub(crate) fn level_enabled(
+    level: sc_observability_types::Level,
+    effective: sc_observability_types::LevelFilter,
+) -> bool {
     level_rank(level) >= filter_rank(effective)
 }
 
@@ -920,6 +927,34 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
 mod tests {
     use super::*;
     use std::time::Instant;
+
+    #[test]
+    fn shared_level_gate_covers_every_level_and_filter() {
+        use sc_observability_types::{Level, LevelFilter};
+        let levels = [
+            Level::Trace,
+            Level::Debug,
+            Level::Info,
+            Level::Warn,
+            Level::Error,
+        ];
+        for (filter, admitted) in [
+            (LevelFilter::Off, [false, false, false, false, false]),
+            (LevelFilter::Error, [false, false, false, false, true]),
+            (LevelFilter::Warn, [false, false, false, true, true]),
+            (LevelFilter::Info, [false, false, true, true, true]),
+            (LevelFilter::Debug, [false, true, true, true, true]),
+            (LevelFilter::Trace, [true, true, true, true, true]),
+        ] {
+            for (level, expected) in levels.into_iter().zip(admitted) {
+                assert_eq!(
+                    level_enabled(level, filter),
+                    expected,
+                    "{level:?} / {filter:?}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn native_flush_counter_positive_control_and_facade_zero_proof() {

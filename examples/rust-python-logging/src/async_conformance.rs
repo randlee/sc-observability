@@ -107,7 +107,8 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
         let root = std::env::temp_dir().join(format!("b6-async-{}-{mode}", std::process::id()));
         let mut config = sc_observability::LoggerConfig::default_for(service, root.clone());
         config.enable_console_sink = true;
-        config.queue_capacity = 128;
+        config.queue_capacity =
+            sc_observability::QueueCapacity::new(128).expect("positive capacity");
         let mut core_owner = None;
         let mut bridge_owner = None;
         let backend: Option<Arc<dyn HostLoggingBackend>> = match mode {

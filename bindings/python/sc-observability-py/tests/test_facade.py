@@ -12,6 +12,7 @@ if os.environ.get("SC_OBSERVABILITY_RUNTIME_TEST") != "1":
 import sc_observability
 from sc_observability import (
     AttachedLogger,
+    AdapterPolicy,
     Err,
     LogEvent,
     Logger,
@@ -115,7 +116,7 @@ class _NeverNative:
     def log(self, payload: str) -> str:
         raise AssertionError(f"native log was called with {payload}")
 
-    def query(self, payload: str) -> str:
+    def query(self, payload: str, timeout: str) -> str:
         raise AssertionError(f"native query was called with {payload}")
 
     def health(self) -> str:
@@ -135,6 +136,52 @@ class _NeverNative:
 
     def reset_level(self, source: str) -> str:
         raise AssertionError(f"native reset_level was called with {source}")
+
+
+class _PolicyNative:
+    def __init__(self) -> None:
+        self.query_timeout: str | None = None
+        self.log_calls = 0
+
+    def log(self, payload: str) -> str:
+        self.log_calls += 1
+        return json.dumps({
+            "schema_version": 1,
+            "kind": "error",
+            "error": {
+                "kind": "internal",
+                "at": "2026-01-01T00:00:00Z",
+                "code": "SC_TEST_INTERNAL",
+                "message": "recorded policy call",
+                "remediation": {"kind": "recoverable", "steps": ["inspect"]},
+            },
+        })
+
+    def query(self, payload: str, timeout: str) -> str:
+        self.query_timeout = timeout
+        return self.log(payload)
+
+    def health(self) -> str:
+        return self.log("")
+
+    def flush(self, timeout: str) -> str:
+        return self.log(timeout)
+
+
+def test_adapter_policy_forwards_query_timeout_and_rejects_over_budget_input() -> None:
+    native = _PolicyNative()
+    logger = AttachedLogger(native)
+    result = logger.query(LogQuery(), AdapterPolicy(query_timeout_ms=17))
+    assert isinstance(result, Err)
+    assert native.query_timeout == "17"
+
+    rejected = logger.log(
+        LogEvent(level="info", target="python.test", action="oversized", message="x"),
+        AdapterPolicy(max_request_bytes=1),
+    )
+    assert isinstance(rejected, Err)
+    assert rejected.error.code == "SC_OBSERVABILITY_BINDING_INVALID_INPUT"
+    assert native.log_calls == 1
 
 
 def test_public_input_failures_are_tagged_before_native_dispatch() -> None:
@@ -172,7 +219,7 @@ class _ForeignNative:
     def log(self, payload: str) -> str:
         raise _UnprintableForeignError()
 
-    def query(self, payload: str) -> str:
+    def query(self, payload: str, timeout: str) -> str:
         raise _UnprintableForeignError()
 
     def health(self) -> str:
@@ -264,7 +311,7 @@ class _MalformedNative:
     def log(self, payload: str) -> None:
         return None
 
-    def query(self, payload: str) -> None:
+    def query(self, payload: str, timeout: str) -> None:
         return None
 
     def health(self) -> None:

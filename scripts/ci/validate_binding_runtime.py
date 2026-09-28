@@ -10,7 +10,7 @@ import sys
 import tempfile
 import subprocess
 from pathlib import Path
-from validate_binding_runtime_dependencies import validate_manifest, main as dependencies
+from validate_binding_runtime_dependencies import load_boundary_manifest, validate_manifest, main as dependencies
 from _hashing import digest
 import tomllib
 import copy
@@ -38,12 +38,13 @@ def cases():
 def negatives():
     manifest=tomllib.loads((ROOT/'crates'/PACKAGE/'Cargo.toml').read_text(encoding='utf-8'))
     workspace=tomllib.loads((ROOT/'Cargo.toml').read_text(encoding='utf-8'))
+    _, boundary = load_boundary_manifest(PACKAGE) or (None, None)
     for host in ('tauri','pyo3'):
         for target in (False,True):
             test=copy.deepcopy(manifest)
             table=test.setdefault('target',{}).setdefault('cfg(windows)',{}) if target else test
             table.setdefault('dependencies',{})['camouflaged']={'package':host,'version':'1'}
-            try: validate_manifest(test,workspace)
+            try: validate_manifest(test,workspace,boundary)
             except ValueError as error:
                 if 'forbidden host dependency' not in str(error): raise
             else: raise RuntimeError('injected host edge accepted')

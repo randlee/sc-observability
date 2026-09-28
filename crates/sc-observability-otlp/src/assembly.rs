@@ -106,6 +106,11 @@ impl SpanAssembler {
     }
 
     /// Pushes one lifecycle signal through the assembler with a neutral failure.
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal lifecycle bookkeeping loses the event buffer paired
+    /// with a started span; that condition indicates corrupted assembler state.
     pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure> {
         match signal {
             SpanSignal::Started(record) => {
@@ -128,6 +133,15 @@ impl SpanAssembler {
                         ),
                     ))));
                 }
+                if self.started[&key].trace() != &event.trace {
+                    return Err(EventFailure::from_context(Box::new(ErrorContext::new(
+                        error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
+                        "received span event with mismatched trace context",
+                        Remediation::not_recoverable(
+                            "preserve trace identifiers, parent, and flags across one span lifecycle",
+                        ),
+                    ))));
+                }
                 self.events.entry(key).or_default().push(event);
                 Ok(None)
             }
@@ -136,7 +150,7 @@ impl SpanAssembler {
                     record.trace().trace_id.as_str(),
                     record.trace().span_id.as_str(),
                 );
-                if self.started.remove(&key).is_none() {
+                let Some(started) = self.started.get(&key) else {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received ended span without a matching started span",
@@ -144,16 +158,20 @@ impl SpanAssembler {
                             "emit started and ended span signals with the same trace context",
                         ),
                     ))));
-                }
-                let Some(events) = self.events.remove(&key) else {
+                };
+                if started.trace() != record.trace() {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
-                        "missing span event buffer for a started span",
+                        "received ended span with mismatched trace context",
                         Remediation::not_recoverable(
-                            "restart telemetry to restore span assembly state",
+                            "preserve trace identifiers, parent, and flags across one span lifecycle",
                         ),
                     ))));
-                };
+                }
+                self.started.remove(&key);
+                let events = self.events.remove(&key).expect(
+                    "started span always has an event buffer; this is an internal invariant",
+                );
                 Ok(Some(CompleteSpan { record, events }))
             }
         }
@@ -235,17 +253,12 @@ impl V2SpanAssembler {
                         "preserve trace identifiers, parent, and flags across one span lifecycle",
                     ));
                 }
-                let started = self
-                    .started
+                self.started
                     .remove(&key)
                     .expect("started span was checked before removal");
-                let Some(events) = self.events.remove(&key) else {
-                    self.started.insert(key, started);
-                    return Err(v2_lifecycle_error(
-                        "missing span event buffer for a started span",
-                        "restart telemetry to restore span assembly state",
-                    ));
-                };
+                let events = self.events.remove(&key).expect(
+                    "started span always has an event buffer; this is an internal invariant",
+                );
                 Ok(Some(V2CompleteSpan { record, events }))
             }
         }
@@ -273,7 +286,7 @@ impl Default for V2SpanAssembler {
 fn v2_lifecycle_error(message: &str, recovery: &str) -> V2EventError {
     V2EventError::Routing {
         context: Box::new(ErrorContext::new(
-            error_codes::OTLP_EXPORT_TERMINAL,
+            error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
             message,
             Remediation::not_recoverable(recovery),
         )),
@@ -388,7 +401,10 @@ mod tests {
             .push(V2SpanSignal::Ended(ended))
             .expect_err("different flags are not the same lifecycle");
 
-        assert_eq!(error.diagnostic().code, error_codes::OTLP_EXPORT_TERMINAL);
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::OTLP_SPAN_ASSEMBLY_FAILED
+        );
         assert_eq!(assembler.flush_incomplete(), 1);
     }
 

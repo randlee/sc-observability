@@ -98,6 +98,14 @@ and integer strings remain distinct. No scalar histogram is synthesized.
 retain the existing schema-version/kind/value/error envelope and add optional
 redacted cause/docs/details. Existing `Diagnostic`, `Failure` and their Rust
 struct literals remain compatible for the independent D.20 boundary.
+
+`Failure`/`WireEnvelope` and `CanonicalFailureDto`/`CanonicalWireEnvelope`
+remain separate concrete wire types because canonical diagnostics carry
+cause/docs/details that retained diagnostics cannot serialize losslessly. They
+must not be Rust aliases. Native error classification and
+canonical-to-stored-diagnostic conversion are shared at the conversion boundary
+so both representations use the same failure category, field and operation
+metadata without changing either JSON contract.
 `TryFrom<&v2::...Error>` matches canonical variants and preserves native
 code/remediation; native source objects remain attached to the borrowed error.
 `decode_canonical_envelope` retains unknown error kinds as `UnknownRemote`.

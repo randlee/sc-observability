@@ -1,16 +1,93 @@
 use std::borrow::Cow;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::time::{Duration, SystemTime};
 
 use sc_observability_types::ErrorContext;
+use sc_observability_types::typed::EventFailure;
 use sc_observability_types::v2::LogSinkError;
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, Level, LogEvent, Remediation, SinkHealth, SinkHealthState,
     SinkName, Timestamp,
 };
+
+/// Serializes an event without allowing its JSON payload to exceed the
+/// configured per-event limit. The returned bytes exclude the JSONL newline.
+pub(crate) fn serialize_event_bounded(event: &LogEvent) -> Result<Vec<u8>, Box<ErrorContext>> {
+    let mut writer = BoundedEventWriter {
+        bytes: Vec::new(),
+        max_bytes: constants::MAX_LOG_EVENT_BYTES - 1,
+        exceeded: false,
+    };
+    if let Err(error) = serde_json::to_writer(&mut writer, event) {
+        if writer.exceeded {
+            return Err(event_too_large_context());
+        }
+        return Err(Box::new(
+            ErrorContext::new(
+                error_codes::LOGGER_INVALID_EVENT,
+                "log event could not be serialized",
+                Remediation::recoverable(
+                    "provide a serializable event and retry logging",
+                    ["check structured event fields for unsupported values"],
+                ),
+            )
+            .cause(error.to_string())
+            .source(Box::new(error)),
+        ));
+    }
+    Ok(writer.bytes)
+}
+
+pub(crate) fn validate_event_size(event: &LogEvent) -> Result<(), EventFailure> {
+    serialize_event_bounded(event)
+        .map(drop)
+        .map_err(EventFailure::from_context)
+}
+
+fn event_too_large_context() -> Box<ErrorContext> {
+    Box::new(ErrorContext::new(
+        error_codes::LOGGER_INVALID_EVENT,
+        format!(
+            "serialized log event exceeds the {} byte limit",
+            constants::MAX_LOG_EVENT_BYTES
+        ),
+        Remediation::recoverable(
+            "reduce the serialized event size before logging",
+            ["shorten the message or remove structured fields"],
+        ),
+    ))
+}
+
+struct BoundedEventWriter {
+    bytes: Vec<u8>,
+    max_bytes: usize,
+    exceeded: bool,
+}
+
+impl Write for BoundedEventWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let Some(new_len) = self.bytes.len().checked_add(bytes.len()) else {
+            self.exceeded = true;
+            return Err(io::Error::other("serialized log event size overflowed"));
+        };
+        if new_len > self.max_bytes {
+            self.exceeded = true;
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "serialized log event exceeds its byte limit",
+            ));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 #[cfg(feature = "fault-injection")]
 use std::sync::{Arc, Mutex};
 
@@ -303,7 +380,8 @@ impl crate::typed::TypedLogSink for JsonlFileSink {
             fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
         }
 
-        let mut line = serde_json::to_vec(event).map_err(|err| self.mark_failure(err))?;
+        let mut line =
+            serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
         line.push(b'\n');
         if let Some(policy) = self.legacy_policy {
             self.rotate_if_needed(
@@ -453,6 +531,7 @@ impl ConsoleSink {
 
 impl crate::typed::TypedLogSink for ConsoleSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
         let line = Self::format_line(event);
         self.writer
             .write_line(&line)
@@ -752,6 +831,40 @@ mod tests {
             state_transition: None,
             fields: serde_json::Map::from_iter([("attempt".to_string(), json!(1))]),
         }
+    }
+
+    #[test]
+    fn bounded_event_serialization_accepts_exact_limit_and_rejects_one_byte_over() {
+        let mut event = log_event();
+        event.message = Some(String::new());
+        let empty_message_len = serde_json::to_vec(&event)
+            .expect("serialize small fixture")
+            .len();
+        let exact_message_len = constants::MAX_LOG_EVENT_BYTES - 1 - empty_message_len;
+        event.message = Some("x".repeat(exact_message_len));
+
+        let serialized = serialize_event_bounded(&event).expect("event exactly at limit");
+        assert_eq!(serialized.len() + 1, constants::MAX_LOG_EVENT_BYTES);
+
+        event.message.as_mut().expect("message exists").push('x');
+        let error = serialize_event_bounded(&event).expect_err("event exceeds byte limit");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
+        assert!(error.diagnostic().message.contains("byte limit"));
+    }
+
+    #[test]
+    fn oversized_standalone_file_sink_write_does_not_create_or_degrade_sink() {
+        let root = temp_root("oversized-event");
+        let active_path = root.join("logs/service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path.clone());
+        let mut event = log_event();
+        event.message = Some("x".repeat(constants::MAX_LOG_EVENT_BYTES));
+
+        let error = sink.write(&event).expect_err("oversized event is rejected");
+
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
+        assert!(!active_path.exists());
+        assert_eq!(sink.health().state, SinkHealthState::Healthy);
     }
 
     fn bytes(value: u64) -> crate::ByteCount {

@@ -56,6 +56,7 @@ uvx --from maturin==1.10.2 maturin build --locked \
 uv venv --python "$B4_PYTHON" "$B4_TEMP_DIR/venv"
 uv pip install --python "$B4_TEMP_DIR/venv/bin/python" pytest==9.1.1 mypy==2.3.1 "$B4_TEMP_DIR"/wheels/*.whl
 cp -R bindings/python/sc-observability-py/tests "$B4_TEMP_DIR/tests"
+"$B4_PYTHON" scripts/ci/stage_python_conformance.py --source . --tests "$B4_TEMP_DIR/tests"
 cp -R bindings/python/sc-observability-py/examples "$B4_TEMP_DIR/examples"
 SC_OBSERVABILITY_RUNTIME_TEST=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
   "$B4_TEMP_DIR/venv/bin/python" -I -X dev -W error -m pytest \

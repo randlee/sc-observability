@@ -3,16 +3,17 @@ use super::implementation::{
 };
 use crate::config::LegacyRetryPolicy;
 use crate::contracts::{ExporterLifecycle, LogExporter};
+use crate::lifecycle::LifecycleState;
 use sc_observability_types::{
     ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName,
     TargetCategory, Timestamp,
 };
 use serde_json::Value;
 use std::fs;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{BufRead, ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process;
+use std::process::{self, Command, Stdio};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -192,6 +193,34 @@ fn custom_ca_file(contents: &str) -> PathBuf {
     path
 }
 
+fn start_tls_test_server(
+    cert: &PathBuf,
+    key: &PathBuf,
+    address: std::net::SocketAddr,
+) -> process::Child {
+    let server = Command::new("python3")
+        .args([
+            "-u",
+            "-c",
+            "import http.server, ssl, sys\nclass H(http.server.BaseHTTPRequestHandler):\n def do_POST(self):\n  n=int(self.headers.get('Content-Length','0')); self.rfile.read(n); self.send_response(200); self.send_header('Content-Length','0'); self.end_headers()\n def log_message(self,*args): pass\ns=http.server.HTTPServer(('127.0.0.1',int(sys.argv[1])),H); c=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); c.load_cert_chain(sys.argv[2],sys.argv[3]); s.socket=c.wrap_socket(s.socket,server_side=True); print('READY',flush=True); s.serve_forever()",
+        ])
+        .arg(address.port().to_string())
+        .arg(cert)
+        .arg(key)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("start standard-library local TLS server");
+    let mut server = server;
+    let mut ready = String::new();
+    std::io::BufReader::new(server.stdout.take().expect("TLS server ready output"))
+        .read_line(&mut ready)
+        .expect("read TLS server readiness");
+    assert_eq!(ready.trim(), "READY", "local TLS server became ready");
+    server
+}
+
 fn retry_policy(
     max_retries: u32,
     initial_backoff_ms: u64,
@@ -262,26 +291,152 @@ fn safety_delta_shutdown_cancels_retry_wait() {
     ));
 }
 
+fn verify_provenance_source(
+    repo: &std::path::Path,
+    source_commit: &str,
+    entry: &Value,
+) -> Result<(), String> {
+    let source = entry["source"].as_str().expect("manifest source path");
+    let pinned_blob = Command::new("git")
+        .args(["-C", repo.to_str().expect("repo path"), "rev-parse"])
+        .arg(format!("{source_commit}:{source}"))
+        .output()
+        .expect("run git rev-parse");
+    assert!(
+        pinned_blob.status.success(),
+        "pinned source exists: {source}"
+    );
+    if String::from_utf8(pinned_blob.stdout)
+        .expect("blob id is utf8")
+        .trim()
+        != entry["git_blob"].as_str().expect("manifest git blob")
+    {
+        return Err(format!(
+            "manifest git_blob does not identify pinned source {source}"
+        ));
+    }
+    let source_bytes = Command::new("git")
+        .args(["-C", repo.to_str().expect("repo path"), "show"])
+        .arg(format!("{source_commit}:{source}"))
+        .output()
+        .expect("read pinned source");
+    assert!(
+        source_bytes.status.success(),
+        "read pinned source: {source}"
+    );
+    let mut hash = Command::new("shasum")
+        .args(["-a", "256"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("shasum is available");
+    hash.stdin
+        .take()
+        .expect("hash stdin")
+        .write_all(&source_bytes.stdout)
+        .expect("hash source bytes");
+    let sha256 = hash.wait_with_output().expect("finish sha256");
+    assert!(sha256.status.success(), "hash pinned source: {source}");
+    if String::from_utf8(sha256.stdout)
+        .expect("sha256 is utf8")
+        .split_whitespace()
+        .next()
+        .expect("sha256 digest")
+        != entry["sha256"].as_str().expect("manifest sha256")
+    {
+        return Err(format!(
+            "manifest sha256 does not identify pinned source {source}"
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn provenance_rejects_tampered_hashes_for_every_manifest_entry() {
+    let manifest: Value = serde_json::from_str(include_str!(
+        "../../../../docs/plans/phase-d/legacy-otlp-provenance.json"
+    ))
+    .expect("valid provenance manifest");
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let source_commit = manifest["source_commit"].as_str().expect("source commit");
+    let entries = manifest["entries"].as_array().expect("manifest entries");
+    assert!(!entries.is_empty());
+    for entry in entries {
+        let source = entry["source"].as_str().expect("source path");
+        for field in ["git_blob", "sha256"] {
+            let mut tampered = entry.clone();
+            let original = entry[field].as_str().expect("source hash");
+            tampered[field] = Value::String("0".repeat(original.len()));
+            assert_eq!(
+                verify_provenance_source(&repo, source_commit, &tampered),
+                Err(format!(
+                    "manifest {field} does not identify pinned source {source}"
+                )),
+                "must reject a tampered {field} for {source}",
+            );
+        }
+    }
+}
+
 #[test]
 fn provenance_pin_and_destination_disposition_are_present() {
     let manifest = include_str!("../../../../docs/plans/phase-d/legacy-otlp-provenance.json");
+    let sprint =
+        include_str!("../../../../docs/plans/phase-d/sprint-d-8-otlp-http-json-transplant.md");
     let manifest: Value = serde_json::from_str(manifest).expect("valid provenance manifest");
     assert_eq!(
         manifest["source_commit"],
         "7b39f4e7f72b6845edec4eab4cd671611661445f"
     );
 
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entries = manifest["entries"].as_array().expect("manifest entries");
+    assert!(
+        !entries.is_empty(),
+        "provenance must contain source entries"
+    );
+    let source_commit = manifest["source_commit"].as_str().expect("source commit");
+    // Source identity applies to the entire manifest, including D9 scripts and
+    // reference/translation entries. Do not derive coverage from D8's owned
+    // destination list below: adapted destinations need not equal source bytes.
+    for entry in entries {
+        verify_provenance_source(&repo, source_commit, entry)
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(
+            matches!(
+                entry["disposition"].as_str(),
+                Some(
+                    "transplant-and-adapt"
+                        | "dependency-reference-only"
+                        | "translate-current-schema"
+                        | "reference-and-disposition-only"
+                )
+            ),
+            "unauthorized provenance disposition: {entry}"
+        );
+    }
+
+    // These destination existence/adaptation assertions belong to D8. D9's
+    // planned destinations are separate deliverables; their source pins above
+    // are still verified even before those destinations have been delivered.
     let destinations = [
         (
             "crates/sc-observability-otlp/src/lib.rs",
             "crates/sc-observability-otlp/src/legacy_http_json/implementation.rs",
+            "transplant-and-adapt",
+        ),
+        (
+            "crates/sc-observability-otlp/Cargo.toml",
+            "crates/sc-observability-otlp/Cargo.toml",
+            "dependency-reference-only",
         ),
         (
             "crates/sc-observability-otlp/tests/timestamp_export_integration.rs",
             "crates/sc-observability-otlp/src/legacy_http_json/tests.rs",
+            "transplant-and-adapt",
         ),
     ];
-    for (source, destination) in destinations {
+    for (source, destination, disposition) in destinations {
         let entry = manifest["entries"]
             .as_array()
             .expect("manifest entries")
@@ -289,12 +444,22 @@ fn provenance_pin_and_destination_disposition_are_present() {
             .find(|entry| entry["source"] == source)
             .unwrap_or_else(|| panic!("missing provenance source {source}"));
         assert_eq!(entry["destination"], destination);
-        assert_eq!(entry["disposition"], "transplant-and-adapt");
+        assert_eq!(entry["disposition"], disposition);
+        if disposition == "transplant-and-adapt" {
+            for delta in [
+                "retry classification",
+                "server pacing/jitter and independent caps",
+                "shutdown cancellation",
+                "retry deadline",
+            ] {
+                assert!(
+                    sprint.contains(delta),
+                    "sprint doc names authorized adaptation: {delta}"
+                );
+            }
+        }
         assert!(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../..")
-                .join(destination)
-                .is_file(),
+            repo.join(destination).is_file(),
             "missing provenance destination {destination}"
         );
     }
@@ -420,18 +585,79 @@ fn retained_wrong_auth_fixture_is_rejected_without_credential_diagnostic() {
 }
 
 #[test]
-fn retained_custom_ca_bundle_builds_the_actual_client() {
-    let valid_ca = custom_ca_file(CUSTOM_CA_PEM);
-    let exporter = OtlpHttpExporter::for_test_config(
-        "https://collector.example".to_owned(),
-        None,
-        Some(valid_ca.clone()),
-    );
-    fs::remove_file(&valid_ca).expect("remove temporary CA bundle");
+fn retained_custom_ca_bundle_verifies_real_tls_exports() {
+    let nonce = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("system clock after epoch")
+        .as_nanos();
+    let cert = std::env::temp_dir().join(format!("sc-otlp-d8-{nonce}.crt"));
+    let key = std::env::temp_dir().join(format!("sc-otlp-d8-{nonce}.key"));
+    let generated = Command::new("openssl")
+        .args(["req", "-x509", "-newkey", "rsa:2048", "-nodes"])
+        .arg("-keyout")
+        .arg(&key)
+        .arg("-out")
+        .arg(&cert)
+        .args([
+            "-days",
+            "1",
+            "-subj",
+            "/CN=127.0.0.1",
+            "-addext",
+            "subjectAltName=IP:127.0.0.1",
+            "-addext",
+            "basicConstraints=critical,CA:FALSE",
+            "-addext",
+            "extendedKeyUsage=serverAuth",
+        ])
+        .output()
+        .expect("openssl is available for local TLS test");
+    assert!(generated.status.success(), "generate local TLS certificate");
+    let unrelated = custom_ca_file(CUSTOM_CA_PEM);
+    let ca = custom_ca_file(&fs::read_to_string(&cert).expect("read server CA"));
+    let listener = TcpListener::bind("127.0.0.1:0").expect("reserve TLS port");
+    let address = listener.local_addr().expect("TLS address");
+    drop(listener);
+    let mut server = start_tls_test_server(&cert, &key, address);
+    let exporter =
+        OtlpHttpExporter::for_test_config(format!("https://{address}"), None, Some(ca.clone()))
+            .expect("construct exporter with trusted CA");
+    let trusted = exporter.send_payload_sync("logs", &logs_payload());
+    exporter
+        .shutdown_blocking()
+        .expect("shut down successful TLS exporter");
+    let _ = server.kill();
+    let _ = server.wait();
     assert!(
-        exporter.is_ok(),
-        "valid custom CA must build the reqwest client"
+        trusted.is_ok(),
+        "trusted CA completes TLS export: {trusted:?}"
     );
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("reserve TLS port");
+    let address = listener.local_addr().expect("TLS address");
+    drop(listener);
+    let mut server = start_tls_test_server(&cert, &key, address);
+    let exporter = OtlpHttpExporter::for_test_config(
+        format!("https://{address}"),
+        None,
+        Some(unrelated.clone()),
+    )
+    .expect("unrelated CA does not prevent client construction");
+    let rejected = exporter.send_payload_sync("logs", &logs_payload());
+    exporter
+        .shutdown_blocking()
+        .expect("shut down certificate-rejected TLS exporter");
+    let _ = server.kill();
+    let _ = server.wait();
+    let error = rejected.expect_err("unrelated CA fails certificate verification");
+    assert!(
+        format!("{error:?}").contains("InvalidCertificate"),
+        "unrelated CA failure must be certificate verification, got {error:?}"
+    );
+    let _ = fs::remove_file(ca);
+    let _ = fs::remove_file(cert);
+    let _ = fs::remove_file(key);
+    let _ = fs::remove_file(unrelated);
 }
 
 #[test]
@@ -519,7 +745,7 @@ fn loopback_retry_after_is_capped_before_the_next_request() {
             stream.write_all(response).expect("write response");
         }
     });
-    let (delay_tx, delay_rx) = mpsc::sync_channel(0);
+    let (delay_tx, delay_rx) = mpsc::channel();
     let exporter = OtlpHttpExporter::for_endpoint_with_retry(
         format!("http://{address}"),
         retry_policy(1, 5, 50, 500, 20, 0),
@@ -559,7 +785,7 @@ fn loopback_fallback_jitter_preserves_an_ordered_retry_sequence() {
             stream.write_all(response).expect("write response");
         }
     });
-    let (delay_tx, delay_rx) = mpsc::sync_channel(0);
+    let (delay_tx, delay_rx) = mpsc::channel();
     let exporter = OtlpHttpExporter::for_endpoint_with_retry(
         format!("http://{address}"),
         retry_policy(2, 20, 40, 500, 100, 50),
@@ -586,6 +812,82 @@ fn loopback_fallback_jitter_preserves_an_ordered_retry_sequence() {
         "unexpected second fallback delay: {second_delay:?}"
     );
     assert_eq!(calls.load(Ordering::Relaxed), 3);
+}
+
+fn drop_without_shutdown_abandons_pending_admission(entered_tokio: bool) {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let request = read_request(&mut stream);
+        assert!(request.contains("\"hello\""));
+        stream
+            .write_all(
+                b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 30\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .expect("write retry response");
+    });
+    let (retry_wait_tx, retry_wait_rx) = mpsc::channel();
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry(
+        format!("http://{address}"),
+        retry_policy(3, 100, 200, 5_000, 4_000, 0),
+        1,
+        Some(retry_wait_tx),
+    )
+    .expect("construct exporter");
+    let lifecycle = exporter.lifecycle_for_test();
+    exporter
+        .export_logs(&[sample_log()])
+        .expect("admit log before final-handle drop");
+    retry_wait_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("request entered retained retry wait");
+
+    let flush = exporter.flush_async();
+    let flush_thread = thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("flush runtime");
+        runtime.block_on(flush)
+    });
+    if entered_tokio {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        runtime.block_on(async {
+            drop(exporter);
+            tokio::task::yield_now().await;
+        });
+    } else {
+        drop(exporter);
+    }
+
+    let outcome = flush_thread.join().expect("join flush observer");
+    assert!(matches!(
+        outcome,
+        Err(sc_observability_types::v2::ExportError::WorkerTerminated { .. })
+    ));
+    let health = lifecycle.health();
+    assert_eq!(health.phase, LifecycleState::Shutdown);
+    assert_eq!(health.admitted_records, 0);
+    assert_eq!(health.admitted_bytes, 0);
+    assert_eq!(health.dropped_by_signal, [1, 0, 0]);
+    // A second retained observation is stable and does not count again.
+    assert_eq!(lifecycle.health().dropped_by_signal, [1, 0, 0]);
+    server.join().expect("join server");
+}
+
+#[test]
+fn drop_without_shutdown_abandons_pending_admission_on_plain_thread() {
+    drop_without_shutdown_abandons_pending_admission(false);
+}
+
+#[test]
+fn drop_without_shutdown_abandons_pending_admission_in_entered_tokio() {
+    drop_without_shutdown_abandons_pending_admission(true);
 }
 
 #[test]
@@ -826,6 +1128,21 @@ fn blocking_lifecycle_is_rejected_from_entered_tokio() {
         .build()
         .expect("runtime");
     let error = runtime.block_on(async { exporter.flush_blocking() });
+    assert!(matches!(
+        error,
+        Err(sc_observability_types::v2::ExportError::BlockingBackendInAsyncContext { .. })
+    ));
+}
+
+#[test]
+fn shutdown_blocking_is_rejected_from_entered_tokio() {
+    let exporter = OtlpHttpExporter::for_endpoint("http://127.0.0.1:4318".to_owned())
+        .expect("construct exporter");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let error = runtime.block_on(async { exporter.shutdown_blocking() });
     assert!(matches!(
         error,
         Err(sc_observability_types::v2::ExportError::BlockingBackendInAsyncContext { .. })

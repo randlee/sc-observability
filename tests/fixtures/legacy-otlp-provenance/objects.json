@@ -1,0 +1,90 @@
+{
+  "objects": {
+    "0383c6d2c4648813b3944fcf46e222be712ee18b": {
+      "path": "crates/sc-observability-otlp/Cargo.toml",
+      "type": "blob"
+    },
+    "0f951a6483bea30dfb07b182cf199e2a654dc74f": {
+      "path": "scripts",
+      "type": "tree"
+    },
+    "331accac42e9c9bd536e2df78502d44e141aa435": {
+      "path": "crates/sc-observability-otlp/tests/timestamp_export_integration.rs",
+      "type": "blob"
+    },
+    "3b2e3697a6f70e41bb6797a67a08a6b728d05534": {
+      "path": "crates/sc-observability-otlp/tests",
+      "type": "tree"
+    },
+    "447b93b138cb18dabe53a432262349dc8035754b": {
+      "path": "crates/sc-observability-otlp/src/lib.rs",
+      "type": "blob"
+    },
+    "497bb87b5bc481e4c7316ce22a203d8741b00b62": {
+      "path": "scripts/grafana-verify-smoke.py",
+      "type": "blob"
+    },
+    "58a32754b0ee9b22b330a652cf124c728ff0284e": {
+      "path": "docs",
+      "type": "tree"
+    },
+    "5be117c599d02868aaa0786d93861e608e4974eb": {
+      "path": "docs/phase-ay-grafana-dogfood-readiness.md",
+      "type": "blob"
+    },
+    "6524662aa9d37f21451759accef52c2cfea51c78": {
+      "path": "scripts/otel-dev-install-smoke.py",
+      "type": "blob"
+    },
+    "66c70756df346479028218321b469e261f19310b": {
+      "path": "crates",
+      "type": "tree"
+    },
+    "7b39f4e7f72b6845edec4eab4cd671611661445f": {
+      "path": null,
+      "type": "commit"
+    },
+    "89d9bd819a374549801dde8b1f6859e5b1babc69": {
+      "path": "docs/observability/grafana-rollout-smoke.md",
+      "type": "blob"
+    },
+    "959ef4f6d3be31138a8cee2d6e047e56f4e37408": {
+      "path": "crates/sc-observability-otlp/src",
+      "type": "tree"
+    },
+    "9a68bf296efae5d828ce8473cb590c3cf9b2bff8": {
+      "path": "",
+      "type": "tree"
+    },
+    "9b284670444143b3b57ecac5fd526ce4c9f5e426": {
+      "path": "docs/observability/smoke-test-plan-phase-aw.md",
+      "type": "blob"
+    },
+    "a9dc4a2eafe42d5d944471ffb5eaf00930cd3eb1": {
+      "path": "docs/observability/grafana-dashboards.md",
+      "type": "blob"
+    },
+    "abe3371331e112566c159b9ed5630ea85018e545": {
+      "path": "docs/observability",
+      "type": "tree"
+    },
+    "af6c25d3628ab74f159daccc6757e036d81acc0d": {
+      "path": "crates/sc-observability-otlp",
+      "type": "tree"
+    },
+    "d7539261117f4d7ff4b757b1fa75186471bc19da": {
+      "path": "docs/phase-av-otel-planning.md",
+      "type": "blob"
+    },
+    "e6739c3231b0d2914878b133236a79a6cc01ffc9": {
+      "path": "docs/phase-ax-planning.md",
+      "type": "blob"
+    },
+    "fbb495ef8615953a37f3d11a4611539452904621": {
+      "path": "docs/phase-aw-traces-metrics-planning.md",
+      "type": "blob"
+    }
+  },
+  "pack_sha256": "e066edf254ec3a6ee120c1f328473e6d08b3d89e8444f57f85c9bf6b810e2d70",
+  "source_commit": "7b39f4e7f72b6845edec4eab4cd671611661445f"
+}

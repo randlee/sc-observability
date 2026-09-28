@@ -36,7 +36,9 @@ use std::sync::{Arc, Condvar, Mutex};
     deprecated,
     reason = "the facade retains legacy error names in its public compatibility signatures"
 )]
-use sc_observability::{LogError, Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
+use sc_observability::{
+    LogError, Logger, LoggerConfig, QueueCapacity, RetainedLogPolicy, Running, Stopped,
+};
 use sc_observability_types::v2::{
     FlushError as CanonicalFlushError, InitError as CanonicalInitError,
     ShutdownError as CanonicalShutdownError,
@@ -192,7 +194,17 @@ impl ObservabilityConfig {
     fn logger_config_typed(&self) -> Result<LoggerConfig, CanonicalInitError> {
         let mut config =
             LoggerConfig::default_for(self.service_name_typed()?, self.log_root.clone());
-        config.queue_capacity = self.queue_capacity;
+        config.queue_capacity =
+            QueueCapacity::new(self.queue_capacity).ok_or_else(|| CanonicalInitError::Runtime {
+                context: Box::new(ErrorContext::new(
+                    sc_observability::error_codes::LOGGER_INIT_FAILED,
+                    "queue capacity must be greater than zero",
+                    Remediation::recoverable(
+                        "set the observation queue capacity to a positive value",
+                        ["increase queue_capacity to at least 1"],
+                    ),
+                )),
+            })?;
         config.retained_log_policy = self.retained_log_policy;
         Ok(config)
     }
@@ -1254,7 +1266,7 @@ mod tests {
 
         let logger_config = config.logger_config_typed().expect("logger config");
 
-        assert_eq!(logger_config.queue_capacity, 2048);
+        assert_eq!(logger_config.queue_capacity.get(), 2048);
     }
 
     #[test]

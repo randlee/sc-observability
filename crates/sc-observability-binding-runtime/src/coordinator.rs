@@ -91,8 +91,16 @@ impl Coordinator {
     pub(crate) fn create(
         build: impl FnOnce() -> Result<(Backend, LogHealthDto), Failure>,
     ) -> Result<Arc<Self>, Failure> {
-        let timer = crate::timer::shared()
-            .map_err(|error| conversion::canonical(&error, conversion::Kind::Unavailable))?;
+        let timer = crate::timer::shared().map_err(|error| {
+            let kind = if error.diagnostic().code.as_str()
+                == dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL
+            {
+                conversion::Kind::Internal
+            } else {
+                conversion::Kind::Unavailable
+            };
+            conversion::canonical(&error, kind)
+        })?;
         let dispatcher = Dispatcher::new();
         let gate = Arc::new(StartGate {
             state: Mutex::new(Start::Parked),
@@ -407,11 +415,15 @@ impl Coordinator {
         let result =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &self.backend {
                 Backend::Core { logger, .. } => {
-                    let logger = logger
-                        .swap(None)
-                        .ok_or_else(|| error::internal("core owner already consumed"))?;
+                    let logger = logger.swap(None).ok_or_else(|| {
+                        let error = error::shutdown_drain("core owner already consumed");
+                        conversion::canonical(&error, conversion::Kind::Internal)
+                    })?;
                     let logger = Arc::try_unwrap(logger).map_err(|_| {
-                        error::internal("active native reference survived admission drain")
+                        let error = error::shutdown_drain(
+                            "active native reference survived admission drain",
+                        );
+                        conversion::canonical(&error, conversion::Kind::Internal)
                     })?;
                     let stopped = logger.shutdown();
                     Ok(dto::from_core_health(

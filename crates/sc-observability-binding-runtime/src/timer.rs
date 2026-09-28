@@ -43,14 +43,10 @@ impl Ord for Entry {
 }
 
 pub(crate) fn shared() -> Result<Arc<TimerService>, InitError> {
-    let mut cell = TIMER.get_or_init(|| Mutex::new(None)).lock().map_err(|_| {
-        error::init_configuration_code(
-            sc_observability_types::ErrorCode::new_static(
-                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-            ),
-            "timer initialization state poisoned",
-        )
-    })?;
+    let mut cell = TIMER
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .map_err(|_| error::init_runtime_internal("timer initialization state poisoned"))?;
     if let Some(timer) = &*cell {
         return Ok(timer.clone());
     }

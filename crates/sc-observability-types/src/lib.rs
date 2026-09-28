@@ -113,8 +113,9 @@ pub use validation::{
 pub mod v2 {
     #[doc(inline)]
     pub use crate::errors_v2::{
-        ConfigFailure, EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError,
-        MetricModelError, ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+        ConfigFailure, EventError, ExportError, FailureClassification, FlushError, IdentityError,
+        InitError, LogSinkError, MetricModelError, ProjectionError, ShutdownError, SubscriberError,
+        TelemetryError,
     };
     #[doc(inline)]
     pub use crate::signals_v2::{
