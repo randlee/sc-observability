@@ -706,7 +706,7 @@ fn admission32(close: bool) {
     }
     stop(&owner);
 }
-fn failed_helper() {
+fn failed_shutdown() -> Failure {
     let (_root, owner, backend) = core();
     backend.shared.hooks.crash.store(true, Ordering::SeqCst);
     let op = backend.start_query(query()).unwrap();
@@ -714,11 +714,23 @@ fn failed_helper() {
         op.wait(Duration::from_secs(2)),
         Err(Failure::Internal { .. })
     ));
-    assert!(matches!(
-        owner.shutdown(Duration::from_secs(2)),
-        Err(Failure::Internal { .. })
-    ));
+    let failure = owner
+        .shutdown(Duration::from_secs(2))
+        .expect_err("crashed helper must fail the real shutdown path");
+    assert_eq!(
+        failure.diagnostic().message,
+        "helper failure prevents confirmed shutdown"
+    );
     crate::spawn::wait_live(1);
+    failure
+}
+fn failed_helper() {
+    assert_failure(
+        Err::<(), _>(failed_shutdown()),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+        "internal",
+        None,
+    );
 }
 fn bridge_host() -> (tempfile::TempDir, sc_observability_log::LogGuard) {
     let (root, mut config) = config();
@@ -928,22 +940,12 @@ fn d15_spawn_fixture() {
 }
 
 fn d15_sync_fixture() {
-    let error = crate::error::shutdown_drain("synchronization worker failed");
-    assert_canonical_context(
-        &error,
-        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-        0,
-    );
     assert_failure(
-        Err::<(), _>(crate::conversion::canonical(
-            &error,
-            crate::conversion::Kind::Internal,
-        )),
+        Err::<(), _>(failed_shutdown()),
         dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
         "internal",
         None,
     );
-    sync_and_async_waiters();
 }
 
 fn d15_timer_fixture() {
