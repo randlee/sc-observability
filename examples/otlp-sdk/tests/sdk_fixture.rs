@@ -28,7 +28,7 @@ use std::io::Read;
 use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 fn fixture_config(queue_byte_capacity: usize) -> TelemetryConfig {
     fixture_config_for_endpoint(queue_byte_capacity, "http://127.0.0.1:9")
@@ -215,7 +215,7 @@ async fn external_fixture_enforces_record_and_byte_pressure() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn external_fixture_exercises_request_deadline() {
+async fn external_fixture_exercises_request_deadline_terminal_outcome() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind deadline listener");
     let address = listener.local_addr().expect("deadline listener address");
     let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
@@ -240,21 +240,20 @@ async fn external_fixture_exercises_request_deadline() {
         .await
         .expect("SDK did not open the deadline request in time")
         .expect("deadline server dropped its acceptance signal");
-    tokio::task::yield_now().await;
+    let flush_result = tokio::time::timeout(Duration::from_secs(1), fixture.flush()).await;
 
-    let started = Instant::now();
-    tokio::time::timeout(Duration::from_secs(1), fixture.flush())
-        .await
-        .expect("request deadline must complete before the test bound")
-        .expect("held request must complete through the configured deadline");
-    assert!(
-        started.elapsed() >= Duration::from_millis(5),
-        "flush completed before the configured 10ms request deadline"
-    );
+    // Release and join before inspecting the assertion result, so a regression
+    // cannot strand the server thread or turn teardown into a second panic.
     release_tx.send(()).expect("release deadline request");
-    fixture
+    server.join().expect("join deadline server");
+    let flush = flush_result
+        .expect("request deadline must complete before the test bound")
+        .expect_err("held request must preserve its typed terminal outcome");
+    assert_eq!(flush.diagnostic().code, OTLP_EXPORT_TERMINAL);
+
+    let shutdown = fixture
         .shutdown()
         .await
-        .expect("shutdown after the bounded request deadline");
-    server.join().expect("join deadline server");
+        .expect_err("shutdown preserves the admitted terminal outcome");
+    assert_eq!(shutdown.diagnostic().code, OTLP_EXPORT_TERMINAL);
 }
