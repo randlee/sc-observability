@@ -1059,7 +1059,7 @@ fn export_category(
         core::v2::ExportError::AsyncLifecycleRequired { .. } => validation_failure,
         core::v2::ExportError::RuntimeTerminated { .. } => unavailable_failure,
         core::v2::ExportError::LifecycleTimeout { .. } => timeout_failure,
-        core::v2::ExportError::QueueFull { .. } if !cfg!(test) => {
+        core::v2::ExportError::QueueFull { .. } => {
             |diagnostic| CanonicalFailureDto::QueueFull { diagnostic }
         }
         core::v2::ExportError::WorkerTerminated { .. } => unavailable_failure,
@@ -1086,26 +1086,32 @@ fn drain_category(
 canonical_projection!(ExportError, value, export_category(value));
 
 #[cfg(test)]
-mod native_fallback_tests {
+mod export_projection_tests {
     use super::*;
 
     #[test]
-    fn a_native_variant_routed_through_the_wildcard_stays_internal() {
+    fn queue_full_projects_to_queue_full_with_its_diagnostic() {
         let error = core::v2::ExportError::QueueFull {
             context: Box::new(core::ErrorContext::new(
-                core::ErrorCode::new_static("TEST_NATIVE_FALLBACK"),
-                "native fallback",
-                core::Remediation::not_recoverable("test-only mutation"),
+                core::error_codes::otlp::OTLP_QUEUE_FULL,
+                "queue full in unit regression",
+                core::Remediation::recoverable("retry later", ["inspect health"]),
             )),
         };
 
         let projected = CanonicalFailureDto::try_from(&error).expect("conversion succeeds");
-        match projected {
-            CanonicalFailureDto::Internal { diagnostic } => {
-                assert_eq!(diagnostic.diagnostic.code, "TEST_NATIVE_FALLBACK");
-            }
-            other => panic!("wildcard must preserve a native error as Internal, got {other:?}"),
-        }
+        assert!(matches!(projected, CanonicalFailureDto::QueueFull { .. }));
+        let diagnostic = projected.diagnostic();
+        assert_eq!(diagnostic.diagnostic.code, "OTLP_QUEUE_FULL");
+        assert_eq!(
+            diagnostic.diagnostic.message,
+            "queue full in unit regression"
+        );
+        assert!(matches!(
+            &diagnostic.diagnostic.remediation,
+            RemediationDto::Recoverable { steps }
+                if steps.iter().any(|step| step == "inspect health")
+        ));
     }
 }
 
