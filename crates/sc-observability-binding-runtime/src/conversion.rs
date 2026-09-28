@@ -162,9 +162,7 @@ pub(crate) fn bridge_admission(error: bridge::EmitError) -> Failure {
         }
     }
 }
-pub(crate) fn bridge_health(
-    value: bridge::BridgeHealthReport,
-) -> Result<dto::LogHealthDto, Failure> {
+pub(crate) fn bridge_health(value: bridge::BridgeHealthReport) -> dto::LogHealthDto {
     let level_state = dto::LevelStateDto {
         configured_level: value.configured_level.into(),
         effective_level: value.effective_level.into(),
@@ -177,7 +175,7 @@ pub(crate) fn bridge_health(
             effective_level: value.effective_level,
             revision: value.level_revision,
         },
-    )?;
+    );
     let logging = checked.logging;
     let dropped = value.dropped;
     let bridge = dto::BridgeHealthDto {
@@ -203,12 +201,12 @@ pub(crate) fn bridge_health(
         effective_level: level_state.effective_level.clone(),
         level_revision: level_state.level_revision.clone(),
     };
-    Ok(dto::LogHealthDto {
+    dto::LogHealthDto {
         schema_version: 1,
         logging,
         bridge: Some(bridge),
         level_state,
-    })
+    }
 }
 pub(crate) fn event(
     value: dto::LogEventDto,

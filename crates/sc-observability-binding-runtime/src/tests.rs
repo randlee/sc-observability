@@ -675,7 +675,7 @@ fn core_with_sink(
         let mut builder = sc_observability::Logger::builder_typed(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink));
         let (logger, level) = builder.build_with_level_owner_typed().unwrap();
-        let health = dto::from_core_health(logger.health(), logger.level_state()).unwrap();
+        let health = dto::from_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: arc_swap::ArcSwapOption::from(Some(Arc::new(logger))),
@@ -752,7 +752,7 @@ fn core_sink_and_shutdown() {
         let mut builder = sc_observability::Logger::builder_typed(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink.clone()));
         let (logger, level) = builder.build_with_level_owner_typed().unwrap();
-        let health = dto::from_core_health(logger.health(), logger.level_state()).unwrap();
+        let health = dto::from_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: arc_swap::ArcSwapOption::from(Some(Arc::new(logger))),

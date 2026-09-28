@@ -237,11 +237,11 @@ impl Coordinator {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &self.backend {
                 Backend::Core { logger, .. } => {
                     let logger = logger.load_full().ok_or_else(error::closed)?;
-                    dto::from_core_health(logger.health(), logger.level_state())
+                    Ok(dto::from_core_health(logger.health(), logger.level_state()))
                 }
-                Backend::Bridge(control) => {
-                    conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)
-                }
+                Backend::Bridge(control) => Ok(conversion::bridge_health(
+                    control.health().map_err(conversion::bridge_control)?,
+                )),
             }))
             .unwrap_or_else(|_| Err(error::internal("native health panicked")));
         if let Ok(health) = &result {
@@ -414,11 +414,14 @@ impl Coordinator {
                         error::internal("active native reference survived admission drain")
                     })?;
                     let stopped = logger.shutdown();
-                    dto::from_core_health(stopped.health(), stopped.level_state())
+                    Ok(dto::from_core_health(
+                        stopped.health(),
+                        stopped.level_state(),
+                    ))
                 }
-                Backend::Bridge(control) => {
-                    conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)
-                }
+                Backend::Bridge(control) => Ok(conversion::bridge_health(
+                    control.health().map_err(conversion::bridge_control)?,
+                )),
             }))
             .unwrap_or_else(|_| {
                 let error = error::shutdown_drain("native shutdown panicked");
@@ -539,7 +542,7 @@ fn core_from_factory(
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let (stamp, logger, level) = build()?;
-        let health = dto::from_core_health(logger.health(), logger.level_state())?;
+        let health = dto::from_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: ArcSwapOption::from(Some(Arc::new(logger))),
@@ -555,7 +558,7 @@ pub(crate) fn bridge(
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let health =
-            conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)?;
+            conversion::bridge_health(control.health().map_err(conversion::bridge_control)?);
         Ok((Backend::Bridge(control), health))
     })
 }
