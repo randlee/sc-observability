@@ -39,6 +39,25 @@ migration. Import canonical same-name enums after activation, not permanent
 parallel typed wrappers. Keep open trait implementations and host-owned logger
 lifecycle semantics intact.
 
+## Enumerated public 2.0 removals
+
+The D18 manifest records every observed 1.4.1 removal rather than granting a
+crate-wide waiver. `sc-observability-types` retires wrapper structs,
+`ClassifiedError`, `*Failure` conversions, kind aliases, and `TelemetryError`
+in favor of the ADR-017 named enums. `sc-observability` and `sc-observe` retire
+legacy logging/routing errors and the duplicate `*_typed` surface; unsuffixed
+2.0 methods use canonical errors where a same-method replacement exists.
+
+`sc-observability-log` retires its local lifecycle error enums and their
+variants in favor of the shared `InitError`, `FlushError`, and `ShutdownError`
+families. `sc-observability-otlp` retires the old constants/error-code modules
+and changes construction, export, lifecycle, and span assembly signatures to
+the canonical configuration/error contracts. `sc-observability-dto` retires
+the legacy `Failure` and generic `WireEnvelope` forms in favor of the canonical
+DTO/schema projection. A removed item with no exact added public line has an
+empty `new` field in the manifest; that is intentional and must not be
+represented as a compatibility promise.
+
 ## OTLP configuration and defaults
 
 Applications own environment/config translation. Construct validated
