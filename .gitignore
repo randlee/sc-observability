@@ -50,6 +50,10 @@ examples/tauri-logging/src-tauri/permissions/
 # sc-compose runtime state and render logs (never committed)
 **/.sc-compose/
 
+# .sc/ runtime state: agent session records, QA metrics logs, and other
+# ephemeral per-checkout artifacts. Never committed; regenerated fresh locally.
+.sc/
+
 # QA metrics log: ephemeral, recomputed fresh at every QA close from bd; never
 # hand-carried, never a versioned artifact. Lives locally per checkout only.
 .sc/qa-log/
