@@ -43,10 +43,11 @@ lifecycle semantics intact.
 
 The D18 manifest records every observed 1.4.1 removal rather than granting a
 crate-wide waiver. `sc-observability-types` retires wrapper structs,
-`ClassifiedError`, `*Failure` conversions, kind aliases, and `TelemetryError`
-in favor of the ADR-017 named enums. `sc-observability` and `sc-observe` retire
-legacy logging/routing errors and the duplicate `*_typed` surface; unsuffixed
-2.0 methods use canonical errors where a same-method replacement exists.
+`ClassifiedError`, `*Failure` conversions, and kind aliases in favor of the
+ADR-017 named enums; `TelemetryError` remains but becomes a non-exhaustive
+canonical 2.0 enum. `sc-observability` and `sc-observe` retire legacy
+logging/routing errors and the duplicate `*_typed` surface; unsuffixed 2.0
+methods use canonical errors where a same-method replacement exists.
 
 `sc-observability-log` retires its local lifecycle error enums and their
 variants in favor of the shared `InitError`, `FlushError`, and `ShutdownError`
