@@ -59,6 +59,13 @@ DTO/schema projection. A removed item with no exact added public line has an
 empty `new` field in the manifest; that is intentional and must not be
 represented as a compatibility promise.
 
+### EmitError pattern matching
+
+`sc_observability_log::EmitError` is non-exhaustive in 2.0. Downstream code
+matching it must include a wildcard arm for future variants. `NotInstalled`
+now follows the eight 1.x variants, preserving their discriminants; use the
+typed code, remediation, or drop cause instead of relying on numeric casts.
+
 ## OTLP configuration and defaults
 
 Applications own environment/config translation. Construct validated

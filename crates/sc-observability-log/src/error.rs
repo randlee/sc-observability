@@ -48,11 +48,8 @@ pub enum FieldKeyError {
 /// Typed direct-admission failure; each path has already recorded exactly one drop cause.
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum EmitError {
-    /// The saved attachment no longer occupies the bridge slot.
-    #[error("logger attachment is not installed")]
-    NotInstalled,
-
     /// A producer field cannot be represented safely.
     #[error("invalid field {raw_key:?}: {reason}")]
     InvalidField {
@@ -97,6 +94,9 @@ pub enum EmitError {
     /// A logger callback panic was contained.
     #[error("logger callback panicked")]
     Panicked,
+    /// The saved attachment no longer occupies the bridge slot.
+    #[error("logger attachment is not installed")]
+    NotInstalled,
 }
 
 /// Failure of a read-only control operation.

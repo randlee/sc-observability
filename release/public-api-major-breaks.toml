@@ -3000,3 +3000,12 @@ new = "pub fn sc_observe::ObservabilityConfig::service_name(&self) -> core::resu
 reason = "Retype sc_observe::ObservabilityConfig::service_name to its canonical 2.0 signature."
 authority = "ADR-017; obs-d-18"
 migration = "docs/migration.md#enumerated-public-20-removals"
+
+[[breaks]]
+id = "sc-observability-log-097"
+crate = "sc-observability-log"
+old = "pub enum sc_observability_log::EmitError"
+new = "#[non_exhaustive] pub enum sc_observability_log::EmitError"
+reason = "Correct the D2 front-insertion defect by preserving the eight 1.x EmitError discriminants, appending NotInstalled, and making the ADR-017 2.0 shape non-exhaustive."
+authority = "ADR-017; obs-d-18"
+migration = "docs/migration.md#emiterror-pattern-matching"
