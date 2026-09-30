@@ -19,48 +19,9 @@
       "title": "Dependency",
       "type": "object"
     },
-    "SprintMetadata": {
+    "LegacySprintMetadata": {
       "additionalProperties": true,
       "properties": {
-        "phase": {
-          "minLength": 1,
-          "title": "Phase",
-          "type": "string"
-        },
-        "sprint": {
-          "minLength": 1,
-          "title": "Sprint",
-          "type": "string"
-        },
-        "wave": {
-          "minimum": 0,
-          "title": "Wave",
-          "type": "integer"
-        },
-        "stack": {
-          "minLength": 1,
-          "title": "Stack",
-          "type": "string"
-        },
-        "layer": {
-          "minimum": 1,
-          "title": "Layer",
-          "type": "integer"
-        },
-        "pr_target": {
-          "minLength": 1,
-          "title": "Pr Target",
-          "type": "string"
-        },
-        "difficulty": {
-          "enum": [
-            "hard",
-            "normal",
-            "fast"
-          ],
-          "title": "Difficulty",
-          "type": "string"
-        },
         "requirements": {
           "items": {
             "minLength": 1,
@@ -77,33 +38,45 @@
           "title": "Adrs",
           "type": "array"
         },
-        "owned_paths": {
-          "items": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "title": "Owned Paths",
-          "type": "array"
+        "worktree": {
+          "minLength": 1,
+          "title": "Worktree",
+          "type": "string"
+        },
+        "branch": {
+          "minLength": 1,
+          "title": "Branch",
+          "type": "string"
+        },
+        "pr_target": {
+          "minLength": 1,
+          "title": "Pr Target",
+          "type": "string"
+        },
+        "difficulty": {
+          "enum": [
+            "hard",
+            "normal",
+            "fast"
+          ],
+          "title": "Difficulty",
+          "type": "string"
         }
       },
       "required": [
-        "phase",
-        "sprint",
-        "wave",
-        "stack",
-        "layer",
-        "pr_target",
-        "difficulty",
         "requirements",
         "adrs",
-        "owned_paths"
+        "worktree",
+        "branch",
+        "pr_target",
+        "difficulty"
       ],
-      "title": "SprintMetadata",
+      "title": "LegacySprintMetadata",
       "type": "object"
     }
   },
   "additionalProperties": true,
-  "description": "A stage:sprint container: carries the sprint doc and its wave, and is never dispatched.",
+  "description": "A legacy stage:sprint dev bead (sprints.jsonl rows [sprint, sanity bead, deps]).",
   "properties": {
     "id": {
       "minLength": 1,
@@ -118,12 +91,10 @@
       "title": "Dependencies",
       "type": "array"
     },
-    "labels": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Labels",
-      "type": "array"
+    "assignee": {
+      "minLength": 1,
+      "title": "Assignee",
+      "type": "string"
     },
     "description": {
       "pattern": "(?m)^## Deliverables\\s*\\n(?:\\s*\\n)*\\s*1[.)]\\s+\\S",
@@ -136,16 +107,16 @@
       "type": "string"
     },
     "metadata": {
-      "$ref": "#/$defs/SprintMetadata"
+      "$ref": "#/$defs/LegacySprintMetadata"
     }
   },
   "required": [
     "id",
-    "labels",
+    "assignee",
     "description",
     "acceptance_criteria",
     "metadata"
   ],
-  "title": "SprintBead",
+  "title": "LegacySprintBead",
   "type": "object"
 }

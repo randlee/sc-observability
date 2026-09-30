@@ -1,0 +1,151 @@
+{
+  "$defs": {
+    "ChainStepMetadata": {
+      "additionalProperties": true,
+      "properties": {
+        "sprint_bead": {
+          "minLength": 1,
+          "title": "Sprint Bead",
+          "type": "string"
+        },
+        "sprint": {
+          "minLength": 1,
+          "title": "Sprint",
+          "type": "string"
+        },
+        "stack": {
+          "minLength": 1,
+          "title": "Stack",
+          "type": "string"
+        },
+        "layer": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "minLength": 1,
+              "type": "string"
+            }
+          ],
+          "title": "Layer"
+        },
+        "phase": {
+          "minLength": 1,
+          "title": "Phase",
+          "type": "string"
+        },
+        "wave": {
+          "minimum": 0,
+          "title": "Wave",
+          "type": "integer"
+        },
+        "difficulty": {
+          "enum": [
+            "hard",
+            "normal",
+            "fast"
+          ],
+          "title": "Difficulty",
+          "type": "string"
+        },
+        "pr_target": {
+          "minLength": 1,
+          "title": "Pr Target",
+          "type": "string"
+        },
+        "dev_bead": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dev Bead"
+        },
+        "checked_bead": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checked Bead"
+        }
+      },
+      "required": [
+        "sprint_bead",
+        "sprint",
+        "stack",
+        "layer",
+        "phase",
+        "wave",
+        "difficulty",
+        "pr_target"
+      ],
+      "title": "ChainStepMetadata",
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "depends_on_id": {
+          "title": "Depends On Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "depends_on_id"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "A <sprint>.chain.{dev,sanity,qa} step poured from sprint-chain.formula.toml.j2.",
+  "properties": {
+    "id": {
+      "pattern": "\\.chain\\.(dev|sanity|qa)$",
+      "title": "Id",
+      "type": "string"
+    },
+    "dependencies": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "labels": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Labels",
+      "type": "array"
+    },
+    "metadata": {
+      "$ref": "#/$defs/ChainStepMetadata"
+    }
+  },
+  "required": [
+    "id",
+    "labels",
+    "metadata"
+  ],
+  "title": "ChainStep",
+  "type": "object"
+}

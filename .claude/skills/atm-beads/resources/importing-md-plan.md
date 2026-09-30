@@ -31,8 +31,10 @@ goes back to the plan's author to supply, with the exact list of gaps.
 2. **Read** the phase plan (whole-phase import) and each sprint doc to import.
    Build one vars file per bead from the mapping below:
    - a whole-phase import produces the root (`plan-root.json.j2`), plus
-     `sprint-bead.json.j2` and `dev-sanity-bead.json.j2` for each sprint;
-   - a one-plan import produces only the sprint's two beads.
+     `sprint-bead.json.j2` for each sprint;
+   - a one-plan import produces only the sprint bead.
+   Chains are poured after plan review ([`planning.md`](planning.md) "Plan
+   Complete"), never at import.
 3. **Check** the vars against every row in Checks except the id-exists row
    (step 6), and collect all the gaps before reporting any of them. If any blocking row fails, stop and send the
    list to lead: `atm send <lead> --stdin` with the file, the field and what
@@ -51,7 +53,7 @@ goes back to the plan's author to supply, with the exact list of gaps.
 5. **Gate** the rendered plan. Run from the repository root:
 
    ```bash
-   .claude/skills/atm-beads/scripts/validate-plan --file <scratch>/plan.jsonl --root <id> --index docs/plans/phase-<x>/sprints.jsonl
+   .claude/skills/atm-beads/scripts/validate-plan --mode plan --file <scratch>/plan.jsonl --root <id> --index docs/plans/phase-<x>/sprints.jsonl
    ```
 
    Exit 5 lists the problems (`SKILL.md`, Validation), and every one of
@@ -79,23 +81,20 @@ goes back to the plan's author to supply, with the exact list of gaps.
 9. **Wire the plan gate** right away, before any readiness check. Nothing
    is dispatched until this is done. Create the plan-review bead as in
    `atm-bd-orchestration` "Plan Gate", step 2:
-   - whole phase: `<root>-plan-qa`, blocking every root sprint;
+   - whole phase: `<root>-plan-qa`;
    - one plan into a running phase: `<root>-plan-qa` is already closed, so
-     create `<root>-plan-qa-<n>` (the next free number), blocking every new
-     dev bead.
-   **Mandatory:** write the phase definition `docs/plans/phase-<x>/sprints.jsonl` by hand (one `[sprint_name, sanity_bead_id, depends_on_sprint_names]` tuple per imported sprint; `resources/planning.md` "Phase definition") in the same commit as the plan, then run `.claude/skills/atm-beads/scripts/validate-plan --root <root>` followed by `.claude/skills/sprint-review/scripts/sprint-review --root <root>`. It publishes the required initial `docs/plans/phase-<x>/phase-<x>-dag.html` on the root bead's integration branch. Do not open a viewer unless `--view` is requested. The plan is never exported from Beads.
-10. **Verify** with `.claude/skills/atm-beads/scripts/validate-plan --root
-    <root>`, then check the graph:
-    - `bd ready -l phase-<x> -n 0` lists the plan-review bead and no dev bead
-      from this import;
-    - `bd ready --explain` shows every other dev bead blocked by the
-      plan-review bead or by the sanity check beads of its prerequisites.
+     create `<root>-plan-qa-<n>` (the next free number).
+   **Mandatory:** write the phase definition `docs/plans/phase-<x>/sprints.jsonl` by hand (one `[sprint_name, wave, depends_on]` tuple per imported sprint; `resources/planning.md` "Phase definition") in the same commit as the plan, then run `.claude/skills/atm-beads/scripts/validate-plan --mode plan --root <root>` followed by `.claude/skills/sprint-review/scripts/sprint-review --root <root>`. It publishes the required initial `docs/plans/phase-<x>/phase-<x>-dag.html` on the root bead's integration branch. Do not open a viewer unless `--view` is requested. The plan is never exported from Beads.
+10. **Verify** with `.claude/skills/atm-beads/scripts/validate-plan --mode plan
+    --root <root>`; `bd ready -l phase-<x> -n 0` lists the plan-review bead
+    and no step from this import (none is poured yet).
 11. **Sync**: run `bd sync` so the Dolt remote has the plan (see
     `atm-bd-orchestration` "Sync").
 
 The plan then goes to plan review (`atm-bd-orchestration` "Plan Gate",
-step 3). Once it passes, `bd ready` lists exactly the root sprints
-(`relation: root`, or `parallel_safe` with no prerequisites).
+step 3). Once it passes, the lead pours the chains; `bd ready` then lists
+exactly the dev steps of the root sprints (`relation: root`, or
+`parallel_safe` with no prerequisites).
 
 Keep `<scratch>` outside the repository.
 
@@ -120,12 +119,14 @@ Keep `<scratch>` outside the repository.
 | Bead var | Markdown source |
 | --- | --- |
 | `sprint` | frontmatter `id`, lower-cased with `.` → `-` (`D.4` → `d-4`) |
-| `id` | `<prefix>-<sprint>` (`obs-d-4`); its sanity check is `<id>-sanity` |
+| `id` | `<prefix>-<sprint>` (`obs-d-4`) |
 | `parent` | the phase root's id |
 | `title` | H1 without the `<id> — ` prefix |
-| `assignee`, `model_class` | frontmatter `assignee`, `model_class` (or the sprint table's `agent:model`) |
+| `model_class` | frontmatter `model_class` (or the sprint table's `agent:model`) |
+| `wave` | the sprint table's or wave table's wave, as an integer |
+| `difficulty` | frontmatter `difficulty` (`hard`, `normal`, `fast`) |
 | `relation` | frontmatter `relation` (`root`, `must_follow`, `parallel_safe`) |
-| `blocked_by` | for each `must_follow` parent in `depends_on`: that parent's sanity check bead (`obs-d-5-sanity`), never the parent's dev bead |
+| `depends_on` (`sprints.jsonl`) | each `must_follow` parent in `depends_on`; `["<parent>", "qa"]` or `["<parent>", "sprint"]` only when the doc requires that parent's QA or whole sprint |
 | `closure_type`, `target_boundary` | frontmatter or the "Closure" section |
 | `owned_paths` | the "Owned Paths" section, else "Exact Targets", plus `owned_docs` (see Checks) |
 | `description` | Goal, Deliverables, Required Work, and Non-closure, in that order, as markdown |
@@ -135,11 +136,8 @@ Keep `<scratch>` outside the repository.
 | `requirements` | frontmatter `requirements`, plus every REQ id the body relies on (`LOG-001`, `OTLP-008`, `NFR-…`). Exactly `["NONE"]` only when the author says no requirement governs the sprint |
 | `adrs` | frontmatter `adrs`, plus every ADR the body relies on (`ADR-011`). Exactly `["NONE"]` only when the author says so |
 | `release_train` | frontmatter, when present |
-| `branch` | `sprint/<sprint>-<slug>`, with the slug taken from the doc's branch or file name |
-| `worktree` | `<repo>-worktrees/<branch>` |
 | `stack` | `phase-<x>`: the phase is one append-only stack |
 | `layer`, `pr_target` | planned order: layer 1 targets `integrate/phase-<x>`, and layer n targets the branch of layer n−1. Number the layers in the sprint table's order among sprints of the same dependency depth, and by sprint number within a row. These are the plan's intent: layers really stack in completion order, and lead records the actual values at link time |
-| sanity check bead | `id` = `<sprint id>-sanity`, `dev_bead` = the sprint id, `assignee` = `scripts/resolve-role dev-sanity` (ask lead when the role is not mapped or the member is not in `atm members`) |
 
 Section headings vary between plans. Map a section by what it holds, not by
 its exact title: "Goal and dependency" is the Goal plus the dependency
@@ -167,6 +165,7 @@ does not stop it.
 | One-plan import: the phase root does not exist, or is not a `feature` or `epic` | blocking | import the phase first |
 | A sprint's `status` is not `planned` (in progress, complete) | blocking | ask lead: finish it on the old workflow, or import it as closed |
 | `closure_type` or `target_boundary` missing | blocking | ask the author; do not infer them from the goal |
+| `wave` or `difficulty` missing | blocking | ask the author |
 | No owned code paths: no "Owned Paths" and no "Exact Targets" (`owned_docs` alone is not enough) | blocking | ask the author for the file fence |
 | Owned paths taken only from the Deliverables list (no "Owned Paths" or "Exact Targets" section) | warn | import them and list them for the author to confirm |
 | Two sprints that can run at once (`parallel_safe`, or neither depends on the other) with overlapping owned paths or `owned_docs` | blocking | the author makes one `must_follow` or splits the sprint |
@@ -179,9 +178,6 @@ does not stop it.
 | `depends_on` names a sprint that is not in the plan or in beads | blocking | ask the author |
 | `must_follow` without a parent, or a dependency cycle | blocking | ask the author |
 | Sprint table, branch table and sprint docs disagree (missing doc, extra doc, different agent or relation) | blocking | ask the author which is right |
-| `assignee` is not an ATM identity on the team (`atm members`) | blocking | ask lead for the assignee |
-| The planned branch or worktree already exists (`git ls-remote`, `git worktree list`) | blocking | ask lead: rename it, or finish that sprint on the old workflow |
-| Branch name is not `sprint/<p>-<n>-<slug>`, and no branch exists yet | warn | rename it at import and list the old and new names |
 | `model_class` missing | warn | import without it; lead picks at dispatch |
 | Frontmatter `base` is `develop` rather than the integration branch | warn | ignore it; the stack's layer 1 targets `integrate/phase-<x>` |
 | Requirement or ADR ids named in the body but not in frontmatter | warn | add them to `requirements` / `adrs` and list them |

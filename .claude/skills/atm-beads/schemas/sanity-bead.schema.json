@@ -36,16 +36,11 @@
     }
   },
   "additionalProperties": true,
-  "description": "A stage:dev-sanity bead: it blocks on the bead it checks.",
+  "description": "A stage:dev-sanity bead: it blocks on the bead it checks, except the fix sanity bead of an important finding\n(parent = dev_bead = the finding), which the finding never blocks: the finding stays open for quality-mgr.",
   "properties": {
     "id": {
       "minLength": 1,
       "title": "Id",
-      "type": "string"
-    },
-    "assignee": {
-      "minLength": 1,
-      "title": "Assignee",
       "type": "string"
     },
     "dependencies": {
@@ -55,6 +50,11 @@
       },
       "title": "Dependencies",
       "type": "array"
+    },
+    "assignee": {
+      "minLength": 1,
+      "title": "Assignee",
+      "type": "string"
     },
     "metadata": {
       "$ref": "#/$defs/SanityMetadata"

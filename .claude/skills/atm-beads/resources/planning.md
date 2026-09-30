@@ -1,10 +1,11 @@
 # Planning in Beads
 
 The plan is written to beads, not to markdown files. The phase is a root
-bead (an epic, or a feature under the Development epic). Every sprint is two
-beads under it: a dev bead, and the sanity check bead that follows it. The
-dependency edges are the order. There is no phase plan or sprint doc to keep
-in sync: `bd show <bead>` is the plan.
+bead (an epic, or a feature under the Development epic). Every sprint is a
+container bead under it that carries the sprint doc and is never dispatched.
+At plan complete the lead pours each sprint's chain (dev → sanity → QA) under
+it. The dependency edges are the order. There is no phase plan or sprint doc
+to keep in sync: `bd show <bead>` is the plan.
 
 Shape the sprints with
 [`atm-beads-plan-guidelines.md`](atm-beads-plan-guidelines.md). Where it says
@@ -16,18 +17,19 @@ To turn an existing markdown plan into beads, use
 
 ## Writing The Plan
 
-Every bead is rendered from a template, so a missing field fails the render
-rather than reaching an agent:
+The planner authors the sprints and their dependencies only. Every bead is
+rendered from a template, so a missing field fails the render rather than
+reaching an agent:
 
 | Bead | Template | Id |
 | --- | --- | --- |
 | phase root | [`plan-root.json.j2`](../templates/plan-root.json.j2) | `<prefix>-phase-<x>` |
-| sprint dev bead | [`sprint-bead.json.j2`](../templates/sprint-bead.json.j2) | `<prefix>-<x>-<n>` |
-| sprint sanity check | [`dev-sanity-bead.json.j2`](../templates/dev-sanity-bead.json.j2) | `<dev id>-sanity` |
+| sprint | [`sprint-bead.json.j2`](../templates/sprint-bead.json.j2) | `<prefix>-<x>-<n>` |
+| chain (poured at plan complete) | [`sprint-chain.formula.toml.j2`](../templates/sprint-chain.formula.toml.j2) | `<sprint>.chain`, `<sprint>.chain.dev`, `.chain.sanity`, `.chain.qa` |
 
 1. Run `bd doctor --json`. Any check with `"status": "error"` stops the
    plan; report it to lead.
-2. Write one vars file per bead (examples in [`../examples/`](../examples/))
+2. Write one vars file per sprint (examples in [`../examples/`](../examples/))
    and render each strictly into one JSONL file:
 
    ```bash
@@ -42,7 +44,7 @@ rather than reaching an agent:
 3. Validate. This step is mandatory:
 
    ```bash
-   .claude/skills/atm-beads/scripts/validate-plan --file <scratch>/plan.jsonl
+   .claude/skills/atm-beads/scripts/validate-plan --mode plan --file <scratch>/plan.jsonl
    ```
 
    Add `--root <id> --phase <x>` when the root already exists. Exit 5 lists
@@ -51,58 +53,80 @@ rather than reaching an agent:
    <scratch>/plan.jsonl`. Right away, create the plan-review bead
    (`atm-bd-orchestration` "Plan Gate", step 2). Then write the phase
    definition by hand: `docs/plans/phase-<x>/sprints.jsonl` has one
-   `[sprint_name, sanity_bead_id, depends_on_sprint_names]` tuple per sprint.
-   The dev ID is derived as `obs-<sprint_name>`. It is authored, never
+   `[sprint_name, wave, depends_on]` tuple per sprint. It is authored, never
    exported: the planner edits it in the same commit as the bead changes, and
-   `validate-plan --root <root>` refuses until the beads under the root are
-   exactly those pairs. Then run
+   `validate-plan --mode plan --root <root>` refuses until the sprints under
+   the root are exactly those tuples. Then run
    `.claude/skills/sprint-review/scripts/sprint-review --root <root>`, which
    renders the required initial `docs/plans/phase-<x>/phase-<x>-dag.html`
    with embedded SVG and commits/pushes the HTML on the root bead's integration
-   branch. No viewer opens without `--view`. Then run `validate-plan --root <root>`
-   on the imported beads.
+   branch. No viewer opens without `--view`. Then run
+   `validate-plan --mode plan --root <root>` on the imported beads.
 
 The plan then goes to plan review (`atm-bd-orchestration` "Plan Gate").
-Nothing is dispatched until it passes.
+Plan complete is plan review PASS; nothing is poured or dispatched before it.
 
 Keep `<scratch>` outside the repository.
 
 ## Phase definition (`sprints.jsonl`)
 
 `docs/plans/phase-<x>/sprints.jsonl` is the authored, committed graph authority.
-Planning five sprints creates five dev beads and five sanity beads through the
-validated import JSONL. The planner records one compact tuple for each sprint;
-the dev bead ID is derived, so it cannot be duplicated or drift from the
-sprint name. Sprint content (title, deliverables, acceptance, REQ/ADR,
-ownership, and state) lives only in Beads.
+Planning five sprints creates five sprint beads through the validated import
+JSONL. The planner records one compact tuple for each sprint. Sprint content
+(title, deliverables, acceptance, REQ/ADR, ownership, and state) lives only in
+Beads.
 
 ```jsonl
-["d-12", "obs-d-12-sanity", []]
-["d-13", "obs-d-13-sanity", ["d-12"]]
+["d-12", 1, []]
+["d-13", 2, ["d-12"]]
+["d-14", 2, ["d-12", ["d-13", "qa"]]]
 ```
 
-Each tuple is exactly `(sprint_name, sanity_bead_id, depends_on[])`.
-`depends_on[]` names direct prerequisite sprints; validation resolves each
-name to that sprint's sanity bead and requires the direct `blocks` edge on the
-dependent dev bead. The phase root is derived from the path as
-`obs-phase-<x>`. No finding, fix, QA, task, branch, or runtime gate appears in
-this file.
+Each tuple is exactly `(sprint_name, wave, depends_on[])`. `wave` is an
+integer equal to the sprint bead's `metadata.wave`. Each `depends_on` entry
+names a direct prerequisite sprint and blocks the dependent's `.chain.dev`:
+
+| Entry | Blocks on |
+| --- | --- |
+| `"d-12"` | `<prefix>-d-12.chain.sanity` (default) |
+| `["d-12", "qa"]` | `<prefix>-d-12.chain.qa` |
+| `["d-12", "sprint"]` | the sprint bead `<prefix>-d-12` |
+
+A declared `qa` or `sprint` dependency is kept as declared, never weakened to
+the default. The phase root is derived from the path as `obs-phase-<x>`. No
+finding, fix, task, branch, or runtime gate appears in this file.
 
 The file is never generated from beads and beads are never generated from the
 file. A plan change is one planner transaction: change the beads, edit the
-file, commit both. `validate-plan --root <root>` checks the sprint and
-sanity beads against it (see `SKILL.md`, Validation). It must stay green from
-plan approval to phase end; every template runs it before a claim.
+file, commit both. `validate-plan --root <root>` checks the sprints and, once
+poured, their chains against it (see `SKILL.md`, Validation). It must stay
+green from plan approval to phase end; every template runs it before a claim.
 
 Hierarchy:
 
 - top level: epics only; the phase root is an epic or a `feature` under epics;
-- children of the root: exactly the listed pairs, plus `stage:plan*` beads,
-  `bd gate` beads and sprints closed "folded into ...";
-- under the sprint dev bead: its QA beads (parent = `checked_bead`), findings
-  (parent = `sprint_bead`, `discovered-from` the QA bead), fixes and their
-  sanity beads. No `validates` or `caused-by` edge to the sprint: bd allows one
-  edge type per pair, and the parent link is the membership.
+- children of the root: exactly the listed sprints, important and minor
+  findings, plus `stage:plan*` beads, `bd gate` beads and sprints closed
+  "folded into ...";
+- under a sprint: its `<sprint>.chain` and its blocking findings
+  (`discovered-from` the QA bead that found them);
+- under the chain: `.dev`, `.sanity` and `.qa`, linked dev → sanity → qa by
+  `blocks` edges;
+- under a finding: its fix sanity and fix QA beads. A blocking sanity-FAIL
+  finding is a child of the step it checked, so it is under the sprint too;
+  an important or minor one goes under the root.
+
+Important and minor findings carry their provenance in metadata:
+`sprint_bead`, `qa_bead`, `found_at_commit`, `pr_number`, `wave`. They hold the
+phase, never the sprint or the wave.
+
+Closure:
+
+- dev-complete closes the dev step only;
+- the lead closes a sprint after `sprint-closable <sprint>` passes: its dev,
+  sanity and QA steps are closed and no blocking finding under it is open. Important and minor
+  findings never hold it;
+- the phase closes when every sprint and every finding is closed.
 
 The initial `phase-<x>-dag.html` is a required plan-review artifact alongside
 `sprints.jsonl`. Live-root validation verifies both files on the remote
@@ -122,7 +146,7 @@ before beads exist, so it does not require this generated artifact yet.
 | `plan_scope`, `parent` | `feature` under the Development epic, or `epic` with no parent |
 | `integration_branch` | `integrate/phase-<x>` |
 
-## Sprint Dev Bead
+## Sprint Bead
 
 | Var | Content |
 | --- | --- |
@@ -130,21 +154,19 @@ before beads exist, so it does not require this generated artifact yet.
 | `description` | goal, deliverables, required work, and what the sprint does not close |
 | `design` | public contract, types, code samples, exact targets |
 | `acceptance_criteria` | acceptance criteria and the validation commands |
-| `assignee` | the ATM identity that owns it (`aobs`); must be in `atm members` |
 | `parent` | the phase root |
-| `blocked_by` | the **sanity check** bead of each prerequisite sprint (`obs-d-4-sanity`), never its dev bead |
 
-Its labels (`phase-<x>`, `stage:dev`, `stack:<stack>`, `train:<t>` when
-set) and metadata come from these required vars:
+Its labels (`phase-<x>`, `stage:sprint`, `wave:<n>`, `stack:<stack>`,
+`train:<t>` when set) and metadata come from these required vars:
 
 | Var | Value |
 | --- | --- |
 | `sprint` | `d-5` |
+| `wave` | integer; equals the `sprints.jsonl` tuple's wave |
 | `stack` | `phase-<x>`: the phase is one stack |
 | `layer` | planned position, 1 = bottom |
-| `branch` | `sprint/<phase>-<n>-<slug>` |
 | `pr_target` | planned: branch of layer n−1, or `integrate/phase-<x>` for layer 1 |
-| `worktree` | `<repo>-worktrees/<branch>` |
+| `difficulty` | `hard`, `normal` or `fast`; the dev step's assignee must match it |
 | `relation` | `root`, `must_follow` or `parallel_safe` |
 | `closure_type` | from the guidelines' closure types |
 | `target_boundary` | the one boundary the sprint closes |
@@ -153,7 +175,8 @@ set) and metadata come from these required vars:
 | `adrs` | every ADR that governs the work (`ADR-011`), or exactly `["NONE"]` |
 
 Optional: `model_class` (`astra`, `terra`, `luna`), `release_train`,
-`priority`.
+`priority`. The lead sets each step's assignee, branch and worktree at
+dispatch.
 
 `requirements` and `adrs` are never left empty. The dev reads each listed id
 before coding, QA checks the change against each one, and plan review
@@ -180,43 +203,69 @@ Branch and id naming follows the repository's "Plan Naming" in
 `.claude/project/quality-policy.md` and the shared rules in the guidelines'
 "Naming" section; the doc file names there do not apply.
 
-## Dev Sanity Check Bead
+## Plan Complete: Pour The Chains
 
-One per sprint: `dev_bead` = the sprint's dev bead, `assignee` = the
-member of the `dev-sanity` role (`scripts/resolve-role dev-sanity`). It is blocked by its dev bead, and later sprints
-wait on it rather than on the dev bead, so a sprint's dependents start only
-after its work passes the sanity check. See [`dev-sanity.md`](dev-sanity.md).
+After plan review passes, the lead pours every sprint's chain, in
+`sprints.jsonl` order:
+
+1. `bd children <sprint> --json`:
+   - a complete chain (three steps, two `blocks` edges): skip the bond, go to
+     step 4;
+   - a partial chain: report it. Only that sprint's missing steps are held;
+     existing steps and their work are kept. Never re-bond: a repeated bond
+     reopens closed steps (sc-compose #613).
+2. Render the chain with `sc-compose bead render` from
+   `templates/sprint-chain.formula.toml.j2` into
+   `.beads/formulas/sprint-chain.formula.toml` (vars: `sprint_bead`, `phase`,
+   `sprint`, `wave`, `stack`, `layer`, `pr_target`, `difficulty`, from the sprint
+   bead).
+3. Bond it once: `bd mol bond sprint-chain <sprint> --type parallel --ref chain
+   --var ...`. `--type sequential` would block the chain on its own sprint.
+4. Add or reconcile the cross-sprint `blocks` edges `sprints.jsonl` declares.
+
+Then `validate-plan --mode execution --root <root>` must exit 0 before any
+dispatch. The dev-sanity step's assignee is the `dev-sanity` role's member
+(`scripts/resolve-role dev-sanity`); the QA step's is quality-mgr. See
+[`dev-sanity.md`](dev-sanity.md).
 
 ## Stack
 
-- The phase is one append-only `gh stack` on `integrate/phase-<x>`. Only the
-  final phase PR targets `develop`.
+- Each wave is one append-only `gh stack` on its base (`integrate/phase-<x>`,
+  or the previous wave's top); a landed wave moves the next wave's base. Only
+  the final phase PR targets `develop`.
 - `layer` and `pr_target` are the plan's intent. Layers really stack in the
-  order they complete, and the lead records the actual values when it links
-  each one (`atm-bd-orchestration` "Stack Discipline").
+  order they complete; the stack writer records the actual `stack_parent`
+  and `stack_head` when it integrates each one (`atm-bd-orchestration`
+  "Stack Discipline").
 - Sprints that can run at once must have disjoint `owned_paths`. Sprints that
-  share a path must be ordered: one's sanity bead in the other's blocker closure.
+  share a path must be ordered: one's sanity step in the other's blocker
+  closure.
 
 The stack table is a query, not a document:
 
 ```bash
-bd list -l phase-d,stage:dev -n 0 --json | jq -r '.[] | [.metadata.stack, .metadata.layer, .metadata.sprint, .metadata.branch, .metadata.pr_target, .assignee] | @tsv' | sort
+bd list -l phase-d,stage:sprint -n 0 --json | jq -r '.[] | [.metadata.stack, .metadata.layer, .metadata.wave, .metadata.sprint, .metadata.pr_target] | @tsv' | sort
 ```
 
 ## Checks
 
-`validate-plan` is the check. The plan is not ready for plan review until it
+`validate-plan` is the check: `--mode plan` until plan complete, then
+`--mode execution`. The plan is not ready for plan review until plan mode
 exits 0. It fails when:
 
 - `bd doctor` reports an error;
 - a bead lacks a required field, label or metadata key;
 - `requirements` or `adrs` is empty, mixes `NONE` with ids, holds a
   malformed id, or names an id that its governing document does not have;
-- a dev bead does not have exactly one sanity check bead, or is blocked by a
-  bead other than a sanity check (or the plan-review bead);
+- a sprint's `wave:<n>` label, `metadata.wave` and `sprints.jsonl` wave
+  disagree;
 - a `root` sprint has prerequisites, or a `must_follow` sprint has none;
 - two beads claim the same `stack` and `layer`, or a layer's `pr_target` is
   not the branch of the layer below;
-- a bead's parent is not the phase root, or its phase does not match;
-- an assignee is not an ATM member of the team, or a sanity check bead's
-  assignee is not the `dev-sanity` role's member.
+- a sprint's parent is not the phase root, or its phase does not match;
+- execution mode: a sprint lacks exactly one complete chain (chain parent =
+  the sprint; dev, sanity and qa parent = the chain; dev → sanity → qa
+  `blocks` edges), or a dev step's blockers differ from the declared
+  cross-sprint dependencies;
+- an assignee is not an ATM member of the team, or a sanity step's assignee
+  is not the `dev-sanity` role's member.

@@ -14,5 +14,6 @@
   "carry_forward": "obs-d-4-qa1-f1",
   "lead": "obs-lead",
   "cc": "",
-  "sprint_bead": "obs-d-4"
+  "sprint_bead": "obs-d-4",
+  "primary_checkout": "/Users/randlee/github/sc-observability"
 }

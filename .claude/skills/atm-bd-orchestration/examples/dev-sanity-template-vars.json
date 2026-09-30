@@ -24,5 +24,6 @@
   ],
   "files_outside_owned_paths": [],
   "base_sha": "sprint/d-3-otlp-config",
-  "primary_checkout": "/Users/randlee/github/sc-observability"
+  "primary_checkout": "/Users/randlee/github/sc-observability",
+  "phase_root": "obs-phase-d"
 }

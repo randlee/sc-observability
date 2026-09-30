@@ -1,7 +1,7 @@
 ---
 name: qa-bead
-version: 0.1.0
-description: The QA bead the lead creates when a sanity check passes. It is a child of the bead it checks and blocks nothing. Render strictly, then `jq -c .` into the import JSONL.
+version: 0.2.0
+description: A fix-round QA bead, created when a finding's fix sanity check passes. The planned QA of a sprint is its chain step `<sprint>.chain.qa`, not this template. It is a child of the finding it checks (`checked_bead`) and blocks nothing. Render strictly, then `jq -c .` into the import JSONL.
 format: json
 required_variables:
   - id

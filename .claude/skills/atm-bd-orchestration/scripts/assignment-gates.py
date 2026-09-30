@@ -48,6 +48,23 @@ def members_for(runner: Runner) -> list[dict[str, Any]]:
     return members if isinstance(members, list) else members.get("members", [])
 
 
+def is_chain_step(bead: dict[str, Any]) -> bool:
+    """A chain dev step (`<sprint>.chain.dev`): stage:dev under a sprint container; a legacy dev bead is itself stage:sprint."""
+    labels = bead.get("labels") or []
+    return "stage:dev" in labels and "stage:sprint" not in labels and bool(metadata(bead).get("sprint_bead"))
+
+
+def dev_fields(bead: dict[str, Any], runner: Runner) -> dict[str, Any]:
+    """The bead's metadata; a chain step without difficulty or pr_target takes them from its sprint container."""
+    fields = dict(metadata(bead))
+    if is_chain_step(bead) and any(fields.get(key) in (None, "") for key in ("difficulty", "pr_target")):
+        container = metadata(run_json(runner, "bd", "show", str(fields["sprint_bead"]), "--json")[0])
+        for key in ("difficulty", "pr_target"):
+            if fields.get(key) in (None, ""):
+                fields[key] = container.get(key)
+    return fields
+
+
 def claimable(bead: dict[str, Any], identity: str) -> bool:
     return bead.get("status") == "open" and (not bead.get("assignee") or bead.get("assignee") == identity)
 
@@ -74,9 +91,10 @@ def dev_gate(args: argparse.Namespace, runner: Runner, identity: str) -> str:
     bead = run_json(runner, "bd", "show", args.bead, "--json")[0]
     if not claimable(bead, identity):
         return "UNCLAIMABLE"
-    if metadata(bead).get("pr_target") not in (None, args.pr_target):
+    fields = dev_fields(bead, runner)
+    if (fields.get("exec_pr_target") or fields.get("pr_target")) not in (None, args.pr_target):  # a finding may be re-homed by exec_pr_target
         return "PR_TARGET_MISMATCH"
-    if (reason := refusal_for_difficulty(bead, members_for(runner), identity)):
+    if (reason := refusal_for_difficulty({"metadata": fields}, members_for(runner), identity)):
         return reason
     if runner(["git", *git_dir(args), "merge-base", "--is-ancestor", f"origin/{args.pr_target}", "HEAD"], capture_output=True, text=True).returncode:
         return "WRONG_BASE"

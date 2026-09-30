@@ -32,20 +32,19 @@ risk deferred to one late checkpoint. Both extremes are findings. See
 
 - The phase is one bead, normally of type `feature`, with every sprint bead
   of the phase under it as a `parent-child` child.
-- Each sprint is two beads: a dev bead and a sanity check bead. The dev
-  bead's description, design, acceptance criteria and metadata carry what
-  the sprint doc carried.
-- The sanity check bead is blocked by its dev bead and blocks every dev bead
-  that requires that sprint. What it verifies is defined in
+- Each sprint is a container bead whose description, design, acceptance
+  criteria and metadata carry what the sprint doc carried. At plan complete
+  its chain is poured under it: dev → sanity → QA
+  ([`planning.md`](planning.md)). What sanity verifies is defined in
   [`dev-sanity.md`](dev-sanity.md).
-- A dev bead is blocked by the sanity check bead of each required
-  prerequisite (`must_follow`). `parallel_safe` sprints have no dependency
+- A dependent sprint's dev step is blocked by the sanity step of each
+  required prerequisite (`must_follow`), or by its QA step or the whole sprint
+  when the plan declares that. `parallel_safe` sprints have no dependency
   between them.
 - A track is a `gh stack` on the phase integration branch. The stack is
   specified when the plan is written: each sprint bead's metadata records its
-  `stack`, `layer` (1 = bottom), `branch`, `pr_target` and `worktree`, where
-  `pr_target` is the branch of the layer below (the integration branch for
-  layer 1).
+  `stack`, `layer` (1 = bottom) and `pr_target`, where `pr_target` is the
+  branch of the layer below (the integration branch for layer 1).
 - The plan is optimized for parallel execution, so waves are horizontal
   layers of code: contract, layers, integration. A bead is released as soon
   as all of its blockers are closed, that is when all its required work is
@@ -182,7 +181,8 @@ List each related sprint as `must_follow` or `parallel_safe` with a rationale.
 - Parallel tracks run as separate gh-stack stacks with named branches,
   worktrees, and assigned agents.
 
-The phase bead's design publishes a **wave table**: each track, its sprints by wave,
+The phase bead's design publishes a **wave table**: each track, its sprints by
+wave (each sprint's `metadata.wave` and `sprints.jsonl` wave),
 their `target_boundary` and `owned_paths`, plus three numbers: **critical
 path** (longest `must_follow` chain, in sprints), **width** (most sprints
 running at once) and **sprint count**. The expected shape of one

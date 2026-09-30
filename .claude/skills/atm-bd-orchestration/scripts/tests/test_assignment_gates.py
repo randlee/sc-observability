@@ -101,6 +101,62 @@ class AssignmentGateTests(unittest.TestCase):
         behind = dev_runner({("git", "-C", "/other", "merge-base", "--is-ancestor", "origin/target", "HEAD"): (1, "")})
         self.assertEqual(gates.evaluate(ns("dev", worktree="/other"), behind), "WRONG_BASE")
 
+    def test_chain_step_reads_difficulty_and_target_from_its_sprint_container(self):
+        step = {"status": "open", "assignee": "", "labels": ["phase-d", "stage:dev", "wave:1"],
+                "metadata": {"sprint_bead": "obs-d-30", "sprint": "d-30"}}
+        container = {"labels": ["stage:sprint"], "metadata": {"difficulty": "normal", "pr_target": "target"}}
+        runner = dev_runner({("bd", "show", "bead", "--json"): (0, dumped([step])),
+                             ("bd", "show", "obs-d-30", "--json"): (0, dumped([container]))})
+        self.assertEqual(gates.evaluate(ns("dev"), runner), "READY")
+        wrong = dict(container, metadata={"difficulty": "normal", "pr_target": "elsewhere"})
+        runner = dev_runner({("bd", "show", "bead", "--json"): (0, dumped([step])),
+                             ("bd", "show", "obs-d-30", "--json"): (0, dumped([wrong]))})
+        self.assertEqual(gates.evaluate(ns("dev"), runner), "PR_TARGET_MISMATCH")
+        hard = dict(container, metadata={"difficulty": "hard", "pr_target": "target"})
+        runner = dev_runner({("bd", "show", "bead", "--json"): (0, dumped([step])),
+                             ("bd", "show", "obs-d-30", "--json"): (0, dumped([hard]))})
+        self.assertEqual(gates.evaluate(ns("dev"), runner), "DIFFICULTY_MISMATCH")
+
+    def test_chain_step_with_baked_fields_does_not_read_the_container(self):
+        step = {"status": "open", "assignee": "", "labels": ["stage:dev"],
+                "metadata": {"sprint_bead": "obs-d-30", "difficulty": "normal", "pr_target": "target"}}
+        runner = dev_runner({("bd", "show", "bead", "--json"): (0, dumped([step])),
+                             ("bd", "show", "obs-d-30", "--json"): (1, "must not be read")})
+        self.assertEqual(gates.evaluate(ns("dev"), runner), "READY")
+
+    def test_legacy_dev_bead_is_its_own_sprint(self):
+        legacy = {"status": "open", "assignee": "", "labels": ["stage:dev", "stage:sprint"],
+                  "metadata": {"difficulty": "normal", "pr_target": "target", "sprint_bead": "ignored"}}
+        runner = dev_runner({("bd", "show", "bead", "--json"): (0, dumped([legacy])),
+                             ("bd", "show", "ignored", "--json"): (1, "must not be read")})
+        self.assertEqual(gates.evaluate(ns("dev"), runner), "READY")
+
+    def test_fix_gate_prefers_exec_pr_target(self):
+        def finding(**extra):
+            return {"status": "open", "assignee": "", "labels": ["stage:finding"],
+                    "metadata": {"difficulty": "normal", "sprint_bead": "obs-d-30", **extra}}
+        cases = [
+            ({"pr_target": "old", "exec_pr_target": "target"}, "READY"),
+            ({"pr_target": "target", "exec_pr_target": "other"}, "PR_TARGET_MISMATCH"),
+            ({"pr_target": "target"}, "READY"),
+            ({"pr_target": "other"}, "PR_TARGET_MISMATCH"),
+            ({}, "READY"),  # a finding does not inherit the container's target
+        ]
+        for extra, expected in cases:
+            runner = dev_runner({("bd", "show", "bead", "--json"): (0, dumped([finding(**extra)])),
+                                 ("bd", "show", "obs-d-30", "--json"): (0, dumped([{"metadata": {"pr_target": "x"}}]))})
+            with self.subTest(extra=extra): self.assertEqual(gates.evaluate(ns("dev"), runner), expected)
+
+    def test_qa_gate_for_a_chain_qa_step_reads_the_dev_step_pass(self):
+        qa_step = {"labels": ["stage:qa"], "metadata": {"checked_bead": "obs-d-30.chain.dev", "pr_target": "target",
+                                                        "sprint_bead": "obs-d-30"}}
+        runner = qa_runner({("bd", "show", "bead", "--json"): (0, dumped([qa_step])),
+                            ("bd", "show", "obs-d-30.chain.dev", "--json"): (0, dumped([{"metadata": {"sanity_pass_commit": "head"}}]))})
+        self.assertEqual(gates.evaluate(ns("qa", checked_bead=""), runner), "READY")
+        runner = qa_runner({("bd", "show", "bead", "--json"): (0, dumped([qa_step])),
+                            ("bd", "show", "obs-d-30.chain.dev", "--json"): (0, dumped([{"metadata": {}}]))})
+        self.assertEqual(gates.evaluate(ns("qa", checked_bead=""), runner), "SANITY_STALE")
+
     def test_sanity_refusals_and_ready(self):
         cases = [
             ("pr-required.json", ns("sanity", pr_number=""), sanity_runner()),

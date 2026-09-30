@@ -1,7 +1,7 @@
 ---
 name: atm-bd-orchestration
-version: 0.3.6
-description: Bead-driven phase orchestration for the lead. Use when running a phase whose plan is in beads, dispatching from `bd ready` with ATM tasks, and landing it as one gh stack.
+version: 0.4.0
+description: Bead-driven phase orchestration for the lead. Use when running a phase whose plan is in beads, dispatching from `bd ready` with ATM tasks, and landing it as one gh stack per wave.
 requires:
   cli:
     - name: bd
@@ -52,14 +52,18 @@ before proceeding.**
 
 The orchestrator is the **lead**: the identity that dispatches beads, creates
 QA beads, links layers into the stack and receives every task close. Templates
-address it through the `lead` variable (default `team-lead`) and copy
-reports to `cc` (default `team-lead`; empty switches copies off). The role
+address the orchestrator that dispatched the task through the `lead` variable
+(default `team-lead`) and copy reports to `cc` (default `team-lead`; empty
+switches copies off). An orchestrator agent (parallax) sets `lead` to itself
+and `cc` to the lead, so the tasks it dispatches report to it; in role files
+and templates, "the lead" means that dispatcher. The role
 can move mid-phase: the outgoing lead sends the incoming lead the open task
 ids, open PRs and the stack number, and announces the new lead. In-flight
 tasks keep their assigner.
 
 The lead is the only stack writer (`gh stack link`, `unstack`, `sync`,
-`rebase`, `merge`). quality-mgr files the finding beads from QA; the lead
+`rebase`, `merge`), except that the parallax role links, unstacks and
+rebases its assigned wave's stack. quality-mgr files the finding beads from QA; the lead
 files those from a phase-end review.
 
 Before treating a finding or unresolved decision as a development stop, read
@@ -76,8 +80,10 @@ work moving. Unresolved decision beads block phase closure, not development.
 | dev | frontier / high-value devs; fast agents for important and minor findings | the assignment templates |
 | dev-sanity | the member the repository maps to the role, never a dev or fix agent | [`roles/dev-sanity.md`](roles/dev-sanity.md) |
 | quality-mgr | the long-running QA agent | [`roles/quality-mgr.md`](roles/quality-mgr.md) |
+| parallax | one agent per wave, started by the lead | [`roles/parallax.md`](roles/parallax.md) |
 
-This skill names roles, not members or agents. A repository maps a role to
+This skill names roles, not members or agents. Except for parallax, which
+runs one agent per wave, a repository maps a role to
 its team-unique member in `roles:` of `.claude/agents/registry.yaml`, and
 that member's `[startup.<member>]` prompt in `.atm.toml` names the directive
 it runs. Resolve the member with
@@ -99,12 +105,49 @@ or ATM.
 ## Stack Discipline
 
 Every bead declares its immutable `metadata.pr_target`. A dev or fix branch
-is cut from `origin/<pr_target>` and rebases only onto that branch. The lead
-opens the PR against that same target after sanity PASS; a passed sanity is
-frozen and a later change is a new fix bead with its own sanity. Sprint work
+is cut from `origin/<pr_target>` of its assignment. Its stack position is set
+at integration and recorded separately:
+
+1. **Integrate before review.** At dev-complete, or fix-complete (`fixed`),
+   the stack writer rebases the pushed branch onto its immediate parent: the
+   top of the wave's stack (the previous layer's branch, or the wave base for
+   the first layer). It works in its own worktree with `/sc-gh-stack`,
+   pushes with `--force-with-lease`, opens a draft PR against the parent, and
+   records `metadata.stack_parent` and `metadata.stack_head` on the checked
+   bead, beside the `source_commit` recorded at completion. A conflicting rebase is aborted and goes back to the owner with
+   [`dev-fix.xml.j2`](templates/dev-fix.xml.j2), naming the parent.
+2. **Review the rebased head.** Sanity and QA run only at `stack_head` with
+   PR base `stack_parent`, never at a head cut in parallel. After sanity PASS
+   the PR is marked ready and linked. A passed sanity is frozen; a later
+   change is a new fix bead with its own sanity.
+3. **Track restacks.** When layers move, the stack writer appends
+   `restack: <old head> -> <new head>` to each moved bead's notes and
+   updates `stack_head` and `stack_parent`. Its old sanity and QA evidence
+   stays as recorded, pinned to the old head, and is stale: nothing marks the
+   new head PASS, and an unchanged `git patch-id` does not prove unchanged
+   behaviour on a new parent. The layer gets a new sanity check bead at the
+   new head (`dev-sanity-bead.json.j2`, `dev_bead` = the moved bead; the
+   frozen one is never re-run), and quality-mgr records a disposition there (a new QA round, or a
+   carry with its reason) before the layer counts as reviewed.
+4. **One stack, history kept.** Never a competing stack, and never a closed
+   and recreated PR: PRs are retargeted and rebased, so comments and review
+   history stay.
+
+Sprint work
 does not wait for QA: the next sprint is dispatched as soon as its sanity
 blockers PASS. QA and fixes interleave by priority (blocking P1, sprint and
 important P2, minor P4).
+
+## Waves
+
+A wave is its sprint beads (`stage:sprint` with `metadata.wave` and a
+matching `wave:<n>` label) and everything under them. Each wave is one gh
+stack, run by one parallax agent; important and minor findings are the phase
+pool, in no wave. Membership, dispatch rules, the wave transition, assigning
+a wave, the lead's oversight and the Sanity Monitor are in
+[`waves.md`](waves.md); the parallax agent's procedure is
+[`wave-loop.md`](wave-loop.md); spin-up and spin-down are
+[`parallax-lifecycle.md`](parallax-lifecycle.md).
 
 ## Gate Beads
 
@@ -158,15 +201,14 @@ the designs drift apart.
 No dev bead is dispatched until the plan passes review.
 
 1. Create the plan-review bead right after the import (the import
-   procedures do this as their next step), so that it blocks every root sprint (every dev
-   bead with no sanity check blocker). For sprints imported into a running
-   phase, use `<root>-plan-qa-<n>` (the next free number) and block only the
-   new dev beads, including any that already have sanity check blockers:
+   procedures do this as their next step). No dev step exists yet: chains
+   are poured only after the review passes. For sprints imported into a
+   running phase, use `<root>-plan-qa-<n>` (the next free number):
 
    ```bash
    bd create --id <root>-plan-qa --type task --parent <root> \
      -l phase-<x>,stage:plan-review --assignee quality-mgr \
-     --title "phase-<x>: plan review" --deps blocks:<root sprint>,blocks:<root sprint>
+     --title "phase-<x>: plan review"
    ```
 
 2. Generate and publish the initial phase diagram before review:
@@ -181,14 +223,17 @@ No dev bead is dispatched until the plan passes review.
 
 3. Dispatch it with
    [`plan-review-template.xml.j2`](templates/plan-review-template.xml.j2).
-   - PASS closes the bead and releases the root sprints. With minor
-     findings, it is handed to you open; you fix them and close it.
+   - PASS closes the bead. With minor findings, it is handed to you open;
+     you fix them and close it. Then pour every reviewed sprint's chain
+     (`atm-beads` planning.md, plan-complete pour) and run
+     `validate-plan --mode execution`; the root sprints' dev steps are now
+     ready.
    - FAIL leaves it open. The author fixes the beads with `bd update`; you
      assign the next round (`round` + 1, `carry_forward` = the open
      findings) with the same task id.
    - Plan review is capped at three rounds, as in `quality-mgr.md`.
 
-Requirements and ADRs are the tight part of the gate. Every dev bead lists
+Requirements and ADRs are the tight part of the gate. Every sprint bead lists
 its governing ids in `metadata.requirements` and `metadata.adrs`, or exactly
 `["NONE"]`. quality-mgr rejects the plan as blocking when a list is missing,
 names an id that does not exist (except as
@@ -203,8 +248,8 @@ bd ready -l phase-<x> -n 0 --json
 ```
 
 `bd ready` lists every bead whose blockers are closed, highest priority
-first: dev beads whose prerequisites' sanity checks passed, sanity checks
-whose dev bead closed, QA beads and open findings. For each ready bead:
+first: dev steps whose prerequisites' sanity checks passed, sanity checks
+whose dev step closed, QA beads and open findings. For each ready bead:
 
 | Ready bead | Template | To |
 | --- | --- | --- |
@@ -217,22 +262,29 @@ whose dev bead closed, QA beads and open findings. For each ready bead:
 
 Then, on each task close:
 
-| Close | Lead does |
+| Close | The dispatcher does (the lead, or the parallax agent for its wave) |
 | --- | --- |
-| plan-review PASS | nothing when the bead closed: the root sprints are now ready. With minor findings the bead is assigned to you still open: fix each listed bead with `bd update`, then `bd close <root>-plan-qa --reason "minor fixes applied"` |
+| plan-review PASS | pour the chains and run `validate-plan --mode execution` (Plan Gate step 3); the root sprints' dev steps are then ready. With minor findings the bead is assigned to you still open: fix each listed bead with `bd update`, then `bd close <root>-plan-qa --reason "minor fixes applied"` |
 | plan-review FAIL | have the author fix the listed beads, run `validate-plan` again, then dispatch the next round |
-| dev-complete | nothing: the sanity check is now ready |
-| sanity check PASS | verify the branch base is its declared `pr_target`, then create and dispatch the QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (a child of the checked bead). For a finding, the QA dispatch sets `checked_bead` = the finding (it carries its own requirements and ADRs), `sprint_bead` = its `metadata.sprint_bead`, `carry_forward` = the finding id, and `round` = the `metadata.round` of the QA bead it was `discovered-from`, + 1, or 1 when it came from the phase-end review |
-| sanity check FAIL | sanity answers only whether a numbered deliverable is written; requirements and quality are QA. The sanity member creates one child finding bead for every undone deliverable under `<checked bead>` at `clamp(parent priority - 1, P1, P4)`, so it ranks ahead of the parent's peers, never one for lint; it does not edit the parent. It copies phase/sprint/stack/layer provenance and uses only `phase-<phase>`, `stage:finding`, and `stack:<stack>` labels. The hierarchy is the parent closure gate (`bd` rejects parent-to-child `blocks` edges); it adds `blocks` edges only between those new beads, where one fix depends on another. Each child stores the exact structured report data. On a first FAIL the lead reopens the checked bead and assigns it with [`dev-fix.xml.j2`](templates/dev-fix.xml.j2). When the children are excessive, the lead first verifies against the branch that each one's work is really not done and closes, with a reason, any that judges correctness or quality (that is QA). The lead may overrule, amend, split, or reassign children, but does not recreate them. After the second FAIL for the same checked bead, before dispatching a fix the lead diffs flagged files versus the last PASS, checks the branch base for foreign commits, then rules; report `SANITY.ROUND_CAP` with undone deliverable numbers and do not run a third round without that ruling. The parent cannot close until every child closes. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
-| qa-complete | quality-mgr files finding beads, applies the ceremony screen, and reports the verdict. |
-| fix-complete (`fixed`) | create the fix's sanity check bead (`atm-beads` [`dev-sanity-bead.json.j2`](../atm-beads/templates/dev-sanity-bead.json.j2), `dev_bead` and `parent` = the finding) |
+| dev-complete | integrate the branch into the stack (Stack Discipline, step 1), then dispatch the sanity check, now ready |
+| sanity check PASS | verify the PR base is the checked bead's `stack_parent` and its head `stack_head`, mark the PR ready and link it, then dispatch the QA: for a sprint, its chain step `<sprint>.chain.qa` (now ready); for a finding, a QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (a child of the finding). For a finding, the QA dispatch sets `checked_bead` = the finding (it carries its own requirements and ADRs), `sprint_bead` = its `metadata.sprint_bead`, `carry_forward` = the finding id, and `round` = the `metadata.round` of the QA bead it was `discovered-from`, + 1, or 1 when it came from the phase-end review |
+| sanity check FAIL | sanity answers only whether a numbered deliverable is written; requirements and quality are QA. The sanity member creates one finding bead for every undone deliverable, never one for lint: a blocking one as a child of `<checked bead>` at `clamp(parent priority - 1, P1, P4)`, so it ranks ahead of the parent's peers; an important or minor one under the phase root, with its provenance. It does not edit the parent. It copies phase/sprint/stack/layer provenance and uses only `phase-<phase>`, `stage:finding`, and `stack:<stack>` labels. The hierarchy is the parent closure gate (`bd` rejects parent-to-child `blocks` edges); it adds `blocks` edges only between those new beads, where one fix depends on another. Each child stores the exact structured report data. On a first FAIL the lead reopens the checked bead and assigns it with [`dev-fix.xml.j2`](templates/dev-fix.xml.j2). When the children are excessive, the lead first verifies against the branch that each one's work is really not done and closes, with a reason, any that judges correctness or quality (that is QA). The lead may overrule, amend, split, or reassign children, but does not recreate them. After the second FAIL for the same checked bead, before dispatching a fix the lead diffs flagged files versus the last PASS, checks the branch base for foreign commits, then rules; report `SANITY.ROUND_CAP` with undone deliverable numbers and do not run a third round without that ruling. The parent cannot close until every child closes. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
+| qa-complete | quality-mgr files finding beads (blocking under the sprint, important and minor under the phase root), applies the ceremony screen, and reports the verdict. Then close the sprint if it is closable (below) |
+| fix-complete (`fixed`) | integrate the branch into the stack (Stack Discipline, step 1), then create the fix's sanity check bead (`atm-beads` [`dev-sanity-bead.json.j2`](../atm-beads/templates/dev-sanity-bead.json.j2), `dev_bead` and `parent` = the finding; `dev_bead_open: true` for an important finding, which stays open for quality-mgr) |
 | review-complete | file each finding with `finding-bead.json.j2` (`qa_bead` = the review bead) |
 | task-refused | read the reason and the bead state (`open`, or `blocked-failed` for a dev bead that declared failure). Reassign it, split it, or close the bead yourself with `bd close <bead> --force --reason "<why>"`. A `blocked` bead is never in `bd ready`: run `bd update <bead> --status open --assignee <new agent>` before you re-dispatch it |
-| fix-complete (`not_reproducible`) | nothing: no commit, no sanity check; the finding is closed |
+| fix-complete (`not_reproducible`) | no commit, no sanity check. A blocking or minor finding is closed; an important one is left open with the note, and quality-mgr closes it |
 | not-ready report | the task is still open and queued. Fix the cause it names (usually a blocker still open) and tell the assignee to run the ready check again. If the work is no longer wanted, close the task `cancelled` with `task-refused.md.j2` (`bead_state` open) |
 
 Re-run `bd ready` after every close. Never cache the ready list. The open
-phase root also appears in it; it is never dispatched.
+phase root and the sprint beads also appear in it; they are never
+dispatched.
+
+A sprint closes only through the lead, never at dev-complete. After any
+close under a sprint, run `sprint-closable <sprint>`: it passes when the
+dev, sanity and QA steps are closed and no blocking finding under the
+sprint is open; important and minor findings never hold it. On a pass,
+close `<sprint>.chain`, then the sprint.
 
 After every bead write, run `validate-plan --root <root>`. On any problem,
 stop dispatching and report it to the user; never repair the graph
@@ -263,13 +315,14 @@ bd create --id <root>-review --type task --parent <root> \
 On review-complete, file each finding with `finding-bead.json.j2`, using:
 
 - `qa_bead` = the review bead;
-- `sprint` and `found_on_layer` from the metadata of the dev bead whose code
+- `phase_root` = `<root>`;
+- `sprint` and `found_on_layer` from the metadata of the sprint bead whose code
   it cites (the phase root when it spans sprints) (`phase-end` and
   the top layer when it is the root);
 - `found_at_commit` = the reviewed commit;
 - `screen` = `keep`, unless you ran `ceremony-finding-screen` over them;
 - `finding_ref` = the reviewer's numbering (`R-1`, `R-2`, …);
-- `sprint_bead`, `requirements` and `adrs` = the cited dev bead's id and
+- `sprint_bead`, `requirements` and `adrs` = the cited sprint bead's id and
   lists. For a finding that spans sprints, use the root as `sprint_bead`. For
   `requirements` and for `adrs` separately, take the union of the real ids
   of the sprints it touches, dropping every `NONE` and duplicate. Use
@@ -373,8 +426,8 @@ written to beads with the `atm-beads` templates.
 | --- | --- | --- |
 | `plan-review-template.xml.j2` | assignment | lead → quality-mgr, the plan-review bead |
 | `plan-review-complete.md.j2` | close | quality-mgr, PASS or FAIL |
-| `dev-template.xml.j2` | assignment | lead → dev, a planned dev bead |
-| `dev-fix.xml.j2` | assignment | lead → dev, a dev bead reopened by a failed sanity check |
+| `dev-template.xml.j2` | assignment | lead → dev, a sprint's dev step |
+| `dev-fix.xml.j2` | assignment | lead → dev, a dev step reopened by a failed sanity check |
 | `dev-complete.md.j2` | close | dev, for `dev-template` and `dev-fix` |
 | `dev-sanity-template.xml.j2` | assignment | lead → dev-sanity member |
 | `dev-sanity-complete.md.j2` | close | dev-sanity member, PASS or FAIL |
@@ -399,3 +452,9 @@ template's vars are in [`examples/`](examples/).
 template derives it from severity: blocking P1, planned dev P2, important P2,
 minor P4. The lead still picks the assignee; the usual case is a frontier dev
 for blocking and dev work and a fast agent for important and minor.
+
+The lead raises an important finding that may turn out blocking, or that
+really needs to get fixed, to P1 (`bd update <finding> --priority 1`), so it
+is worked with the blockers. It stays important and does not hold the wave
+merge unless the lead reclassifies it as blocking. These are the lead's
+judgements; the parallax role never makes them.
