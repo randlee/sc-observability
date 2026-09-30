@@ -147,7 +147,7 @@ fn decode<T: DeserializeOwned>(value: Value, field: &str) -> Result<T, Failure> 
 pub fn decode_event(value: Value) -> Result<LogEventDto, Failure> {
     check_event_keys(&value)?;
     let dto: LogEventDto = decode(value, "event")?;
-    validate_event(&dto)?;
+    check_input_provenance(&dto.fields, "fields")?;
     Ok(dto)
 }
 /// Decodes and validates the inclusive native query contract.
@@ -159,9 +159,7 @@ pub fn decode_query(value: Value) -> Result<LogQueryDto, Failure> {
             }
         }
     }
-    let dto: LogQueryDto = decode(value, "query")?;
-    to_core_query(dto.clone())?;
-    Ok(dto)
+    decode(value, "query")
 }
 /// Decodes the owner-level request without granting an ownership capability.
 pub fn decode_level_request(value: Value) -> Result<LevelRequestDto, Failure> {
@@ -208,6 +206,36 @@ pub fn normalize_field_key(value: &str) -> String {
 pub fn is_protected_key(key: &str) -> bool {
     key.starts_with("sc_observability.binding.")
         || normalize_field_key(key).starts_with("sc_observability.binding.")
+}
+fn check_input_provenance(fields: &BTreeMap<String, ValueDto>, field: &str) -> Result<(), Failure> {
+    for (key, value) in fields {
+        let path = format!("{field}.{key}");
+        if is_protected_key(key) {
+            return Err(invalid_input(path, "reserved binding provenance field"));
+        }
+        match value {
+            ValueDto::Array { value } => {
+                for (index, value) in value.iter().enumerate() {
+                    check_input_provenance_value(value, &format!("{path}[{index}]"))?;
+                }
+            }
+            ValueDto::Object { value } => check_input_provenance(value, &path)?,
+            _ => {}
+        }
+    }
+    Ok(())
+}
+fn check_input_provenance_value(value: &ValueDto, field: &str) -> Result<(), Failure> {
+    match value {
+        ValueDto::Array { value } => {
+            for (index, value) in value.iter().enumerate() {
+                check_input_provenance_value(value, &format!("{field}[{index}]"))?;
+            }
+        }
+        ValueDto::Object { value } => check_input_provenance(value, field)?,
+        _ => {}
+    }
+    Ok(())
 }
 fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result<Value, Failure> {
     Ok(match value {
@@ -305,46 +333,23 @@ fn trace(value: TraceContextDto) -> Result<core::TraceContext, Failure> {
     Ok(core::TraceContext {
         trace_id: checked(core::TraceId::new(value.trace_id), "trace.trace_id")?,
         span_id: checked(core::SpanId::new(value.span_id), "trace.span_id")?,
-        parent_span_id: value
-            .parent_span_id
-            .map(|v| checked(core::SpanId::new(v), "trace.parent_span_id"))
-            .transpose()?,
+        parent_span_id: optional_checked(value.parent_span_id, "trace.parent_span_id", |value| {
+            core::SpanId::new(value)
+        })?,
     })
 }
-fn validate_event(dto: &LogEventDto) -> Result<(), Failure> {
-    // Serialized size and container depth are checked on the original JSON in
-    // `decode_event`. Re-serializing here would add omitted nullable fields and
-    // could reject a request that was within the raw 64 KiB boundary.
-    version(dto.schema_version)?;
-    checked(core::TargetCategory::new(dto.target.clone()), "target")?;
-    checked(core::ActionName::new(dto.action.clone()), "action")?;
-    if let Some(value) = dto.trace.clone() {
-        trace(value)?;
-    }
-    for (field, value) in [
-        ("request_id", &dto.request_id),
-        ("correlation_id", &dto.correlation_id),
-    ] {
-        if let Some(value) = value {
-            checked(core::CorrelationId::new(value.clone()), field)?;
-        }
-    }
-    if let Some(value) = &dto.outcome {
-        checked(core::OutcomeLabel::new(value.clone()), "outcome")?;
-    }
-    to_value(
-        ValueDto::Object {
-            value: dto.fields.clone(),
-        },
-        "fields",
-        true,
-        0,
-    )?;
-    Ok(())
+fn optional_checked<T, E: std::fmt::Display + 'static>(
+    value: Option<String>,
+    field: &str,
+    convert: impl FnOnce(String) -> Result<T, E>,
+) -> Result<Option<T>, Failure> {
+    value
+        .map(|value| checked(convert(value), field))
+        .transpose()
 }
 /// Converts validated event input using host-selected identity and time.
 pub fn to_core_event(dto: LogEventDto, stamp: EventStamp) -> Result<core::LogEvent, Failure> {
-    validate_event(&dto)?;
+    version(dto.schema_version)?;
     let Value::Object(fields) =
         to_value(ValueDto::Object { value: dto.fields }, "fields", true, 0)?
     else {
@@ -363,18 +368,15 @@ pub fn to_core_event(dto: LogEventDto, stamp: EventStamp) -> Result<core::LogEve
         action: checked(core::ActionName::new(dto.action), "action")?,
         message: dto.message,
         trace: dto.trace.map(trace).transpose()?,
-        request_id: dto
-            .request_id
-            .map(|v| checked(core::CorrelationId::new(v), "request_id"))
-            .transpose()?,
-        correlation_id: dto
-            .correlation_id
-            .map(|v| checked(core::CorrelationId::new(v), "correlation_id"))
-            .transpose()?,
-        outcome: dto
-            .outcome
-            .map(|v| checked(core::OutcomeLabel::new(v), "outcome"))
-            .transpose()?,
+        request_id: optional_checked(dto.request_id, "request_id", |value| {
+            core::CorrelationId::new(value)
+        })?,
+        correlation_id: optional_checked(dto.correlation_id, "correlation_id", |value| {
+            core::CorrelationId::new(value)
+        })?,
+        outcome: optional_checked(dto.outcome, "outcome", |value| {
+            core::OutcomeLabel::new(value)
+        })?,
         diagnostic: None,
         state_transition: None,
         fields,
@@ -398,27 +400,20 @@ pub fn to_core_query(dto: LogQueryDto) -> Result<core::LogQuery, Failure> {
         ));
     }
     let query = core::LogQuery {
-        service: dto
-            .service
-            .map(|v| checked(core::ServiceName::new(v), "service"))
-            .transpose()?,
+        service: optional_checked(dto.service, "service", |value| {
+            core::ServiceName::new(value)
+        })?,
         levels: dto.levels.into_iter().map(Into::into).collect(),
-        target: dto
-            .target
-            .map(|v| checked(core::TargetCategory::new(v), "target"))
-            .transpose()?,
-        action: dto
-            .action
-            .map(|v| checked(core::ActionName::new(v), "action"))
-            .transpose()?,
-        request_id: dto
-            .request_id
-            .map(|v| checked(core::CorrelationId::new(v), "request_id"))
-            .transpose()?,
-        correlation_id: dto
-            .correlation_id
-            .map(|v| checked(core::CorrelationId::new(v), "correlation_id"))
-            .transpose()?,
+        target: optional_checked(dto.target, "target", |value| {
+            core::TargetCategory::new(value)
+        })?,
+        action: optional_checked(dto.action, "action", core::ActionName::new)?,
+        request_id: optional_checked(dto.request_id, "request_id", |value| {
+            core::CorrelationId::new(value)
+        })?,
+        correlation_id: optional_checked(dto.correlation_id, "correlation_id", |value| {
+            core::CorrelationId::new(value)
+        })?,
         since: dto.since.map(|v| timestamp(v, "since")).transpose()?,
         until: dto.until.map(|v| timestamp(v, "until")).transpose()?,
         field_matches: dto
