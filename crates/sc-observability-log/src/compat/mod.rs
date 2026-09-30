@@ -512,12 +512,15 @@ pub(crate) fn legacy_flush(
         {
             FlushError::InProgress
         }
-        Core::Drain { .. }
-            if diagnostic.code == error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING
-                || diagnostic.code == error_codes::SC_LOG_DETACH_NOT_INSTALLED =>
-        {
+        Core::Drain { .. } if diagnostic.code == error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING => {
             FlushError::NotRunning {
                 phase: crate::handle::lifecycle_phase(),
+            }
+        }
+        // A saved attachment is stopped even if a separate global owner is running.
+        Core::Drain { .. } if diagnostic.code == error_codes::SC_LOG_DETACH_NOT_INSTALLED => {
+            FlushError::NotRunning {
+                phase: crate::LifecyclePhase::Stopped,
             }
         }
         _ => FlushError::Logger { diagnostic },
@@ -594,6 +597,31 @@ mod tests {
                 "released errors expose diagnostics rather than a new source chain"
             );
         }};
+    }
+
+    fn assert_detached_flush_maps_to_stopped(stale: &crate::control::LogControl) {
+        let core_flush_error = stale
+            .flush(Duration::ZERO)
+            .expect_err("detached saved attachment must reject flush");
+        assert_eq!(
+            core_flush_error.diagnostic().code,
+            error_codes::SC_LOG_DETACH_NOT_INSTALLED,
+            "the real saved-attachment path supplies the detach diagnostic"
+        );
+        let released_flush_error = legacy_flush(&core_flush_error, Duration::ZERO);
+        assert!(matches!(
+            released_flush_error,
+            FlushError::NotRunning {
+                phase: crate::LifecyclePhase::Stopped,
+            }
+        ));
+        assert_root_contract!(
+            released_flush_error,
+            "SC_OBSERVABILITY_LOG_NOT_RUNNING",
+            Remediation::not_recoverable(
+                "the lifecycle owner has shut the logger down; the final shutdown flushed what was queued",
+            )
+        );
     }
 
     #[test]
@@ -713,6 +741,8 @@ mod tests {
             }
         ));
 
+        assert_detached_flush_maps_to_stopped(&stale);
+
         std::sync::Arc::try_unwrap(logger)
             .unwrap_or_else(|_| panic!("detach releases host logger"))
             .shutdown();
@@ -826,6 +856,95 @@ mod tests {
     }
 
     #[test]
+    fn legacy_init_special_configuration_rows_preserve_root_contracts() {
+        let special_cases = [
+            (
+                "already initialized",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Configuration {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED",
+                            Remediation::not_recoverable("unused canonical remediation"),
+                        )),
+                    },
+                    LevelFilter::Info,
+                    LevelFilter::Trace,
+                ),
+                "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED",
+                Remediation::not_recoverable(
+                    "the log facade logger cannot be replaced; keep the first LogGuard",
+                ),
+            ),
+            (
+                "foreign logger",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Configuration {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED",
+                            Remediation::not_recoverable("unused canonical remediation"),
+                        )),
+                    },
+                    LevelFilter::Info,
+                    LevelFilter::Trace,
+                ),
+                "SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED",
+                Remediation::not_recoverable("choose one application logger before startup"),
+            ),
+            (
+                "unsupported level",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Configuration {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL",
+                            Remediation::not_recoverable("unused canonical remediation"),
+                        )),
+                    },
+                    LevelFilter::Warn,
+                    LevelFilter::Info,
+                ),
+                "SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL",
+                Remediation::not_recoverable(
+                    "rebuild without the static cap or choose a supported startup baseline",
+                ),
+            ),
+        ];
+
+        for (name, error, code, remediation) in special_cases {
+            match name {
+                "already initialized" => {
+                    assert!(matches!(error, InitError::AlreadyInitialized));
+                    assert_eq!(
+                        error.to_string(),
+                        "sc-observability-log is already initialized in this process"
+                    );
+                }
+                "foreign logger" => {
+                    assert!(matches!(error, InitError::ForeignLoggerInstalled));
+                    assert_eq!(
+                        error.to_string(),
+                        "another log::Log implementation is already installed"
+                    );
+                }
+                "unsupported level" => {
+                    assert!(matches!(
+                        error,
+                        InitError::UnsupportedLevel {
+                            configured: LevelFilter::Warn,
+                            available: LevelFilter::Info,
+                        }
+                    ));
+                    assert_eq!(
+                        error.to_string(),
+                        "configured level Warn exceeds available static level Info"
+                    );
+                }
+                _ => unreachable!("fixed table row"),
+            }
+            assert_root_contract!(error, code, remediation);
+        }
+    }
+
+    #[test]
     fn legacy_flush_table_preserves_released_variants_and_contracts() {
         let diagnostic_remediation = Remediation::recoverable("inspect logger", ["retry"]);
         let timeout = Duration::from_millis(7);
@@ -898,7 +1017,63 @@ mod tests {
     }
 
     #[test]
-    fn released_control_flush_reads_the_failed_phase_at_the_adapter_boundary() {
+    fn legacy_flush_in_progress_and_logger_rows_preserve_root_contracts() {
+        let diagnostic_remediation = Remediation::recoverable("inspect logger", ["retry"]);
+        let timeout = Duration::from_millis(7);
+        let cases = [
+            (
+                "in progress",
+                legacy_flush(
+                    &sc_observability_types::v2::FlushError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
+                "SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS",
+                Remediation::recoverable(
+                    "wait for the previous flush to finish, then retry",
+                    ["wait for the in-flight flush before making an explicit new request"],
+                ),
+            ),
+            (
+                "generic logger",
+                legacy_flush(
+                    &sc_observability_types::v2::FlushError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
+                "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED",
+                diagnostic_remediation,
+            ),
+        ];
+
+        for (name, error, code, remediation) in cases {
+            match name {
+                "in progress" => assert!(matches!(error, FlushError::InProgress)),
+                "generic logger" => {
+                    let FlushError::Logger { diagnostic } = &error else {
+                        panic!("generic drain errors retain the released Logger variant");
+                    };
+                    assert_eq!(
+                        diagnostic.message,
+                        "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED fixture"
+                    );
+                }
+                _ => unreachable!("fixed table row"),
+            }
+            assert_root_contract!(error, code, remediation);
+        }
+    }
+
+    #[test]
+    fn released_control_flush_preserves_non_running_phase_at_the_adapter_boundary() {
         struct RestoreStopped;
 
         impl Drop for RestoreStopped {
@@ -908,21 +1083,37 @@ mod tests {
         }
 
         if !crate::handle::is_isolated_test_child(
-            "compat::tests::released_control_flush_reads_the_failed_phase_at_the_adapter_boundary",
+            "compat::tests::released_control_flush_preserves_non_running_phase_at_the_adapter_boundary",
         ) {
             return;
         }
-        crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Failed);
         let _restore = RestoreStopped;
-        let error = LogControl::new()
-            .flush(Duration::ZERO)
-            .expect_err("failed lifecycle must reject the released flush");
-        assert!(matches!(
-            error,
-            FlushError::NotRunning {
-                phase: crate::LifecyclePhase::Failed,
-            }
-        ));
+        for (lifecycle, phase) in [
+            (
+                crate::health::BridgeLifecycle::ShuttingDown,
+                crate::LifecyclePhase::Stopping,
+            ),
+            (
+                crate::health::BridgeLifecycle::Failed,
+                crate::LifecyclePhase::Failed,
+            ),
+        ] {
+            crate::handle::set_lifecycle(lifecycle);
+            let error = LogControl::new()
+                .flush(Duration::ZERO)
+                .expect_err("non-running lifecycle must reject the released flush");
+            assert!(matches!(
+                error,
+                FlushError::NotRunning { phase: observed } if observed == phase
+            ));
+            assert_root_contract!(
+                error,
+                "SC_OBSERVABILITY_LOG_NOT_RUNNING",
+                Remediation::not_recoverable(
+                    "the lifecycle owner has shut the logger down; the final shutdown flushed what was queued",
+                )
+            );
+        }
     }
 
     #[test]
@@ -974,17 +1165,38 @@ mod tests {
                 "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED",
                 diagnostic_remediation.clone(),
             ),
+            (
+                "helper lost",
+                legacy_shutdown(
+                    sc_observability_types::v2::ShutdownError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_HELPER_LOST",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
+                "SC_OBSERVABILITY_LOG_HELPER_LOST",
+                Remediation::not_recoverable(
+                    "inspect saved lifecycle and health; do not claim worker completion",
+                ),
+            ),
         ];
         for (name, error, code, remediation) in shutdown_cases {
             match name {
                 "timeout" => assert!(matches!(error, ShutdownError::TimedOut { .. })),
                 "helper spawn" => assert!(matches!(error, ShutdownError::HelperSpawn { .. })),
                 "final flush" => assert!(matches!(error, ShutdownError::FinalFlush { .. })),
+                "helper lost" => assert!(matches!(error, ShutdownError::HelperLost { .. })),
                 _ => unreachable!("fixed table row"),
             }
             assert_root_contract!(error, code, remediation);
         }
+    }
 
+    #[test]
+    fn legacy_emit_root_contract_rows_preserve_root_contracts() {
+        let diagnostic_remediation = Remediation::recoverable("inspect logger", ["retry"]);
         let emit_cases = [
             (
                 "queue full",
