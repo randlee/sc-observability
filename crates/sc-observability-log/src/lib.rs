@@ -198,6 +198,7 @@ pub mod v2 {
     }
 
     impl LogGuard {
+        /// Returns a non-owning control for the installed bridge.
         #[must_use]
         pub fn control(&self) -> LogControl {
             LogControl::new()
@@ -222,11 +223,13 @@ pub mod v2 {
             crate::handle::shutdown_sequence(timeout)
         }
 
+        /// Snapshots the number of events dropped by the bridge.
         #[must_use]
         pub fn dropped_events(&self) -> crate::DroppedEvents {
             self.inner.dropped_events()
         }
 
+        /// Returns the active log file path captured during initialization.
         #[must_use]
         pub fn active_log_path(&self) -> Option<&Path> {
             self.inner.active_log_path()

@@ -15,105 +15,163 @@ use crate::{control, error_codes};
 
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+/// Failure while initializing the released 1.x bridge facade.
 pub enum InitError {
+    /// The process-wide bridge was already initialized.
     #[error("sc-observability-log is already initialized in this process")]
     AlreadyInitialized,
+    /// Another logger already owns the `log` facade.
     #[error("another log::Log implementation is already installed")]
     ForeignLoggerInstalled,
+    /// The requested level exceeds the level compiled into this executable.
     #[error("configured level {configured:?} exceeds available static level {available:?}")]
     UnsupportedLevel {
+        /// Requested runtime level.
         configured: LevelFilter,
+        /// Most verbose level available in this build.
         available: LevelFilter,
     },
+    /// Process identity could not be resolved.
     #[error("process identity resolution failed: {diagnostic}")]
     IdentityResolution {
+        /// Details about the identity-resolution failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// The underlying logger could not be constructed.
     #[error("sc-observability logger construction failed: {diagnostic}")]
     Logger {
+        /// Details about the logger-construction failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// Required bridge lifecycle coordination could not be started.
     #[error("could not start bridge lifecycle coordination: {diagnostic}")]
     RuntimeStart {
+        /// Details about the coordination startup failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+/// Failure while flushing the released 1.x bridge facade.
 pub enum FlushError {
+    /// The flush did not finish before the supplied deadline.
     #[error("flush did not complete within {timeout:?}")]
-    TimedOut { timeout: Duration },
+    TimedOut {
+        /// Deadline that elapsed while waiting for the flush.
+        timeout: Duration,
+    },
+    /// The underlying logger rejected or failed the flush.
     #[error("sc-observability flush failed: {diagnostic}")]
     Logger {
+        /// Details about the logger flush failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// A helper thread could not be started for the bounded flush.
     #[error("could not start the flush helper thread: {diagnostic}")]
     HelperSpawn {
+        /// Details about the helper startup failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// The flush helper ended without publishing a result.
     #[error("the flush helper thread ended without a result: {diagnostic}")]
     HelperLost {
+        /// Details about the missing helper result.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// A previous flush remains in flight, so no new flush was started.
     #[error("a previous flush is still running; no new flush was started")]
     InProgress,
+    /// The bridge no longer accepts flush requests.
     #[error("the logger is not running: {phase:?}")]
-    NotRunning { phase: crate::LifecyclePhase },
+    NotRunning {
+        /// Lifecycle phase observed when the request was rejected.
+        phase: crate::LifecyclePhase,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+/// Failure while shutting down the released 1.x bridge facade.
 pub enum ShutdownError {
+    /// Shutdown did not finish before the supplied deadline.
     #[error("shutdown did not complete within {timeout:?}")]
-    TimedOut { timeout: Duration },
+    TimedOut {
+        /// Deadline that elapsed while waiting for shutdown.
+        timeout: Duration,
+    },
+    /// Final flush failed, although shutdown still completed.
     #[error("final flush failed; the logger was still shut down: {diagnostic}")]
     FinalFlush {
+        /// Details about the final flush failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// A helper thread could not be started for shutdown.
     #[error("could not start the shutdown helper thread: {diagnostic}")]
     HelperSpawn {
+        /// Details about the helper startup failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// The shutdown helper ended without publishing a result.
     #[error("the shutdown helper thread ended without a result: {diagnostic}")]
     HelperLost {
+        /// Details about the missing helper result.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+/// Failure while admitting an event through the released 1.x bridge facade.
 pub enum EmitError {
+    /// A producer field key could not be represented safely.
     #[error("invalid field {raw_key:?}: {reason}")]
     InvalidField {
+        /// Original producer-supplied field key.
         raw_key: String,
+        /// Reason the field key was rejected.
         reason: crate::FieldKeyError,
     },
+    /// The assembled event failed validation.
     #[error("invalid event: {diagnostic}")]
     InvalidEvent {
+        /// Details about the invalid event.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// The writer queue had no capacity for this event.
     #[error("writer queue is full: {diagnostic}")]
     QueueFull {
+        /// Details about queue saturation.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// The writer could not accept more events.
     #[error("writer is degraded: {diagnostic}")]
     WriterDegraded {
+        /// Details about the writer failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// Logger shutdown exceeded its deadline during admission.
     #[error("logger shutdown timed out: {diagnostic}")]
     ShutdownTimedOut {
+        /// Details about the shutdown timeout.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
+    /// The bridge no longer accepts events.
     #[error("logger is not running: {phase:?}")]
-    NotRunning { phase: crate::LifecyclePhase },
+    NotRunning {
+        /// Lifecycle phase observed when admission was rejected.
+        phase: crate::LifecyclePhase,
+    },
+    /// Emission re-entered the guarded logging path.
     #[error("reentrant emission")]
     Reentrant,
+    /// A logger callback panicked and was contained.
     #[error("logger callback panicked")]
     Panicked,
 }
 
 impl InitError {
+    /// Returns the stable code associated with this initialization failure.
     #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
@@ -129,6 +187,7 @@ impl InitError {
         }
     }
 
+    /// Returns recovery guidance for this initialization failure.
     #[must_use]
     pub fn remediation(&self) -> Remediation {
         match self {
@@ -153,6 +212,7 @@ impl InitError {
 }
 
 impl FlushError {
+    /// Returns the stable code associated with this flush failure.
     #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
@@ -165,6 +225,7 @@ impl FlushError {
         }
     }
 
+    /// Returns recovery guidance for this flush failure.
     #[must_use]
     pub fn remediation(&self) -> Remediation {
         match self {
@@ -191,6 +252,7 @@ impl FlushError {
 }
 
 impl ShutdownError {
+    /// Returns the stable code associated with this shutdown failure.
     #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
@@ -201,6 +263,7 @@ impl ShutdownError {
         }
     }
 
+    /// Returns recovery guidance for this shutdown failure.
     #[must_use]
     pub fn remediation(&self) -> Remediation {
         match self {
@@ -220,6 +283,7 @@ impl ShutdownError {
 }
 
 impl EmitError {
+    /// Returns the stable code associated with this admission failure.
     #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
@@ -234,6 +298,7 @@ impl EmitError {
         }
     }
 
+    /// Returns recovery guidance for this admission failure.
     #[must_use]
     pub fn remediation(&self) -> Remediation {
         match self {
@@ -258,6 +323,7 @@ impl EmitError {
 }
 
 #[derive(Debug, Clone)]
+/// Cloneable, non-owning control for the installed released 1.x bridge.
 pub struct LogControl(control::LogControl);
 
 impl LogControl {
