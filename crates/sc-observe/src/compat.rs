@@ -116,8 +116,8 @@ impl Observability {
     ///
     /// # Panics
     ///
-    /// Panics if the attached logger encounters a poisoned internal mutex while
-    /// flushing its registered sinks.
+    /// Panics if the runtime's internal logger-state mutex is poisoned, including
+    /// while waiting for an in-progress shutdown to finish.
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
@@ -134,8 +134,9 @@ impl Observability {
     ///
     /// # Panics
     ///
-    /// Panics if the attached logger encounters a poisoned internal mutex while
-    /// flushing sinks or updating query/follow health during shutdown.
+    /// Panics if the runtime's internal logger-state mutex is poisoned. It also
+    /// resumes panics from logger shutdown, including panics from poisoned
+    /// writer-snapshot or query-health mutexes.
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
