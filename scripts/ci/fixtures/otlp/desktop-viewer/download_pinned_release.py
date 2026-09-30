@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download and verify the release selected by config-agent for CI probes."""
+"""Download and verify the viewer release pinned by the checked-in manifest."""
 
 from __future__ import annotations
 
