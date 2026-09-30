@@ -119,7 +119,10 @@ impl From<LoggerBuilder> for CanonicalLoggerBuilder {
 
 impl LoggerBuilder {
     /// Creates a 1.x builder with the released initialization error wrapper.
-    #[deprecated(since = "1.4.0", note = "Use v2::LoggerBuilder::new instead.")]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use LoggerBuilder::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         CanonicalLoggerBuilder::new(config)
             .map(Self::from)
@@ -154,7 +157,6 @@ impl LoggerBuilder {
     ///
     /// Panics if the writer runtime cannot start, preserving the released
     /// infallible builder contract.
-    #[deprecated(since = "1.4.0", note = "Use v2::LoggerBuilder::build instead.")]
     pub fn build(self) -> Logger<Running> {
         Logger::from(
             self.inner
@@ -218,7 +220,10 @@ impl Logger<Running> {
     }
 
     /// Starts a 1.x builder with the released initialization error wrapper.
-    #[deprecated(since = "1.4.0", note = "Use v2::Logger::builder instead.")]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::builder_typed(); see migrate-error-api.md."
+    )]
     pub fn builder(config: LoggerConfig) -> Result<LoggerBuilder, InitError> {
         LoggerBuilder::new(config)
     }
@@ -229,7 +234,10 @@ impl Logger<Running> {
     }
 
     /// Creates a logger with the retained 1.x initialization error wrapper.
-    #[deprecated(since = "1.4.0", note = "Use v2::Logger::new instead.")]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         CanonicalLogger::new(config)
             .map(Self::from)
@@ -237,10 +245,6 @@ impl Logger<Running> {
     }
 
     /// Creates a logger and level owner with the retained 1.x error wrapper.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use v2::Logger::new_with_level_owner instead."
-    )]
     pub fn new_with_level_owner(config: LoggerConfig) -> Result<(Self, LevelOwner), InitError> {
         CanonicalLogger::new_with_level_owner(config)
             .map(|(logger, owner)| (Self::from(logger), owner))
@@ -264,7 +268,10 @@ impl Logger<Running> {
     }
 
     /// Validates, redacts, and blocks for released queue admission.
-    #[deprecated(since = "1.4.0", note = "Use v2::Logger::log instead.")]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::log_typed(); see migrate-error-api.md."
+    )]
     pub fn log(&self, event: LogEvent) -> Result<(), LogError> {
         self.inner.log(event).map_err(legacy_log)
     }
@@ -276,7 +283,10 @@ impl Logger<Running> {
     }
 
     /// Attempts non-blocking queue admission using 1.x errors.
-    #[deprecated(since = "1.4.0", note = "Use v2::Logger::try_log instead.")]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::try_log_typed(); see migrate-error-api.md."
+    )]
     pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError> {
         self.try_log_with_outcome(event).map(|_| ())
     }
@@ -289,7 +299,7 @@ impl Logger<Running> {
     /// Attempts non-blocking admission and reports filtering using 1.x errors.
     #[deprecated(
         since = "1.4.0",
-        note = "Use v2::Logger::try_log_with_outcome instead."
+        note = "Use Logger::try_log_with_outcome_typed(); see migrate-error-api.md."
     )]
     pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, TryLogError> {
         self.inner
@@ -317,7 +327,10 @@ impl Logger<Running> {
     }
 
     /// Flushes the shared writer through the released typed failure.
-    #[deprecated(since = "1.4.0", note = "Use v2::Logger::flush instead.")]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::flush_typed(); see migrate-error-api.md."
+    )]
     #[expect(
         deprecated,
         reason = "the released 1.x method retains its deprecated error wrapper"
