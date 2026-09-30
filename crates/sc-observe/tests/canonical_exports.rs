@@ -2,9 +2,14 @@
 
 use std::path::PathBuf;
 
+use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::{ServiceName, ToolName};
 use sc_observe::v2::{
     FlushError, InitError, Observability, ObservabilityBuilder, ObservabilityConfig, ShutdownError,
+};
+use sc_observe::{
+    Observability as LegacyObservability, ObservabilityBuilder as LegacyBuilder,
+    ObservabilityConfig as LegacyConfig,
 };
 
 fn requires_send_sync<T: Send + Sync>() {}
@@ -22,4 +27,18 @@ fn canonical_observe_exports_have_real_public_signatures() {
     let _: fn(&Observability) -> Result<(), ShutdownError> = Observability::shutdown;
 
     requires_send_sync::<Observability>();
+}
+
+#[test]
+fn released_typed_helpers_keep_their_public_signatures() {
+    let _: fn(ToolName, PathBuf) -> Result<LegacyConfig, InitFailure> =
+        LegacyConfig::default_for_typed;
+    let _: fn(&LegacyConfig) -> Result<ServiceName, InitFailure> = LegacyConfig::service_name_typed;
+    let _: fn(LegacyConfig) -> Result<LegacyObservability, InitFailure> =
+        LegacyObservability::new_typed;
+    let _: fn(&LegacyObservability) -> Result<(), FlushFailure> = LegacyObservability::flush_typed;
+    let _: fn(&LegacyObservability) -> Result<(), ShutdownFailure> =
+        LegacyObservability::shutdown_typed;
+    let _: fn(LegacyBuilder) -> Result<LegacyObservability, InitFailure> =
+        LegacyBuilder::build_typed;
 }
