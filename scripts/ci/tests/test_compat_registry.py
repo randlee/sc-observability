@@ -1,4 +1,5 @@
 """Focused fixture coverage for compatibility registry signature validation."""
+import os
 import subprocess
 import sys
 import tempfile
@@ -192,6 +193,13 @@ class CompatibilitySourceBoundaryTests(unittest.TestCase):
             self.validate(relative, contents,
                           {"deprecated_owner_exceptions": [relative]}, {relative: ("new",)})
 
+    def test_new_same_line_owner_before_baseline_named_item_is_rejected(self):
+        relative = "crates/example/src/lib.rs"
+        contents = "#[deprecated] pub fn brand_new() {}\npub fn max_age_days() {}\n"
+        with self.assertRaisesRegex(ValueError, "exceeds v1.4.1 baseline: .*: brand_new"):
+            self.validate(
+                relative, contents, {"deprecated_owner_exceptions": [relative]}, {relative: ("max_age_days",)})
+
     def test_exception_without_baseline_is_rejected(self):
         relative = "crates/example/src/runtime.rs"
         with self.assertRaisesRegex(ValueError, "exception has no v1.4.1 baseline"):
@@ -228,12 +236,22 @@ class DeprecatedOwnerNameTests(unittest.TestCase):
             "pub struct Config {\n    #[deprecated]\n    pub max_age_days: u32,\n}\n")
         self.assertEqual(deprecated_owner_names(contents), ["IdentityError", "max_age_days"])
 
+    def test_same_line_owner_mid_file_is_taken_from_the_attribute_line(self):
+        contents = "#[deprecated] pub fn brand_new() {}\npub fn max_age_days() {}\n"
+        self.assertEqual(deprecated_owner_names(contents), ["brand_new"])
+
+    def test_same_line_owner_at_end_of_file_is_taken_from_the_attribute_line(self):
+        contents = "pub fn current() {}\n#[deprecated(note = \"use v2\")] pub struct Legacy;"
+        self.assertEqual(deprecated_owner_names(contents), ["Legacy"])
+
     def test_recorded_baseline_matches_pinned_release_source(self):
         for relative, names in DEPRECATED_OWNER_BASELINE.items():
-            source = baseline_source(relative)
-            if source is None:
-                self.skipTest(f"pinned commit {BASELINE_COMMIT} is not in this clone")
             with self.subTest(relative=relative):
+                source = baseline_source(relative)
+                if source is None:
+                    if os.environ.get("CI"):
+                        self.fail(f"pinned commit {BASELINE_COMMIT} is not in this CI clone: {relative}")
+                    self.skipTest(f"pinned commit {BASELINE_COMMIT} is not in this local clone")
                 self.assertEqual(deprecated_owner_names(source), list(names))
 
 
