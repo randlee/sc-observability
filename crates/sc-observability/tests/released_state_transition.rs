@@ -24,8 +24,8 @@ use sc_observability::{
 use sc_observability_types::LevelFilter;
 use sc_observability_types::v2::FailureClassification;
 use sc_observability_types::{
-    ActionName, OBSERVATION_ENVELOPE_VERSION, ProcessIdentity, SchemaVersion, StateName,
-    StateTransition, TargetCategory, Timestamp,
+    ActionName, EntityId, OBSERVATION_ENVELOPE_VERSION, ProcessIdentity, Remediation,
+    SchemaVersion, StateName, StateTransition, TargetCategory, Timestamp, ValueValidationError,
 };
 
 const INVALID_ID: &str = "entity invalid";
@@ -97,6 +97,17 @@ fn assert_event_validation(error: &EventError) {
         error.failure_classification(),
         FailureClassification::validation("event")
     );
+}
+
+fn retained_validation_cause(error: &EventError) -> &ValueValidationError {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(link) = current {
+        if let Some(cause) = link.downcast_ref::<ValueValidationError>() {
+            return cause;
+        }
+        current = link.source();
+    }
+    panic!("entity rejection must retain its ValueValidationError: {error:?}");
 }
 
 #[test]
@@ -287,4 +298,53 @@ fn stored_invalid_entity_id_still_decodes_on_readback() {
             .len(),
         1
     );
+}
+
+#[test]
+fn v2_entity_rejection_retains_the_distinct_validation_cause() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let logger = CanonicalLogger::new(config(&root)).expect("logger");
+    let empty = logger.log(event(Some(""))).expect_err("empty entity_id");
+    let grammar = logger
+        .log(event(Some(INVALID_ID)))
+        .expect_err("entity_id outside the identifier grammar");
+
+    for error in [&empty, &grammar] {
+        assert_event_validation(error);
+        let diagnostic = error.diagnostic();
+        assert_eq!(
+            diagnostic.code,
+            sc_observability::error_codes::LOGGER_INVALID_EVENT
+        );
+        assert_eq!(
+            diagnostic.message,
+            "log event state transition entity_id is invalid"
+        );
+        assert_eq!(
+            diagnostic.remediation,
+            Remediation::recoverable(
+                "emit a valid entity_id or omit it",
+                ["rebuild the state transition before emitting"],
+            )
+        );
+    }
+    let empty_cause = retained_validation_cause(&empty);
+    let grammar_cause = retained_validation_cause(&grammar);
+    assert_eq!(empty_cause, &EntityId::new("").expect_err("empty id"));
+    assert_eq!(
+        grammar_cause,
+        &EntityId::new(INVALID_ID).expect_err("id with a space")
+    );
+    assert_ne!(empty_cause, grammar_cause);
+    assert_eq!(v2_count(&logger), 0, "rejected events are never queued");
+
+    let root_dir = tempfile::tempdir().expect("tempdir");
+    let released = Logger::new(config(&root_dir)).expect("logger");
+    released
+        .log(event(Some("")))
+        .expect("root accepts an empty id");
+    released
+        .log(event(Some(INVALID_ID)))
+        .expect("root accepts an id outside the grammar");
+    assert_eq!(root_count(&released), 2);
 }

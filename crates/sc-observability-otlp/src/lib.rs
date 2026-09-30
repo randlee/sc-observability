@@ -532,7 +532,7 @@ impl RuntimeTelemetry {
         Ok(())
     }
 
-    pub(crate) fn buffer_log(&self, event: &LogEvent) {
+    fn buffer_log(&self, event: &LogEvent) {
         self.runtime
             .lock()
             .expect("telemetry runtime poisoned")
@@ -1001,14 +1001,15 @@ fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
     };
     sc_observability_types::EntityId::new(entity_id)
         .map(|_| ())
-        .map_err(|_| {
+        .map_err(|error| {
             let failure = EventFailure::invalid_event(
                 "log event state transition entity_id is invalid",
                 Remediation::recoverable(
                     "emit a valid entity_id or omit it",
                     ["rebuild the state transition before emitting"],
                 ),
-            );
+            )
+            .source(Box::new(error));
             CanonicalTelemetryError::Event(CanonicalEventError::Validation {
                 context: failure.into_context(),
             })

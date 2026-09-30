@@ -1185,7 +1185,7 @@ enum AdmissionMode {
 }
 
 /// Validates the optional state-transition entity identifier with `EntityId`.
-pub(crate) fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
+fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
     let Some(entity_id) = event
         .state_transition
         .as_ref()
@@ -1193,7 +1193,7 @@ pub(crate) fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
     else {
         return Ok(());
     };
-    EntityId::new(entity_id).map(|_| ()).map_err(|_| {
+    EntityId::new(entity_id).map(|_| ()).map_err(|error| {
         EventFailure::invalid_event(
             "log event state transition entity_id is invalid",
             Remediation::recoverable(
@@ -1201,6 +1201,7 @@ pub(crate) fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
                 ["rebuild the state transition before emitting"],
             ),
         )
+        .source(Box::new(error))
     })
 }
 
