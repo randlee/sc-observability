@@ -246,6 +246,18 @@ class CompatiblePolicyTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, error):
                 validate_api_package_roster(self.policy(), inventory, artifacts)
 
+        policy_shape_error = (
+            'public API policy must name exactly the qualification candidate packages'
+        )
+        for name, policy_names in (
+                ('policy crates is None', None),
+                ('policy crates is not an object', ['sc-observability-log-macros'])):
+            policy = self.policy()
+            policy['crates'] = policy_names
+            with self.subTest(name=name), self.assertRaises(ValueError) as raised:
+                validate_api_package_roster(policy, valid_inventory, valid_artifacts)
+            self.assertEqual(str(raised.exception), policy_shape_error)
+
     def diff(self, *, removal='', changed='', addition=''):
         return ('Removed items from the public API\n' + (removal or '(none)') + '\n'
                 'Changed items in the public API\n' + (changed or '(none)') + '\n'
