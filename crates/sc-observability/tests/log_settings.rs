@@ -625,6 +625,12 @@ fn rejects_empty_unknown_case_and_prefix_collision() {
     )
     .unwrap_err();
     assert_eq!(unknown.code(), error_codes::LOG_UNKNOWN_KEY);
+    let empty_unknown = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_UNKNOWN", "")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(empty_unknown.code(), error_codes::LOG_UNKNOWN_KEY);
     let case = LogSettings::from_env(
         &snapshot(&[("sc_log_level", "Info")]),
         EnvPrefix::new("SC").unwrap(),
@@ -640,7 +646,7 @@ fn rejects_empty_unknown_case_and_prefix_collision() {
     ));
     assert_eq!(collision.code(), error_codes::LOG_PREFIX_COLLISION);
 
-    for error in [&empty, &unknown, &case, &collision] {
+    for error in [&empty, &unknown, &empty_unknown, &case, &collision] {
         assert!(
             error_codes::ALL.contains(&error.code()),
             "emitted code {} must be registered",
