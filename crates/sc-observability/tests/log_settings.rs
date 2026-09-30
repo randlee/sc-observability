@@ -7,7 +7,7 @@ use sc_observability::{
     EnvSnapshot, LogSettings, LogSettingsError, LogSettingsInputs, ResolvedLogSettings,
     RetainedLogPolicy, error_codes,
 };
-use sc_observability_types::{EnvPrefix, LevelFilter, ServiceName};
+use sc_observability_types::{EnvPrefix, LevelFilter, Remediation, ServiceName};
 
 fn snapshot(values: &[(&str, &str)]) -> EnvSnapshot {
     EnvSnapshot::from_pairs(
@@ -39,6 +39,63 @@ fn settings_error_codes_match_documented_stable_names() {
     for (code, expected) in codes {
         assert_eq!(code.as_str(), expected);
     }
+}
+
+#[test]
+fn settings_errors_include_actionable_recovery_steps_and_docs() {
+    let invalid_value = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_FILE", "yes")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
+    let invalid_environment = LogSettings::from_env(
+        &snapshot(&[("sc_log_level", "Info")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
+    let unknown_key = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_UNKNOWN", "x")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
+    let prefix_collision =
+        LogSettings::from_application_env(&snapshot(&[]), EnvPrefix::new("SC").unwrap())
+            .unwrap_err();
+    let resolution = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: LogSettings::default(),
+        application_env: None,
+        default_root: PathBuf::new(),
+    })
+    .unwrap_err();
+
+    let errors = [
+        invalid_value,
+        invalid_environment,
+        unknown_key,
+        prefix_collision,
+        resolution,
+    ];
+    let mut all_steps = Vec::new();
+    for error in errors {
+        let diagnostic = error.context().diagnostic();
+        assert_eq!(
+            diagnostic.docs.as_deref(),
+            Some("docs/logging/d-1-log-settings.md")
+        );
+        let Remediation::Recoverable { steps } = &diagnostic.remediation else {
+            panic!("settings errors must be recoverable");
+        };
+        assert!(!steps.steps().is_empty(), "{}", error.code());
+        all_steps.extend(steps.steps().iter().cloned());
+    }
+
+    let all_steps = all_steps.join(" ");
+    assert!(all_steps.contains("SC_LOG_ROTATION_MAX_BYTES"));
+    assert!(all_steps.contains("SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS"));
+    assert!(all_steps.contains("${prefix}_LOG_"));
+    assert!(all_steps.contains("lowercase true or false"));
+    assert!(all_steps.contains("docs/logging/d-1-log-settings.md"));
 }
 
 #[test]
