@@ -840,16 +840,16 @@
       "symbol": "sc_observability::LoggerConfig",
       "area": "core",
       "kind": "owner",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "LoggerConfig",
-      "treatment": "new_adapter",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug)] pub struct LoggerConfig { /// Stable service name attached to emitted records. pub service_name: ServiceName, /// Root directory that owns the service log tree. pub log_root: PathBuf, /// Minimum severity level emitted by the logger. pub level: LevelFilter, /// Bounded writer-thread queue capacity for admitted log records. pub queue_capacity: usize, /// Retained-log rotation, pruning, and background maintenance settings. pub retained_log_policy: RetainedLogPolicy, /// Redaction policy applied before sink fan-out. pub redaction: RedactionPolicy, /// Process identity policy for emitted records. pub process_identity: ProcessIdentityPolicy, /// Whether the built-in JSONL file sink is enabled. pub enable_file_sink: bool, /// Whether the built-in console sink is enabled. pub enable_console_sink: bool, #[cfg(test)] maintenance_test_pass_delay: Option<Duration>, #[cfg(test)] maintenance_test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>, #[cfg(test)] writer_start_should_fail: bool, }",
-      "canonical_signature": "#[derive(Debug)] pub struct LoggerConfig { /// Stable service name attached to emitted records. pub service_name: ServiceName, /// Root directory that owns the service log tree. pub log_root: PathBuf, /// Minimum severity level emitted by the logger. pub level: LevelFilter, /// Bounded writer-thread queue capacity for admitted log records. pub queue_capacity: QueueCapacity, /// Retained-log rotation, pruning, and background maintenance settings. pub retained_log_policy: RetainedLogPolicy, /// Redaction policy applied before sink fan-out. pub redaction: RedactionPolicy, /// Process identity policy for emitted records. pub process_identity: ProcessIdentityPolicy, /// Whether the built-in JSONL file sink is enabled. pub enable_file_sink: bool, /// Whether the built-in console sink is enabled. pub enable_console_sink: bool, #[cfg(test)] maintenance_test_pass_delay: Option<Duration>, #[cfg(test)] maintenance_test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>, #[cfg(test)] writer_start_should_fail: bool, }",
+      "canonical_signature": "#[derive(Debug)] pub struct LoggerConfig { /// Stable service name attached to emitted records. pub service_name: ServiceName, /// Root directory that owns the service log tree. pub log_root: PathBuf, /// Minimum severity level emitted by the logger. pub level: LevelFilter, /// Bounded writer-thread queue capacity for admitted log records. pub queue_capacity: usize, /// Retained-log rotation, pruning, and background maintenance settings. pub retained_log_policy: RetainedLogPolicy, /// Redaction policy applied before sink fan-out. pub redaction: RedactionPolicy, /// Process identity policy for emitted records. pub process_identity: ProcessIdentityPolicy, /// Whether the built-in JSONL file sink is enabled. pub enable_file_sink: bool, /// Whether the built-in console sink is enabled. pub enable_console_sink: bool, #[cfg(test)] maintenance_test_pass_delay: Option<Duration>, #[cfg(test)] maintenance_test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>, #[cfg(test)] writer_start_should_fail: bool, }",
       "obligations": [
         "signature identity: preserve LoggerConfig declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The shared LoggerConfig retains the released public field identities. LoggerBuilder validates queue_capacity through QueueCapacity::new at the build boundary before constructing the writer; no public configuration facade conversion is required.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -861,7 +861,7 @@
         "symbol": "LoggerConfig"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LoggerConfig is the shared released configuration owner, not a compatibility-only facade. QueueCapacity validation is internal to LoggerBuilder, so no configuration facade file is removable."
     },
     {
       "symbol": "sc_observability::Logger",

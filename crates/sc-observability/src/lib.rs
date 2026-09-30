@@ -518,7 +518,7 @@ pub struct LoggerConfig {
     /// Minimum severity level emitted by the logger.
     pub level: LevelFilter,
     /// Bounded writer-thread queue capacity for admitted log records.
-    pub queue_capacity: QueueCapacity,
+    pub queue_capacity: usize,
     /// Retained-log rotation, pruning, and background maintenance settings.
     pub retained_log_policy: RetainedLogPolicy,
     /// Redaction policy applied before sink fan-out.
@@ -559,7 +559,7 @@ impl LoggerConfig {
             service_name,
             log_root: resolved_log_root,
             level: LevelFilter::Info,
-            queue_capacity: QueueCapacity::default(),
+            queue_capacity: constants::DEFAULT_LOG_QUEUE_CAPACITY,
             retained_log_policy: RetainedLogPolicy::default(),
             redaction: RedactionPolicy {
                 redact_bearer_tokens: true,
@@ -1198,10 +1198,7 @@ mod tests {
         let root = temp_path("defaults");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
         assert_eq!(config.level, LevelFilter::Info);
-        assert_eq!(
-            config.queue_capacity.get(),
-            constants::DEFAULT_LOG_QUEUE_CAPACITY
-        );
+        assert_eq!(config.queue_capacity, constants::DEFAULT_LOG_QUEUE_CAPACITY);
         assert_eq!(
             config.retained_log_policy.rotation_max_bytes,
             ByteCount::from_bytes(constants::DEFAULT_ROTATION_MAX_BYTES)
@@ -1958,7 +1955,7 @@ mod tests {
     fn try_log_reports_queue_full_on_saturated_queue() {
         let root = temp_path("try-log-queue-full");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.queue_capacity = QueueCapacity::new(1).expect("positive queue capacity");
+        config.queue_capacity = 1;
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
@@ -2724,7 +2721,7 @@ mod tests {
     fn saturated_diagnostic_queue_keeps_the_level_change_committed() {
         let root = temp_path("level-diagnostic-saturation");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.queue_capacity = QueueCapacity::new(1).expect("positive queue capacity");
+        config.queue_capacity = 1;
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());

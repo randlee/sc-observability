@@ -988,7 +988,7 @@ impl<State> Logger<State> {
                 .clone()
                 .unwrap_or(WriterHealthSnapshot {
                     queue_depth: 0,
-                    queue_capacity: self.config.queue_capacity.get() as u64,
+                    queue_capacity: self.config.queue_capacity as u64,
                     queue_high_water_mark: 0,
                     queue_full_drops_total: 0,
                     writer_state: WriterState::Stopped,

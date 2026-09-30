@@ -33,7 +33,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-use sc_observability::{Logger, LoggerConfig, QueueCapacity, RetainedLogPolicy, Running, Stopped};
+use sc_observability::{Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
 use sc_observability_types::v2::{
     EventError, FlushError as CanonicalFlushError, InitError as CanonicalInitError,
     ShutdownError as CanonicalShutdownError, SubscriberError,
@@ -255,8 +255,8 @@ impl ObservabilityConfig {
 
     fn logger_config(&self) -> Result<LoggerConfig, CanonicalInitError> {
         let mut config = LoggerConfig::default_for(self.service_name_v2()?, self.log_root.clone());
-        config.queue_capacity =
-            QueueCapacity::new(self.queue_capacity).ok_or_else(|| CanonicalInitError::Runtime {
+        if self.queue_capacity == 0 {
+            return Err(CanonicalInitError::Runtime {
                 context: Box::new(ErrorContext::new(
                     sc_observability::error_codes::LOGGER_INIT_FAILED,
                     "queue capacity must be greater than zero",
@@ -265,7 +265,9 @@ impl ObservabilityConfig {
                         ["increase queue_capacity to at least 1"],
                     ),
                 )),
-            })?;
+            });
+        }
+        config.queue_capacity = self.queue_capacity;
         config.retained_log_policy = self.retained_log_policy;
         Ok(config)
     }
@@ -1242,7 +1244,7 @@ mod tests {
 
         let logger_config = config.logger_config().expect("logger config");
 
-        assert_eq!(logger_config.queue_capacity.get(), 2048);
+        assert_eq!(logger_config.queue_capacity, 2048);
     }
 
     #[test]

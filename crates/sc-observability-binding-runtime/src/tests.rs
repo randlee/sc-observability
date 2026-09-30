@@ -74,7 +74,7 @@ fn config() -> (tempfile::TempDir, sc_observability::LoggerConfig) {
         root.path().into(),
     );
     config.enable_console_sink = false;
-    config.queue_capacity = sc_observability::QueueCapacity::new(4096).expect("positive capacity");
+    config.queue_capacity = 4096;
     config.process_identity = native::ProcessIdentityPolicy::Fixed {
         hostname: Some("host".into()),
         pid: Some(123),
@@ -685,8 +685,7 @@ fn core_with_sink(
 
 fn core_admission_and_flush_faults() {
     let (_root, mut logger_config) = config();
-    logger_config.queue_capacity =
-        sc_observability::QueueCapacity::new(1).expect("positive capacity");
+    logger_config.queue_capacity = 1;
     let gate = Gate::new();
     let _release = Release(gate.clone());
     let (owner, backend) = core_with_sink(
