@@ -30,10 +30,9 @@ use sc_observability_types::{
 
 /// Carries one validated 2.0 metric into the OTLP implementation layer.
 ///
-/// Histogram structure and interval semantics are type-owned. Projection is
-/// intentionally an identity transfer: rebuilding a scalar metric here would
-/// lose histogram buckets or duplicate `MetricModelError` validation already
-/// performed by `MetricRecord::try_new` and deserialization.
+/// This is an identity stub until D.18 supplies the exporter conversion body.
+/// It does not itself establish field-preservation behavior; the validated
+/// metric model owns that contract today.
 #[allow(
     dead_code,
     reason = "D.18 activates this staged 2.0 projector after the canonical re-export switch"
@@ -44,10 +43,9 @@ pub(crate) fn project_v2_metric(metric: V2MetricRecord) -> V2MetricRecord {
 
 /// Carries one validated 2.0 span signal into the OTLP implementation layer.
 ///
-/// Span lifecycle values are already typestate-validated by the neutral model.
-/// Projection therefore preserves their trace flags, kind, links, status,
-/// timing, attributes, and events until [`crate::assembly::V2SpanAssembler`]
-/// establishes the completed-span invariant.
+/// This is an identity stub until D.18 supplies the exporter conversion body.
+/// The validated span model owns lifecycle and field behavior today; this
+/// function only carries its input to the staged handoff.
 #[allow(
     dead_code,
     reason = "D.18 activates this staged 2.0 projector after the canonical re-export switch"
@@ -422,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn v2_span_projection_preserves_lifecycle_fields_without_legacy_conversion() {
+    fn v2_span_identity_stub_returns_each_signal_input() {
         let trace = trace_context();
         let link = SpanLink::new(
             TraceId::new("fedcba9876543210fedcba9876543210").expect("valid linked trace"),
@@ -460,19 +458,11 @@ mod tests {
 
         assert_eq!(projected_started, SpanSignal::Started(started));
         assert_eq!(projected_event, SpanSignal::Event(event));
-        assert_eq!(projected_ended, SpanSignal::Ended(ended.clone()));
-        let SpanSignal::Ended(projected) = projected_ended else {
-            panic!("ended span must remain ended through projection");
-        };
-        assert_eq!(projected.kind(), SpanKind::Server);
-        assert_eq!(projected.trace().flags.bits(), 0xa5);
-        assert_eq!(projected.links().len(), 1);
-        assert_eq!(projected.status(), SpanStatus::Ok);
-        assert_eq!(projected.duration_ms(), DurationMs::from(9));
+        assert_eq!(projected_ended, SpanSignal::Ended(ended));
     }
 
     #[test]
-    fn v2_metric_projection_preserves_gauge_without_scalar_conversion() {
+    fn v2_metric_identity_stub_returns_gauge_input() {
         let metric = metric(MetricValue::Gauge(
             FiniteF64::new(12.5).expect("finite gauge"),
         ));
@@ -481,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn v2_metric_projection_preserves_sum_temporality_and_start_time() {
+    fn v2_metric_identity_stub_returns_sum_input() {
         let start = Timestamp::UNIX_EPOCH;
         let end = one_second_after_epoch();
         let metric = MetricRecord::try_new(
@@ -501,7 +491,7 @@ mod tests {
     }
 
     #[test]
-    fn v2_metric_projection_preserves_every_histogram_bucket_and_interval() {
+    fn v2_metric_identity_stub_returns_histogram_input() {
         let start = Timestamp::UNIX_EPOCH;
         let end = one_second_after_epoch();
         let point = HistogramPoint::try_new(
@@ -523,24 +513,6 @@ mod tests {
         )
         .expect("validated histogram metric");
 
-        let projected = project_v2_metric(metric);
-        let MetricValue::Histogram {
-            point: projected_point,
-            temporality,
-            start_time,
-        } = projected.value()
-        else {
-            panic!("histogram must not be replaced with a scalar placeholder");
-        };
-        assert_eq!(projected_point, &point);
-        assert_eq!(
-            projected_point.explicit_bounds(),
-            &[FiniteF64::new(1.0).unwrap(), FiniteF64::new(10.0).unwrap()]
-        );
-        assert_eq!(projected_point.bucket_counts(), &[2, 3, 5]);
-        assert_eq!(projected_point.count(), 10);
-        assert!((projected_point.sum().get() - 37.5).abs() < f64::EPSILON);
-        assert_eq!(*temporality, AggregationTemporality::Delta);
-        assert_eq!(*start_time, start);
+        assert_eq!(project_v2_metric(metric.clone()), metric);
     }
 }
