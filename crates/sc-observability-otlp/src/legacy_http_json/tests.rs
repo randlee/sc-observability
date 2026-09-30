@@ -187,7 +187,12 @@ const RETRY_OBSERVER_NEGATIVE_WINDOW: Duration = Duration::from_millis(100);
 fn accept_retry_observer_request(listener: &TcpListener, deadline: Instant) -> std::net::TcpStream {
     loop {
         match listener.accept() {
-            Ok((stream, _)) => return stream,
+            Ok((stream, _)) => {
+                stream
+                    .set_nonblocking(false)
+                    .expect("restore blocking mode for accepted retry-observer socket");
+                return stream;
+            }
             Err(error) if error.kind() == ErrorKind::WouldBlock => {
                 assert!(
                     Instant::now() < deadline,
