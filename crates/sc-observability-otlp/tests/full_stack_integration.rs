@@ -13,13 +13,13 @@ use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
     legacy_log_projector, legacy_metric_projector, legacy_span_projector,
 };
+use sc_observability_types::v2::ProjectionError;
 use sc_observability_types::{
     ActionName, Diagnostic, DiagnosticInfo, DurationMs, EntityId, ErrorCode, Level, LogEvent,
     LogProjector, MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
-    ObservationFilter, OutcomeLabel, ProcessIdentity, ProjectionError, Remediation, SchemaVersion,
-    ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
-    StateTransition, TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext,
-    TraceId,
+    ObservationFilter, OutcomeLabel, ProcessIdentity, Remediation, SchemaVersion, ServiceName,
+    SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, StateTransition,
+    TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -366,7 +366,7 @@ fn enabled_sdk_telemetry_awaits_shared_lifecycle_and_closes_admission() {
 
         assert!(matches!(
             telemetry.emit_log(&log_event(service_name(), "after-shutdown")),
-            Err(sc_observability_types::TelemetryError::Shutdown { .. })
+            Err(sc_observability_types::v2::TelemetryError::Shutdown { .. })
         ));
     });
 }

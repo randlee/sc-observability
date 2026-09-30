@@ -10,12 +10,13 @@ use sc_observability_types::typed::{
     ClassifiedError, ProjectionFailureKind, SubscriberFailureKind, typed_log_projector,
     typed_metric_projector, typed_span_projector, typed_subscriber,
 };
+use sc_observability_types::v2::{ProjectionError, SubscriberError};
 use sc_observability_types::{
     ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, MetricKind, MetricName,
-    MetricUnit, Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity, ProjectionError,
+    MetricUnit, Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity,
     ProjectionRegistration, Remediation, SchemaVersion, ServiceName, SpanId, SpanProjector,
-    SpanRecord, SpanSignal, SpanStarted, SubscriberError, SubscriberRegistration, TargetCategory,
-    Timestamp, TraceContext, TraceId,
+    SpanRecord, SpanSignal, SpanStarted, SubscriberRegistration, TargetCategory, Timestamp,
+    TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -34,7 +35,7 @@ impl ObservationSubscriber<AgentEvent> for RecordingSubscriber {
     fn observe(
         &self,
         _observation: &Observation<AgentEvent>,
-    ) -> Result<(), sc_observability_types::SubscriberError> {
+    ) -> Result<(), sc_observability_types::v2::SubscriberError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(())
     }
@@ -49,7 +50,7 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
     fn project_logs(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
+    ) -> Result<Vec<LogEvent>, sc_observability_types::v2::ProjectionError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(vec![LogEvent {
             version: SchemaVersion::new(
@@ -90,7 +91,7 @@ impl SpanProjector<AgentEvent> for RecordingSpanProjector {
     fn project_spans(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<SpanSignal>, sc_observability_types::ProjectionError> {
+    ) -> Result<Vec<SpanSignal>, sc_observability_types::v2::ProjectionError> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(vec![SpanSignal::Started(SpanRecord::<SpanStarted>::new(
             Timestamp::UNIX_EPOCH,
@@ -187,8 +188,10 @@ impl sc_observability_types::MetricProjector<AgentEvent> for RecordingMetricProj
     fn project_metrics(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<sc_observability_types::MetricRecord>, sc_observability_types::ProjectionError>
-    {
+    ) -> Result<
+        Vec<sc_observability_types::MetricRecord>,
+        sc_observability_types::v2::ProjectionError,
+    > {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(vec![sc_observability_types::MetricRecord {
             timestamp: Timestamp::UNIX_EPOCH,

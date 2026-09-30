@@ -351,7 +351,7 @@ fn observation_adapter_preserves_custom_and_cross_family_context() {
                 .expect_err("legacy adapter should preserve failure");
         assert!(matches!(
             &legacy_error,
-            sc_observability_types::SubscriberError::Subscriber { .. }
+            sc_observability_types::v2::SubscriberError::Subscriber { .. }
         ));
         assert_eq!(legacy_error.context().diagnostic().code, code);
         assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -408,8 +408,8 @@ macro_rules! projector_context_case {
             fn $method(
                 &self,
                 _: &Observation<ObservationPayload>,
-            ) -> Result<Vec<$output>, sc_observability_types::ProjectionError> {
-                Err(sc_observability_types::ProjectionError::Projection {
+            ) -> Result<Vec<$output>, sc_observability_types::v2::ProjectionError> {
+                Err(sc_observability_types::v2::ProjectionError::Projection {
                     context: self.fail(),
                 })
             }
@@ -458,7 +458,7 @@ macro_rules! projector_context_case {
                         let error = adapter.$method(&observation()).expect_err("legacy failure");
                         assert!(matches!(
                             &error,
-                            sc_observability_types::ProjectionError::Projection { .. }
+                            sc_observability_types::v2::ProjectionError::Projection { .. }
                         ));
                         ProjectionFailure::from_context(error.into_context())
                     } else {

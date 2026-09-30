@@ -45,26 +45,17 @@ pub use follow::LogFollowSession;
 #[doc(inline)]
 pub use jsonl_reader::JsonlLogReader;
 #[doc(inline)]
+pub use sc_observability_types::v2::{EventError, LogSinkError};
+#[doc(inline)]
 pub use sc_observability_types::{
     ActionName, AdmissionOutcome, ChangeDiagnostic, Diagnostic, DiagnosticSummary, ErrorCode,
-    ErrorContext, EventError, FileCount, Level, LevelChange, LevelChangeError, LevelChangeSource,
-    LevelState, LogEvent, LogQuery, LogSinkError, LogSnapshot, LoggingHealthReport,
-    LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
-    OBSERVATION_ENVELOPE_VERSION, OperationDiagnostic, OutcomeLabel, ProcessIdentity, Remediation,
-    SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp,
-    WriterState,
+    ErrorContext, FileCount, Level, LevelChange, LevelChangeError, LevelChangeSource, LevelState,
+    LogEvent, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
+    MaintenanceHealthReport, MaintenanceWorkerState, OBSERVATION_ENVELOPE_VERSION,
+    OperationDiagnostic, OutcomeLabel, ProcessIdentity, Remediation, SchemaVersion, ServiceName,
+    SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp, WriterState,
 };
 
-/// Staged 2.0 error contracts.
-///
-/// The crate-root names remain the retained 1.x compatibility surface until
-/// the integration sprint activates the major-version API. New consumers can
-/// use this namespace to match the discriminated errors without losing the
-/// original diagnostic context or typed source.
-#[allow(
-    deprecated,
-    reason = "the facade retains legacy error names in its public compatibility surface"
-)]
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
@@ -78,11 +69,11 @@ pub use sinks::RetainedSinkFaultInjector;
 #[doc(inline)]
 pub use sinks::{ConsoleSink, JsonlFileSink};
 
-/// Opt-in canonical logging facade for the compatible 1.x transition.
+/// Opt-in canonical logging facade for the compatible transition.
 ///
-/// The released root remains the compatibility surface. This module exposes
-/// the same production implementation under a stable opt-in namespace without
-/// creating a second logger runtime.
+/// This namespace mirrors the root production implementation without creating
+/// a second logger runtime. D23 will add released-surface compatibility
+/// wrappers at the legacy boundary.
 pub mod v2 {
     #[doc(inline)]
     pub use crate::{
@@ -686,10 +677,11 @@ mod tests {
     use crate::runtime::LevelLifecycle;
     use crate::sinks::ConsoleWriter;
     use crate::typed::{legacy_sink, typed_sink};
+    use sc_observability_types::v2::InitError;
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, ErrorContext, InitError, Level, LogEvent, LogOrder,
-        LogQuery, LogSnapshot, ProcessIdentity, ProcessIdentityPolicy, QueryError,
-        QueryHealthState, Remediation, SinkName, TargetCategory, Timestamp,
+        ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, LogOrder, LogQuery,
+        LogSnapshot, ProcessIdentity, ProcessIdentityPolicy, QueryError, QueryHealthState,
+        Remediation, SinkName, TargetCategory, Timestamp,
     };
     use serde_json::{Map, json};
     use std::fs::{self, OpenOptions};
