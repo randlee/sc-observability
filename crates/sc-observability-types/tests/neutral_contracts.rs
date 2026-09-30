@@ -301,8 +301,8 @@ fn cloned_canonical_error_preserves_source_identity() {
     let cloned = original.clone();
     let original_source = std::error::Error::source(original.context())
         .expect("original context must retain its source");
-    let cloned_source = std::error::Error::source(cloned.context())
-        .expect("cloned context must retain its source");
+    let cloned_source =
+        std::error::Error::source(cloned.context()).expect("cloned context must retain its source");
 
     assert!(std::ptr::eq(original_source, cloned_source));
     assert_eq!(original_source.to_string(), "sentinel source");
