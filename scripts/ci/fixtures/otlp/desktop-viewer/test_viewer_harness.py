@@ -75,6 +75,29 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
                     proc.terminate()
                     proc.wait(timeout=5)
 
+    def test_stop_refuses_database_recorded_outside_state_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / "state"
+            state.mkdir()
+            outside_database = root / "user-data.duckdb"
+            outside_database.write_text("keep")
+            proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)",
+                                     str(outside_database)])
+            try:
+                (state / "viewer.pid").write_text(f"{proc.pid}\n")
+                (state / "viewer.json").write_text(json.dumps({"database": str(outside_database)}))
+                with self.assertRaisesRegex(harness.HarnessError, "refusing cleanup"):
+                    harness.stop(argparse.Namespace(state_dir=str(state), timeout=5,
+                                                    remove_state=True))
+                self.assertIsNone(proc.poll(), "refusal must happen before signalling the recorded PID")
+                self.assertEqual(outside_database.read_text(), "keep")
+                self.assertTrue((state / "viewer.pid").exists())
+            finally:
+                if proc.poll() is None:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+
     def test_ci_always_stops_an_instance_after_probe_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             state = Path(temp) / "state"
