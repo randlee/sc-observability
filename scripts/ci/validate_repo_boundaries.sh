@@ -13,7 +13,11 @@ import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
 sys.path.insert(0, str(Path('scripts/ci').resolve()))
 from release_manifest import workspace_members
-from compatibility_registry import has_placeholder_baseline_signature, is_compat_source_path
+from compatibility_registry import (
+    has_placeholder_baseline_signature,
+    is_allowed_compat_reference_source,
+    is_compat_source_path,
+)
 
 def is_release_manifest(path: Path, workspace_toml: Path):
     data = load_toml(path)
@@ -189,9 +193,11 @@ for path in source_files:
     relative = path.relative_to(root).as_posix()
     text = path.read_text(encoding="utf-8")
     is_compat_source = is_compat_source_path(relative)
-    if not is_compat_source and compat_reference.search(text):
-        if path.name != "lib.rs" or relative not in root_reexport_exceptions:
-            raise SystemExit(f"canonical source imports compatibility module: {relative}")
+    is_allowed_compat_reference = is_allowed_compat_reference_source(
+        relative, root_reexport_exceptions
+    )
+    if not is_allowed_compat_reference and compat_reference.search(text):
+        raise SystemExit(f"canonical source imports compatibility module: {relative}")
     if "#[deprecated" in text and not is_compat_source and relative not in deprecated_exceptions:
         raise SystemExit(f"deprecated owner is outside compat without registry exception: {relative}")
 

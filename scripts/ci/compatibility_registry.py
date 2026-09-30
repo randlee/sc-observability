@@ -16,3 +16,13 @@ def is_compat_source_path(relative_path: str) -> bool:
         or normalized.endswith("/src/compat.rs")
         or "/src/compat/" in f"/{normalized}"
     )
+
+
+def is_allowed_compat_reference_source(
+    relative_path: str, root_reexport_exceptions: set[str]
+) -> bool:
+    """Return whether a source path may reference a compatibility module."""
+    normalized = relative_path.lstrip("/")
+    return is_compat_source_path(normalized) or (
+        normalized.endswith("/lib.rs") and normalized in root_reexport_exceptions
+    )
