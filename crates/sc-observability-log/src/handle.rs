@@ -1047,7 +1047,7 @@ mod tests {
     }
 
     #[test]
-    fn static_level_availability_covers_every_filter_pair() {
+    fn log_level_rank_ordering_covers_every_filter_pair() {
         let filters = [
             LevelFilter::Trace,
             LevelFilter::Debug,
