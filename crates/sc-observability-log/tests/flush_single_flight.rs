@@ -66,11 +66,11 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
     let first = control.flush(STUCK_FLUSH_TIMEOUT);
     let first_error = first.unwrap_err();
     assert!(
-        matches!(first_error, FlushError::Drain { .. }),
+        matches!(first_error, FlushError::TimedOut { .. }),
         "{first_error:?}"
     );
     assert_eq!(
-        first_error.diagnostic().code,
+        first_error.code(),
         error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT
     );
 
@@ -78,13 +78,13 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
     for _ in 0..3 {
         let started = Instant::now();
         let retry = guard.flush(RETRY_TIMEOUT);
-        assert!(matches!(retry, Err(FlushError::Drain { .. })), "{retry:?}");
+        assert!(matches!(retry, Err(FlushError::InProgress)), "{retry:?}");
         assert!(
             started.elapsed() < RETRY_TIMEOUT / 4,
             "InProgress must not wait for the flush timeout"
         );
         assert_eq!(
-            retry.unwrap_err().diagnostic().code,
+            retry.unwrap_err().code(),
             error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
         );
     }

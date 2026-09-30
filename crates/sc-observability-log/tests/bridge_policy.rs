@@ -148,7 +148,7 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
         .get(sc_observability_log::DropCause::InvalidEvent);
     assert!(matches!(
         control.try_log(event()),
-        Err(sc_observability_log::EmitError::InvalidEvent { .. })
+        Err(sc_observability_log::v2::EmitError::InvalidEvent { .. })
     ));
     let after = control
         .dropped_events()
@@ -164,7 +164,7 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
     let control = attachment.control();
     assert!(matches!(
         control.try_log(event()),
-        Err(sc_observability_log::EmitError::Panicked)
+        Err(sc_observability_log::v2::EmitError::Panicked)
     ));
     assert!(events.lock().expect("recording lock").is_empty());
     attachment.detach(Duration::from_secs(2)).expect("detach");
@@ -191,14 +191,14 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
     denied.target = TargetCategory::new("policy.other").expect("target");
     assert!(matches!(
         control.try_log(denied),
-        Err(sc_observability_log::EmitError::InvalidEvent { .. })
+        Err(sc_observability_log::v2::EmitError::InvalidEvent { .. })
     ));
 
     let mut oversized = event();
     oversized.message = Some("x".repeat(65));
     assert!(matches!(
         control.try_log(oversized),
-        Err(sc_observability_log::EmitError::InvalidEvent { .. })
+        Err(sc_observability_log::v2::EmitError::InvalidEvent { .. })
     ));
     assert_eq!(
         control
@@ -267,7 +267,7 @@ fn every_policy_reason_has_concrete_steps_and_facade_diagnostics() {
             error.code(),
             sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_POLICY_REJECTED
         );
-        let sc_observability_log::EmitError::InvalidEvent { diagnostic } = error else {
+        let sc_observability_log::v2::EmitError::InvalidEvent { diagnostic } = error else {
             panic!("typed diagnostic")
         };
         assert!(

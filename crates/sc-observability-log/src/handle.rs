@@ -15,15 +15,15 @@ use std::time::{Duration, Instant};
 use crate::__private::EventParts;
 use crate::health::BridgeLifecycle;
 use crate::{
-    DropCause, DroppedEvents, FlushError, ShutdownError, ShutdownOutcome, ShutdownReport,
-    UnconfirmedShutdown, health,
+    DropCause, DroppedEvents, ShutdownOutcome, ShutdownReport, UnconfirmedShutdown, health,
 };
 use sc_observability_types::v2::EventError;
+use sc_observability_types::v2::{FlushError, ShutdownError};
 
 /// A rejected submission: every failure of the guarded core maps to exactly one [`DropCause`].
 ///
 /// Implemented by `DropCause` (the facade and the macros, which discard the
-/// result) and by [`crate::EmitError`] (`LogControl::try_log`, which returns it).
+/// result) and by [`crate::v2::EmitError`] (`LogControl::try_log`, which returns it).
 pub(crate) trait Rejection: Sized {
     /// The single counter this rejection increments.
     fn drop_cause(&self) -> DropCause;
@@ -47,7 +47,7 @@ impl Rejection for DropCause {
     }
 }
 
-impl Rejection for crate::EmitError {
+impl Rejection for crate::error::EmitError {
     fn drop_cause(&self) -> DropCause {
         match self {
             Self::InvalidField { .. } | Self::InvalidEvent { .. } => DropCause::InvalidEvent,

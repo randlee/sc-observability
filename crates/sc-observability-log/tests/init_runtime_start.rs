@@ -23,9 +23,9 @@ fn coordinator_failure_returns_runtime_start_before_global_install() {
     failed.enable_console_sink = false;
     fail_next_shutdown_coordinator_reservation();
     let error = sc_observability_log::init(failed, options.clone()).unwrap_err();
-    assert!(matches!(error, InitError::Runtime { .. }));
+    assert!(matches!(error, InitError::RuntimeStart { .. }));
     assert_eq!(
-        error.diagnostic().code.as_str(),
+        error.code().as_str(),
         "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED"
     );
 

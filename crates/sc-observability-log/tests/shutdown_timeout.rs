@@ -135,16 +135,10 @@ fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
     let started = Instant::now();
     let result = guard.shutdown(SHUTDOWN_TIMEOUT);
     let error = result.unwrap_err();
-    assert!(matches!(error, ShutdownError::Timeout { .. }));
+    assert!(matches!(error, ShutdownError::TimedOut { timeout } if timeout == SHUTDOWN_TIMEOUT));
     assert_eq!(
-        error.diagnostic().code.as_str(),
+        error.code().as_str(),
         "SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT"
-    );
-    assert!(
-        error
-            .diagnostic()
-            .message
-            .contains(&format!("{SHUTDOWN_TIMEOUT:?}"))
     );
     assert!(started.elapsed() < SHUTDOWN_TIMEOUT * 10);
     assert_eq!(

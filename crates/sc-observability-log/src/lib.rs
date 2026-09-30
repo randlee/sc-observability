@@ -70,13 +70,15 @@
 //!   process identity (resolved once at `init`), trace context, redaction and
 //!   sink routing are filled by the bridge; no producer can supply them.
 //! - **Timeout versus final stop.** A shutdown that returns
-//!   [`ShutdownError::Timeout`] leaves [`LifecyclePhase::Stopping`] while a
+//!   [`ShutdownError::TimedOut`] leaves [`LifecyclePhase::Stopping`] while a
 //!   detached helper finishes; late completion is observable as
 //!   [`LifecyclePhase::Stopped`]. `Stopped` is final.
 //! - **Serializable contracts.** [`BridgeHealthReport`] (versioned by
 //!   [`BRIDGE_HEALTH_SCHEMA_VERSION`]), [`BridgeEvent`] and the native operation
-//!   errors are plain serde data with `snake_case` tagged discriminants and
-//!   stable code / remediation fields.
+//!   reports, events and errors are plain serde data with `snake_case` tagged
+//!   discriminants and stable code / remediation fields. The root operation
+//!   errors retain the released 1.x variants; canonical v2 errors live under
+//!   [`v2`].
 //! - **Field keys.** One sanitizer and one reserved prefix
 //!   (`sc_observability_log.`) for every producer; see `docs/mapping.md`,
 //!   "Field keys", for the per-producer and collision rules.
@@ -93,6 +95,7 @@ pub mod error_codes;
 
 mod bridge;
 mod callsite;
+mod compat;
 mod context;
 mod control;
 mod error;
@@ -113,12 +116,13 @@ pub use bridge::{
     PolicyRejection, attach_logger,
 };
 #[doc(inline)]
-pub use control::{BridgeEvent, EmitOutcome, LogControl};
+pub use compat::LogControl;
 #[doc(inline)]
-pub use error::{
-    ControlError, DropCause, EmitError, FieldKeyError, FlushError, InitError, LifecyclePhase,
-    ShutdownError, WaitError,
-};
+pub use compat::{EmitError, FlushError, InitError, ShutdownError};
+#[doc(inline)]
+pub use control::{BridgeEvent, EmitOutcome};
+#[doc(inline)]
+pub use error::{ControlError, DropCause, FieldKeyError, LifecyclePhase, WaitError};
 #[doc(inline)]
 pub use error::{ShutdownOutcome, ShutdownReport, UnconfirmedShutdown};
 #[doc(inline)]
@@ -158,9 +162,110 @@ pub use sc_observability_log_macros::{debug, error, event, info, instrument, tra
 /// a namespace seam only.
 pub mod v2 {
     #[doc(inline)]
-    pub use crate::{BridgeEvent, BridgeOptions, LogControl, LogGuard};
+    pub use crate::BridgeEvent;
+    #[doc(inline)]
+    pub use crate::BridgeOptions;
+    #[doc(inline)]
+    pub use crate::bridge::LogAttachment;
+    #[doc(inline)]
+    pub use crate::error::EmitError;
     #[doc(inline)]
     pub use sc_observability_types::v2::{EventError, FlushError, InitError, ShutdownError};
+
+    use std::path::Path;
+    use std::time::Duration;
+
+    /// Canonical v2 control with context-preserving operation errors.
+    pub use crate::control::LogControl;
+
+    /// Canonical v2 lifecycle facade over the same process-wide bridge owner.
+    #[must_use = "dropping the guard shuts the logger down"]
+    #[derive(Debug)]
+    pub struct LogGuard {
+        inner: crate::LogGuard,
+    }
+
+    /// Starts the canonical v2 bridge while sharing the released process runtime.
+    ///
+    /// # Errors
+    ///
+    /// Returns the canonical startup error with its diagnostic context and source.
+    pub fn init(
+        config: crate::LoggerConfig,
+        options: crate::BridgeOptions,
+    ) -> Result<LogGuard, InitError> {
+        crate::init_canonical(config, options).map(|inner| LogGuard { inner })
+    }
+
+    impl LogGuard {
+        #[must_use]
+        pub fn control(&self) -> LogControl {
+            LogControl::new()
+        }
+
+        /// Requests a bounded flush with the canonical operation error.
+        ///
+        /// # Errors
+        ///
+        /// Returns the canonical drain error with its context and source.
+        pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
+            crate::handle::flush_installed(timeout)
+        }
+
+        /// Performs final flush and shutdown, preserving canonical error context.
+        ///
+        /// # Errors
+        ///
+        /// Returns the canonical timeout or drain error with its source context.
+        pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError> {
+            self.inner.shut_down = true;
+            crate::handle::shutdown_sequence(timeout)
+        }
+
+        #[must_use]
+        pub fn dropped_events(&self) -> crate::DroppedEvents {
+            self.inner.dropped_events()
+        }
+
+        #[must_use]
+        pub fn active_log_path(&self) -> Option<&Path> {
+            self.inner.active_log_path()
+        }
+
+        /// Reads the retained bridge health report.
+        ///
+        /// # Errors
+        ///
+        /// Returns `ControlError::Unavailable` when the report cannot be read.
+        pub fn health(&self) -> Result<crate::BridgeHealthReport, crate::ControlError> {
+            self.inner.health()
+        }
+
+        /// Raises the sole runtime-level owner’s filter.
+        ///
+        /// # Errors
+        ///
+        /// Returns the typed level change failure before or during mutation.
+        pub fn elevate_level(
+            &mut self,
+            level: crate::LevelFilter,
+            source: crate::LevelChangeSource,
+        ) -> Result<crate::LevelChange, crate::LevelChangeError> {
+            self.inner.elevate_level(level, source)
+        }
+
+        /// Restores the configured filter through the sole runtime-level owner.
+        ///
+        /// # Errors
+        ///
+        /// Returns the typed level change failure if reset cannot commit.
+        pub fn reset_level(
+            &mut self,
+            source: crate::LevelChangeSource,
+        ) -> Result<crate::LevelChange, crate::LevelChangeError> {
+            self.inner.reset_level(source)
+        }
+    }
 }
 
 /// tracing-compatible level type (mirrors the `tracing::Level` constants).
@@ -302,7 +407,7 @@ impl LogGuard {
     /// cloned freely and may outlive the guard.
     #[must_use]
     pub fn control(&self) -> LogControl {
-        LogControl::new()
+        compat::LogControl::new()
     }
 
     /// Raises the staged core's effective filter.  Only the lifecycle owner
@@ -341,12 +446,11 @@ impl LogGuard {
     ///
     /// # Errors
     ///
-    /// Returns [`FlushError::Drain`] with stable diagnostic codes for timeout,
-    /// writer, lifecycle, or helper failures. A timed-out helper is detached and
-    /// retains the logger until it completes. Every error preserves its context
-    /// and any underlying source.
+    /// Returns the released 1.x flush variants. A timed-out helper is detached
+    /// and retains the logger until it completes. Use [`v2::FlushError`] for the
+    /// canonical context-preserving error form.
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
-        handle::flush_installed(timeout)
+        handle::flush_installed(timeout).map_err(|error| compat::legacy_flush(&error, timeout))
     }
 
     /// The final shutdown: threshold → Off, empty the slot, flush, `Logger::shutdown`.
@@ -356,14 +460,14 @@ impl LogGuard {
     ///
     /// # Errors
     ///
-    /// Returns [`ShutdownError::Timeout`] when sole ownership, the final flush and
-    /// the writer join do not finish within `timeout` (a detached helper keeps
+    /// Returns [`ShutdownError::TimedOut`] when sole ownership, the final flush
+    /// and the writer join do not finish within `timeout` (a detached helper keeps
     /// going; the lifecycle is `Stopping` until it completes and publishes
-    /// `Stopped`), or [`ShutdownError::Drain`] for final-flush and helper failures
-    /// (the original diagnostic and source are preserved).
+    /// `Stopped`), or the released final-flush and helper variants. Use
+    /// [`v2::ShutdownError`] to retain canonical diagnostic context and source.
     pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError> {
         self.shut_down = true;
-        handle::shutdown_sequence(timeout)
+        handle::shutdown_sequence(timeout).map_err(|error| compat::legacy_shutdown(error, timeout))
     }
 
     /// Snapshot of the process-wide dropped-event counters.
@@ -413,12 +517,21 @@ impl Drop for LogGuard {
 ///
 /// # Errors
 ///
-/// - `InitError::Configuration` with a stable diagnostic code when the facade
-///   is already initialized, another logger is installed, or the level cap is
-///   unsupported.
-/// - `InitError::Runtime` with the originating diagnostic and source when
-///   identity resolution, logger construction, or lifecycle startup fails.
+/// Returns the released 1.x [`InitError`] variants for install, level,
+/// identity, construction and lifecycle startup failures. Use [`v2::init`] for
+/// canonical `sc_observability_types::v2::InitError` values with their source
+/// contexts intact.
 pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError> {
+    let configured = config.level;
+    let available = ensure_static_level(configured).err().unwrap_or(configured);
+    init_canonical(config, options)
+        .map_err(|error| compat::legacy_init(error, configured, available))
+}
+
+fn init_canonical(
+    config: LoggerConfig,
+    options: BridgeOptions,
+) -> Result<LogGuard, sc_observability_types::v2::InitError> {
     if let Err(available) = ensure_static_level(config.level) {
         return Err(error::init_configuration(
             error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL,
@@ -447,7 +560,7 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
         Ok(identity) => identity,
         Err(source) => {
             INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
-            return Err(InitError::Runtime {
+            return Err(sc_observability_types::v2::InitError::Runtime {
                 context: source.into_context(),
             });
         }
