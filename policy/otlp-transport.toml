@@ -30,9 +30,15 @@ backends = ["otlp-sdk"]
 features = ["transport"]
 default_features = false
 
+[transport.prost]
+version = "=0.14.4"
+backends = ["otlp-sdk"]
+features = ["std"]
+default_features = false
+
 [transport.reqwest]
 version = "=0.12.28"
-backends = ["legacy-http-json"]
+backends = ["otlp-sdk", "legacy-http-json"]
 features = ["blocking", "json", "rustls-tls"]
 default_features = false
 

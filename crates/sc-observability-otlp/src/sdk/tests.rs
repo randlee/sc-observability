@@ -2,7 +2,8 @@
 
 use super::build_exporter_set;
 use super::implementation::{
-    CallerRuntime, group_by_resource, project_logs, project_metrics, retry_action,
+    CallerRuntime, HttpError, HttpFailure, RetryClass, group_by_resource, http_retry_action,
+    project_logs, project_metrics, retry_action,
 };
 use crate::config::{
     ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, validated_backend_connection,
@@ -91,7 +92,40 @@ async fn run_retry_script(
     statuses: &[Code],
     deadline: Duration,
 ) -> (usize, Option<String>, [u64; 3]) {
-    let statuses = statuses.to_vec();
+    let outcomes = statuses
+        .iter()
+        .map(|&code| {
+            if code == Code::Ok {
+                Ok(())
+            } else {
+                Err(tonic::Status::new(code, "scripted fixture"))
+            }
+        })
+        .collect();
+    run_scripted_retry(
+        outcomes,
+        || tonic::Status::new(Code::Unavailable, "scripted fixture"),
+        deadline,
+    )
+    .await
+}
+
+async fn run_http_retry_script(
+    outcomes: &[Result<(), HttpFailure>],
+    deadline: Duration,
+) -> (usize, Option<String>, [u64; 3]) {
+    run_scripted_retry(outcomes.to_vec(), || HttpFailure::Status(503), deadline).await
+}
+
+async fn run_scripted_retry<E, D>(
+    outcomes: Vec<Result<(), E>>,
+    exhausted: D,
+    deadline: Duration,
+) -> (usize, Option<String>, [u64; 3])
+where
+    E: RetryClass + std::error::Error + Clone + Send + Sync + 'static,
+    D: Fn() -> E + Send + 'static,
+{
     let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let attempts_for_retry = Arc::clone(&attempts);
     let mut next = 0;
@@ -111,16 +145,13 @@ async fn run_retry_script(
     let result = super::implementation::retry_export(
         deadline,
         move || {
-            let response_code = statuses.get(next).copied().unwrap_or(Code::Unavailable);
+            let outcome = outcomes
+                .get(next)
+                .cloned()
+                .unwrap_or_else(|| Err(exhausted()));
             next += 1;
             attempts_for_retry.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Box::pin(async move {
-                if response_code == Code::Ok {
-                    Ok(())
-                } else {
-                    Err(tonic::Status::new(response_code, "scripted fixture"))
-                }
-            })
+            Box::pin(async move { outcome })
         },
         "scripted retry fixture",
     );
@@ -167,6 +198,259 @@ async fn sdk_transport_retry_loop_exercises_attempts_and_terminal_modes() {
         (4, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
         "max retry budget must terminate after the initial attempt plus three retries"
     );
+}
+
+#[test]
+fn sdk_http_retry_classifies_throttling_gateway_connect_and_timeout_as_retryable() {
+    for failure in [
+        HttpFailure::Status(429),
+        HttpFailure::Status(502),
+        HttpFailure::Status(503),
+        HttpFailure::Status(504),
+        HttpFailure::ConnectOrTimeout,
+    ] {
+        assert_eq!(
+            http_retry_action(
+                failure,
+                0,
+                Duration::from_millis(1),
+                Duration::from_secs(30),
+                Duration::from_millis(250),
+            ),
+            Some(Duration::from_millis(250)),
+            "{failure:?} must be retried"
+        );
+    }
+}
+
+#[test]
+fn sdk_http_retry_treats_every_other_failure_as_terminal() {
+    for failure in [
+        HttpFailure::Status(400),
+        HttpFailure::Status(401),
+        HttpFailure::Status(403),
+        HttpFailure::Status(404),
+        HttpFailure::Status(413),
+        HttpFailure::Status(500),
+        HttpFailure::Status(501),
+        HttpFailure::Other,
+    ] {
+        assert_eq!(
+            http_retry_action(
+                failure,
+                0,
+                Duration::from_millis(1),
+                Duration::from_secs(30),
+                Duration::from_millis(250),
+            ),
+            None,
+            "{failure:?} must be terminal"
+        );
+    }
+}
+
+#[test]
+fn sdk_http_retry_exhaustion_and_deadline_are_terminal() {
+    assert_eq!(
+        http_retry_action(
+            HttpFailure::Status(503),
+            crate::constants::DEFAULT_OTLP_MAX_RETRIES,
+            Duration::from_millis(1),
+            Duration::from_secs(30),
+            Duration::from_millis(250),
+        ),
+        None
+    );
+    assert_eq!(
+        http_retry_action(
+            HttpFailure::ConnectOrTimeout,
+            0,
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+            Duration::from_millis(250),
+        ),
+        None
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn sdk_http_retry_loop_uses_the_shared_attempt_and_deadline_policy() {
+    assert_eq!(
+        run_http_retry_script(
+            &[Err(HttpFailure::Status(429)), Ok(())],
+            Duration::from_secs(30)
+        )
+        .await,
+        (2, None, [0, 0, 0]),
+        "throttled request must be retried once before success"
+    );
+    assert_eq!(
+        run_http_retry_script(&[Err(HttpFailure::Status(400))], Duration::from_secs(30)).await,
+        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        "client error must not be retried"
+    );
+    assert_eq!(
+        run_http_retry_script(
+            &[Err(HttpFailure::ConnectOrTimeout)],
+            Duration::from_millis(100)
+        )
+        .await,
+        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        "retry deadline must prevent a second attempt"
+    );
+    assert_eq!(
+        run_http_retry_script(&[], Duration::from_secs(30)).await,
+        (4, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        "max retry budget must terminate after the initial attempt plus three retries"
+    );
+}
+
+/// Walks the `source()` chain of `error` for a `T`.
+fn find_source<'a, T: std::error::Error + 'static>(
+    error: &'a (dyn std::error::Error + 'static),
+) -> Option<&'a T> {
+    let mut current = Some(error);
+    while let Some(error) = current {
+        if let Some(found) = error.downcast_ref::<T>() {
+            return Some(found);
+        }
+        current = error.source();
+    }
+    None
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn sdk_terminal_grpc_failure_keeps_the_tonic_status_as_source() {
+    let error = super::implementation::retry_export(
+        Duration::from_secs(30),
+        || async { Err::<(), _>(tonic::Status::new(Code::Internal, "collector rejected")) },
+        "OTLP log export failed",
+    )
+    .await
+    .expect_err("terminal status");
+    assert_eq!(error.code().to_string(), "OTLP_EXPORT_TERMINAL");
+    assert!(error.to_string().starts_with("OTLP log export failed"));
+    let status = find_source::<tonic::Status>(&error).expect("tonic status source");
+    assert_eq!(status.code(), Code::Internal);
+    assert_eq!(status.message(), "collector rejected");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn sdk_terminal_http_failure_keeps_the_client_error_as_source() {
+    let client = reqwest::Client::new();
+    let error = super::implementation::retry_export(
+        Duration::from_millis(100),
+        || {
+            let send = client.post("http://127.0.0.1:1/v1/logs").send();
+            async move { send.await.map(|_| ()).map_err(HttpError::Client) }
+        },
+        "OTLP log export failed",
+    )
+    .await
+    .expect_err("refused connection");
+    assert_eq!(error.code().to_string(), "OTLP_EXPORT_TERMINAL");
+    let http = find_source::<HttpError>(&error).expect("HTTP send error source");
+    assert_eq!(http.failure(), HttpFailure::ConnectOrTimeout);
+    let client_error = find_source::<reqwest::Error>(&error).expect("reqwest error source");
+    assert!(client_error.is_connect());
+
+    let status = super::implementation::retry_export(
+        Duration::from_secs(30),
+        || async { Err::<(), _>(HttpError::Status(400)) },
+        "OTLP log export failed",
+    )
+    .await
+    .expect_err("terminal status");
+    assert!(matches!(
+        find_source::<HttpError>(&status),
+        Some(HttpError::Status(400))
+    ));
+}
+
+/// gRPC logs collector whose every export waits (bounded) for a second export
+/// to arrive, counting the exports that met a concurrent partner.
+#[derive(Clone)]
+struct Rendezvous {
+    barrier: Arc<tokio::sync::Barrier>,
+    met: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[tonic::async_trait]
+impl opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsService
+    for Rendezvous
+{
+    async fn export(
+        &self,
+        _request: tonic::Request<
+            opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest,
+        >,
+    ) -> Result<
+        tonic::Response<opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse>,
+        tonic::Status,
+    > {
+        if tokio::time::timeout(Duration::from_secs(2), self.barrier.wait())
+            .await
+            .is_ok()
+        {
+            self.met.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        Ok(tonic::Response::new(
+            opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse {
+                partial_success: None,
+            },
+        ))
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn sdk_grpc_exports_of_one_signal_are_in_flight_together() {
+    let incoming = tonic::transport::server::TcpIncoming::bind(
+        "127.0.0.1:0".parse().expect("loopback address"),
+    )
+    .expect("bind collector");
+    let address = incoming.local_addr().expect("collector address");
+    let collector = Rendezvous {
+        barrier: Arc::new(tokio::sync::Barrier::new(2)),
+        met: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+    };
+    let met = Arc::clone(&collector.met);
+    let server = tokio::spawn(tonic::transport::Server::builder().serve_with_incoming(
+        opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsServiceServer::new(
+            collector,
+        ),
+        incoming,
+    ));
+
+    let mut config = OtelConfig::new(ExporterBackend::OpenTelemetrySdk, OtlpProtocol::Grpc);
+    config.enabled = true;
+    config.endpoint = Some(OtlpEndpoint::new_typed(format!("http://{address}")).expect("endpoint"));
+    let bounds = validated_transport_bounds(&config).expect("bounds");
+    let connection = validated_backend_connection(&config).expect("connection");
+    let adapter = build_exporter_set(&connection, &bounds).expect("SDK adapter set");
+
+    adapter
+        .exporters
+        .logs
+        .export_logs(&[log_record(None)])
+        .expect("first export admitted");
+    adapter
+        .exporters
+        .logs
+        .export_logs(&[log_record(None)])
+        .expect("second export admitted");
+    adapter
+        .lifecycle
+        .flush_async()
+        .await
+        .expect("both exports complete");
+    server.abort();
+
+    assert_eq!(
+        met.load(std::sync::atomic::Ordering::SeqCst),
+        2,
+        "the second export must reach the collector while the first is in flight"
+    );
+    assert_eq!(adapter.lifecycle.health().dropped_by_signal, [0, 0, 0]);
 }
 
 #[test]
