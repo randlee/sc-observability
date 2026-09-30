@@ -5627,8 +5627,9 @@
       "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>",
       "obligations": [
         "signature: preserve sc_observability::LogSink::write exactly as recorded in this row baseline_signature: fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::write baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
+        "receiver: preserve the released &self receiver at sc_observability::LogSink::write",
+        "argument: preserve the released borrowed &LogEvent input at sc_observability::LogSink::write",
+        "trait: retain LogSink as an open, object-safe downstream extension point with its released Send + Sync supertraits",
         "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
@@ -5655,8 +5656,8 @@
       "canonical_signature": "fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) }",
       "obligations": [
         "signature: preserve sc_observability::LogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::flush baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
+        "receiver: preserve the released &self receiver at sc_observability::LogSink::flush",
+        "trait: retain LogSink as an open, object-safe downstream extension point with its released Send + Sync supertraits",
         "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart",
         "default method: preserve the released provided default body (Ok(()))"
       ],
@@ -5684,9 +5685,9 @@
       "canonical_signature": "fn health(&self) -> SinkHealth",
       "obligations": [
         "signature: preserve sc_observability::LogSink::health exactly as recorded in this row baseline_signature: fn health(&self) -> SinkHealth",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::health baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "behavior: preserve the released return and side-effect semantics recorded in sc_observability::LogSink::health baseline_signature"
+        "receiver: preserve the released &self receiver at sc_observability::LogSink::health",
+        "trait: retain LogSink as an open, object-safe downstream extension point with its released Send + Sync supertraits",
+        "return: preserve the released SinkHealth snapshot result at sc_observability::LogSink::health"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; health has no error type: the released slot in compat.rs delegates directly to the canonical v2::LogSink health slot and returns the same SinkHealth unchanged",
@@ -5713,8 +5714,9 @@
       "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>",
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::write exactly as recorded in this row baseline_signature: fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::write baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
+        "receiver: preserve the released &self receiver at sc_observability::typed::TypedLogSink::write",
+        "argument: preserve the released borrowed &LogEvent input at sc_observability::typed::TypedLogSink::write",
+        "trait: retain TypedLogSink as an open, object-safe downstream extension point with its released Send + Sync supertraits",
         "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
@@ -5742,8 +5744,8 @@
       "canonical_signature": "fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) }",
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkFailure>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::flush baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
+        "receiver: preserve the released &self receiver at sc_observability::typed::TypedLogSink::flush",
+        "trait: retain TypedLogSink as an open, object-safe downstream extension point with its released Send + Sync supertraits",
         "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart",
         "default method: preserve the released provided default body (Ok(()))"
       ],
@@ -5772,9 +5774,9 @@
       "canonical_signature": "fn health(&self) -> SinkHealth",
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::health exactly as recorded in this row baseline_signature: fn health(&self) -> SinkHealth",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::health baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "behavior: preserve the released return and side-effect semantics recorded in sc_observability::typed::TypedLogSink::health baseline_signature"
+        "receiver: preserve the released &self receiver at sc_observability::typed::TypedLogSink::health",
+        "trait: retain TypedLogSink as an open, object-safe downstream extension point with its released Send + Sync supertraits",
+        "return: preserve the released SinkHealth snapshot result at sc_observability::typed::TypedLogSink::health"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; health has no error type: the released slot in compat.rs delegates directly to the canonical v2::LogSink health slot and returns the same SinkHealth unchanged",
@@ -5802,9 +5804,9 @@
       "canonical_signature": "fn accepts(&self, event: &LogEvent) -> bool",
       "obligations": [
         "signature: preserve sc_observability::LogFilter::accepts exactly as recorded in this row baseline_signature: fn accepts(&self, event: &LogEvent) -> bool",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogFilter::accepts baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "behavior: preserve the released return and side-effect semantics recorded in sc_observability::LogFilter::accepts baseline_signature",
+        "receiver: preserve the released &self receiver at sc_observability::LogFilter::accepts",
+        "argument: preserve the released borrowed &LogEvent input and bool acceptance result at sc_observability::LogFilter::accepts",
+        "trait: retain LogFilter as an open, object-safe downstream extension point with its released Send + Sync supertraits",
         "wire: retain released JSON/event shape; canonical EntityId validation remains at admission"
       ],
       "treatment": "unchanged_alias",
