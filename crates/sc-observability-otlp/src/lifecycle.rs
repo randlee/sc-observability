@@ -382,6 +382,30 @@ impl LifecycleCore {
         LifecycleWaiter::new(operation)
     }
 
+    /// Builds an already-expired shutdown operation without starting its timer.
+    ///
+    /// Tests use this to exercise the production monotonic-deadline branch in
+    /// `Operation::poll_inner` without permitting the timer thread to complete
+    /// the operation first.
+    #[cfg(test)]
+    pub(crate) fn expired_shutdown_for_test(&self) -> LifecycleWaiter {
+        let mut state = self.inner.state.lock().expect("lifecycle state lock");
+        state.phase = LifecycleState::Closing;
+        let operation = Arc::new(Operation::new(
+            Arc::clone(&self.inner),
+            OperationKind::Shutdown,
+            state.next_sequence,
+            Duration::ZERO,
+            None,
+            state.pending_failure.take(),
+        ));
+        // `poll_inner` calls `start_timer` before comparing the deadline. Mark
+        // the timer as started so no timer thread can mask that comparison.
+        operation.timer_started.store(true, Ordering::Release);
+        state.shutdown = Some(Arc::clone(&operation));
+        LifecycleWaiter::new(operation)
+    }
+
     /// Abandons all admitted work when the final backend handle is dropped.
     ///
     /// This is deliberately separate from explicit shutdown: dropping a
