@@ -36,7 +36,7 @@ pub(crate) struct Coordinator {
     active: AtomicUsize,
     failed: AtomicBool,
     // MUTEX: bounded queue/slot bookkeeping and worker sleep predicates only;
-    // native calls and notifications execute outside this critical section.
+    // native calls run outside it, while Condvar notifications run inside it.
     queue: Mutex<Queue>,
     changed: Condvar,
     operation_exited: AtomicBool,
