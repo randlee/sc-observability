@@ -505,6 +505,7 @@ impl sc_observability_types::typed::TypedLogProjector<AgentInfoEvent> for AtmLog
 
 #[derive(Default)]
 struct AtmSpanProjector {
+    // Shared across calls so each end event can recover its matching start timestamp.
     started: Mutex<HashMap<String, sc_observability_types::Timestamp>>,
 }
 
