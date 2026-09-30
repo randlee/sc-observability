@@ -500,6 +500,10 @@ The detailed sprint-by-sprint execution record remains in
 
 ## Phase D — Host logging, OTLP restoration, and distribution completion
 
+**Current release decision:** ADR-020 and the [compatible 1.x amendment](plans/phase-d/compatible-1x-amendment.md) supersede the historical 2.0 activation/removal sequence below. Active work is D22 contracts plus independent D27 release tooling, then parallel D23–D26/D28 adapters, then D18 combined integration alongside retained D9 conformance. D9 consumes D22/D26, not D18 test/report output. Released APIs remain functional through deprecated adapters. No implementation merge to develop precedes full phase-ending review and user authorization.
+
+### Historical execution record (not current dispatch scope)
+
 The authoritative execution plan is the obs-phase-d bead, projected in
 [the Phase D plan](plans/phase-d/plan-phase-d.md). Its corrected boundaries are:
 
@@ -529,9 +533,10 @@ supported-interpreter matrix and guard expectations; it is not an incidental
 packaging edit. obs-d-10 supplies the guard and policy specification; obs-d-18
 activates release policy/inventory and checks combined release evidence.
 
-ADR-017/018 were accepted through PR #225 on 2026-09-26. ADR-019 remains
-proposed until the plan-fix PR merges. PHD-001–004 govern 2.0; PHB-003/004/005
-remain the historical 1.x compatibility contract. Planning or implementation
+ADR-017/018 were accepted through PR #225 on 2026-09-26 and ADR-019 through
+PR #227. The former 2.0 activation sequence above is historical. ADR-020 and
+the amended PHD-001–004 retain compatible 1.x obligations, including
+PHB-003/004/005. Planning or implementation
 does not authorize a release, tag, registry publication or downstream atm-core
 change. Issue #88 (Python OTEL/structured logging) remains excluded.
 

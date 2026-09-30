@@ -141,3 +141,33 @@ screen said. What happens next depends on the verdict:
   is still open (`bd reopen`).
 
 Do not assign findings. The lead picks the member for each one.
+
+## QA Metrics Log
+
+`qa-template.xml.j2` step j appends one row to each of two JSONL logs at
+`.sc/qa-log/`, on every task close in step i (never on the step-i1 refusal
+path). Both rows are computed fresh at close time, the same way
+`.sc/sanity-log/phase-<p>.jsonl` is: never hand-incremented, never carried
+forward from a previous row.
+
+- `phase-<p>.jsonl` — one row per round, this round's own results:
+  `completed_at` (UTC), `completed_local` (24h HH:MM local), `duration`,
+  `phase`, `sprint`, `task`, `pr_number`, `iteration` (the round number),
+  `verdict`, `tested` (the carried finding_ref(s) for a fix round, else the
+  checked bead), and this round's own filed findings — `fnd`, `blk`, `imp`,
+  `min` — counting only findings whose screen verdict was not `ceremony`.
+- `phase-<p>-stats.jsonl` — one row per round, a phase-wide snapshot queried
+  live from `bd` at that same moment: `snapshot_at`, `snapshot_local`,
+  `phase`, `trigger_task` (the round that produced this snapshot), `tot`
+  (all finding beads ever filed in the phase), `open`, and `blk`/`imp`/`min`
+  (open findings by severity). This is the same query used to answer "how
+  many findings are open" ad hoc; it gives velocity and a closure estimate
+  across rounds, and ties out against `phase-<p>.jsonl` at phase end (sum of
+  its `fnd` across all rounds reconciles with this log's final `tot`).
+
+When you display either log's timestamps to the operator, convert to 24h
+local; the logs themselves keep both the UTC and local strings.
+
+Never edit either file by hand outside step j's append; a wrong row is
+fixed by filing a workflow-issue bead and appending a correcting row, not by
+rewriting history in place.

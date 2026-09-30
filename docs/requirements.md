@@ -341,10 +341,10 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - `initial_backoff_ms = 250`
   - `max_backoff_ms = 5000`
   - logs, traces, and metrics disabled unless explicitly configured
-  This list is the frozen 1.x baseline only. obs-d-21 exclusively owns the Phase
-  D 2.0 candidate config/default/validation contract and its documentation;
-  under accepted ADR-018, obs-d-21 updates this requirement rather than allowing
-  any later sprint to redefine that contract.
+  This list remains the released 1.x baseline under ADR-020. The accepted
+  D21 canonical backend contract is retained. D22 now owns the exact
+  compatibility/namespace contract and D26 implements its adapter without
+  redefining backend defaults or validation; D18 verifies both public paths.
 - OTLP-021 Upon technical-lead acceptance of ADR-018, `Telemetry` lifecycle
   behavior shall be explicit as follows; until that acceptance these bullets
   are the gated Phase D candidate contract rather than an active requirement:
@@ -434,13 +434,14 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - OOS-008 CLI success envelopes and exit-code conventions
 
 
-## 10. Phase B Additions — Proposed for Review
+## 10. Phase B Contracts — Retained 1.x Requirements
 
-The user has requested this scope; its detailed design and sprint execution are
-not yet approved. Existing requirements above remain the released baseline.
+These requirements govern the released 1.x baseline and the current compatible
+Phase D adoption under ADR-020. Architectural acceptance is recorded in the
+ADRs below; acceptance does not itself assert implementation closure.
 The [Phase B index](plans/phase-b/plan-phase-b.md) routes the authoritative sprint
 contracts; [ADR-011 through ADR-015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
-record the proposed architecture. No item below asserts implementation closure.
+record the accepted architecture. No item below asserts implementation closure.
 
 - PHB-001 sc-observability shall own and review the target bridge contract before
   BTIT completes its initial implementation. All foreseeable bridge changes,
@@ -536,14 +537,15 @@ major-release claim is introduced.
   loading is independent.
   Qualification follows the [ADR-013 preflight amendment](architecture.md#adr-013-owner-controlled-shared-runtime-level).
 
-## 11. Phase C Additions — Proposed for Review
+## 11. Phase C Contracts — Retained Publishing Constraints
 
-The user has requested this scope; its detailed design and sprint execution are
-not yet approved. Existing requirements above remain the released baseline.
+These requirements retain the shared publishing and preflight constraints.
+Architectural acceptance is recorded in ADR-016; this text grants no new
+publication authority or assertion of implementation closure.
 The [Phase C index](plans/phase-c/plan-phase-c.md) routes the authoritative
 sprint contracts; [ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption)
-records the proposed architecture. No item below asserts implementation
-closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
+records the accepted architecture. Phase C shall not publish, tag, or execute
+BTIT integration tests; current Phase D work also has no publication authority.
 
 - PHC-001 The repository-specific publishing implementation (release
   workflows, the publisher agent, the manifest/gate scripts and the legacy
@@ -593,33 +595,11 @@ closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
   validation gate — not recorded as an accepted regression closed out by a
   follow-up ticket.
 
-## 12. Phase D — Reviewed 2.0 Contracts
+## 12. Phase D — Compatible 1.x Adoption
 
-ADR-017 and ADR-018 were accepted on 2026-09-26 by the user's merge of
-PR #225. PHB-003/004/005 govern Phase B and 1.x; the requirements below
-govern the reviewed Phase D major release and supersede only conflicting
-1.x compatibility obligations. Unlisted breaking changes remain prohibited.
+ADR-020 records the user's current compatible 1.x release decision. PHB-003/004/005 govern every changed released API. ADR-017/018's original acceptance remains historical; no major-break approval waives the current 1.x obligations. A future 2.0 removal is separately authorized.
 
-- PHD-001 For 2.0, the nine inventoried diagnostic-wrapper error types shall
-  become same-name non-exhaustive discriminated enums owned by
-  `sc-observability-types` and re-exported by their consuming crates. Each
-  failure cause shall have one typed variant preserving diagnostic code,
-  remediation, structured context and available source data. Local construction
-  sites, consumers and language conversions shall use those canonical types.
-- PHD-002 The 2.0 integration shall remove superseded 1.x wrappers, typed/legacy
-  adapters and classification surfaces after consumers have migrated. The
-  reviewed major-break manifest shall enumerate every break against the frozen
-  1.4.1 API; the existing semver gate shall reject any unlisted break before
-  a reviewed 2.0 baseline is generated. Migration guidance shall have executable
-  consumer fixtures.
-- PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a
-  caller-owned runtime and a bounded plain-thread legacy HTTP/JSON backend.
-  They shall share crate-private contracts, ordered admission/lifecycle
-  barriers, deadlines and health/drop accounting. Backend/protocol/runtime
-  combinations shall be validated at construction, and enabled transports
-  shall never silently fall back to no-op.
-- PHD-004 The Phase D 2.0 OTLP config, defaults and validation contract shall
-  be owned by obs-d-21 and consumed unchanged by backend implementations.
-  Queue bounds shall limit both record count and aggregate bytes; validated
-  explicit config shall not be overridden by ambient OTEL_* environment values.
-  Lifecycle implementations shall satisfy OTLP-021 for both backends.
+- PHD-001 The shared canonical diagnostic error implementation shall provide typed cause variants preserving diagnostic code, remediation, structured context and available source data. In the current 1.x release, incompatible new identities use opt-in canonical namespaces and existing released identities/variants remain functional through boundary adapters. Root replacement is reserved for a separately authorized 2.0 release.
+- PHD-002 Current 1.x integration shall retain released wrappers, typed/legacy adapters and classification surfaces where needed for compatibility. Deprecated interfaces shall have functioning replacements, executable migration fixtures and named future removal points. Compare every released package against frozen 1.4.1; no breaking-change approval may turn a 1.x incompatibility into PASS. Removal and a new major baseline require separate 2.0 authorization.
+- PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a caller-owned runtime and a bounded plain-thread legacy HTTP/JSON backend. They shall share crate-private contracts, ordered admission/lifecycle barriers, deadlines and health/drop accounting. Backend/protocol/runtime combinations shall be validated at construction, and enabled transports shall never silently fall back to no-op.
+- PHD-004 Preserve the accepted Phase D canonical OTLP config/default/validation behavior: queue bounds limit record count and aggregate bytes, explicit validated config is not overridden by ambient OTEL_* values, and both backends satisfy OTLP-021. D22 specifies compatibility with released config literals/defaults; D26 supplies minimal adapters without changing backend contracts. Incompatible new configuration owners use the canonical namespace while the released root configuration retains its behavior.

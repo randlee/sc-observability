@@ -20,7 +20,9 @@ This protocol is mandatory for all ATM team communications.
 4. A task close is terminal. The assigner does not acknowledge it; the
    daemon's close receipt is the record, and the assigner closes the mirror
    task on its own side. Only plain requires-ack messages get an ack.
-5. No silent processing. Every requires-ack message must receive a response.
+5. No silent blocking or completion. Routine execution may be quiet.
+   Acknowledge every `requires_ack` message immediately; terminal task closes
+   need no extra acknowledgement.
 
 An acknowledgement is message hygiene only: an ack never changes task state.
 If work cannot be completed, close it with the typed outcome `refused` or
@@ -106,7 +108,7 @@ Two classes of message exist. Handling differs per class.
   "class": "informational",
   "examples": ["task assignment (dev sprint, fix round, QA dispatch)", "status update", "idle ping", "self-echo", "terminal confirmation (e.g. \"Noted.\")"],
   "read_with": "atm peek",
-  "respond_with": "atm send <to> \"<reply>\" (omit --requires-ack; never use atm ack)"
+  "respond_with": "No acknowledgement required; substantive replies use atm send without --requires-ack"
 }
 ```
 
@@ -132,7 +134,7 @@ when the task pass emits `task_ready`.
 - Doing work without `atm task start`.
 - Closing with no start row.
 - Sending a status update without clear completion or next action.
-- Letting a message sit without response while processing internally.
+- Leaving a `requires_ack` message unacknowledged or a blocker unreported.
 
 ## Send Content, Not Paths
 
@@ -175,5 +177,5 @@ child outside the phase tree before the refusal task close.
   `ROUND_CAP` and stops for root cause.
 
 - If blocked, start the task anyway with the blocker in the start line (`atm task start <task-id> "blocked: <why>"`), or close it `refused` with the reason; never leave a task-linked message unanswered.
-- If work will take time, send periodic progress updates.
+- Report blockers, meaningful state changes, and completion; omit routine narration.
 - Prefer concise, explicit messages with branch/commit/test context when relevant.

@@ -49,3 +49,8 @@ examples/tauri-logging/src-tauri/permissions/
 
 # sc-compose runtime state and render logs (never committed)
 **/.sc-compose/
+
+# QA metrics log: ephemeral, recomputed fresh at every QA close from bd; never
+# hand-carried, never a versioned artifact. Lives locally per checkout only.
+.sc/qa-log/
+.sc/sanity-log/
