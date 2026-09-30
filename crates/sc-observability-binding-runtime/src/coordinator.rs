@@ -18,7 +18,7 @@ pub(crate) enum Backend {
         level: Mutex<LevelOwner>,
         stamp: dto::EventStamp,
     },
-    Bridge(sc_observability_log::LogControl),
+    Bridge(sc_observability_log::v2::LogControl),
 }
 enum Work {
     Query(Box<native::LogQuery>, Operation<LogSnapshotDto>),
@@ -569,7 +569,7 @@ fn core_from_factory(
     })
 }
 pub(crate) fn bridge(
-    control: sc_observability_log::LogControl,
+    control: sc_observability_log::v2::LogControl,
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let health =

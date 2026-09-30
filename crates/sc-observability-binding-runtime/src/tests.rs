@@ -879,7 +879,7 @@ fn bridge_timeout(external: bool) {
     if external {
         assert!(matches!(
             control.flush(Duration::from_millis(1)),
-            Err(sc_observability_log::FlushError::Drain { .. })
+            Err(sc_observability_log::FlushError::TimedOut { .. })
         ));
     } else {
         let timed = backend.start_flush(Duration::from_millis(1)).unwrap();
@@ -929,7 +929,7 @@ fn native_diagnostic_fidelity() {
         remediation: native::Remediation::recoverable("first", ["second"]),
         at: native::Timestamp::UNIX_EPOCH,
     };
-    let error = sc_observability_log::FlushError::Drain {
+    let error = native::v2::FlushError::Drain {
         context: Box::new(native::ErrorContext::new(
             diagnostic.code.clone(),
             diagnostic.message.clone(),
