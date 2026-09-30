@@ -6,8 +6,11 @@ sprints. This document does not itself install services, change account resource
 or authorize remote telemetry submission. Compatibility execution is authorized
 separately and is not held by this addendum.
 
-The user selected an existing Grafana account and a local
-`otel-desktop-viewer` installation. Prepare both environments alongside the
+The user selected an existing Grafana account and authorized
+`config-agent@hermes` to install the latest released `otel-desktop-viewer` and
+launch it on startup. That agent owns installation, startup integration and
+account configuration with the user. The dev tasks below verify and consume
+that setup; they must not install a competing managed service. Prepare both environments alongside the
 compatibility sprints. D9 then proves the completed production exporters against
 both destinations; endpoint setup and synthetic probes are not D9 completion.
 Beads hold task ownership and execution state. This document defines the shared
@@ -34,7 +37,7 @@ environment and acceptance contract.
 
 | Task | Proposed owner | Work available before D22/D26 | Owned implementation paths |
 |---|---|---|---|
-| `obs-d9-local-viewer-setup` | lobs2 | Pinned local receiver, managed start/stop, RPC queries, synthetic three-signal setup probe | `scripts/ci/fixtures/otlp/desktop-viewer/**`; `docs/observability/otlp/local-viewer.md` |
+| `obs-d9-local-viewer-setup` | lobs2 | Reproducible harness, RPC queries, synthetic three-signal setup probe | `scripts/ci/fixtures/otlp/desktop-viewer/**`; `docs/observability/otlp/local-viewer.md` |
 | `obs-d9-grafana-setup` | cobs2 | Resolve account/ingest/query configuration, secret references, synthetic three-signal setup probe and dashboard queries | `scripts/ci/fixtures/otlp/grafana/**`; `docs/observability/otlp/grafana-environment.md` |
 | Existing D9 | cobs | Conformance corpus preparation; final exporter runs require D22/D26 | Existing D9 integration test, smoke entry points, workflow, and remaining documentation |
 
@@ -62,11 +65,13 @@ based on `develop` and does not change PR #499.
 
 ## Local receiver contract
 
-Use the pinned viewer as the local collector and viewer. Do not add a second
+Use the installed released viewer as the local collector and viewer. Do not add a second
 local Loki/Tempo/Mimir/Grafana deployment merely to duplicate its display/storage.
-Build from the pinned source in a separate checkout or verify a binary/image's
-source and digest match it. Record the selected installation artifact, platform,
-version output and checksum; never use an unpinned `latest` in CI.
+Config-agent selects the latest released artifact for desktop installation and
+records its version, platform, checksum and release source. The monitored clone
+above is a research reference, not a requirement to install an unreleased commit.
+Pin the selected release artifact/version/digest in CI once known; verify all
+flags and RPC shapes against that release, and never resolve `latest` on each CI run.
 
 The launch configuration is:
 
@@ -82,8 +87,10 @@ database. Port overrides must be explicit, reflected in the producer config, and
 reported on startup. Never stop a process or clear a database merely because it
 already occupies a default port. The lifecycle helper owns only its own PID and
 data directory, checks readiness within 30 seconds, and always cleans up its CI
-instance. Local use has documented start, status and stop commands; it does not
-install an unsolicited login daemon.
+instance. Local use documents the start, status and stop commands for config-agent’s
+authorized startup service. The test harness uses that service without taking
+ownership of its PID or deleting its persistent database; only an explicitly
+created isolated CI/test instance is owned and cleaned up by the harness.
 
 Expose the UI at `http://127.0.0.1:8000` and query `POST /rpc`. Verify OTLP HTTP
 JSON, HTTP protobuf, and gRPC ingestion using the protocols needed by the two
