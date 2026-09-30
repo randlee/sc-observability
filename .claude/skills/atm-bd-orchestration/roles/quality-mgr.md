@@ -169,7 +169,8 @@ The script computes both rows; never write, compute or carry a row by hand.
   many findings are open" ad hoc; it gives velocity and a closure estimate
   across rounds, and ties out against `phase-<p>.jsonl` at phase end (sum of
   its `fnd` over rounds resolved per (`task`, `iteration`) as the qa-report
-  skill resolves them reconciles with this log's final `tot`).
+  skill resolves them reconciles with this log's final `tot`, with its
+  unresolved rounds reported beside it).
 
 When you display either log's timestamps to the operator, convert to 24h
 local; the logs themselves keep both the UTC and local strings.
@@ -177,5 +178,7 @@ local; the logs themselves keep both the UTC and local strings.
 Never edit either file by hand outside step j's append; a wrong row is
 fixed by filing a workflow-issue bead and appending a correcting row, not by
 rewriting history in place. The correcting row repeats the round's `task` and
-`iteration`, carries `correction: true`, and, when the verdict changes,
-`supersedes_verdict`.
+`iteration`, carries `correction: true`, and names what it replaces in
+`supersedes_verdict` and/or `supersedes_counts`. Normalize a round the
+qa-report skill labels `legacy-correction-needs-resolution` or `conflict` the
+same way.
