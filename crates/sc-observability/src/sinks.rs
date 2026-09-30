@@ -269,7 +269,11 @@ impl JsonlFileSink {
         let Some(parent) = self.path.parent() else {
             return Ok(0);
         };
-        let entries = fs::read_dir(parent).map_err(|error| self.mark_failure(error))?;
+        let entries = match fs::read_dir(parent) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
+            Err(error) => return Err(self.mark_failure(error)),
+        };
 
         let mut retained_files = Vec::new();
         for entry in entries {
@@ -925,14 +929,39 @@ mod tests {
     }
 
     #[test]
-    fn retained_prune_read_dir_failure_uses_maintenance_error_code() {
-        let root = temp_root("maintenance-read-dir-error");
-        let parent = root.join("logs");
-        fs::write(&parent, "not a directory").expect("create invalid log parent");
+    fn retained_prune_read_dir_invalid_input_marks_sink_failure() {
+        let parent = PathBuf::from("invalid\0log-parent");
         let active_path = parent.join("service.log.jsonl");
         let sink = JsonlFileSink::for_logger(active_path);
 
         let error = sink
+            .prune_retained_files(file_count(1).as_usize(), retention_secs(3600), None)
+            .expect_err("read_dir must reject an interior-NUL parent path");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        let source = std::error::Error::source(error.context())
+            .and_then(|source| source.downcast_ref::<io::Error>());
+        assert_eq!(
+            source.map(io::Error::kind),
+            Some(io::ErrorKind::InvalidInput)
+        );
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[test]
+    fn retained_prune_missing_directory_is_a_healthy_noop() {
+        let root = temp_root("maintenance-missing-directory");
+        let sink = JsonlFileSink::for_logger(root.join("missing-logs/service.log.jsonl"));
+
+        assert_eq!(
+            sink.prune_retained_files(file_count(1).as_usize(), retention_secs(3600), None)
+                .expect("missing directory means nothing to prune"),
+            0
+        );
+        let stats = sink
             .perform_maintenance(&RetainedLogPolicy {
                 rotation_max_bytes: bytes(u64::MAX),
                 rotation_max_files: file_count(1),
@@ -941,7 +970,45 @@ mod tests {
                 writer_shutdown_timeout: join_secs(5),
                 maintenance_max_work_per_pass: None,
             })
-            .expect_err("reading the regular-file log parent must fail maintenance");
+            .expect("maintenance with no log directory is a healthy no-op");
+
+        assert_eq!(stats.rotated_files, 0);
+        assert_eq!(stats.pruned_files, 0);
+        assert_eq!(sink.health().state, SinkHealthState::Healthy);
+    }
+
+    #[test]
+    fn rotation_invalid_path_marks_sink_failure() {
+        let sink =
+            JsonlFileSink::for_logger(PathBuf::from("invalid\0log-parent/service.log.jsonl"));
+
+        let error = sink
+            .rotate_if_needed(u64::MAX, 1, 0)
+            .expect_err("metadata must reject an interior-NUL path");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        let source = std::error::Error::source(error.context())
+            .and_then(|source| source.downcast_ref::<io::Error>());
+        assert_eq!(
+            source.map(io::Error::kind),
+            Some(io::ErrorKind::InvalidInput)
+        );
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[test]
+    fn maintenance_wrapper_maps_sink_failure_to_maintenance_code() {
+        let root = temp_root("maintenance-wrapper-error-code");
+        let sink = JsonlFileSink::for_logger(root.join("logs/service.log.jsonl"));
+        let sink_error = sink.mark_failure(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "interior-NUL path fixture",
+        ));
+
+        let error = sink.mark_maintenance_failure(sink_error);
 
         assert_eq!(
             error.diagnostic().code,
