@@ -84,7 +84,7 @@ round without a lead ruling.
 ## Mandatory Run Status Table
 
 After every terminal PASS or FAIL close succeeds, append the completed run to
-the repository-local, ignored ledger and render its newest six rows. Do not
+the repository-local, ignored ledger and render its newest ten rows. Do not
 run this for a refusal. Use the completion vars produced by `sanity-merge`:
 
 ```bash
@@ -93,7 +93,7 @@ iteration=$(atm task events "$task" --all --json \
 $S/sanity-run-history \
   --vars "$scratch/sanity-$task-vars.json" --task "$task" --bead "$checked_bead" \
   --pr-number "$pr_number" --iteration "$iteration" --started-at "$run_started_at" \
-  --output "$scratch/sanity-$task-table-vars.json" --limit 6
+  --output "$scratch/sanity-$task-table-vars.json" --limit 10
 sc-compose render --strict \
   --file .claude/skills/atm-bd-orchestration/templates/sanity-run-table.md.j2 \
   --var-file "$scratch/sanity-$task-table-vars.json" \
