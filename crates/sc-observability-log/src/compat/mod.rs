@@ -452,6 +452,9 @@ pub(crate) fn legacy_init(
             },
         },
         Core::Runtime { context } => match context.diagnostic().code.as_str() {
+            "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED" => InitError::RuntimeStart {
+                diagnostic: operation_diagnostic(context.diagnostic()),
+            },
             "SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED" => InitError::IdentityResolution {
                 diagnostic: operation_diagnostic(context.diagnostic()),
             },
@@ -533,5 +536,31 @@ fn operation_diagnostic(
         message: value.message.clone(),
         remediation: value.remediation.clone(),
         at: value.timestamp,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_init_preserves_runtime_start_variant_and_diagnostic() {
+        let context = sc_observability_types::ErrorContext::new(
+            error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED,
+            "coordinator could not start",
+            Remediation::recoverable("restore thread resources", ["retry initialization"]),
+        );
+        let expected = operation_diagnostic(context.diagnostic());
+        let error = legacy_init(
+            sc_observability_types::v2::InitError::Runtime {
+                context: Box::new(context),
+            },
+            LevelFilter::Info,
+            LevelFilter::Trace,
+        );
+        let InitError::RuntimeStart { diagnostic } = error else {
+            panic!("released coordinator failures retain RuntimeStart");
+        };
+        assert_eq!(diagnostic, expected);
     }
 }
