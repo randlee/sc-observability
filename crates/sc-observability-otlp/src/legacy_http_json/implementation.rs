@@ -575,10 +575,12 @@ fn send_with_retries(
         if remaining.is_zero() {
             return Err(retry_deadline_error());
         }
+        let request_timeout = selected_request_timeout(config.request_timeout, remaining);
         let response = client
             .post(endpoint)
             .header(CONTENT_TYPE, "application/json")
             .body(body.to_owned())
+            .timeout(request_timeout)
             .send();
         match response {
             Ok(response) if response.status().is_success() => return Ok(()),
@@ -620,6 +622,10 @@ fn send_with_retries(
         attempt = attempt.saturating_add(1);
         fallback = fallback.saturating_mul(2).min(config.retry.max_backoff);
     }
+}
+
+pub(super) fn selected_request_timeout(request_timeout: Duration, remaining: Duration) -> Duration {
+    request_timeout.min(remaining)
 }
 
 pub(super) fn is_retryable_status(status: reqwest::StatusCode) -> bool {
@@ -870,9 +876,27 @@ impl OtlpHttpExporter {
         retry_delay_observer: Option<Sender<Duration>>,
     ) -> Result<Self, ExportError> {
         let sequence_timeout_ms = retry.retry_sequence_timeout_ms.map_or(3_000, u64::from);
+        let request_timeout_ms = sequence_timeout_ms.saturating_sub(1).clamp(1, 100);
+        Self::for_endpoint_with_retry_timeout(
+            endpoint,
+            retry,
+            request_timeout_ms,
+            jitter_seed,
+            retry_delay_observer,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn for_endpoint_with_retry_timeout(
+        endpoint: String,
+        retry: crate::config::LegacyRetryPolicy,
+        request_timeout_ms: u64,
+        jitter_seed: u64,
+        retry_delay_observer: Option<Sender<Duration>>,
+    ) -> Result<Self, ExportError> {
         let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
         config.enabled = true;
-        config.timeout_ms = Some(sequence_timeout_ms.saturating_sub(1).clamp(1, 100).into());
+        config.timeout_ms = Some(request_timeout_ms.into());
         config.endpoint = Some(
             crate::config::OtlpEndpoint::new_typed(endpoint.clone())
                 .expect("loopback test endpoint is valid"),

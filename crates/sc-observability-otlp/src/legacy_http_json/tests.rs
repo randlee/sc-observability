@@ -25,6 +25,14 @@ static RETRY_WAIT_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 // This is a test watchdog, not the production handshake deadline (1 ms).
 const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
+const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 4_000;
+const STALLED_RETRY_REQUEST_TIMEOUT_MS: u64 = 4_000;
+const STALLED_RETRY_BACKOFF_MS: u64 = 2_500;
+const STALLED_RETRY_SERVER_WATCHDOG: Duration = Duration::from_secs(8);
+const STALLED_RETRY_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const STALLED_RETRY_STEP_WATCHDOG: Duration = Duration::from_secs(4);
+const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(3);
+const STALLED_RETRY_CLEANUP_WATCHDOG: Duration = Duration::from_secs(2);
 
 struct StartupFixture {
     initialize: mpsc::Sender<()>,
@@ -262,6 +270,34 @@ fn retry_after_accepts_delta_seconds_and_bounded_dates() {
         Some(Duration::from_secs(3))
     );
     assert!(parse_retry_after(&"x".repeat(129), SystemTime::now()).is_none());
+}
+
+#[test]
+fn selected_request_timeout_uses_the_shorter_bound() {
+    let cases = [
+        (
+            Duration::from_secs(2),
+            Duration::from_secs(3),
+            Duration::from_secs(2),
+        ),
+        (
+            Duration::from_secs(3),
+            Duration::from_secs(2),
+            Duration::from_secs(2),
+        ),
+        (
+            Duration::from_secs(2),
+            Duration::from_secs(2),
+            Duration::from_secs(2),
+        ),
+    ];
+
+    for (request_timeout, remaining, expected) in cases {
+        assert_eq!(
+            super::implementation::selected_request_timeout(request_timeout, remaining),
+            expected
+        );
+    }
 }
 
 #[test]
@@ -972,6 +1008,108 @@ fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests()
         sc_observability_types::v2::ExportError::RetryDeadlineExhausted { .. }
     ));
     assert!(calls.load(Ordering::Relaxed) >= 2);
+}
+
+#[test]
+fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    listener
+        .set_nonblocking(true)
+        .expect("set listener nonblocking for bounded accept");
+    let (stalled_tx, stalled_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let server_deadline = Instant::now() + STALLED_RETRY_SERVER_WATCHDOG;
+        for attempt in 0..2 {
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error)
+                        if error.kind() == ErrorKind::WouldBlock
+                            && Instant::now() < server_deadline =>
+                    {
+                        thread::sleep(STALLED_RETRY_ACCEPT_POLL_INTERVAL);
+                    }
+                    Err(error) => panic!("accept retry request before deadline: {error}"),
+                }
+            };
+            stream
+                .set_nonblocking(false)
+                .expect("set accepted stream blocking");
+            let request = read_request(&mut stream);
+            assert!(request.contains("\"hello\""));
+            if attempt == 0 {
+                stream
+                    .write_all(
+                        b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .expect("write retryable response");
+            } else {
+                stalled_tx.send(()).expect("signal stalled final request");
+                let _ = release_rx.recv_timeout(Duration::from_secs(8));
+            }
+        }
+    });
+    let (delay_tx, delay_rx) = mpsc::channel();
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry_timeout(
+        format!("http://{address}"),
+        retry_policy(
+            1,
+            STALLED_RETRY_BACKOFF_MS,
+            STALLED_RETRY_BACKOFF_MS,
+            STALLED_RETRY_SEQUENCE_TIMEOUT_MS,
+            100,
+            0,
+        ),
+        STALLED_RETRY_REQUEST_TIMEOUT_MS,
+        1,
+        Some(delay_tx),
+    )
+    .expect("construct exporter with equal request and sequence bounds");
+    let (result_tx, result_rx) = mpsc::channel();
+    let export_thread = thread::spawn(move || {
+        let result = exporter.send_payload_sync("logs", &logs_payload());
+        let _ = result_tx.send(result);
+    });
+
+    assert_eq!(
+        delay_rx
+            .recv_timeout(STALLED_RETRY_STEP_WATCHDOG)
+            .expect("first retry enters the configured backoff"),
+        Duration::from_millis(STALLED_RETRY_BACKOFF_MS)
+    );
+    stalled_rx
+        .recv_timeout(STALLED_RETRY_STEP_WATCHDOG)
+        .expect("second request reaches the stalled collector");
+
+    // This is a hang watchdog with room for the remaining sequence budget;
+    // the selected timeout is checked deterministically above.
+    let timely_result = result_rx.recv_timeout(STALLED_RETRY_EXPORT_WATCHDOG);
+    let _ = release_tx.send(());
+    server
+        .join()
+        .expect("stalled collector exits after release");
+    let completed_before_watchdog = timely_result.is_ok();
+    let result = match timely_result {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => result_rx
+            .recv_timeout(STALLED_RETRY_CLEANUP_WATCHDOG)
+            .expect("closing the loopback connection bounds failure cleanup"),
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            panic!("export worker exited without reporting its result")
+        }
+    };
+    export_thread.join().expect("join export worker");
+
+    assert!(
+        completed_before_watchdog,
+        "stalled attempt must use the remaining sequence deadline, not the full request timeout"
+    );
+    assert!(matches!(
+        result,
+        Err(sc_observability_types::v2::ExportError::RetryAttemptsExhausted { .. })
+    ));
 }
 
 #[test]
