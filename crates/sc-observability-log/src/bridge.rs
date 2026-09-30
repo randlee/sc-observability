@@ -650,36 +650,54 @@ pub(crate) fn mark_owned_stopped() {
 #[derive(Debug)]
 pub(crate) struct Bridge;
 
+/// The one logger a facade record is submitted to, selected once per record.
+enum Target {
+    Attached(AttachmentCall),
+    Installed(Arc<handle::Installed>),
+}
+
 impl log::Log for Bridge {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
         handle::core_enabled(mapping::map_level(metadata.level()))
     }
 
     fn log(&self, record: &log::Record<'_>) {
-        let _ = handle::submit_guarded(|| -> Result<(), DropCause> {
-            let level = mapping::map_level(record.level());
-            if let Some(call) = enter_attachment(None) {
-                if !handle::level_enabled(level, call.state.logger.level_state().effective_level) {
-                    return Ok(());
+        // Select the target once. As in the released facade, a record with no
+        // attached or installed logger, or below the target's effective level,
+        // is skipped silently: it never enters the guarded core or a drop counter.
+        let target = match enter_attachment(None) {
+            Some(call) => Target::Attached(call),
+            None => match handle::current_installed() {
+                Some(installed) => Target::Installed(installed),
+                None => return,
+            },
+        };
+        let effective = match &target {
+            Target::Attached(call) => call.state.logger.level_state().effective_level,
+            Target::Installed(installed) => installed.logger.level_state().effective_level,
+        };
+        if !handle::level_enabled(mapping::map_level(record.level()), effective) {
+            return;
+        }
+        let _ = handle::submit_guarded(move || -> Result<(), DropCause> {
+            match target {
+                Target::Attached(call) => {
+                    let mapped = mapping::record_to_parts(record, &call.state.options)
+                        .map_err(|_label_error| DropCause::InvalidEvent)?;
+                    for _ in 0..mapped.omitted_fields {
+                        handle::record_drop(DropCause::InvalidEvent);
+                    }
+                    submit_parts_to_attachment(call, mapped.parts).map(|_| ())
                 }
-                let mapped = mapping::record_to_parts(record, &call.state.options)
-                    .map_err(|_label_error| DropCause::InvalidEvent)?;
-                for _ in 0..mapped.omitted_fields {
-                    handle::record_drop(DropCause::InvalidEvent);
+                Target::Installed(installed) => {
+                    let mapped = mapping::record_to_parts(record, &installed.options)
+                        .map_err(|_label_error| DropCause::InvalidEvent)?;
+                    for _ in 0..mapped.omitted_fields {
+                        handle::record_drop(DropCause::InvalidEvent);
+                    }
+                    handle::submit_to(&installed, mapped.parts).map(|_| ())
                 }
-                return submit_parts_to_attachment(call, mapped.parts).map(|_| ());
             }
-
-            let installed = handle::current_installed().ok_or(DropCause::NotInstalled)?;
-            if !handle::level_enabled(level, installed.logger.level_state().effective_level) {
-                return Ok(());
-            }
-            let mapped = mapping::record_to_parts(record, &installed.options)
-                .map_err(|_label_error| DropCause::InvalidEvent)?;
-            for _ in 0..mapped.omitted_fields {
-                handle::record_drop(DropCause::InvalidEvent);
-            }
-            handle::submit_to(&installed, mapped.parts).map(|_| ())
         });
     }
 
@@ -698,19 +716,12 @@ mod tests {
         }
     }
 
-    #[test]
-    fn facade_record_enters_an_attachment_once() {
-        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_BRIDGE_ENTRY_CHILD";
-        const TEST_NAME: &str = "bridge::tests::facade_record_enters_an_attachment_once";
-
-        if std::env::var_os(CHILD_ENV).is_some() {
-            facade_record_enters_an_attachment_once_in_child();
-            return;
-        }
-
+    /// Runs `test_name` alone in a child process: these tests own the global
+    /// attachment registry, installed slot and drop counters.
+    fn run_isolated(child_env: &str, test_name: &str) {
         let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
-            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
-            .env(CHILD_ENV, "1")
+            .args(["--exact", test_name, "--nocapture", "--test-threads=1"])
+            .env(child_env, "1")
             .status()
             .expect("spawn isolated bridge regression");
         assert!(
@@ -719,53 +730,40 @@ mod tests {
         );
     }
 
-    fn facade_record_enters_an_attachment_once_in_child() {
-        let root = tempfile::tempdir().expect("temporary log root");
-        let service = ServiceName::new("bridge-entry-test").expect("service name");
+    fn attach(
+        service: &str,
+        root: &std::path::Path,
+    ) -> (Arc<sc_observability::v2::Logger>, Arc<AttachmentState>) {
+        let service = ServiceName::new(service).expect("service name");
         let logger = Arc::new(
             sc_observability::v2::Logger::new(crate::LoggerConfig::default_for(
                 service.clone(),
-                root.path().to_path_buf(),
+                root.to_path_buf(),
             ))
             .expect("host logger"),
         );
         let state = Arc::new(AttachmentState {
             logger: Arc::clone(&logger),
-            options: crate::BridgeOptions {
-                default_action: crate::ActionName::new("log.record").expect("action name"),
-                parse_bracket_action: false,
-            },
+            options: options(),
             policy: Arc::new(Admit),
             service,
             identity: ProcessIdentity::default(),
             last_policy_rejection: Mutex::new(None),
         });
-        {
-            let mut registry = ATTACHMENT.lock().expect("attachment registry");
-            assert!(
-                registry.state.is_none(),
-                "unit test owns attachment registry"
-            );
-            registry.mode = AttachmentMode::Attached;
-            registry.state = Some(Arc::clone(&state));
-            registry.in_flight = 0;
-            registry.abandoned = false;
-        }
-
-        ATTACHMENT_ENTRIES.with(|entries| entries.set(0));
-        let args = format_args!("one attachment entry");
-        let record = log::Record::builder()
-            .args(args)
-            .level(log::Level::Info)
-            .target("bridge.entry.test")
-            .build();
-        log::Log::log(&Bridge, &record);
-        assert_eq!(
-            ATTACHMENT_ENTRIES.with(Cell::get),
-            1,
-            "one facade record must retain its first attachment call"
+        let mut registry = ATTACHMENT.lock().expect("attachment registry");
+        assert!(
+            registry.state.is_none(),
+            "unit test owns attachment registry"
         );
+        registry.mode = AttachmentMode::Attached;
+        registry.state = Some(Arc::clone(&state));
+        registry.in_flight = 0;
+        registry.abandoned = false;
+        drop(registry);
+        (logger, state)
+    }
 
+    fn detach(logger: Arc<sc_observability::v2::Logger>, state: Arc<AttachmentState>) {
         close_attachment(&state, Duration::from_secs(5), false)
             .expect("all entered calls drain before releasing the host logger");
         ATTACHMENT.lock().expect("attachment registry").mode = AttachmentMode::Empty;
@@ -773,5 +771,124 @@ mod tests {
         Arc::try_unwrap(logger)
             .unwrap_or_else(|_| panic!("attachment call releases the host logger"))
             .shutdown();
+    }
+
+    fn options() -> crate::BridgeOptions {
+        crate::BridgeOptions {
+            default_action: crate::ActionName::new("log.record").expect("action name"),
+            parse_bracket_action: false,
+        }
+    }
+
+    /// Submits one facade record at `level`, optionally from inside an emit scope.
+    fn log_at(level: log::Level, in_emit_scope: bool) {
+        let _scope = in_emit_scope.then(|| handle::EmitScope::enter().expect("outer emit scope"));
+        log::Log::log(
+            &Bridge,
+            &log::Record::builder()
+                .args(format_args!("facade record"))
+                .level(level)
+                .target("bridge.skip.test")
+                .build(),
+        );
+    }
+
+    #[test]
+    fn facade_record_enters_an_attachment_once() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_BRIDGE_ENTRY_CHILD";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            facade_record_enters_an_attachment_once_in_child();
+            return;
+        }
+        run_isolated(
+            CHILD_ENV,
+            "bridge::tests::facade_record_enters_an_attachment_once",
+        );
+    }
+
+    fn facade_record_enters_an_attachment_once_in_child() {
+        let root = tempfile::tempdir().expect("temporary log root");
+        let (logger, state) = attach("bridge-entry-test", root.path());
+
+        ATTACHMENT_ENTRIES.with(|entries| entries.set(0));
+        log_at(log::Level::Info, false);
+        assert_eq!(
+            ATTACHMENT_ENTRIES.with(Cell::get),
+            1,
+            "one facade record must retain its first attachment call"
+        );
+
+        detach(logger, state);
+    }
+
+    #[test]
+    fn skipped_facade_records_count_no_drop() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_BRIDGE_SKIP_CHILD";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            skipped_facade_records_count_no_drop_in_child();
+            return;
+        }
+        run_isolated(
+            CHILD_ENV,
+            "bridge::tests::skipped_facade_records_count_no_drop",
+        );
+    }
+
+    fn skipped_facade_records_count_no_drop_in_child() {
+        // Nothing attached or installed: skipped, also inside an emit scope.
+        assert!(handle::current_installed().is_none());
+        let before = handle::dropped_events();
+        log_at(log::Level::Error, false);
+        log_at(log::Level::Error, true);
+        assert_eq!(
+            handle::dropped_events(),
+            before,
+            "a record with no logger is skipped without a drop"
+        );
+
+        // Attached, below the effective level: one attachment entry, no drop.
+        let root = tempfile::tempdir().expect("temporary log root");
+        let (logger, state) = attach("bridge-skip-test", root.path());
+        let before = handle::dropped_events();
+        ATTACHMENT_ENTRIES.with(|entries| entries.set(0));
+        log_at(log::Level::Trace, false);
+        log_at(log::Level::Trace, true);
+        assert_eq!(
+            ATTACHMENT_ENTRIES.with(Cell::get),
+            2,
+            "one entry per record"
+        );
+        assert_eq!(
+            handle::dropped_events(),
+            before,
+            "a below-level attached record is skipped without a drop"
+        );
+        // Control: an enabled record inside an emit scope is a reentrant drop.
+        let reentrant = handle::drop_count(DropCause::ReentrantEmit);
+        log_at(log::Level::Info, true);
+        assert_eq!(handle::drop_count(DropCause::ReentrantEmit), reentrant + 1);
+        detach(logger, state);
+
+        // Installed, below the effective level.
+        let root = tempfile::tempdir().expect("temporary log root");
+        let guard = crate::init(
+            crate::LoggerConfig::default_for(
+                ServiceName::new("bridge-skip-installed").expect("service name"),
+                root.path().to_path_buf(),
+            ),
+            options(),
+        )
+        .expect("installed logger");
+        let before = handle::dropped_events();
+        log_at(log::Level::Trace, false);
+        log_at(log::Level::Trace, true);
+        assert_eq!(
+            handle::dropped_events(),
+            before,
+            "a below-level installed record is skipped without a drop"
+        );
+        guard
+            .shutdown(Duration::from_secs(5))
+            .expect("installed logger shuts down");
     }
 }
