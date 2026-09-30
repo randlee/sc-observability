@@ -47,7 +47,7 @@ use config::{
 use config::{validate_config_typed, validated_transport_bounds};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
-use sc_observability_types::v2::{ConfigFailure, ExportError};
+use sc_observability_types::v2::{ConfigFailure, EventError as CanonicalEventError, ExportError};
 use sc_observability_types::{
     DiagnosticSummary, ErrorContext, LogEvent, MetricRecord, ObservabilityHealthProvider,
     Remediation, SinkName, SpanSignal, telemetry_health_provider_sealed,
@@ -514,12 +514,30 @@ impl RuntimeTelemetry {
         if self.config.logs.is_none() || !self.config.transport.enabled {
             return Ok(());
         }
+        validate_entity_id(event)?;
+        self.buffer_log(event);
+        Ok(())
+    }
+
+    /// Released root-facade log admission: exact 1.4.1 acceptance, no entity check.
+    pub(crate) fn emit_log_released(
+        &self,
+        event: &LogEvent,
+    ) -> Result<(), CanonicalTelemetryError> {
+        self.ensure_active()?;
+        if self.config.logs.is_none() || !self.config.transport.enabled {
+            return Ok(());
+        }
+        self.buffer_log(event);
+        Ok(())
+    }
+
+    pub(crate) fn buffer_log(&self, event: &LogEvent) {
         self.runtime
             .lock()
             .expect("telemetry runtime poisoned")
             .log_buffer
             .push(event.clone());
-        Ok(())
     }
 
     /// Buffers one projected span signal for later export.
@@ -970,6 +988,31 @@ impl MetricEmitter for RuntimeTelemetry {
     fn emit_metric(&self, metric: MetricRecord) -> Result<(), CanonicalTelemetryError> {
         RuntimeTelemetry::emit_metric(self, &metric)
     }
+}
+
+/// Canonical admission check for the state-transition `entity_id`.
+fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
+    let Some(entity_id) = event
+        .state_transition
+        .as_ref()
+        .and_then(|transition| transition.entity_id.as_deref())
+    else {
+        return Ok(());
+    };
+    sc_observability_types::EntityId::new(entity_id)
+        .map(|_| ())
+        .map_err(|_| {
+            let failure = EventFailure::invalid_event(
+                "log event state transition entity_id is invalid",
+                Remediation::recoverable(
+                    "emit a valid entity_id or omit it",
+                    ["rebuild the state transition before emitting"],
+                ),
+            );
+            CanonicalTelemetryError::Event(CanonicalEventError::Validation {
+                context: failure.into_context(),
+            })
+        })
 }
 
 /// Builds a telemetry export failure with the crate-local error code.

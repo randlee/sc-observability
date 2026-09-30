@@ -157,6 +157,7 @@ impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
     fn try_from(value: &core::v2::TelemetryError) -> Result<Self, Self::Error> {
         match value {
             core::v2::TelemetryError::ExportFailure(error) => Self::try_from(error),
+            core::v2::TelemetryError::Event(error) => Self::try_from(error),
             core::v2::TelemetryError::Shutdown { context } => Ok(Self::Closed {
                 diagnostic: Box::new(from_canonical_diagnostic(context.diagnostic())?),
             }),

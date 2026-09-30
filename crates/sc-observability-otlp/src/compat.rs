@@ -450,9 +450,17 @@ impl Telemetry {
         &self.inner
     }
 
+    /// Wraps an injected runtime so tests can exercise the released facade.
+    #[cfg(test)]
+    pub(crate) fn from_runtime(inner: RuntimeTelemetry) -> Self {
+        Self { inner }
+    }
+
     /// Buffers one log event for export.
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError> {
-        self.inner.emit_log(event).map_err(legacy_telemetry_error)
+        self.inner
+            .emit_log_released(event)
+            .map_err(legacy_telemetry_error)
     }
 
     /// Buffers one span signal for export.
@@ -515,7 +523,7 @@ impl Telemetry {
 
 impl TelemetryEmit for Telemetry {
     fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_log(event)
+        self.runtime().emit_log_released(event)
     }
 
     fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
@@ -586,6 +594,9 @@ fn legacy_telemetry_error(error: CanonicalTelemetryError) -> TelemetryError {
     match error {
         CanonicalTelemetryError::Shutdown { .. } => TelemetryError::Shutdown,
         CanonicalTelemetryError::ExportFailure(error) => {
+            TelemetryError::ExportFailure(error.into_context())
+        }
+        CanonicalTelemetryError::Event(error) => {
             TelemetryError::ExportFailure(error.into_context())
         }
         _ => TelemetryError::ExportFailure(error.into_context()),

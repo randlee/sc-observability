@@ -19,8 +19,8 @@ use sc_observability_types::typed::{
 };
 use sc_observability_types::v2::ProjectionError;
 use sc_observability_types::{
-    ActionName, Diagnostic, DiagnosticInfo, DurationMs, EntityId, ErrorCode, Level, LogEvent,
-    LogProjector, MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
+    ActionName, Diagnostic, DiagnosticInfo, DurationMs, ErrorCode, Level, LogEvent, LogProjector,
+    MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
     ObservationFilter, OutcomeLabel, ProcessIdentity, Remediation, SchemaVersion, ServiceName,
     SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, StateTransition,
     TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext, TraceId,
@@ -211,7 +211,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
         }),
         state_transition: Some(StateTransition {
             entity_kind: TargetCategory::new("agent").expect("valid target"),
-            entity_id: Some(EntityId::new("agent-123").expect("valid entity id")),
+            entity_id: Some(String::from("agent-123")),
             from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
             to_state: sc_observability_types::StateName::new("running").expect("valid state"),
             reason: None,

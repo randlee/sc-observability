@@ -622,7 +622,7 @@ pub fn from_core_event(v: core::LogEvent) -> Result<StoredEventDto, Failure> {
             .transpose()?,
         state_transition: v.state_transition.map(|v| StateTransitionDto {
             entity_kind: v.entity_kind.as_str().into(),
-            entity_id: v.entity_id.map(|value| value.as_str().into()),
+            entity_id: v.entity_id,
             from_state: v.from_state.as_str().into(),
             to_state: v.to_state.as_str().into(),
             reason: v.reason,

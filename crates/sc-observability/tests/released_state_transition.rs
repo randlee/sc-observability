@@ -1,0 +1,244 @@
+//! Released 1.x `StateTransition::entity_id` acceptance versus canonical admission.
+//!
+//! The root facade keeps exact 1.4.1 acceptance (`Option<String>`, no entity
+//! check). The v2 facade validates the identifier as an `EntityId` at
+//! admission, after the service and level checks.
+#![expect(
+    deprecated,
+    reason = "the test exercises the released root facade signatures"
+)]
+
+use std::fs;
+use std::path::PathBuf;
+
+use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
+use sc_observability::v2::{EventError, Logger as CanonicalLogger};
+use sc_observability::{
+    AdmissionOutcome, JsonlLogReader, Level, LogEvent, LogQuery, Logger, LoggerConfig, ServiceName,
+};
+use sc_observability_types::LevelFilter;
+use sc_observability_types::v2::FailureClassification;
+use sc_observability_types::{
+    ActionName, OBSERVATION_ENVELOPE_VERSION, ProcessIdentity, SchemaVersion, StateName,
+    StateTransition, TargetCategory, Timestamp,
+};
+
+const INVALID_ID: &str = "entity invalid";
+
+fn service_name() -> ServiceName {
+    ServiceName::new("released-state-app").expect("valid service name")
+}
+
+fn config(root: &tempfile::TempDir) -> LoggerConfig {
+    LoggerConfig::default_for(service_name(), root.path().to_path_buf())
+}
+
+fn event(entity_id: Option<&str>) -> LogEvent {
+    LogEvent {
+        version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid version"),
+        timestamp: Timestamp::UNIX_EPOCH,
+        level: Level::Info,
+        service: service_name(),
+        target: TargetCategory::new("app.core").expect("valid target"),
+        action: ActionName::new("transition").expect("valid action"),
+        message: None,
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: None,
+        diagnostic: None,
+        state_transition: Some(StateTransition {
+            entity_kind: TargetCategory::new("worker").expect("valid target"),
+            entity_id: entity_id.map(String::from),
+            from_state: StateName::new("idle").expect("valid state"),
+            to_state: StateName::new("active").expect("valid state"),
+            reason: None,
+            trigger: None,
+        }),
+        fields: serde_json::Map::new(),
+    }
+}
+
+fn root_count(logger: &Logger) -> usize {
+    logger.flush().expect("flush");
+    logger
+        .query(&LogQuery::default())
+        .expect("query")
+        .events
+        .len()
+}
+
+fn v2_count(logger: &CanonicalLogger) -> usize {
+    logger.flush().expect("flush");
+    logger
+        .query(&LogQuery::default())
+        .expect("query")
+        .events
+        .len()
+}
+
+fn assert_event_validation(error: &EventError) {
+    assert!(matches!(error, EventError::Validation { .. }), "{error:?}");
+    assert_eq!(
+        error.failure_classification(),
+        FailureClassification::validation("event")
+    );
+}
+
+#[test]
+fn released_literal_with_string_entity_id_compiles() {
+    let transition = StateTransition {
+        entity_kind: TargetCategory::new("worker").expect("valid target"),
+        entity_id: Some(String::from("worker-1")),
+        from_state: StateName::new("idle").expect("valid state"),
+        to_state: StateName::new("active").expect("valid state"),
+        reason: None,
+        trigger: None,
+    };
+    assert_eq!(transition.entity_id.as_deref(), Some("worker-1"));
+}
+
+#[test]
+fn root_facade_accepts_invalid_entity_id_on_every_admission_path() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let logger = Logger::new(config(&root)).expect("logger");
+
+    logger.log(event(Some(INVALID_ID))).expect("log");
+    assert_eq!(root_count(&logger), 1);
+    logger.try_log(event(Some(INVALID_ID))).expect("try_log");
+    assert_eq!(root_count(&logger), 2);
+    assert_eq!(
+        logger
+            .try_log_with_outcome(event(Some(INVALID_ID)))
+            .expect("try_log_with_outcome"),
+        AdmissionOutcome::Accepted
+    );
+    assert_eq!(root_count(&logger), 3);
+    logger.emit(event(Some(INVALID_ID))).expect("emit");
+    assert_eq!(root_count(&logger), 4);
+
+    let snapshot = logger.query(&LogQuery::default()).expect("query");
+    assert!(snapshot.events.iter().all(|stored| {
+        stored
+            .state_transition
+            .as_ref()
+            .and_then(|transition| transition.entity_id.as_deref())
+            == Some(INVALID_ID)
+    }));
+}
+
+#[test]
+fn v2_facade_rejects_invalid_entity_id_without_queueing() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let logger = CanonicalLogger::new(config(&root)).expect("logger");
+    logger.log(event(Some("worker-1"))).expect("valid id");
+    assert_eq!(v2_count(&logger), 1);
+
+    let error = logger.log(event(Some(INVALID_ID))).expect_err("log");
+    assert_event_validation(&error);
+    let error = logger
+        .try_log(event(Some(INVALID_ID)))
+        .expect_err("try_log");
+    assert_event_validation(&error);
+    let error = logger
+        .try_log_with_outcome(event(Some(INVALID_ID)))
+        .expect_err("try_log_with_outcome");
+    assert_event_validation(&error);
+
+    assert_eq!(v2_count(&logger), 1, "rejected events are never queued");
+}
+
+#[test]
+fn valid_and_absent_entity_ids_are_admitted_on_root_and_v2() {
+    let root_dir = tempfile::tempdir().expect("tempdir");
+    let root = Logger::new(config(&root_dir)).expect("logger");
+    root.log(event(Some("worker-1"))).expect("root valid");
+    root.log(event(None)).expect("root absent");
+    assert_eq!(root_count(&root), 2);
+
+    let v2_dir = tempfile::tempdir().expect("tempdir");
+    let v2 = CanonicalLogger::new(config(&v2_dir)).expect("logger");
+    v2.log(event(Some("worker-1"))).expect("v2 valid");
+    v2.log(event(None)).expect("v2 absent");
+    assert_eq!(v2_count(&v2), 2);
+}
+
+#[test]
+fn service_mismatch_takes_precedence_over_entity_check() {
+    let root_dir = tempfile::tempdir().expect("tempdir");
+    let root = Logger::new(config(&root_dir)).expect("logger");
+    let v2_dir = tempfile::tempdir().expect("tempdir");
+    let v2 = CanonicalLogger::new(config(&v2_dir)).expect("logger");
+
+    let mut wrong_service = event(Some(INVALID_ID));
+    wrong_service.service = ServiceName::new("other-service").expect("valid service");
+
+    let root_error = root
+        .log(wrong_service.clone())
+        .expect_err("service mismatch");
+    let v2_error = v2.log(wrong_service).expect_err("service mismatch");
+    assert_event_validation(&v2_error);
+    assert!(
+        v2_error
+            .diagnostic()
+            .message
+            .contains("service does not match"),
+        "{v2_error:?}"
+    );
+    assert!(
+        root_error.to_string().contains("service does not match"),
+        "{root_error}"
+    );
+}
+
+#[test]
+fn below_level_event_with_invalid_entity_id_is_filtered_on_v2() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let mut config = config(&root);
+    config.level = LevelFilter::Info;
+    let logger = CanonicalLogger::new(config).expect("logger");
+
+    let mut below_level = event(Some(INVALID_ID));
+    below_level.level = Level::Debug;
+    assert_eq!(
+        logger
+            .try_log_with_outcome(below_level.clone())
+            .expect("filtered, not rejected"),
+        AdmissionOutcome::Filtered
+    );
+    logger.log(below_level).expect("filtered log is Ok");
+}
+
+#[test]
+fn stored_invalid_entity_id_still_decodes_on_readback() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let log_dir = root.path().join(DEFAULT_LOG_DIR_NAME);
+    fs::create_dir_all(&log_dir).expect("log dir");
+    let path: PathBuf = log_dir.join(format!("released-state-app{DEFAULT_LOG_FILE_SUFFIX}"));
+    let line = serde_json::to_string(&event(Some(INVALID_ID))).expect("serialize");
+    assert!(line.contains(INVALID_ID));
+    fs::write(&path, format!("{line}\n")).expect("write stored line");
+
+    let snapshot = JsonlLogReader::new(path)
+        .query(&LogQuery::default())
+        .expect("lenient readback");
+    assert_eq!(snapshot.events.len(), 1);
+    assert_eq!(
+        snapshot.events[0]
+            .state_transition
+            .as_ref()
+            .and_then(|transition| transition.entity_id.as_deref()),
+        Some(INVALID_ID)
+    );
+
+    let logger = Logger::new(config(&root)).expect("logger");
+    assert_eq!(
+        logger
+            .query(&LogQuery::default())
+            .expect("query readback")
+            .events
+            .len(),
+        1
+    );
+}

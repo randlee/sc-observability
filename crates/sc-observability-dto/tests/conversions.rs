@@ -390,7 +390,7 @@ fn all_stored_event_fields_and_trusted_output_survive() {
     });
     native.state_transition = Some(core::StateTransition {
         entity_kind: core::TargetCategory::new("worker").unwrap(),
-        entity_id: Some(core::EntityId::new("worker-1").unwrap()),
+        entity_id: Some("worker-1".to_string()),
         from_state: core::StateName::new("idle").unwrap(),
         to_state: core::StateName::new("active").unwrap(),
         reason: Some("work".into()),
@@ -596,4 +596,26 @@ fn diagnostic_string_and_step_bounds_are_exact_and_never_truncate() {
     );
     diagnostic.remediation = RemediationDto::Recoverable { steps: vec![] };
     validate_diagnostic(&diagnostic, "response.error").unwrap();
+}
+#[test]
+fn telemetry_event_error_projects_as_validation_not_internal() {
+    let error = core::v2::TelemetryError::Event(core::v2::EventError::Validation {
+        context: Box::new(core::ErrorContext::new(
+            core::error_codes::DIAGNOSTIC_INVALID,
+            "entity id rejected",
+            core::Remediation::recoverable("fix the id", ["rebuild the event"]),
+        )),
+    });
+    let projected = CanonicalFailureDto::try_from(&error).expect("projection succeeds");
+    match projected {
+        CanonicalFailureDto::Validation { diagnostic, field } => {
+            assert_eq!(field, "event");
+            assert_eq!(
+                diagnostic.diagnostic.code,
+                core::error_codes::DIAGNOSTIC_INVALID.as_str()
+            );
+            assert_eq!(diagnostic.diagnostic.message, "entity id rejected");
+        }
+        other => panic!("expected Validation, got {other:?}"),
+    }
 }

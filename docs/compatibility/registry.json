@@ -474,17 +474,17 @@
       "symbol": "sc_observability_types::StateTransition",
       "area": "shared",
       "kind": "value",
-      "status": "pending_d23_wrapper",
-      "canonical": "v2::StateTransition",
-      "treatment": "new_adapter",
+      "status": "canonical_routed",
+      "canonical": "StateTransition",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] pub struct StateTransition { /// Stable category describing what changed, such as `task` or `subagent`. pub entity_kind: TargetCategory, /// Optional caller-owned identifier for the entity that changed. pub entity_id: Option<String>, /// Previous stable state label. pub from_state: StateName, /// New stable state label. pub to_state: StateName, /// Optional human-readable explanation for why the transition occurred. pub reason: Option<String>, /// Optional action or event name that triggered the transition. pub trigger: Option<ActionName>, }",
-      "canonical_signature": "#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] pub struct StateTransition { /// Stable category describing what changed, such as `task` or `subagent`. pub entity_kind: TargetCategory, /// Optional validated caller-owned identifier for the entity that changed. pub entity_id: Option<EntityId>, /// Previous stable state label. pub from_state: StateName, /// New stable state label. pub to_state: StateName, /// Optional human-readable explanation for why the transition occurred. pub reason: Option<String>, /// Optional action or event name that triggered the transition. pub trigger: Option<ActionName>, }",
+      "canonical_signature": "#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] pub struct StateTransition { /// Stable category describing what changed, such as `task` or `subagent`. pub entity_kind: TargetCategory, /// Optional caller-owned identifier for the entity that changed. pub entity_id: Option<String>, /// Previous stable state label. pub from_state: StateName, /// New stable state label. pub to_state: StateName, /// Optional human-readable explanation for why the transition occurred. pub reason: Option<String>, /// Optional action or event name that triggered the transition. pub trigger: Option<ActionName>, }",
       "obligations": [
         "signature identity: preserve StateTransition declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "wire: preserve StateTransition serde derives and tag/content/rename attributes recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "StateTransition is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed. StateTransition.entity_id is the released Option<String>, so one shared LogEvent/query graph serves every facade. Canonical (v2) admission validates it as an EntityId after the version, service and level checks and rejects an invalid value as EventError::Validation, or as the additive v2::TelemetryError::Event(EventError) variant on the non_exhaustive v2 enum for OTLP emit_log (governed-interface note: no new diagnostic code or counter; the released root TelemetryError row is unchanged). Released root facades keep exact 1.4.1 acceptance with no entity check.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/tracing.rs",
@@ -493,18 +493,18 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-types/src/tracing.rs",
-        "symbol": "v2::StateTransition"
+        "symbol": "StateTransition"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "StateTransition is the shared released owner, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability_types::LogEvent",
       "area": "shared",
       "kind": "value",
-      "status": "pending_d23_wrapper",
-      "canonical": "v2::LogEvent",
-      "treatment": "new_adapter",
+      "status": "canonical_routed",
+      "canonical": "LogEvent",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] pub struct LogEvent { /// Log schema version. pub version: SchemaVersion, /// UTC event timestamp. pub timestamp: Timestamp, /// Event severity. pub level: Level, /// Service that emitted the event. pub service: ServiceName, /// Stable target/category label. pub target: TargetCategory, /// Stable action label. pub action: ActionName, /// Optional human-readable message. pub message: Option<String>, /// Process identity attached to the event. pub identity: ProcessIdentity, /// Optional trace context for correlation. pub trace: Option<TraceContext>, /// Optional request identifier. pub request_id: Option<CorrelationId>, /// Optional correlation identifier. pub correlation_id: Option<CorrelationId>, /// Optional stable outcome label. pub outcome: Option<OutcomeLabel>, /// Optional structured diagnostic payload. pub diagnostic: Option<Diagnostic>, /// Optional state transition payload. pub state_transition: Option<StateTransition>, /// Arbitrary structured event fields. pub fields: Map<String, Value>, }",
       "canonical_signature": "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] pub struct LogEvent { /// Log schema version. pub version: SchemaVersion, /// UTC event timestamp. pub timestamp: Timestamp, /// Event severity. pub level: Level, /// Service that emitted the event. pub service: ServiceName, /// Stable target/category label. pub target: TargetCategory, /// Stable action label. pub action: ActionName, /// Optional human-readable message. pub message: Option<String>, /// Process identity attached to the event. pub identity: ProcessIdentity, /// Optional trace context for correlation. pub trace: Option<TraceContext>, /// Optional request identifier. pub request_id: Option<CorrelationId>, /// Optional correlation identifier. pub correlation_id: Option<CorrelationId>, /// Optional stable outcome label. pub outcome: Option<OutcomeLabel>, /// Optional structured diagnostic payload. pub diagnostic: Option<Diagnostic>, /// Optional state transition payload. pub state_transition: Option<StateTransition>, /// Arbitrary structured event fields. pub fields: Map<String, Value>, }",
       "obligations": [
@@ -512,7 +512,7 @@
         "wire: preserve LogEvent serde derives and tag/content/rename attributes recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "LogEvent is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed. StateTransition.entity_id is the released Option<String>, so one shared LogEvent/query graph serves every facade. Canonical (v2) admission validates it as an EntityId after the version, service and level checks and rejects an invalid value as EventError::Validation, or as the additive v2::TelemetryError::Event(EventError) variant on the non_exhaustive v2 enum for OTLP emit_log (governed-interface note: no new diagnostic code or counter; the released root TelemetryError row is unchanged). Released root facades keep exact 1.4.1 acceptance with no entity check.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/events.rs",
@@ -521,18 +521,18 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-types/src/events.rs",
-        "symbol": "v2::LogEvent"
+        "symbol": "LogEvent"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LogEvent is the shared released owner, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability_types::LogSnapshot",
       "area": "shared",
       "kind": "value",
-      "status": "pending_d23_wrapper",
-      "canonical": "v2::LogSnapshot",
-      "treatment": "new_adapter",
+      "status": "canonical_routed",
+      "canonical": "LogSnapshot",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)] pub struct LogSnapshot { /// Matching events returned by the query or poll. pub events: Vec<LogEvent>, /// Whether the result set was truncated by the configured limit. pub truncated: bool, }",
       "canonical_signature": "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)] pub struct LogSnapshot { /// Matching events returned by the query or poll. pub events: Vec<LogEvent>, /// Whether the result set was truncated by the configured limit. pub truncated: bool, }",
       "obligations": [
@@ -540,7 +540,7 @@
         "wire: preserve LogSnapshot serde derives and tag/content/rename attributes recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "LogSnapshot is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed. StateTransition.entity_id is the released Option<String>, so one shared LogEvent/query graph serves every facade. Canonical (v2) admission validates it as an EntityId after the version, service and level checks and rejects an invalid value as EventError::Validation, or as the additive v2::TelemetryError::Event(EventError) variant on the non_exhaustive v2 enum for OTLP emit_log (governed-interface note: no new diagnostic code or counter; the released root TelemetryError row is unchanged). Released root facades keep exact 1.4.1 acceptance with no entity check.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/query.rs",
@@ -549,10 +549,10 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-types/src/query.rs",
-        "symbol": "v2::LogSnapshot"
+        "symbol": "LogSnapshot"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LogSnapshot is the shared released owner, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability_types::ProcessIdentityResolver",

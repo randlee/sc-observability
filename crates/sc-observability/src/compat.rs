@@ -462,7 +462,7 @@ impl Logger<Running> {
         note = "Use Logger::log_typed(); see migrate-error-api.md."
     )]
     pub fn log(&self, event: LogEvent) -> Result<(), LogError> {
-        self.inner.log(event).map_err(legacy_log)
+        self.inner.log_released(event).map_err(legacy_log)
     }
 
     /// Validates, redacts, and blocks for queue admission using typed 1.x
@@ -492,7 +492,7 @@ impl Logger<Running> {
     )]
     pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, TryLogError> {
         self.inner
-            .try_log_with_outcome(event)
+            .try_log_with_outcome_released(event)
             .map_err(legacy_try_log)
     }
 

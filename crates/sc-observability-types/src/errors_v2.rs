@@ -508,6 +508,9 @@ pub enum TelemetryError {
     /// Preserves the export variant, its context and typed source chain.
     #[error("{0}")]
     ExportFailure(#[from] ExportError),
+    /// Canonical event admission rejected the event; delegates to the inner `EventError`.
+    #[error("{0}")]
+    Event(#[from] EventError),
 }
 impl TelemetryError {
     /// Returns the original error context without reconstruction.
@@ -516,6 +519,7 @@ impl TelemetryError {
         match self {
             Self::Shutdown { context } => context,
             Self::ExportFailure(error) => error.context(),
+            Self::Event(error) => error.context(),
         }
     }
 
@@ -531,6 +535,7 @@ impl TelemetryError {
         match self {
             Self::Shutdown { context } => context,
             Self::ExportFailure(error) => error.into_context(),
+            Self::Event(error) => error.into_context(),
         }
     }
 
@@ -540,6 +545,7 @@ impl TelemetryError {
         match self {
             Self::Shutdown { .. } => crate::error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN,
             Self::ExportFailure(error) => error.code(),
+            Self::Event(error) => error.code(),
         }
     }
     /// Returns the native-owned wire failure classification.
@@ -548,6 +554,7 @@ impl TelemetryError {
         match self {
             Self::Shutdown { .. } => FailureClassification::Closed,
             Self::ExportFailure(error) => error.failure_classification(),
+            Self::Event(error) => error.failure_classification(),
         }
     }
 }

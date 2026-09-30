@@ -13,9 +13,9 @@ use crate::{
 };
 use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::{
-    ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, MetricKind,
-    MetricName, ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted,
-    StateTransition, TargetCategory, Timestamp, TraceContext, TraceId,
+    ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
+    ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted, StateTransition,
+    TargetCategory, Timestamp, TraceContext, TraceId,
 };
 use serde_json::{Map, json};
 
@@ -158,7 +158,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
         }),
         state_transition: Some(StateTransition {
             entity_kind: TargetCategory::new("agent").expect("valid target"),
-            entity_id: Some(EntityId::new("agent-123").expect("valid entity id")),
+            entity_id: Some(String::from("agent-123")),
             from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
             to_state: sc_observability_types::StateName::new("running").expect("valid state"),
             reason: None,
@@ -1471,4 +1471,247 @@ fn combined_export_failure_and_incomplete_span_preserve_baseline_shutdown_summar
 
     legacy.shutdown().expect("legacy repeated shutdown");
     typed.shutdown_typed().expect("typed repeated shutdown");
+}
+
+// Released-versus-canonical `entity_id` admission. The active (exporting) state
+// is only constructible through injected exporters, so the buffered-state
+// assertions live here; `tests/released_emit_log.rs` covers the public surface.
+mod entity_admission {
+    use super::*;
+    use crate::{TelemetryProjectors, V2TelemetryProjectors};
+    use sc_observability_types::v2::FailureClassification;
+    use sc_observability_types::{Observation, ProjectionRegistration};
+
+    const INVALID_ID: &str = "entity invalid";
+
+    fn event_with_id(id: &str) -> LogEvent {
+        let mut event = log_event(service_name(), "entity");
+        if let Some(transition) = event.state_transition.as_mut() {
+            transition.entity_id = Some(id.to_string());
+        }
+        event
+    }
+
+    fn active() -> (Telemetry, Arc<RecordingLogExporter<LogEvent>>) {
+        let exporter = Arc::new(RecordingLogExporter::<LogEvent>::default());
+        let telemetry = Telemetry::new_with_exporters(
+            telemetry_config(),
+            exporter.clone(),
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("active telemetry");
+        (telemetry, exporter)
+    }
+
+    fn disabled() -> (Telemetry, Arc<RecordingLogExporter<LogEvent>>) {
+        let exporter = Arc::new(RecordingLogExporter::<LogEvent>::default());
+        let config = TelemetryConfigBuilder::new(service_name())
+            .enable_logs(LogsConfig::default())
+            .build_typed()
+            .expect("disabled config");
+        let telemetry = Telemetry::new_with_exporters(
+            config,
+            exporter.clone(),
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("disabled telemetry");
+        (telemetry, exporter)
+    }
+
+    fn exported(exporter: &RecordingLogExporter<LogEvent>) -> usize {
+        exporter
+            .batches
+            .lock()
+            .expect("batches poisoned")
+            .iter()
+            .map(Vec::len)
+            .sum()
+    }
+
+    fn observation() -> Observation<u8> {
+        Observation::new(service_name(), 1_u8)
+    }
+
+    struct FixedLogProjector(&'static str);
+
+    impl sc_observability_types::LogProjector<u8> for FixedLogProjector {
+        fn project_logs(
+            &self,
+            _observation: &Observation<u8>,
+        ) -> Result<Vec<LogEvent>, sc_observability_types::v2::ProjectionError> {
+            Ok(vec![event_with_id(self.0)])
+        }
+    }
+
+    #[test]
+    fn v2_emit_log_inactive_with_invalid_id_reports_shutdown_first() {
+        let (telemetry, exporter) = active();
+        telemetry.shutdown_typed().expect("shutdown");
+        let error = telemetry
+            .emit_log(&event_with_id(INVALID_ID))
+            .expect_err("closed admission");
+        assert!(
+            matches!(error, TelemetryError::Shutdown { .. }),
+            "{error:?}"
+        );
+        assert_eq!(exported(&exporter), 0);
+    }
+
+    #[test]
+    fn v2_emit_log_disabled_with_invalid_id_is_ok_and_unbuffered() {
+        let (telemetry, exporter) = disabled();
+        telemetry
+            .emit_log(&event_with_id(INVALID_ID))
+            .expect("disabled transport returns before the entity check");
+        telemetry.flush().expect("flush");
+        assert_eq!(exported(&exporter), 0);
+    }
+
+    #[test]
+    fn v2_emit_log_active_with_invalid_id_returns_event_validation_unbuffered() {
+        let (telemetry, exporter) = active();
+        let error = telemetry
+            .emit_log(&event_with_id(INVALID_ID))
+            .expect_err("canonical admission rejects the id");
+        assert!(matches!(error, TelemetryError::Event(_)), "{error:?}");
+        assert_eq!(
+            error.failure_classification(),
+            FailureClassification::validation("event")
+        );
+        assert_ne!(error.failure_classification(), FailureClassification::Io);
+        assert_eq!(
+            error.code(),
+            sc_observability_types::error_codes::DIAGNOSTIC_INVALID
+        );
+        telemetry.flush().expect("flush");
+        assert_eq!(exported(&exporter), 0, "rejected events are never buffered");
+    }
+
+    #[test]
+    fn v2_emit_log_active_with_valid_id_is_buffered() {
+        let (telemetry, exporter) = active();
+        telemetry
+            .emit_log(&event_with_id("agent-123"))
+            .expect("valid id");
+        telemetry.flush().expect("flush");
+        assert_eq!(exported(&exporter), 1);
+    }
+
+    #[test]
+    fn root_emit_log_keeps_released_acceptance() {
+        let (runtime, exporter) = active();
+        let root = crate::Telemetry::from_runtime(runtime);
+        root.emit_log(&event_with_id(INVALID_ID))
+            .expect("released facade has no entity check");
+        root.emit_log(&event_with_id("agent-123")).expect("valid");
+        assert_eq!(root.runtime().flush().map(|()| exported(&exporter)), Ok(2));
+
+        let (runtime, _exporter) = active();
+        let closed = crate::Telemetry::from_runtime(runtime);
+        closed.runtime().shutdown_typed().expect("shutdown");
+        #[allow(deprecated, reason = "asserts the released legacy Shutdown variant")]
+        let shutdown = matches!(
+            closed.emit_log(&event_with_id(INVALID_ID)),
+            Err(crate::TelemetryError::Shutdown)
+        );
+        assert!(shutdown);
+
+        let (runtime, exporter) = disabled();
+        let disabled = crate::Telemetry::from_runtime(runtime);
+        disabled
+            .emit_log(&event_with_id(INVALID_ID))
+            .expect("disabled");
+        assert_eq!(exported(&exporter), 0);
+    }
+
+    #[test]
+    fn root_projectors_keep_released_acceptance_and_v2_projectors_stay_canonical() {
+        let (runtime, exporter) = active();
+        let root = Arc::new(crate::Telemetry::from_runtime(runtime));
+        let registration: ProjectionRegistration<u8> = TelemetryProjectors::new(root.clone())
+            .with_log_projector(Arc::new(FixedLogProjector(INVALID_ID)))
+            .into_registration();
+        let (log_projector, _, _, _) = registration.into_parts();
+        let events = log_projector
+            .expect("log projector")
+            .project_logs(&observation())
+            .expect("released projector ingress accepts the id");
+        assert_eq!(events.len(), 1);
+        root.runtime().flush().expect("flush");
+        assert_eq!(exported(&exporter), 1);
+
+        let (v2, v2_exporter) = active();
+        let v2 = Arc::new(v2);
+        let registration: ProjectionRegistration<u8> = V2TelemetryProjectors::new(v2.clone())
+            .with_log_projector(Arc::new(FixedLogProjector(INVALID_ID)))
+            .into_registration();
+        let (log_projector, _, _, _) = registration.into_parts();
+        let error = log_projector
+            .expect("log projector")
+            .project_logs(&observation())
+            .expect_err("canonical projector ingress rejects the id");
+        assert!(
+            matches!(
+                error,
+                sc_observability_types::v2::ProjectionError::Projection { .. }
+            ),
+            "{error:?}"
+        );
+        // The projection failure preserves the admission context code.
+        assert_eq!(
+            error.diagnostic().code,
+            sc_observability::error_codes::LOGGER_INVALID_EVENT
+        );
+        v2.flush().expect("flush");
+        assert_eq!(exported(&v2_exporter), 0);
+    }
+    #[test]
+    fn v2_logger_and_v2_emit_log_accept_and_reject_entity_ids_identically() {
+        let long_valid = "a".repeat(512);
+        let cases: Vec<(String, &str)> = vec![
+            ("worker-1".into(), "valid"),
+            ("A.b_c-9".into(), "valid punctuation edge"),
+            ("x".into(), "single character"),
+            (long_valid, "long valid"),
+            (String::new(), "empty"),
+            (" ".into(), "space"),
+            ("entity invalid".into(), "embedded space"),
+            (" leading".into(), "leading space"),
+            ("trailing ".into(), "trailing space"),
+            ("tab\tid".into(), "tab"),
+            ("new\nline".into(), "newline"),
+            ("agent/1".into(), "slash"),
+            ("caf\u{e9}".into(), "non-ascii"),
+            ("a:b".into(), "colon"),
+        ];
+
+        let service = service_name();
+        let log_root = std::env::temp_dir().join(format!(
+            "sc-otlp-entity-parity-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        let logger_config =
+            sc_observability::LoggerConfig::default_for(service.clone(), log_root.clone());
+        let logger = sc_observability::v2::Logger::new(logger_config).expect("logger");
+        let (telemetry, _exporter) = active();
+
+        for (id, label) in cases {
+            let expected_valid = sc_observability_types::EntityId::new(id.clone()).is_ok();
+            let logger_accepts = logger.log(event_with_id(&id)).is_ok();
+            let otlp_result = telemetry.emit_log(&event_with_id(&id));
+            assert_eq!(logger_accepts, expected_valid, "logger: {label}");
+            assert_eq!(otlp_result.is_ok(), expected_valid, "otlp: {label}");
+            if let Err(error) = otlp_result {
+                assert!(matches!(error, TelemetryError::Event(_)), "{label}");
+            }
+        }
+        let _stopped = logger.shutdown();
+        let _ = std::fs::remove_dir_all(&log_root);
+    }
 }

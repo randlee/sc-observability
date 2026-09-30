@@ -15,12 +15,12 @@ use sc_observability_otlp::v2::{
 };
 use sc_observability_types::typed::ProjectionFailure;
 use sc_observability_types::{
-    ActionName, CorrelationId, Diagnostic, EntityId, ErrorCode, Level, LogEvent,
-    LoggingHealthReport, MetricKind, MetricName, MetricRecord, MetricUnit,
-    OBSERVATION_ENVELOPE_VERSION, ObservabilityHealthReport, Observation, OutcomeLabel,
-    ProcessIdentity, ProjectionRegistration, Remediation, SchemaVersion, ServiceName, SpanEvent,
-    SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateName, StateTransition,
-    TargetCategory, TelemetryHealthReport, TraceContext, TraceId,
+    ActionName, CorrelationId, Diagnostic, ErrorCode, Level, LogEvent, LoggingHealthReport,
+    MetricKind, MetricName, MetricRecord, MetricUnit, OBSERVATION_ENVELOPE_VERSION,
+    ObservabilityHealthReport, Observation, OutcomeLabel, ProcessIdentity, ProjectionRegistration,
+    Remediation, SchemaVersion, ServiceName, SpanEvent, SpanId, SpanRecord, SpanSignal,
+    SpanStarted, SpanStatus, StateName, StateTransition, TargetCategory, TelemetryHealthReport,
+    TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde::{Deserialize, Serialize};
@@ -663,7 +663,7 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
     match event {
         HookEventKind::SubagentStart { .. } => Some(StateTransition {
             entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
-            entity_id: Some(EntityId::new("subagent-7").expect("valid entity id")),
+            entity_id: Some(String::from("subagent-7")),
             from_state: SUBAGENT_IDLE_STATE.clone(),
             to_state: SUBAGENT_RUNNING_STATE.clone(),
             reason: None,
@@ -671,7 +671,7 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
         }),
         HookEventKind::SubagentEnd { .. } => Some(StateTransition {
             entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
-            entity_id: Some(EntityId::new("subagent-7").expect("valid entity id")),
+            entity_id: Some(String::from("subagent-7")),
             from_state: SUBAGENT_RUNNING_STATE.clone(),
             to_state: SUBAGENT_COMPLETED_STATE.clone(),
             reason: None,
