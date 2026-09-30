@@ -348,3 +348,128 @@ fn nested_export_timeout_keeps_lifecycle_category_and_code() {
     assert!(matches!(wire, CanonicalFailureDto::Timeout { .. }));
     assert_eq!(wire.diagnostic().diagnostic.code, code.as_str());
 }
+
+fn envelope_failure(wire: Value) -> (String, String, String) {
+    match decode_canonical_envelope::<AdmissionDto>(wire) {
+        Err(Failure::Validation { diagnostic, field }) => {
+            (diagnostic.code, field, diagnostic.message)
+        }
+        other => panic!("expected validation failure, got {other:?}"),
+    }
+}
+
+#[test]
+fn canonical_envelope_error_arm_follows_binding_contract() {
+    // binding-contract.md: malformed envelope -> INVALID_INPUT at `response`;
+    // oversized diagnostic -> DIAGNOSTIC_TOO_LARGE at `response.error`, checked before timestamp.
+    let wire = fixture("CanonicalWireEnvelopeAdmissionDto");
+    let too_large = error_codes::SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE;
+    let invalid = error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT;
+    let with = |edit: &dyn Fn(&mut Value)| {
+        let mut w = wire.clone();
+        edit(&mut w["error"]);
+        envelope_failure(w)
+    };
+    for edit in [
+        &(|e: &mut Value| e["message"] = json!("x".repeat(4097))) as &dyn Fn(&mut Value),
+        &|e| e["at"] = json!("x".repeat(4097)),
+        &|e| {
+            e["message"] = json!("x".repeat(4097));
+            e["at"] = json!("not-a-time");
+        },
+    ] {
+        let (code, field, _) = with(edit);
+        assert_eq!(
+            (code.as_str(), field.as_str()),
+            (too_large, "response.error")
+        );
+    }
+    let (code, field, _) = with(&|e| e["at"] = json!("not-a-time"));
+    assert_eq!((code.as_str(), field.as_str()), (invalid, "response.error"));
+    let (code, field, message) = with(&|e| {
+        e["at"] = json!("not-a-time");
+        e["details"] = json!({"k": {"kind": "nope"}});
+    });
+    assert_eq!((code.as_str(), field.as_str()), (invalid, "response.error"));
+    assert!(!message.contains("nope"), "{message}");
+    for edit in [
+        &(|e: &mut Value| drop(e.as_object_mut().unwrap().remove("message")))
+            as &dyn Fn(&mut Value),
+        &|e| {
+            e["kind"] = json!("validation");
+            e.as_object_mut().unwrap().remove("field");
+        },
+    ] {
+        let (code, field, _) = with(edit);
+        assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
+    }
+    // Canonical contract mapping, not base parity: these malformed-envelope
+    // groups report `response` (base b6f54cb6 reported `response.error`).
+    for (edit, needle) in [
+        (
+            &(|e: &mut Value| e["details"] = json!([1])) as &dyn Fn(&mut Value),
+            "expected a map",
+        ),
+        (
+            &|e| e["details"] = json!({"k": {"kind": "nope"}}),
+            "unknown variant",
+        ),
+        (
+            &|e| e["details"] = json!({"k": {"kind": "string", "value": "x".repeat(70_000)}}),
+            "request exceeds",
+        ),
+    ] {
+        let (code, field, message) = with(edit);
+        assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
+        assert!(message.contains(needle), "{message}");
+    }
+    for error in [Value::Null, json!("x")] {
+        let mut w = wire.clone();
+        w["error"] = error;
+        let (code, field, message) = envelope_failure(w);
+        assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
+        assert!(message.contains("expected struct Diagnostic"), "{message}");
+    }
+}
+
+#[test]
+fn canonical_envelope_ok_value_is_not_request_bounded() {
+    // binding-contract.md: request size and depth bounds do not limit output records.
+    let deep = (0..40).fold(json!(1), |v, _| json!([v]));
+    for value in [deep, json!("x".repeat(70_000))] {
+        let wire = json!({"schema_version": 1, "kind": "ok", "value": value.clone()});
+        match decode_canonical_envelope::<Value>(wire).unwrap() {
+            CanonicalWireEnvelope::Ok { value: decoded, .. } => assert_eq!(decoded, value),
+            other => panic!("expected ok, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn canonical_envelope_unknown_kind_keeps_canonical_metadata() {
+    let mut wire = fixture("CanonicalWireEnvelopeAdmissionDto");
+    wire["error"]["kind"] = json!("future_kind_xyz");
+    wire["error"]["docs"] = json!("https://example.test/recovery");
+    wire["error"]["details"] = json!({"k": {"kind": "string", "value": "v"}});
+    match decode_canonical_envelope::<AdmissionDto>(wire.clone()).unwrap() {
+        CanonicalWireEnvelope::Error {
+            error:
+                CanonicalFailureDto::UnknownRemote {
+                    diagnostic,
+                    remote_kind,
+                },
+            ..
+        } => {
+            assert_eq!(remote_kind, "future_kind_xyz");
+            assert_eq!(
+                diagnostic.docs.as_deref(),
+                Some("https://example.test/recovery")
+            );
+            assert_eq!(
+                serde_json::to_value(&diagnostic.details).unwrap(),
+                wire["error"]["details"]
+            );
+        }
+        other => panic!("expected unknown remote failure, got {other:?}"),
+    }
+}
