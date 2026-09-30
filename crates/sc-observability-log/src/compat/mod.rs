@@ -425,6 +425,7 @@ pub(crate) fn legacy_emit(error: crate::error::EmitError) -> EmitError {
         Core::WriterDegraded { diagnostic } => EmitError::WriterDegraded { diagnostic },
         Core::ShutdownTimedOut { diagnostic } => EmitError::ShutdownTimedOut { diagnostic },
         Core::NotRunning { phase } => EmitError::NotRunning { phase },
+        // A missing attachment is stopped independently of any unrelated global owner.
         Core::NotInstalled => EmitError::NotRunning {
             phase: crate::LifecyclePhase::Stopped,
         },
@@ -602,6 +603,119 @@ mod tests {
         >() {
         }
         assert_traits::<LogControl>();
+    }
+
+    #[test]
+    fn detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_DETACHED_ATTACHMENT_CHILD";
+        struct Admit;
+
+        impl crate::BridgeEventPolicy for Admit {
+            fn decide(&self, _: &crate::LogEvent) -> crate::BridgeEventDecision {
+                crate::BridgeEventDecision::Admit
+            }
+        }
+
+        struct RestoreStopped;
+
+        impl Drop for RestoreStopped {
+            fn drop(&mut self) {
+                crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Stopped);
+            }
+        }
+
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("test executable"),
+            )
+            .args([
+                "--exact",
+                "compat::tests::detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD_ENV, "1")
+            .output()
+            .expect("spawn isolated compatibility regression");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                output.status.success(),
+                "isolated compatibility regression failed: {}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+                output.status
+            );
+            assert_eq!(
+                stdout
+                    .lines()
+                    .filter(|line| line.trim() == "running 1 test")
+                    .count(),
+                1,
+                "isolated compatibility regression must execute exactly one test:\n{stdout}"
+            );
+            assert_eq!(
+                stdout
+                    .matches("test result: ok. 1 passed; 0 failed;")
+                    .count(),
+                1,
+                "isolated compatibility regression must report one passing test:\n{stdout}"
+            );
+            return;
+        }
+
+        let root = tempfile::tempdir().expect("temporary log root");
+        let service = crate::ServiceName::new("detached-attachment").expect("service name");
+        let logger = std::sync::Arc::new(
+            sc_observability::v2::Logger::new(crate::LoggerConfig::default_for(
+                service,
+                root.path().to_path_buf(),
+            ))
+            .expect("host logger"),
+        );
+        let mut attachment = crate::attach_logger(
+            std::sync::Arc::clone(&logger),
+            crate::AttachmentOptions::new(
+                crate::BridgeOptions {
+                    default_action: crate::ActionName::new("log.record").expect("action name"),
+                    parse_bracket_action: false,
+                },
+                std::sync::Arc::new(Admit),
+            ),
+        )
+        .expect("attach host logger");
+        let stale = attachment.control();
+        attachment
+            .detach(std::time::Duration::ZERO)
+            .expect("detach attachment before stale admission");
+
+        // Test-only unrelated lifecycle state: no owner is installed here. The
+        // real attachment path above proves `NotInstalled`; this prevents the
+        // released adapter from consulting an unrelated global phase.
+        crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Running);
+        let _restore = RestoreStopped;
+        let core_error = stale
+            .try_log(crate::BridgeEvent {
+                level: crate::EventLevel::Info,
+                target: crate::TargetCategory::new("bridge.compat").expect("target"),
+                action: None,
+                message: Some("stale attachment".to_owned()),
+                outcome: None,
+                fields: serde_json::Map::new(),
+                request_id: None,
+                correlation_id: None,
+                trace: None,
+            })
+            .expect_err("detached attachment");
+        assert!(matches!(core_error, crate::error::EmitError::NotInstalled));
+        assert!(matches!(
+            legacy_emit(core_error),
+            EmitError::NotRunning {
+                phase: crate::LifecyclePhase::Stopped,
+            }
+        ));
+
+        std::sync::Arc::try_unwrap(logger)
+            .unwrap_or_else(|_| panic!("detach releases host logger"))
+            .shutdown();
     }
 
     #[test]
