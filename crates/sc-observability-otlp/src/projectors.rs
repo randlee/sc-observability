@@ -1,9 +1,9 @@
 //! Telemetry projector adapters layered on top of generic observation routing.
 //!
-//! `TelemetryProjectors<T>` wraps ordinary `sc-observe` projectors for one
+//! `V2TelemetryProjectors<T>` wraps ordinary `sc-observe` projectors for one
 //! `Observable` payload type and forwards projected logs, spans, and metrics
-//! into a shared `Telemetry` runtime without changing downstream registration
-//! paths.
+//! into a shared canonical `RuntimeTelemetry` without changing downstream
+//! registration paths.
 #![allow(
     clippy::must_use_candidate,
     reason = "projection-helper builders are intentionally kept lightweight and explicit without repetitive must_use decoration"
@@ -14,7 +14,7 @@
 )]
 use std::sync::Arc;
 
-use crate::{RuntimeTelemetry, Telemetry};
+use crate::RuntimeTelemetry;
 use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
     typed_log_projector, typed_metric_projector, typed_span_projector,
@@ -55,7 +55,7 @@ pub(crate) fn project_v2_span(signal: V2SpanSignal) -> V2SpanSignal {
 }
 
 /// Public helper for attaching telemetry export to ordinary observation projection registration.
-struct ProjectorSet<T, R>
+pub(crate) struct ProjectorSet<T, R>
 where
     T: Observable,
     R: TelemetryEmit,
@@ -73,7 +73,7 @@ where
     R: TelemetryEmit,
 {
     /// Starts a wrapped projector set for one observation payload type.
-    fn new(telemetry: Arc<R>) -> Self {
+    pub(crate) fn new(telemetry: Arc<R>) -> Self {
         Self {
             telemetry,
             log_projector: None,
@@ -84,31 +84,31 @@ where
     }
 
     /// Attaches a log projector whose output is also forwarded into telemetry.
-    fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
+    pub(crate) fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
         self.log_projector = Some(projector);
         self
     }
 
     /// Attaches a span projector whose output is also forwarded into telemetry.
-    fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
+    pub(crate) fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
         self.span_projector = Some(projector);
         self
     }
 
     /// Attaches a metric projector whose output is also forwarded into telemetry.
-    fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
+    pub(crate) fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
         self.metric_projector = Some(projector);
         self
     }
 
     /// Attaches the same observation filter the wrapped projector registration should honor.
-    fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
+    pub(crate) fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
         self.filter = Some(filter);
         self
     }
 
     /// Converts the wrapped helper into ordinary sc-observe projection registration.
-    fn into_registration(self) -> ProjectionRegistration<T> {
+    pub(crate) fn into_registration(self) -> ProjectionRegistration<T> {
         let mut registration = ProjectionRegistration::new();
 
         if let Some(inner) = self.log_projector {
@@ -143,24 +143,10 @@ where
     }
 }
 
-trait TelemetryEmit: Send + Sync + 'static {
+pub(crate) trait TelemetryEmit: Send + Sync + 'static {
     fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError>;
     fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError>;
     fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError>;
-}
-
-impl TelemetryEmit for Telemetry {
-    fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
-        self.emit_log_canonical(event)
-    }
-
-    fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
-        self.emit_span_canonical(span)
-    }
-
-    fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
-        self.emit_metric_canonical(metric)
-    }
 }
 
 impl TelemetryEmit for RuntimeTelemetry {
@@ -236,12 +222,6 @@ macro_rules! projector_facade {
     };
 }
 
-projector_facade!(
-    TelemetryProjectors,
-    Telemetry,
-    "Wrap observation projectors for the released OTLP telemetry API.",
-    "Attach log, span, and metric projectors and an optional filter, then call `into_registration` to register them with the observation routing layer. Projected outputs are also forwarded to the supplied telemetry runtime."
-);
 projector_facade!(
     V2TelemetryProjectors,
     RuntimeTelemetry,
