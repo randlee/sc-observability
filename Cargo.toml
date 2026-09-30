@@ -14,6 +14,7 @@ members = [
   "examples/otlp-legacy",
   "examples/otlp-sdk",
   "examples/log-settings",
+  "tests/sc-observability-composition",
 ]
 exclude = ["examples/atm-adapter-example"]
 resolver = "2"
