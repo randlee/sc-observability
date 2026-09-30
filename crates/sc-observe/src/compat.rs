@@ -20,10 +20,6 @@ use sc_observability_types::{ServiceName, ToolName};
 
 use crate::{Observability, ObservabilityBuilder, ObservabilityConfig};
 
-fn init_failure(error: InitError) -> InitFailure {
-    InitFailure::from_context(error.into_context())
-}
-
 #[allow(
     deprecated,
     reason = "root methods retain the released compatibility error wrappers"
@@ -32,20 +28,12 @@ fn legacy_init_error(error: InitError) -> LegacyInitError {
     LegacyInitError(error.into_context())
 }
 
-fn flush_failure(error: FlushError) -> FlushFailure {
-    FlushFailure::from_context(error.into_context())
-}
-
 #[allow(
     deprecated,
     reason = "root methods retain the released compatibility error wrappers"
 )]
 fn legacy_flush_error(error: FlushError) -> LegacyFlushError {
     LegacyFlushError(error.into_context())
-}
-
-fn shutdown_failure(error: ShutdownError) -> ShutdownFailure {
-    ShutdownFailure::from_context(error.into_context())
 }
 
 #[allow(
@@ -77,12 +65,12 @@ impl ObservabilityConfig {
 
     /// Builds v1 defaults while retaining the released typed failure contract.
     pub fn default_for_typed(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitFailure> {
-        Self::default_for_v2(tool_name, log_root).map_err(init_failure)
+        Self::default_for_v2(tool_name, log_root).map_err(InitFailure::from)
     }
 
     /// Derives a service name while retaining the released typed failure contract.
     pub fn service_name_typed(&self) -> Result<ServiceName, InitFailure> {
-        self.service_name_v2().map_err(init_failure)
+        self.service_name_v2().map_err(InitFailure::from)
     }
 }
 
@@ -116,17 +104,17 @@ impl Observability {
 
     /// Constructs the existing runtime with the released typed failure contract.
     pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure> {
-        Self::new_v2(config).map_err(init_failure)
+        Self::new_v2(config).map_err(InitFailure::from)
     }
 
     /// Flushes the existing runtime with the released typed failure contract.
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
-        self.flush_v2().map_err(flush_failure)
+        self.flush_v2().map_err(FlushFailure::from)
     }
 
     /// Shuts down the existing runtime with the released typed failure contract.
     pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
-        self.shutdown_v2().map_err(shutdown_failure)
+        self.shutdown_v2().map_err(ShutdownFailure::from)
     }
 }
 
@@ -142,6 +130,6 @@ impl ObservabilityBuilder {
 
     /// Finalizes the existing builder with the released typed failure contract.
     pub fn build_typed(self) -> Result<Observability, InitFailure> {
-        self.build_v2().map_err(init_failure)
+        self.build_v2().map_err(InitFailure::from)
     }
 }
