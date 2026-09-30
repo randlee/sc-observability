@@ -673,7 +673,9 @@ fn rejects_non_utf8_key_in_selected_namespace() {
 #[test]
 fn rejects_non_utf8_key_in_selected_namespace() {
     let snapshot = EnvSnapshot::from_pairs([(
-        OsString::from_wide(&[0x0053, 0x0043, 0x005F, 0xD800]),
+        OsString::from_wide(&[
+            0x0053, 0x0043, 0x005F, 0x004C, 0x004F, 0x0047, 0x005F, 0xD800,
+        ]),
         OsString::from("ignored"),
     )]);
 
