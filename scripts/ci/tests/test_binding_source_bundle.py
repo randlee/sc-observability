@@ -19,6 +19,45 @@ BUNDLE=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(BUNDLE)
 from _log_staging import PACKAGES, inspect_archive, read_stage_manifest, sha256
 
 class SourceBoundaryTests(unittest.TestCase):
+    def registry_lock(self, packages):
+        return {'package': packages}
+
+    def package(self, name, version, *, source=None, checksum=None, dependencies=None):
+        package={'name':name,'version':version}
+        if source is not None:package['source']=source
+        if checksum is not None:package['checksum']=checksum
+        if dependencies is not None:package['dependencies']=dependencies
+        return package
+
+    def test_isolated_registry_selection_ignores_workspace_feature_only_packages(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='tokio',dependencies=['getrandom 0.2.0 (registry+https://example.invalid/index)']),
+            self.package('getrandom','0.2.0',source=registry,checksum='getrandom'),
+        ])
+        staged=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='tokio'),
+        ])
+        self.assertEqual(BUNDLE.reviewed_registry_closure(source,staged,[('binding','1.0.0')]),[{'name':'tokio','version':'1.0.0','source':registry,'checksum':'tokio'}])
+
+    def test_registry_selection_rejects_changed_or_missing_selected_packages(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='reviewed'),
+        ])
+        changed=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='changed'),
+        ])
+        with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+            BUNDLE.reviewed_registry_closure(source,changed,[('binding','1.0.0')])
+        missing=self.registry_lock([self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)'])])
+        with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_STALE_LOCK'):
+            BUNDLE.reviewed_registry_closure(source,missing,[('binding','1.0.0')])
+
     def test_read_stage_manifest_decodes_utf8_explicitly(self):
         with tempfile.TemporaryDirectory() as temporary:
             stage = Path(temporary)
