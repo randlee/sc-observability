@@ -414,7 +414,7 @@ fn precedence_root_exception_and_conversion_preserve_defaults() {
     let config = resolved.into_logger_config(ServiceName::new("settings-test").unwrap());
     assert_eq!(config.level, LevelFilter::Error);
     assert_eq!(
-        config.queue_capacity.get(),
+        config.queue_capacity,
         sc_observability::constants::DEFAULT_LOG_QUEUE_CAPACITY
     );
     assert!(config.redaction.redact_bearer_tokens);

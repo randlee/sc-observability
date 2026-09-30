@@ -10,7 +10,7 @@ use sc_observability_types::{ErrorContext, Remediation, v2::InitError as Canonic
 use crate::typed::{TypedLogSink, legacy_sink};
 use crate::{
     ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, Logger, LoggerConfig, LoggerRuntime,
-    Running, SinkHealthState, SinkRegistration, default_log_path, error_codes,
+    QueueCapacity, Running, SinkHealthState, SinkRegistration, default_log_path, error_codes,
 };
 
 impl SinkRegistration {
@@ -215,6 +215,18 @@ impl LoggerBuilder {
                 .into_context(),
             });
         }
+        let queue_capacity = QueueCapacity::new(config.queue_capacity).ok_or_else(|| {
+            CanonicalInitError::Configuration {
+                context: InitFailure::logger_initialization(
+                    "logger queue capacity must be positive",
+                    Remediation::recoverable(
+                        "set LoggerConfig.queue_capacity to a positive value",
+                        ["use a queue capacity of at least one record"],
+                    ),
+                )
+                .into_context(),
+            }
+        })?;
         let config = Arc::new(config);
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let query_available = active_log_path.exists() || config.enable_file_sink;
@@ -224,7 +236,7 @@ impl LoggerBuilder {
             sinks.clone(),
             file_sink,
             retained_log_policy,
-            config.queue_capacity.get(),
+            queue_capacity.get(),
             #[cfg(test)]
             config.maintenance_test_pass_delay,
             #[cfg(test)]

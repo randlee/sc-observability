@@ -23,7 +23,7 @@ fn health_uses_the_core_report_and_retains_it_after_shutdown() {
     );
     config.level = LevelFilter::Info;
     config.enable_console_sink = false;
-    config.queue_capacity = sc_observability::QueueCapacity::new(64).expect("positive capacity");
+    config.queue_capacity = 64;
     let guard = sc_observability_log::init(
         config,
         BridgeOptions {
