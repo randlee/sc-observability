@@ -167,7 +167,7 @@ fn enabled_telemetry_config() -> V2TelemetryConfig {
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
         .with_transport(transport)
-        .build()
+        .build_typed()
         .expect("valid enabled telemetry config")
 }
 

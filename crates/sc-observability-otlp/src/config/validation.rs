@@ -8,8 +8,6 @@ use super::types::{
 use crate::{constants, error_codes};
 use sc_observability_types::typed::InitFailure;
 use sc_observability_types::v2::ConfigFailure;
-#[cfg(test)]
-use sc_observability_types::v2::InitError;
 use sc_observability_types::{DurationMs, ErrorContext, Remediation};
 use serde_json::Value;
 
@@ -116,17 +114,6 @@ impl OtlpConfigTarget {
             Self::Backend(backend) => format!("backend:{}", backend.stable_name()),
         }
     }
-}
-
-#[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "OTLP config compatibility tests exercise retained constructors and builder"
-)]
-pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
-    validate_config_typed(config).map_err(|failure| InitError::Configuration {
-        context: failure.into_context(),
-    })
 }
 
 pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), InitFailure> {
@@ -397,31 +384,10 @@ impl RetryPolicy {
 
 /// Resolves defaults and validates a transport in the documented first-failure
 /// order. This is crate-visible for backend factories and contract tests.
-#[expect(
-    clippy::too_many_lines,
-    reason = "the normative validation order is intentionally visible and linear"
-)]
 pub(crate) fn validated_transport_bounds(
     config: &OtelConfig,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
-    #[expect(
-        deprecated,
-        reason = "validation intentionally reads retained retry compatibility fields"
-    )]
-    let direct_legacy_fields = config.max_retries.is_some()
-        || config.initial_backoff_ms.is_some()
-        || config.max_backoff_ms.is_some();
     let legacy_retry_field = first_legacy_retry_field(config);
-    #[expect(
-        deprecated,
-        reason = "validation intentionally constructs the retained retry compatibility policy"
-    )]
-    let direct_retry = LegacyRetryPolicy {
-        max_retries: config.max_retries,
-        initial_backoff_ms: config.initial_backoff_ms,
-        max_backoff_ms: config.max_backoff_ms,
-        ..LegacyRetryPolicy::default()
-    };
     let timeout = resolve_duration(
         OtlpConfigField::Timeout,
         config.timeout_ms,
@@ -461,13 +427,7 @@ pub(crate) fn validated_transport_bounds(
     }
     let legacy_retry =
         if config.enabled && matches!(config.backend, ExporterBackend::LegacyHttpJson) {
-            Some(resolve_retry(
-                config
-                    .legacy_retry
-                    .as_ref()
-                    .or(direct_legacy_fields.then_some(&direct_retry)),
-                &timeout,
-            )?)
+            Some(resolve_retry(config.legacy_retry.as_ref(), &timeout)?)
         } else {
             None
         };
@@ -560,25 +520,16 @@ pub(crate) fn validated_backend_connection(
 
 /// Returns the first legacy-only retry setting supplied by the caller.
 ///
-/// The order is part of the deterministic validation contract. Retained
-/// direct fields and their `legacy_retry` successors share the same identity,
-/// so either representation reports the same first applicable field.
-#[allow(
-    deprecated,
-    reason = "the selector preserves diagnostics for retained direct retry fields"
-)]
+/// The order is part of the deterministic validation contract.
 fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
     let retry = config.legacy_retry.as_ref();
-    if config.max_retries.is_some() || retry.is_some_and(|value| value.max_retries.is_some()) {
+    if retry.is_some_and(|value| value.max_retries.is_some()) {
         return Some(OtlpConfigField::MaxRetries);
     }
-    if config.initial_backoff_ms.is_some()
-        || retry.is_some_and(|value| value.initial_backoff_ms.is_some())
-    {
+    if retry.is_some_and(|value| value.initial_backoff_ms.is_some()) {
         return Some(OtlpConfigField::InitialBackoff);
     }
-    if config.max_backoff_ms.is_some() || retry.is_some_and(|value| value.max_backoff_ms.is_some())
-    {
+    if retry.is_some_and(|value| value.max_backoff_ms.is_some()) {
         return Some(OtlpConfigField::MaxBackoff);
     }
     if retry.is_some_and(|value| value.retry_sequence_timeout_ms.is_some()) {

@@ -63,11 +63,12 @@ fn telemetry_config() -> TelemetryConfig {
         .with_transport(OtelConfig {
             enabled: true,
             endpoint: Some(
-                OtlpEndpoint::new("https://otel.example.internal").expect("valid OTLP endpoint"),
+                OtlpEndpoint::new_typed("https://otel.example.internal")
+                    .expect("valid OTLP endpoint"),
             ),
             ..OtelConfig::default()
         })
-        .build()
+        .build_typed()
         .expect("valid telemetry config")
 }
 
@@ -79,11 +80,12 @@ fn legacy_telemetry_config(protocol: OtlpProtocol) -> TelemetryConfig {
             backend: ExporterBackend::LegacyHttpJson,
             protocol,
             endpoint: Some(
-                OtlpEndpoint::new("https://otel.example.internal").expect("valid OTLP endpoint"),
+                OtlpEndpoint::new_typed("https://otel.example.internal")
+                    .expect("valid OTLP endpoint"),
             ),
             ..OtelConfig::default()
         })
-        .build()
+        .build_typed()
         .expect("valid legacy telemetry config")
 }
 
@@ -196,7 +198,7 @@ fn complete_span_signals() -> (SpanSignal, SpanSignal) {
 fn telemetry_config_builder_defaults() {
     // TelemetryConfig is constructed independently of ObservabilityConfig (OTLP-018).
     let config = TelemetryConfigBuilder::new(service_name())
-        .build()
+        .build_typed()
         .expect("valid config");
 
     assert!(config.logs.is_none());
@@ -426,7 +428,7 @@ fn sdk_factory_requires_a_caller_tokio_runtime_after_feature_checks() {
 #[test]
 fn disabled_factory_constructs_and_telemetry_carries_one_exporter_set() {
     let config = TelemetryConfigBuilder::new(service_name())
-        .build()
+        .build_typed()
         .expect("disabled configuration is valid");
     let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
     let exporters = exporter_factory(&config, &bounds).expect("disabled factory set");
@@ -485,7 +487,7 @@ fn all_signals_disabled_rejects_at_construction() {
             endpoint: None,
             ..OtelConfig::default()
         })
-        .build()
+        .build_typed()
         .expect("valid config");
 
     assert!(Telemetry::new(config).is_ok());

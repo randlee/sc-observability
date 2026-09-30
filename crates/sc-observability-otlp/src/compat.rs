@@ -217,11 +217,9 @@ impl OtelConfig {
             (self.enabled && backend == ExporterBackend::LegacyHttpJson).then_some(retry);
         // Released retry settings apply only to the enabled HTTP/JSON legacy
         // backend. HTTP/binary selects the SDK and disabled transport creates
-        // no backend, matching the published 1.4.1 conversion rule. Keep the
-        // retained flat fields empty so `legacy_retry` is the sole canonical
-        // representation when the legacy backend is selected.
-        #[allow(deprecated)]
-        let runtime = crate::config::OtelConfig {
+        // no backend, matching the published 1.4.1 conversion rule. The
+        // canonical config stores applicable retry values only in `legacy_retry`.
+        crate::config::OtelConfig {
             enabled: self.enabled,
             backend,
             endpoint: self.endpoint.map(|endpoint| endpoint.0),
@@ -231,13 +229,9 @@ impl OtelConfig {
             insecure_skip_verify: self.insecure_skip_verify,
             timeout_ms: Some(self.timeout_ms),
             debug_local_export: self.debug_local_export,
-            max_retries: None,
-            initial_backoff_ms: None,
-            max_backoff_ms: None,
             legacy_retry,
             ..crate::config::OtelConfig::default()
-        };
-        runtime
+        }
     }
 }
 
@@ -553,10 +547,6 @@ mod tests {
     }
 
     #[test]
-    #[expect(
-        deprecated,
-        reason = "the regression test verifies released fields leave canonical compatibility fields empty"
-    )]
     fn released_http_json_uses_the_nested_legacy_retry_policy() {
         let runtime = released_transport(OtlpProtocol::HttpJson, true).into_runtime();
 
@@ -571,16 +561,9 @@ mod tests {
                 ..LegacyRetryPolicy::default()
             })
         );
-        assert_eq!(runtime.max_retries, None);
-        assert_eq!(runtime.initial_backoff_ms, None);
-        assert_eq!(runtime.max_backoff_ms, None);
     }
 
     #[test]
-    #[expect(
-        deprecated,
-        reason = "the regression test verifies released fields are discarded outside the legacy backend"
-    )]
     fn released_sdk_and_disabled_transports_discard_legacy_retry_settings() {
         for (transport, backend) in [
             (
@@ -601,9 +584,6 @@ mod tests {
             assert_eq!(runtime.backend, backend);
             assert_eq!(runtime.timeout_ms, Some(DurationMs::from(750)));
             assert_eq!(runtime.legacy_retry, None);
-            assert_eq!(runtime.max_retries, None);
-            assert_eq!(runtime.initial_backoff_ms, None);
-            assert_eq!(runtime.max_backoff_ms, None);
         }
     }
 
