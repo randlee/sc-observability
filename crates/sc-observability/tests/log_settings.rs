@@ -612,13 +612,13 @@ fn settings_conversion_preserves_every_non_inventory_default() {
 }
 
 #[test]
-fn rejects_empty_unknown_case_and_prefix_collision() {
-    let empty = LogSettings::from_env(
+fn permits_empty_root_until_effective_resolution_and_rejects_unknown_case_and_prefix_collision() {
+    let empty_root = LogSettings::from_env(
         &snapshot(&[("SC_LOG_ROOT", "")]),
         EnvPrefix::new("SC").unwrap(),
     )
-    .unwrap_err();
-    assert_eq!(empty.code(), error_codes::LOG_INVALID_VALUE);
+    .expect("an empty root is deferred to the effective-root validator");
+    assert_eq!(empty_root.log_root, Some(PathBuf::new()));
     let unknown = LogSettings::from_env(
         &snapshot(&[("SC_LOG_UNKNOWN", "x")]),
         EnvPrefix::new("SC").unwrap(),
@@ -646,7 +646,7 @@ fn rejects_empty_unknown_case_and_prefix_collision() {
     ));
     assert_eq!(collision.code(), error_codes::LOG_PREFIX_COLLISION);
 
-    for error in [&empty, &unknown, &empty_unknown, &case, &collision] {
+    for error in [&unknown, &empty_unknown, &case, &collision] {
         assert!(
             error_codes::ALL.contains(&error.code()),
             "emitted code {} must be registered",
@@ -677,7 +677,7 @@ fn empty_json_root_is_never_overridden_and_json_null_is_unset() {
         default_root: PathBuf::from("/default"),
     })
     .unwrap_err();
-    assert_eq!(error.code(), error_codes::LOG_INVALID_VALUE);
+    assert_eq!(error.code(), error_codes::LOG_RESOLUTION);
     let null: LogSettings =
         serde_json::from_str(r#"{"level":null,"retainedLogPolicy":null}"#).unwrap();
     let resolved = LogSettings::resolve(LogSettingsInputs {
@@ -689,4 +689,24 @@ fn empty_json_root_is_never_overridden_and_json_null_is_unset() {
     .unwrap();
     assert_eq!(resolved.level, LevelFilter::Info);
     assert_eq!(resolved.retained_log_policy, RetainedLogPolicy::default());
+}
+
+#[test]
+fn shadowed_empty_root_is_ignored_before_effective_root_validation() {
+    let shared_env = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_ROOT", "")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .expect("an empty shadowed root parses for precedence resolution");
+    let file: LogSettings = serde_json::from_str(r#"{"logRoot":"/json"}"#).unwrap();
+
+    let resolved = LogSettings::resolve(LogSettingsInputs {
+        file: Some(file),
+        shared_env,
+        application_env: None,
+        default_root: PathBuf::from("/default"),
+    })
+    .expect("the non-empty effective root is the only validated root");
+
+    assert_eq!(resolved.log_root.as_ref(), std::path::Path::new("/json"));
 }

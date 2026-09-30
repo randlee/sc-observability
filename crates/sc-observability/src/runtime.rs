@@ -97,7 +97,7 @@ impl LogSettings {
             };
             match suffix {
                 "LEVEL" => settings.level = Some(parse_json_string(required_value()?, key)?),
-                "ROOT" => settings.log_root = Some(PathBuf::from(required_value()?)),
+                "ROOT" => settings.log_root = Some(PathBuf::from(value)),
                 "FILE" => settings.enable_file_sink = Some(parse_env_bool(required_value()?, key)?),
                 "CONSOLE" => {
                     settings.enable_console_sink = Some(parse_env_bool(required_value()?, key)?);
@@ -161,8 +161,8 @@ impl LogSettings {
     ///
     /// # Errors
     ///
-    /// Returns [`LogSettingsError`] when any supplied root is empty or the
-    /// resulting root cannot be validated.
+    /// Returns [`LogSettingsError`] when the effective root cannot be
+    /// validated.
     pub fn resolve(inputs: LogSettingsInputs) -> Result<ResolvedLogSettings, LogSettingsError> {
         let LogSettingsInputs {
             file,
@@ -172,16 +172,6 @@ impl LogSettings {
         } = inputs;
         let file = file.unwrap_or_default();
         let application_env = application_env.unwrap_or_default();
-        for root in [
-            file.log_root.as_ref(),
-            shared_env.log_root.as_ref(),
-            application_env.log_root.as_ref(),
-        ] {
-            if root.is_some_and(|root| root.as_os_str().is_empty()) {
-                return Err(LogSettingsError::invalid_value("logRoot must not be empty"));
-            }
-        }
-
         // JSON has the explicit LOG-009 exception for the log root. Every
         // other field follows defaults < JSON < shared env < application env.
         let log_root = file
