@@ -1,0 +1,12 @@
+---
+name: sanity-run-table
+version: 1.1.0
+description: Compact sanity-run history table. Input runs are newest-first.
+format: markdown
+required_variables:
+  - runs
+---
+| Sprint | PR | Iter | Result | Done | Find |
+|:--|:--|--:|:--:|:--|--:|
+{% for run in runs %}| {{ run.sprint }} | #{{ run.pr_number }} | {{ run.iteration }} | {% if run.verdict == "PASS" %}✅{% else %}❌{% endif %} | {{ run.completed_local }} · {{ run.duration }} | {{ run.findings }} |
+{% endfor %}

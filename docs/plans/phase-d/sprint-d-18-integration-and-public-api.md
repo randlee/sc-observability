@@ -1,3 +1,5 @@
+> **Release-policy supersession:** This document preserves the historical Phase D projection. Its 2.0 activation, compatibility-removal and breaking-approval instructions are superseded by [the compatible 1.x amendment](compatible-1x-amendment.md) and the amended authoritative beads. Do not execute those historical instructions.
+
 # d-18: Integration and public API
 
 Generated projection of `obs-d-18`; the bead is authoritative.
