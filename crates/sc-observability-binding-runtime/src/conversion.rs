@@ -2,6 +2,7 @@
 use crate::ProducerOrigin;
 use dto::{Diagnostic, Failure};
 use native::DiagnosticInfo;
+use native::v2::FlushError;
 use sc_observability_dto as dto;
 use sc_observability_log as bridge;
 use sc_observability_types as native;
@@ -76,7 +77,7 @@ pub(crate) fn query(error: &native::QueryError) -> Failure {
     };
     context(error.diagnostic(), kind)
 }
-pub(crate) fn bridge_flush(error: &bridge::FlushError) -> Failure {
+pub(crate) fn bridge_flush(error: &FlushError) -> Failure {
     let kind = match error.diagnostic().code.as_str() {
         "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT" => Kind::timeout("flush"),
         "SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS" => Kind::QueueFull,
@@ -101,8 +102,8 @@ pub(crate) fn bridge_control(error: bridge::ControlError) -> Failure {
         ),
     }
 }
-pub(crate) fn bridge_admission(error: bridge::EmitError) -> Failure {
-    use bridge::EmitError as E;
+pub(crate) fn bridge_admission(error: bridge::v2::EmitError) -> Failure {
+    use bridge::v2::EmitError as E;
     match error {
         E::InvalidEvent { diagnostic } => operation(diagnostic, Kind::validation("event")),
         E::QueueFull { diagnostic } => operation(diagnostic, Kind::QueueFull),

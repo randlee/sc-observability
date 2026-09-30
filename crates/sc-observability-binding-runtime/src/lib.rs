@@ -285,7 +285,7 @@ pub fn bridge_backend(
     control: sc_observability_log::LogControl,
 ) -> Result<BridgeControlBackend, Failure> {
     Ok(BridgeControlBackend {
-        shared: coordinator::bridge(control)?,
+        shared: coordinator::bridge(control.into_v2())?,
     })
 }
 impl CoreLoggerOwner {
