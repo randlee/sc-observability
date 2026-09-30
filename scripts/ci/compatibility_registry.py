@@ -1,10 +1,36 @@
 """Small validation helpers for the compatible-contract registry."""
 
 import re
-from collections.abc import Iterable
+from collections import Counter
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 PLACEHOLDER_BASELINE_SIGNATURE_PREFIXES = ("released public nominal identity",)
+
+BASELINE_COMMIT = "c578912653233c7dc678fefe5af575118dbbaaa1"
+
+# Deprecated owners each excepted file carried at the pinned v1.4.1 commit.
+# An exception covers only these names; any other deprecated owner in the file
+# is new deprecated surface and must live under `src/compat`.
+DEPRECATED_OWNER_BASELINE: dict[str, tuple[str, ...]] = {
+    "crates/sc-observability-types/src/errors.rs": (
+        "IdentityError", "InitError", "EventError", "FlushError", "ShutdownError",
+        "ProjectionError", "SubscriberError", "LogSinkError", "ExportError",
+    ),
+    "crates/sc-observability/src/lib.rs": ("max_age_days",),
+    "crates/sc-observability/src/runtime.rs": (
+        "builder", "new", "log", "try_log", "try_log_with_outcome", "emit", "flush",
+    ),
+    "crates/sc-observability-otlp/src/assembly.rs": ("push",),
+}
+
+# Path segments only: `foo_compat::` and `compatibility::` are not references.
+COMPAT_PATH_REFERENCE = re.compile(r"\bcompat::")
+COMPAT_USE_REFERENCE = re.compile(r"\buse\s[^;]*\bcompat\b(?!::)")
+COMPAT_MODULE_DECLARATION = re.compile(r"\bmod\s+compat\b")
+
+_ITEM_NAME = re.compile(r"\b(?:fn|struct|enum|trait|type|const|static|mod|union)\s+([A-Za-z_]\w*)")
+_FIELD_OR_VARIANT_NAME = re.compile(r"(?:pub(?:\([^)]*\))?\s+)?([A-Za-z_]\w*)")
 
 
 def has_placeholder_baseline_signature(signature: str) -> bool:
@@ -22,6 +48,12 @@ def is_compat_source_path(relative_path: str) -> bool:
     )
 
 
+def is_crate_root_path(relative_path: str) -> bool:
+    """Return whether a repository-relative path is a library crate root."""
+    normalized = relative_path.lstrip("/")
+    return normalized == "src/lib.rs" or normalized.endswith("/src/lib.rs")
+
+
 def is_allowed_compat_reference_source(
     relative_path: str, root_reexport_exceptions: set[str]
 ) -> bool:
@@ -32,19 +64,63 @@ def is_allowed_compat_reference_source(
     )
 
 
+def deprecated_owner_names(text: str) -> list[str]:
+    """Return the name of each item, field or variant carrying `#[deprecated]`."""
+    lines = text.splitlines()
+    names = []
+    index = 0
+    while index < len(lines):
+        if not lines[index].lstrip().startswith("#[deprecated"):
+            index += 1
+            continue
+        depth = 0
+        cursor = index
+        while cursor < len(lines):
+            stripped = lines[cursor].strip()
+            is_preamble = stripped.startswith(("#[", "//")) or not stripped
+            if depth == 0 and cursor != index and not is_preamble:
+                break
+            depth += stripped.count("[") - stripped.count("]")
+            cursor += 1
+        owner = lines[cursor].strip() if cursor < len(lines) else ""
+        match = _ITEM_NAME.search(owner) or _FIELD_OR_VARIANT_NAME.match(owner)
+        names.append(match.group(1) if match else owner)
+        index = cursor
+    return names
+
+
 def validate_compatibility_source_boundary(
-    root: Path, source_files: Iterable[Path], registry: dict,
+    root: Path,
+    source_files: Iterable[Path],
+    registry: dict,
+    baseline: Mapping[str, tuple[str, ...]] = DEPRECATED_OWNER_BASELINE,
 ) -> None:
-    """Reject canonical-to-compat imports and unrecorded deprecated owners."""
+    """Reject canonical-to-compat imports and deprecated owners beyond the baseline."""
     deprecated_exceptions = set(registry.get("deprecated_owner_exceptions", []))
     root_reexport_exceptions = set(registry.get("compat_root_reexport_exceptions", []))
-    compat_reference = re.compile(r"(?:crate::)?compat::|::compat::")
+    for relative in sorted(deprecated_exceptions - set(baseline)):
+        raise ValueError(f"deprecated owner exception has no v1.4.1 baseline: {relative}")
 
     for path in source_files:
         relative = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8")
         is_compat_source = is_compat_source_path(relative)
-        if not is_allowed_compat_reference_source(relative, root_reexport_exceptions) and compat_reference.search(text):
+        if not is_allowed_compat_reference_source(relative, root_reexport_exceptions) and (
+            COMPAT_PATH_REFERENCE.search(text) or COMPAT_USE_REFERENCE.search(text)
+        ):
             raise ValueError(f"canonical source imports compatibility module: {relative}")
-        if "#[deprecated" in text and not is_compat_source and relative not in deprecated_exceptions:
+        if (
+            not is_compat_source
+            and not is_crate_root_path(relative)
+            and COMPAT_MODULE_DECLARATION.search(text)
+        ):
+            raise ValueError(f"compatibility module declared outside a crate root: {relative}")
+        if is_compat_source or "#[deprecated" not in text:
+            continue
+        if relative not in deprecated_exceptions:
             raise ValueError(f"deprecated owner is outside compat without registry exception: {relative}")
+        excess = Counter(deprecated_owner_names(text)) - Counter(baseline[relative])
+        if excess:
+            raise ValueError(
+                f"deprecated owner exceeds v1.4.1 baseline: {relative}: {', '.join(sorted(excess.elements()))}"
+            )
