@@ -167,22 +167,22 @@ fn build_observability(
                     }),
                 )),
         )
-        .build()?;
+        .build_typed()?;
 
     emit_example_sequence(&runtime, service, mode)?;
-    runtime.flush()?;
+    runtime.flush_typed()?;
     telemetry.flush_typed()?;
 
     match mode {
         RunMode::Normal => {
             telemetry.shutdown_typed()?;
-            runtime.shutdown()?;
+            runtime.shutdown_typed()?;
         }
         RunMode::FailOpen => {
             // OTLP-009: this path intentionally leaves one started span without a
             // matching end so shutdown drops it and records fail-open export loss.
             let _ = telemetry.shutdown_typed();
-            runtime.shutdown()?;
+            runtime.shutdown_typed()?;
         }
     }
 

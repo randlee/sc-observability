@@ -66,6 +66,10 @@ impl ObservabilityConfig {
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityConfig::default_for_typed(); see migrate-error-api.md."
+    )]
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, LegacyInitError> {
         Self::default_for_v2(tool_name, log_root).map_err(legacy_init_error)
     }
@@ -74,6 +78,10 @@ impl ObservabilityConfig {
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityConfig::service_name_typed(); see migrate-error-api.md."
     )]
     pub fn service_name(&self) -> Result<ServiceName, LegacyInitError> {
         self.service_name_v2().map_err(legacy_init_error)
@@ -96,6 +104,10 @@ impl Observability {
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(config: ObservabilityConfig) -> Result<Self, LegacyInitError> {
         Self::new_v2(config).map_err(legacy_init_error)
     }
@@ -110,6 +122,10 @@ impl Observability {
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::flush_typed(); see migrate-error-api.md."
+    )]
     pub fn flush(&self) -> Result<(), LegacyFlushError> {
         self.flush_v2().map_err(legacy_flush_error)
     }
@@ -123,6 +139,10 @@ impl Observability {
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::shutdown_typed(); see migrate-error-api.md."
     )]
     pub fn shutdown(&self) -> Result<(), LegacyShutdownError> {
         self.shutdown_v2().map_err(legacy_shutdown_error)
@@ -149,6 +169,10 @@ impl ObservabilityBuilder {
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityBuilder::build_typed(); see migrate-error-api.md."
     )]
     pub fn build(self) -> Result<Observability, LegacyInitError> {
         self.build_v2().map_err(legacy_init_error)

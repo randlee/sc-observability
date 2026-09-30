@@ -31,17 +31,40 @@ fn canonical_observe_exports_have_real_public_signatures() {
     let _: fn(&Observability) -> Result<(), ShutdownError> = Observability::shutdown;
 }
 
-#[allow(deprecated)]
 #[test]
 fn released_root_observe_exports_keep_their_error_identities() {
+    #[expect(
+        deprecated,
+        reason = "the released default_for deprecation must remain externally observable"
+    )]
     let _: fn(ToolName, PathBuf) -> Result<LegacyConfig, LegacyInitError> =
         LegacyConfig::default_for;
+    #[expect(
+        deprecated,
+        reason = "the released service_name deprecation must remain externally observable"
+    )]
     let _: fn(&LegacyConfig) -> Result<ServiceName, LegacyInitError> = LegacyConfig::service_name;
+    #[expect(
+        deprecated,
+        reason = "the released Observability::new deprecation must remain externally observable"
+    )]
     let _: fn(LegacyConfig) -> Result<LegacyObservability, LegacyInitError> =
         LegacyObservability::new;
+    #[expect(
+        deprecated,
+        reason = "the released Observability::flush deprecation must remain externally observable"
+    )]
     let _: fn(&LegacyObservability) -> Result<(), LegacyFlushError> = LegacyObservability::flush;
+    #[expect(
+        deprecated,
+        reason = "the released Observability::shutdown deprecation must remain externally observable"
+    )]
     let _: fn(&LegacyObservability) -> Result<(), LegacyShutdownError> =
         LegacyObservability::shutdown;
+    #[expect(
+        deprecated,
+        reason = "the released ObservabilityBuilder::build deprecation must remain externally observable"
+    )]
     let _: fn(LegacyBuilder) -> Result<LegacyObservability, LegacyInitError> = LegacyBuilder::build;
 }
 
