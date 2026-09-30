@@ -35,6 +35,9 @@ tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [dev-dependencies]
 sc-observe.workspace = true
+# The hermetic conformance collector routes the three generated OTLP services
+# in integration tests only; production SDK transport keeps its pinned features.
+tonic = { workspace = true, features = ["router"] }
 
 [lints]
 workspace = true

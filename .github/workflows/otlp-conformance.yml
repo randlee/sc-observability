@@ -1,0 +1,96 @@
+name: OTLP conformance
+
+on:
+  pull_request:
+    paths:
+      - 'crates/sc-observability-otlp/**'
+      - 'crates/sc-observability-types/**'
+      - 'scripts/ci/fixtures/otlp/**'
+      - '.github/workflows/otlp-conformance.yml'
+  workflow_dispatch:
+
+jobs:
+  collector-conformance:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          - otlp-sdk
+          - legacy-http-json
+          - otlp-sdk,legacy-http-json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - name: Run hermetic collector conformance (${{ matrix.features }})
+        run: >-
+          cargo test --locked -p sc-observability-otlp
+          --test full_stack_integration --features ${{ matrix.features }}
+
+  canonical-ingress-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - name: Run the canonical span and histogram corpus through both production backends
+        run: >-
+          cargo test --locked -p sc-observability-otlp
+          --test canonical_ingress --features otlp-sdk,legacy-http-json
+
+  desktop-viewer-factory-conformance:
+    name: desktop-viewer-factory-conformance (macOS arm64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - name: Read pinned viewer manifest
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = json.loads(Path(
+              'scripts/ci/fixtures/otlp/desktop-viewer/release.json'
+          ).read_text())
+          with Path(os.environ['GITHUB_ENV']).open('a') as output:
+              output.write(f"VIEWER_VERSION={manifest['version']}\n")
+              output.write(f"VIEWER_BINARY_SHA256={manifest['binary_sha256']}\n")
+          PY
+      - name: Download verified pinned desktop viewer
+        run: >-
+          python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py
+          "$RUNNER_TEMP/otel-desktop-viewer"
+      - name: Start an owned isolated desktop viewer
+        run: |
+          viewer_state="$RUNNER_TEMP/sc-observability-d9-viewer"
+          echo "VIEWER_STATE_DIR=$viewer_state" >> "$GITHUB_ENV"
+          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py start \
+            --binary "$RUNNER_TEMP/otel-desktop-viewer" \
+            --version "$VIEWER_VERSION" \
+            --binary-sha256 "$VIEWER_BINARY_SHA256" \
+            --state-dir "$viewer_state" \
+            --host 127.0.0.1 --http 52118 --grpc 52117 --ui 52100
+      - name: Run legacy public factory against the pinned viewer
+        run: >-
+          D9_VIEWER_LEGACY_ADDRESS=127.0.0.1:52118
+          cargo test --locked -p sc-observability-otlp
+          --test full_stack_integration --features legacy-http-json
+          -- --ignored public_legacy_factory_exports_three_signals_to_the_pinned_desktop_viewer
+      - name: Run SDK public factory against the pinned viewer
+        run: >-
+          D9_VIEWER_SDK_ADDRESS=127.0.0.1:52117
+          cargo test --locked -p sc-observability-otlp
+          --test full_stack_integration --features otlp-sdk
+          -- --ignored public_sdk_factory_exports_three_signals_to_the_pinned_desktop_viewer
+      - name: Remove the owned desktop viewer state
+        if: always()
+        run: >-
+          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py stop
+          --state-dir "$VIEWER_STATE_DIR" --remove-state

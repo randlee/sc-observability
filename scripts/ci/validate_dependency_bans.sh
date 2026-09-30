@@ -135,10 +135,17 @@ if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubs
         f"{sorted(otlp_runtime_deps)}"
     )
 
-if otlp_test_deps - {"sc-observe"}:
+if otlp_test_deps - {"sc-observe", "tonic"}:
     raise SystemExit(
         "sc-observability-otlp test dependency set drifted from allowed baseline: "
-        f"{sorted(otlp_test_deps - {'sc-observe'})}"
+        f"{sorted(otlp_test_deps - {'sc-observe', 'tonic'})}"
+    )
+
+otlp_test_tonic = load_toml(root / "crates/sc-observability-otlp/Cargo.toml")["dev-dependencies"].get("tonic")
+if otlp_test_tonic != {"workspace": True, "features": ["router"]}:
+    raise SystemExit(
+        "sc-observability-otlp may use tonic/router only as the exact hermetic "
+        "collector test dependency"
     )
 
 for path in [

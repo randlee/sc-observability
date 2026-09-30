@@ -80,7 +80,7 @@ if observe_test_deps - {"serde_json"}:
         "sc-observe dev-dependencies drifted from allowed baseline: "
         f"{sorted(observe_test_deps - {'serde_json'})}"
     )
-if otlp_test_deps - {"sc-observe"}:
+if otlp_test_deps - {"sc-observe", "tonic"}:
     raise SystemExit(
         "sc-observability-otlp dev-dependencies drifted from allowed baseline"
     )
