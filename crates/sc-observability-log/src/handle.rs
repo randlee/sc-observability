@@ -1217,6 +1217,12 @@ mod tests {
             })
         ));
         assert_eq!(lifecycle(), BridgeLifecycle::Failed);
+        assert!(matches!(
+            crate::LogControl::new().flush(Duration::ZERO),
+            Err(crate::FlushError::NotRunning {
+                phase: crate::LifecyclePhase::Failed,
+            })
+        ));
     }
 
     /// Signals its channel when dropped: the work closure has returned.
