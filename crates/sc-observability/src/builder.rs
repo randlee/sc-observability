@@ -49,7 +49,7 @@ impl LoggerBuilder {
     /// use sc_observability::{LoggerBuilder, LoggerConfig};
     /// use sc_observability_types::ServiceName;
     ///
-    /// let builder = LoggerBuilder::new(LoggerConfig::default_for(
+    /// let builder = LoggerBuilder::new_canonical(LoggerConfig::default_for(
     ///     ServiceName::new("demo").expect("valid service"),
     ///     PathBuf::from("logs"),
     /// ))

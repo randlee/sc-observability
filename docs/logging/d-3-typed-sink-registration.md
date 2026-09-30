@@ -1,10 +1,11 @@
 # Typed sink registration
 
-`SinkRegistration::typed` and `LoggerBuilder::register_typed_sink` accept an
-`Arc<dyn TypedLogSink>` without requiring a consumer to invoke `legacy_sink`.
-Both paths use the D13 adapter internally, so canonical v2 `LogSinkError`
-failures retain their structured diagnostic code and original source at the
-retained `LogSink` boundary.
+This guide covers the current typed registration APIs.
+`LoggerBuilder::register_typed_sink` accepts an `Arc<dyn TypedLogSink>`
+without requiring a consumer to invoke `legacy_sink`; it is not part of the
+v1.4.1 released surface. It uses the D13 adapter internally, so canonical v2
+`LogSinkError` failures retain their structured diagnostic code and original
+source at the retained `LogSink` boundary.
 
 ```rust,no_run
 use std::sync::Arc;
@@ -38,8 +39,10 @@ builder.register_typed_sink(Arc::new(CustomSink))?;
 ```
 
 The builder only records healthy, unique typed registrations. Re-registering
-the same `Arc` returns `SinkRegistrationError::Duplicate`; a degraded sink is
-`Invalid`; an unavailable sink is `Closed`. The logger writer owns each write
-and flush, so registering a typed sink does not add a writer, a flush path, or
+the same `Arc` returns a canonical `v2::InitError::Configuration` with code
+`SC_LOG_SINK_REGISTRATION_DUPLICATE`; a degraded sink uses
+`SC_LOG_SINK_REGISTRATION_INVALID`, and an unavailable sink uses
+`SC_LOG_SINK_REGISTRATION_CLOSED`. The logger writer owns each write and
+flush, so registering a typed sink does not add a writer, a flush path, or
 level-owner authority. Existing `LogSink` registrations remain supported; D18
 owns retirement of transitional compatibility adapters.

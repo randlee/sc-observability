@@ -370,10 +370,13 @@ fn register_typed_sink(builder: &mut LoggerBuilder) -> Result<(), Box<dyn std::e
 }
 ```
 
-Typed registration accepts only healthy, unique sinks. Re-registering the same
-`Arc` reports `SinkRegistrationError::Duplicate`; a degraded sink reports
-`Invalid`, and an unavailable sink reports `Closed`. Registration does not add
-a writer, flush path, or level-owner authority. See the
+`LoggerBuilder::register_typed_sink` is a current canonical API, not part of
+the v1.4.1 released surface. Typed registration accepts only healthy, unique
+sinks. Re-registering the same `Arc` returns a canonical
+`v2::InitError::Configuration` with code `SC_LOG_SINK_REGISTRATION_DUPLICATE`;
+a degraded sink uses `SC_LOG_SINK_REGISTRATION_INVALID`, and an unavailable
+sink uses `SC_LOG_SINK_REGISTRATION_CLOSED`. Registration does not add a
+writer, flush path, or level-owner authority. See the
 [typed sink registration guide](./docs/logging/d-3-typed-sink-registration.md)
 for the full contract.
 
