@@ -1263,7 +1263,7 @@
       "kind": "error",
       "status": "pending_d23_wrapper",
       "canonical": "EmitError",
-      "treatment": "new_adapter",
+      "treatment": "existing_pair",
       "baseline_signature": "#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)] #[serde(tag = \"kind\", content = \"value\", rename_all = \"snake_case\")] pub enum EmitError { /// A producer field cannot be represented safely. #[error(\"invalid field {raw_key:?}: {reason}\")] InvalidField { /// The producer-supplied key that was rejected. raw_key: String, /// The specific key-validation failure. reason: FieldKeyError, }, /// The core rejected the assembled event. #[error(\"invalid event: {diagnostic}\")] InvalidEvent { /// The core diagnostic explaining the invalid event. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core queue is full. #[error(\"writer queue is full: {diagnostic}\")] QueueFull { /// The core diagnostic describing queue saturation. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The writer cannot accept more work. #[error(\"writer is degraded: {diagnostic}\")] WriterDegraded { /// The core diagnostic describing the writer failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core shutdown deadline has elapsed. #[error(\"logger shutdown timed out: {diagnostic}\")] ShutdownTimedOut { /// The core diagnostic describing the elapsed shutdown deadline. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The lifecycle is no longer running. #[error(\"logger is not running: {phase:?}\")] NotRunning { /// The lifecycle phase observed when emission was attempted. phase: LifecyclePhase, }, /// The producer re-entered the guarded path. #[error(\"reentrant emission\")] Reentrant, /// A logger callback panic was contained. #[error(\"logger callback panicked\")] Panicked, }",
       "canonical_signature": "#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)] #[serde(tag = \"kind\", content = \"value\", rename_all = \"snake_case\")] #[non_exhaustive] pub enum EmitError { /// A producer field cannot be represented safely. #[error(\"invalid field {raw_key:?}: {reason}\")] InvalidField { /// The producer-supplied key that was rejected. raw_key: String, /// The specific key-validation failure. reason: FieldKeyError, }, /// The core rejected the assembled event. #[error(\"invalid event: {diagnostic}\")] InvalidEvent { /// The core diagnostic explaining the invalid event. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core queue is full. #[error(\"writer queue is full: {diagnostic}\")] QueueFull { /// The core diagnostic describing queue saturation. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The writer cannot accept more work. #[error(\"writer is degraded: {diagnostic}\")] WriterDegraded { /// The core diagnostic describing the writer failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core shutdown deadline has elapsed. #[error(\"logger shutdown timed out: {diagnostic}\")] ShutdownTimedOut { /// The core diagnostic describing the elapsed shutdown deadline. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The lifecycle is no longer running. #[error(\"logger is not running: {phase:?}\")] NotRunning { /// The lifecycle phase observed when emission was attempted. phase: LifecyclePhase, }, /// The producer re-entered the guarded path. #[error(\"reentrant emission\")] Reentrant, /// A logger callback panic was contained. #[error(\"logger callback panicked\")] Panicked, /// The saved attachment no longer occupies the bridge slot. #[error(\"logger attachment is not installed\")] NotInstalled, }",
       "obligations": [
@@ -1272,7 +1272,7 @@
         "error mapping: preserve EmitError source/context ownership and its released diagnostic/code identity at the root boundary",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released root sc_observability_log::EmitError is declared in crates/sc-observability-log/src/compat/mod.rs and re-exported from crates/sc-observability-log/src/lib.rs; compat::legacy_emit maps the canonical crate::error::EmitError (re-exported as v2::EmitError) to it. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -1283,8 +1283,11 @@
         "path": "crates/sc-observability-log/src/error.rs",
         "symbol": "EmitError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs owns the released root EmitError declaration and compat::legacy_emit; crates/sc-observability-log/src/lib.rs re-exports it at the root. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl",
@@ -1299,7 +1302,7 @@
         "signature identity: preserve LogControl declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released root sc_observability_log::LogControl is the compat::LogControl newtype over the canonical control::LogControl (v2::LogControl) in crates/sc-observability-log/src/compat/mod.rs: it forwards through its methods and Deref, exposes into_v2, and translates only flush and try_log errors through compat::legacy_flush and compat::legacy_emit. crates/sc-observability-log/src/lib.rs re-exports it at the root.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -1310,8 +1313,11 @@
         "path": "crates/sc-observability-log/src/control.rs",
         "symbol": "LogControl with v2 errors"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs owns the compat::LogControl newtype, its forwarding methods, Deref and into_v2; crates/sc-observability-log/src/lib.rs re-exports it at the root. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard",
@@ -1326,7 +1332,7 @@
         "signature identity: preserve LogGuard declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released root LogGuard in crates/sc-observability-log/src/lib.rs is the retained implementation; the canonical v2::LogGuard in crates/sc-observability-log/src/lib.rs wraps it (inner: crate::LogGuard) and returns canonical errors directly. Only the root flush, shutdown and control methods convert through compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -1338,7 +1344,7 @@
         "symbol": "LogGuard with v2 errors"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The root LogGuard declaration is the implementation that v2::LogGuard wraps, so it has no removable path until ownership moves to v2::LogGuard; its compat-converting methods are recorded as removable on their own rows."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig",
@@ -3355,13 +3361,13 @@
       "symbol": "sc_observability_log::LogGuard::control",
       "owner": "sc_observability_log::LogGuard",
       "baseline_signature": "pub fn control(&self) -> LogControl",
-      "canonical_signature": "pub fn control(&self) -> LogControl",
+      "canonical_signature": "pub fn control(&self) -> v2::LogControl",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::control exactly as recorded in this row baseline_signature: pub fn control(&self) -> LogControl",
         "receiver: preserve released &self receiver at sc_observability_log::LogGuard::control boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogGuard::control shim in crates/sc-observability-log/src/lib.rs returns the released compat::LogControl newtype from crates/sc-observability-log/src/compat/mod.rs over the canonical control::LogControl; v2::LogGuard::control returns v2::LogControl directly.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -3371,10 +3377,14 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-log/src/lib.rs",
-        "owner": "LogGuard",
+        "owner": "v2::LogGuard",
         "member": "control"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl newtype; crates/sc-observability-log/src/lib.rs contains the retained released root shim that returns it. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard::elevate_level",
@@ -3459,13 +3469,13 @@
       "symbol": "sc_observability_log::LogGuard::shutdown",
       "owner": "sc_observability_log::LogGuard",
       "baseline_signature": "pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError>",
-      "canonical_signature": "pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError>",
+      "canonical_signature": "pub fn shutdown(mut self, timeout: Duration) -> Result<(), sc_observability_types::v2::ShutdownError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError>",
         "error: preserve released ShutdownError failure type at sc_observability_log::LogGuard::shutdown boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogGuard::shutdown shim in crates/sc-observability-log/src/lib.rs calls handle::shutdown_sequence, then compat::legacy_shutdown maps sc_observability_types::v2::ShutdownError to the released sc_observability_log::ShutdownError; v2::LogGuard::shutdown returns the canonical error directly.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -3475,10 +3485,14 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-log/src/lib.rs",
-        "owner": "LogGuard",
+        "owner": "v2::LogGuard",
         "member": "shutdown"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains compat::legacy_shutdown; crates/sc-observability-log/src/lib.rs contains the retained released root shim that invokes it. Retire that shim and its error mapping when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard::dropped_events",
@@ -3564,8 +3578,8 @@
         "signature: preserve sc_observability_log::LogControl::flush exactly as recorded in this row baseline_signature: pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
         "error: preserve released FlushError failure type at sc_observability_log::LogControl::flush boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::flush on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs calls the canonical control::LogControl::flush, then compat::legacy_flush maps its canonical error to the released root error.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3578,7 +3592,10 @@
         "owner": "LogControl",
         "member": "flush"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::flush wrapper and compat::legacy_flush. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::health",
@@ -3589,8 +3606,8 @@
         "signature: preserve sc_observability_log::LogControl::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> Result<BridgeHealthReport, ControlError>",
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::health boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::health on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::health; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3603,7 +3620,10 @@
         "owner": "LogControl",
         "member": "health"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::health forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::active_log_path",
@@ -3614,8 +3634,8 @@
         "signature: preserve sc_observability_log::LogControl::active_log_path exactly as recorded in this row baseline_signature: pub fn active_log_path(&self) -> Result<Option<PathBuf>, ControlError>",
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::active_log_path boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::active_log_path on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::active_log_path; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3628,7 +3648,10 @@
         "owner": "LogControl",
         "member": "active_log_path"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::active_log_path forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::dropped_events",
@@ -3639,8 +3662,8 @@
         "signature: preserve sc_observability_log::LogControl::dropped_events exactly as recorded in this row baseline_signature: pub fn dropped_events(&self) -> crate::DroppedEvents",
         "receiver: preserve released &self receiver at sc_observability_log::LogControl::dropped_events boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::dropped_events on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::dropped_events; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3653,7 +3676,10 @@
         "owner": "LogControl",
         "member": "dropped_events"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::dropped_events forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::wait_stopped",
@@ -3664,8 +3690,8 @@
         "signature: preserve sc_observability_log::LogControl::wait_stopped exactly as recorded in this row baseline_signature: pub fn wait_stopped( &self, timeout: Duration, ) -> Result<crate::ShutdownReport, crate::WaitError>",
         "error: preserve released crate::WaitError failure type at sc_observability_log::LogControl::wait_stopped boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::wait_stopped on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::wait_stopped; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3678,7 +3704,10 @@
         "owner": "LogControl",
         "member": "wait_stopped"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::wait_stopped forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::try_log",
@@ -3689,8 +3718,8 @@
         "signature: preserve sc_observability_log::LogControl::try_log exactly as recorded in this row baseline_signature: pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError>",
         "error: preserve released EmitError failure type at sc_observability_log::LogControl::try_log boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::try_log on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs calls the canonical control::LogControl::try_log, then compat::legacy_emit maps its canonical error to the released root error.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3703,7 +3732,10 @@
         "owner": "LogControl",
         "member": "try_log"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::try_log wrapper and compat::legacy_emit. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::query",
@@ -3714,8 +3746,8 @@
         "signature: preserve sc_observability_log::LogControl::query exactly as recorded in this row baseline_signature: pub fn query( &self, query: &sc_observability_types::LogQuery, ) -> Result<sc_observability_types::LogSnapshot, ControlError>",
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::query boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::query on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::query; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3728,29 +3760,38 @@
         "owner": "LogControl",
         "member": "query"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::query forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::InitError::code",
       "owner": "sc_observability_log::InitError",
       "baseline_signature": "pub fn code(&self) -> ErrorCode",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn code(&self) -> crate::ErrorCode",
       "obligations": [
         "signature: preserve sc_observability_log::InitError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
         "receiver: preserve released &self receiver at sc_observability_log::InitError::code boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "existing_pair",
+      "conversion": "The released root InitError::code is declared on compat::InitError in crates/sc-observability-log/src/compat/mod.rs; the canonical sc_observability_types::v2::InitError::code generated by context_error! in crates/sc-observability-types/src/errors_v2.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
         "owner": "InitError",
         "member": "code"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability-types/src/errors_v2.rs",
+        "owner": "v2::InitError",
+        "member": "code"
+      },
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root InitError::code. Retire it with compat::InitError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::InitError::remediation",
@@ -3762,7 +3803,7 @@
         "receiver: preserve released &self receiver at sc_observability_log::InitError::remediation boundary"
       ],
       "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "conversion": "The released root InitError::remediation is restored on compat::InitError in crates/sc-observability-log/src/compat/mod.rs; sc_observability_types::v2::InitError has no remediation method, and its remediation is reached through diagnostic().",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3771,30 +3812,37 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the restored released root InitError::remediation. Retire it with compat::InitError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::FlushError::code",
       "owner": "sc_observability_log::FlushError",
       "baseline_signature": "pub fn code(&self) -> ErrorCode",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn code(&self) -> crate::ErrorCode",
       "obligations": [
         "signature: preserve sc_observability_log::FlushError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
         "receiver: preserve released &self receiver at sc_observability_log::FlushError::code boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "existing_pair",
+      "conversion": "The released root FlushError::code is declared on compat::FlushError in crates/sc-observability-log/src/compat/mod.rs; the canonical sc_observability_types::v2::FlushError::code generated by context_error! in crates/sc-observability-types/src/errors_v2.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
         "owner": "FlushError",
         "member": "code"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability-types/src/errors_v2.rs",
+        "owner": "v2::FlushError",
+        "member": "code"
+      },
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root FlushError::code. Retire it with compat::FlushError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::FlushError::remediation",
@@ -3806,7 +3854,7 @@
         "receiver: preserve released &self receiver at sc_observability_log::FlushError::remediation boundary"
       ],
       "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "conversion": "The released root FlushError::remediation is restored on compat::FlushError in crates/sc-observability-log/src/compat/mod.rs; sc_observability_types::v2::FlushError has no remediation method, and its remediation is reached through diagnostic().",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3815,30 +3863,37 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the restored released root FlushError::remediation. Retire it with compat::FlushError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::ShutdownError::code",
       "owner": "sc_observability_log::ShutdownError",
       "baseline_signature": "pub fn code(&self) -> ErrorCode",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn code(&self) -> crate::ErrorCode",
       "obligations": [
         "signature: preserve sc_observability_log::ShutdownError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
         "receiver: preserve released &self receiver at sc_observability_log::ShutdownError::code boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "existing_pair",
+      "conversion": "The released root ShutdownError::code is declared on compat::ShutdownError in crates/sc-observability-log/src/compat/mod.rs; the canonical sc_observability_types::v2::ShutdownError::code generated by context_error! in crates/sc-observability-types/src/errors_v2.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
         "owner": "ShutdownError",
         "member": "code"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability-types/src/errors_v2.rs",
+        "owner": "v2::ShutdownError",
+        "member": "code"
+      },
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root ShutdownError::code. Retire it with compat::ShutdownError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::ShutdownError::remediation",
@@ -3850,7 +3905,7 @@
         "receiver: preserve released &self receiver at sc_observability_log::ShutdownError::remediation boundary"
       ],
       "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "conversion": "The released root ShutdownError::remediation is restored on compat::ShutdownError in crates/sc-observability-log/src/compat/mod.rs; sc_observability_types::v2::ShutdownError has no remediation method, and its remediation is reached through diagnostic().",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3859,8 +3914,9 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the restored released root ShutdownError::remediation. Retire it with compat::ShutdownError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::EmitError::code",
@@ -3871,8 +3927,8 @@
         "signature: preserve sc_observability_log::EmitError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
         "receiver: preserve released &self receiver at sc_observability_log::EmitError::code boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released root EmitError::code is declared on compat::EmitError in crates/sc-observability-log/src/compat/mod.rs; the canonical crate::error::EmitError::code in crates/sc-observability-log/src/error.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3885,7 +3941,10 @@
         "owner": "EmitError",
         "member": "code"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root EmitError::code. Retire it with compat::EmitError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::EmitError::remediation",
@@ -3896,8 +3955,8 @@
         "signature: preserve sc_observability_log::EmitError::remediation exactly as recorded in this row baseline_signature: pub fn remediation(&self) -> Remediation",
         "receiver: preserve released &self receiver at sc_observability_log::EmitError::remediation boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released root EmitError::remediation is declared on compat::EmitError in crates/sc-observability-log/src/compat/mod.rs; the canonical crate::error::EmitError::remediation in crates/sc-observability-log/src/error.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3910,7 +3969,10 @@
         "owner": "EmitError",
         "member": "remediation"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root EmitError::remediation. Retire it with compat::EmitError when the released root surface is removed."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::default_for",
@@ -5270,13 +5332,13 @@
       "symbol": "sc_observability_log::init",
       "owner": "sc_observability_log",
       "baseline_signature": "pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
-      "canonical_signature": "pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
+      "canonical_signature": "pub fn init( config: crate::LoggerConfig, options: crate::BridgeOptions, ) -> Result<v2::LogGuard, sc_observability_types::v2::InitError>",
       "obligations": [
         "signature: preserve sc_observability_log::init exactly as recorded in this row baseline_signature: pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
         "error: preserve released InitError failure type at sc_observability_log::init boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root sc_observability_log::init shim in crates/sc-observability-log/src/lib.rs calls init_canonical, then compat::legacy_init maps sc_observability_types::v2::InitError to the released sc_observability_log::InitError; v2::init returns the canonical error directly.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -5287,9 +5349,13 @@
         "revision": "selected_head",
         "path": "crates/sc-observability-log/src/lib.rs",
         "owner": null,
-        "member": "init"
+        "member": "v2::init"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains compat::legacy_init; crates/sc-observability-log/src/lib.rs contains the retained released root shim that invokes it. Retire that shim and its error mapping when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_dto::from_core_health",
