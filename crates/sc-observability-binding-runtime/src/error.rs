@@ -57,7 +57,7 @@ fn context(
 
 pub(crate) fn init_runtime(
     message: impl Into<String>,
-    source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
+    source: Box<dyn std::error::Error + Send + Sync + 'static>,
 ) -> native::v2::InitError {
     let context = context(
         ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED),
@@ -67,11 +67,7 @@ pub(crate) fn init_runtime(
             std::iter::empty::<String>(),
         ),
     );
-    let context = if let Some(source) = source {
-        Box::new((*context).source(source))
-    } else {
-        context
-    };
+    let context = Box::new((*context).source(source));
     native::v2::InitError::Runtime { context }
 }
 

@@ -1040,7 +1040,7 @@ fn d15_operation_fixture() {
 fn d15_spawn_fixture() {
     let error = crate::error::init_runtime(
         "helper startup failed",
-        Some(Box::new(std::io::Error::other("native startup source"))),
+        Box::new(std::io::Error::other("native startup source")),
     );
     assert_canonical_context(
         &error,

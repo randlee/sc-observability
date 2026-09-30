@@ -133,7 +133,7 @@ impl Coordinator {
                     for helper in helpers {
                         let _ = helper.join();
                     }
-                    let typed = error::init_runtime(cause.to_string(), Some(Box::new(cause)));
+                    let typed = error::init_runtime(cause.to_string(), Box::new(cause));
                     return Err(conversion::canonical(&typed, conversion::Kind::Unavailable));
                 }
             }
