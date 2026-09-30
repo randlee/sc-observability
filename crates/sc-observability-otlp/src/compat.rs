@@ -17,15 +17,18 @@
 
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::config::{self, ExporterBackend, LegacyRetryPolicy, TelemetryConfig as RuntimeConfig};
+use crate::projectors::{ProjectorSet, TelemetryEmit};
 use crate::{RuntimeTelemetry, constants};
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 #[allow(deprecated)]
 use sc_observability_types::{
-    DurationMs, FlushError, InitError, LogEvent, MetricRecord, ServiceName, ShutdownError,
-    SpanSignal, TelemetryError,
+    DurationMs, FlushError, InitError, LogEvent, LogProjector, MetricProjector, MetricRecord,
+    Observable, ObservationFilter, ProjectionRegistration, ServiceName, ShutdownError,
+    SpanProjector, SpanSignal, TelemetryError,
 };
 
 /// The released 1.4.1 HTTP protocol set.
@@ -369,16 +372,13 @@ impl Telemetry {
         RuntimeTelemetry::new_typed(config.into_runtime()).map(|inner| Self { inner })
     }
 
+    pub(crate) fn runtime(&self) -> &RuntimeTelemetry {
+        &self.inner
+    }
+
     /// Buffers one log event for export.
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError> {
         self.inner.emit_log(event).map_err(legacy_telemetry_error)
-    }
-
-    pub(crate) fn emit_log_canonical(
-        &self,
-        event: &LogEvent,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.inner.emit_log(event)
     }
 
     /// Buffers one span signal for export.
@@ -386,25 +386,11 @@ impl Telemetry {
         self.inner.emit_span(span).map_err(legacy_telemetry_error)
     }
 
-    pub(crate) fn emit_span_canonical(
-        &self,
-        span: &SpanSignal,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.inner.emit_span(span)
-    }
-
     /// Buffers one metric record for export.
     pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError> {
         self.inner
             .emit_metric(metric)
             .map_err(legacy_telemetry_error)
-    }
-
-    pub(crate) fn emit_metric_canonical(
-        &self,
-        metric: &MetricRecord,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.inner.emit_metric(metric)
     }
 
     /// Flushes all configured exporters with the released error type.
@@ -450,6 +436,73 @@ impl Telemetry {
     /// Returns the current exporter health report.
     pub fn health(&self) -> crate::TelemetryHealthReport {
         self.inner.health()
+    }
+}
+
+impl TelemetryEmit for Telemetry {
+    fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
+        self.runtime().emit_log(event)
+    }
+
+    fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
+        self.runtime().emit_span(span)
+    }
+
+    fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
+        self.runtime().emit_metric(metric)
+    }
+}
+
+/// Public helper for attaching the released telemetry API to observation projectors.
+#[expect(
+    missing_debug_implementations,
+    reason = "the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract"
+)]
+pub struct TelemetryProjectors<T>
+where
+    T: Observable,
+{
+    inner: ProjectorSet<T, Telemetry>,
+}
+
+impl<T> TelemetryProjectors<T>
+where
+    T: Observable,
+{
+    /// Starts a wrapped projector set for one observation payload type.
+    pub fn new(telemetry: Arc<Telemetry>) -> Self {
+        Self {
+            inner: ProjectorSet::new(telemetry),
+        }
+    }
+
+    /// Attaches a log projector whose output is also forwarded into telemetry.
+    pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
+        self.inner = self.inner.with_log_projector(projector);
+        self
+    }
+
+    /// Attaches a span projector whose output is also forwarded into telemetry.
+    pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
+        self.inner = self.inner.with_span_projector(projector);
+        self
+    }
+
+    /// Attaches a metric projector whose output is also forwarded into telemetry.
+    pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
+        self.inner = self.inner.with_metric_projector(projector);
+        self
+    }
+
+    /// Attaches the filter the wrapped projector registration should honor.
+    pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
+        self.inner = self.inner.with_filter(filter);
+        self
+    }
+
+    /// Converts the wrapped helper into ordinary observation registration.
+    pub fn into_registration(self) -> ProjectionRegistration<T> {
+        self.inner.into_registration()
     }
 }
 

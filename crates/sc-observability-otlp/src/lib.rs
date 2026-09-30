@@ -64,14 +64,14 @@ pub use assembly::{CompleteSpan, SpanAssembler, SpanAssemblyLoss};
 #[doc(inline)]
 pub use compat::{
     AuthHeader, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry, TelemetryConfig,
-    TelemetryConfigBuilder,
+    TelemetryConfigBuilder, TelemetryProjectors,
 };
 #[doc(inline)]
 pub use config::{
     ExporterBackend, LegacyRetryPolicy, LogsConfig, MetricsConfig, ResourceAttributes, TracesConfig,
 };
 #[doc(inline)]
-pub use projectors::{TelemetryProjectors, V2TelemetryProjectors};
+pub use projectors::V2TelemetryProjectors;
 
 /// Opt-in canonical OTLP facade for the compatible 1.x transition.
 ///
