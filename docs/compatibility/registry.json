@@ -3863,8 +3863,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
+        "crates/sc-observe/src/compat.rs",
         "crates/sc-observe/src/lib.rs"
-      ]
+      ],
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::service_name",
@@ -3910,8 +3912,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
+        "crates/sc-observe/src/compat.rs",
         "crates/sc-observe/src/lib.rs"
-      ]
+      ],
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::new",
@@ -3957,8 +3961,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
+        "crates/sc-observe/src/compat.rs",
         "crates/sc-observe/src/lib.rs"
-      ]
+      ],
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::builder",
@@ -4054,8 +4060,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
+        "crates/sc-observe/src/compat.rs",
         "crates/sc-observe/src/lib.rs"
-      ]
+      ],
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::shutdown",
@@ -4101,8 +4109,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
+        "crates/sc-observe/src/compat.rs",
         "crates/sc-observe/src/lib.rs"
-      ]
+      ],
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::health",
@@ -4248,8 +4258,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
+        "crates/sc-observe/src/compat.rs",
         "crates/sc-observe/src/lib.rs"
-      ]
+      ],
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::new",
