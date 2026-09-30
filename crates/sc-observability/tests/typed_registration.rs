@@ -220,12 +220,15 @@ fn typed_registration_adapter_preserves_failure_diagnostic_and_source() {
     let error = sink.write(&event()).expect_err("typed sink should fail");
 
     assert_eq!(error.diagnostic().code.as_str(), "TYPED_REGISTRATION_WRITE");
+    let context = std::error::Error::source(&error).expect("legacy context source");
     assert_eq!(
-        std::error::Error::source(&error)
-            .map(ToString::to_string)
-            .as_deref(),
-        Some("typed source")
+        context.to_string(),
+        "typed sink write failed; caused by: typed source"
     );
-    assert!(std::error::Error::source(&error).unwrap().is::<io::Error>());
+    assert!(
+        context
+            .source()
+            .is_some_and(|source| source.is::<io::Error>())
+    );
     assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
 }

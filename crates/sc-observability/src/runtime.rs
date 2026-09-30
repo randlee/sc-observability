@@ -6,7 +6,10 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use sc_observability_types::typed::{EventFailure, InitFailure};
-use sc_observability_types::v2::{EventError, FlushError, InitError};
+use sc_observability_types::v2::{
+    EventError as CanonicalEventError, FlushError as CanonicalFlushError,
+    InitError as CanonicalInitError,
+};
 use sc_observability_types::{
     AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext,
     LevelChange, LevelChangeError, LevelChangeSource, LevelFilter, LevelState, LogQuery,
@@ -564,8 +567,10 @@ impl LoggerRuntime {
 
 impl Logger<Running> {
     /// Starts a construction-time builder for sink registration.
-    pub fn builder(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitError> {
-        LoggerBuilder::new(config)
+    pub fn builder_canonical(
+        config: crate::LoggerConfig,
+    ) -> Result<LoggerBuilder, CanonicalInitError> {
+        LoggerBuilder::new_canonical(config)
     }
 
     /// Starts a construction-time builder that reports the released typed
@@ -575,8 +580,8 @@ impl Logger<Running> {
     }
 
     /// Creates a logger with the configured built-in sinks and runtime state.
-    pub fn new(config: crate::LoggerConfig) -> Result<Self, InitError> {
-        LoggerBuilder::new(config)?.build_canonical()
+    pub fn new_canonical(config: crate::LoggerConfig) -> Result<Self, CanonicalInitError> {
+        LoggerBuilder::new_canonical(config)?.build_canonical()
     }
 
     /// Creates a logger with the released typed initialization failure.
@@ -585,10 +590,10 @@ impl Logger<Running> {
     }
 
     /// Creates a logger together with weak authority for runtime level changes.
-    pub fn new_with_level_owner(
+    pub fn new_with_level_owner_canonical(
         config: crate::LoggerConfig,
-    ) -> Result<(Self, LevelOwner), InitError> {
-        LoggerBuilder::new(config)?.build_with_level_owner()
+    ) -> Result<(Self, LevelOwner), CanonicalInitError> {
+        LoggerBuilder::new_canonical(config)?.build_with_level_owner_canonical()
     }
 
     /// Creates a logger and level owner with the released typed startup
@@ -604,12 +609,12 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
-    pub fn log(&self, event: LogEvent) -> Result<(), EventError> {
-        let event = self
-            .prepare_event(event)
-            .map_err(|failure| EventError::Validation {
-                context: failure.into_context(),
-            })?;
+    pub fn log_canonical(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+        let event =
+            self.prepare_event(event)
+                .map_err(|failure| CanonicalEventError::Validation {
+                    context: failure.into_context(),
+                })?;
         let Some(event) = event else {
             return Ok(());
         };
@@ -625,8 +630,8 @@ impl Logger<Running> {
     }
 
     /// Admits one event with the released typed failure contract.
-    pub fn log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
-        self.log(event)
+    pub fn log_typed_canonical(&self, event: LogEvent) -> Result<(), EventFailure> {
+        self.log_canonical(event)
             .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
@@ -635,13 +640,13 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
-    pub fn try_log(&self, event: LogEvent) -> Result<(), EventError> {
-        self.try_log_with_outcome(event).map(|_| ())
+    pub fn try_log_canonical(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+        self.try_log_with_outcome_canonical(event).map(|_| ())
     }
 
     /// Attempts non-blocking admission with the released typed failure contract.
-    pub fn try_log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
-        self.try_log(event)
+    pub fn try_log_typed_canonical(&self, event: LogEvent) -> Result<(), EventFailure> {
+        self.try_log_canonical(event)
             .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
@@ -650,12 +655,15 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
-    pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, EventError> {
-        let event = self
-            .prepare_event(event)
-            .map_err(|failure| EventError::Validation {
-                context: failure.into_context(),
-            })?;
+    pub fn try_log_with_outcome_canonical(
+        &self,
+        event: LogEvent,
+    ) -> Result<AdmissionOutcome, CanonicalEventError> {
+        let event =
+            self.prepare_event(event)
+                .map_err(|failure| CanonicalEventError::Validation {
+                    context: failure.into_context(),
+                })?;
         let Some(event) = event else {
             return Ok(AdmissionOutcome::Filtered);
         };
@@ -670,7 +678,7 @@ impl Logger<Running> {
             Err(TryEnqueueError::Full) => {
                 let summary = writer.record_queue_full_drop();
                 self.record_last_error(summary);
-                Err(EventError::Routing {
+                Err(CanonicalEventError::Routing {
                     context: Box::new(ErrorContext::new(
                         error_codes::LOGGER_QUEUE_FULL,
                         "writer queue is full",
@@ -689,11 +697,11 @@ impl Logger<Running> {
     }
 
     /// Attempts non-blocking admission and returns the released typed failure.
-    pub fn try_log_with_outcome_typed(
+    pub fn try_log_with_outcome_typed_canonical(
         &self,
         event: LogEvent,
     ) -> Result<AdmissionOutcome, EventFailure> {
-        self.try_log_with_outcome(event)
+        self.try_log_with_outcome_canonical(event)
             .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
@@ -702,15 +710,15 @@ impl Logger<Running> {
         since = "1.2.0",
         note = "Use log() for blocking queue admission or try_log() for non-blocking logging."
     )]
-    pub fn emit(&self, event: LogEvent) -> Result<(), EventError> {
-        self.log(event)?;
+    pub fn emit_canonical(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+        self.log_canonical(event)?;
         if !self
             .runtime
             .writer
             .as_ref()
             .is_some_and(WriterRuntime::maintenance_active)
         {
-            let _ = self.flush();
+            let _ = self.flush_canonical();
         }
         Ok(())
     }
@@ -723,7 +731,7 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
-    pub fn flush(&self) -> Result<(), FlushError> {
+    pub fn flush_canonical(&self) -> Result<(), CanonicalFlushError> {
         let writer = self
             .runtime
             .writer
@@ -734,7 +742,7 @@ impl Logger<Running> {
                 .flush_errors_total
                 .fetch_add(1, Ordering::SeqCst);
             self.record_last_error(DiagnosticSummary::from(error.diagnostic()));
-            return Err(FlushError::Drain {
+            return Err(CanonicalFlushError::Drain {
                 context: error.into_context(),
             });
         }
@@ -742,8 +750,8 @@ impl Logger<Running> {
     }
 
     /// Flushes with the released typed failure contract.
-    pub fn flush_typed(&self) -> Result<(), sc_observability_types::typed::FlushFailure> {
-        self.flush().map_err(|error| {
+    pub fn flush_typed_canonical(&self) -> Result<(), sc_observability_types::typed::FlushFailure> {
+        self.flush_canonical().map_err(|error| {
             sc_observability_types::typed::FlushFailure::from_context(error.into_context())
         })
     }
@@ -850,22 +858,22 @@ impl Logger<Running> {
         ))
     }
 
-    fn log_disconnected_failure(&self) -> EventError {
+    fn log_disconnected_failure(&self) -> CanonicalEventError {
         match self.runtime_snapshot().last_writer_error {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
             {
-                EventError::Routing {
+                CanonicalEventError::Routing {
                     context: Box::new(shutdown_timed_out_error_context(&summary.message)),
                 }
             }
-            Some(summary) => EventError::Routing {
+            Some(summary) => CanonicalEventError::Routing {
                 context: Box::new(writer_degraded_error_context(&format!(
                     "writer thread disconnected while admitting log work: {}",
                     summary.message
                 ))),
             },
-            None => EventError::Routing {
+            None => CanonicalEventError::Routing {
                 context: Box::new(writer_degraded_error_context(
                     "writer thread disconnected while admitting log work",
                 )),
@@ -873,22 +881,22 @@ impl Logger<Running> {
         }
     }
 
-    fn try_log_disconnected_failure(&self) -> EventError {
+    fn try_log_disconnected_failure(&self) -> CanonicalEventError {
         match self.runtime_snapshot().last_writer_error {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
             {
-                EventError::Routing {
+                CanonicalEventError::Routing {
                     context: Box::new(shutdown_timed_out_error_context(&summary.message)),
                 }
             }
-            Some(summary) => EventError::Routing {
+            Some(summary) => CanonicalEventError::Routing {
                 context: Box::new(writer_degraded_error_context(&format!(
                     "writer thread disconnected while admitting non-blocking log work: {}",
                     summary.message
                 ))),
             },
-            None => EventError::Routing {
+            None => CanonicalEventError::Routing {
                 context: Box::new(writer_degraded_error_context(
                     "writer thread disconnected while admitting non-blocking log work",
                 )),

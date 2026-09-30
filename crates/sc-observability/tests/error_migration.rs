@@ -6,7 +6,7 @@ use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX}
 use sc_observability::error_codes;
 use sc_observability::*;
 use sc_observability_types::{
-    QueryError, QueryHealthState,
+    DiagnosticInfo, QueryError, QueryHealthState,
     error_codes::{SC_LOG_QUERY_DECODE, SC_LOG_QUERY_SHUTDOWN},
 };
 use serde_json::json;
@@ -74,10 +74,7 @@ fn logger_emit_preserves_real_event_validation_diagnostic() {
         error.diagnostic().remediation,
         Remediation::Recoverable { .. }
     ));
-    assert!(std::ptr::eq(
-        error.diagnostic(),
-        error.context().diagnostic()
-    ));
+    assert!(std::ptr::eq(error.diagnostic(), error.0.diagnostic()));
 
     let _stopped = logger.shutdown();
 }
