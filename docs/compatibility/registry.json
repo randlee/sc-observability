@@ -1621,7 +1621,7 @@
         "trait: preserve Telemetry implementability, the exact public trait bounds, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released Telemetry facade is in compat.rs. The selected RuntimeTelemetry implementation also retains released-only admission in lib.rs (BufferedMetric::Released and RuntimeTelemetry::{emit_log_released, emit_span_released, emit_metric_released}) and the Released metric arm in RuntimeTelemetry::flush_typed. Released model conversion is in legacy_projection.rs::{log_record, span_signal, metric_record} and span_signal helpers. The TelemetryProjectors release adapters are separately identified on that owner row; these are scoped declarations and branches, not whole-file deletion candidates.",
+      "conversion": "The released Telemetry facade is in compat.rs. The selected RuntimeTelemetry implementation also retains released-only admission in crates/sc-observability-otlp/src/runtime.rs (BufferedMetric::Released and RuntimeTelemetry::{emit_log_released, emit_span_released, emit_metric_released}) and the Released metric arm in RuntimeTelemetry::flush_typed. Released-only immediate-retry admission also remains in crates/sc-observability-otlp/src/config/validation.rs: validated_released_telemetry_bounds selects the immediate=true route through validated_telemetry_bounds_with_delays, validated_transport_bounds_with_delays and resolve_retry, which produces RetryDelay::Immediate; the shared validators and their canonical positive-delay path remain in place. Released model conversion is in legacy_projection.rs::{log_record, span_signal, metric_record} and span_signal helpers. The TelemetryProjectors release adapters are separately identified on that owner row; these are scoped declarations and branches, not whole-file deletion candidates.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -1634,11 +1634,16 @@
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::{new_typed, emit_log, emit_span, emit_metric, flush, flush_typed, shutdown, shutdown_typed, health}",
-        "crates/sc-observability-otlp/src/lib.rs::BufferedMetric::Released",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::{emit_log_released, emit_span_released, emit_metric_released}",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::flush_typed BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/runtime.rs::BufferedMetric::Released",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::{emit_log_released, emit_span_released, emit_metric_released}",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed BufferedMetric::Released arm",
         "crates/sc-observability-otlp/src/legacy_projection.rs::{log_record, span_signal, metric_record}",
-        "crates/sc-observability-otlp/src/legacy_projection.rs::span_signal helpers {started_record, span_status, span_event, trace_context, attributes, attribute, transport_error}"
+        "crates/sc-observability-otlp/src/legacy_projection.rs::span_signal helpers {started_record, span_status, span_event, trace_context, attributes, attribute, transport_error}",
+        "crates/sc-observability-otlp/src/config/validation.rs::validated_released_telemetry_bounds",
+        "crates/sc-observability-otlp/src/config/validation.rs::validated_telemetry_bounds_with_delays immediate=true route, immediate parameter and branch (retain the canonical false route)",
+        "crates/sc-observability-otlp/src/config/validation.rs::validated_transport_bounds_with_delays immediate=true route and immediate parameter (retain the canonical false route)",
+        "crates/sc-observability-otlp/src/config/validation.rs::resolve_retry immediate parameter and immediate && value.value == 0 branch (retain checked positive-delay path)",
+        "crates/sc-observability-otlp/src/config/validation.rs::RetryDelay::Immediate variant"
       ]
     },
     {
@@ -1708,7 +1713,7 @@
         "signature identity: preserve TelemetryProjectors declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released root TelemetryProjectors export in lib.rs (69-72) forwards to the compat.rs facade (554-620), which uses ProjectorSet (projectors.rs:31-41, 51-116), AttachedParts (43-49), TelemetryEmit (118-122; implemented for Telemetry in compat.rs:535-547), and AttachedLogProjector/AttachedSpanProjector/AttachedMetricProjector with their TypedLogProjector/TypedSpanProjector/TypedMetricProjector implementations (projectors.rs:266-348). The released LogProjector/SpanProjector/MetricProjector forwarding implementations are in compat.rs:629-674. The v2 V2TelemetryProjectors implementation (projectors.rs:134-210) instead wraps canonical projectors with CanonicalAttached (213-258) and telemetry_to_projection_error (260-264); it does not use the released projector plumbing. telemetry_to_projection_failure (350-352) is used only by the three released Typed*Projector implementations.",
+      "conversion": "The released root TelemetryProjectors export in lib.rs (72-75) forwards to the compat.rs facade (554-620), which uses ProjectorSet (projectors.rs:31-41, 51-116), AttachedParts (43-49), TelemetryEmit (118-122; implemented for Telemetry in compat.rs:535-547), and AttachedLogProjector/AttachedSpanProjector/AttachedMetricProjector with their TypedLogProjector/TypedSpanProjector/TypedMetricProjector implementations (projectors.rs:266-348). The released LogProjector/SpanProjector/MetricProjector forwarding implementations are in compat.rs:629-674. The v2 V2TelemetryProjectors implementation (projectors.rs:134-210) instead wraps canonical projectors with CanonicalAttached (213-258) and telemetry_to_projection_error (260-264); it does not use the released projector plumbing. telemetry_to_projection_failure (350-352) is used only by the three released Typed*Projector implementations.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -1720,7 +1725,7 @@
         "symbol": "V2TelemetryProjectors"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/lib.rs::root compat re-export of TelemetryProjectors (lines 69-72)",
+        "crates/sc-observability-otlp/src/lib.rs::root compat re-export of TelemetryProjectors (lines 72-75)",
         "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::{new, with_log_projector, with_span_projector, with_metric_projector, with_filter, into_registration}",
         "crates/sc-observability-otlp/src/compat.rs::TelemetryEmit for Telemetry",
         "crates/sc-observability-otlp/src/compat.rs::{LogProjector, SpanProjector, MetricProjector} for Attached*Projector",
@@ -4496,7 +4501,7 @@
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::new exactly as recorded in this row baseline_signature: pub fn new(config: TelemetryConfig) -> Result<Self, InitError>",
         "error: preserve released InitError failure type at sc_observability_otlp::Telemetry::new boundary",
-        "error: released InitError is produced one way from InitFailure, which is also the canonical RuntimeTelemetry::new error: crates/sc-observability-otlp/src/compat.rs Telemetry::new maps Telemetry::new_typed through From<InitFailure> for InitError, which moves the ErrorContext box with diagnostic and source; new_typed runs validate_released_config and validated_released_telemetry_bounds, then RuntimeTelemetry::new_prepared (crates/sc-observability-otlp/src/lib.rs), not RuntimeTelemetry::new"
+        "error: released InitError is produced one way from InitFailure, which is also the canonical RuntimeTelemetry::new error: crates/sc-observability-otlp/src/compat.rs Telemetry::new maps Telemetry::new_typed through From<InitFailure> for InitError, which moves the ErrorContext box with diagnostic and source; new_typed runs validate_released_config and validated_released_telemetry_bounds, then RuntimeTelemetry::new_prepared (crates/sc-observability-otlp/src/runtime.rs), not RuntimeTelemetry::new"
       ],
       "treatment": "new_adapter",
       "conversion": "The released Telemetry::new in compat.rs delegates to Telemetry::new_typed, which validates the released TelemetryConfig, converts it with into_runtime, derives validated released telemetry bounds, and calls RuntimeTelemetry::new_prepared. The released new maps InitFailure into InitError.",
@@ -4568,7 +4573,7 @@
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::emit_log",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::emit_log_released",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::emit_log_released",
         "crates/sc-observability-otlp/src/legacy_projection.rs::log_record"
       ]
     },
@@ -4597,7 +4602,7 @@
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::emit_span",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::emit_span_released",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::emit_span_released",
         "crates/sc-observability-otlp/src/legacy_projection.rs::{span_signal, started_record, span_status, span_event, trace_context, attributes, attribute, transport_error}"
       ]
     },
@@ -4626,9 +4631,9 @@
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::emit_metric",
-        "crates/sc-observability-otlp/src/lib.rs::BufferedMetric::Released",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::emit_metric_released",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/runtime.rs::BufferedMetric::Released",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::emit_metric_released",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
         "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
@@ -4640,7 +4645,7 @@
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::flush exactly as recorded in this row baseline_signature: pub fn flush(&self) -> Result<(), FlushError>",
         "error: preserve released FlushError failure type at sc_observability_otlp::Telemetry::flush boundary",
-        "error: released FlushError is produced one way from FlushFailure, which is also the canonical RuntimeTelemetry::flush error: crates/sc-observability-otlp/src/compat.rs Telemetry::flush maps Telemetry::flush_typed, which returns RuntimeTelemetry::flush_typed (crates/sc-observability-otlp/src/lib.rs) unchanged, through From<FlushFailure> for FlushError, moving the ErrorContext box with diagnostic and source"
+        "error: released FlushError is produced one way from FlushFailure, which is also the canonical RuntimeTelemetry::flush error: crates/sc-observability-otlp/src/compat.rs Telemetry::flush maps Telemetry::flush_typed, which returns RuntimeTelemetry::flush_typed (crates/sc-observability-otlp/src/runtime.rs) unchanged, through From<FlushFailure> for FlushError, moving the ErrorContext box with diagnostic and source"
       ],
       "treatment": "new_adapter",
       "conversion": "The released Telemetry::flush in compat.rs delegates to flush_typed and converts FlushFailure into released FlushError; flush_typed calls the inner RuntimeTelemetry; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
@@ -4659,7 +4664,7 @@
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::flush",
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::flush_typed",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
         "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
@@ -4688,7 +4693,7 @@
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::flush_typed",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
         "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
@@ -4700,7 +4705,7 @@
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(&self) -> Result<(), ShutdownError>",
         "error: preserve released ShutdownError failure type at sc_observability_otlp::Telemetry::shutdown boundary",
-        "error: released ShutdownError is produced one way from ShutdownFailure, which is also the canonical RuntimeTelemetry::shutdown error: crates/sc-observability-otlp/src/compat.rs Telemetry::shutdown maps Telemetry::shutdown_typed, which returns RuntimeTelemetry::shutdown_typed (crates/sc-observability-otlp/src/lib.rs) unchanged, through From<ShutdownFailure> for ShutdownError, moving the ErrorContext box with diagnostic and source"
+        "error: released ShutdownError is produced one way from ShutdownFailure, which is also the canonical RuntimeTelemetry::shutdown error: crates/sc-observability-otlp/src/compat.rs Telemetry::shutdown maps Telemetry::shutdown_typed, which returns RuntimeTelemetry::shutdown_typed (crates/sc-observability-otlp/src/runtime.rs) unchanged, through From<ShutdownFailure> for ShutdownError, moving the ErrorContext box with diagnostic and source"
       ],
       "treatment": "new_adapter",
       "conversion": "The released Telemetry::shutdown in compat.rs delegates to shutdown_typed and converts ShutdownFailure into released ShutdownError; shutdown_typed calls the inner RuntimeTelemetry; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
@@ -4719,7 +4724,7 @@
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::shutdown",
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::shutdown_typed",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
         "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
@@ -4748,7 +4753,7 @@
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs::Telemetry::shutdown_typed",
-        "crates/sc-observability-otlp/src/lib.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
         "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
