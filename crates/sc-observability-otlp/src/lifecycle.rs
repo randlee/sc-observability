@@ -176,7 +176,10 @@ impl LifecycleCore {
     /// Constructs the state machine from D.21's validated, backend-neutral
     /// bounds.  Exporter preflight is intentionally performed before any
     /// state becomes visible to callers.
-    #[allow(dead_code, reason = "D.18 constructs the staged lifecycle core")]
+    #[allow(
+        dead_code,
+        reason = "only unused in the lib build; the unified lifecycle test binary uses it, making #[expect] unfulfilled under --all-targets"
+    )]
     pub(crate) fn new(
         exporters: ExporterSet,
         bounds: &ValidatedTransportBounds,
