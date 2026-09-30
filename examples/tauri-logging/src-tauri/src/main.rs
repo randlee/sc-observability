@@ -348,10 +348,9 @@ fn main() {
     app.run(|app, event| {
         if matches!(event, tauri::RunEvent::ExitRequested { .. })
             && let Some(owner) = app.try_state::<OwnerState>()
+            && let Err(error) = owner.shutdown(Duration::from_secs(2))
         {
-            if let Err(error) = owner.shutdown(Duration::from_secs(2)) {
-                eprintln!("observability host shutdown was not accepted: {error:?}");
-            }
+            eprintln!("observability host shutdown was not accepted: {error:?}");
         }
     });
 }
