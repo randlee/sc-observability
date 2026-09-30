@@ -9,13 +9,13 @@ use sc_observability_dto::{
     decode_level_request,
 };
 use sc_observability_tauri::{AdapterPolicy, plugin};
-use tauri::Manager;
 use std::{
     collections::BTreeSet,
     path::PathBuf,
     sync::{Arc, Mutex, TryLockError},
     time::Duration,
 };
+use tauri::Manager;
 
 struct OwnerState {
     guard: Mutex<Option<sc_observability_log::v2::LogGuard>>,
@@ -64,38 +64,6 @@ fn shutdown_failure(error: sc_observability_log::v2::ShutdownError) -> Failure {
         error.diagnostic(),
         error.failure_classification(),
     )
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn context(message: &str) -> Box<sc_observability_types::ErrorContext> {
-        Box::new(sc_observability_types::ErrorContext::new(
-            sc_observability_types::error_codes::DIAGNOSTIC_INVALID,
-            message,
-            sc_observability_types::Remediation::recoverable("retry", ["inspect health"]),
-        ))
-    }
-
-    #[test]
-    fn canonical_shutdown_errors_keep_the_released_failure_categories() {
-        let timeout = shutdown_failure(sc_observability_log::v2::ShutdownError::Timeout {
-            context: context("timed out"),
-        });
-        assert!(matches!(
-            timeout,
-            Failure::Timeout { ref operation, .. } if operation == "shutdown"
-        ));
-        assert_eq!(timeout.diagnostic().message, "timed out");
-
-        let drain = shutdown_failure(sc_observability_log::v2::ShutdownError::Drain {
-            context: context("drain failed"),
-        });
-        assert!(matches!(drain, Failure::Io { .. }));
-        assert_eq!(drain.diagnostic().message, "drain failed");
-    }
 }
 
 fn level_envelope(result: Result<LevelChangeDto, Failure>) -> WireEnvelope<LevelChangeDto> {
@@ -159,13 +127,17 @@ fn app_observability_level_change<R: tauri::Runtime>(
     let Some(object) = request.as_object() else {
         return level_envelope(Err(invalid("request", "level request must be an object")));
     };
-    if object.keys().any(|key| !matches!(key.as_str(), "schema_version" | "change")) {
+    if object
+        .keys()
+        .any(|key| !matches!(key.as_str(), "schema_version" | "change"))
+    {
         return level_envelope(Err(invalid("request", "unknown level request field")));
     }
     let Some(schema_version) = object
         .get("schema_version")
         .and_then(serde_json::Value::as_u64)
-        .and_then(|version| u32::try_from(version).ok()) else {
+        .and_then(|version| u32::try_from(version).ok())
+    else {
         return level_envelope(Err(invalid("schema_version", "schema_version must be 1")));
     };
     if schema_version != 1 {
@@ -174,7 +146,10 @@ fn app_observability_level_change<R: tauri::Runtime>(
     let Some(change) = object.get("change").and_then(serde_json::Value::as_object) else {
         return level_envelope(Err(invalid("change", "change must be an object")));
     };
-    if change.keys().any(|key| !matches!(key.as_str(), "kind" | "level")) {
+    if change
+        .keys()
+        .any(|key| !matches!(key.as_str(), "kind" | "level"))
+    {
         return level_envelope(Err(invalid("change", "unknown level change field")));
     }
     let parsed: Result<LevelChangeRequest, _> = serde_json::from_value(request);
@@ -213,17 +188,17 @@ fn app_observability_level_change<R: tauri::Runtime>(
         return level_envelope(Err(closed_level_change()));
     };
     let result: Result<LevelChangeDto, Failure> = match change {
-        LevelRequestDto::Elevate { level } => owner.elevate_level(
-            level.into(),
-            sc_observability_types::LevelChangeSource::UserRequest,
-        ).map_err(sc_observability_dto::from_level_error)
+        LevelRequestDto::Elevate { level } => owner
+            .elevate_level(
+                level.into(),
+                sc_observability_types::LevelChangeSource::UserRequest,
+            )
+            .map_err(sc_observability_dto::from_level_error)
             .and_then(sc_observability_dto::from_level_change),
-        LevelRequestDto::Reset {} => {
-            owner
-                .reset_level(sc_observability_types::LevelChangeSource::UserRequest)
-                .map_err(sc_observability_dto::from_level_error)
-                .and_then(sc_observability_dto::from_level_change)
-        }
+        LevelRequestDto::Reset {} => owner
+            .reset_level(sc_observability_types::LevelChangeSource::UserRequest)
+            .map_err(sc_observability_dto::from_level_error)
+            .and_then(sc_observability_dto::from_level_change),
     };
     level_envelope(result)
 }
@@ -335,4 +310,35 @@ fn main() {
             eprintln!("observability host shutdown was not accepted: {error:?}");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn context(message: &str) -> Box<sc_observability_types::ErrorContext> {
+        Box::new(sc_observability_types::ErrorContext::new(
+            sc_observability_types::error_codes::DIAGNOSTIC_INVALID,
+            message,
+            sc_observability_types::Remediation::recoverable("retry", ["inspect health"]),
+        ))
+    }
+
+    #[test]
+    fn canonical_shutdown_errors_keep_the_released_failure_categories() {
+        let timeout = shutdown_failure(sc_observability_log::v2::ShutdownError::Timeout {
+            context: context("timed out"),
+        });
+        assert!(matches!(
+            timeout,
+            Failure::Timeout { ref operation, .. } if operation == "shutdown"
+        ));
+        assert_eq!(timeout.diagnostic().message, "timed out");
+
+        let drain = shutdown_failure(sc_observability_log::v2::ShutdownError::Drain {
+            context: context("drain failed"),
+        });
+        assert!(matches!(drain, Failure::Io { .. }));
+        assert_eq!(drain.diagnostic().message, "drain failed");
+    }
 }
