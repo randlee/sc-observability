@@ -1690,7 +1690,7 @@
       "canonical_signature": "pub fn new( timestamp: Timestamp, service: ServiceName, name: ActionName, trace: TraceContext, attributes: Map<String, Value>, ) -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::new exactly as recorded in this row baseline_signature: pub fn new( timestamp: Timestamp, service: ServiceName, name: ActionName, trace: TraceContext, attributes: Map<String, Value>, ) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability_types::SpanRecord::new as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1715,7 +1715,7 @@
       "canonical_signature": "pub fn with_diagnostic(mut self, diagnostic: Diagnostic) -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::with_diagnostic exactly as recorded in this row baseline_signature: pub fn with_diagnostic(mut self, diagnostic: Diagnostic) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::with_diagnostic baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_types::SpanRecord::with_diagnostic boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1740,7 +1740,7 @@
       "canonical_signature": "pub fn end(self, status: SpanStatus, duration: DurationMs) -> SpanRecord<SpanEnded>",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::end exactly as recorded in this row baseline_signature: pub fn end(self, status: SpanStatus, duration: DurationMs) -> SpanRecord<SpanEnded>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::end baseline_signature"
+        "receiver: preserve released self receiver at sc_observability_types::SpanRecord::end boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1765,7 +1765,7 @@
       "canonical_signature": "pub fn timestamp(&self) -> Timestamp",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::timestamp exactly as recorded in this row baseline_signature: pub fn timestamp(&self) -> Timestamp",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::timestamp baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_types::SpanRecord::timestamp boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1790,7 +1790,7 @@
       "canonical_signature": "pub fn service(&self) -> &ServiceName",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::service exactly as recorded in this row baseline_signature: pub fn service(&self) -> &ServiceName",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::service baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_types::SpanRecord::service boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1815,7 +1815,7 @@
       "canonical_signature": "pub fn name(&self) -> &ActionName",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::name exactly as recorded in this row baseline_signature: pub fn name(&self) -> &ActionName",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::name baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_types::SpanRecord::name boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1840,7 +1840,7 @@
       "canonical_signature": "pub fn trace(&self) -> &TraceContext",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::trace exactly as recorded in this row baseline_signature: pub fn trace(&self) -> &TraceContext",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::trace baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_types::SpanRecord::trace boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1865,7 +1865,7 @@
       "canonical_signature": "pub fn status(&self) -> SpanStatus",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::status exactly as recorded in this row baseline_signature: pub fn status(&self) -> SpanStatus",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::status baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_types::SpanRecord::status boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1890,7 +1890,7 @@
       "canonical_signature": "pub fn diagnostic(&self) -> Option<&Diagnostic>",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::diagnostic exactly as recorded in this row baseline_signature: pub fn diagnostic(&self) -> Option<&Diagnostic>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::diagnostic baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_types::SpanRecord::diagnostic boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1915,7 +1915,7 @@
       "canonical_signature": "pub fn attributes(&self) -> &Map<String, Value>",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::attributes exactly as recorded in this row baseline_signature: pub fn attributes(&self) -> &Map<String, Value>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::attributes baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_types::SpanRecord::attributes boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1940,7 +1940,7 @@
       "canonical_signature": "pub fn duration_ms(&self) -> Option<DurationMs>",
       "obligations": [
         "signature: preserve sc_observability_types::SpanRecord::duration_ms exactly as recorded in this row baseline_signature: pub fn duration_ms(&self) -> Option<DurationMs>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SpanRecord::duration_ms baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_types::SpanRecord::duration_ms boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1965,7 +1965,7 @@
       "canonical_signature": "pub fn new(subscriber: Arc<dyn ObservationSubscriber<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::SubscriberRegistration::new exactly as recorded in this row baseline_signature: pub fn new(subscriber: Arc<dyn ObservationSubscriber<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SubscriberRegistration::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability_types::SubscriberRegistration::new as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -1990,7 +1990,7 @@
       "canonical_signature": "pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::SubscriberRegistration::with_filter exactly as recorded in this row baseline_signature: pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SubscriberRegistration::with_filter baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_types::SubscriberRegistration::with_filter boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2015,7 +2015,7 @@
       "canonical_signature": "pub fn into_parts(self) -> SubscriberRegistrationParts<T>",
       "obligations": [
         "signature: preserve sc_observability_types::SubscriberRegistration::into_parts exactly as recorded in this row baseline_signature: pub fn into_parts(self) -> SubscriberRegistrationParts<T>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::SubscriberRegistration::into_parts baseline_signature"
+        "receiver: preserve released self receiver at sc_observability_types::SubscriberRegistration::into_parts boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2040,7 +2040,7 @@
       "canonical_signature": "pub fn new() -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::ProjectionRegistration::new exactly as recorded in this row baseline_signature: pub fn new() -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::ProjectionRegistration::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability_types::ProjectionRegistration::new as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2065,7 +2065,7 @@
       "canonical_signature": "pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::ProjectionRegistration::with_log_projector exactly as recorded in this row baseline_signature: pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::ProjectionRegistration::with_log_projector baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_types::ProjectionRegistration::with_log_projector boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2090,7 +2090,7 @@
       "canonical_signature": "pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::ProjectionRegistration::with_span_projector exactly as recorded in this row baseline_signature: pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::ProjectionRegistration::with_span_projector baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_types::ProjectionRegistration::with_span_projector boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2115,7 +2115,7 @@
       "canonical_signature": "pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::ProjectionRegistration::with_metric_projector exactly as recorded in this row baseline_signature: pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::ProjectionRegistration::with_metric_projector baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_types::ProjectionRegistration::with_metric_projector boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2140,7 +2140,7 @@
       "canonical_signature": "pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_types::ProjectionRegistration::with_filter exactly as recorded in this row baseline_signature: pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::ProjectionRegistration::with_filter baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_types::ProjectionRegistration::with_filter boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2165,7 +2165,7 @@
       "canonical_signature": "pub fn into_parts(self) -> ProjectionRegistrationParts<T>",
       "obligations": [
         "signature: preserve sc_observability_types::ProjectionRegistration::into_parts exactly as recorded in this row baseline_signature: pub fn into_parts(self) -> ProjectionRegistrationParts<T>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_types::ProjectionRegistration::into_parts baseline_signature"
+        "receiver: preserve released self receiver at sc_observability_types::ProjectionRegistration::into_parts boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2190,7 +2190,7 @@
       "canonical_signature": "pub fn builder(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::builder exactly as recorded in this row baseline_signature: pub fn builder( config: crate::LoggerConfig, ) -> Result<LoggerBuilder, sc_observability_types::InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::builder baseline_signature"
+        "error: preserve released sc_observability_types::InitError failure type at sc_observability::Logger::builder boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -2217,7 +2217,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::Logger::builder_typed exactly as recorded in this row baseline_signature: pub fn builder_typed(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::builder_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability::Logger::builder_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2239,7 +2239,7 @@
       "canonical_signature": "pub fn new(config: crate::LoggerConfig) -> Result<Self, InitError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::new exactly as recorded in this row baseline_signature: pub fn new(config: crate::LoggerConfig) -> Result<Self, sc_observability_types::InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::new baseline_signature"
+        "error: preserve released sc_observability_types::InitError failure type at sc_observability::Logger::new boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -2266,7 +2266,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::Logger::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::new_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability::Logger::new_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2288,7 +2288,7 @@
       "canonical_signature": "pub fn new_with_level_owner( config: crate::LoggerConfig, ) -> Result<(Self, LevelOwner), InitError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::new_with_level_owner exactly as recorded in this row baseline_signature: pub fn new_with_level_owner( config: crate::LoggerConfig, ) -> Result<(Self, LevelOwner), sc_observability_types::InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::new_with_level_owner baseline_signature"
+        "error: preserve released sc_observability_types::InitError failure type at sc_observability::Logger::new_with_level_owner boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -2315,7 +2315,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::Logger::new_with_level_owner_typed exactly as recorded in this row baseline_signature: pub fn new_with_level_owner_typed( config: crate::LoggerConfig, ) -> Result<(Self, LevelOwner), InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::new_with_level_owner_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability::Logger::new_with_level_owner_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2337,7 +2337,7 @@
       "canonical_signature": "pub fn log(&self, event: LogEvent) -> Result<(), EventError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::log exactly as recorded in this row baseline_signature: pub fn log(&self, event: LogEvent) -> Result<(), LogError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::log baseline_signature"
+        "error: preserve released LogError failure type at sc_observability::Logger::log boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -2364,7 +2364,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::Logger::log_typed exactly as recorded in this row baseline_signature: pub fn log_typed(&self, event: LogEvent) -> Result<(), LogFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::log_typed baseline_signature"
+        "error: preserve released LogFailure failure type at sc_observability::Logger::log_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2386,7 +2386,7 @@
       "canonical_signature": "pub fn try_log(&self, event: LogEvent) -> Result<(), EventError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log exactly as recorded in this row baseline_signature: pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::try_log baseline_signature"
+        "error: preserve released TryLogError failure type at sc_observability::Logger::try_log boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -2413,7 +2413,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log_typed exactly as recorded in this row baseline_signature: pub fn try_log_typed(&self, event: LogEvent) -> Result<(), TryLogFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::try_log_typed baseline_signature"
+        "error: preserve released TryLogFailure failure type at sc_observability::Logger::try_log_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2435,7 +2435,7 @@
       "canonical_signature": "pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, EventError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log_with_outcome exactly as recorded in this row baseline_signature: pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, TryLogError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::try_log_with_outcome baseline_signature"
+        "error: preserve released TryLogError failure type at sc_observability::Logger::try_log_with_outcome boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -2462,7 +2462,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log_with_outcome_typed exactly as recorded in this row baseline_signature: pub fn try_log_with_outcome_typed( &self, event: LogEvent, ) -> Result<AdmissionOutcome, TryLogFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::try_log_with_outcome_typed baseline_signature"
+        "error: preserve released TryLogFailure failure type at sc_observability::Logger::try_log_with_outcome_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2484,7 +2484,7 @@
       "canonical_signature": "pub fn emit(&self, event: LogEvent) -> Result<(), EventError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::emit exactly as recorded in this row baseline_signature: pub fn emit(&self, event: LogEvent) -> Result<(), EventError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::emit baseline_signature"
+        "error: preserve released EventError failure type at sc_observability::Logger::emit boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2509,7 +2509,7 @@
       "canonical_signature": "pub fn flush(&self) -> Result<(), FlushError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::flush exactly as recorded in this row baseline_signature: pub fn flush(&self) -> Result<(), FlushError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::flush baseline_signature"
+        "error: preserve released FlushError failure type at sc_observability::Logger::flush boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2534,7 +2534,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::Logger::flush_typed exactly as recorded in this row baseline_signature: pub fn flush_typed(&self) -> Result<(), FlushFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::flush_typed baseline_signature"
+        "error: preserve released FlushFailure failure type at sc_observability::Logger::flush_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2556,7 +2556,7 @@
       "canonical_signature": "pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::query exactly as recorded in this row baseline_signature: pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::query baseline_signature"
+        "error: preserve released QueryError failure type at sc_observability::Logger::query boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2581,7 +2581,7 @@
       "canonical_signature": "pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::follow exactly as recorded in this row baseline_signature: pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::Logger::follow baseline_signature"
+        "error: preserve released QueryError failure type at sc_observability::Logger::follow boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2606,7 +2606,7 @@
       "canonical_signature": "pub fn shutdown(mut self) -> Logger<Stopped>",
       "obligations": [
         "signature: preserve sc_observability::Logger::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(mut self) -> Logger<Stopped>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::Logger::shutdown baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability::Logger::shutdown boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2631,7 +2631,7 @@
       "canonical_signature": "pub fn level_state(&self) -> LevelState",
       "obligations": [
         "signature: preserve sc_observability::Logger::level_state exactly as recorded in this row baseline_signature: pub fn level_state(&self) -> LevelState",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::Logger::level_state baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability::Logger::level_state boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2656,7 +2656,7 @@
       "canonical_signature": "pub fn health(&self) -> LoggingHealthReport",
       "obligations": [
         "signature: preserve sc_observability::Logger::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> LoggingHealthReport",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::Logger::health baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability::Logger::health boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2681,7 +2681,7 @@
       "canonical_signature": "pub fn new(config: LoggerConfig) -> Result<Self, InitError>",
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::new exactly as recorded in this row baseline_signature: pub fn new(config: LoggerConfig) -> Result<Self, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::LoggerBuilder::new baseline_signature"
+        "error: preserve released InitError failure type at sc_observability::LoggerBuilder::new boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2706,7 +2706,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::LoggerBuilder::new_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability::LoggerBuilder::new_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2728,7 +2728,7 @@
       "canonical_signature": "pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self",
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::register_sink exactly as recorded in this row baseline_signature: pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::LoggerBuilder::register_sink baseline_signature"
+        "receiver: preserve released &mut self receiver at sc_observability::LoggerBuilder::register_sink boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2753,7 +2753,7 @@
       "canonical_signature": "pub fn build(self) -> Result<Logger<Running>, InitError>",
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::build exactly as recorded in this row baseline_signature: pub fn build(self) -> Logger<Running>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::LoggerBuilder::build baseline_signature"
+        "receiver: preserve released self receiver at sc_observability::LoggerBuilder::build boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -2780,7 +2780,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::build_typed exactly as recorded in this row baseline_signature: pub fn build_typed(self) -> Result<Logger<Running>, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::LoggerBuilder::build_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability::LoggerBuilder::build_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2802,7 +2802,7 @@
       "canonical_signature": "pub fn build_with_level_owner(self) -> Result<(Logger<Running>, LevelOwner), InitError>",
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::build_with_level_owner exactly as recorded in this row baseline_signature: pub fn build_with_level_owner( self, ) -> Result<(Logger<Running>, LevelOwner), sc_observability_types::InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::LoggerBuilder::build_with_level_owner baseline_signature"
+        "error: preserve released sc_observability_types::InitError failure type at sc_observability::LoggerBuilder::build_with_level_owner boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -2829,7 +2829,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::build_with_level_owner_typed exactly as recorded in this row baseline_signature: pub fn build_with_level_owner_typed( self, ) -> Result<(Logger<Running>, LevelOwner), InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::LoggerBuilder::build_with_level_owner_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability::LoggerBuilder::build_with_level_owner_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -2851,7 +2851,7 @@
       "canonical_signature": "pub fn default_for(service_name: ServiceName, log_root: PathBuf) -> Self",
       "obligations": [
         "signature: preserve sc_observability::LoggerConfig::default_for exactly as recorded in this row baseline_signature: pub fn default_for(service_name: ServiceName, log_root: PathBuf) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::LoggerConfig::default_for baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability::LoggerConfig::default_for as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2876,7 +2876,7 @@
       "canonical_signature": "pub fn new(sink: Arc<dyn LogSink>) -> Self",
       "obligations": [
         "signature: preserve sc_observability::SinkRegistration::new exactly as recorded in this row baseline_signature: pub fn new(sink: Arc<dyn LogSink>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::SinkRegistration::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability::SinkRegistration::new as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2901,7 +2901,7 @@
       "canonical_signature": "pub fn with_filter(mut self, filter: Arc<dyn LogFilter>) -> Self",
       "obligations": [
         "signature: preserve sc_observability::SinkRegistration::with_filter exactly as recorded in this row baseline_signature: pub fn with_filter(mut self, filter: Arc<dyn LogFilter>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::SinkRegistration::with_filter baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability::SinkRegistration::with_filter boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2926,7 +2926,8 @@
       "canonical_signature": "pub fn poll(&mut self) -> Result<LogSnapshot, QueryError>",
       "obligations": [
         "signature: preserve sc_observability::LogFollowSession::poll exactly as recorded in this row baseline_signature: pub fn poll(&mut self) -> Result<LogSnapshot, QueryError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::LogFollowSession::poll baseline_signature"
+        "error: preserve released QueryError failure type at sc_observability::LogFollowSession::poll boundary",
+        "wire: retain released JSON/event shape; canonical EntityId validation remains at admission"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2951,7 +2952,8 @@
       "canonical_signature": "pub fn health(&self) -> QueryHealthReport",
       "obligations": [
         "signature: preserve sc_observability::LogFollowSession::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> QueryHealthReport",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::LogFollowSession::health baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability::LogFollowSession::health boundary",
+        "wire: retain released JSON/event shape; canonical EntityId validation remains at admission"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -2976,7 +2978,8 @@
       "canonical_signature": "pub fn new(active_log_path: PathBuf) -> Self",
       "obligations": [
         "signature: preserve sc_observability::JsonlLogReader::new exactly as recorded in this row baseline_signature: pub fn new(active_log_path: PathBuf) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::JsonlLogReader::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability::JsonlLogReader::new as an associated function",
+        "wire: retain released JSON/event shape; canonical EntityId validation remains at admission"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3001,7 +3004,8 @@
       "canonical_signature": "pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>",
       "obligations": [
         "signature: preserve sc_observability::JsonlLogReader::query exactly as recorded in this row baseline_signature: pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::JsonlLogReader::query baseline_signature"
+        "error: preserve released QueryError failure type at sc_observability::JsonlLogReader::query boundary",
+        "wire: retain released JSON/event shape; canonical EntityId validation remains at admission"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3026,7 +3030,8 @@
       "canonical_signature": "pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>",
       "obligations": [
         "signature: preserve sc_observability::JsonlLogReader::follow exactly as recorded in this row baseline_signature: pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::JsonlLogReader::follow baseline_signature"
+        "error: preserve released QueryError failure type at sc_observability::JsonlLogReader::follow boundary",
+        "wire: retain released JSON/event shape; canonical EntityId validation remains at admission"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3051,7 +3056,7 @@
       "canonical_signature": "pub fn new() -> Self",
       "obligations": [
         "signature: preserve sc_observability::RetainedSinkFaultInjector::new exactly as recorded in this row baseline_signature: pub fn new() -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::RetainedSinkFaultInjector::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability::RetainedSinkFaultInjector::new as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3076,7 +3081,7 @@
       "canonical_signature": "pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink>",
       "obligations": [
         "signature: preserve sc_observability::RetainedSinkFaultInjector::wrap exactly as recorded in this row baseline_signature: pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::RetainedSinkFaultInjector::wrap baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability::RetainedSinkFaultInjector::wrap boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3101,7 +3106,7 @@
       "canonical_signature": "pub fn force_degraded(&self)",
       "obligations": [
         "signature: preserve sc_observability::RetainedSinkFaultInjector::force_degraded exactly as recorded in this row baseline_signature: pub fn force_degraded(&self)",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::RetainedSinkFaultInjector::force_degraded baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability::RetainedSinkFaultInjector::force_degraded boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3126,7 +3131,7 @@
       "canonical_signature": "pub fn force_unavailable(&self)",
       "obligations": [
         "signature: preserve sc_observability::RetainedSinkFaultInjector::force_unavailable exactly as recorded in this row baseline_signature: pub fn force_unavailable(&self)",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::RetainedSinkFaultInjector::force_unavailable baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability::RetainedSinkFaultInjector::force_unavailable boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3151,7 +3156,7 @@
       "canonical_signature": "pub fn clear(&self)",
       "obligations": [
         "signature: preserve sc_observability::RetainedSinkFaultInjector::clear exactly as recorded in this row baseline_signature: pub fn clear(&self)",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::RetainedSinkFaultInjector::clear baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability::RetainedSinkFaultInjector::clear boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3176,7 +3181,7 @@
       "canonical_signature": "pub fn new(path: PathBuf, rotation: RotationPolicy, retention: RetentionPolicy) -> Self",
       "obligations": [
         "signature: preserve sc_observability::JsonlFileSink::new exactly as recorded in this row baseline_signature: pub fn new(path: PathBuf, rotation: RotationPolicy, retention: RetentionPolicy) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::JsonlFileSink::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability::JsonlFileSink::new as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3201,7 +3206,7 @@
       "canonical_signature": "pub fn path(&self) -> &Path",
       "obligations": [
         "signature: preserve sc_observability::JsonlFileSink::path exactly as recorded in this row baseline_signature: pub fn path(&self) -> &Path",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::JsonlFileSink::path baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability::JsonlFileSink::path boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3226,7 +3231,7 @@
       "canonical_signature": "pub fn stdout() -> Self",
       "obligations": [
         "signature: preserve sc_observability::ConsoleSink::stdout exactly as recorded in this row baseline_signature: pub fn stdout() -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::ConsoleSink::stdout baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability::ConsoleSink::stdout as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3251,7 +3256,7 @@
       "canonical_signature": "pub fn stderr() -> Self",
       "obligations": [
         "signature: preserve sc_observability::ConsoleSink::stderr exactly as recorded in this row baseline_signature: pub fn stderr() -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability::ConsoleSink::stderr baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability::ConsoleSink::stderr as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3276,7 +3281,7 @@
       "canonical_signature": "pub fn control(&self) -> LogControl",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::control exactly as recorded in this row baseline_signature: pub fn control(&self) -> LogControl",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::LogGuard::control baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::LogGuard::control boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3301,7 +3306,7 @@
       "canonical_signature": "pub fn elevate_level( &mut self, level: LevelFilter, source: LevelChangeSource, ) -> Result<LevelChange, LevelChangeError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::elevate_level exactly as recorded in this row baseline_signature: pub fn elevate_level( &mut self, level: LevelFilter, source: LevelChangeSource, ) -> Result<LevelChange, LevelChangeError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogGuard::elevate_level baseline_signature"
+        "error: preserve released LevelChangeError failure type at sc_observability_log::LogGuard::elevate_level boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3326,7 +3331,7 @@
       "canonical_signature": "pub fn reset_level( &mut self, source: LevelChangeSource, ) -> Result<LevelChange, LevelChangeError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::reset_level exactly as recorded in this row baseline_signature: pub fn reset_level( &mut self, source: LevelChangeSource, ) -> Result<LevelChange, LevelChangeError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogGuard::reset_level baseline_signature"
+        "error: preserve released LevelChangeError failure type at sc_observability_log::LogGuard::reset_level boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3351,7 +3356,7 @@
       "canonical_signature": "pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::flush exactly as recorded in this row baseline_signature: pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogGuard::flush baseline_signature"
+        "error: preserve released FlushError failure type at sc_observability_log::LogGuard::flush boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3376,7 +3381,7 @@
       "canonical_signature": "pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogGuard::shutdown baseline_signature"
+        "error: preserve released ShutdownError failure type at sc_observability_log::LogGuard::shutdown boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3401,7 +3406,7 @@
       "canonical_signature": "pub fn dropped_events(&self) -> DroppedEvents",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::dropped_events exactly as recorded in this row baseline_signature: pub fn dropped_events(&self) -> DroppedEvents",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::LogGuard::dropped_events baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::LogGuard::dropped_events boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3426,7 +3431,7 @@
       "canonical_signature": "pub fn active_log_path(&self) -> Option<&Path>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::active_log_path exactly as recorded in this row baseline_signature: pub fn active_log_path(&self) -> Option<&Path>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::LogGuard::active_log_path baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::LogGuard::active_log_path boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3451,7 +3456,7 @@
       "canonical_signature": "pub fn health(&self) -> Result<BridgeHealthReport, ControlError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> Result<BridgeHealthReport, ControlError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogGuard::health baseline_signature"
+        "error: preserve released ControlError failure type at sc_observability_log::LogGuard::health boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3476,7 +3481,7 @@
       "canonical_signature": "pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogControl::flush exactly as recorded in this row baseline_signature: pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogControl::flush baseline_signature"
+        "error: preserve released FlushError failure type at sc_observability_log::LogControl::flush boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3501,7 +3506,7 @@
       "canonical_signature": "pub fn health(&self) -> Result<BridgeHealthReport, ControlError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogControl::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> Result<BridgeHealthReport, ControlError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogControl::health baseline_signature"
+        "error: preserve released ControlError failure type at sc_observability_log::LogControl::health boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3526,7 +3531,7 @@
       "canonical_signature": "pub fn active_log_path(&self) -> Result<Option<PathBuf>, ControlError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogControl::active_log_path exactly as recorded in this row baseline_signature: pub fn active_log_path(&self) -> Result<Option<PathBuf>, ControlError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogControl::active_log_path baseline_signature"
+        "error: preserve released ControlError failure type at sc_observability_log::LogControl::active_log_path boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3551,7 +3556,7 @@
       "canonical_signature": "pub fn dropped_events(&self) -> crate::DroppedEvents",
       "obligations": [
         "signature: preserve sc_observability_log::LogControl::dropped_events exactly as recorded in this row baseline_signature: pub fn dropped_events(&self) -> crate::DroppedEvents",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::LogControl::dropped_events baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::LogControl::dropped_events boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3576,7 +3581,7 @@
       "canonical_signature": "pub fn wait_stopped( &self, timeout: Duration, ) -> Result<crate::ShutdownReport, crate::WaitError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogControl::wait_stopped exactly as recorded in this row baseline_signature: pub fn wait_stopped( &self, timeout: Duration, ) -> Result<crate::ShutdownReport, crate::WaitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogControl::wait_stopped baseline_signature"
+        "error: preserve released crate::WaitError failure type at sc_observability_log::LogControl::wait_stopped boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3601,7 +3606,7 @@
       "canonical_signature": "pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogControl::try_log exactly as recorded in this row baseline_signature: pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogControl::try_log baseline_signature"
+        "error: preserve released EmitError failure type at sc_observability_log::LogControl::try_log boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3626,7 +3631,7 @@
       "canonical_signature": "pub fn query( &self, query: &sc_observability_types::LogQuery, ) -> Result<sc_observability_types::LogSnapshot, ControlError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogControl::query exactly as recorded in this row baseline_signature: pub fn query( &self, query: &sc_observability_types::LogQuery, ) -> Result<sc_observability_types::LogSnapshot, ControlError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::LogControl::query baseline_signature"
+        "error: preserve released ControlError failure type at sc_observability_log::LogControl::query boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3651,7 +3656,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability_log::InitError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::InitError::code baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::InitError::code boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3673,7 +3678,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability_log::InitError::remediation exactly as recorded in this row baseline_signature: pub fn remediation(&self) -> Remediation",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::InitError::remediation baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::InitError::remediation boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3695,7 +3700,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability_log::FlushError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::FlushError::code baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::FlushError::code boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3717,7 +3722,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability_log::FlushError::remediation exactly as recorded in this row baseline_signature: pub fn remediation(&self) -> Remediation",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::FlushError::remediation baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::FlushError::remediation boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3739,7 +3744,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability_log::ShutdownError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::ShutdownError::code baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::ShutdownError::code boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3761,7 +3766,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability_log::ShutdownError::remediation exactly as recorded in this row baseline_signature: pub fn remediation(&self) -> Remediation",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::ShutdownError::remediation baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::ShutdownError::remediation boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3783,7 +3788,7 @@
       "canonical_signature": "pub fn code(&self) -> ErrorCode",
       "obligations": [
         "signature: preserve sc_observability_log::EmitError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::EmitError::code baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::EmitError::code boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3808,7 +3813,7 @@
       "canonical_signature": "pub fn remediation(&self) -> Remediation",
       "obligations": [
         "signature: preserve sc_observability_log::EmitError::remediation exactly as recorded in this row baseline_signature: pub fn remediation(&self) -> Remediation",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_log::EmitError::remediation baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_log::EmitError::remediation boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3833,7 +3838,7 @@
       "canonical_signature": "pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitError>",
       "obligations": [
         "signature: preserve sc_observe::ObservabilityConfig::default_for exactly as recorded in this row baseline_signature: pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::ObservabilityConfig::default_for baseline_signature"
+        "error: preserve released InitError failure type at sc_observe::ObservabilityConfig::default_for boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3858,7 +3863,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observe::ObservabilityConfig::default_for_typed exactly as recorded in this row baseline_signature: pub fn default_for_typed(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::ObservabilityConfig::default_for_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observe::ObservabilityConfig::default_for_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3882,7 +3887,7 @@
       "canonical_signature": "pub fn service_name(&self) -> Result<ServiceName, InitError>",
       "obligations": [
         "signature: preserve sc_observe::ObservabilityConfig::service_name exactly as recorded in this row baseline_signature: pub fn service_name(&self) -> Result<ServiceName, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::ObservabilityConfig::service_name baseline_signature"
+        "error: preserve released InitError failure type at sc_observe::ObservabilityConfig::service_name boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3907,7 +3912,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observe::ObservabilityConfig::service_name_typed exactly as recorded in this row baseline_signature: pub fn service_name_typed(&self) -> Result<ServiceName, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::ObservabilityConfig::service_name_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observe::ObservabilityConfig::service_name_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3931,7 +3936,7 @@
       "canonical_signature": "pub fn new(config: ObservabilityConfig) -> Result<Self, InitError>",
       "obligations": [
         "signature: preserve sc_observe::Observability::new exactly as recorded in this row baseline_signature: pub fn new(config: ObservabilityConfig) -> Result<Self, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::Observability::new baseline_signature"
+        "error: preserve released InitError failure type at sc_observe::Observability::new boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -3956,7 +3961,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observe::Observability::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::Observability::new_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observe::Observability::new_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -3980,7 +3985,7 @@
       "canonical_signature": "pub fn builder(config: ObservabilityConfig) -> ObservabilityBuilder",
       "obligations": [
         "signature: preserve sc_observe::Observability::builder exactly as recorded in this row baseline_signature: pub fn builder(config: ObservabilityConfig) -> ObservabilityBuilder",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observe::Observability::builder baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observe::Observability::builder as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4005,7 +4010,7 @@
       "canonical_signature": "pub fn emit<T>(&self, observation: Observation<T>) -> Result<(), ObservationError> where T: Observable,",
       "obligations": [
         "signature: preserve sc_observe::Observability::emit exactly as recorded in this row baseline_signature: pub fn emit<T>(&self, observation: Observation<T>) -> Result<(), ObservationError> where T: Observable,",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::Observability::emit baseline_signature"
+        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::Observability::emit boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4030,7 +4035,7 @@
       "canonical_signature": "pub fn flush(&self) -> Result<(), FlushError>",
       "obligations": [
         "signature: preserve sc_observe::Observability::flush exactly as recorded in this row baseline_signature: pub fn flush(&self) -> Result<(), FlushError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::Observability::flush baseline_signature"
+        "error: preserve released FlushError failure type at sc_observe::Observability::flush boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4055,7 +4060,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observe::Observability::flush_typed exactly as recorded in this row baseline_signature: pub fn flush_typed(&self) -> Result<(), FlushFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::Observability::flush_typed baseline_signature"
+        "error: preserve released FlushFailure failure type at sc_observe::Observability::flush_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -4079,7 +4084,7 @@
       "canonical_signature": "pub fn shutdown(&self) -> Result<(), ShutdownError>",
       "obligations": [
         "signature: preserve sc_observe::Observability::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(&self) -> Result<(), ShutdownError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::Observability::shutdown baseline_signature"
+        "error: preserve released ShutdownError failure type at sc_observe::Observability::shutdown boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4104,7 +4109,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observe::Observability::shutdown_typed exactly as recorded in this row baseline_signature: pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::Observability::shutdown_typed baseline_signature"
+        "error: preserve released ShutdownFailure failure type at sc_observe::Observability::shutdown_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -4128,7 +4133,7 @@
       "canonical_signature": "pub fn health(&self) -> ObservabilityHealthReport",
       "obligations": [
         "signature: preserve sc_observe::Observability::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> ObservabilityHealthReport",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observe::Observability::health baseline_signature"
+        "receiver: preserve released &self receiver at sc_observe::Observability::health boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4153,7 +4158,7 @@
       "canonical_signature": "pub fn with_observability_health_provider( mut self, provider: impl ObservabilityHealthProvider + Send + Sync + 'static, ) -> Self",
       "obligations": [
         "signature: preserve sc_observe::ObservabilityBuilder::with_observability_health_provider exactly as recorded in this row baseline_signature: pub fn with_observability_health_provider( mut self, provider: impl ObservabilityHealthProvider + Send + Sync + 'static, ) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observe::ObservabilityBuilder::with_observability_health_provider baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observe::ObservabilityBuilder::with_observability_health_provider boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4178,7 +4183,7 @@
       "canonical_signature": "pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self where T: Observable,",
       "obligations": [
         "signature: preserve sc_observe::ObservabilityBuilder::register_subscriber exactly as recorded in this row baseline_signature: pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self where T: Observable,",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observe::ObservabilityBuilder::register_subscriber baseline_signature"
+        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_subscriber boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4203,7 +4208,7 @@
       "canonical_signature": "pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self where T: Observable,",
       "obligations": [
         "signature: preserve sc_observe::ObservabilityBuilder::register_projection exactly as recorded in this row baseline_signature: pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self where T: Observable,",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observe::ObservabilityBuilder::register_projection baseline_signature"
+        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_projection boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4228,7 +4233,7 @@
       "canonical_signature": "pub fn build(self) -> Result<Observability, InitError>",
       "obligations": [
         "signature: preserve sc_observe::ObservabilityBuilder::build exactly as recorded in this row baseline_signature: pub fn build(self) -> Result<Observability, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::ObservabilityBuilder::build baseline_signature"
+        "error: preserve released InitError failure type at sc_observe::ObservabilityBuilder::build boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4253,7 +4258,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observe::ObservabilityBuilder::build_typed exactly as recorded in this row baseline_signature: pub fn build_typed(self) -> Result<Observability, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observe::ObservabilityBuilder::build_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observe::ObservabilityBuilder::build_typed boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -4277,7 +4282,7 @@
       "canonical_signature": "pub fn new(config: TelemetryConfig) -> Result<Self, InitFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::new exactly as recorded in this row baseline_signature: pub fn new(config: TelemetryConfig) -> Result<Self, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::new baseline_signature"
+        "error: preserve released InitError failure type at sc_observability_otlp::Telemetry::new boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -4304,7 +4309,7 @@
       "canonical_signature": "pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::new_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability_otlp::Telemetry::new_typed boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4331,7 +4336,7 @@
       "canonical_signature": "pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::emit_log exactly as recorded in this row baseline_signature: pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::emit_log baseline_signature"
+        "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_log boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4358,7 +4363,7 @@
       "canonical_signature": "pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::emit_span exactly as recorded in this row baseline_signature: pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::emit_span baseline_signature"
+        "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_span boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4385,7 +4390,7 @@
       "canonical_signature": "pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::emit_metric exactly as recorded in this row baseline_signature: pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::emit_metric baseline_signature"
+        "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_metric boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4412,7 +4417,7 @@
       "canonical_signature": "pub fn flush(&self) -> Result<(), FlushFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::flush exactly as recorded in this row baseline_signature: pub fn flush(&self) -> Result<(), FlushError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::flush baseline_signature"
+        "error: preserve released FlushError failure type at sc_observability_otlp::Telemetry::flush boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -4439,7 +4444,7 @@
       "canonical_signature": "pub fn flush_typed(&self) -> Result<(), FlushFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::flush_typed exactly as recorded in this row baseline_signature: pub fn flush_typed(&self) -> Result<(), FlushFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::flush_typed baseline_signature"
+        "error: preserve released FlushFailure failure type at sc_observability_otlp::Telemetry::flush_typed boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4466,7 +4471,7 @@
       "canonical_signature": "pub fn shutdown(&self) -> Result<(), ShutdownFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(&self) -> Result<(), ShutdownError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::shutdown baseline_signature"
+        "error: preserve released ShutdownError failure type at sc_observability_otlp::Telemetry::shutdown boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -4493,7 +4498,7 @@
       "canonical_signature": "pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::shutdown_typed exactly as recorded in this row baseline_signature: pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::Telemetry::shutdown_typed baseline_signature"
+        "error: preserve released ShutdownFailure failure type at sc_observability_otlp::Telemetry::shutdown_typed boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4520,7 +4525,7 @@
       "canonical_signature": "pub fn health(&self) -> TelemetryHealthReport",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> TelemetryHealthReport",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::Telemetry::health baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_otlp::Telemetry::health boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4547,7 +4552,7 @@
       "canonical_signature": "pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::OtlpEndpoint::new exactly as recorded in this row baseline_signature: pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::OtlpEndpoint::new baseline_signature"
+        "error: preserve released InitError failure type at sc_observability_otlp::OtlpEndpoint::new boundary"
       ],
       "treatment": "existing_pair",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4574,7 +4579,7 @@
       "canonical_signature": "pub fn new_typed(value: impl Into<String>) -> Result<Self, ConfigFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::OtlpEndpoint::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::OtlpEndpoint::new_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability_otlp::OtlpEndpoint::new_typed boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -4601,7 +4606,7 @@
       "canonical_signature": "pub fn as_str(&self) -> &str",
       "obligations": [
         "signature: preserve sc_observability_otlp::OtlpEndpoint::as_str exactly as recorded in this row baseline_signature: pub fn as_str(&self) -> &str",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::OtlpEndpoint::as_str baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_otlp::OtlpEndpoint::as_str boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4628,7 +4633,7 @@
       "canonical_signature": "pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::AuthHeader::new exactly as recorded in this row baseline_signature: pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::AuthHeader::new baseline_signature"
+        "error: preserve released InitError failure type at sc_observability_otlp::AuthHeader::new boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4655,7 +4660,7 @@
       "canonical_signature": "pub fn new_typed(value: impl Into<String>) -> Result<Self, ConfigFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::AuthHeader::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::AuthHeader::new_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability_otlp::AuthHeader::new_typed boundary"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -4682,7 +4687,7 @@
       "canonical_signature": "pub fn as_str(&self) -> &str",
       "obligations": [
         "signature: preserve sc_observability_otlp::AuthHeader::as_str exactly as recorded in this row baseline_signature: pub fn as_str(&self) -> &str",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::AuthHeader::as_str baseline_signature"
+        "receiver: preserve released &self receiver at sc_observability_otlp::AuthHeader::as_str boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4709,7 +4714,7 @@
       "canonical_signature": "pub fn new(service_name: ServiceName) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::new exactly as recorded in this row baseline_signature: pub fn new(service_name: ServiceName) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryConfigBuilder::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability_otlp::TelemetryConfigBuilder::new as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4736,7 +4741,7 @@
       "canonical_signature": "pub fn with_resource(mut self, resource: ResourceAttributes) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::with_resource exactly as recorded in this row baseline_signature: pub fn with_resource(mut self, resource: ResourceAttributes) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryConfigBuilder::with_resource baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::with_resource boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4763,7 +4768,7 @@
       "canonical_signature": "pub fn with_transport(mut self, transport: OtelConfig) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::with_transport exactly as recorded in this row baseline_signature: pub fn with_transport(mut self, transport: OtelConfig) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryConfigBuilder::with_transport baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::with_transport boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4790,7 +4795,7 @@
       "canonical_signature": "pub fn enable_logs(mut self, config: LogsConfig) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::enable_logs exactly as recorded in this row baseline_signature: pub fn enable_logs(mut self, config: LogsConfig) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryConfigBuilder::enable_logs baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::enable_logs boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4817,7 +4822,7 @@
       "canonical_signature": "pub fn enable_traces(mut self, config: TracesConfig) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::enable_traces exactly as recorded in this row baseline_signature: pub fn enable_traces(mut self, config: TracesConfig) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryConfigBuilder::enable_traces baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::enable_traces boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4844,7 +4849,7 @@
       "canonical_signature": "pub fn enable_metrics(mut self, config: MetricsConfig) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::enable_metrics exactly as recorded in this row baseline_signature: pub fn enable_metrics(mut self, config: MetricsConfig) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryConfigBuilder::enable_metrics baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::enable_metrics boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4871,7 +4876,7 @@
       "canonical_signature": "pub fn build(self) -> Result<TelemetryConfig, InitError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::build exactly as recorded in this row baseline_signature: pub fn build(self) -> Result<TelemetryConfig, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::TelemetryConfigBuilder::build baseline_signature"
+        "error: preserve released InitError failure type at sc_observability_otlp::TelemetryConfigBuilder::build boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4898,7 +4903,7 @@
       "canonical_signature": "pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::build_typed exactly as recorded in this row baseline_signature: pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::TelemetryConfigBuilder::build_typed baseline_signature"
+        "error: preserve released InitFailure failure type at sc_observability_otlp::TelemetryConfigBuilder::build_typed boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4925,7 +4930,7 @@
       "canonical_signature": "pub fn new() -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::SpanAssembler::new exactly as recorded in this row baseline_signature: pub fn new() -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::SpanAssembler::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability_otlp::SpanAssembler::new as an associated function"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4950,7 +4955,7 @@
       "canonical_signature": "pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::SpanAssembler::push exactly as recorded in this row baseline_signature: pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::SpanAssembler::push baseline_signature"
+        "error: preserve released EventError failure type at sc_observability_otlp::SpanAssembler::push boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -4975,7 +4980,7 @@
       "canonical_signature": "pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::SpanAssembler::push_typed exactly as recorded in this row baseline_signature: pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::SpanAssembler::push_typed baseline_signature"
+        "error: preserve released EventFailure failure type at sc_observability_otlp::SpanAssembler::push_typed boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -5000,7 +5005,7 @@
       "canonical_signature": "pub fn flush_incomplete(&mut self) -> usize",
       "obligations": [
         "signature: preserve sc_observability_otlp::SpanAssembler::flush_incomplete exactly as recorded in this row baseline_signature: pub fn flush_incomplete(&mut self) -> usize",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::SpanAssembler::flush_incomplete baseline_signature"
+        "receiver: preserve released &mut self receiver at sc_observability_otlp::SpanAssembler::flush_incomplete boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -5025,7 +5030,7 @@
       "canonical_signature": "pub fn new(telemetry: Arc<RuntimeTelemetry>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryProjectors::new exactly as recorded in this row baseline_signature: pub fn new(telemetry: Arc<Telemetry>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::new baseline_signature"
+        "receiver: baseline declares no receiver; preserve sc_observability_otlp::TelemetryProjectors::new as an associated function"
       ],
       "treatment": "existing_pair",
       "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
@@ -5052,7 +5057,7 @@
       "canonical_signature": "pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryProjectors::with_log_projector exactly as recorded in this row baseline_signature: pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::with_log_projector baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryProjectors::with_log_projector boundary"
       ],
       "treatment": "existing_pair",
       "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
@@ -5079,7 +5084,7 @@
       "canonical_signature": "pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryProjectors::with_span_projector exactly as recorded in this row baseline_signature: pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::with_span_projector baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryProjectors::with_span_projector boundary"
       ],
       "treatment": "existing_pair",
       "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
@@ -5106,7 +5111,7 @@
       "canonical_signature": "pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryProjectors::with_metric_projector exactly as recorded in this row baseline_signature: pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::with_metric_projector baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryProjectors::with_metric_projector boundary"
       ],
       "treatment": "existing_pair",
       "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
@@ -5133,7 +5138,7 @@
       "canonical_signature": "pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryProjectors::with_filter exactly as recorded in this row baseline_signature: pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::with_filter baseline_signature"
+        "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryProjectors::with_filter boundary"
       ],
       "treatment": "existing_pair",
       "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
@@ -5160,7 +5165,7 @@
       "canonical_signature": "pub fn into_registration(self) -> ProjectionRegistration<T>",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryProjectors::into_registration exactly as recorded in this row baseline_signature: pub fn into_registration(self) -> ProjectionRegistration<T>",
-        "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::into_registration baseline_signature"
+        "receiver: preserve released self receiver at sc_observability_otlp::TelemetryProjectors::into_registration boundary"
       ],
       "treatment": "existing_pair",
       "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
@@ -5187,7 +5192,7 @@
       "canonical_signature": "pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
       "obligations": [
         "signature: preserve sc_observability_log::init exactly as recorded in this row baseline_signature: pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_log::init baseline_signature"
+        "error: preserve released InitError failure type at sc_observability_log::init boundary"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
@@ -5212,7 +5217,7 @@
       "canonical_signature": null,
       "obligations": [
         "signature: preserve sc_observability_dto::from_core_health exactly as recorded in this row baseline_signature: pub fn from_core_health( value: core::LoggingHealthReport, level: core::LevelState, ) -> Result<LogHealthDto, Failure>",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_dto::from_core_health baseline_signature"
+        "error: preserve released Failure failure type at sc_observability_dto::from_core_health boundary"
       ],
       "treatment": "restoration",
       "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
@@ -5541,7 +5546,8 @@
         "signature: preserve sc_observability::LogFilter::accepts exactly as recorded in this row baseline_signature: fn accepts(&self, event: &LogEvent) -> bool",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogFilter::accepts baseline_signature",
         "trait: preserve public implementability and Send + Sync constraints",
-        "behavior: preserve the released return and side-effect semantics recorded in sc_observability::LogFilter::accepts baseline_signature"
+        "behavior: preserve the released return and side-effect semantics recorded in sc_observability::LogFilter::accepts baseline_signature",
+        "wire: retain released JSON/event shape; canonical EntityId validation remains at admission"
       ],
       "treatment": "unchanged_alias",
       "conversion": "none; the canonical declaration is identity-preserving",
