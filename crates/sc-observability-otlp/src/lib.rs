@@ -68,6 +68,20 @@ pub use config::{
 };
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
+
+/// Opt-in canonical OTLP facade for the compatible 1.x transition.
+///
+/// This namespace re-exports the existing telemetry implementation and does
+/// not introduce a second backend, configuration authority, or lifecycle.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::{
+        AuthHeader, OtelConfig, OtlpEndpoint, Telemetry, TelemetryConfig, TelemetryConfigBuilder,
+        TelemetryProjectors,
+    };
+    #[doc(inline)]
+    pub use sc_observability_types::v2::{ConfigFailure, EventError, FlushError, InitError, ShutdownError};
+}
 #[cfg(feature = "sdk-test-support")]
 #[doc(inline)]
 pub use sdk::SdkFixture;
