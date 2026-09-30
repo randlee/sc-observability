@@ -1,14 +1,17 @@
 # Local desktop viewer setup
 
 The local collector and viewer is the released `otel-desktop-viewer` v0.5.0
-selected and installed by `config-agent@hermes`. The approved release is the
+selected and installed by the managed installer. The approved release is the
 macOS Apple Silicon archive at
 `https://github.com/CtrlSpice/otel-desktop-viewer/releases/download/v0.5.0/otel-desktop-viewer_darwin_arm64.tar.gz`,
 SHA-256 `e4a0051f827e6a40f52b097f490d7832af85bae577f4b33a69a986112c7618a4`.
 The same source commit is recorded in
 [`release.json`](../../../scripts/ci/fixtures/otlp/desktop-viewer/release.json).
-CI must use this manifest and verify the archive digest. Do not resolve `latest`
-at run time.
+The pin supports macOS Apple Silicon (`darwin_arm64`) only. CI wiring belongs
+to obs-d-9 deliverable 3 in `otlp-conformance.yml`; that job owns invoking the
+downloader and harness. Do not resolve `latest` at run time.
+
+Documentation constraints: OTLP-023 and DOC-003.
 
 ## Installed desktop service
 
@@ -22,11 +25,14 @@ binds only to loopback:
 | OTLP gRPC | `127.0.0.1:4317` |
 | Persistent database | `~/Library/Application Support/otel-desktop-viewer/telemetry.duckdb` |
 
-Use the installed service without claiming its PID or deleting its database:
+Only the service owner may load or unload this launchd service. Other users
+can inspect it without changing its lifecycle. Never claim its PID or delete
+its database:
 
 ```sh
 launchctl load -w ~/Library/LaunchAgents/com.ctrlspice.otel-desktop-viewer.plist
 launchctl list | grep otel-desktop-viewer
+# Owner-only lifecycle command:
 launchctl unload ~/Library/LaunchAgents/com.ctrlspice.otel-desktop-viewer.plist
 ```
 
@@ -41,11 +47,14 @@ The harness is standard-library Python. CI runs on the pinned artifact's
 instance with a disposable database:
 
 ```sh
+VIEWER_RELEASE=scripts/ci/fixtures/otlp/desktop-viewer/release.json
+VIEWER_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$VIEWER_RELEASE")"
+VIEWER_SHA256="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["binary_sha256"])' "$VIEWER_RELEASE")"
 python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py build/otel-desktop-viewer
 python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py ci \
   --binary build/otel-desktop-viewer \
-  --version 0.5.0 \
-  --binary-sha256 d8b84e175904a81d9f977aee71fa0588ebdf5479efeaebb2285096fe3e414cb9 \
+  --version "$VIEWER_VERSION" \
+  --binary-sha256 "$VIEWER_SHA256" \
   --state-dir "$RUNNER_TEMP/sc-observability-d9-viewer"
 ```
 
@@ -99,15 +108,18 @@ probe.
 
 ## Captured D9 setup evidence
 
-On 2026-09-30, the managed desktop service passed the synthetic probe after
-its owner's launchd reload with run ID `d9-live-post-restart-final` and trace
-ID `8bdf25589e974a06b0c4291f1b2b5be8`. `searchLogs` returned the exact log body;
-`getLog` returned its trace ID; `searchSpans` returned the matching span; and
-`searchMetricSummaries` plus `getMetric` returned gauge value `42`. The same
-release artifact passed the isolated `ci` lifecycle with run ID
-`d9-ci-query-final`; all three empty protobuf requests returned HTTP 200 and
-the gRPC listener was reachable. The isolated PID, database, and run directory
-were removed by the harness.
+The service owner attested that the managed desktop service passed the
+synthetic probe at 2026-09-29 20:14 PDT (2026-09-30 03:14 UTC), after the
+owner's launchd reload. Run ID was `d9-live-post-restart-final` and trace ID
+was `8bdf25589e974a06b0c4291f1b2b5be8`. The owner reported that `searchLogs`
+returned the exact log body, `getLog` returned its trace ID, `searchSpans`
+returned the matching span, and `searchMetricSummaries` plus `getMetric`
+returned gauge value `42`. The owner also reported that the same release
+artifact passed the isolated `ci` lifecycle with run ID `d9-ci-query-final`,
+that all three empty protobuf requests returned HTTP 200, and that the gRPC
+listener was reachable. The isolated PID, database, and run directory were
+reported removed by the harness. Raw command output was not retained, so these
+results are owner-attested and not independently verifiable from this checkout.
 
 The managed launchd agent was reloaded by its owner to apply the requested
 five-minute post-login delay. During that intentional delay, a probe attempt
