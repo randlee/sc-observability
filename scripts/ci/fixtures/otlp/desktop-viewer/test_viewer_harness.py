@@ -120,6 +120,21 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(harness.HarnessError, "statusCode"):
                 harness.assert_production(argparse.Namespace(state_dir="/owned", backend="sdk"))
 
+    def test_production_assertion_rejects_matched_span_link_count_mismatch(self) -> None:
+        wait, query = _sdk_viewer_responses()
+
+        def mismatched_links(*args: object) -> object:
+            response = wait(*args)
+            if args[1] == "searchSpans":
+                response["spans"][0]["spanData"]["links"] = []
+            return response
+
+        with mock.patch.object(harness, "_owned", return_value=(123, {"host": "127.0.0.1", "ui": 8000})), \
+                mock.patch.object(harness, "_wait_rpc", side_effect=mismatched_links), \
+                mock.patch.object(harness, "rpc", side_effect=query):
+            with self.assertRaisesRegex(harness.HarnessError, "links did not match"):
+                harness.assert_production(argparse.Namespace(state_dir="/owned", backend="sdk"))
+
     def test_production_assertion_rejects_corrupt_matched_log_resource(self) -> None:
         wait, query = _sdk_viewer_responses(log_service="wrong-service")
         with mock.patch.object(harness, "_owned", return_value=(123, {"host": "127.0.0.1", "ui": 8000})), \

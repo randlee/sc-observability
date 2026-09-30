@@ -521,7 +521,7 @@ def assert_production(args: argparse.Namespace) -> None:
     links = span.get("links")
     if not isinstance(links, list) or len(links) != len(expected["links"]):
         raise HarnessError("production span links did not match the expected decoded shape")
-    for link, required in zip(links, expected["links"], strict=True):
+    for link, required in zip(links, expected["links"]):
         if not isinstance(link, dict):
             raise HarnessError("production span link was not decoded")
         for field in ("traceID", "spanID", "flags"):
