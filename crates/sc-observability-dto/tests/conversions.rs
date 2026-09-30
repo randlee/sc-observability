@@ -250,6 +250,21 @@ fn registry_has_unique_literals_and_exact_remediation() {
 }
 
 #[test]
+fn unregistered_boundary_code_has_explicit_recovery() {
+    let diagnostic = boundary_diagnostic("SC_EXTERNAL_COMPONENT_FAILURE", "external failure");
+    assert_eq!(
+        diagnostic.remediation,
+        RemediationDto::Recoverable {
+            steps: vec![
+                "Inspect the diagnostic code and follow the emitting component's recovery guidance"
+                    .into()
+            ]
+        }
+    );
+    validate_diagnostic(&diagnostic, "test").unwrap();
+}
+
+#[test]
 fn exact_request_size_and_depth_boundaries() {
     let mut raw = event();
     raw["message"] = json!("");
