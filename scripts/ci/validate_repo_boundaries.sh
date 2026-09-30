@@ -13,7 +13,7 @@ import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
 sys.path.insert(0, str(Path('scripts/ci').resolve()))
 from release_manifest import workspace_members
-from compatibility_registry import has_placeholder_baseline_signature
+from compatibility_registry import has_placeholder_baseline_signature, is_compat_source_path
 
 def is_release_manifest(path: Path, workspace_toml: Path):
     data = load_toml(path)
@@ -188,7 +188,7 @@ compat_reference = re.compile(r"(?:crate::)?compat::|::compat::")
 for path in source_files:
     relative = path.relative_to(root).as_posix()
     text = path.read_text(encoding="utf-8")
-    is_compat_source = "/src/compat/" in f"/{relative}"
+    is_compat_source = is_compat_source_path(relative)
     if not is_compat_source and compat_reference.search(text):
         if path.name != "lib.rs" or relative not in root_reexport_exceptions:
             raise SystemExit(f"canonical source imports compatibility module: {relative}")
