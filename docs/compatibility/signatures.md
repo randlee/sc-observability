@@ -12,13 +12,13 @@ Every nominal, callable, and trait-slot record carries these fields:
 
 | Field | Meaning |
 | --- | --- |
-| `baseline_signature` | Exact released declaration extracted from the pinned baseline; nominal rows retain the released public identity. |
-| `canonical_signature` | Exact declaration at the selected head, or `null` when the released method no longer exists and must be restored by its named facade owner. |
+| `baseline_signature` | Complete released declaration extracted from the pinned baseline. For macro-owned public types, this is the exact source macro invocation that defines the declaration. |
+| `canonical_signature` | Complete declaration at the selected head (or its exact defining macro invocation), or `null` when the released method no longer exists and must be restored by its named facade owner. |
 | `obligations` | Identity, open-trait/Send+Sync, source/code, or wire-shape constraint that cannot be lost in conversion. |
 | `treatment` | One of `unchanged_alias`, `existing_pair`, `new_adapter`, or `restoration`; this is a four-way implementation decision, not a progress label. |
 | `conversion` | The permitted conversion direction. Canonical implementation remains independent of compat. |
 | `baseline_source` / `canonical_source` | Pinned source evidence for the declaration. |
-| `removable_paths` | Current root/compat source path only when there is code to remove; an empty list means the future facade is not invented here. |
+| `removable_paths` / `removal_rationale` | Current root/compat source path only when there is code to remove; an empty list carries an explicit rationale rather than inventing a future facade path. |
 
 `null` canonical signatures are intentional evidence: a D22 record may name a
 removed released method, but D22 must not fabricate the D23–D26 facade wrapper
