@@ -117,7 +117,7 @@ round is dispatched without the lead's ruling.
 ## Mandatory Console Report
 
 After every completed PASS or FAIL task close, follow the assignment's step e3:
-append to the existing ignored sanity ledger, render the newest six completed
+append to the existing ignored sanity ledger, render the newest ten completed
 runs with `templates/sanity-run-table.md.j2`, and include the complete rendered
 table as Markdown directly in the user-visible completion reply before reading
 ATM again. Preserve the exact `S | PR | Find | ✓ | Done | Iter` columns, order,
