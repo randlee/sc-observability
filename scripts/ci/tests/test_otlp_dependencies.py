@@ -1,5 +1,8 @@
 """Mutation regressions for the existing OTLP boundary/dependency gates."""
+import os
 import shutil
+import signal
+import subprocess
 import tempfile
 import tomllib
 import unittest
@@ -10,6 +13,11 @@ from scripts.ci.otlp_dependencies import validate_composition_harness, validate_
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = "crates/sc-observability-otlp/Cargo.toml"
 HARNESS = "tests/sc-observability-composition/Cargo.toml"
+SHELL_GATES = ("scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh")
+# validate_dependency_bans.sh runs this module; its child run skips the shell
+# integration cases so they never recurse, while the helper tests still run.
+SHELL_CHILD_ENV = "SC_OBS_OTLP_SHELL_GATE_CHILD"
+SHELL_TIMEOUT_SECONDS = 900
 
 
 class TransportPolicyTests(unittest.TestCase):
@@ -191,6 +199,81 @@ class CompositionHarnessTests(unittest.TestCase):
     def test_unreviewed_dev_dependency(self):
         self.replace(HARNESS, "tonic.workspace = true", "tonic.workspace = true\nopentelemetry.workspace = true")
         self.rejects(r"unexpected \['opentelemetry'\]")
+
+
+@unittest.skipIf(os.environ.get(SHELL_CHILD_ENV) == "1", "nested run inside a shell gate")
+@unittest.skipIf(shutil.which("bash") is None or shutil.which("git") is None, "bash and git are required")
+class ShellGateIntegrationTests(unittest.TestCase):
+    """Runs both real boundary shells against a temporary copy of the checkout."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temporary = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.temporary.cleanup)
+        cls.root = Path(cls.temporary.name)
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True, timeout=60
+        ).stdout.decode().split("\0")
+        for relative in filter(None, tracked):
+            source = ROOT / relative
+            if source.is_file():
+                target = cls.root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+        cls.manifest = (cls.root / MANIFEST).read_text()
+
+    def setUp(self):
+        self.addCleanup((self.root / MANIFEST).write_text, self.manifest)
+
+    def replace_manifest(self, before, after):
+        self.assertIn(before, self.manifest)
+        (self.root / MANIFEST).write_text(self.manifest.replace(before, after))
+
+    def run_gate(self, script):
+        env = {
+            **os.environ,
+            SHELL_CHILD_ENV: "1",
+            "CARGO_TARGET_DIR": os.environ.get("CARGO_TARGET_DIR", str(ROOT / "target")),
+        }
+        process = subprocess.Popen(
+            ["bash", script],
+            cwd=self.root,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = process.communicate(timeout=SHELL_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate()
+            self.fail(f"{script} exceeded {SHELL_TIMEOUT_SECONDS}s")
+        return process.returncode, stdout, stderr
+
+    def rejects(self, message):
+        # The shell's own gate must stop with the helper's diagnostic as its
+        # final line, not a later nested unittest reporting the same text.
+        for script in SHELL_GATES:
+            with self.subTest(script=script):
+                code, stdout, stderr = self.run_gate(script)
+                self.assertEqual(code, 1, (stdout + stderr)[-4000:])
+                self.assertEqual(stderr.rstrip().splitlines()[-1], message, stderr[-4000:])
+
+    def test_reviewed_checkout_passes_both_gates(self):
+        for script in SHELL_GATES:
+            with self.subTest(script=script):
+                code, stdout, stderr = self.run_gate(script)
+                self.assertEqual(code, 0, (stdout + stderr)[-4000:])
+
+    def test_unreviewed_dev_dependency_fails_both_gates(self):
+        self.replace_manifest("sc-observe.workspace = true", "sc-observe.workspace = true\nserde_yaml.workspace = true")
+        self.rejects("OTLP dev-dependencies differ from policy: unexpected ['serde_yaml'], missing []")
+
+    def test_collector_server_feature_fails_both_gates(self):
+        self.replace_manifest('features = ["router"] }', 'features = ["router", "server"] }')
+        self.rejects("OTLP dev-dependency tonic: effective features differ from policy")
 
 
 if __name__ == "__main__":
