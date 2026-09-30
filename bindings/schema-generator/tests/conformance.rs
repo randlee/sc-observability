@@ -129,7 +129,10 @@ fn semantic_negatives_have_exact_failure_kinds_and_codes() {
                     let error = decode_canonical_envelope::<AdmissionDto>(value)
                         .expect_err("malformed canonical envelope must be rejected");
                     assert_eq!(error.diagnostic().code, case["expected_error"]["code"]);
-                    assert_eq!(serde_json::to_value(error).unwrap()["kind"], case["expected_error"]["kind"]);
+                    assert_eq!(
+                        serde_json::to_value(error).unwrap()["kind"],
+                        case["expected_error"]["kind"]
+                    );
                 }
                 result => panic!("unknown canonical-envelope result: {result}"),
             }
@@ -139,11 +142,20 @@ fn semantic_negatives_have_exact_failure_kinds_and_codes() {
             "metric" => decode_metric(value).unwrap_err(),
             "span" => decode_span(value).unwrap_err(),
             "event" => decode_event(value)
-                .and_then(|event| to_core_event(event, EventStamp {
-                    service: serde_json::from_value(serde_json::json!("conformance")).unwrap(),
-                    timestamp: serde_json::from_value(serde_json::json!("1970-01-01T00:00:00Z")).unwrap(),
-                    identity: Default::default(),
-                }))
+                .and_then(|event| {
+                    to_core_event(
+                        event,
+                        EventStamp {
+                            service: serde_json::from_value(serde_json::json!("conformance"))
+                                .unwrap(),
+                            timestamp: serde_json::from_value(serde_json::json!(
+                                "1970-01-01T00:00:00Z"
+                            ))
+                            .unwrap(),
+                            identity: Default::default(),
+                        },
+                    )
+                })
                 .unwrap_err(),
             "query" => decode_query(value).and_then(to_core_query).unwrap_err(),
             "level" => decode_level_request(value).unwrap_err(),
