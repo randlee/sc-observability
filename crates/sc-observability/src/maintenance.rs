@@ -329,7 +329,9 @@ pub(crate) struct WriterTracker {
     queue_capacity: u64,
     queue_high_water_mark: AtomicU64,
     queue_full_drops_total: AtomicU64,
+    // MUTEX: The writer changes state on failures and shutdown; read-mostly health snapshots use this RwLock without gaining a global snapshot.
     state: RwLock<WriterState>,
+    // MUTEX: Failures replace the latest diagnostic while health snapshots clone it read-mostly; this RwLock covers only this field.
     last_error: RwLock<Option<DiagnosticSummary>>,
     shutdown_timeout_recorded: AtomicBool,
 }
@@ -451,8 +453,11 @@ impl WriterTracker {
 /// updates occur on the writer thread without a single global snapshot lock.
 pub(crate) struct MaintenanceTracker {
     pass_active: AtomicBool,
+    // MUTEX: The writer updates this after each pass and health snapshots read it read-mostly; this lock does not make the whole report atomic.
     last_pass_at: RwLock<Option<Timestamp>>,
+    // MUTEX: Failure writes replace the latest diagnostic while health snapshots clone it read-mostly; this lock covers only this field.
     last_error: RwLock<Option<DiagnosticSummary>>,
+    // MUTEX: Maintenance transitions update this state while health reads it frequently; this RwLock does not make the report atomic.
     state: RwLock<MaintenanceWorkerState>,
     rotated_files_total: AtomicU64,
     pruned_files_total: AtomicU64,

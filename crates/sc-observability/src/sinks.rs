@@ -560,6 +560,7 @@ impl LogSink for ConsoleSink {
 /// unavailable health through the ordinary `LoggingHealthReport` path without
 /// sabotaging the filesystem or reaching into crate-private internals.
 pub struct RetainedSinkFaultInjector {
+    // MUTEX: The controller and cloned fault sink share this forced state; the mutex synchronizes force/clear with sink health checks.
     forced_state: Arc<Mutex<Option<SinkHealthState>>>,
 }
 
@@ -612,6 +613,7 @@ impl RetainedSinkFaultInjector {
 #[cfg(feature = "fault-injection")]
 pub(crate) struct FaultInjectingSink {
     inner: Arc<dyn LogSink>,
+    // MUTEX: The wrapped sink reads this state while its controller may force or clear it; the shared mutex serializes those accesses.
     forced_state: Arc<Mutex<Option<SinkHealthState>>>,
 }
 
