@@ -17,6 +17,7 @@ use sc_observability_types::{
     MaintenanceWorkerState, OperationDiagnostic, QueryError, QueryHealthState, Remediation,
     SinkHealth, SinkHealthState, Timestamp, WriterState,
 };
+use serde::de::{DeserializeOwned, value::StrDeserializer};
 use serde_json::Value;
 
 use crate::builder::LoggerBuilder;
@@ -236,10 +237,9 @@ fn parse_env_bool(value: &str, key: &str) -> Result<bool, LogSettingsError> {
 
 fn parse_json_string<T>(value: &str, key: &str) -> Result<T, LogSettingsError>
 where
-    T: serde::de::DeserializeOwned,
+    T: DeserializeOwned,
 {
-    let encoded = serde_json::to_string(value).expect("str serializes");
-    serde_json::from_str(&encoded).map_err(|error| {
+    T::deserialize(StrDeserializer::<serde::de::value::Error>::new(value)).map_err(|error| {
         LogSettingsError::invalid_value_with_source(
             format!("invalid logging environment value for {key}"),
             error,
