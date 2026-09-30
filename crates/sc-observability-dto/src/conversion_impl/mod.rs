@@ -77,15 +77,13 @@ fn checked<T, E: std::fmt::Display + 'static>(
                     .downcast_ref::<DecimalDtoError>()
                     .map(|error| error.code())
             });
-        let diagnostic = code.map_or_else(
-            || {
-                boundary_diagnostic(
-                    error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT,
-                    error.to_string(),
-                )
-            },
-            |code| boundary_diagnostic(code, error.to_string()),
-        );
+        let message = format!("{}: {error}", std::any::type_name::<E>());
+        let diagnostic = match code {
+            Some(code) => boundary_diagnostic(code, message),
+            None => {
+                boundary_diagnostic(error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT, message)
+            }
+        };
         Failure::Validation {
             diagnostic: Box::new(diagnostic),
             field: field.into(),
