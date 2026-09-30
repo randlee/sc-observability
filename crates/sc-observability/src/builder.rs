@@ -244,6 +244,7 @@ impl CanonicalLoggerBuilder {
             context: failure.into_context(),
         })?;
         let diagnostic_admitter = runtime.diagnostic_admitter();
+        // MUTEX: the logger and LevelOwner share one control allocation for serialized level changes.
         let control = Arc::new(Mutex::new(LevelControl::new(&config, &diagnostic_admitter)));
         Ok((
             CanonicalLogger {

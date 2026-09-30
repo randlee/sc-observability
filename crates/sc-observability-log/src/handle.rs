@@ -78,6 +78,7 @@ pub(crate) struct Installed {
     pub(crate) options: crate::BridgeOptions,
 }
 
+// MUTEX: coordinates install, short Arc-clone reads, and shutdown take; all slot accesses recover poison.
 pub(crate) static SLOT: RwLock<Option<Arc<Installed>>> = RwLock::new(None);
 pub(crate) static INSTALLED: AtomicBool = AtomicBool::new(false);
 
@@ -151,6 +152,7 @@ enum ShutdownState {
 }
 
 struct ShutdownCoordinator {
+    // MUTEX: shares the single shutdown transition/result with waiters; state accesses recover poison.
     state: Mutex<ShutdownState>,
     complete: Condvar,
     work: mpsc::Sender<ShutdownCommand>,

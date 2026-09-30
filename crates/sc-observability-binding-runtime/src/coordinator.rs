@@ -16,6 +16,7 @@ use std::time::Duration;
 pub(crate) enum Backend {
     Core {
         logger: ArcSwapOption<Logger<Running>>,
+        // MUTEX: serializes Core level-owner updates; contention reports dispatch-full and poison reports an internal failure.
         level: Mutex<LevelOwner>,
         stamp: dto::EventStamp,
     },
@@ -64,6 +65,7 @@ enum Start {
     Abort,
 }
 struct StartGate {
+    // MUTEX: shares the one startup outcome with Condvar waiters; sync::lock recovers poisoned bookkeeping.
     state: Mutex<Start>,
     changed: Condvar,
 }

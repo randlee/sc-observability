@@ -104,6 +104,7 @@ use crate::{
 /// Built-in JSONL file sink with rotation and retention handling.
 pub struct JsonlFileSink {
     path: PathBuf,
+    // MUTEX: sink operations update health while callers snapshot it; existing expect sites intentionally panic on poison.
     health: RwLock<SinkHealth>,
     legacy_policy: Option<LegacyRetentionPolicy>,
 }
@@ -467,6 +468,7 @@ impl ConsoleWriter for StderrConsoleWriter {
 /// (stdout or stderr).
 pub struct ConsoleSink {
     writer: Box<dyn ConsoleWriter>,
+    // MUTEX: writes update health while callers snapshot it; existing expect sites intentionally panic on poison.
     health: RwLock<SinkHealth>,
 }
 

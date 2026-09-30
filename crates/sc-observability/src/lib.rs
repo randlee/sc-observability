@@ -611,6 +611,7 @@ mod canonical {
         pub(crate) shutdown: Arc<AtomicBool>,
         pub(crate) runtime: LoggerRuntime,
         pub(crate) diagnostic_admitter: Option<DiagnosticAdmitter>,
+        // MUTEX: logger admission and LevelOwner changes share serialized state; each use keeps its explicit poison policy.
         pub(crate) level_control: Arc<Mutex<LevelControl>>,
         pub(crate) state: PhantomData<State>,
     }

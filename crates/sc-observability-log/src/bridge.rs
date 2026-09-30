@@ -209,6 +209,7 @@ pub(crate) struct AttachmentState {
     policy: Arc<dyn BridgeEventPolicy>,
     service: ServiceName,
     identity: ProcessIdentity,
+    // MUTEX: concurrent admissions and inspection share the latest rejection; both accesses recover poison.
     last_policy_rejection: Mutex<Option<OperationDiagnostic>>,
 }
 
