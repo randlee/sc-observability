@@ -214,7 +214,9 @@ impl OtelConfig {
             OtlpProtocol::HttpBinary | OtlpProtocol::Grpc => ExporterBackend::OpenTelemetrySdk,
             OtlpProtocol::HttpJson => ExporterBackend::LegacyHttpJson,
         };
-        let budget = DurationMs::from(u64::from(self.timeout_ms).max(30_000));
+        let budget = DurationMs::from(
+            u64::from(self.timeout_ms).max(constants::RELEASED_OTLP_BUDGET_FLOOR_MS),
+        );
         let retry = LegacyRetryPolicy {
             max_retries: Some(self.max_retries),
             initial_backoff_ms: Some(self.initial_backoff_ms),
@@ -774,7 +776,9 @@ mod tests {
             let crate::config::BackendTransportBounds::Legacy(retry) = bounds.backend() else {
                 panic!("enabled released HttpJson has retry bounds");
             };
-            let budget = std::time::Duration::from_millis(timeout.max(30_000));
+            let budget = std::time::Duration::from_millis(
+                timeout.max(constants::RELEASED_OTLP_BUDGET_FLOOR_MS),
+            );
             assert_eq!(
                 bounds.request_timeout().get(),
                 std::time::Duration::from_millis(timeout)
