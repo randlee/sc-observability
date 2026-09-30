@@ -194,6 +194,11 @@ fn legacy_log(error: CanonicalEventError) -> LogError {
         CanonicalEventError::Validation { context } => {
             LogError::InvalidEvent(legacy_event(context))
         }
+        CanonicalEventError::Routing { context }
+            if context.diagnostic().code == error_codes::LOGGER_SHUTDOWN_TIMED_OUT =>
+        {
+            LogError::ShutdownTimedOut(context)
+        }
         CanonicalEventError::Routing { context } => LogError::WriterDegraded(context),
         _ => LogError::WriterDegraded(error.into_context()),
     }
@@ -208,6 +213,11 @@ fn legacy_try_log(error: CanonicalEventError) -> TryLogError {
             if context.diagnostic().code == error_codes::LOGGER_QUEUE_FULL =>
         {
             TryLogError::QueueFull(context)
+        }
+        CanonicalEventError::Routing { context }
+            if context.diagnostic().code == error_codes::LOGGER_SHUTDOWN_TIMED_OUT =>
+        {
+            TryLogError::ShutdownTimedOut(context)
         }
         CanonicalEventError::Routing { context } => TryLogError::WriterDegraded(context),
         _ => TryLogError::WriterDegraded(error.into_context()),
@@ -225,4 +235,32 @@ fn legacy_event_from_log(error: LogError) -> EventError {
 
 fn legacy_flush(error: CanonicalFlushError) -> FlushError {
     FlushFailure::from_context(error.into_context()).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sc_observability_types::Remediation;
+
+    fn shutdown_timeout() -> CanonicalEventError {
+        CanonicalEventError::Routing {
+            context: Box::new(ErrorContext::new(
+                error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+                "writer thread did not stop within 10ms",
+                Remediation::recoverable("wait for writer shutdown", ["retry after shutdown"]),
+            )),
+        }
+    }
+
+    #[test]
+    fn released_log_and_try_log_preserve_shutdown_timeout_variants() {
+        assert!(matches!(
+            legacy_log(shutdown_timeout()),
+            LogError::ShutdownTimedOut(_)
+        ));
+        assert!(matches!(
+            legacy_try_log(shutdown_timeout()),
+            TryLogError::ShutdownTimedOut(_)
+        ));
+    }
 }
