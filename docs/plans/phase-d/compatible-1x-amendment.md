@@ -21,12 +21,14 @@ The pinned comparison is v1.4.1 `c578912653233c7dc678fefe5af575118dbbaaa1` versu
 | Contracts | D22 `obs-d-22` | cobs | Shared released types plus real canonical facade exports, exact compatibility decisions, governing ADR/requirement amendment |
 | Parallel adapters | D23 `obs-d-23` | cobs | Core/logger source and tests |
 | Parallel adapters | D24 `obs-d-24` | cobs2 | Observation facade source and tests |
-| Parallel adapters | D25 `obs-d-25` | lobs | Log bridge source and tests |
+| Parallel adapters | D25 `obs-d-25` | lobs | Log bridge plus existing macro producer/external consumer proof |
 | Parallel adapters | D26 `obs-d-26` | lobs2 | Released OTLP facade source and tests |
 | Parallel release work | D27 `obs-d-27` | lobs | Versions, manifests/locks, compatible release validation and CI |
 | Integration | Existing D18 `obs-d-18` | cobs | Real combined old/new consumers, bindings, semver and release evidence |
 
 There are six new sprints and one amended sprint. Existing D9 conformance follows D18 and remains separate; it is not an eighth new compatibility sprint. The graph contains 26 entries including historical work. Compatibility critical path is three development stages, theoretical width five; the existing four developer agents limit immediate execution width to four. Including D9, the path is four stages because real collector qualification consumes the integrated library.
+
+D22 explicitly owns the source-audited prerequisite canonical import paths and one `tests/canonical_exports.rs` fixture per facade; the bead lists exact files and transfers them to the relevant owner after sanity. Only changed canonical identities move to `types::v2`/peer `v2`; unchanged aliases/constants and released consumer fixtures keep their paths.
 
 D22 supplies **compiled production** canonical exports backed by existing new implementations, not fake mocks. Core/observe/log/OTLP facade roots initially belong to D22 for this narrow publication, then transfer to D23–D26. Frozen canonical signatures let each facade owner consume peers' existing implementation while restoring only its own old surface. Shared type source remains D22-owned. D27 owns manifests, locks and release tooling; the parallel facade sprints own source/tests. Contract drift requires a scoped D22 amendment, not silently serializing unrelated sprints.
 
@@ -38,4 +40,10 @@ Planned layers 19–24 are D22–D27, after historical D20; D18 and D9 move to 2
 
 The user requires two review iterations: cobs using `critical-plan-reviewer.md` and a background reviewer using `plan-scope-reviewer.md`, with fixes after each iteration, followed by quality-mgr plan review. The plan gate prevents implementation dispatch until review passes. This amendment does not repeat prior passed runtime work or close important findings based merely on task-completion messages.
 
-Final acceptance includes unchanged released consumers, clean opt-in canonical consumers, both backend paths, bindings/schema/wheels and exact released-package semver comparison. D27 validates the release tooling independently; D18 runs the real combined gate. D9 and the full phase-ending review precede any implementation landing on `develop`, which still requires user authorization.
+Final acceptance includes unchanged released consumers, clean opt-in canonical consumers, both backend paths, bindings/schema/wheels and exact released-package semver comparison. D27 closes a release-validation boundary using baseline/additive positive fixtures, breaking/missing-evidence negative fixtures, and version/CI coherence. D18 alone runs the real combined consumer and all-crate semver gate. D9 and the full phase-ending review precede any implementation landing on `develop`, which still requires user authorization.
+
+D18 has no implicit authority to edit facade source or release tooling. Combination defects return to D22–D27 owners; D18 owns real combined verification and its explicit consumer/test/docs fence. Macro syntax/expansion remains unchanged by default; D25 owns any strictly required routing repair plus the existing external consumer-check proof, as a thin producer/consumer exception. Contract and boundary checks remain scoped (workspace build, owned tests, boundary/production lint); D18 owns combined workspace behavior.
+
+## Planning review record
+
+Iteration 1 scope and critical reports are attached to PR #499 (issuecomment-5902245963). The fix round clarified canonical-import/fixture handoff, D18 owner routing, macro expansion proof, the current phase map and D9 train, and D27 boundary closure. OTLP observation imports remain dev-only. The second review uses immutable bead snapshot SHA-256 `181dcf0ab9f88544c4d3a6cc5f8c8d381402635f1d7e73a5490d9fe4b6cefc7b`; live beads remain authoritative.
