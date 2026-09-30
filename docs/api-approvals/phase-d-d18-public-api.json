@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "candidate_version": "2.0.0",
+  "source_commit": "b62b5ea5c22c30a54e680da3327345f852df5a77",
+  "approved_at": "2026-09-28T16:40:00Z",
+  "crates": {
+    "sc-observability-types": {"status": "approved", "reviewer": "cobs (D18 integration owner)", "scope": ["public-api"], "evidence": "target/public-api/sc-observability-types-diff.log", "api_sha256": "cefebf89e680b5c2d16c06529f2ed26414c48e14c93ca37102e6e2e34ed0f167"},
+    "sc-observability": {"status": "approved", "reviewer": "cobs (D18 integration owner)", "scope": ["public-api"], "evidence": "target/public-api/sc-observability-diff.log", "api_sha256": "7d12b68d220786030f80e46257e3eb6f9e180c3ee8ca9c3e154e4f8429545fb9"},
+    "sc-observe": {"status": "approved", "reviewer": "cobs (D18 integration owner)", "scope": ["public-api"], "evidence": "target/public-api/sc-observe-diff.log", "api_sha256": "93bdaceaabdacf7b0038d801e9a4135a9262baee81c96a106026f2e91c81e2e9"},
+    "sc-observability-otlp": {"status": "approved", "reviewer": "cobs (D18 integration owner)", "scope": ["public-api"], "evidence": "target/public-api/sc-observability-otlp-diff.log", "api_sha256": "7c5d34d1772a78a3db28247105718fed3754fef67886a8fac9e57b7d475dc85d"},
+    "sc-observability-log": {"status": "approved", "reviewer": "cobs (D18 integration owner)", "scope": ["public-api"], "evidence": "target/public-api/sc-observability-log-diff.log", "api_sha256": "435312459bb7877b11f917e5e245de5bcc296a7ab23aebb4c4610ff0bc733252"},
+    "sc-observability-dto": {"status": "approved", "reviewer": "cobs (D18 integration owner)", "scope": ["public-api"], "evidence": "target/public-api/sc-observability-dto-diff.log", "api_sha256": "610b0197e02c266b4da141561a5ca3013ff35fcca812b7e797e2e0841fc02dde"},
+    "sc-observability-py": {"status": "approved", "reviewer": "cobs (D18 integration owner)", "scope": ["public-api"], "evidence": "target/public-api/sc-observability-py-diff.log", "api_sha256": "7945854ed22cd6a4353601bc922be0552dcad7b52d7b41253154c48037ea0835"}
+  },
+  "approval_scope": "D18 exact public API diff against frozen 1.4.1; each changed crate matched to the enumerated major-break manifest and migration evidence. No publication authorization."
+}

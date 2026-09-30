@@ -42,6 +42,9 @@ def wheel_targets(distribution):
             elif item["target"] == "x86_64-pc-windows-msvc":
                 if not item["os"].startswith("windows-") or item["platform"] != "win_amd64":
                     raise ValueError("Windows wheel runner/target/platform mismatch")
+            elif item["target"] == "aarch64-pc-windows-msvc":
+                if item["os"] != "windows-11-arm" or item["platform"] != "win_arm64":
+                    raise ValueError("Windows ARM64 wheel runner/target/platform mismatch")
             else:
                 raise ValueError("unsupported explicit wheel target")
             if distribution.get("build_system") == "setuptools":

@@ -55,7 +55,7 @@
     }
   ],
   "qualificationCandidate": {
-    "version": "1.4.0",
+    "version": "2.0.0",
     "publication": "pending_phase_c_sc_publish_and_owner_authorization",
     "packages": [
       "sc-observability-types",
@@ -63,10 +63,17 @@
       "sc-observe",
       "sc-observability-otlp",
       "sc-observability-log-macros",
-      "sc-observability-log"
+      "sc-observability-log",
+      "sc-observability-dto",
+      "sc-observability-binding-runtime",
+      "sc-observability-tauri",
+      "sc-observability-py"
     ],
     "bindingInventory": "release/bindings-artifacts.toml",
     "bindingChannels": ["crates.io", "pypi", "npm"],
+    "pythonPolicy": "release/python-platform-policy.json",
+    "pythonPlatforms": 6,
+    "pythonNativeInstalledSuiteCells": 29,
     "bindingPublication": "pending_phase_c_sc_publish_and_owner_authorization",
     "handoff": "docs/plans/phase-b/handoff-b-2.md",
     "stageManifest": "stage-manifest.json",

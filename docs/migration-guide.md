@@ -92,28 +92,24 @@ For consumers that export to OTLP:
 3. Attach OTLP by wrapping projector implementations locally, following the
    pattern used by `examples/atm-adapter-example`.
 
-## Typed Error Adoption (B.1e warning rollout)
+## Phase D 2.0 error and signal migration
 
-The additive typed error methods and B.1e warning rollout were implemented and
-validated on the current stack. B.2 qualified the result before B.7
-publication. For exact old/new symbols, nine wrapper families, typed kind matching,
-source retention, custom-trait adapters, rollback and narrow warning policy,
-use the [typed error migration reference](../.claude/skills/sc-observability-adopting/references/migrate-error-api.md)
-and its [source inventory](plans/phase-b/warning-inventory-b-1e.md).
+For migration from frozen 1.4.1, use [the 2.0 release reference](migration.md)
+and [the nine-family error migration](migrate-error-api.md). They cover named
+cause variants, source/remediation retention, custom sinks/projectors, config
+defaults, signal serde and the direct-return `from_core_health` change.
 
-`LoggerBuilder::build`, `Logger::new_with_level_owner` and
-`LoggerBuilder::build_with_level_owner` remain supported without method-level
-deprecation; their `_typed` methods are additive. `Logger::emit` retains its
-existing v1.2.0 warning and behavior; new migration guidance uses
-`log_typed()` for blocking admission and `try_log_typed()` for nonblocking
-admission. The corrected telemetry projector path
-uses explicit `sc_observability_types::typed::legacy_*` adapters with the
-unchanged `with_log_projector`, `with_span_projector` and
-`with_metric_projector` methods; no `with_typed_*` builders exist.
+The old Phase B `_typed` adoption recipe is historical 1.x guidance. ADR-017
+replaces wrappers with canonical same-name enums and retires duplicate
+classifiers/adapters in D18. Until D18 qualifies activation, staged `v2`
+definitions and retained compatibility still coexist in this branch; the
+presence of these documents does not certify their removal.
 
-This guide does not promise warning-free legacy compilation under
-`-D deprecated`, introduce a removal schedule or claim that B.2/B.7 remain open
-completion gates.
+Before rollout, run the consumed major-break manifest/semver gate against
+1.4.1 and its omitted-entry negative control, the existing canonical migrated
+consumer and intended-old-source rejection, real bindings/schema composition,
+and default/all-features workspace tests. A scoped DTO signature pass does
+not authorize final baseline generation or publication.
 
 ## Breaking API Renames
 

@@ -2,5 +2,6 @@
 
 mod implementation;
 mod payload;
+pub(crate) use implementation::build_exporter_set;
 #[cfg(test)]
 mod tests;

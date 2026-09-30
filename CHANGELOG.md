@@ -34,7 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Candidate `1.4.0` is staged only; it is not published or approved for release.
+Candidate `2.0.0` is staged only; it is not published, tagged, or approved for
+release. The release inventory covers ten publishable Rust crates plus the
+shared PyPI and npm channels. Python uses `abi3-py310`/`cp310-abi3`,
+`Requires-Python >=3.10` with no upper or exclusion cap, six platforms, and 29
+native installed-suite cells; Windows ARM64 runs Python 3.11–3.14 because no
+native CPython 3.10 asset exists.
 
 ### Added
 

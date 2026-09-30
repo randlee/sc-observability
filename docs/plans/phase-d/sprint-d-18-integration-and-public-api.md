@@ -2,8 +2,13 @@
 
 Generated projection of `obs-d-18`; the bead is authoritative.
 
+> This release-prep layer is complete for its independent inventory and policy
+> documentation scope. It does not claim full production composition or final
+> semver/publication approval.
+
 ## Plan metadata
 
+- Status: complete
 - Wave: 3
 - Layer: 19
 - Assignee / model: cobs / terra
@@ -275,7 +280,7 @@ Consume obs-d-12 contract specification and write this exact row in owned docs/p
 
 ## Handoff from obs-d-10
 
-Consume obs-d-10's independent six-wheel/30-native-cell proof and policy specification after obs-d-10-sanity. Activate release/python-platform-policy.json and inventory, then write in owned docs/project-plan.md: "Python uses abi3-py310, cp310-abi3 wheels and requires-python >=3.10 without an upper/exclusion cap; six platforms and 30 native installed-suite cells are proved from one immutable source. Raising the floor or adding a cap requires a separately approved compatibility decision, supported-interpreter matrix and guard expected-value update." obs-d-10 does not wait on this activation and does not edit this document.
+Consume obs-d-10's independent six-wheel/29-native-cell proof and policy specification after obs-d-10-sanity. Activate release/python-platform-policy.json and inventory, then write in owned docs/project-plan.md: "Python uses abi3-py310, cp310-abi3 wheels and requires-python >=3.10 without an upper/exclusion cap; six platforms and 29 native installed-suite cells are proved from one immutable source, with Windows ARM64 running 3.11–3.14 because native CPython 3.10 is unavailable. Raising the floor or adding a cap requires a separately approved compatibility decision, supported-interpreter matrix and guard expected-value update." obs-d-10 does not wait on this activation and does not edit this document.
 
 
 ## Handoff from obs-d-21 (wave 1)
