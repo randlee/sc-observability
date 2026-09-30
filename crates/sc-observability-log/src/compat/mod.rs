@@ -615,6 +615,10 @@ mod tests {
                 phase: crate::LifecyclePhase::Stopped,
             }
         ));
+        assert_eq!(
+            released_flush_error.to_string(),
+            "the logger is not running: Stopped"
+        );
         assert_root_contract!(
             released_flush_error,
             "SC_OBSERVABILITY_LOG_NOT_RUNNING",
@@ -1056,7 +1060,13 @@ mod tests {
 
         for (name, error, code, remediation) in cases {
             match name {
-                "in progress" => assert!(matches!(error, FlushError::InProgress)),
+                "in progress" => {
+                    assert!(matches!(error, FlushError::InProgress));
+                    assert_eq!(
+                        error.to_string(),
+                        "a previous flush is still running; no new flush was started"
+                    );
+                }
                 "generic logger" => {
                     let FlushError::Logger { diagnostic } = &error else {
                         panic!("generic drain errors retain the released Logger variant");
@@ -1088,14 +1098,16 @@ mod tests {
             return;
         }
         let _restore = RestoreStopped;
-        for (lifecycle, phase) in [
+        for (lifecycle, phase, message) in [
             (
                 crate::health::BridgeLifecycle::ShuttingDown,
                 crate::LifecyclePhase::Stopping,
+                "the logger is not running: Stopping",
             ),
             (
                 crate::health::BridgeLifecycle::Failed,
                 crate::LifecyclePhase::Failed,
+                "the logger is not running: Failed",
             ),
         ] {
             crate::handle::set_lifecycle(lifecycle);
@@ -1106,6 +1118,7 @@ mod tests {
                 error,
                 FlushError::NotRunning { phase: observed } if observed == phase
             ));
+            assert_eq!(error.to_string(), message);
             assert_root_contract!(
                 error,
                 "SC_OBSERVABILITY_LOG_NOT_RUNNING",
@@ -1187,7 +1200,15 @@ mod tests {
                 "timeout" => assert!(matches!(error, ShutdownError::TimedOut { .. })),
                 "helper spawn" => assert!(matches!(error, ShutdownError::HelperSpawn { .. })),
                 "final flush" => assert!(matches!(error, ShutdownError::FinalFlush { .. })),
-                "helper lost" => assert!(matches!(error, ShutdownError::HelperLost { .. })),
+                "helper lost" => {
+                    let ShutdownError::HelperLost { diagnostic } = &error else {
+                        panic!("helper loss retains the released HelperLost variant");
+                    };
+                    assert_eq!(
+                        diagnostic.message,
+                        "SC_OBSERVABILITY_LOG_HELPER_LOST fixture"
+                    );
+                }
                 _ => unreachable!("fixed table row"),
             }
             assert_root_contract!(error, code, remediation);
