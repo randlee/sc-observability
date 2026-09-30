@@ -60,3 +60,24 @@ fn released_typed_helpers_keep_their_public_signatures() {
     let _: fn(LegacyBuilder) -> Result<LegacyObservability, InitFailure> =
         LegacyBuilder::build_typed;
 }
+
+#[allow(deprecated)]
+#[test]
+fn released_and_canonical_observe_contracts_are_send_sync() {
+    requires_send_sync::<LegacyConfig>();
+    requires_send_sync::<LegacyBuilder>();
+    requires_send_sync::<LegacyObservability>();
+    requires_send_sync::<ObservabilityConfig>();
+    requires_send_sync::<ObservabilityBuilder>();
+    requires_send_sync::<Observability>();
+
+    requires_send_sync::<LegacyInitError>();
+    requires_send_sync::<LegacyFlushError>();
+    requires_send_sync::<LegacyShutdownError>();
+    requires_send_sync::<InitError>();
+    requires_send_sync::<FlushError>();
+    requires_send_sync::<ShutdownError>();
+    requires_send_sync::<InitFailure>();
+    requires_send_sync::<FlushFailure>();
+    requires_send_sync::<ShutdownFailure>();
+}
