@@ -15,8 +15,7 @@ sys.path.insert(0, str(Path('scripts/ci').resolve()))
 from release_manifest import workspace_members
 from compatibility_registry import (
     has_placeholder_baseline_signature,
-    is_allowed_compat_reference_source,
-    is_compat_source_path,
+    validate_compatibility_source_boundary,
 )
 
 def is_release_manifest(path: Path, workspace_toml: Path):
@@ -186,20 +185,10 @@ if any(
     raise SystemExit("compatibility registry has an unsigned or placeholder baseline contract")
 if any(row["canonical_signature"] is None and row["treatment"] != "restoration" for row in all_contract_rows):
     raise SystemExit("missing canonical signatures must be explicit restoration records")
-deprecated_exceptions = set(registry.get("deprecated_owner_exceptions", []))
-root_reexport_exceptions = set(registry.get("compat_root_reexport_exceptions", []))
-compat_reference = re.compile(r"(?:crate::)?compat::|::compat::")
-for path in source_files:
-    relative = path.relative_to(root).as_posix()
-    text = path.read_text(encoding="utf-8")
-    is_compat_source = is_compat_source_path(relative)
-    is_allowed_compat_reference = is_allowed_compat_reference_source(
-        relative, root_reexport_exceptions
-    )
-    if not is_allowed_compat_reference and compat_reference.search(text):
-        raise SystemExit(f"canonical source imports compatibility module: {relative}")
-    if "#[deprecated" in text and not is_compat_source and relative not in deprecated_exceptions:
-        raise SystemExit(f"deprecated owner is outside compat without registry exception: {relative}")
+try:
+    validate_compatibility_source_boundary(root, source_files, registry)
+except ValueError as error:
+    raise SystemExit(error) from error
 
 for path in source_files:
     text = path.read_text(encoding="utf-8")
