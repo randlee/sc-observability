@@ -126,10 +126,6 @@ impl LogControl {
     /// # Errors
     ///
     /// Returns [`EmitError`] after exact-once accounting for a rejected event.
-    #[allow(
-        deprecated,
-        reason = "the copied bridge retains its legacy logger admission boundary"
-    )]
     pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError> {
         if let Some(saved) = &self.attachment {
             return handle::submit_guarded(|| crate::bridge::submit_control(saved, event));
@@ -177,10 +173,6 @@ impl LogControl {
     }
 }
 
-#[allow(
-    deprecated,
-    reason = "shared admission retains the legacy core boundary until D18"
-)]
 pub(crate) fn submit_event(
     logger: &sc_observability::v2::Logger,
     event: sc_observability_types::LogEvent,
