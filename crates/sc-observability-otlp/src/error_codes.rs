@@ -1,7 +1,43 @@
-//! Types-owned OTLP error-code re-exports.
-//!
-//! The canonical inventory lives in `sc-observability-types`; this transport
-//! crate intentionally has no independent registry or string literals.
+//! Released OTLP error-code surface plus canonical internal re-exports.
+
+use sc_observability_types::ErrorCode;
+
+/// Error code for telemetry use after shutdown.
+pub const TELEMETRY_SHUTDOWN: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN");
+/// Error code for invalid telemetry configuration.
+pub const TELEMETRY_INVALID_CONFIG: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_INVALID_CONFIG");
+/// Error code for invalid OTLP protocol selection.
+pub const TELEMETRY_INVALID_PROTOCOL: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL");
+/// Error code for exporter failures during log, trace, or metric export.
+pub const TELEMETRY_EXPORT_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_EXPORT_FAILED");
+/// Error code for flush-time export failures.
+pub const TELEMETRY_FLUSH_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_FLUSH_FAILED");
+/// Error code for exporter initialization failures.
+pub const TELEMETRY_EXPORTER_INIT_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED");
+/// Error code for incomplete spans dropped during shutdown.
+pub const TELEMETRY_INCOMPLETE_SPAN_DROPPED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED");
+/// Error code for span assembly failures before export.
+pub const TELEMETRY_SPAN_ASSEMBLY_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED");
+
+/// Enumerable registry of all released `sc-observability-otlp` error codes.
+pub const ALL: &[ErrorCode] = &[
+    TELEMETRY_SHUTDOWN,
+    TELEMETRY_INVALID_CONFIG,
+    TELEMETRY_INVALID_PROTOCOL,
+    TELEMETRY_EXPORT_FAILED,
+    TELEMETRY_FLUSH_FAILED,
+    TELEMETRY_EXPORTER_INIT_FAILED,
+    TELEMETRY_INCOMPLETE_SPAN_DROPPED,
+    TELEMETRY_SPAN_ASSEMBLY_FAILED,
+];
 
 pub(crate) use sc_observability_types::error_codes::otlp::{
     OTLP_CONFIG_BOUND_ORDER, OTLP_CONFIG_FIELD_NOT_APPLICABLE,

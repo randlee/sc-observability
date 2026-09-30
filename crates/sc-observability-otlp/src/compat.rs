@@ -31,13 +31,15 @@ use sc_observability_types::{
     SpanProjector, SpanSignal, TelemetryError,
 };
 
-/// The released 1.4.1 HTTP protocol set.
+/// The released 1.4.1 OTLP protocol set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OtlpProtocol {
     /// OTLP over HTTP with protobuf/binary payloads.
     HttpBinary,
     /// OTLP over HTTP with JSON payloads.
     HttpJson,
+    /// OTLP over gRPC.
+    Grpc,
 }
 
 impl From<OtlpProtocol> for crate::config::OtlpProtocol {
@@ -45,6 +47,7 @@ impl From<OtlpProtocol> for crate::config::OtlpProtocol {
         match value {
             OtlpProtocol::HttpBinary => Self::HttpBinary,
             OtlpProtocol::HttpJson => Self::HttpJson,
+            OtlpProtocol::Grpc => Self::Grpc,
         }
     }
 }
@@ -201,7 +204,7 @@ impl Default for OtelConfig {
 impl OtelConfig {
     fn into_runtime(self) -> crate::config::OtelConfig {
         let backend = match self.protocol {
-            OtlpProtocol::HttpBinary => ExporterBackend::OpenTelemetrySdk,
+            OtlpProtocol::HttpBinary | OtlpProtocol::Grpc => ExporterBackend::OpenTelemetrySdk,
             OtlpProtocol::HttpJson => ExporterBackend::LegacyHttpJson,
         };
         let retry = LegacyRetryPolicy {
@@ -578,10 +581,14 @@ mod tests {
         deprecated,
         reason = "the regression test verifies released fields are discarded outside the legacy backend"
     )]
-    fn released_binary_and_disabled_transports_discard_legacy_retry_settings() {
+    fn released_sdk_and_disabled_transports_discard_legacy_retry_settings() {
         for (transport, backend) in [
             (
                 released_transport(OtlpProtocol::HttpBinary, true),
+                ExporterBackend::OpenTelemetrySdk,
+            ),
+            (
+                released_transport(OtlpProtocol::Grpc, true),
                 ExporterBackend::OpenTelemetrySdk,
             ),
             (
@@ -598,5 +605,18 @@ mod tests {
             assert_eq!(runtime.initial_backoff_ms, None);
             assert_eq!(runtime.max_backoff_ms, None);
         }
+    }
+
+    #[test]
+    fn released_grpc_protocol_uses_the_canonical_sdk_adapter() {
+        let runtime = OtelConfig {
+            protocol: OtlpProtocol::Grpc,
+            ..OtelConfig::default()
+        }
+        .into_runtime();
+
+        assert_eq!(runtime.backend, ExporterBackend::OpenTelemetrySdk);
+        assert_eq!(runtime.protocol, crate::config::OtlpProtocol::Grpc);
+        assert!(runtime.legacy_retry.is_none());
     }
 }

@@ -21,16 +21,8 @@ pub const MAX_OTLP_LIVE_SPANS: usize = 1_024;
 /// Maximum events retained for one live V1 span lifecycle.
 pub const MAX_OTLP_EVENTS_PER_SPAN: usize = 256;
 /// Maximum records in one backend batch.
-#[expect(
-    dead_code,
-    reason = "staged batch bounds are consumed by downstream exporter implementations"
-)]
 pub const MAX_OTLP_BATCH_RECORDS: usize = 512;
 /// Maximum serialized bytes in one backend batch (1 MiB).
-#[expect(
-    dead_code,
-    reason = "staged batch bounds are consumed by downstream exporter implementations"
-)]
 pub const MAX_OTLP_BATCH_BYTES: usize = 1024 * 1024;
 /// Default maximum number of OTLP export retries.
 pub const DEFAULT_OTLP_MAX_RETRIES: u32 = 3;
