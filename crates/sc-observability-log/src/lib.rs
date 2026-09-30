@@ -377,14 +377,16 @@ impl DroppedEvents {
     }
 }
 
-/// Timeout used by `Drop for LogGuard` when `shutdown` was not called.
+/// Timeout used by the implicit drop paths for `LogGuard` and `LogAttachment`.
 ///
-/// `Drop for LogGuard` runs the same flush-and-shutdown sequence as
-/// [`LogGuard::shutdown`], bounded by this timeout, but it has no `Result` to
-/// return to a caller and therefore discards the outcome (`let _ = ..`):
-/// an implicit teardown failure (a timeout, a final-flush error or a lost
-/// helper thread) is silent. Call [`LogGuard::shutdown`] explicitly whenever
-/// that `Result` matters, for example to log or retry on failure.
+/// Dropping the owning [`LogGuard`] runs the same bounded flush-and-shutdown
+/// sequence as [`LogGuard::shutdown`], but it has no `Result` to return and
+/// therefore discards the outcome (`let _ = ..`). Dropping the non-owning
+/// [`LogAttachment`] instead performs a bounded best-effort detach; it does not
+/// shut down the logger or own `LevelOwner` authority. The constant is shared
+/// only for its timeout value, not for shutdown or `LevelOwner` authority.
+/// Call [`LogGuard::shutdown`] explicitly whenever its `Result` matters, for
+/// example to log or retry on failure.
 pub const DEFAULT_DROP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The sole lifecycle owner of the installed bridge; dropping it shuts the logger down.
