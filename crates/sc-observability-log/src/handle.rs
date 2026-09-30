@@ -226,6 +226,29 @@ static WAIT_STOPPED_HOOK: OnceLock<Mutex<Option<mpsc::SyncSender<()>>>> = OnceLo
 static SHUTDOWN_WORK_HOOK: OnceLock<Mutex<Option<ShutdownCommand>>> = OnceLock::new();
 
 #[cfg(test)]
+pub(crate) fn is_isolated_test_child(test_name: &str) -> bool {
+    const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_ISOLATED_LIB_TEST";
+    if std::env::var(CHILD_ENV).as_deref() == Ok(test_name) {
+        return true;
+    }
+    let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+        .args(["--exact", test_name, "--nocapture", "--test-threads=1"])
+        .env(CHILD_ENV, test_name)
+        .output()
+        .expect("spawn isolated library test");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success()
+            && stdout.contains("running 1 test")
+            && stdout.contains("test result: ok. 1 passed;"),
+        "isolated {test_name} must execute and pass exactly one test: {}\n{stdout}\n{stderr}",
+        output.status,
+    );
+    false
+}
+
+#[cfg(test)]
 fn run_shutdown_work_hook() {
     let hook = SHUTDOWN_WORK_HOOK
         .get_or_init(|| Mutex::new(None))
@@ -1166,6 +1189,11 @@ mod tests {
 
     #[test]
     fn reserved_shutdown_worker_publishes_failure_after_a_waiter_times_out() {
+        if !is_isolated_test_child(
+            "handle::tests::reserved_shutdown_worker_publishes_failure_after_a_waiter_times_out",
+        ) {
+            return;
+        }
         let root = std::env::temp_dir().join(format!("bp3-worker-{}", std::process::id()));
         let service = sc_observability_types::ServiceName::new("bp3-worker");
         assert!(service.is_ok());
@@ -1386,6 +1414,9 @@ mod tests {
     /// The only unit test that calls `submit_guarded` or `record_drop`, so its counter deltas cannot race.
     #[test]
     fn emit_core_counts_panics_and_reentry() {
+        if !is_isolated_test_child("handle::tests::emit_core_counts_panics_and_reentry") {
+            return;
+        }
         // 1. A nested call inside the closure is counted once as ReentrantEmit.
         let reentrant_before = drop_count(DropCause::ReentrantEmit);
         let panicked_before = drop_count(DropCause::LoggerPanicked);

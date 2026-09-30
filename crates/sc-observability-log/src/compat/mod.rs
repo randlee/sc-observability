@@ -719,7 +719,15 @@ mod tests {
             (
                 "timeout",
                 "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT",
-                FlushError::TimedOut { timeout },
+                legacy_flush(
+                    &sc_observability_types::v2::FlushError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
                 Remediation::recoverable(
                     "retry the flush later or raise the timeout",
                     [
@@ -763,7 +771,10 @@ mod tests {
 
         for (name, code, error, remediation) in cases {
             match name {
-                "timeout" => assert!(matches!(error, FlushError::TimedOut { .. })),
+                "timeout" => assert!(matches!(
+                    error,
+                    FlushError::TimedOut { timeout: observed } if observed == timeout
+                )),
                 "helper spawn" => assert!(matches!(error, FlushError::HelperSpawn { .. })),
                 "helper lost" => assert!(matches!(error, FlushError::HelperLost { .. })),
                 _ => unreachable!("fixed table row"),
@@ -782,6 +793,11 @@ mod tests {
             }
         }
 
+        if !crate::handle::is_isolated_test_child(
+            "compat::tests::released_control_flush_reads_the_failed_phase_at_the_adapter_boundary",
+        ) {
+            return;
+        }
         crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Failed);
         let _restore = RestoreStopped;
         let error = LogControl::new()
