@@ -763,8 +763,12 @@ mod tests {
         let policy = AdapterPolicy {
             allowed_window_labels: ["main".into()].into(),
             allowed_targets: ["app".into()].into(),
-            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32 + 1,
-            max_depth: MAX_CONTAINER_DEPTH as u32,
+            max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                .expect("wire payload limit fits in u32")
+                .checked_add(1)
+                .expect("one byte over the wire payload limit fits in u32"),
+            max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                .expect("container depth limit fits in u32"),
             redacted_field_keys: BTreeSet::new(),
         };
         assert!(policy.validate().is_err());
