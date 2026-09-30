@@ -4,12 +4,13 @@
 
 use sc_observability_otlp::{
     AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
-    ResourceAttributes, Telemetry, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
+    ResourceAttributes, SpanAssembler, Telemetry, TelemetryConfig, TelemetryConfigBuilder,
+    TracesConfig,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, DiagnosticInfo, DurationMs, ErrorCode, FlushError, InitError, Level,
-    LogEvent, Observable, ProcessIdentity, Remediation, SchemaVersion, ServiceName, ShutdownError,
-    TargetCategory, TelemetryError, Timestamp,
+    ActionName, Diagnostic, DiagnosticInfo, DurationMs, ErrorCode, EventError, FlushError,
+    InitError, Level, LogEvent, Observable, ProcessIdentity, Remediation, SchemaVersion,
+    ServiceName, ShutdownError, SpanSignal, TargetCategory, TelemetryError, Timestamp,
 };
 use serde_json::Map;
 use std::sync::Arc;
@@ -58,6 +59,10 @@ fn released_projector_signature<T: Observable>(
 
 #[test]
 fn released_struct_literals_and_result_signatures_remain_source_compatible() {
+    let _: fn(
+        &mut SpanAssembler,
+        SpanSignal,
+    ) -> Result<Option<sc_observability_otlp::CompleteSpan>, EventError> = SpanAssembler::push;
     let _: fn(String) -> Result<OtlpEndpoint, InitError> = OtlpEndpoint::new;
     let _: fn(String) -> Result<OtlpEndpoint, sc_observability_types::typed::InitFailure> =
         OtlpEndpoint::new_typed;

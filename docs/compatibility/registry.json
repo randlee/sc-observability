@@ -1424,7 +1424,7 @@
         "signature identity: preserve OtelConfig declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released OtelConfig facade in compat.rs converts to config::OtelConfig; the canonical config implementation does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -1452,7 +1452,7 @@
         "signature identity: preserve TelemetryConfig declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released TelemetryConfig facade in compat.rs converts to config::TelemetryConfig; the canonical config implementation does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -1480,7 +1480,7 @@
         "signature identity: preserve TelemetryConfigBuilder declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released TelemetryConfigBuilder facade in compat.rs validates converted config::TelemetryConfig values; the canonical config implementation does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -1508,7 +1508,7 @@
         "signature identity: preserve OtlpEndpoint declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released OtlpEndpoint facade in compat.rs wraps config::OtlpEndpoint and converts its ConfigFailure at the released boundary; the canonical config implementation does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -1536,7 +1536,7 @@
         "signature identity: preserve AuthHeader declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released AuthHeader facade in compat.rs wraps config::AuthHeader and converts its ConfigFailure at the released boundary; the canonical config implementation does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -1565,7 +1565,7 @@
         "trait: preserve Telemetry implementability, the exact public trait bounds, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released Telemetry facade in compat.rs wraps RuntimeTelemetry and maps canonical telemetry errors at that boundary; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -1593,7 +1593,7 @@
         "signature identity: preserve SpanAssembler declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released root SpanAssembler remains its own public owner and returns the released EventError from push; the internal V2SpanAssembler is separate.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/assembly.rs",
@@ -1602,7 +1602,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/assembly.rs",
-        "symbol": "assembler with v2::EventError"
+        "symbol": "SpanAssembler with root EventError"
       },
       "removable_paths": [],
       "removal_rationale": "The released assembly owner remains defined directly in assembly.rs; the canonical v2 assembler and completion types are separate internal owners, so there is no compatibility-only facade file to remove."
@@ -1620,7 +1620,7 @@
         "signature identity: preserve CompleteSpan declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "CompleteSpan remains the released root owner; its internal V2CompleteSpan counterpart is separate.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/assembly.rs",
@@ -1647,7 +1647,7 @@
         "signature identity: preserve TelemetryProjectors declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released TelemetryProjectors facade in compat.rs delegates to the generic ProjectorSet using its retained Telemetry wrapper; canonical V2TelemetryProjectors uses RuntimeTelemetry and does not import compatibility code.",
+      "conversion": "The released TelemetryProjectors facade in compat.rs delegates to ProjectorSet using its retained Telemetry wrapper; canonical V2TelemetryProjectors uses RuntimeTelemetry and does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -4309,13 +4309,13 @@
       "symbol": "sc_observability_otlp::Telemetry::new_typed",
       "owner": "sc_observability_otlp::Telemetry",
       "baseline_signature": "pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure>",
-      "canonical_signature": "pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure>",
+      "canonical_signature": "pub fn new_typed(config: config::TelemetryConfig) -> Result<Self, InitFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure>",
         "error: preserve released InitFailure failure type at sc_observability_otlp::Telemetry::new_typed boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released Telemetry facade in compat.rs converts its TelemetryConfig and wraps RuntimeTelemetry; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4325,7 +4325,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "new_typed"
       },
       "removable_paths": [
@@ -4336,13 +4336,13 @@
       "symbol": "sc_observability_otlp::Telemetry::emit_log",
       "owner": "sc_observability_otlp::Telemetry",
       "baseline_signature": "pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError>",
-      "canonical_signature": "pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError>",
+      "canonical_signature": "pub fn emit_log(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::TelemetryError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::emit_log exactly as recorded in this row baseline_signature: pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError>",
         "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_log boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4352,7 +4352,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "emit_log"
       },
       "removable_paths": [
@@ -4363,13 +4363,13 @@
       "symbol": "sc_observability_otlp::Telemetry::emit_span",
       "owner": "sc_observability_otlp::Telemetry",
       "baseline_signature": "pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>",
-      "canonical_signature": "pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>",
+      "canonical_signature": "pub fn emit_span(&self, span: &SpanSignal) -> Result<(), sc_observability_types::v2::TelemetryError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::emit_span exactly as recorded in this row baseline_signature: pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>",
         "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_span boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4379,7 +4379,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "emit_span"
       },
       "removable_paths": [
@@ -4390,13 +4390,13 @@
       "symbol": "sc_observability_otlp::Telemetry::emit_metric",
       "owner": "sc_observability_otlp::Telemetry",
       "baseline_signature": "pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>",
-      "canonical_signature": "pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>",
+      "canonical_signature": "pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), sc_observability_types::v2::TelemetryError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::emit_metric exactly as recorded in this row baseline_signature: pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>",
         "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_metric boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4406,7 +4406,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "emit_metric"
       },
       "removable_paths": [
@@ -4449,8 +4449,8 @@
         "signature: preserve sc_observability_otlp::Telemetry::flush_typed exactly as recorded in this row baseline_signature: pub fn flush_typed(&self) -> Result<(), FlushFailure>",
         "error: preserve released FlushFailure failure type at sc_observability_otlp::Telemetry::flush_typed boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::flush_typed; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4460,7 +4460,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "flush_typed"
       },
       "removable_paths": [
@@ -4503,8 +4503,8 @@
         "signature: preserve sc_observability_otlp::Telemetry::shutdown_typed exactly as recorded in this row baseline_signature: pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure>",
         "error: preserve released ShutdownFailure failure type at sc_observability_otlp::Telemetry::shutdown_typed boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::shutdown_typed; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4514,7 +4514,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "shutdown_typed"
       },
       "removable_paths": [
@@ -4530,8 +4530,8 @@
         "signature: preserve sc_observability_otlp::Telemetry::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> TelemetryHealthReport",
         "receiver: preserve released &self receiver at sc_observability_otlp::Telemetry::health boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::health; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4541,7 +4541,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "health"
       },
       "removable_paths": [
@@ -4552,13 +4552,13 @@
       "symbol": "sc_observability_otlp::OtlpEndpoint::new",
       "owner": "sc_observability_otlp::OtlpEndpoint",
       "baseline_signature": "pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
-      "canonical_signature": "pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
+      "canonical_signature": "pub fn new_typed(value: impl Into<String>) -> Result<Self, sc_observability_types::v2::ConfigFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::OtlpEndpoint::new exactly as recorded in this row baseline_signature: pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
         "error: preserve released InitError failure type at sc_observability_otlp::OtlpEndpoint::new boundary"
       ],
-      "treatment": "existing_pair",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released OtlpEndpoint facade in compat.rs delegates to config::OtlpEndpoint::new_typed, converts ConfigFailure to InitFailure, then maps the released new result to InitError; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4568,8 +4568,8 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "OtlpEndpoint",
-        "member": "new"
+        "owner": "config::OtlpEndpoint",
+        "member": "new_typed"
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs"
@@ -4611,8 +4611,8 @@
         "signature: preserve sc_observability_otlp::OtlpEndpoint::as_str exactly as recorded in this row baseline_signature: pub fn as_str(&self) -> &str",
         "receiver: preserve released &self receiver at sc_observability_otlp::OtlpEndpoint::as_str boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released OtlpEndpoint facade in compat.rs delegates to its wrapped config::OtlpEndpoint; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4622,7 +4622,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "OtlpEndpoint",
+        "owner": "config::OtlpEndpoint",
         "member": "as_str"
       },
       "removable_paths": [
@@ -4633,13 +4633,13 @@
       "symbol": "sc_observability_otlp::AuthHeader::new",
       "owner": "sc_observability_otlp::AuthHeader",
       "baseline_signature": "pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
-      "canonical_signature": "pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
+      "canonical_signature": "pub fn new_typed(value: impl Into<String>) -> Result<Self, sc_observability_types::v2::ConfigFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::AuthHeader::new exactly as recorded in this row baseline_signature: pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
         "error: preserve released InitError failure type at sc_observability_otlp::AuthHeader::new boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released AuthHeader facade in compat.rs delegates to config::AuthHeader::new_typed, converts ConfigFailure to InitFailure, then maps the released new result to InitError; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4649,8 +4649,8 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "AuthHeader",
-        "member": "new"
+        "owner": "config::AuthHeader",
+        "member": "new_typed"
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs"
@@ -4692,8 +4692,8 @@
         "signature: preserve sc_observability_otlp::AuthHeader::as_str exactly as recorded in this row baseline_signature: pub fn as_str(&self) -> &str",
         "receiver: preserve released &self receiver at sc_observability_otlp::AuthHeader::as_str boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released AuthHeader facade in compat.rs delegates to its wrapped config::AuthHeader; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4703,7 +4703,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "AuthHeader",
+        "owner": "config::AuthHeader",
         "member": "as_str"
       },
       "removable_paths": [
@@ -4719,8 +4719,8 @@
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::new exactly as recorded in this row baseline_signature: pub fn new(service_name: ServiceName) -> Self",
         "receiver: baseline declares no receiver; preserve sc_observability_otlp::TelemetryConfigBuilder::new as an associated function"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryConfigBuilder facade in compat.rs retains released builder state and validates its converted config::TelemetryConfig; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4730,7 +4730,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "TelemetryConfigBuilder",
+        "owner": "config::TelemetryConfigBuilder",
         "member": "new"
       },
       "removable_paths": [
@@ -4746,8 +4746,8 @@
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::with_resource exactly as recorded in this row baseline_signature: pub fn with_resource(mut self, resource: ResourceAttributes) -> Self",
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::with_resource boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryConfigBuilder facade in compat.rs retains released builder state and validates its converted config::TelemetryConfig; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4757,7 +4757,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "TelemetryConfigBuilder",
+        "owner": "config::TelemetryConfigBuilder",
         "member": "with_resource"
       },
       "removable_paths": [
@@ -4768,13 +4768,13 @@
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::with_transport",
       "owner": "sc_observability_otlp::TelemetryConfigBuilder",
       "baseline_signature": "pub fn with_transport(mut self, transport: OtelConfig) -> Self",
-      "canonical_signature": "pub fn with_transport(mut self, transport: OtelConfig) -> Self",
+      "canonical_signature": "pub fn with_transport(mut self, transport: config::OtelConfig) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::with_transport exactly as recorded in this row baseline_signature: pub fn with_transport(mut self, transport: OtelConfig) -> Self",
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::with_transport boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released TelemetryConfigBuilder facade retains compat::OtelConfig and converts it to config::OtelConfig for validation; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4784,7 +4784,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "TelemetryConfigBuilder",
+        "owner": "config::TelemetryConfigBuilder",
         "member": "with_transport"
       },
       "removable_paths": [
@@ -4800,8 +4800,8 @@
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::enable_logs exactly as recorded in this row baseline_signature: pub fn enable_logs(mut self, config: LogsConfig) -> Self",
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::enable_logs boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryConfigBuilder facade in compat.rs retains released builder state and validates its converted config::TelemetryConfig; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4811,7 +4811,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "TelemetryConfigBuilder",
+        "owner": "config::TelemetryConfigBuilder",
         "member": "enable_logs"
       },
       "removable_paths": [
@@ -4827,8 +4827,8 @@
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::enable_traces exactly as recorded in this row baseline_signature: pub fn enable_traces(mut self, config: TracesConfig) -> Self",
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::enable_traces boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryConfigBuilder facade in compat.rs retains released builder state and validates its converted config::TelemetryConfig; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4838,7 +4838,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "TelemetryConfigBuilder",
+        "owner": "config::TelemetryConfigBuilder",
         "member": "enable_traces"
       },
       "removable_paths": [
@@ -4854,8 +4854,8 @@
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::enable_metrics exactly as recorded in this row baseline_signature: pub fn enable_metrics(mut self, config: MetricsConfig) -> Self",
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryConfigBuilder::enable_metrics boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryConfigBuilder facade in compat.rs retains released builder state and validates its converted config::TelemetryConfig; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4865,7 +4865,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "TelemetryConfigBuilder",
+        "owner": "config::TelemetryConfigBuilder",
         "member": "enable_metrics"
       },
       "removable_paths": [
@@ -4876,13 +4876,13 @@
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::build",
       "owner": "sc_observability_otlp::TelemetryConfigBuilder",
       "baseline_signature": "pub fn build(self) -> Result<TelemetryConfig, InitError>",
-      "canonical_signature": "pub fn build(self) -> Result<TelemetryConfig, InitError>",
+      "canonical_signature": "pub fn build_typed(self) -> Result<config::TelemetryConfig, InitFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::build exactly as recorded in this row baseline_signature: pub fn build(self) -> Result<TelemetryConfig, InitError>",
         "error: preserve released InitError failure type at sc_observability_otlp::TelemetryConfigBuilder::build boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released TelemetryConfigBuilder facade builds a released TelemetryConfig, validates its converted config::TelemetryConfig, and maps InitFailure to the released InitError; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4892,8 +4892,8 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "TelemetryConfigBuilder",
-        "member": "build"
+        "owner": "config::TelemetryConfigBuilder",
+        "member": "build_typed"
       },
       "removable_paths": [
         "crates/sc-observability-otlp/src/compat.rs"
@@ -4903,13 +4903,13 @@
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::build_typed",
       "owner": "sc_observability_otlp::TelemetryConfigBuilder",
       "baseline_signature": "pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure>",
-      "canonical_signature": "pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure>",
+      "canonical_signature": "pub fn build_typed(self) -> Result<config::TelemetryConfig, InitFailure>",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryConfigBuilder::build_typed exactly as recorded in this row baseline_signature: pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure>",
         "error: preserve released InitFailure failure type at sc_observability_otlp::TelemetryConfigBuilder::build_typed boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released TelemetryConfigBuilder facade builds a released TelemetryConfig and validates its converted config::TelemetryConfig; the canonical config owner does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4919,7 +4919,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "TelemetryConfigBuilder",
+        "owner": "config::TelemetryConfigBuilder",
         "member": "build_typed"
       },
       "removable_paths": [
