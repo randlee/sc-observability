@@ -1,4 +1,5 @@
 """Focused fixture coverage for compatibility registry signature validation."""
+import json
 import os
 import subprocess
 import sys
@@ -11,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from compatibility_registry import (  # noqa: E402
     BASELINE_COMMIT,
     DEPRECATED_OWNER_BASELINE,
+    deprecated_owner_exception_records,
     deprecated_owner_names,
     has_placeholder_baseline_signature,
     is_allowed_compat_reference_source,
@@ -28,6 +30,23 @@ def baseline_source(relative: str) -> str | None:
         ["git", "-C", str(REPO_ROOT), "show", f"{BASELINE_COMMIT}:{relative}"],
         capture_output=True, text=True, check=False)
     return result.stdout if result.returncode == 0 else None
+
+
+def exceptions(relative: str, *symbols: str) -> dict:
+    """Registry fragment with one structured deprecated-owner exception record."""
+    return {"deprecated_owner_exceptions": [{
+        "file": relative, "deprecated_symbols": list(symbols),
+        "reason": "fixture reason", "removal_point": "fixture removal point"}]}
+
+
+def validate_source(relative: str, contents: str, registry=None, baseline=None) -> None:
+    """Validate one temporary source file against a registry fragment and baseline."""
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+        validate_compatibility_source_boundary(root, [path], registry or {}, baseline or {})
 
 
 class BaselineSignatureTests(unittest.TestCase):
@@ -194,48 +213,44 @@ class CompatibilitySourceBoundaryTests(unittest.TestCase):
                 root, [source], {"compat_root_reexport_exceptions": [relative]})
 
     def validate(self, relative: str, contents: str, registry=None, baseline=None):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = self.source_file(root, relative, contents)
-            validate_compatibility_source_boundary(
-                root, [source], registry or {}, baseline or {})
+        validate_source(relative, contents, registry, baseline)
 
     def test_recorded_deprecated_owner_is_accepted(self):
         relative = "crates/example/src/runtime.rs"
         self.validate(relative, "#[deprecated]\npub fn old() {}\n",
-                      {"deprecated_owner_exceptions": [relative]}, {relative: ("old",)})
+                      exceptions(relative, "old"), {relative: ("old",)})
 
     def test_deprecated_owner_beyond_baseline_is_rejected(self):
         relative = "crates/example/src/runtime.rs"
         with self.assertRaisesRegex(ValueError, "exceeds v1.4.1 baseline: .*: new_owner"):
             self.validate(relative, "#[deprecated]\npub fn old() {}\n#[deprecated]\npub fn new_owner() {}\n",
-                          {"deprecated_owner_exceptions": [relative]}, {relative: ("old",)})
+                          exceptions(relative, "old"), {relative: ("old",)})
 
     def test_renamed_deprecated_owner_within_baseline_count_is_rejected(self):
         relative = "crates/example/src/runtime.rs"
         with self.assertRaisesRegex(ValueError, "exceeds v1.4.1 baseline: .*: emit_canonical"):
             self.validate(relative, "#[deprecated]\npub fn emit_canonical() {}\n",
-                          {"deprecated_owner_exceptions": [relative]}, {relative: ("emit", "flush")})
+                          exceptions(relative, "emit"), {relative: ("emit", "flush")})
 
     def test_repeated_deprecated_owner_beyond_baseline_count_is_rejected(self):
         relative = "crates/example/src/runtime.rs"
         contents = "impl A {\n#[deprecated]\npub fn new() {}\n}\nimpl B {\n#[deprecated]\npub fn new() {}\n}\n"
         with self.assertRaisesRegex(ValueError, "exceeds v1.4.1 baseline: .*: new"):
             self.validate(relative, contents,
-                          {"deprecated_owner_exceptions": [relative]}, {relative: ("new",)})
+                          exceptions(relative, "new"), {relative: ("new",)})
 
     def test_new_same_line_owner_before_baseline_named_item_is_rejected(self):
         relative = "crates/example/src/lib.rs"
         contents = "#[deprecated] pub fn brand_new() {}\npub fn max_age_days() {}\n"
         with self.assertRaisesRegex(ValueError, "exceeds v1.4.1 baseline: .*: brand_new"):
             self.validate(
-                relative, contents, {"deprecated_owner_exceptions": [relative]}, {relative: ("max_age_days",)})
+                relative, contents, exceptions(relative, "max_age_days"), {relative: ("max_age_days",)})
 
     def test_exception_without_baseline_is_rejected(self):
         relative = "crates/example/src/runtime.rs"
         with self.assertRaisesRegex(ValueError, "exception has no v1.4.1 baseline"):
             self.validate(relative, "#[deprecated]\npub fn old() {}\n",
-                          {"deprecated_owner_exceptions": [relative]}, {})
+                          exceptions(relative, "old"), {})
 
     def test_suffixed_compat_path_is_not_a_compat_reference(self):
         self.validate("crates/example/src/runtime.rs", "use crate::foo_compat::Legacy;\n")
@@ -257,6 +272,79 @@ class CompatibilitySourceBoundaryTests(unittest.TestCase):
 
     def test_compatibility_module_declaration_is_not_compat(self):
         self.validate("crates/example/src/runtime.rs", "mod compatibility;\n")
+
+
+class DeprecatedOwnerExceptionRecordTests(unittest.TestCase):
+    RELATIVE = "crates/example/src/runtime.rs"
+    BASELINE = {RELATIVE: ("old", "legacy")}
+
+    def records(self, **overrides):
+        record = exceptions(self.RELATIVE, "old")["deprecated_owner_exceptions"][0]
+        record.update(overrides)
+        return {"deprecated_owner_exceptions": [record]}
+
+    def reject(self, registry, message):
+        with self.assertRaisesRegex(ValueError, message):
+            deprecated_owner_exception_records(registry, self.BASELINE)
+
+    def test_complete_record_returns_its_symbols(self):
+        self.assertEqual(deprecated_owner_exception_records(self.records(), self.BASELINE),
+                         {self.RELATIVE: ("old",)})
+
+    def test_bare_path_entry_is_rejected(self):
+        self.reject({"deprecated_owner_exceptions": [self.RELATIVE]}, "malformed deprecated owner exception record")
+
+    def test_missing_and_extra_fields_are_rejected(self):
+        record = self.records()["deprecated_owner_exceptions"][0]
+        del record["reason"]
+        self.reject({"deprecated_owner_exceptions": [record]}, "malformed deprecated owner exception record")
+        self.reject(self.records(approved_by="nobody"), "malformed deprecated owner exception record")
+
+    def test_duplicate_file_record_is_rejected(self):
+        registry = self.records()
+        registry["deprecated_owner_exceptions"].append(dict(registry["deprecated_owner_exceptions"][0]))
+        self.reject(registry, "duplicate deprecated owner exception")
+
+    def test_blank_reason_and_removal_point_are_rejected(self):
+        self.reject(self.records(reason="  "), "blank reason")
+        self.reject(self.records(removal_point=""), "blank removal_point")
+
+    def test_empty_symbol_list_is_rejected(self):
+        self.reject(self.records(deprecated_symbols=[]), "must name its deprecated symbols")
+
+    def test_symbol_outside_baseline_is_rejected(self):
+        self.reject(self.records(deprecated_symbols=["old", "invented"]),
+                    "declares symbols outside the v1.4.1 baseline: .*: invented")
+
+    def test_declared_symbol_missing_from_source_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "exception symbols differ from source"):
+            validate_source(
+                self.RELATIVE, "#[deprecated]\npub fn old() {}\n",
+                exceptions(self.RELATIVE, "old", "legacy"), self.BASELINE)
+
+    def test_undeclared_baseline_owner_in_source_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "exception symbols differ from source"):
+            validate_source(
+                self.RELATIVE, "#[deprecated]\npub fn old() {}\n#[deprecated]\npub fn legacy() {}\n",
+                exceptions(self.RELATIVE, "old"), self.BASELINE)
+
+    def test_record_for_file_without_deprecated_owners_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "names a file without deprecated owners"):
+            validate_source(
+                self.RELATIVE, "pub fn old() {}\n", exceptions(self.RELATIVE, "old"), self.BASELINE)
+
+    def test_repository_records_match_their_source(self):
+        registry = json.loads((REPO_ROOT / "docs/compatibility/registry.json").read_text(encoding="utf-8"))
+        records = deprecated_owner_exception_records(registry)
+        self.assertEqual(sorted(records), [
+            "crates/sc-observability-otlp/src/assembly.rs",
+            "crates/sc-observability-types/src/errors.rs",
+            "crates/sc-observability/src/lib.rs",
+        ])
+        for relative, symbols in records.items():
+            with self.subTest(relative=relative):
+                source = (REPO_ROOT / relative).read_text(encoding="utf-8")
+                self.assertEqual(deprecated_owner_names(source), list(symbols))
 
 
 class DeprecatedOwnerNameTests(unittest.TestCase):

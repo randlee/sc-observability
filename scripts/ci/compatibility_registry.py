@@ -141,6 +141,47 @@ def deprecated_owner_names(text: str) -> list[str]:
     return names
 
 
+DEPRECATED_OWNER_EXCEPTION_FIELDS = frozenset({"file", "deprecated_symbols", "reason", "removal_point"})
+
+
+def deprecated_owner_exception_records(
+    registry: dict, baseline: Mapping[str, tuple[str, ...]] = DEPRECATED_OWNER_BASELINE
+) -> dict[str, tuple[str, ...]]:
+    """Return each excepted file's declared deprecated symbols after checking its record."""
+    records = registry.get("deprecated_owner_exceptions", [])
+    if not isinstance(records, list):
+        raise ValueError("deprecated_owner_exceptions must be a list of records")
+    declared: dict[str, tuple[str, ...]] = {}
+    for record in records:
+        if not isinstance(record, dict) or set(record) != DEPRECATED_OWNER_EXCEPTION_FIELDS:
+            raise ValueError(f"malformed deprecated owner exception record: {record!r}")
+        relative = record["file"]
+        if not isinstance(relative, str) or not relative.strip():
+            raise ValueError(f"deprecated owner exception has no file: {record!r}")
+        if relative in declared:
+            raise ValueError(f"duplicate deprecated owner exception: {relative}")
+        if relative not in baseline:
+            raise ValueError(f"deprecated owner exception has no v1.4.1 baseline: {relative}")
+        for field in ("reason", "removal_point"):
+            if not isinstance(record[field], str) or not record[field].strip():
+                raise ValueError(f"deprecated owner exception has a blank {field}: {relative}")
+        symbols = record["deprecated_symbols"]
+        if (
+            not isinstance(symbols, list)
+            or not symbols
+            or any(not isinstance(symbol, str) or not symbol.strip() for symbol in symbols)
+        ):
+            raise ValueError(f"deprecated owner exception must name its deprecated symbols: {relative}")
+        unknown = Counter(symbols) - Counter(baseline[relative])
+        if unknown:
+            raise ValueError(
+                f"deprecated owner exception declares symbols outside the v1.4.1 baseline: {relative}: "
+                f"{', '.join(sorted(unknown.elements()))}"
+            )
+        declared[relative] = tuple(symbols)
+    return declared
+
+
 def validate_compatibility_source_boundary(
     root: Path,
     source_files: Iterable[Path],
@@ -148,10 +189,9 @@ def validate_compatibility_source_boundary(
     baseline: Mapping[str, tuple[str, ...]] = DEPRECATED_OWNER_BASELINE,
 ) -> None:
     """Reject canonical-to-compat imports and deprecated owners beyond the baseline."""
-    deprecated_exceptions = set(registry.get("deprecated_owner_exceptions", []))
+    deprecated_exceptions = deprecated_owner_exception_records(registry, baseline)
     root_reexport_exceptions = set(registry.get("compat_root_reexport_exceptions", []))
-    for relative in sorted(deprecated_exceptions - set(baseline)):
-        raise ValueError(f"deprecated owner exception has no v1.4.1 baseline: {relative}")
+    owning_files = set()
 
     for path in source_files:
         relative = path.relative_to(root).as_posix()
@@ -171,8 +211,17 @@ def validate_compatibility_source_boundary(
             continue
         if relative not in deprecated_exceptions:
             raise ValueError(f"deprecated owner is outside compat without registry exception: {relative}")
-        excess = Counter(deprecated_owner_names(text)) - Counter(baseline[relative])
+        names = Counter(deprecated_owner_names(text))
+        excess = names - Counter(baseline[relative])
         if excess:
             raise ValueError(
                 f"deprecated owner exceeds v1.4.1 baseline: {relative}: {', '.join(sorted(excess.elements()))}"
             )
+        if names != Counter(deprecated_exceptions[relative]):
+            raise ValueError(
+                f"deprecated owner exception symbols differ from source: {relative}: "
+                f"declared {', '.join(deprecated_exceptions[relative])}; source {', '.join(sorted(names.elements()))}"
+            )
+        owning_files.add(relative)
+    for relative in sorted(set(deprecated_exceptions) - owning_files):
+        raise ValueError(f"deprecated owner exception names a file without deprecated owners: {relative}")
