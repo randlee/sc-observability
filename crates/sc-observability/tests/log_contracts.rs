@@ -30,11 +30,8 @@ struct FixtureLogSettings {
 struct FixtureLogRoot(PathBuf);
 
 impl FixtureLogRoot {
-    fn new(path: PathBuf) -> Result<Self, FixtureLogSettingsError> {
-        if path.as_os_str().is_empty() {
-            return Err(FixtureLogSettingsError::InvalidValue);
-        }
-        Ok(Self(path))
+    fn new(path: PathBuf) -> Self {
+        Self(path)
     }
 
     fn as_path(&self) -> &Path {
@@ -59,23 +56,10 @@ struct FixtureLogSettingsInputs {
     default_root: PathBuf,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FixtureLogSettingsError {
-    InvalidValue,
-}
-
-impl FixtureLogSettingsError {
-    const fn code(self) -> &'static str {
-        match self {
-            Self::InvalidValue => "SC_LOG_SETTINGS_INVALID_VALUE",
-        }
-    }
-}
-
 impl FixtureLogSettings {
-    fn resolve(
-        inputs: FixtureLogSettingsInputs,
-    ) -> Result<FixtureResolvedLogSettings, FixtureLogSettingsError> {
+    // This private fixture preserves precedence shape only. Production
+    // log_settings tests own validation of the effective resolved root.
+    fn resolve(inputs: FixtureLogSettingsInputs) -> FixtureResolvedLogSettings {
         let FixtureLogSettingsInputs {
             file,
             shared_env,
@@ -84,17 +68,6 @@ impl FixtureLogSettings {
         } = inputs;
         let application_env = application_env.unwrap_or_default();
         let file = file.unwrap_or_default();
-        // A root's presence is significant even when it is empty.  Validate
-        // every supplied source before precedence can choose another value.
-        for root in [
-            file.log_root.as_ref(),
-            shared_env.log_root.as_ref(),
-            application_env.log_root.as_ref(),
-        ] {
-            if root.is_some_and(|root| root.as_os_str().is_empty()) {
-                return Err(FixtureLogSettingsError::InvalidValue);
-            }
-        }
         let level = application_env
             .level
             .or(shared_env.level)
@@ -123,13 +96,13 @@ impl FixtureLogSettings {
             .or(file.retained_log_policy)
             .unwrap_or_default();
 
-        Ok(FixtureResolvedLogSettings {
+        FixtureResolvedLogSettings {
             level,
-            log_root: FixtureLogRoot::new(root)?,
+            log_root: FixtureLogRoot::new(root),
             enable_file_sink,
             enable_console_sink,
             retained_log_policy,
-        })
+        }
     }
 }
 
@@ -202,31 +175,8 @@ fn log_root_validation() {
             ..FixtureLogSettings::default()
         }),
         default_root: PathBuf::from("default"),
-    })
-    .expect("configured root resolves");
+    });
     assert_eq!(resolved.log_root.as_path(), Path::new("configured"));
-
-    let error = FixtureLogRoot::new(PathBuf::new()).expect_err("empty root is rejected");
-    assert_eq!(error, FixtureLogSettingsError::InvalidValue);
-    assert_eq!(error.code(), "SC_LOG_SETTINGS_INVALID_VALUE");
-
-    let error = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
-        file: Some(FixtureLogSettings {
-            log_root: Some(PathBuf::new()),
-            ..FixtureLogSettings::default()
-        }),
-        shared_env: FixtureLogSettings {
-            log_root: Some(PathBuf::from("shared")),
-            ..FixtureLogSettings::default()
-        },
-        application_env: Some(FixtureLogSettings {
-            log_root: Some(PathBuf::from("application")),
-            ..FixtureLogSettings::default()
-        }),
-        default_root: PathBuf::from("default"),
-    })
-    .expect_err("an explicitly empty JSON root is invalid, never overridden");
-    assert_eq!(error, FixtureLogSettingsError::InvalidValue);
 }
 
 fn policy(
@@ -376,8 +326,7 @@ fn settings_resolution_contract_table() {
             shared_env: case.shared_env,
             application_env: case.application_env,
             default_root: PathBuf::from("default"),
-        })
-        .unwrap_or_else(|error| panic!("{}: {error:?}", case.name));
+        });
         assert_eq!(resolved.level, case.expected_level, "{}", case.name);
         assert_eq!(
             resolved.log_root.as_path(),
@@ -436,8 +385,7 @@ fn settings_null_empty_environment_and_atomic_policy_contracts() {
         ),
         application_env: Some(null_json),
         default_root: PathBuf::from("default"),
-    })
-    .expect("null JSON fields do not override SC environment values");
+    });
     assert_eq!(resolved.level, LevelFilter::Warn);
     assert_eq!(resolved.log_root.as_path(), Path::new("shared"));
     assert!(!resolved.enable_file_sink);
@@ -455,21 +403,11 @@ fn settings_null_empty_environment_and_atomic_policy_contracts() {
         shared_env: settings(None, None, None, None, Some(shared_policy)),
         application_env: Some(settings(None, None, None, None, Some(application_policy))),
         default_root: PathBuf::from("default"),
-    })
-    .expect("policy resolution succeeds");
+    });
     assert_eq!(
         resolved.retained_log_policy, application_policy,
         "the winning retainedLogPolicy replaces the complete policy instead of merging fields"
     );
-
-    let error = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
-        file: None,
-        shared_env: settings(None, Some(""), None, None, None),
-        application_env: None,
-        default_root: PathBuf::from("default"),
-    })
-    .expect_err("an explicitly empty SC_LOG_ROOT is invalid");
-    assert_eq!(error, FixtureLogSettingsError::InvalidValue);
 }
 
 fn contract_event() -> LogEvent {
