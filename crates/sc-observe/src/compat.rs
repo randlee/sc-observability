@@ -197,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn released_root_error_adapters_preserve_canonical_context_and_source() {
+    fn direct_root_error_adapters_preserve_canonical_context_and_source() {
         let init = legacy_init_error(InitError::Runtime {
             context: context("root init native source"),
         });
