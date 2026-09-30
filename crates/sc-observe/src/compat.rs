@@ -133,3 +133,58 @@ impl ObservabilityBuilder {
         self.build_v2().map_err(InitFailure::from)
     }
 }
+
+#[cfg(test)]
+#[allow(deprecated, reason = "tests exercise the released root error wrappers")]
+mod tests {
+    use super::*;
+    use sc_observability_types::{DiagnosticInfo, ErrorCode, ErrorContext, Remediation};
+
+    fn context(native_source: &'static str) -> Box<ErrorContext> {
+        Box::new(
+            ErrorContext::new(
+                ErrorCode::new_static("SC_OBSERVE_ROOT_CONTEXT_FIXTURE"),
+                "canonical root error fixture",
+                Remediation::not_recoverable("inspect the root adapter fixture"),
+            )
+            .source(Box::new(std::io::Error::other(native_source))),
+        )
+    }
+
+    fn assert_legacy_root_error(
+        error: &(impl std::error::Error + DiagnosticInfo),
+        native_source: &str,
+    ) {
+        assert_eq!(
+            error.diagnostic().code.as_str(),
+            "SC_OBSERVE_ROOT_CONTEXT_FIXTURE"
+        );
+        let context = std::error::Error::source(error)
+            .expect("released root wrapper retains the canonical context");
+        assert_eq!(
+            std::error::Error::source(context)
+                .map(ToString::to_string)
+                .as_deref(),
+            Some(native_source),
+            "released root wrapper retains the native canonical source"
+        );
+    }
+
+    #[test]
+    fn released_root_error_adapters_preserve_canonical_context_and_source() {
+        let init = legacy_init_error(InitError::Runtime {
+            context: context("root init native source"),
+        });
+        assert_legacy_root_error(&init, "root init native source");
+
+        let flush = legacy_flush_error(FlushError::Drain {
+            context: context("root flush native source"),
+        });
+        assert_legacy_root_error(&flush, "root flush native source");
+
+        let shutdown = legacy_shutdown_error(ShutdownError::Drain {
+            context: context("root shutdown native source"),
+        });
+        assert_legacy_root_error(&shutdown, "root shutdown native source");
+    }
+}

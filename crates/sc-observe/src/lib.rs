@@ -1336,8 +1336,8 @@ mod tests {
     }
 
     #[test]
-    fn legacy_compatibility_boundary_preserves_canonical_source_context() {
-        let legacy = CanonicalFlushError::Drain {
+    fn canonical_flush_error_preserves_its_source_context() {
+        let canonical = CanonicalFlushError::Drain {
             context: Box::new(
                 ErrorContext::new(
                     ErrorCode::new_static("SC_OBSERVE_TEST_DRAIN"),
@@ -1350,12 +1350,36 @@ mod tests {
             ),
         };
 
-        assert_eq!(legacy.diagnostic().code.as_str(), "SC_OBSERVE_TEST_DRAIN");
+        assert_eq!(
+            canonical.diagnostic().code.as_str(),
+            "SC_OBSERVE_TEST_DRAIN"
+        );
         assert!(
-            std::error::Error::source(&legacy)
-                .expect("legacy boundary retains canonical source")
+            std::error::Error::source(&canonical)
+                .expect("canonical error retains its source")
                 .to_string()
                 .contains("canonical drain fixture source")
+        );
+    }
+
+    #[test]
+    fn released_root_init_error_preserves_canonical_context_and_source() {
+        let init_error = ObservabilityConfig::default_for(
+            ToolName::new(".").expect("fixture tool name is an identifier"),
+            temp_path("root-init-error"),
+        )
+        .expect_err("invalid derived environment prefix must fail root initialization");
+        assert_eq!(
+            init_error.diagnostic().code,
+            error_codes::OBSERVABILITY_INIT_FAILED
+        );
+        let context = std::error::Error::source(&init_error)
+            .expect("released root init error retains canonical context");
+        assert_eq!(
+            std::error::Error::source(context)
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("env prefix must not end with underscore")
         );
     }
 
