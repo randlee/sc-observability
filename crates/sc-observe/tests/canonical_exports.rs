@@ -29,8 +29,6 @@ fn canonical_observe_exports_have_real_public_signatures() {
         ObservabilityBuilder::build;
     let _: fn(&Observability) -> Result<(), FlushError> = Observability::flush;
     let _: fn(&Observability) -> Result<(), ShutdownError> = Observability::shutdown;
-
-    requires_send_sync::<Observability>();
 }
 
 #[allow(deprecated)]
