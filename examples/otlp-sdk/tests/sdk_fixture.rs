@@ -7,8 +7,9 @@
 
 #![cfg(feature = "sdk-fixture")]
 
-use sc_observability_otlp::{
-    ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, SdkFixture,
+use sc_observability_otlp::SdkFixture;
+use sc_observability_otlp::v2::{
+    ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
     TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL;
