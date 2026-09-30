@@ -49,9 +49,10 @@ def registry_absent(crate: str) -> bool:
         raise
 
 
-def validate_compatible_policy(policy: dict) -> None:
+def validate_compatible_policy(policy: dict, root: Path | None = None) -> None:
     """Fail closed unless the active candidate is a compatible 1.x release."""
-    path = ROOT / 'release/public-api-major-breaks.toml'
+    root = ROOT if root is None else root
+    path = root / 'release/public-api-major-breaks.toml'
     manifest = tomllib.loads(path.read_text(encoding='utf-8'))
     candidate = policy.get('candidate_version', '')
     if (policy.get('schema_version') != 1

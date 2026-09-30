@@ -5,6 +5,8 @@ import re
 import tomllib
 from pathlib import Path
 
+from validate_public_api import validate_compatible_policy
+
 
 HISTORICAL_LOCKS = {
     Path("crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-baseline/Cargo.lock"),
@@ -86,19 +88,14 @@ def validate(root: Path) -> None:
         if match and match[1] == version and f"{version}" not in path.read_text(encoding="utf-8"):
             raise ValueError(f"{path}: release notes omit their release version")
     api_policy = json.loads((root / "release/public-api-policy.json").read_text(encoding="utf-8"))
-    if api_policy.get("candidate_version") != version or not api_policy.get("crates"):
+    if api_policy.get("candidate_version") != version:
         raise ValueError("public API policy candidate must match the workspace release version")
-    if any(item.get("baseline_version") != "1.4.1" for item in api_policy["crates"].values()):
-        raise ValueError("every published API crate must use the actual 1.4.1 baseline")
+    validate_compatible_policy(api_policy, root)
     workspace_lock = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
     locked_packages = {item["name"]: item["version"] for item in workspace_lock.get("package", [])}
     for crate in api_policy["crates"]:
         if locked_packages.get(crate) != version:
             raise ValueError(f"Cargo.lock: {crate} must resolve to candidate version {version}")
-    breaks = tomllib.loads((root / "release/public-api-major-breaks.toml").read_text(encoding="utf-8"))
-    if (breaks.get("candidate_version") != version or breaks.get("baseline_version") != "1.4.1"
-            or breaks.get("breaks") != []):
-        raise ValueError("compatible release requires a matching 1.4.1 baseline and no API break exceptions")
     python_policy = json.loads((root / "release/python-platform-policy.json").read_text(encoding="utf-8"))
     if python_policy.get("candidate_version") != version:
         raise ValueError("Python release policy candidate must match the workspace release version")
