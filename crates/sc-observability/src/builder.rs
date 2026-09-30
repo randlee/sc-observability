@@ -9,8 +9,9 @@ use sc_observability_types::{ErrorContext, Remediation, v2::InitError as Canonic
 
 use crate::typed::{TypedLogSink, legacy_sink};
 use crate::{
-    ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, Logger, LoggerConfig, LoggerRuntime,
-    QueueCapacity, Running, SinkHealthState, SinkRegistration, default_log_path, error_codes,
+    CanonicalLogger, ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, LoggerConfig,
+    LoggerRuntime, QueueCapacity, Running, SinkHealthState, SinkRegistration, default_log_path,
+    error_codes,
 };
 
 impl SinkRegistration {
@@ -29,7 +30,7 @@ impl SinkRegistration {
     missing_debug_implementations,
     reason = "the builder stores registration trait objects whose debug representation is not part of the public API"
 )]
-pub struct LoggerBuilder {
+pub struct CanonicalLoggerBuilder {
     config: LoggerConfig,
     file_sink: Option<Arc<JsonlFileSink>>,
     sinks: Vec<SinkRegistration>,
@@ -39,17 +40,17 @@ pub struct LoggerBuilder {
 /// Canonical initialization failure returned when sink registration is rejected.
 pub type SinkRegistrationError = CanonicalInitError;
 
-impl LoggerBuilder {
+impl CanonicalLoggerBuilder {
     /// Creates a builder with the configured built-in sinks.
     ///
     /// # Examples
     ///
     /// ```
     /// use std::path::PathBuf;
-    /// use sc_observability::{LoggerBuilder, LoggerConfig};
+    /// use sc_observability::{LoggerConfig, v2::LoggerBuilder};
     /// use sc_observability_types::ServiceName;
     ///
-    /// let builder = LoggerBuilder::new_canonical(LoggerConfig::default_for(
+    /// let builder = LoggerBuilder::new(LoggerConfig::default_for(
     ///     ServiceName::new("demo").expect("valid service"),
     ///     PathBuf::from("logs"),
     /// ))
@@ -57,7 +58,7 @@ impl LoggerBuilder {
     ///
     /// let _logger = builder.build();
     /// ```
-    pub fn new_canonical(config: LoggerConfig) -> Result<Self, CanonicalInitError> {
+    pub fn new(config: LoggerConfig) -> Result<Self, CanonicalInitError> {
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let mut sinks = Vec::new();
         let mut file_sink = None;
@@ -82,7 +83,7 @@ impl LoggerBuilder {
 
     /// Creates a builder with the released typed initialization failure.
     pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
-        Self::new_canonical(config).map_err(|error| InitFailure::from_context(error.into_context()))
+        Self::new(config).map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     /// Registers one additional sink before the logger runtime is built.
@@ -153,32 +154,21 @@ impl LoggerBuilder {
         Ok(self.register_sink(SinkRegistration::typed(sink)))
     }
 
-    /// Finalizes construction and returns the logger runtime.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the writer runtime cannot start, preserving the released
-    /// infallible builder contract.
-    pub fn build(self) -> Logger<Running> {
-        self.build_canonical()
-            .expect("existing infallible builder expects writer thread startup")
-    }
-
     /// Finalizes construction with the canonical recoverable error surface.
-    pub fn build_canonical(self) -> Result<Logger<Running>, CanonicalInitError> {
+    pub fn build(self) -> Result<CanonicalLogger<Running>, CanonicalInitError> {
         self.build_inner().map(|(logger, _)| logger)
     }
 
     /// Finalizes construction with the released typed initialization failure.
-    pub fn build_typed(self) -> Result<Logger<Running>, InitFailure> {
-        self.build_canonical()
+    pub fn build_typed(self) -> Result<CanonicalLogger<Running>, InitFailure> {
+        self.build()
             .map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     /// Finalizes construction and returns the logger with weak level ownership.
-    pub fn build_with_level_owner_canonical(
+    pub fn build_with_level_owner(
         self,
-    ) -> Result<(Logger<Running>, LevelOwner), CanonicalInitError> {
+    ) -> Result<(CanonicalLogger<Running>, LevelOwner), CanonicalInitError> {
         let (logger, control) = self.build_inner()?;
         Ok((logger, LevelOwner::new(&control)))
     }
@@ -186,14 +176,14 @@ impl LoggerBuilder {
     /// Finalizes construction with the released typed initialization failure.
     pub fn build_with_level_owner_typed(
         self,
-    ) -> Result<(Logger<Running>, LevelOwner), InitFailure> {
-        self.build_with_level_owner_canonical()
+    ) -> Result<(CanonicalLogger<Running>, LevelOwner), InitFailure> {
+        self.build_with_level_owner()
             .map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     fn build_inner(
         self,
-    ) -> Result<(Logger<Running>, Arc<Mutex<LevelControl>>), CanonicalInitError> {
+    ) -> Result<(CanonicalLogger<Running>, Arc<Mutex<LevelControl>>), CanonicalInitError> {
         let Self {
             config,
             file_sink,
@@ -208,7 +198,7 @@ impl LoggerBuilder {
                         "enable a built-in sink or register a sink before building the logger",
                         [
                             "set LoggerConfig.enable_file_sink or enable_console_sink to true",
-                            "register a sink with LoggerBuilder::register_sink",
+                            "register a sink with v2::LoggerBuilder::register_sink",
                         ],
                     ),
                 )
@@ -250,7 +240,7 @@ impl LoggerBuilder {
         let diagnostic_admitter = runtime.diagnostic_admitter();
         let control = Arc::new(Mutex::new(LevelControl::new(&config, &diagnostic_admitter)));
         Ok((
-            Logger {
+            CanonicalLogger {
                 runtime,
                 diagnostic_admitter: Some(diagnostic_admitter),
                 config,

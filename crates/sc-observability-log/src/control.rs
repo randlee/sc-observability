@@ -181,11 +181,11 @@ impl LogControl {
     reason = "shared admission retains the legacy core boundary until D18"
 )]
 pub(crate) fn submit_event(
-    logger: &sc_observability::Logger,
+    logger: &sc_observability::v2::Logger,
     event: sc_observability_types::LogEvent,
 ) -> Result<EmitOutcome, EmitError> {
     logger
-        .try_log_with_outcome_canonical(event)
+        .try_log_with_outcome(event)
         .map_err(|error| core_emit_error(&error))
 }
 

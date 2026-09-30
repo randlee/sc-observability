@@ -33,7 +33,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-use sc_observability::{Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
+use sc_observability::v2::Logger;
+use sc_observability::{LoggerConfig, RetainedLogPolicy, Running, Stopped};
 use sc_observability_types::v2::{
     EventError, FlushError as CanonicalFlushError, InitError as CanonicalInitError,
     ShutdownError as CanonicalShutdownError, SubscriberError,
@@ -477,7 +478,7 @@ impl Observability {
                 .expect("observability logger poisoned");
         }
         match &*logger {
-            LoggerHandle::Running(logger) => logger.flush_canonical(),
+            LoggerHandle::Running(logger) => logger.flush(),
             LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => Ok(()),
         }
     }
@@ -686,11 +687,11 @@ impl ObservabilityBuilder {
                         Ok(events) => {
                             result.matched = true;
                             for event in events {
-                                if let Err(err) = logger.log_canonical(event) {
+                                if let Err(err) = logger.log(event) {
                                     record_failure(log_error_summary(&err));
                                 }
                             }
-                            if let Err(err) = logger.flush_canonical() {
+                            if let Err(err) = logger.flush() {
                                 record_failure(DiagnosticSummary::from(err.diagnostic()));
                             }
                         }
@@ -732,7 +733,7 @@ impl ObservabilityBuilder {
                 )),
             });
         }
-        let logger = Logger::new_canonical(self.config.logger_config()?)?;
+        let logger = Logger::new(self.config.logger_config()?)?;
         Ok(Observability {
             logger: Mutex::new(LoggerHandle::Running(logger)),
             logger_changed: Condvar::new(),
@@ -1472,10 +1473,8 @@ mod tests {
             entered: entered_tx,
             release: Mutex::new(release_rx),
         })));
-        let logger = builder.build_canonical().expect("built logger");
-        logger
-            .flush_canonical()
-            .expect_err("seed logging failure counter");
+        let logger = builder.build().expect("built logger");
+        logger.flush().expect_err("seed logging failure counter");
         seed_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("seed flush completed before shutdown is armed");
@@ -1782,12 +1781,12 @@ mod tests {
             logger_config.enable_file_sink = false;
             logger_config.enable_console_sink = false;
             let mut builder =
-                sc_observability::Logger::builder(logger_config).expect("logger builder");
+                sc_observability::v2::Logger::builder(logger_config).expect("logger builder");
             builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink {
                 flush_calls: flush_calls.clone(),
                 flush_completed,
             })));
-            let logger = builder.build_canonical().expect("built logger");
+            let logger = builder.build().expect("built logger");
 
             let runtime = Observability {
                 logger: Mutex::new(LoggerHandle::Running(logger)),

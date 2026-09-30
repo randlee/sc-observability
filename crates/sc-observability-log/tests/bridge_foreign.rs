@@ -41,7 +41,7 @@ fn attachment_rejects_a_foreign_process_global_logger() {
     log::set_max_level(log::LevelFilter::Trace);
     let root = tempfile::tempdir().expect("temp root");
     let host = Arc::new(
-        sc_observability::Logger::new(LoggerConfig::default_for(
+        sc_observability::v2::Logger::new(LoggerConfig::default_for(
             ServiceName::new("foreign-facade").expect("service"),
             root.path().to_path_buf(),
         ))

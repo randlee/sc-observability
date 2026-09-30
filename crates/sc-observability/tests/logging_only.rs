@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
 use sc_observability::error_codes;
 use sc_observability::typed::{TypedLogSink, legacy_sink};
+use sc_observability::v2::Logger as CanonicalLogger;
 use sc_observability::*;
 use sc_observability_types::{
     QueryError, QueryHealthState,
@@ -77,6 +78,10 @@ fn event() -> LogEvent {
 }
 
 #[test]
+#[expect(
+    deprecated,
+    reason = "the test intentionally verifies the released logging-only root facade"
+)]
 fn logging_only_consumer_can_emit_without_routing_or_otlp() {
     let root = temp_root("logging-only");
     let logger =
@@ -96,13 +101,13 @@ fn logging_only_consumer_can_emit_without_routing_or_otlp() {
 #[test]
 fn logging_only_consumer_observes_facade_event_and_shutdown_health_contracts() {
     let root = temp_root("typed-event-and-shutdown-health");
-    let logger =
-        Logger::new(LoggerConfig::default_for(service_name(), root.path_buf())).expect("logger");
+    let logger = CanonicalLogger::new(LoggerConfig::default_for(service_name(), root.path_buf()))
+        .expect("logger");
 
     let mut invalid_event = event();
     invalid_event.version = SchemaVersion::new("v0").expect("valid invalid test version");
     let failure = logger
-        .log_canonical(invalid_event)
+        .log(invalid_event)
         .expect_err("invalid event failure");
     let sc_observability_types::v2::EventError::Validation { context } = failure else {
         panic!("expected the canonical validation variant");
@@ -143,6 +148,10 @@ fn logging_only_consumer_observes_facade_event_and_shutdown_health_contracts() {
 }
 
 #[test]
+#[expect(
+    deprecated,
+    reason = "the test intentionally verifies released root log and flush decode-health behavior"
+)]
 fn logging_only_consumer_preserves_decode_health_source() {
     let root = temp_root("decode-health-source");
     let logger =
@@ -244,9 +253,9 @@ fn flush_command_flushes_each_sink_once_after_an_admitted_event() {
     let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
     config.enable_file_sink = false;
     config.enable_console_sink = false;
-    let mut builder = Logger::builder(config).expect("valid builder");
+    let mut builder = CanonicalLogger::builder(config).expect("valid builder");
     builder.register_sink(SinkRegistration::new(sink.clone()));
-    let logger = builder.build_canonical().expect("built logger");
+    let logger = builder.build().expect("built logger");
 
     logger.log(event()).expect("admit event");
     logger.flush().expect("flush barrier");

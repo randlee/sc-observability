@@ -66,6 +66,10 @@ fn config() -> LoggerConfig {
 }
 
 #[test]
+#[expect(
+    deprecated,
+    reason = "the test intentionally verifies released root builder registration and build contracts"
+)]
 fn released_sink_trait_objects_are_thread_safe_and_registerable() {
     let legacy: Arc<dyn LogSink> = Arc::new(LegacySink);
     let typed: Arc<dyn TypedLogSink> = Arc::new(TypedSink);

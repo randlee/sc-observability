@@ -90,10 +90,10 @@ fn options(policy: Arc<dyn BridgeEventPolicy>) -> AttachmentOptions {
     )
 }
 
-fn logger() -> (tempfile::TempDir, Arc<sc_observability::Logger>) {
+fn logger() -> (tempfile::TempDir, Arc<sc_observability::v2::Logger>) {
     let root = tempfile::tempdir().expect("temp root");
     let logger = Arc::new(
-        sc_observability::Logger::new(LoggerConfig::default_for(
+        sc_observability::v2::Logger::new(LoggerConfig::default_for(
             ServiceName::new("attachment").expect("service"),
             root.path().to_path_buf(),
         ))
@@ -104,7 +104,7 @@ fn logger() -> (tempfile::TempDir, Arc<sc_observability::Logger>) {
 
 fn recording_logger() -> (
     tempfile::TempDir,
-    Arc<sc_observability::Logger>,
+    Arc<sc_observability::v2::Logger>,
     Arc<Mutex<Vec<LogEvent>>>,
 ) {
     let root = tempfile::tempdir().expect("temp root");
@@ -115,11 +115,11 @@ fn recording_logger() -> (
     config.enable_file_sink = false;
     config.enable_console_sink = false;
     let events = Arc::new(Mutex::new(Vec::new()));
-    let mut builder = sc_observability::LoggerBuilder::new(config).expect("builder");
+    let mut builder = sc_observability::v2::LoggerBuilder::new(config).expect("builder");
     builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
-    let logger = builder.build_canonical().expect("host logger");
+    let logger = builder.build().expect("host logger");
     (root, Arc::new(logger), events)
 }
 
@@ -168,7 +168,7 @@ impl LogSink for BlockingFlushSink {
 fn blocking_logger(
     entered: mpsc::Sender<()>,
     release: mpsc::Receiver<()>,
-) -> (tempfile::TempDir, Arc<sc_observability::Logger>) {
+) -> (tempfile::TempDir, Arc<sc_observability::v2::Logger>) {
     let root = tempfile::tempdir().expect("temp root");
     let mut config = LoggerConfig::default_for(
         ServiceName::new("attachment-blocking-flush").expect("service"),
@@ -176,14 +176,11 @@ fn blocking_logger(
     );
     config.enable_file_sink = false;
     config.enable_console_sink = false;
-    let mut builder = sc_observability::LoggerBuilder::new(config).expect("builder");
+    let mut builder = sc_observability::v2::LoggerBuilder::new(config).expect("builder");
     builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink::new(
         entered, release,
     ))));
-    (
-        root,
-        Arc::new(builder.build_canonical().expect("host logger")),
-    )
+    (root, Arc::new(builder.build().expect("host logger")))
 }
 
 fn event() -> BridgeEvent {

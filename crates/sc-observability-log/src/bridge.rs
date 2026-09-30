@@ -204,7 +204,7 @@ impl DetachError {
 
 /// Shared state retained by an attachment, its controls, and in-flight calls.
 pub(crate) struct AttachmentState {
-    pub(crate) logger: Arc<sc_observability::Logger>,
+    pub(crate) logger: Arc<sc_observability::v2::Logger>,
     pub(crate) options: crate::BridgeOptions,
     policy: Arc<dyn BridgeEventPolicy>,
     service: ServiceName,
@@ -344,7 +344,7 @@ impl Drop for LogAttachment {
 /// Returns [`DetachError::ForeignLoggerInstalled`] when the process facade is
 /// occupied by an owned bridge, another attachment, or a foreign `log::Log`.
 pub fn attach_logger(
-    logger: Arc<sc_observability::Logger>,
+    logger: Arc<sc_observability::v2::Logger>,
     options: AttachmentOptions,
 ) -> Result<LogAttachment, DetachError> {
     let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
@@ -512,7 +512,7 @@ fn submit_parts_to_attachment(
     if let Err(cause) = policy_allows(state, &event) {
         return Err(handle::Rejection::drop_cause(&cause));
     }
-    let outcome = match state.logger.try_log_with_outcome_canonical(event) {
+    let outcome = match state.logger.try_log_with_outcome(event) {
         Ok(outcome) => Ok(outcome),
         Err(error) => Err(match error {
             sc_observability_types::v2::EventError::Validation { .. } => DropCause::InvalidEvent,
@@ -575,7 +575,7 @@ fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), CoreFlushEr
             // Keep the attachment call alive until the helper exits.  A timed-out
             // caller must not be able to detach while this helper still owns the
             // attachment's logger reference.
-            let result = call.state.logger.flush_canonical();
+            let result = call.state.logger.flush();
             drop(call);
             let _ = sender.send(result);
         })
@@ -715,7 +715,7 @@ mod tests {
         let root = tempfile::tempdir().expect("temporary log root");
         let service = ServiceName::new("bridge-entry-test").expect("service name");
         let logger = Arc::new(
-            sc_observability::Logger::new(crate::LoggerConfig::default_for(
+            sc_observability::v2::Logger::new(crate::LoggerConfig::default_for(
                 service.clone(),
                 root.path().to_path_buf(),
             ))

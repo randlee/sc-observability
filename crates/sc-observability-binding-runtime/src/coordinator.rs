@@ -4,7 +4,8 @@ use crate::{
     timer::TimerService,
 };
 use arc_swap::{ArcSwap, ArcSwapOption};
-use sc_observability::{LevelOwner, Logger, Running};
+use sc_observability::v2::Logger;
+use sc_observability::{LevelOwner, Running};
 use sc_observability_dto::{self as dto, CompletionDto, Failure, LogHealthDto, LogSnapshotDto};
 use sc_observability_types as native;
 use std::collections::VecDeque;
@@ -215,7 +216,7 @@ impl Coordinator {
                 let event = conversion::event(event, stamp, origin)?;
                 let logger = logger.load_full().ok_or_else(error::closed)?;
                 logger
-                    .try_log_with_outcome_canonical(event)
+                    .try_log_with_outcome(event)
                     .map(conversion::admission)
                     .map_err(|error| conversion::core_admission(&error))
             }
@@ -356,7 +357,7 @@ impl Coordinator {
                             Backend::Core { logger, .. } => logger
                                 .load_full()
                                 .ok_or_else(error::closed)?
-                                .flush_canonical()
+                                .flush()
                                 .map_err(|error| {
                                     let (typed, kind) = conversion::core_flush(error);
                                     conversion::canonical(&typed, kind)
@@ -537,11 +538,10 @@ fn core_parts(
         hostname: stamp.identity.hostname.clone(),
         pid: stamp.identity.pid,
     };
-    let (logger, level) = Logger::new_with_level_owner_canonical(config).map_err(|error| {
-        native::v2::InitError::Runtime {
+    let (logger, level) =
+        Logger::new_with_level_owner(config).map_err(|error| native::v2::InitError::Runtime {
             context: error.into_context(),
-        }
-    })?;
+        })?;
     Ok((stamp, logger, level))
 }
 

@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
 use sc_observability::typed::{TypedLogSink, legacy_sink};
+use sc_observability::v2::LoggerBuilder;
 use sc_observability::*;
 use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::v2::LogSinkError;
@@ -109,7 +110,7 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
         .register_typed_sink(chained_sink.clone())
         .expect("chained typed registration");
 
-    let logger = builder.build_canonical().expect("build typed logger");
+    let logger = builder.build().expect("build typed logger");
     logger.log(event()).expect("admit event");
     logger.flush().expect("flush typed sinks");
 
@@ -125,7 +126,7 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
 #[test]
 fn builder_rejects_zero_sinks_at_build_and_accepts_a_registered_sink() {
     let zero_sink = LoggerBuilder::new(config()).expect("valid zero-sink builder");
-    let Err(error) = zero_sink.build_canonical() else {
+    let Err(error) = zero_sink.build() else {
         panic!("zero-sink logger construction must fail");
     };
     assert_eq!(
@@ -145,7 +146,7 @@ fn builder_rejects_zero_sinks_at_build_and_accepts_a_registered_sink() {
         .register_typed_sink(Arc::new(RecordingTypedSink::default()))
         .expect("register a healthy sink");
     let logger = valid
-        .build_canonical()
+        .build()
         .expect("a registered sink should permit construction");
     logger.shutdown();
 }

@@ -35,12 +35,11 @@ pub mod typed;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 #[doc(inline)]
-pub use builder::{LoggerBuilder, SinkRegistrationError};
+pub use builder::SinkRegistrationError;
 #[doc(inline)]
 pub use compat::{LogError, TryLogError};
 #[doc(inline)]
@@ -78,15 +77,38 @@ pub use sinks::RetainedSinkFaultInjector;
 #[doc(inline)]
 pub use sinks::{ConsoleSink, JsonlFileSink};
 
+/// Retained 1.x construction facade over the canonical builder.
+#[expect(
+    missing_debug_implementations,
+    reason = "the wrapper deliberately hides the canonical builder's sink trait objects"
+)]
+pub struct LoggerBuilder {
+    pub(crate) inner: builder::CanonicalLoggerBuilder,
+}
+
+/// Retained 1.x logger facade over the canonical logger.
+#[expect(
+    missing_debug_implementations,
+    reason = "the wrapper deliberately hides runtime handles and trait-object sinks"
+)]
+pub struct Logger<State = Running> {
+    pub(crate) inner: CanonicalLogger<State>,
+    // Keeps the released stopped-state diagnostic shape while the real state
+    // remains owned exclusively by the canonical inner logger.
+    shutdown: PhantomData<State>,
+}
+
 /// Opt-in canonical logging facade for the compatible transition.
 ///
 /// This namespace exposes the canonical error contracts without creating a
 /// second logger runtime.
 pub mod v2 {
     #[doc(inline)]
-    pub use crate::{
-        ConsoleSink, JsonlFileSink, Logger, LoggerBuilder, LoggerConfig, RetainedLogPolicy,
-    };
+    pub use crate::builder::CanonicalLoggerBuilder as LoggerBuilder;
+    #[doc(inline)]
+    pub use crate::canonical::Logger;
+    #[doc(inline)]
+    pub use crate::{ConsoleSink, JsonlFileSink, LoggerConfig, RetainedLogPolicy};
     #[doc(inline)]
     pub use sc_observability_types::v2::{EventError, FlushError, InitError, LogSinkError};
 }
@@ -587,21 +609,34 @@ pub struct Running;
 pub struct Stopped;
 
 /// Lightweight structured logging runtime with built-in query and follow support.
-#[expect(
-    missing_debug_implementations,
-    reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
-)]
-pub struct Logger<State = Running> {
-    config: Arc<LoggerConfig>,
-    sinks: Vec<SinkRegistration>,
-    shutdown: Arc<AtomicBool>,
-    runtime: LoggerRuntime,
-    diagnostic_admitter: Option<DiagnosticAdmitter>,
-    level_control: Arc<Mutex<LevelControl>>,
-    state: PhantomData<State>,
+mod canonical {
+    use std::marker::PhantomData;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex};
+
+    use super::{
+        DiagnosticAdmitter, LevelControl, LoggerConfig, LoggerRuntime, Running, SinkRegistration,
+    };
+
+    #[expect(
+        missing_debug_implementations,
+        reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
+    )]
+    /// Structured logging runtime with query, follow, and typestate-checked shutdown.
+    pub struct Logger<State = Running> {
+        pub(crate) config: Arc<LoggerConfig>,
+        pub(crate) sinks: Vec<SinkRegistration>,
+        pub(crate) shutdown: Arc<AtomicBool>,
+        pub(crate) runtime: LoggerRuntime,
+        pub(crate) diagnostic_admitter: Option<DiagnosticAdmitter>,
+        pub(crate) level_control: Arc<Mutex<LevelControl>>,
+        pub(crate) state: PhantomData<State>,
+    }
 }
 
-impl<State> Logger<State> {
+pub(crate) use canonical::Logger as CanonicalLogger;
+
+impl<State> CanonicalLogger<State> {
     /// Returns the configured service identity, independent of sink layout.
     #[must_use]
     pub fn service_name(&self) -> &ServiceName {
@@ -690,7 +725,9 @@ mod tests {
     use crate::sinks::ConsoleWriter;
     use crate::typed::{legacy_sink, typed_sink};
     use sc_observability_types::typed::LogSinkFailure;
-    use sc_observability_types::v2::{EventError as CanonicalEventError, InitError};
+    use sc_observability_types::v2::{
+        EventError as CanonicalEventError, InitError as CanonicalInitError,
+    };
     use sc_observability_types::{
         ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, LogOrder,
         LogQuery, LogSnapshot, ProcessIdentity, ProcessIdentityPolicy, QueryError,
@@ -1385,7 +1422,7 @@ mod tests {
                 lines: lines.clone(),
             }),
         ))));
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
         logger.flush().expect("flush");
@@ -1448,7 +1485,7 @@ mod tests {
                 lines: lines.clone(),
             }),
         ))));
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
         logger.flush().expect("flush");
@@ -1478,7 +1515,7 @@ mod tests {
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(FailSink)));
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build();
 
         logger
             .emit(log_event(service_name()))
@@ -1521,7 +1558,7 @@ mod tests {
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build();
 
         let error = logger.flush().expect_err("flush error should propagate");
         assert_eq!(error.diagnostic().code, error_codes::LOGGER_FLUSH_FAILED);
@@ -1629,7 +1666,7 @@ mod tests {
         builder.register_sink(SinkRegistration::new(
             injector.wrap(Arc::new(RecordingFlushSink::default())),
         ));
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build();
 
         injector.force_degraded();
         logger
@@ -1657,7 +1694,7 @@ mod tests {
         builder.register_sink(SinkRegistration::new(
             injector.wrap(Arc::new(RecordingFlushSink::default())),
         ));
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build();
 
         injector.force_unavailable();
         logger
@@ -1693,7 +1730,7 @@ mod tests {
             }))))
             .with_filter(Arc::new(DenyAll)),
         );
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
 
@@ -1717,7 +1754,7 @@ mod tests {
         let mut builder = Logger::builder(config).expect("logger builder");
         let sink = Arc::new(RecordingFlushSink::default());
         builder.register_sink(SinkRegistration::new(sink.clone()));
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build();
 
         let _stopped = logger.shutdown();
 
@@ -1962,7 +1999,7 @@ mod tests {
         signal.block_delay_until_released();
         let _release_delay = signal.release_on_drop();
         config.maintenance_test_pass_signal = Some(signal.clone());
-        let logger = Logger::new(config).expect("logger");
+        let logger = CanonicalLogger::new(config).expect("logger");
 
         logger.log(log_event(service_name())).expect("initial log");
         assert!(
@@ -1974,9 +2011,9 @@ mod tests {
         );
 
         logger
-            .try_log_canonical(log_event_with_request(service_name(), "queued", 10))
+            .try_log(log_event_with_request(service_name(), "queued", 10))
             .expect("first queued event should fit");
-        let result = logger.try_log_canonical(log_event_with_request(service_name(), "full", 10));
+        let result = logger.try_log(log_event_with_request(service_name(), "full", 10));
 
         assert!(matches!(
             result,
@@ -2012,14 +2049,14 @@ mod tests {
         config.enable_file_sink = false;
         config.enable_console_sink = false;
         let entered = Arc::new(AtomicBool::new(false));
-        let mut builder = Logger::builder(config).expect("logger builder");
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(PanicSink {
             entered: entered.clone(),
         })));
-        let logger = builder.build_canonical().expect("logger");
+        let logger = builder.build().expect("logger");
 
         logger
-            .log_canonical(log_event(service_name()))
+            .log(log_event(service_name()))
             .expect("initial admission");
         wait_for(
             || entered.load(Ordering::SeqCst),
@@ -2034,7 +2071,7 @@ mod tests {
             error_codes::LOGGER_WRITER_DEGRADED
         );
         let admission = logger
-            .try_log_canonical(log_event(service_name()))
+            .try_log(log_event(service_name()))
             .expect_err("canonical admission is disconnected");
         assert!(matches!(admission, CanonicalEventError::Routing { .. }));
         assert_eq!(
@@ -2044,7 +2081,7 @@ mod tests {
 
         // Exercise canonical admission after a real worker failure.
         let CanonicalEventError::Routing { context } = logger
-            .log_canonical(log_event(service_name()))
+            .log(log_event(service_name()))
             .expect_err("canonical admission observes the disconnected writer")
         else {
             panic!("disconnected writer must retain its admission failure kind");
@@ -2086,11 +2123,11 @@ mod tests {
         config.enable_file_sink = false;
         config.enable_console_sink = true;
         config.level = LevelFilter::Off;
-        let logger = Logger::new(config).expect("typed logger");
+        let logger = CanonicalLogger::new(config).expect("typed logger");
 
         assert_eq!(
             logger
-                .try_log_with_outcome_canonical(log_event(service_name()))
+                .try_log_with_outcome(log_event(service_name()))
                 .expect("filtered event succeeds"),
             AdmissionOutcome::Filtered
         );
@@ -2098,13 +2135,13 @@ mod tests {
         let mut invalid_schema = log_event(service_name());
         invalid_schema.version = SchemaVersion::new("v0").expect("valid test schema value");
         assert!(matches!(
-            logger.log_canonical(invalid_schema),
+            logger.log(invalid_schema),
             Err(CanonicalEventError::Validation { .. })
         ));
 
         let wrong_service = ServiceName::new("other-service").expect("valid service");
         assert!(matches!(
-            logger.log_canonical(log_event(wrong_service)),
+            logger.log(log_event(wrong_service)),
             Err(CanonicalEventError::Validation { .. })
         ));
 
@@ -2112,10 +2149,10 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         config.enable_console_sink = true;
-        let logger = Logger::new(config).expect("typed logger");
+        let logger = CanonicalLogger::new(config).expect("typed logger");
         assert_eq!(
             logger
-                .try_log_with_outcome_canonical(log_event(service_name()))
+                .try_log_with_outcome(log_event(service_name()))
                 .expect("accepted event"),
             AdmissionOutcome::Accepted
         );
@@ -2344,10 +2381,10 @@ mod tests {
         config.enable_console_sink = true;
         config.writer_start_should_fail = true;
 
-        let Err(error) = Logger::new_with_level_owner_canonical(config) else {
+        let Err(error) = CanonicalLogger::new_with_level_owner(config) else {
             panic!("writer start must fail");
         };
-        assert!(matches!(&error, InitError::Runtime { .. }));
+        assert!(matches!(&error, CanonicalInitError::Runtime { .. }));
         assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
         assert_eq!(
             std::error::Error::source(&error)
@@ -2421,7 +2458,10 @@ mod tests {
 
         fn assert_contention<F, E>(name: &str, admit: F)
         where
-            F: Fn(&Logger, LogEvent) -> Result<AdmissionOutcome, E> + Send + Sync + 'static,
+            F: Fn(&CanonicalLogger, LogEvent) -> Result<AdmissionOutcome, E>
+                + Send
+                + Sync
+                + 'static,
             E: std::fmt::Debug + Send + 'static,
         {
             let root = temp_path(name);
@@ -2429,7 +2469,7 @@ mod tests {
             config.enable_file_sink = false;
             config.enable_console_sink = true;
             let (logger, owner) =
-                Logger::new_with_level_owner(config).expect("construct logger with owner");
+                CanonicalLogger::new_with_level_owner(config).expect("construct logger with owner");
             let logger = Arc::new(logger);
             let barrier = Arc::new(Barrier::new(3));
             let (mutation_tx, mutation_rx) = mpsc::channel();
@@ -2573,7 +2613,7 @@ mod tests {
         config.enable_file_sink = false;
         config.enable_console_sink = true;
         let (logger, mut owner) =
-            Logger::new_with_level_owner(config).expect("construct logger with owner");
+            CanonicalLogger::new_with_level_owner(config).expect("construct logger with owner");
         owner
             .elevate_level(LevelFilter::Debug, LevelChangeSource::Application)
             .expect("change state");
@@ -2601,7 +2641,7 @@ mod tests {
         config.enable_file_sink = false;
         config.enable_console_sink = true;
         let (logger, mut owner) =
-            Logger::new_with_level_owner(config).expect("construct logger with owner");
+            CanonicalLogger::new_with_level_owner(config).expect("construct logger with owner");
         logger
             .level_control
             .lock()
@@ -2685,7 +2725,7 @@ mod tests {
             .custom_redactors
             .push(Box::new(redactor.clone()));
         let sink = Arc::new(RecordingEventSink::default());
-        let mut builder = Logger::builder(config).expect("builder");
+        let mut builder = CanonicalLogger::builder(config).expect("builder");
         builder.register_sink(SinkRegistration::new(sink.clone()));
         let (logger, mut owner) = builder.build_with_level_owner().expect("owner logger");
         redactor.attach(&logger.level_control);
@@ -2772,7 +2812,7 @@ mod tests {
         let _release_delay = signal.release_on_drop();
         config.maintenance_test_pass_signal = Some(signal.clone());
         let (logger, mut owner) =
-            Logger::new_with_level_owner(config).expect("construct logger with owner");
+            CanonicalLogger::new_with_level_owner(config).expect("construct logger with owner");
         let initial_state = logger.level_state();
         let control = logger.level_control.clone();
 

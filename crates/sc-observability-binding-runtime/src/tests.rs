@@ -662,7 +662,7 @@ fn core_with_sink(
         identity: native::ProcessIdentity::default(),
     };
     let shared = Coordinator::create(|| {
-        let mut builder = sc_observability::Logger::builder(config).unwrap();
+        let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink));
         let (logger, level) = builder.build_with_level_owner().unwrap();
         let health = dto::from_core_health(logger.health(), logger.level_state());
@@ -739,7 +739,7 @@ fn core_sink_and_shutdown() {
         identity: native::ProcessIdentity::default(),
     };
     let shared = Coordinator::create(|| {
-        let mut builder = sc_observability::Logger::builder(config).unwrap();
+        let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink.clone()));
         let (logger, level) = builder.build_with_level_owner().unwrap();
         let health = dto::from_core_health(logger.health(), logger.level_state());

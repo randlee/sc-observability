@@ -7,19 +7,53 @@
 use std::path::PathBuf;
 
 use sc_observability::{
-    EventError, FlushError, InitError, LogError, LogEvent, Logger, LoggerBuilder, LoggerConfig,
-    Running, TryLogError,
+    AdmissionOutcome, EventError, FlushError, InitError, LevelOwner, LevelState, LogError,
+    LogEvent, LogFollowSession, LogQuery, LogSnapshot, Logger, LoggerBuilder, LoggerConfig,
+    LoggingHealthReport, Running, SinkRegistration, Stopped, TryLogError,
 };
-use sc_observability_types::ServiceName;
+use sc_observability_types::typed::{FlushFailure, InitFailure, LogFailure, TryLogFailure};
+use sc_observability_types::{QueryError, ServiceName};
+
+type RootLoggerWithOwner<E> = Result<(Logger<Running>, LevelOwner), E>;
 
 #[test]
 fn released_root_signatures_remain_available() {
+    let _: fn(LoggerConfig) -> Result<LoggerBuilder, InitError> = Logger::builder;
+    let _: fn(LoggerConfig) -> Result<LoggerBuilder, InitFailure> = Logger::builder_typed;
     let _: fn(LoggerConfig) -> Result<LoggerBuilder, InitError> = LoggerBuilder::new;
+    let _: fn(LoggerConfig) -> Result<LoggerBuilder, InitFailure> = LoggerBuilder::new_typed;
+    let _: for<'a> fn(&'a mut LoggerBuilder, SinkRegistration) -> &'a mut LoggerBuilder =
+        LoggerBuilder::register_sink;
+    let _: fn(LoggerBuilder) -> Logger<Running> = LoggerBuilder::build;
+    let _: fn(LoggerBuilder) -> Result<Logger<Running>, InitFailure> = LoggerBuilder::build_typed;
+    let _: fn(LoggerBuilder) -> RootLoggerWithOwner<InitError> =
+        LoggerBuilder::build_with_level_owner;
+    let _: fn(LoggerBuilder) -> RootLoggerWithOwner<InitFailure> =
+        LoggerBuilder::build_with_level_owner_typed;
+
     let _: fn(LoggerConfig) -> Result<Logger<Running>, InitError> = Logger::new;
+    let _: fn(LoggerConfig) -> Result<Logger<Running>, InitFailure> = Logger::new_typed;
+    let _: fn(LoggerConfig) -> RootLoggerWithOwner<InitError> = Logger::new_with_level_owner;
+    let _: fn(LoggerConfig) -> RootLoggerWithOwner<InitFailure> =
+        Logger::new_with_level_owner_typed;
     let _: for<'a> fn(&'a Logger, LogEvent) -> Result<(), LogError> = Logger::log;
+    let _: for<'a> fn(&'a Logger, LogEvent) -> Result<(), LogFailure> = Logger::log_typed;
     let _: for<'a> fn(&'a Logger, LogEvent) -> Result<(), TryLogError> = Logger::try_log;
+    let _: for<'a> fn(&'a Logger, LogEvent) -> Result<(), TryLogFailure> = Logger::try_log_typed;
+    let _: for<'a> fn(&'a Logger, LogEvent) -> Result<AdmissionOutcome, TryLogError> =
+        Logger::try_log_with_outcome;
+    let _: for<'a> fn(&'a Logger, LogEvent) -> Result<AdmissionOutcome, TryLogFailure> =
+        Logger::try_log_with_outcome_typed;
     let _: for<'a> fn(&'a Logger, LogEvent) -> Result<(), EventError> = Logger::emit;
     let _: for<'a> fn(&'a Logger) -> Result<(), FlushError> = Logger::flush;
+    let _: for<'a> fn(&'a Logger) -> Result<(), FlushFailure> = Logger::flush_typed;
+    let _: for<'a> fn(&'a Logger, &'a LogQuery) -> Result<LogSnapshot, QueryError> = Logger::query;
+    let _: for<'a> fn(&'a Logger, LogQuery) -> Result<LogFollowSession, QueryError> =
+        Logger::follow;
+    let _: fn(Logger) -> Logger<Stopped> = Logger::shutdown;
+    let _: for<'a> fn(&'a Logger) -> &'a ServiceName = Logger::service_name;
+    let _: for<'a> fn(&'a Logger) -> LevelState = Logger::level_state;
+    let _: for<'a> fn(&'a Logger) -> LoggingHealthReport = Logger::health;
 }
 
 #[test]

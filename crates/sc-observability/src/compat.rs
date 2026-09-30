@@ -18,10 +18,15 @@ use sc_observability_types::v2::{
     InitError as CanonicalInitError,
 };
 
+use crate::builder::CanonicalLoggerBuilder;
+use crate::typed::TypedLogSink;
 use crate::{
-    AdmissionOutcome, ErrorContext, EventError, FlushError, InitError, LevelOwner, LogEvent,
-    LogFailure, Logger, LoggerBuilder, LoggerConfig, Running, TryLogFailure, error_codes,
+    AdmissionOutcome, CanonicalLogger, ErrorContext, EventError, FlushError, InitError, LevelOwner,
+    LevelState, LogEvent, LogFailure, LogQuery, Logger, LoggerBuilder, LoggerConfig,
+    LoggingHealthReport, Running, SinkRegistration, Stopped, TryLogFailure, error_codes,
 };
+use sc_observability_types::QueryError;
+use std::sync::Arc;
 
 /// Blocking queue-admission error surface retained for 1.x callers.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
@@ -100,38 +105,168 @@ impl From<TryLogFailure> for TryLogError {
     }
 }
 
+impl From<CanonicalLoggerBuilder> for LoggerBuilder {
+    fn from(inner: CanonicalLoggerBuilder) -> Self {
+        Self { inner }
+    }
+}
+
+impl From<LoggerBuilder> for CanonicalLoggerBuilder {
+    fn from(value: LoggerBuilder) -> Self {
+        value.inner
+    }
+}
+
 impl LoggerBuilder {
     /// Creates a 1.x builder with the released initialization error wrapper.
+    #[deprecated(since = "1.4.0", note = "Use v2::LoggerBuilder::new instead.")]
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
-        Self::new_canonical(config).map_err(legacy_init)
+        CanonicalLoggerBuilder::new(config)
+            .map(Self::from)
+            .map_err(legacy_init)
+    }
+
+    /// Creates a released typed builder facade.
+    pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
+        CanonicalLoggerBuilder::new(config)
+            .map(Self::from)
+            .map_err(|error| InitFailure::from_context(error.into_context()))
+    }
+
+    /// Registers one released sink before building the shared runtime.
+    pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self {
+        self.inner.register_sink(registration);
+        self
+    }
+
+    /// Registers a released typed sink before building the shared runtime.
+    pub fn register_typed_sink(
+        &mut self,
+        sink: Arc<dyn TypedLogSink>,
+    ) -> Result<&mut Self, crate::SinkRegistrationError> {
+        self.inner.register_typed_sink(sink)?;
+        Ok(self)
+    }
+
+    /// Builds the released infallible logger facade.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the writer runtime cannot start, preserving the released
+    /// infallible builder contract.
+    #[deprecated(since = "1.4.0", note = "Use v2::LoggerBuilder::build instead.")]
+    pub fn build(self) -> Logger<Running> {
+        Logger::from(
+            self.inner
+                .build()
+                .expect("existing infallible builder expects writer thread startup"),
+        )
+    }
+
+    /// Builds the released typed initialization facade.
+    pub fn build_typed(self) -> Result<Logger<Running>, InitFailure> {
+        self.inner
+            .build()
+            .map(Logger::from)
+            .map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     /// Finalizes construction and returns a level owner with the retained
     /// 1.x initialization error wrapper.
     pub fn build_with_level_owner(self) -> Result<(Logger<Running>, LevelOwner), InitError> {
-        self.build_with_level_owner_canonical().map_err(legacy_init)
+        self.inner
+            .build_with_level_owner()
+            .map(|(logger, owner)| (Logger::from(logger), owner))
+            .map_err(legacy_init)
+    }
+
+    /// Builds the released typed initialization facade with level ownership.
+    pub fn build_with_level_owner_typed(
+        self,
+    ) -> Result<(Logger<Running>, LevelOwner), InitFailure> {
+        self.inner
+            .build_with_level_owner()
+            .map(|(logger, owner)| (Logger::from(logger), owner))
+            .map_err(|error| InitFailure::from_context(error.into_context()))
+    }
+}
+
+impl<State> From<CanonicalLogger<State>> for Logger<State> {
+    fn from(inner: CanonicalLogger<State>) -> Self {
+        Self {
+            inner,
+            shutdown: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<State> From<Logger<State>> for CanonicalLogger<State> {
+    fn from(value: Logger<State>) -> Self {
+        value.inner
     }
 }
 
 impl Logger<Running> {
+    /// Queries through the released facade.
+    pub fn query(&self, query: &LogQuery) -> Result<crate::LogSnapshot, QueryError> {
+        self.inner.query(query)
+    }
+
+    /// Shuts down the shared canonical runtime and returns a stopped facade.
+    pub fn shutdown(self) -> Logger<Stopped> {
+        Logger::from(self.inner.shutdown())
+    }
+
     /// Starts a 1.x builder with the released initialization error wrapper.
+    #[deprecated(since = "1.4.0", note = "Use v2::Logger::builder instead.")]
     pub fn builder(config: LoggerConfig) -> Result<LoggerBuilder, InitError> {
         LoggerBuilder::new(config)
     }
 
+    /// Starts a released typed builder facade.
+    pub fn builder_typed(config: LoggerConfig) -> Result<LoggerBuilder, InitFailure> {
+        LoggerBuilder::new_typed(config)
+    }
+
     /// Creates a logger with the retained 1.x initialization error wrapper.
+    #[deprecated(since = "1.4.0", note = "Use v2::Logger::new instead.")]
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
-        Self::new_canonical(config).map_err(legacy_init)
+        CanonicalLogger::new(config)
+            .map(Self::from)
+            .map_err(legacy_init)
     }
 
     /// Creates a logger and level owner with the retained 1.x error wrapper.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use v2::Logger::new_with_level_owner instead."
+    )]
     pub fn new_with_level_owner(config: LoggerConfig) -> Result<(Self, LevelOwner), InitError> {
-        Self::new_with_level_owner_canonical(config).map_err(legacy_init)
+        CanonicalLogger::new_with_level_owner(config)
+            .map(|(logger, owner)| (Self::from(logger), owner))
+            .map_err(legacy_init)
     }
 
-    /// Validates, redacts, and blocks for queue admission using 1.x errors.
+    /// Creates a released typed logger facade.
+    pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
+        CanonicalLogger::new(config)
+            .map(Self::from)
+            .map_err(|error| InitFailure::from_context(error.into_context()))
+    }
+
+    /// Creates a released typed logger facade with level ownership.
+    pub fn new_with_level_owner_typed(
+        config: LoggerConfig,
+    ) -> Result<(Self, LevelOwner), InitFailure> {
+        CanonicalLogger::new_with_level_owner(config)
+            .map(|(logger, owner)| (Self::from(logger), owner))
+            .map_err(|error| InitFailure::from_context(error.into_context()))
+    }
+
+    /// Validates, redacts, and blocks for released queue admission.
+    #[deprecated(since = "1.4.0", note = "Use v2::Logger::log instead.")]
     pub fn log(&self, event: LogEvent) -> Result<(), LogError> {
-        self.log_canonical(event).map_err(legacy_log)
+        self.inner.log(event).map_err(legacy_log)
     }
 
     /// Validates, redacts, and blocks for queue admission using typed 1.x
@@ -141,6 +276,7 @@ impl Logger<Running> {
     }
 
     /// Attempts non-blocking queue admission using 1.x errors.
+    #[deprecated(since = "1.4.0", note = "Use v2::Logger::try_log instead.")]
     pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError> {
         self.try_log_with_outcome(event).map(|_| ())
     }
@@ -151,8 +287,13 @@ impl Logger<Running> {
     }
 
     /// Attempts non-blocking admission and reports filtering using 1.x errors.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use v2::Logger::try_log_with_outcome instead."
+    )]
     pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, TryLogError> {
-        self.try_log_with_outcome_canonical(event)
+        self.inner
+            .try_log_with_outcome(event)
             .map_err(legacy_try_log)
     }
 
@@ -165,19 +306,56 @@ impl Logger<Running> {
     }
 
     /// Retained event-emission compatibility path.
+    #[deprecated(
+        since = "1.2.0",
+        note = "Use log() for blocking queue admission or try_log() for non-blocking logging."
+    )]
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError> {
-        self.emit_canonical(event)
+        self.inner
+            .emit_legacy(event)
             .map_err(|error| legacy_event_from_log(legacy_log(error)))
     }
 
-    /// Flushes the shared writer through the retained 1.x error wrapper.
+    /// Flushes the shared writer through the released typed failure.
+    #[deprecated(since = "1.4.0", note = "Use v2::Logger::flush instead.")]
+    #[expect(
+        deprecated,
+        reason = "the released 1.x method retains its deprecated error wrapper"
+    )]
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.flush_canonical().map_err(legacy_flush)
+        self.inner.flush().map_err(legacy_flush)
     }
 
     /// Flushes the shared writer through the released typed failure.
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
         self.flush().map_err(Into::into)
+    }
+}
+
+impl<State> Logger<State> {
+    /// Returns the configured service identity through the released facade.
+    #[must_use]
+    pub fn service_name(&self) -> &crate::ServiceName {
+        self.inner.service_name()
+    }
+
+    /// Returns a coherent runtime level snapshot through the released facade.
+    #[must_use]
+    pub fn level_state(&self) -> LevelState {
+        self.inner.level_state()
+    }
+
+    /// Returns runtime health through the released facade.
+    #[must_use]
+    pub fn health(&self) -> LoggingHealthReport {
+        self.inner.health()
+    }
+}
+
+impl Logger<Running> {
+    /// Follows through the released facade.
+    pub fn follow(&self, query: LogQuery) -> Result<crate::follow::LogFollowSession, QueryError> {
+        self.inner.follow(query)
     }
 }
 
@@ -189,7 +367,7 @@ fn legacy_event(context: Box<ErrorContext>) -> EventError {
     EventFailure::from_context(context).into()
 }
 
-fn legacy_log(error: CanonicalEventError) -> LogError {
+pub(crate) fn legacy_log(error: CanonicalEventError) -> LogError {
     match error {
         CanonicalEventError::Validation { context } => {
             LogError::InvalidEvent(legacy_event(context))
@@ -233,7 +411,7 @@ fn legacy_event_from_log(error: LogError) -> EventError {
     }
 }
 
-fn legacy_flush(error: CanonicalFlushError) -> FlushError {
+pub(crate) fn legacy_flush(error: CanonicalFlushError) -> FlushError {
     FlushFailure::from_context(error.into_context()).into()
 }
 

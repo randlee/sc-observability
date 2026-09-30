@@ -257,7 +257,7 @@ pub fn create_test_blocking_core_backend(
             timestamp: sc_observability_types::Timestamp::now_utc(),
             identity: sc_observability_types::ProcessIdentity::default(),
         };
-        let mut builder = sc_observability::Logger::builder(config)
+        let mut builder = sc_observability::v2::Logger::builder(config)
             .map_err(|error| conversion::canonical(&error, conversion::Kind::Internal))?;
         builder.register_sink(sc_observability::SinkRegistration::new(Arc::new(
             TestBlockingSink {

@@ -46,6 +46,10 @@ fn event() -> LogEvent {
     }
 }
 
+#[expect(
+    deprecated,
+    reason = "the helper intentionally constructs the released root facade exercised by these migration tests"
+)]
 fn logger(root: &tempfile::TempDir) -> Logger {
     Logger::new(LoggerConfig::default_for(
         service_name(),
@@ -113,6 +117,10 @@ fn logger_follow_shutdown_updates_real_query_health() {
 }
 
 #[test]
+#[expect(
+    deprecated,
+    reason = "the test intentionally verifies released root log and flush error mapping"
+)]
 fn logger_query_decode_preserves_source_and_records_health_summary() {
     let root = tempfile::tempdir().expect("temporary log root");
     let logger = logger(&root);

@@ -110,7 +110,7 @@ fn attach_with(
 ) -> (
     tempfile::TempDir,
     sc_observability_log::LogAttachment,
-    Arc<sc_observability::Logger>,
+    Arc<sc_observability::v2::Logger>,
     Arc<Mutex<Vec<LogEvent>>>,
 ) {
     attach_with_config(policy, |_| {})
@@ -122,7 +122,7 @@ fn attach_with_config(
 ) -> (
     tempfile::TempDir,
     sc_observability_log::LogAttachment,
-    Arc<sc_observability::Logger>,
+    Arc<sc_observability::v2::Logger>,
     Arc<Mutex<Vec<LogEvent>>>,
 ) {
     let root = tempfile::tempdir().expect("temp root");
@@ -132,11 +132,11 @@ fn attach_with_config(
     );
     configure(&mut config);
     let events = Arc::new(Mutex::new(Vec::new()));
-    let mut builder = sc_observability::LoggerBuilder::new(config).expect("builder");
+    let mut builder = sc_observability::v2::LoggerBuilder::new(config).expect("builder");
     builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
-    let logger = Arc::new(builder.build_canonical().expect("host logger"));
+    let logger = Arc::new(builder.build().expect("host logger"));
     // Keep the host Arc in the attachment fixture; successful detach proves
     // that the attachment itself released its Arc in the lifecycle fixture.
     let options = AttachmentOptions::new(

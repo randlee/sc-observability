@@ -70,7 +70,7 @@ impl Rejection for crate::error::EmitError {
 
 /// Everything the emit path needs, shared behind one `Arc`.
 pub(crate) struct Installed {
-    pub(crate) logger: Arc<sc_observability::Logger>,
+    pub(crate) logger: Arc<sc_observability::v2::Logger>,
     pub(crate) service: sc_observability_types::ServiceName,
     pub(crate) identity: sc_observability_types::ProcessIdentity,
     pub(crate) options: crate::BridgeOptions,
@@ -176,7 +176,7 @@ fn shutdown_command(
             run_shutdown_work_hook();
             let sole = take_sole(installed);
             let logger = take_sole(sole.logger);
-            let flushed = logger.flush_canonical();
+            let flushed = logger.flush();
             let stopped = logger.shutdown();
             health::store_level_state(stopped.level_state());
             if let Some(report) = health::read_report(&stopped) {
@@ -577,7 +577,7 @@ pub(crate) fn submit_to(
     event.trace = crate::context::current_trace();
     installed
         .logger
-        .try_log_with_outcome_canonical(event)
+        .try_log_with_outcome(event)
         .map_err(|error| match error {
             EventError::Validation { .. } => DropCause::InvalidEvent,
             EventError::Routing { context } => match context.diagnostic().code.as_str() {
@@ -926,7 +926,7 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
     let flush = move || {
         // Released when the flush returns or unwinds, before the result is sent.
         let _flight = flight;
-        installed.logger.flush_canonical()
+        installed.logger.flush()
     };
     match run_bounded(timeout, flush) {
         Ok(Ok(())) => Ok(()),
@@ -1087,9 +1087,9 @@ mod tests {
         let Some(service) = service.ok() else {
             return;
         };
-        let mut config = sc_observability::LoggerConfig::default_for(service.clone(), root);
+        let mut config = sc_observability::v2::LoggerConfig::default_for(service.clone(), root);
         config.enable_console_sink = false;
-        let logger = sc_observability::Logger::new(config);
+        let logger = sc_observability::v2::Logger::new(config);
         assert!(logger.is_ok());
         let Some(logger) = logger.ok() else {
             return;

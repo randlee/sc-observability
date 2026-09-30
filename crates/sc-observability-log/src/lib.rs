@@ -2,7 +2,7 @@
 //!
 //! [`init`] installs a `log::Log` implementation that maps every `log` record to
 //! a `sc_observability_types::LogEvent` and writes it through one process-wide
-//! `sc_observability::Logger`. Existing `log::info!` (and friends) call sites keep
+//! `sc_observability::v2::Logger`. Existing `log::info!` (and friends) call sites keep
 //! working unchanged; the tracing-compatible event macros, `#[instrument]` and
 //! [`LogControl::try_log`] write through the same logger.
 //!
@@ -128,7 +128,7 @@ pub use error::{ShutdownOutcome, ShutdownReport, UnconfirmedShutdown};
 #[doc(inline)]
 pub use health::{BRIDGE_HEALTH_SCHEMA_VERSION, BridgeHealthReport};
 #[doc(inline)]
-pub use sc_observability::LoggerConfig;
+pub use sc_observability::v2::LoggerConfig;
 // Re-exported so consumers need no direct sc-observability-types dependency.
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -513,7 +513,7 @@ impl Drop for LogGuard {
 
 /// Installs the bridge as the process-wide `log` logger; succeeds at most once per process.
 ///
-/// Resolves `config.process_identity` once, builds the `sc_observability::Logger`,
+/// Resolves `config.process_identity` once, builds the `sc_observability::v2::Logger`,
 /// installs the bridge with `log::set_boxed_logger`, and derives the `log` facade
 /// level and the emit threshold from `config.level`. The returned [`LogGuard`] is
 /// the sole lifecycle owner. After it shuts down, the process keeps the stopped
@@ -571,14 +571,13 @@ fn init_canonical(
         }
     };
     let (service, enable_file_sink) = (config.service_name.clone(), config.enable_file_sink);
-    let (logger, level_owner) =
-        match sc_observability::Logger::new_with_level_owner_canonical(config) {
-            Ok(logger) => logger,
-            Err(source) => {
-                INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
-                return Err(source);
-            }
-        };
+    let (logger, level_owner) = match sc_observability::v2::Logger::new_with_level_owner(config) {
+        Ok(logger) => logger,
+        Err(source) => {
+            INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
+            return Err(source);
+        }
+    };
     if let Err(source) = handle::reserve_shutdown_coordinator() {
         INSTALLED.store(false, Ordering::SeqCst);
         return Err(error::init_runtime(

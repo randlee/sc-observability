@@ -867,15 +867,15 @@
       "area": "core",
       "kind": "owner",
       "status": "canonical_routed",
-      "canonical": "Logger with v2 errors",
+      "canonical": "sc_observability::v2::Logger",
       "treatment": "existing_pair",
       "baseline_signature": "#[expect( missing_debug_implementations, reason = \"logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract\" )] pub struct Logger<State = Running> { config: Arc<LoggerConfig>, sinks: Vec<SinkRegistration>, shutdown: Arc<AtomicBool>, runtime: LoggerRuntime, diagnostic_admitter: Option<DiagnosticAdmitter>, level_control: Arc<Mutex<LevelControl>>, state: PhantomData<State>, }",
-      "canonical_signature": "#[expect( missing_debug_implementations, reason = \"logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract\" )] pub struct Logger<State = Running> { config: Arc<LoggerConfig>, sinks: Vec<SinkRegistration>, shutdown: Arc<AtomicBool>, runtime: LoggerRuntime, diagnostic_admitter: Option<DiagnosticAdmitter>, level_control: Arc<Mutex<LevelControl>>, state: PhantomData<State>, }",
+      "canonical_signature": "pub struct Logger<State = Running> { config: Arc<LoggerConfig>, sinks: Vec<SinkRegistration>, shutdown: Arc<AtomicBool>, runtime: LoggerRuntime, diagnostic_admitter: Option<DiagnosticAdmitter>, level_control: Arc<Mutex<LevelControl>>, state: PhantomData<State>, }",
       "obligations": [
         "signature identity: preserve Logger declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "root Logger delegates losslessly to sc_observability::v2::Logger and translates only released error wrappers",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -884,17 +884,19 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/lib.rs",
-        "symbol": "Logger with v2 errors"
+        "symbol": "sc_observability::v2::Logger"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the retained root Logger facade and is removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability::LoggerBuilder",
       "area": "core",
       "kind": "owner",
       "status": "canonical_routed",
-      "canonical": "LoggerBuilder with v2 errors",
+      "canonical": "sc_observability::v2::LoggerBuilder",
       "treatment": "existing_pair",
       "baseline_signature": "#[expect( missing_debug_implementations, reason = \"the builder stores registration trait objects whose debug representation is not part of the public API\" )] pub struct LoggerBuilder { config: LoggerConfig, file_sink: Option<Arc<JsonlFileSink>>, sinks: Vec<SinkRegistration>, }",
       "canonical_signature": "#[expect( missing_debug_implementations, reason = \"the builder stores registration trait objects whose debug representation is not part of the public API\" )] pub struct LoggerBuilder { config: LoggerConfig, file_sink: Option<Arc<JsonlFileSink>>, sinks: Vec<SinkRegistration>, typed_sinks: Vec<Arc<dyn TypedLogSink>>, }",
@@ -903,7 +905,7 @@
         "trait: preserve LoggerBuilder implementability, the exact public trait bounds, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "root LoggerBuilder delegates construction and sink registration to sc_observability::v2::LoggerBuilder, preserving released errors at the root boundary.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/builder.rs",
@@ -911,11 +913,13 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/builder.rs",
-        "symbol": "LoggerBuilder with v2 errors"
+        "path": "crates/sc-observability/src/lib.rs",
+        "symbol": "sc_observability::v2::LoggerBuilder"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the retained root LoggerBuilder facade and is removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability::LogSink",
@@ -2192,7 +2196,7 @@
         "error: preserve released sc_observability_types::InitError failure type at sc_observability::Logger::builder boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2202,33 +2206,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "builder"
       },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::Logger::builder_typed",
       "owner": "sc_observability::Logger",
       "baseline_signature": "pub fn builder_typed(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn builder_typed(config: crate::LoggerConfig) -> Result<v2::LoggerBuilder, sc_observability_types::typed::InitFailure>",
       "obligations": [
         "signature: preserve sc_observability::Logger::builder_typed exactly as recorded in this row baseline_signature: pub fn builder_typed(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitFailure>",
         "error: preserve released InitFailure failure type at sc_observability::Logger::builder_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
         "owner": "Logger<Running>",
         "member": "builder_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/runtime.rs",
+        "owner": "v2::Logger",
+        "member": "builder_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -2241,7 +2250,7 @@
         "error: preserve released sc_observability_types::InitError failure type at sc_observability::Logger::new boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2251,33 +2260,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "new"
       },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::Logger::new_typed",
       "owner": "sc_observability::Logger",
       "baseline_signature": "pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, InitFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, sc_observability_types::typed::InitFailure>",
       "obligations": [
         "signature: preserve sc_observability::Logger::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, InitFailure>",
         "error: preserve released InitFailure failure type at sc_observability::Logger::new_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
         "owner": "Logger<Running>",
         "member": "new_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/runtime.rs",
+        "owner": "v2::Logger",
+        "member": "new_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -2290,7 +2304,7 @@
         "error: preserve released sc_observability_types::InitError failure type at sc_observability::Logger::new_with_level_owner boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2300,33 +2314,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "new_with_level_owner"
       },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::Logger::new_with_level_owner_typed",
       "owner": "sc_observability::Logger",
       "baseline_signature": "pub fn new_with_level_owner_typed( config: crate::LoggerConfig, ) -> Result<(Self, LevelOwner), InitFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn new_with_level_owner_typed(config: crate::LoggerConfig) -> Result<(Self, LevelOwner), sc_observability_types::typed::InitFailure>",
       "obligations": [
         "signature: preserve sc_observability::Logger::new_with_level_owner_typed exactly as recorded in this row baseline_signature: pub fn new_with_level_owner_typed( config: crate::LoggerConfig, ) -> Result<(Self, LevelOwner), InitFailure>",
         "error: preserve released InitFailure failure type at sc_observability::Logger::new_with_level_owner_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
         "owner": "Logger<Running>",
         "member": "new_with_level_owner_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/runtime.rs",
+        "owner": "v2::Logger",
+        "member": "new_with_level_owner_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -2339,7 +2358,7 @@
         "error: preserve released LogError failure type at sc_observability::Logger::log boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2349,33 +2368,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "log"
       },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::Logger::log_typed",
       "owner": "sc_observability::Logger",
       "baseline_signature": "pub fn log_typed(&self, event: LogEvent) -> Result<(), LogFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn log_typed(&self, event: LogEvent) -> Result<(), sc_observability_types::typed::EventFailure>",
       "obligations": [
         "signature: preserve sc_observability::Logger::log_typed exactly as recorded in this row baseline_signature: pub fn log_typed(&self, event: LogEvent) -> Result<(), LogFailure>",
         "error: preserve released LogFailure failure type at sc_observability::Logger::log_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
         "owner": "Logger<Running>",
         "member": "log_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/runtime.rs",
+        "owner": "v2::Logger",
+        "member": "log_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -2388,7 +2412,7 @@
         "error: preserve released TryLogError failure type at sc_observability::Logger::try_log boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2398,33 +2422,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "try_log"
       },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::Logger::try_log_typed",
       "owner": "sc_observability::Logger",
       "baseline_signature": "pub fn try_log_typed(&self, event: LogEvent) -> Result<(), TryLogFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn try_log_typed(&self, event: LogEvent) -> Result<(), sc_observability_types::typed::EventFailure>",
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log_typed exactly as recorded in this row baseline_signature: pub fn try_log_typed(&self, event: LogEvent) -> Result<(), TryLogFailure>",
         "error: preserve released TryLogFailure failure type at sc_observability::Logger::try_log_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
         "owner": "Logger<Running>",
         "member": "try_log_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/runtime.rs",
+        "owner": "v2::Logger",
+        "member": "try_log_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -2437,7 +2466,7 @@
         "error: preserve released TryLogError failure type at sc_observability::Logger::try_log_with_outcome boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2447,46 +2476,51 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "try_log_with_outcome"
       },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::Logger::try_log_with_outcome_typed",
       "owner": "sc_observability::Logger",
       "baseline_signature": "pub fn try_log_with_outcome_typed( &self, event: LogEvent, ) -> Result<AdmissionOutcome, TryLogFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn try_log_with_outcome_typed(&self, event: LogEvent) -> Result<AdmissionOutcome, sc_observability_types::typed::EventFailure>",
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log_with_outcome_typed exactly as recorded in this row baseline_signature: pub fn try_log_with_outcome_typed( &self, event: LogEvent, ) -> Result<AdmissionOutcome, TryLogFailure>",
         "error: preserve released TryLogFailure failure type at sc_observability::Logger::try_log_with_outcome_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
         "owner": "Logger<Running>",
         "member": "try_log_with_outcome_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/runtime.rs",
+        "owner": "v2::Logger",
+        "member": "try_log_with_outcome_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::Logger::emit",
       "owner": "sc_observability::Logger",
       "baseline_signature": "pub fn emit(&self, event: LogEvent) -> Result<(), EventError>",
-      "canonical_signature": "pub fn emit(&self, event: LogEvent) -> Result<(), EventError>",
+      "canonical_signature": "pub(crate) fn emit_legacy(&self, event: LogEvent) -> Result<(), v2::EventError>",
       "obligations": [
         "signature: preserve sc_observability::Logger::emit exactly as recorded in this row baseline_signature: pub fn emit(&self, event: LogEvent) -> Result<(), EventError>",
         "error: preserve released EventError failure type at sc_observability::Logger::emit boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the deprecated root emit adapter delegates to the pub(crate) canonical emit_legacy implementation; v2 intentionally exposes no emit method",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2496,10 +2530,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
-        "member": "emit"
+        "owner": "CanonicalLogger<Running>",
+        "member": "emit_legacy"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::Logger::flush",
@@ -2510,8 +2546,8 @@
         "signature: preserve sc_observability::Logger::flush exactly as recorded in this row baseline_signature: pub fn flush(&self) -> Result<(), FlushError>",
         "error: preserve released FlushError failure type at sc_observability::Logger::flush boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2521,31 +2557,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "flush"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::Logger::flush_typed",
       "owner": "sc_observability::Logger",
       "baseline_signature": "pub fn flush_typed(&self) -> Result<(), FlushFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn flush_typed(&self) -> Result<(), sc_observability_types::typed::FlushFailure>",
       "obligations": [
         "signature: preserve sc_observability::Logger::flush_typed exactly as recorded in this row baseline_signature: pub fn flush_typed(&self) -> Result<(), FlushFailure>",
         "error: preserve released FlushFailure failure type at sc_observability::Logger::flush_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
         "owner": "Logger<Running>",
         "member": "flush_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/runtime.rs",
+        "owner": "v2::Logger",
+        "member": "flush_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/runtime.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -2557,8 +2600,8 @@
         "signature: preserve sc_observability::Logger::query exactly as recorded in this row baseline_signature: pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>",
         "error: preserve released QueryError failure type at sc_observability::Logger::query boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2568,10 +2611,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "query"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::Logger::follow",
@@ -2582,8 +2627,8 @@
         "signature: preserve sc_observability::Logger::follow exactly as recorded in this row baseline_signature: pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>",
         "error: preserve released QueryError failure type at sc_observability::Logger::follow boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2593,10 +2638,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "follow"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::Logger::shutdown",
@@ -2607,8 +2654,8 @@
         "signature: preserve sc_observability::Logger::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(mut self) -> Logger<Stopped>",
         "receiver: preserve released mut self receiver at sc_observability::Logger::shutdown boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2618,10 +2665,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "shutdown"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::Logger::level_state",
@@ -2632,8 +2681,8 @@
         "signature: preserve sc_observability::Logger::level_state exactly as recorded in this row baseline_signature: pub fn level_state(&self) -> LevelState",
         "receiver: preserve released &self receiver at sc_observability::Logger::level_state boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2643,10 +2692,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "level_state"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::Logger::health",
@@ -2657,8 +2708,8 @@
         "signature: preserve sc_observability::Logger::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> LoggingHealthReport",
         "receiver: preserve released &self receiver at sc_observability::Logger::health boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/runtime.rs",
@@ -2668,10 +2719,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "Logger",
+        "owner": "v2::Logger",
         "member": "health"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::LoggerBuilder::new",
@@ -2682,8 +2735,8 @@
         "signature: preserve sc_observability::LoggerBuilder::new exactly as recorded in this row baseline_signature: pub fn new(config: LoggerConfig) -> Result<Self, InitError>",
         "error: preserve released InitError failure type at sc_observability::LoggerBuilder::new boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/builder.rs",
@@ -2693,31 +2746,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/builder.rs",
-        "owner": "LoggerBuilder",
+        "owner": "v2::LoggerBuilder",
         "member": "new"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::LoggerBuilder::new_typed",
       "owner": "sc_observability::LoggerBuilder",
       "baseline_signature": "pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn new_typed(config: LoggerConfig) -> Result<Self, sc_observability_types::typed::InitFailure>",
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::new_typed exactly as recorded in this row baseline_signature: pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure>",
         "error: preserve released InitFailure failure type at sc_observability::LoggerBuilder::new_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/builder.rs",
         "owner": "LoggerBuilder",
         "member": "new_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/builder.rs",
+        "owner": "v2::LoggerBuilder",
+        "member": "new_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/builder.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -2729,8 +2789,8 @@
         "signature: preserve sc_observability::LoggerBuilder::register_sink exactly as recorded in this row baseline_signature: pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self",
         "receiver: preserve released &mut self receiver at sc_observability::LoggerBuilder::register_sink boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/builder.rs",
@@ -2740,10 +2800,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/builder.rs",
-        "owner": "LoggerBuilder",
+        "owner": "v2::LoggerBuilder",
         "member": "register_sink"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::LoggerBuilder::build",
@@ -2755,7 +2817,7 @@
         "receiver: preserve released self receiver at sc_observability::LoggerBuilder::build boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/builder.rs",
@@ -2765,33 +2827,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/builder.rs",
-        "owner": "LoggerBuilder",
+        "owner": "v2::LoggerBuilder",
         "member": "build"
       },
       "removable_paths": [
-        "crates/sc-observability/src/builder.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::LoggerBuilder::build_typed",
       "owner": "sc_observability::LoggerBuilder",
       "baseline_signature": "pub fn build_typed(self) -> Result<Logger<Running>, InitFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn build_typed(self) -> Result<v2::Logger<Running>, sc_observability_types::typed::InitFailure>",
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::build_typed exactly as recorded in this row baseline_signature: pub fn build_typed(self) -> Result<Logger<Running>, InitFailure>",
         "error: preserve released InitFailure failure type at sc_observability::LoggerBuilder::build_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/builder.rs",
         "owner": "LoggerBuilder",
         "member": "build_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/builder.rs",
+        "owner": "v2::LoggerBuilder",
+        "member": "build_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/builder.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -2804,7 +2871,7 @@
         "error: preserve released sc_observability_types::InitError failure type at sc_observability::LoggerBuilder::build_with_level_owner boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/builder.rs",
@@ -2814,33 +2881,38 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/builder.rs",
-        "owner": "LoggerBuilder",
+        "owner": "v2::LoggerBuilder",
         "member": "build_with_level_owner"
       },
       "removable_paths": [
-        "crates/sc-observability/src/builder.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::LoggerBuilder::build_with_level_owner_typed",
       "owner": "sc_observability::LoggerBuilder",
       "baseline_signature": "pub fn build_with_level_owner_typed( self, ) -> Result<(Logger<Running>, LevelOwner), InitFailure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn build_with_level_owner_typed(self) -> Result<(v2::Logger<Running>, LevelOwner), sc_observability_types::typed::InitFailure>",
       "obligations": [
         "signature: preserve sc_observability::LoggerBuilder::build_with_level_owner_typed exactly as recorded in this row baseline_signature: pub fn build_with_level_owner_typed( self, ) -> Result<(Logger<Running>, LevelOwner), InitFailure>",
         "error: preserve released InitFailure failure type at sc_observability::LoggerBuilder::build_with_level_owner_typed boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "new_adapter",
+      "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/builder.rs",
         "owner": "LoggerBuilder",
         "member": "build_with_level_owner_typed"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/builder.rs",
+        "owner": "v2::LoggerBuilder",
+        "member": "build_with_level_owner_typed"
+      },
       "removable_paths": [
-        "crates/sc-observability/src/builder.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {

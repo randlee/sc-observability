@@ -34,7 +34,8 @@ Create a logger with the documented defaults:
 ```rust
 use std::path::PathBuf;
 
-use sc_observability::{Logger, LoggerConfig, Running, ServiceName};
+use sc_observability::{LoggerConfig, Running, ServiceName};
+use sc_observability::v2::Logger;
 
 let service = ServiceName::new("my-service")?;
 let logger: Logger<Running> = Logger::new(LoggerConfig::default_for(
@@ -82,20 +83,21 @@ the phase merges, Phase C migrates the shared `sc-publish` pipeline and a
 separate owner authorization is required before publication. BTIT adopts the
 published artifacts afterward.
 
-## 2. `log()`, `try_log()`, `flush()`, And Deprecated `emit()`
+## 2. `v2::Logger::{log, try_log, flush}` And Deprecated Root `emit()`
 
-Use the queue-backed APIs directly in new code:
+Use `sc_observability::v2::Logger` for new code. Its queue-backed APIs return
+the canonical v2 errors directly:
 
 - `Logger::log(event)` validates and redacts the event, then blocks until the
   writer runtime admits it into the bounded queue.
-- `Logger::try_log(event)` performs the same validation path but returns
-  `TryLogError::QueueFull` immediately instead of waiting for queue space.
+- `Logger::try_log(event)` performs the same validation path but returns a
+  canonical routing error immediately instead of waiting for queue space.
 - successful `log()` or `try_log()` means queue admission, not durability on
   disk or console
 - `Logger::flush()` is the durability barrier; call it when the caller must
   wait until queued events have been written and sinks flushed
-- `Logger::emit()` remains available only as a deprecated compatibility path;
-  prefer `log()` or `try_log()` in new code and examples
+- Root `sc_observability::Logger::emit()` remains available only as a
+  deprecated compatibility path; prefer the v2 logger in new code and examples.
 
 ### Queue Admission And Durability
 

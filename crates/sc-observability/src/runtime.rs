@@ -20,7 +20,7 @@ use sc_observability_types::{
 use serde::de::{DeserializeOwned, value::StrDeserializer};
 use serde_json::Value;
 
-use crate::builder::LoggerBuilder;
+use crate::builder::CanonicalLoggerBuilder;
 use crate::follow::LogFollowSession;
 use crate::health::QueryHealthTracker;
 use crate::jsonl_reader::JsonlLogReader;
@@ -31,9 +31,9 @@ use crate::redact::{redact_bearer_token_text, redact_string_value};
 use crate::settings::{LOG_ENV_NAMESPACE_SUFFIX, SHARED_ENV_PREFIX};
 use crate::sinks::{JsonlFileSink, validate_event_size};
 use crate::{
-    EnvSnapshot, LevelOwner, LogEvent, LogRoot, LogSettings, LogSettingsError, LogSettingsInputs,
-    Logger, LoggerConfig, RedactionPolicy, ResolvedLogSettings, RetainedLogPolicy, Running,
-    ServiceName, Stopped, default_log_path, error_codes, shutdown_timed_out_error_context,
+    CanonicalLogger, EnvSnapshot, LevelOwner, LogEvent, LogRoot, LogSettings, LogSettingsError,
+    LogSettingsInputs, LoggerConfig, RedactionPolicy, ResolvedLogSettings, RetainedLogPolicy,
+    Running, ServiceName, Stopped, default_log_path, error_codes, shutdown_timed_out_error_context,
     writer_degraded_error_context,
 };
 
@@ -560,35 +560,37 @@ impl LoggerRuntime {
     }
 }
 
-impl Logger<Running> {
+impl CanonicalLogger<Running> {
     /// Starts a construction-time builder for sink registration.
-    pub fn builder_canonical(
+    pub fn builder(
         config: crate::LoggerConfig,
-    ) -> Result<LoggerBuilder, CanonicalInitError> {
-        LoggerBuilder::new_canonical(config)
+    ) -> Result<CanonicalLoggerBuilder, CanonicalInitError> {
+        CanonicalLoggerBuilder::new(config)
     }
 
     /// Starts a construction-time builder that reports the released typed
     /// initialization failure.
-    pub fn builder_typed(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitFailure> {
-        LoggerBuilder::new_typed(config)
+    pub fn builder_typed(
+        config: crate::LoggerConfig,
+    ) -> Result<CanonicalLoggerBuilder, InitFailure> {
+        CanonicalLoggerBuilder::new_typed(config)
     }
 
     /// Creates a logger with the configured built-in sinks and runtime state.
-    pub fn new_canonical(config: crate::LoggerConfig) -> Result<Self, CanonicalInitError> {
-        LoggerBuilder::new_canonical(config)?.build_canonical()
+    pub fn new(config: crate::LoggerConfig) -> Result<Self, CanonicalInitError> {
+        CanonicalLoggerBuilder::new(config)?.build()
     }
 
     /// Creates a logger with the released typed initialization failure.
     pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, InitFailure> {
-        LoggerBuilder::new_typed(config)?.build_typed()
+        CanonicalLoggerBuilder::new_typed(config)?.build_typed()
     }
 
     /// Creates a logger together with weak authority for runtime level changes.
-    pub fn new_with_level_owner_canonical(
+    pub fn new_with_level_owner(
         config: crate::LoggerConfig,
     ) -> Result<(Self, LevelOwner), CanonicalInitError> {
-        LoggerBuilder::new_canonical(config)?.build_with_level_owner_canonical()
+        CanonicalLoggerBuilder::new(config)?.build_with_level_owner()
     }
 
     /// Creates a logger and level owner with the released typed startup
@@ -596,7 +598,7 @@ impl Logger<Running> {
     pub fn new_with_level_owner_typed(
         config: crate::LoggerConfig,
     ) -> Result<(Self, LevelOwner), InitFailure> {
-        LoggerBuilder::new_typed(config)?.build_with_level_owner_typed()
+        CanonicalLoggerBuilder::new_typed(config)?.build_with_level_owner_typed()
     }
 
     /// Validates, redacts, and admits one structured log event into the writer queue.
@@ -604,7 +606,7 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
-    pub fn log_canonical(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+    pub fn log(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
         let event =
             self.prepare_event(event)
                 .map_err(|failure| CanonicalEventError::Validation {
@@ -625,8 +627,8 @@ impl Logger<Running> {
     }
 
     /// Admits one event with the released typed failure contract.
-    pub fn log_typed_canonical(&self, event: LogEvent) -> Result<(), EventFailure> {
-        self.log_canonical(event)
+    pub fn log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
+        self.log(event)
             .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
@@ -635,13 +637,13 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
-    pub fn try_log_canonical(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
-        self.try_log_with_outcome_canonical(event).map(|_| ())
+    pub fn try_log(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+        self.try_log_with_outcome(event).map(|_| ())
     }
 
     /// Attempts non-blocking admission with the released typed failure contract.
-    pub fn try_log_typed_canonical(&self, event: LogEvent) -> Result<(), EventFailure> {
-        self.try_log_canonical(event)
+    pub fn try_log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
+        self.try_log(event)
             .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
@@ -650,7 +652,7 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
-    pub fn try_log_with_outcome_canonical(
+    pub fn try_log_with_outcome(
         &self,
         event: LogEvent,
     ) -> Result<AdmissionOutcome, CanonicalEventError> {
@@ -692,28 +694,24 @@ impl Logger<Running> {
     }
 
     /// Attempts non-blocking admission and returns the released typed failure.
-    pub fn try_log_with_outcome_typed_canonical(
+    pub fn try_log_with_outcome_typed(
         &self,
         event: LogEvent,
     ) -> Result<AdmissionOutcome, EventFailure> {
-        self.try_log_with_outcome_canonical(event)
+        self.try_log_with_outcome(event)
             .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
     /// Emits one structured log event through the compatibility path.
-    #[deprecated(
-        since = "1.2.0",
-        note = "Use log() for blocking queue admission or try_log() for non-blocking logging."
-    )]
-    pub fn emit_canonical(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
-        self.log_canonical(event)?;
+    pub(crate) fn emit_legacy(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+        self.log(event)?;
         if !self
             .runtime
             .writer
             .as_ref()
             .is_some_and(WriterRuntime::maintenance_active)
         {
-            let _ = self.flush_canonical();
+            let _ = self.flush();
         }
         Ok(())
     }
@@ -726,7 +724,7 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
-    pub fn flush_canonical(&self) -> Result<(), CanonicalFlushError> {
+    pub fn flush(&self) -> Result<(), CanonicalFlushError> {
         let writer = self
             .runtime
             .writer
@@ -745,8 +743,8 @@ impl Logger<Running> {
     }
 
     /// Flushes with the released typed failure contract.
-    pub fn flush_typed_canonical(&self) -> Result<(), sc_observability_types::typed::FlushFailure> {
-        self.flush_canonical().map_err(|error| {
+    pub fn flush_typed(&self) -> Result<(), sc_observability_types::typed::FlushFailure> {
+        self.flush().map_err(|error| {
             sc_observability_types::typed::FlushFailure::from_context(error.into_context())
         })
     }
@@ -783,7 +781,7 @@ impl Logger<Running> {
     ///
     /// Panics if the internal writer-snapshot mutex has been poisoned while
     /// recording final runtime state.
-    pub fn shutdown(mut self) -> Logger<Stopped> {
+    pub fn shutdown(mut self) -> CanonicalLogger<Stopped> {
         self.shutdown.store(true, Ordering::SeqCst);
         self.mark_level_stopping();
         // The owner only has a weak reference to this admission path. Drop the
@@ -802,7 +800,7 @@ impl Logger<Running> {
         }
         self.runtime.query_health.mark_unavailable(None);
         self.mark_level_stopped();
-        Logger {
+        CanonicalLogger {
             config: self.config,
             sinks: self.sinks,
             shutdown: self.shutdown,
@@ -914,7 +912,7 @@ impl Logger<Running> {
     }
 }
 
-impl<State> Logger<State> {
+impl<State> CanonicalLogger<State> {
     /// Returns a coherent snapshot of the logger's runtime level state.
     #[must_use]
     pub fn level_state(&self) -> LevelState {
