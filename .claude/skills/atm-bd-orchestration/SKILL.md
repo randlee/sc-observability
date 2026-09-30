@@ -35,23 +35,7 @@ Never block on bureaucracy. Dev waits only on its prerequisites'
 sanity checks; QA, triage and fixes run beside it. 100% of findings are
 closed, each with a close reason.
 
-## Step 1 — Verify CLI Installation
-
-Run this before anything else in the skill:
-
-```bash
-for c in bd atm sc-compose jq gh; do command -v "$c" >/dev/null && echo "ok $c" || echo "MISSING $c"; done
-bd version    # 1.3.0 or newer
-gh stack --version   # the gh-stack extension
-```
-
-The standalone `sc-compose` CLI is required even though `atm` embeds it.
-The `sc-gh-stack` and `sc-git-worktree` skills (synaptic-canvas plugin)
-must be installed.
-
-If anything is missing or too old, **read
-[`../atm-beads/references/installation-and-troubleshooting.md`](../atm-beads/references/installation-and-troubleshooting.md)
-before proceeding.**
+Required tools, and how to check them: [`prerequisites.md`](prerequisites.md).
 
 ## Lead Role
 
