@@ -134,18 +134,45 @@ registry_path = root / "docs/compatibility/registry.json"
 if not registry_path.exists():
     raise SystemExit("docs/compatibility/registry.json is missing")
 registry = json.loads(registry_path.read_text(encoding="utf-8"))
-if registry.get("registry_version") != 1:
+if registry.get("registry_version") != 2:
     raise SystemExit("compatibility registry version is missing or unsupported")
 if registry.get("baseline", {}).get("commit") != "c578912653233c7dc678fefe5af575118dbbaaa1":
     raise SystemExit("compatibility registry baseline is not the pinned v1.4.1 audit")
 symbols = registry.get("symbols", [])
-required_symbol_fields = {"symbol", "area", "kind", "status", "canonical"}
+required_record_fields = {
+    "symbol",
+    "baseline_signature",
+    "canonical_signature",
+    "obligations",
+    "treatment",
+    "conversion",
+    "removable_paths",
+}
+required_symbol_fields = {"area", "kind", "status", "canonical"} | required_record_fields
 if len(symbols) != 58 or len({row.get("symbol") for row in symbols}) != 58:
     raise SystemExit("compatibility registry must contain each of the 58 audited symbols once")
 if any(not required_symbol_fields.issubset(row) for row in symbols):
     raise SystemExit("compatibility registry has an incomplete symbol row")
 if {row["status"] for row in symbols} - {"restored_root", "canonical_routed", "pending_d23_wrapper"}:
     raise SystemExit("compatibility registry has an unknown disposition")
+allowed_treatments = {"unchanged_alias", "existing_pair", "new_adapter", "restoration"}
+all_contract_rows = symbols + registry.get("method_contracts", []) + registry.get("trait_slot_contracts", [])
+if len(registry.get("method_contracts", [])) != 141:
+    raise SystemExit("compatibility registry must contain all 141 audited inherent/free callables")
+if len({row.get("symbol") for row in registry["method_contracts"]}) != 141:
+    raise SystemExit("compatibility callable records must have unique symbols")
+if len(registry.get("trait_slot_contracts", [])) != 12:
+    raise SystemExit("compatibility registry must contain all 12 audited trait slots")
+if len({row.get("symbol") for row in registry["trait_slot_contracts"]}) != 12:
+    raise SystemExit("compatibility trait-slot records must have unique symbols")
+if any(not required_record_fields.issubset(row) for row in all_contract_rows):
+    raise SystemExit("compatibility registry has an incomplete contract record")
+if {row["treatment"] for row in all_contract_rows} - allowed_treatments:
+    raise SystemExit("compatibility registry has an unknown four-way treatment")
+if any(not isinstance(row["baseline_signature"], str) or not row["baseline_signature"] for row in all_contract_rows):
+    raise SystemExit("compatibility registry has an unsigned baseline contract")
+if any(row["canonical_signature"] is None and row["treatment"] != "restoration" for row in all_contract_rows):
+    raise SystemExit("missing canonical signatures must be explicit restoration records")
 deprecated_exceptions = set(registry.get("deprecated_owner_exceptions", []))
 root_reexport_exceptions = set(registry.get("compat_root_reexport_exceptions", []))
 compat_reference = re.compile(r"(?:crate::)?compat::|::compat::")
@@ -227,14 +254,14 @@ if not (root / "examples/atm-adapter-example/Cargo.toml").exists():
     raise SystemExit("examples/atm-adapter-example/Cargo.toml is missing")
 
 subprocess.run(
-    ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml"],
+    ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml", "--locked"],
     cwd=root,
     check=True,
 )
 
 # D.17's existing consumer migration replaces the temporary expected-failure gate.
 subprocess.run(
-    ["cargo", "check", "--manifest-path", "examples/custom-sink-example/Cargo.toml"],
+    ["cargo", "check", "--manifest-path", "examples/custom-sink-example/Cargo.toml", "--locked"],
     cwd=root,
     check=True,
 )
