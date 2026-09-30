@@ -45,7 +45,23 @@ fn legacy_shutdown_error(error: ShutdownError) -> LegacyShutdownError {
 }
 
 impl ObservabilityConfig {
-    /// Builds v1 defaults while retaining the released root failure contract.
+    /// Builds the documented v1 defaults from a tool name and log root.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use sc_observability_types::ToolName;
+    /// use sc_observe::ObservabilityConfig;
+    ///
+    /// let config = ObservabilityConfig::default_for(
+    ///     ToolName::new("demo-tool").expect("valid tool"),
+    ///     PathBuf::from("logs"),
+    /// )
+    /// .expect("valid config");
+    ///
+    /// assert_eq!(config.tool_name.as_str(), "demo-tool");
+    /// ```
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
@@ -85,6 +101,11 @@ impl Observability {
     }
 
     /// Flushes the shared runtime with the released root failure contract.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// flushing its registered sinks.
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
@@ -94,6 +115,11 @@ impl Observability {
     }
 
     /// Shuts down the shared runtime with the released root failure contract.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// flushing sinks or updating query/follow health during shutdown.
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
