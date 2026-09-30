@@ -573,6 +573,11 @@ impl Logger<Running> {
         LoggerBuilder::new(config)?.build_canonical()
     }
 
+    /// Creates a logger with the released typed initialization failure.
+    pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, InitFailure> {
+        LoggerBuilder::new_typed(config)?.build_typed()
+    }
+
     /// Creates a logger together with weak authority for runtime level changes.
     pub fn new_with_level_owner(
         config: crate::LoggerConfig,
@@ -605,6 +610,12 @@ impl Logger<Running> {
         })
     }
 
+    /// Admits one event with the released typed failure contract.
+    pub fn log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
+        self.log(event)
+            .map_err(|error| EventFailure::from_context(error.into_context()))
+    }
+
     /// Attempts non-blocking queue admission for one structured log event.
     ///
     /// # Panics
@@ -612,6 +623,12 @@ impl Logger<Running> {
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn try_log(&self, event: LogEvent) -> Result<(), EventError> {
         self.try_log_with_outcome(event).map(|_| ())
+    }
+
+    /// Attempts non-blocking admission with the released typed failure contract.
+    pub fn try_log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
+        self.try_log(event)
+            .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
     /// Attempts non-blocking admission and reports whether level policy filtered the event.
@@ -657,6 +674,15 @@ impl Logger<Running> {
         }
     }
 
+    /// Attempts non-blocking admission and returns the released typed failure.
+    pub fn try_log_with_outcome_typed(
+        &self,
+        event: LogEvent,
+    ) -> Result<AdmissionOutcome, EventFailure> {
+        self.try_log_with_outcome(event)
+            .map_err(|error| EventFailure::from_context(error.into_context()))
+    }
+
     /// Emits one structured log event through the compatibility path.
     #[deprecated(
         since = "1.2.0",
@@ -699,6 +725,13 @@ impl Logger<Running> {
             });
         }
         Ok(())
+    }
+
+    /// Flushes with the released typed failure contract.
+    pub fn flush_typed(&self) -> Result<(), sc_observability_types::typed::FlushFailure> {
+        self.flush().map_err(|error| {
+            sc_observability_types::typed::FlushFailure::from_context(error.into_context())
+        })
     }
 
     /// Queries the current JSONL log set synchronously using the shared query contract.
