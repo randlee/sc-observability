@@ -35,7 +35,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use sc_observability::v2::Logger;
 use sc_observability::{
-    LogError, Logger as ReleasedLogger, LoggerConfig, RetainedLogPolicy, Running, Stopped,
+    Logger as ReleasedLogger, LoggerConfig, RetainedLogPolicy, Running, Stopped,
 };
 use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::v2::{
@@ -391,17 +391,6 @@ impl RunningFlushError {
 }
 
 impl RunningLogger {
-    fn log(&self, event: sc_observability_types::LogEvent) -> Result<(), DiagnosticSummary> {
-        match self {
-            Self::Canonical(logger) => logger
-                .log(event)
-                .map_err(|error| canonical_log_error_summary(&error)),
-            Self::Released(logger) => logger
-                .log_typed(event)
-                .map_err(|failure| released_log_error_summary(&LogError::from(failure))),
-        }
-    }
-
     fn flush(&self) -> Result<(), RunningFlushError> {
         match self {
             Self::Canonical(logger) => logger.flush().map_err(RunningFlushError::Canonical),
@@ -439,19 +428,6 @@ struct ProjectionDispatchResult {
 
 fn canonical_log_error_summary(error: &EventError) -> DiagnosticSummary {
     DiagnosticSummary::from(error.diagnostic())
-}
-
-#[allow(
-    deprecated,
-    reason = "released admission reports the retained 1.x LogError summary shape"
-)]
-fn released_log_error_summary(error: &LogError) -> DiagnosticSummary {
-    match error {
-        LogError::InvalidEvent(error) => DiagnosticSummary::from(error.diagnostic()),
-        LogError::WriterDegraded(error) | LogError::ShutdownTimedOut(error) => {
-            DiagnosticSummary::from(error.diagnostic())
-        }
-    }
 }
 
 impl Observability {

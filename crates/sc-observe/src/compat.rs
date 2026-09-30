@@ -6,8 +6,10 @@
 
 use std::path::PathBuf;
 
+use sc_observability::LogError;
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
+use sc_observability_types::{DiagnosticInfo, DiagnosticSummary, LogEvent, ServiceName, ToolName};
 #[expect(
     deprecated,
     reason = "root methods retain the released compatibility error wrappers"
@@ -16,9 +18,10 @@ use sc_observability_types::{
     FlushError as LegacyFlushError, InitError as LegacyInitError,
     ShutdownError as LegacyShutdownError,
 };
-use sc_observability_types::{ServiceName, ToolName};
 
-use crate::{Observability, ObservabilityBuilder, ObservabilityConfig, RunningFlushError};
+use crate::{
+    Observability, ObservabilityBuilder, ObservabilityConfig, RunningFlushError, RunningLogger,
+};
 
 #[expect(
     deprecated,
@@ -41,9 +44,30 @@ fn legacy_flush_error(error: FlushError) -> LegacyFlushError {
     reason = "root methods retain the released compatibility error wrappers"
 )]
 fn legacy_running_flush_error(error: RunningFlushError) -> LegacyFlushError {
+    legacy_flush_error(error.into_canonical())
+}
+
+fn released_log_error_summary(error: LogError) -> DiagnosticSummary {
     match error {
-        RunningFlushError::Canonical(error) => legacy_flush_error(error),
-        RunningFlushError::Released(failure) => LegacyFlushError(failure.into_context()),
+        LogError::InvalidEvent(error) => DiagnosticSummary::from(error.diagnostic()),
+        LogError::WriterDegraded(error) | LogError::ShutdownTimedOut(error) => {
+            DiagnosticSummary::from(error.diagnostic())
+        }
+    }
+}
+
+impl RunningLogger {
+    #[expect(
+        deprecated,
+        reason = "released admission reports the retained 1.x LogError summary shape"
+    )]
+    pub(crate) fn log(&self, event: LogEvent) -> Result<(), DiagnosticSummary> {
+        match self {
+            Self::Canonical(logger) => logger
+                .log(event)
+                .map_err(|error| crate::canonical_log_error_summary(&error)),
+            Self::Released(logger) => logger.log(event).map_err(released_log_error_summary),
+        }
     }
 }
 
