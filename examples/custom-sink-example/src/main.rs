@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use sc_observability::LogSinkError;
 use sc_observability::{
     ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent, LogFilter,
-    LoggerBuilder, LoggerConfig, LogSink, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity,
-    Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName,
-    SinkRegistration, TargetCategory, Timestamp, WriterState,
+    LogSink, LoggerBuilder, LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel,
+    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState,
+    SinkName, SinkRegistration, TargetCategory, Timestamp, WriterState,
 };
 use serde_json::json;
 
@@ -191,27 +191,26 @@ fn build_health_event(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("custom-sink-example")?;
     let root = std::env::temp_dir().join("sc-observability-custom-sink-example");
-    let mut builder = LoggerBuilder::new_typed(LoggerConfig::default_for(service.clone(), root))?;
+    let mut builder = LoggerBuilder::new(LoggerConfig::default_for(service.clone(), root))?;
 
     builder.register_sink(
-        SinkRegistration::new(Arc::new(AuditSink::new()))
-        .with_filter(Arc::new(AuditOnly)),
+        SinkRegistration::new(Arc::new(AuditSink::new())).with_filter(Arc::new(AuditOnly)),
     );
-    let logger = builder.build_typed()?;
+    let logger = builder.build()?;
 
-    logger.log_typed(build_event(
+    logger.log(build_event(
         service.clone(),
         TARGET_AUDIT,
         ACTION_STARTUP,
         MESSAGE_AUDIT_ACCEPTED,
     ))?;
-    if let Err(err) = logger.try_log_typed(build_event(
+    if let Err(err) = logger.try_log(build_event(
         service.clone(),
         TARGET_CORE,
         ACTION_HEARTBEAT,
         MESSAGE_FILE_ONLY,
     )) {
-        logger.log_typed(build_health_event(
+        logger.log(build_health_event(
             service.clone(),
             Level::Warn,
             ACTION_WRITER_WARNING,
@@ -219,10 +218,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             serde_json::Map::from_iter([(FIELD_ERROR.to_string(), json!(err.to_string()))]),
         ))?;
     }
-    logger.flush_typed()?;
+    logger.flush()?;
 
     let health = logger.health();
-    logger.log_typed(build_health_event(
+    logger.log(build_health_event(
         service.clone(),
         Level::Info,
         ACTION_LOGGER_HEALTH,
@@ -257,7 +256,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ))?;
 
     if health.queue_full_drops_total != 0 {
-        logger.log_typed(build_health_event(
+        logger.log(build_health_event(
             service.clone(),
             Level::Warn,
             ACTION_WRITER_WARNING,
@@ -270,7 +269,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if health.writer_state != WriterState::Running {
-        logger.log_typed(build_health_event(
+        logger.log(build_health_event(
             service.clone(),
             Level::Warn,
             ACTION_WRITER_WARNING,
@@ -283,7 +282,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(error) = &health.last_writer_error {
-        logger.log_typed(build_health_event(
+        logger.log(build_health_event(
             service.clone(),
             Level::Warn,
             ACTION_WRITER_WARNING,
@@ -313,7 +312,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             Level::Warn
         };
-        logger.log_typed(build_health_event(
+        logger.log(build_health_event(
             service.clone(),
             level,
             ACTION_SINK_HEALTH,
@@ -328,7 +327,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
     }
 
-    logger.flush_typed()?;
+    logger.flush()?;
     let _stopped = logger.shutdown();
 
     Ok(())

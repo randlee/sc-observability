@@ -378,7 +378,7 @@ where
         for event in &events {
             self.telemetry
                 .emit_log(event)
-                .map_err(legacy_telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_failure)?;
         }
         Ok(events)
     }
@@ -401,7 +401,7 @@ where
         for span in &spans {
             self.telemetry
                 .emit_span(span)
-                .map_err(legacy_telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_failure)?;
         }
         Ok(spans)
     }
@@ -424,7 +424,7 @@ where
         for metric in &metrics {
             self.telemetry
                 .emit_metric(metric)
-                .map_err(legacy_telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_failure)?;
         }
         Ok(metrics)
     }
@@ -432,18 +432,10 @@ where
 
 // The ATM adapter's projector callback still uses the typed extension trait;
 // move the canonical telemetry context through that boundary unchanged.
-fn legacy_telemetry_to_projection_failure(
-    error: sc_observability_types::TelemetryError,
+fn canonical_telemetry_to_projection_failure(
+    error: sc_observability_otlp::TelemetryError,
 ) -> ProjectionFailure {
-    match error {
-        sc_observability_types::TelemetryError::Shutdown { context } => {
-            ProjectionFailure::from_context(context)
-        }
-        sc_observability_types::TelemetryError::ExportFailure(error) => {
-            ProjectionFailure::from_context(error.into_context())
-        }
-        other => ProjectionFailure::from_context(other.into_context()),
-    }
+    ProjectionFailure::from_context(error.into_context())
 }
 
 fn validation_to_projection_failure(
