@@ -574,11 +574,8 @@ fn bounded_span_assembly_evicts_oldest_span_and_excess_events_with_accounting() 
         .push_typed(start(second_trace.clone()))
         .expect("second span");
 
-    assert!(!assembler.has_started(first_trace.trace_id.as_str(), first_trace.span_id.as_str()));
-    assert!(assembler.has_started(
-        second_trace.trace_id.as_str(),
-        second_trace.span_id.as_str()
-    ));
+    assert!(!assembler.has_started(&first_trace.trace_id, &first_trace.span_id));
+    assert!(assembler.has_started(&second_trace.trace_id, &second_trace.span_id));
     assert_eq!(
         assembler.take_loss(),
         SpanAssemblyLoss {
@@ -717,7 +714,7 @@ fn span_assembler_typed_and_legacy_errors_preserve_lifecycle_diagnostics() {
             .expect("typed started")
             .is_none()
     );
-    let key = span_key(trace.trace_id.as_str(), trace.span_id.as_str());
+    let key = span_key(&trace.trace_id, &trace.span_id);
     legacy.remove_event_buffer(&key);
     typed.remove_event_buffer(&key);
 

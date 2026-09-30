@@ -18,7 +18,8 @@ use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::error_codes;
 use sc_observability_types::typed::EventFailure;
 use sc_observability_types::{
-    ErrorContext, Remediation, SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted,
+    ErrorContext, Remediation, SpanEnded, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
+    TraceId,
 };
 
 use sc_observability_types::v2::{
@@ -121,7 +122,7 @@ impl SpanAssembler {
         }
     }
 
-    pub(crate) fn has_started(&self, trace_id: &str, span_id: &str) -> bool {
+    pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
         self.started.contains_key(&span_key(trace_id, span_id))
     }
 
@@ -150,10 +151,7 @@ impl SpanAssembler {
     pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure> {
         match signal {
             SpanSignal::Started(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
+                let key = span_key(&record.trace().trace_id, &record.trace().span_id);
                 if self.started.contains_key(&key) {
                     self.remove_started(&key);
                 } else if self.started.len() >= self.max_live_spans {
@@ -165,7 +163,7 @@ impl SpanAssembler {
                 Ok(None)
             }
             SpanSignal::Event(event) => {
-                let key = span_key(event.trace.trace_id.as_str(), event.trace.span_id.as_str());
+                let key = span_key(&event.trace.trace_id, &event.trace.span_id);
                 if !self.started.contains_key(&key) {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
@@ -193,10 +191,7 @@ impl SpanAssembler {
                 Ok(None)
             }
             SpanSignal::Ended(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
+                let key = span_key(&record.trace().trace_id, &record.trace().span_id);
                 let Some(started) = self.started.get(&key) else {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
@@ -279,16 +274,13 @@ impl V2SpanAssembler {
     ) -> Result<Option<V2CompleteSpan>, V2EventError> {
         match signal {
             V2SpanSignal::Started(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
+                let key = span_key(&record.trace().trace_id, &record.trace().span_id);
                 self.events.insert(key.clone(), Vec::new());
                 self.started.insert(key, record);
                 Ok(None)
             }
             V2SpanSignal::Event(event) => {
-                let key = span_key(event.trace.trace_id.as_str(), event.trace.span_id.as_str());
+                let key = span_key(&event.trace.trace_id, &event.trace.span_id);
                 let Some(started) = self.started.get(&key) else {
                     return Err(v2_lifecycle_error(
                         "received span event without a matching started span",
@@ -305,10 +297,7 @@ impl V2SpanAssembler {
                 Ok(None)
             }
             V2SpanSignal::Ended(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
+                let key = span_key(&record.trace().trace_id, &record.trace().span_id);
                 let Some(started) = self.started.remove(&key) else {
                     return Err(v2_lifecycle_error(
                         "received ended span without a matching started span",
@@ -374,11 +363,11 @@ impl Default for SpanAssembler {
     }
 }
 
-pub(crate) fn span_key(trace_id: &str, span_id: &str) -> String {
-    let mut key = String::with_capacity(trace_id.len() + span_id.len() + 1);
-    key.push_str(trace_id);
+pub(crate) fn span_key(trace_id: &TraceId, span_id: &SpanId) -> String {
+    let mut key = String::with_capacity(trace_id.as_str().len() + span_id.as_str().len() + 1);
+    key.push_str(trace_id.as_str());
     key.push(':');
-    key.push_str(span_id);
+    key.push_str(span_id.as_str());
     key
 }
 
@@ -490,7 +479,7 @@ mod tests {
         let ended = started_record
             .clone()
             .end(SpanStatus::Ok, DurationMs::from(1));
-        let key = span_key(trace.trace_id.as_str(), trace.span_id.as_str());
+        let key = span_key(&trace.trace_id, &trace.span_id);
         let mut assembler = V2SpanAssembler::new();
 
         assembler
