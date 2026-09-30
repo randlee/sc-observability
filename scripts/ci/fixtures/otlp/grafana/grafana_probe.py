@@ -17,12 +17,14 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Mapping
 from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
 SERVICE_NAME = "sc-observability-d9"
 MAX_DEADLINE_SECONDS = 120
 SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+TRACE_ID = re.compile(r"^[0-9a-f]{32}$")
 ENVIRONMENT_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
@@ -57,8 +59,8 @@ class GrafanaConfig:
         if missing:
             raise ConfigurationUnavailable("missing configuration references: " + ", ".join(missing))
         protocol = env[fields["ingest_protocol"]]
-        if protocol not in {"http/protobuf", "grpc"}:
-            raise ConfigurationUnavailable("OTEL_EXPORTER_OTLP_PROTOCOL must be http/protobuf or grpc")
+        if protocol != "http/protobuf":
+            raise ConfigurationUnavailable("OTEL_EXPORTER_OTLP_PROTOCOL must be http/protobuf")
         config = cls(**{field: env[name] for field, name in fields.items()})
         for reference in (config.logs_auth_env, config.traces_auth_env, config.metrics_auth_env):
             if not ENVIRONMENT_NAME.fullmatch(reference):
@@ -89,6 +91,12 @@ def require_safe_id(value: str, name: str) -> str:
     return value
 
 
+def require_trace_id(value: str) -> str:
+    if not TRACE_ID.fullmatch(value):
+        raise ValueError("trace_id must be exactly 32 lowercase hexadecimal characters")
+    return value
+
+
 def queries(run_id: str, trace_id: str, start: int, end: int) -> dict[str, dict[str, str]]:
     """Return account-neutral query requests using current neutral attributes.
 
@@ -96,12 +104,12 @@ def queries(run_id: str, trace_id: str, start: int, end: int) -> dict[str, dict[
     PromQL query, which is the documented OTLP-to-Prometheus convention.
     """
     run_id = require_safe_id(run_id, "run_id")
-    trace_id = require_safe_id(trace_id, "trace_id")
-    selector = f'{{service_name="{SERVICE_NAME}",test_run_id="{run_id}"}}'
+    trace_id = require_trace_id(trace_id)
+    metric_selector = f'{{service_name="{SERVICE_NAME}",test_run_id="{run_id}"}}'
     return {
-        "logs": {"query": f'{selector} |= "{run_id}"', "start": str(start), "end": str(end), "limit": "100"},
+        "logs": {"query": f'{{service_name="{SERVICE_NAME}"}} | json | test_run_id="{run_id}"', "start": str(start), "end": str(end), "limit": "100"},
         "traces": {"q": f'{{ resource.service.name = "{SERVICE_NAME}" && .test.run_id = "{run_id}" }}', "start": str(start), "end": str(end)},
-        "metrics": {"query": f"sc_observability_d9_probe_total{selector}", "start": str(start), "end": str(end), "step": "15s"},
+        "metrics": {"query": f"sc_observability_d9_probe_total{metric_selector}", "start": str(start), "end": str(end), "step": "15s"},
     }
 
 
@@ -113,16 +121,47 @@ def request_json(url: str, params: Mapping[str, str], authorization: str, timeou
 
 
 def contains_exact_log(payload: object, run_id: str) -> bool:
-    return run_id in json.dumps(payload, sort_keys=True)
+    """Match an exact synthetic record in Loki's successful streams result."""
+    if not isinstance(payload, dict) or payload.get("status") != "success":
+        return False
+    data = payload.get("data")
+    if not isinstance(data, dict) or data.get("resultType") != "streams":
+        return False
+    streams = data.get("result")
+    if not isinstance(streams, list):
+        return False
+    for stream in streams:
+        if not isinstance(stream, dict) or not isinstance(stream.get("values"), list):
+            continue
+        for value in stream["values"]:
+            if isinstance(value, list) and len(value) >= 2 and isinstance(value[1], str) and run_id in value[1]:
+                return True
+    return False
 
 
 def contains_exact_trace(payload: object, trace_id: str) -> bool:
-    return trace_id.lower() in json.dumps(payload, sort_keys=True).lower()
+    if not isinstance(payload, dict):
+        return False
+    traces = payload.get("traces")
+    if not isinstance(traces, list):
+        return False
+    return any(isinstance(trace, dict) and trace.get("traceID") == trace_id for trace in traces)
 
 
 def contains_exact_metric(payload: object, run_id: str) -> bool:
-    text = json.dumps(payload, sort_keys=True)
-    return run_id in text and ("test_run_id" in text or "test.run_id" in text)
+    if not isinstance(payload, dict) or payload.get("status") != "success":
+        return False
+    data = payload.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("result"), list):
+        return False
+    for series in data["result"]:
+        if not isinstance(series, dict) or not isinstance(series.get("metric"), dict):
+            continue
+        labels = series["metric"]
+        samples = series.get("values")
+        if labels.get("test_run_id") == run_id and labels.get("service_name") == SERVICE_NAME and isinstance(samples, list) and samples:
+            return True
+    return False
 
 
 def run_probe(config: GrafanaConfig, run_id: str, trace_id: str, now: int, env: Mapping[str, str], opener: Callable = urlopen) -> dict[str, object]:
@@ -143,16 +182,24 @@ def run_probe(config: GrafanaConfig, run_id: str, trace_id: str, now: int, env: 
             return {"status": "FAIL", "reason": "three-signal query deadline exceeded", "deadline_seconds": MAX_DEADLINE_SECONDS, "signals": results}
         try:
             payload = request_json(url, query_set[signal], env[auth_reference], remaining, opener)
-        except (OSError, ValueError, json.JSONDecodeError):
+        except HTTPError as error:
+            if error.code in {401, 403}:
+                return {"status": "BLOCKED", "reason": f"{signal} query access is unavailable", "signals": results}
+            return {"status": "FAIL", "reason": f"{signal} query returned an HTTP error", "signals": results}
+        except (URLError, TimeoutError, ConnectionError, OSError):
+            return {"status": "BLOCKED", "reason": f"{signal} query access is unavailable", "signals": results}
+        except (ValueError, json.JSONDecodeError):
             return {"status": "FAIL", "reason": f"{signal} query did not return a usable response", "deadline_seconds": MAX_DEADLINE_SECONDS, "signals": results}
+        if time.monotonic() >= deadline:
+            return {"status": "FAIL", "reason": "three-signal query deadline exceeded", "deadline_seconds": MAX_DEADLINE_SECONDS, "signals": results}
         exact = matcher(payload, trace_id if signal == "traces" else run_id)
-        results[signal] = {"exact_match": exact, "query": query_set[signal]}
+        results[signal] = {"structural_match": exact, "query": query_set[signal]}
     presentation = {
         "logs": query_set["logs"]["query"],
         "traces": query_set["traces"]["q"],
         "metrics": query_set["metrics"]["query"],
     }
-    passed = all(item["exact_match"] for item in results.values())
+    passed = all(item["structural_match"] for item in results.values())
     return {"status": "PASS" if passed else "FAIL", "deadline_seconds": MAX_DEADLINE_SECONDS, "signals": results, "presentation_queries": presentation}
 
 
@@ -172,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         result = run_probe(config, args.run_id, args.trace_id, int(time.time()), os.environ)
         print(json.dumps(result, sort_keys=True))
-        return 0 if result["status"] == "PASS" else 2
+        return {"PASS": 0, "FAIL": 1, "BLOCKED": 2}[result["status"]]
     except (ConfigurationUnavailable, ValueError) as error:
         print(json.dumps({"status": "BLOCKED", "reason": str(error)}))
         return 2
