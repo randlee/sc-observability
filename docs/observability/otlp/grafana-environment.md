@@ -2,12 +2,12 @@
 
 ## Status and ownership
 
-This is a setup harness, not evidence that the user account is usable. On
-2026-09-29 the deployment type, stack URL, OTLP receiver, per-signal query
-URLs, tenant identifiers, credential references, and enabled Loki/Tempo/metrics
-stores were **not available**. `config-agent@hermes` owns account configuration
-with the user. No credential, stack URL, tenant, or token is stored in this
-repository.
+This is a setup harness, not evidence that the user account is usable. As of
+2026-09-30 UTC (config-agent report `01M3R4MK55FYNBJKV12BM6A7AZ`), the OTLP
+receiver, per-signal query URLs, tenant identifiers, credential references, and
+enabled Loki/Tempo/metrics stores were **not available**. `config-agent@hermes`
+owns account configuration with the user. No credential, stack URL, tenant, or
+token is stored in this repository.
 
 Config-agent's 2026-09-30 nonsecret readiness report identifies **Grafana
 Cloud** as the legacy target and expects HTTPS OTLP/HTTP ingestion plus Loki,
@@ -30,8 +30,9 @@ approved local secret store or protected CI configuration and provide:
 
 | Purpose | Variable | Value policy |
 | --- | --- | --- |
+| Grafana UI/stack URL | `SC_OBS_GRAFANA_URL` | Optional nonsecret UI reference; it is not an ingest endpoint. |
 | OTLP producer endpoint | `OTEL_EXPORTER_OTLP_ENDPOINT` | Actual endpoint; do not commit it if account-sensitive. |
-| OTLP producer protocol | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` or `grpc`. |
+| OTLP producer protocol | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` only for the Grafana Cloud direct-ingest contract. |
 | OTLP headers | `OTEL_EXPORTER_OTLP_HEADERS` | Secret-bearing; never print or commit. |
 | Loki query route | `SC_OBS_GRAFANA_LOGS_QUERY_URL` | Full actual query URL. |
 | Tempo query route | `SC_OBS_GRAFANA_TRACES_QUERY_URL` | Full actual query URL. |
@@ -43,12 +44,15 @@ not accept the required production backend protocol, document a version- and
 digest-pinned Collector or Alloy ingress before using it. This harness neither
 installs an ingress nor adds a third library transport.
 
-Config-agent proposed `SC_OBS_GRAFANA_URL` for the UI/stack reference and the
-three `SC_OBS_GRAFANA_*_QUERY_URL` variables above. The producer adapter keeps
-the standard `OTEL_EXPORTER_OTLP_ENDPOINT` and
+Config-agent supplied `SC_OBS_GRAFANA_URL=https://randlee.grafana.net/` as a
+nonsecret UI/stack reference and proposed the three
+`SC_OBS_GRAFANA_*_QUERY_URL` variables above. The producer adapter keeps the
+standard `OTEL_EXPORTER_OTLP_ENDPOINT` and
 `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` contract required by the collector
-plan. Historical `ATM_OTEL_*` and `ATM_LOKI_*` names are migration evidence
-only; they are not a generic shared-repository contract.
+plan. Ingest is contract-only in this setup layer: emission, flush, and
+shutdown belong to the D9 public factory. Historical `ATM_OTEL_*` and
+`ATM_LOKI_*` names are migration evidence only; they are not a generic
+shared-repository contract.
 
 ## Query routes and neutral-schema mapping
 
@@ -60,17 +64,33 @@ configured TraceQL search endpoint, and Prometheus
 Grafana UI URL.
 
 Every synthetic record uses the bounded resource `service.name=sc-observability-d9`
-and an attribute `test.run_id=<safe unique value>`. LogQL and TraceQL retain
-those neutral attribute names. PromQL uses the conventional OTLP-promoted label
-normalization `service_name` and `test_run_id`; that normalization is explicit
-in `grafana_probe.py`, never a claim that the neutral attributes changed.
+and an attribute `test.run_id=<safe unique value>`. TraceQL retains those
+neutral attributes. LogQL selects the resource-promoted `service_name` label,
+then parses and filters the structured `test_run_id` attribute. PromQL uses the
+conventional OTLP-promoted label normalization `service_name` and `test_run_id`;
+that normalization is explicit in `grafana_probe.py`, never a claim that the
+neutral attributes changed.
 
 The generated presentation queries are:
 
 ```text
-LogQL:   {service_name="sc-observability-d9",test_run_id="<run>"} |= "<run>"
+LogQL:   {service_name="sc-observability-d9"} | json | test_run_id="<run>"
 TraceQL: { resource.service.name = "sc-observability-d9" && .test.run_id = "<run>" }
 PromQL:  sc_observability_d9_probe_total{service_name="sc-observability-d9",test_run_id="<run>"}
+```
+
+The following is a non-destructive dashboard panel example. Replace only the
+datasource UID placeholder after config-agent verifies it; do not replace a
+production dashboard. This is a handoff artifact, not evidence that the panel
+works against the unprovisioned account.
+
+```json
+{
+  "title": "D9 protected synthetic logs",
+  "type": "logs",
+  "datasource": {"uid": "<loki-datasource-uid>"},
+  "targets": [{"expr": "{service_name=\"sc-observability-d9\"} | json | test_run_id=\"${run_id}\"", "refId": "A"}]
+}
 ```
 
 Confirm the final metric name and Tempo syntax against the selected deployment
@@ -80,24 +100,34 @@ pretends to emit production telemetry itself.
 
 ## Offline and protected verification
 
-Offline verification is hermetic and mandatory before account availability:
+Offline verification is hermetic but is not independently wired into this
+preparation branch's CI. `obs-d-9` deliverable 3 owns wiring it into the
+`otlp-conformance.yml` CI job; run it locally before a protected probe:
 
 ```sh
 python3 scripts/ci/fixtures/otlp/grafana/test_grafana_probe.py
 ```
 
 After a protected environment has emitted the bounded D9 corpus, run the remote
-read-only query probe explicitly. It has a fixed 120-second window and makes no
-account-destructive request:
+read-only query probe explicitly and promptly. It queries the 120 seconds
+ending at invocation, and its total request budget (not each individual socket)
+is 120 seconds; it makes no account-destructive request:
 
 ```sh
 SC_OBS_GRAFANA_PROBE=1 python3 scripts/ci/fixtures/otlp/grafana/grafana_probe.py \
   --run-id '<run-id>' --trace-id '<known-trace-id>'
 ```
 
-The command returns `PASS` only when exact logs, the known trace ID, and the
-bounded metric series all match, and it returns the three presentation queries.
-Absent configuration or credentials returns `BLOCKED` before network activity;
-missing data returns `FAIL`. Preserve redacted request/result evidence, code
-SHA, deployment identity, backend/protocol, expected values and one outcome per
-signal in the D9 sanity/QA evidence.
+Use `--print-contract` with the nonsecret reference variables configured to
+emit the redacted configuration contract without querying the account.
+
+The command returns `PASS` only when a Loki stream value contains the run ID, a
+Tempo `traceID` exactly equals the known 32-lowercase-hex ID, and a Prometheus
+series has the expected `service_name`, `test_run_id`, and a non-empty sample.
+It returns the three presentation queries. Absent configuration, credentials,
+401/403 access, or connection access returns `BLOCKED` (exit 2); reachable
+missing/malformed/mismatched data returns `FAIL` (exit 1); `PASS` exits 0.
+Preserve redacted request/result evidence, code SHA, deployment identity,
+backend/protocol, expected values and one outcome per signal in the D9
+sanity/QA evidence. Hermetic-corpus recipe validation is owned by obs-d-9
+deliverable 4, not by this setup harness.
