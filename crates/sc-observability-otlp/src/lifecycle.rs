@@ -4,22 +4,40 @@
 //! protocol.  Exporters provide the two asynchronous lifecycle futures while
 //! this module owns the short admission critical section, ordered barriers,
 //! bounded admission, and terminal accounting.
+#[cfg(feature = "legacy-http-json")]
 use std::collections::BTreeMap;
+#[cfg(all(not(feature = "legacy-http-json"), any(test, feature = "otlp-sdk")))]
+use std::collections::BTreeSet;
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use std::future::Future;
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use std::pin::Pin;
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use std::sync::{Arc, Condvar, Mutex, Weak};
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use std::task::{Context, Poll, Waker};
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use std::thread;
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use std::time::{Duration, Instant};
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use crate::config::ValidatedTransportBounds;
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use crate::constants::MAX_OTLP_RECORD_BYTES;
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use crate::contracts::{ExporterSet, LifecycleFuture};
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use crate::error_codes;
+use sc_observability_types::DiagnosticSummary;
+#[cfg(feature = "legacy-http-json")]
 use sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED;
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 use sc_observability_types::v2::{ExportError, TelemetryError};
-use sc_observability_types::{DiagnosticSummary, ErrorContext, Remediation};
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
+use sc_observability_types::{ErrorContext, Remediation};
 
 /// Signal family used for per-signal dropped accounting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,19 +95,24 @@ pub(crate) enum LifecycleState {
     /// Admission and lifecycle operations are open.
     Open,
     /// New admission is rejected while prior work drains.
+    #[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
     Closing,
     /// The provider has reached its terminal state.
+    #[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
     Shutdown,
 }
 
 /// A record admitted without copying or interpreting its payload.
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 pub(crate) struct Admitted<T> {
     value: Option<T>,
     permit: Option<AdmissionPermit>,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl<T> Admitted<T> {
     /// Borrows the original payload for backend projection.
+    #[cfg(any(test, feature = "otlp-sdk"))]
     pub(crate) fn get(&self) -> &T {
         self.value.as_ref().expect("admitted value is present")
     }
@@ -103,6 +126,7 @@ impl<T> Admitted<T> {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 struct AdmissionPermit {
     inner: Weak<LifecycleInner>,
     sequence: u64,
@@ -111,6 +135,7 @@ struct AdmissionPermit {
     finished: AtomicBool,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl AdmissionPermit {
     fn finish(&self, result: Result<(), ExportError>) {
         if self.finished.swap(true, Ordering::AcqRel) {
@@ -122,23 +147,29 @@ impl AdmissionPermit {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl Drop for AdmissionPermit {
     fn drop(&mut self) {
         self.finish(Err(terminal_drop_error()));
     }
 }
 
+#[cfg(feature = "legacy-http-json")]
 struct AdmissionMeta {
     signal: SignalKind,
     bytes: usize,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 struct CoreState {
     phase: LifecycleState,
     next_sequence: u64,
     admitted_records: usize,
     admitted_bytes: usize,
+    #[cfg(feature = "legacy-http-json")]
     active: BTreeMap<u64, AdmissionMeta>,
+    #[cfg(not(feature = "legacy-http-json"))]
+    active: BTreeSet<u64>,
     dropped_by_signal: [u64; 3],
     degraded: bool,
     last_error: Option<DiagnosticSummary>,
@@ -150,6 +181,7 @@ struct CoreState {
     barrier_wakers: Vec<Waker>,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 struct LifecycleInner {
     /// The terminal backend runs only after the core's admission barrier.
     ///
@@ -167,11 +199,13 @@ struct LifecycleInner {
 }
 
 /// Shared lifecycle core consumed by backend adapters and the future facade.
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 #[derive(Clone)]
 pub(crate) struct LifecycleCore {
     inner: Arc<LifecycleInner>,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl LifecycleCore {
     /// Constructs the state machine from D.21's validated, backend-neutral
     /// bounds.  Exporter preflight is intentionally performed before any
@@ -211,7 +245,10 @@ impl LifecycleCore {
                     next_sequence: 0,
                     admitted_records: 0,
                     admitted_bytes: 0,
+                    #[cfg(feature = "legacy-http-json")]
                     active: BTreeMap::new(),
+                    #[cfg(not(feature = "legacy-http-json"))]
+                    active: BTreeSet::new(),
                     dropped_by_signal: [0; 3],
                     degraded: false,
                     last_error: None,
@@ -274,9 +311,12 @@ impl LifecycleCore {
         state.next_sequence = state.next_sequence.saturating_add(1);
         state.admitted_records += 1;
         state.admitted_bytes += bytes;
+        #[cfg(feature = "legacy-http-json")]
         state
             .active
             .insert(sequence, AdmissionMeta { signal, bytes });
+        #[cfg(not(feature = "legacy-http-json"))]
+        state.active.insert(sequence);
         drop(state);
 
         Ok(Admitted {
@@ -349,6 +389,7 @@ impl LifecycleCore {
     /// publish the same terminal accounting to retained health/barrier
     /// observers. Admission permits that complete later see their sequence
     /// removed and therefore cannot count the record twice.
+    #[cfg(feature = "legacy-http-json")]
     pub(crate) fn abandon(&self) {
         let worker_error = worker_terminated_error();
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
@@ -393,6 +434,7 @@ impl LifecycleCore {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl LifecycleInner {
     fn record_drop(state: &mut CoreState, signal: SignalKind, error: Option<&ExportError>) {
         state.dropped_by_signal[signal.index()] += 1;
@@ -410,7 +452,11 @@ impl LifecycleInner {
         result: Result<(), ExportError>,
     ) {
         let mut state = self.state.lock().expect("lifecycle state lock");
-        if state.active.remove(&sequence).is_none() {
+        #[cfg(feature = "legacy-http-json")]
+        let removed = state.active.remove(&sequence).is_some();
+        #[cfg(not(feature = "legacy-http-json"))]
+        let removed = state.active.remove(&sequence);
+        if !removed {
             return;
         }
         state.admitted_records = state.admitted_records.saturating_sub(1);
@@ -438,12 +484,14 @@ impl LifecycleInner {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OperationKind {
     Flush,
     Shutdown,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 struct Operation {
     inner: Arc<LifecycleInner>,
     kind: OperationKind,
@@ -460,17 +508,20 @@ struct Operation {
     polling: AtomicBool,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 struct TimerSignal {
     completed: Mutex<bool>,
     wake: Condvar,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 enum OperationState {
     Pending,
     Running(LifecycleFuture),
     Complete(Arc<Completion>),
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 struct Completion {
     snapshot: Option<ErrorSnapshot>,
     // The first observer receives the original typed error (including its
@@ -480,10 +531,12 @@ struct Completion {
 }
 
 /// Future returned by the internal flush/shutdown operations.
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 pub(crate) struct LifecycleWaiter {
     operation: Arc<Operation>,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl LifecycleWaiter {
     fn new(operation: Arc<Operation>) -> Self {
         Self { operation }
@@ -495,6 +548,7 @@ impl LifecycleWaiter {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl Future for LifecycleWaiter {
     type Output = Result<(), ExportError>;
 
@@ -503,6 +557,7 @@ impl Future for LifecycleWaiter {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl Operation {
     fn new(
         inner: Arc<LifecycleInner>,
@@ -792,6 +847,7 @@ impl Operation {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl Completion {
     fn from_result(result: Result<(), ExportError>) -> Self {
         match result {
@@ -807,6 +863,7 @@ impl Completion {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 #[derive(Debug, Clone, Copy)]
 enum ErrorKind {
     Transport,
@@ -823,12 +880,14 @@ enum ErrorKind {
     TerminalExportFailure,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 #[derive(Clone)]
 struct ErrorSnapshot {
     kind: ErrorKind,
     diagnostic: sc_observability_types::Diagnostic,
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 impl ErrorSnapshot {
     fn from_error(error: &ExportError) -> Self {
         let kind = match error {
@@ -874,6 +933,7 @@ impl ErrorSnapshot {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 fn context_from_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> ErrorContext {
     let mut context = ErrorContext::new(
         diagnostic.code.clone(),
@@ -892,6 +952,7 @@ fn context_from_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> E
     context
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 fn queue_full_error() -> ExportError {
     ExportError::QueueFull {
         context: Box::new(ErrorContext::new(
@@ -905,6 +966,7 @@ fn queue_full_error() -> ExportError {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 fn terminal_drop_error() -> ExportError {
     ExportError::TerminalExportFailure {
         context: Box::new(ErrorContext::new(
@@ -918,6 +980,7 @@ fn terminal_drop_error() -> ExportError {
     }
 }
 
+#[cfg(feature = "legacy-http-json")]
 fn worker_terminated_error() -> ExportError {
     ExportError::WorkerTerminated {
         context: Box::new(ErrorContext::new(
@@ -931,6 +994,7 @@ fn worker_terminated_error() -> ExportError {
     }
 }
 
+#[cfg(any(test, feature = "otlp-sdk", feature = "legacy-http-json"))]
 fn lifecycle_timeout_error() -> ExportError {
     ExportError::LifecycleTimeout {
         context: Box::new(ErrorContext::new(

@@ -370,9 +370,8 @@ fn legacy_factory_rejects_non_json_protocol_before_backend_availability() {
     }
     #[cfg(not(feature = "legacy-http-json"))]
     {
-        let backend_error = match exporter_factory(&config, &bounds) {
-            Ok(_) => panic!("the disabled legacy feature must reject construction"),
-            Err(error) => error,
+        let Err(backend_error) = exporter_factory(&config, &bounds) else {
+            panic!("the disabled legacy feature must reject construction");
         };
         assert!(matches!(
             backend_error,

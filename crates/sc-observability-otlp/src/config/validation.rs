@@ -188,6 +188,16 @@ fn validated_telemetry_bounds_with_delays(
 pub(crate) struct PositiveDuration(Duration);
 
 impl PositiveDuration {
+    #[cfg_attr(
+        all(
+            not(test),
+            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
+        ),
+        expect(
+            dead_code,
+            reason = "validated durations are retained for configuration precedence without a compiled backend reader"
+        )
+    )]
     pub(crate) const fn get(self) -> Duration {
         self.0
     }
@@ -235,9 +245,29 @@ pub(crate) struct LifecycleBounds {
 }
 
 impl LifecycleBounds {
+    #[cfg_attr(
+        all(
+            not(test),
+            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
+        ),
+        expect(
+            dead_code,
+            reason = "validated lifecycle deadline accessor is consumed by compiled backend paths"
+        )
+    )]
     pub(crate) const fn flush(&self) -> PositiveDuration {
         self.flush
     }
+    #[cfg_attr(
+        all(
+            not(test),
+            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
+        ),
+        expect(
+            dead_code,
+            reason = "validated lifecycle deadline accessor is consumed by compiled backend paths"
+        )
+    )]
     pub(crate) const fn shutdown(&self) -> PositiveDuration {
         self.shutdown
     }
@@ -337,6 +367,16 @@ impl ValidatedTransportBounds {
     pub(crate) const fn request_timeout(&self) -> PositiveDuration {
         self.request_timeout
     }
+    #[cfg_attr(
+        all(
+            not(test),
+            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
+        ),
+        expect(
+            dead_code,
+            reason = "validated lifecycle bounds accessor is consumed by compiled backend paths"
+        )
+    )]
     pub(crate) const fn lifecycle(&self) -> &LifecycleBounds {
         &self.lifecycle
     }
