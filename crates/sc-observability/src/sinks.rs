@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime};
 
 use sc_observability_types::ErrorContext;
 use sc_observability_types::typed::EventFailure;
+use sc_observability_types::typed::LogSinkFailure;
 use sc_observability_types::v2::LogSinkError;
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, Level, LogEvent, Remediation, SinkHealth, SinkHealthState,
@@ -375,35 +376,38 @@ impl JsonlFileSink {
 }
 
 impl LogSink for JsonlFileSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
-        }
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        (|| -> Result<(), LogSinkError> {
+            if let Some(parent) = self.path.parent() {
+                fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
+            }
 
-        let mut line =
-            serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
-        line.push(b'\n');
-        if let Some(policy) = self.legacy_policy {
-            self.rotate_if_needed(
-                policy.rotation.max_bytes.as_u64(),
-                policy.rotation.max_files.as_usize(),
-                line.len() as u64,
-            )?;
-            self.prune_old_files(policy.retention)?;
-        }
+            let mut line = serialize_event_bounded(event)
+                .map_err(|context| LogSinkError::Write { context })?;
+            line.push(b'\n');
+            if let Some(policy) = self.legacy_policy {
+                self.rotate_if_needed(
+                    policy.rotation.max_bytes.as_u64(),
+                    policy.rotation.max_files.as_usize(),
+                    line.len() as u64,
+                )?;
+                self.prune_old_files(policy.retention)?;
+            }
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)
-            .map_err(|err| self.mark_failure(err))?;
-        file.write_all(&line)
-            .and_then(|()| file.flush())
-            .map_err(|err| self.mark_failure(err))?;
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.path)
+                .map_err(|err| self.mark_failure(err))?;
+            file.write_all(&line)
+                .and_then(|()| file.flush())
+                .map_err(|err| self.mark_failure(err))?;
 
-        let mut health = self.health.write().expect("file sink health poisoned");
-        health.state = SinkHealthState::Healthy;
-        Ok(())
+            let mut health = self.health.write().expect("file sink health poisoned");
+            health.state = SinkHealthState::Healthy;
+            Ok(())
+        })()
+        .map_err(legacy_sink_error)
     }
 
     fn health(&self) -> SinkHealth {
@@ -520,15 +524,18 @@ impl ConsoleSink {
 }
 
 impl LogSink for ConsoleSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
-        let line = Self::format_line(event);
-        self.writer
-            .write_line(&line)
-            .map_err(|err| self.mark_failure(err))?;
-        let mut health = self.health.write().expect("console sink health poisoned");
-        health.state = SinkHealthState::Healthy;
-        Ok(())
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        (|| -> Result<(), LogSinkError> {
+            serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
+            let line = Self::format_line(event);
+            self.writer
+                .write_line(&line)
+                .map_err(|err| self.mark_failure(err))?;
+            let mut health = self.health.write().expect("console sink health poisoned");
+            health.state = SinkHealthState::Healthy;
+            Ok(())
+        })()
+        .map_err(legacy_sink_error)
     }
 
     fn health(&self) -> SinkHealth {
@@ -623,20 +630,20 @@ impl FaultInjectingSink {
 
 #[cfg(feature = "fault-injection")]
 impl LogSink for FaultInjectingSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         if let Some(state) = self.current_state() {
-            return Err(LogSinkError::Write {
+            return Err(legacy_sink_error(LogSinkError::Write {
                 context: Box::new(fault_injection_error_context(state)),
-            });
+            }));
         }
         self.inner.write(event)
     }
 
-    fn flush(&self) -> Result<(), LogSinkError> {
+    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
         if let Some(state) = self.current_state() {
-            return Err(LogSinkError::Flush {
+            return Err(legacy_sink_error(LogSinkError::Flush {
                 context: Box::new(fault_injection_error_context(state)),
-            });
+            }));
         }
         self.inner.flush()
     }
@@ -695,6 +702,10 @@ where
     }
 }
 
+fn legacy_sink_error(error: LogSinkError) -> sc_observability_types::LogSinkError {
+    LogSinkFailure::from_context(error.into_context()).into()
+}
+
 #[cfg(feature = "fault-injection")]
 fn fault_injection_error_context(state: SinkHealthState) -> ErrorContext {
     let forced_state = match state {
@@ -744,8 +755,8 @@ mod tests {
     use super::*;
     use crate::{FileCount, RetentionMaxAge};
     use sc_observability_types::{
-        ActionName, Level, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
-        TargetCategory, constants::OBSERVATION_ENVELOPE_VERSION,
+        ActionName, DiagnosticInfo, Level, OutcomeLabel, ProcessIdentity, SchemaVersion,
+        ServiceName, TargetCategory, constants::OBSERVATION_ENVELOPE_VERSION,
     };
     use serde_json::json;
     use std::fs;
@@ -754,7 +765,7 @@ mod tests {
     use std::time::Duration;
 
     #[cfg(feature = "fault-injection")]
-    use sc_observability_types::{DiagnosticInfo, typed::LogSinkFailure};
+    use sc_observability_types::typed::LogSinkFailure;
 
     struct TestRoot(tempfile::TempDir);
 

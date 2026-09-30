@@ -106,7 +106,7 @@ fn logging_only_consumer_observes_facade_event_and_shutdown_health_contracts() {
     let mut invalid_event = event();
     invalid_event.version = SchemaVersion::new("v0").expect("valid invalid test version");
     let failure = logger
-        .log(invalid_event)
+        .log_canonical(invalid_event)
         .expect_err("invalid event failure");
     let sc_observability_types::v2::EventError::Validation { context } = failure else {
         panic!("expected the canonical validation variant");
@@ -221,12 +221,12 @@ fn flush_command_flushes_each_sink_once_after_an_admitted_event() {
     }
 
     impl LogSink for CountingSink {
-        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
             self.writes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        fn flush(&self) -> Result<(), LogSinkError> {
             self.flushes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -250,7 +250,7 @@ fn flush_command_flushes_each_sink_once_after_an_admitted_event() {
     config.enable_console_sink = false;
     let mut builder = Logger::builder(config).expect("valid builder");
     builder.register_sink(SinkRegistration::new(sink.clone()));
-    let logger = builder.build().expect("built logger");
+    let logger = builder.build_canonical().expect("built logger");
 
     logger.log(event()).expect("admit event");
     logger.flush().expect("flush barrier");
