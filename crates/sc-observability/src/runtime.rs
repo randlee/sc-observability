@@ -82,44 +82,49 @@ impl LogSettings {
                     "logging environment value for {key} is not valid UTF-8"
                 ))
             })?;
-            if value.is_empty() {
-                return Err(LogSettingsError::invalid_value(format!(
-                    "logging environment value for {key} must not be empty"
-                )));
-            }
-
             let suffix = key.strip_prefix(&namespace).ok_or_else(|| {
                 LogSettingsError::environment(format!(
                     "logging environment key {key} did not retain its selected namespace"
                 ))
             })?;
+            let required_value = || {
+                if value.is_empty() {
+                    return Err(LogSettingsError::invalid_value(format!(
+                        "logging environment value for {key} must not be empty"
+                    )));
+                }
+                Ok(value)
+            };
             match suffix {
-                "LEVEL" => settings.level = Some(parse_json_string(value, key)?),
-                "ROOT" => settings.log_root = Some(PathBuf::from(value)),
-                "FILE" => settings.enable_file_sink = Some(parse_env_bool(value, key)?),
-                "CONSOLE" => settings.enable_console_sink = Some(parse_env_bool(value, key)?),
+                "LEVEL" => settings.level = Some(parse_json_string(required_value()?, key)?),
+                "ROOT" => settings.log_root = Some(PathBuf::from(required_value()?)),
+                "FILE" => settings.enable_file_sink = Some(parse_env_bool(required_value()?, key)?),
+                "CONSOLE" => {
+                    settings.enable_console_sink = Some(parse_env_bool(required_value()?, key)?);
+                }
                 "ROTATION_MAX_BYTES" => {
-                    policy.rotation_max_bytes = parse_env_json(value, key)?;
+                    policy.rotation_max_bytes = parse_env_json(required_value()?, key)?;
                     has_policy_override = true;
                 }
                 "ROTATION_MAX_FILES" => {
-                    policy.rotation_max_files = parse_env_json(value, key)?;
+                    policy.rotation_max_files = parse_env_json(required_value()?, key)?;
                     has_policy_override = true;
                 }
                 "RETENTION_MAX_AGE_MS" => {
-                    policy.retention_max_age = parse_env_json(value, key)?;
+                    policy.retention_max_age = parse_env_json(required_value()?, key)?;
                     has_policy_override = true;
                 }
                 "MAINTENANCE_CADENCE_MS" => {
-                    policy.maintenance_cadence = parse_env_json(value, key)?;
+                    policy.maintenance_cadence = parse_env_json(required_value()?, key)?;
                     has_policy_override = true;
                 }
                 "WRITER_SHUTDOWN_TIMEOUT_MS" => {
-                    policy.writer_shutdown_timeout = parse_env_json(value, key)?;
+                    policy.writer_shutdown_timeout = parse_env_json(required_value()?, key)?;
                     has_policy_override = true;
                 }
                 "MAINTENANCE_MAX_WORK_PER_PASS" => {
-                    policy.maintenance_max_work_per_pass = Some(parse_env_json(value, key)?);
+                    policy.maintenance_max_work_per_pass =
+                        Some(parse_env_json(required_value()?, key)?);
                     has_policy_override = true;
                 }
                 _ => {
