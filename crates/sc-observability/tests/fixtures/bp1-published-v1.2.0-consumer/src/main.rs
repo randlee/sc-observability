@@ -19,4 +19,22 @@ fn main() {
         .expect("legacy builder remains available")
         .build();
     let _stopped = logger.shutdown();
+
+    let typed_builder_config = LoggerConfig::default_for(
+        ServiceName::new("published-typed-builder").expect("valid service name"),
+        PathBuf::from("logs"),
+    );
+    let logger = Logger::builder_typed(typed_builder_config)
+        .expect("published typed builder remains available")
+        .build_typed()
+        .expect("published typed build remains available");
+    let _stopped = logger.shutdown();
+
+    let typed_owner_config = LoggerConfig::default_for(
+        ServiceName::new("published-typed-owner").expect("valid service name"),
+        PathBuf::from("logs"),
+    );
+    let (logger, _owner) = Logger::new_with_level_owner_typed(typed_owner_config)
+        .expect("published typed owner constructor remains available");
+    let _stopped = logger.shutdown();
 }
