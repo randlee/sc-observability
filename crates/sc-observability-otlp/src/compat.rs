@@ -21,14 +21,14 @@ use std::sync::Arc;
 
 use crate::config::{self, ExporterBackend, LegacyRetryPolicy, TelemetryConfig as RuntimeConfig};
 use crate::projectors::{ProjectorSet, TelemetryEmit};
-use crate::{RuntimeTelemetry, constants};
+use crate::{RuntimeTelemetry, constants, error_codes};
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 #[allow(deprecated)]
 use sc_observability_types::{
-    DurationMs, FlushError, InitError, LogEvent, LogProjector, MetricProjector, MetricRecord,
-    Observable, ObservationFilter, ProjectionRegistration, ServiceName, ShutdownError,
-    SpanProjector, SpanSignal, TelemetryError,
+    DurationMs, ErrorContext, FlushError, InitError, LogEvent, LogProjector, MetricProjector,
+    MetricRecord, Observable, ObservationFilter, ProjectionRegistration, Remediation, ServiceName,
+    ShutdownError, SpanProjector, SpanSignal, TelemetryError,
 };
 
 /// The released 1.4.1 OTLP protocol set.
@@ -215,10 +215,9 @@ impl OtelConfig {
         };
         let legacy_retry =
             (self.enabled && backend == ExporterBackend::LegacyHttpJson).then_some(retry);
-        // Released retry settings apply only to the enabled HTTP/JSON legacy
-        // backend. HTTP/binary selects the SDK and disabled transport creates
-        // no backend, matching the published 1.4.1 conversion rule. The
-        // canonical config stores applicable retry values only in `legacy_retry`.
+        // Canonical retry values apply only to the enabled HTTP/JSON legacy
+        // backend. Released retry bounds are validated before this projection,
+        // for every protocol and enabled state, as required by 1.4.1.
         crate::config::OtelConfig {
             enabled: self.enabled,
             backend,
@@ -342,9 +341,32 @@ impl TelemetryConfigBuilder {
             traces: self.traces,
             metrics: self.metrics,
         };
+        validate_released_transport(&config.transport)?;
         config::validate_config_typed(&config.clone().into_runtime())?;
         Ok(config)
     }
+}
+
+/// Validates released transport fields before backend-specific projection.
+fn validate_released_transport(transport: &OtelConfig) -> Result<(), InitFailure> {
+    if u64::from(transport.timeout_ms) == 0 {
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
+            error_codes::TELEMETRY_INVALID_CONFIG,
+            "timeout_ms must be greater than zero",
+            Remediation::recoverable(
+                "set timeout_ms to a positive value",
+                ["use documented defaults"],
+            ),
+        ))));
+    }
+    if transport.initial_backoff_ms > transport.max_backoff_ms {
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
+            error_codes::TELEMETRY_INVALID_CONFIG,
+            "initial_backoff_ms must not exceed max_backoff_ms",
+            Remediation::recoverable("fix the backoff configuration", ["use documented defaults"]),
+        ))));
+    }
+    Ok(())
 }
 
 /// Released root facade over the single canonical telemetry runtime.
@@ -533,6 +555,7 @@ impl sc_observability_types::ObservabilityHealthProvider for Telemetry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_types::DiagnosticInfo;
 
     fn released_transport(protocol: OtlpProtocol, enabled: bool) -> OtelConfig {
         OtelConfig {
@@ -584,6 +607,38 @@ mod tests {
             assert_eq!(runtime.backend, backend);
             assert_eq!(runtime.timeout_ms, Some(DurationMs::from(750)));
             assert_eq!(runtime.legacy_retry, None);
+        }
+    }
+
+    #[test]
+    fn released_builder_validates_bounds_before_backend_specific_retry_projection() {
+        for (protocol, enabled) in [
+            (OtlpProtocol::HttpBinary, true),
+            (OtlpProtocol::Grpc, true),
+            (OtlpProtocol::HttpJson, true),
+            (OtlpProtocol::HttpBinary, false),
+            (OtlpProtocol::HttpJson, false),
+        ] {
+            let mut transport = released_transport(protocol, enabled);
+            transport.initial_backoff_ms = DurationMs::from(300);
+            transport.max_backoff_ms = DurationMs::from(200);
+
+            let error = TelemetryConfigBuilder::new(
+                ServiceName::new("released-config-validation").expect("valid service name"),
+            )
+            .with_transport(transport)
+            .enable_logs(crate::LogsConfig::default())
+            .build_typed()
+            .expect_err("released bounds must be checked before retry projection");
+
+            assert_eq!(
+                error.diagnostic().code,
+                error_codes::TELEMETRY_INVALID_CONFIG
+            );
+            assert_eq!(
+                error.diagnostic().message,
+                "initial_backoff_ms must not exceed max_backoff_ms"
+            );
         }
     }
 

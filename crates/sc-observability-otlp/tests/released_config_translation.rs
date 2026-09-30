@@ -8,7 +8,7 @@
 use sc_observability_otlp::{
     LogsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, TelemetryConfigBuilder,
 };
-use sc_observability_types::{DiagnosticInfo, DurationMs, ServiceName};
+use sc_observability_types::{DiagnosticInfo, DurationMs, Remediation, ServiceName};
 
 fn service() -> ServiceName {
     ServiceName::new("released-config-translation").expect("valid service")
@@ -38,32 +38,60 @@ fn validate(transport: OtelConfig) -> Result<(), sc_observability_types::typed::
 #[test]
 fn released_http_json_retains_retry_bounds_through_the_facade() {
     let error = validate(released_transport(OtlpProtocol::HttpJson, true))
-        .expect_err("HTTP/JSON must preserve its released retry settings");
+        .expect_err("released retry bounds must remain valid through the facade");
 
     assert_eq!(
         error.diagnostic().code,
-        sc_observability_types::error_codes::otlp::OTLP_CONFIG_BOUND_ORDER
+        sc_observability_otlp::error_codes::TELEMETRY_INVALID_CONFIG
     );
     assert_eq!(
-        error.diagnostic().details["field"].as_str(),
-        Some("legacy_retry.initial_backoff_ms")
+        error.diagnostic().message,
+        "initial_backoff_ms must not exceed max_backoff_ms"
     );
     assert_eq!(
-        error.diagnostic().details["lower_value"].as_u64(),
-        Some(300)
-    );
-    assert_eq!(
-        error.diagnostic().details["upper_value"].as_u64(),
-        Some(200)
+        error.diagnostic().remediation,
+        Remediation::recoverable("fix the backoff configuration", ["use documented defaults"])
     );
 }
 
 #[test]
-fn released_binary_and_disabled_transports_discard_retry_bounds() {
-    validate(released_transport(OtlpProtocol::HttpBinary, true))
-        .expect("HTTP/binary selects the SDK, which has no released retry policy");
-    validate(released_transport(OtlpProtocol::HttpJson, false))
-        .expect("disabled transport has no backend or released retry policy");
+fn released_binary_and_disabled_transports_retain_released_bound_validation() {
+    for transport in [
+        released_transport(OtlpProtocol::HttpBinary, true),
+        released_transport(OtlpProtocol::HttpJson, false),
+    ] {
+        let error = validate(transport)
+            .expect_err("released retry bounds apply before backend selection or disabling");
+
+        assert_eq!(
+            error.diagnostic().code,
+            sc_observability_otlp::error_codes::TELEMETRY_INVALID_CONFIG
+        );
+        assert_eq!(
+            error.diagnostic().message,
+            "initial_backoff_ms must not exceed max_backoff_ms"
+        );
+        assert_eq!(
+            error.diagnostic().remediation,
+            Remediation::recoverable("fix the backoff configuration", ["use documented defaults"])
+        );
+    }
+}
+
+#[test]
+fn released_transport_matrix_accepts_ordered_bounds() {
+    for protocol in [
+        OtlpProtocol::HttpBinary,
+        OtlpProtocol::HttpJson,
+        OtlpProtocol::Grpc,
+    ] {
+        for enabled in [false, true] {
+            let mut transport = released_transport(protocol, enabled);
+            transport.initial_backoff_ms = DurationMs::from(100);
+            transport.max_backoff_ms = DurationMs::from(200);
+            validate(transport).expect("ordered released bounds must remain valid");
+        }
+    }
 }
 
 #[test]
@@ -77,10 +105,17 @@ fn released_facade_carries_the_transport_timeout() {
 
     assert_eq!(
         error.diagnostic().code,
-        sc_observability_types::error_codes::otlp::OTLP_CONFIG_ZERO_DURATION
+        sc_observability_otlp::error_codes::TELEMETRY_INVALID_CONFIG
     );
     assert_eq!(
-        error.diagnostic().details["field"].as_str(),
-        Some("timeout_ms")
+        error.diagnostic().message,
+        "timeout_ms must be greater than zero"
+    );
+    assert_eq!(
+        error.diagnostic().remediation,
+        Remediation::recoverable(
+            "set timeout_ms to a positive value",
+            ["use documented defaults"],
+        )
     );
 }
