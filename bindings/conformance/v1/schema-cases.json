@@ -6498,7 +6498,8 @@
     "entrypoint": "InputSpanSignalDto",
     "valid": true,
     "value": {
-      "Ended": {
+      "kind": "ended",
+      "data": {
         "timestamp": "1970-01-01T00:00:00Z",
         "service": "demo",
         "name": "run",
@@ -6524,7 +6525,8 @@
       }
     },
     "serde_output": {
-      "Ended": {
+      "kind": "ended",
+      "data": {
         "timestamp": "1970-01-01T00:00:00Z",
         "service": "demo",
         "name": "run",
@@ -6555,7 +6557,8 @@
     "entrypoint": "OutputSpanSignalDto",
     "valid": true,
     "value": {
-      "Ended": {
+      "kind": "ended",
+      "data": {
         "timestamp": "1970-01-01T00:00:00Z",
         "service": "demo",
         "name": "run",
@@ -6581,7 +6584,8 @@
       }
     },
     "serde_output": {
-      "Ended": {
+      "kind": "ended",
+      "data": {
         "timestamp": "1970-01-01T00:00:00Z",
         "service": "demo",
         "name": "run",
@@ -6758,7 +6762,8 @@
     "entrypoint": "InputSpanSignalDto",
     "valid": false,
     "value": {
-      "Future": {
+      "kind": "future",
+      "data": {
         "timestamp": "1970-01-01T00:00:00Z",
         "service": "demo",
         "name": "run",

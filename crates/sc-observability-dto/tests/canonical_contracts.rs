@@ -177,8 +177,37 @@ fn span_flags_links_duration_and_typestate_round_trip() {
         wire
     );
     let mut bad = wire;
-    bad["Ended"]["duration_ms"] = Value::Null;
+    bad["data"]["duration_ms"] = Value::Null;
     assert!(decode_span(bad).is_err());
+}
+
+#[test]
+fn span_signal_wire_variants_use_adjacent_tags() {
+    let ended = fixture("SpanSignalDto");
+    let mut started = ended.clone();
+    started["kind"] = json!("started");
+    started["data"]["duration_ms"] = Value::Null;
+    started["data"]["status"] = json!("Unset");
+    let event = json!({
+        "kind": "event",
+        "data": {
+            "timestamp": "1970-01-01T00:00:00Z",
+            "trace": {
+                "trace_id": "0123456789abcdef0123456789abcdef",
+                "span_id": "0123456789abcdef",
+                "parent_span_id": null,
+                "flags": 131
+            },
+            "name": "event",
+            "attributes": {},
+            "diagnostic": null
+        }
+    });
+
+    for wire in [started, event, ended] {
+        let signal: SpanSignalDto = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(signal).unwrap(), wire);
+    }
 }
 #[test]
 fn unknown_errors_remain_tagged_failures() {
