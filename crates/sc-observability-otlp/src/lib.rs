@@ -506,6 +506,13 @@ impl RuntimeTelemetry {
 
     /// Buffers one projected log event for later export.
     ///
+    /// # Errors
+    ///
+    /// Returns [`CanonicalTelemetryError::Shutdown`] if telemetry has shut down.
+    /// Returns [`CanonicalTelemetryError::Event`] when enabled telemetry receives
+    /// an invalid state-transition entity identifier. Disabled logs or transport
+    /// return successfully before entity validation.
+    ///
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.

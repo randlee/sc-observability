@@ -2484,6 +2484,9 @@ backtraces are deliberately not serialized. Native chaining preserves them.
 diagnostic-carrying runtime admission guard; the retained root
 `TelemetryError::Shutdown` remains the unit variant described above.
 `From<v2::ExportError>` wraps the exact error in `v2::TelemetryError::ExportFailure`.
+The `#[from]` on `v2::TelemetryError::Event(v2::EventError)` also generates the
+public `From<v2::EventError> for v2::TelemetryError` implementation; this
+additive compatible-1.x conversion is part of the governed interface.
 Governed-interface note: `v2::TelemetryError::Event(v2::EventError)` is an
 additive variant on the `#[non_exhaustive]` v2 enum, returned only by canonical
 `emit_log` when `StateTransition.entity_id` is not a valid `EntityId`. Its
@@ -2492,6 +2495,12 @@ additive variant on the `#[non_exhaustive]` v2 enum, returned only by canonical
 (`Validation { field: "event" }`), preserving context, source and backtrace. It
 adds no diagnostic code and no counter, and the released root `TelemetryError`
 shape is unchanged; released root emit paths never produce it.
+Admission order is facade-specific. The logger checks event version and service,
+filters by effective level, validates the entity identifier, then applies
+redaction and the event-size limit. `RuntimeTelemetry::emit_log` checks for
+shutdown first, returns successfully when logs or transport are disabled,
+validates the entity identifier, then buffers the event; it does not perform
+the logger's version or service checks.
 For `v2::TelemetryError::ExportFailure`, `.code()` returns the fixed stable
 classification for the variant, while `.diagnostic().code` returns the preserved
 original cause code.
