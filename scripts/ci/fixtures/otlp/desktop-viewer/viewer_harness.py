@@ -116,6 +116,19 @@ def _owned(state: Path) -> tuple[int, dict[str, Any]]:
     return pid, metadata
 
 
+def _owned_database(state: Path, metadata: dict[str, Any]) -> Path:
+    """Return the only database path this harness may delete."""
+    database = state / "viewer.duckdb"
+    try:
+        recorded = Path(metadata["database"]).expanduser().resolve()
+    except (KeyError, OSError, TypeError, ValueError) as error:
+        raise HarnessError("refusing cleanup: viewer metadata has no valid database path") from error
+    if database.is_symlink() or recorded != database:
+        raise HarnessError(
+            f"refusing cleanup: recorded database {recorded} does not resolve to owned path {database}")
+    return database
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -198,6 +211,7 @@ def status(args: argparse.Namespace) -> None:
 def stop(args: argparse.Namespace) -> None:
     state = Path(args.state_dir).expanduser().resolve()
     pid, metadata = _owned(state)
+    database = _owned_database(state, metadata) if args.remove_state else None
     os.kill(pid, signal.SIGTERM)
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
@@ -210,7 +224,8 @@ def stop(args: argparse.Namespace) -> None:
     (state / "viewer.json").unlink(missing_ok=True)
     if args.remove_state:
         # Remove only this tool's database and its log, never a configured desktop DB.
-        Path(metadata["database"]).unlink(missing_ok=True)
+        assert database is not None
+        database.unlink(missing_ok=True)
         (state / "viewer.log").unlink(missing_ok=True)
         state.rmdir()
     print(json.dumps({"status": "stopped", "pid": pid, "state_dir": str(state),
