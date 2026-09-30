@@ -5491,6 +5491,48 @@
       ]
     }
   ],
+  "trait_impl_contracts": [
+    {
+      "implementation": "sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink",
+      "baseline_declaration": "impl crate::typed::TypedLogSink for JsonlFileSink",
+      "current_declaration": "impl TypedLogSink for JsonlFileSink",
+      "baseline_source": {
+        "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
+        "path": "crates/sc-observability/src/sinks.rs",
+        "owner": "JsonlFileSink"
+      },
+      "current_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/compat.rs",
+        "owner": "JsonlFileSink"
+      },
+      "conversion": "compat.rs delegates write, flush, and health to the canonical crate::sink::LogSink implementation; write and flush move the canonical error context into the released LogSinkFailure without rewrapping diagnostics or sources.",
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "remove this released TypedLogSink implementation with compat.rs when the 1.x surface retires."
+    },
+    {
+      "implementation": "sc_observability::typed::TypedLogSink for sc_observability::ConsoleSink",
+      "baseline_declaration": "impl crate::typed::TypedLogSink for ConsoleSink",
+      "current_declaration": "impl TypedLogSink for ConsoleSink",
+      "baseline_source": {
+        "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
+        "path": "crates/sc-observability/src/sinks.rs",
+        "owner": "ConsoleSink"
+      },
+      "current_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability/src/compat.rs",
+        "owner": "ConsoleSink"
+      },
+      "conversion": "compat.rs delegates write, flush, and health to the canonical crate::sink::LogSink implementation; write and flush move the canonical error context into the released LogSinkFailure without rewrapping diagnostics or sources.",
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "remove this released TypedLogSink implementation with compat.rs when the 1.x surface retires."
+    }
+  ],
   "trait_slot_contracts": [
     {
       "symbol": "sc_observability_types::ProcessIdentityResolver::resolve",

@@ -9,6 +9,22 @@ PLACEHOLDER_BASELINE_SIGNATURE_PREFIXES = ("released public nominal identity",)
 
 BASELINE_COMMIT = "c578912653233c7dc678fefe5af575118dbbaaa1"
 
+RELEASED_TYPED_BUILTIN_IMPLS = frozenset({
+    "sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink",
+    "sc_observability::typed::TypedLogSink for sc_observability::ConsoleSink",
+})
+TRAIT_IMPL_CONTRACT_FIELDS = frozenset({
+    "implementation",
+    "baseline_declaration",
+    "current_declaration",
+    "baseline_source",
+    "current_source",
+    "conversion",
+    "removable_paths",
+    "removal_rationale",
+})
+TRAIT_IMPL_SOURCE_FIELDS = frozenset({"revision", "path", "owner"})
+
 # Deprecated owners each excepted file carried at the pinned v1.4.1 commit.
 # An exception covers only these names; any other deprecated owner in the file
 # is new deprecated surface and must live under `src/compat`.
@@ -69,6 +85,42 @@ def validate_trait_slot_contracts(rows: Iterable[dict]) -> None:
         canonical_path = (row.get("canonical_source") or {}).get("path")
         if canonical_path is not None and canonical_path in row["removable_paths"]:
             raise ValueError(f"trait-slot removable_paths contains its canonical source: {symbol}")
+
+
+def validate_trait_impl_contracts(records: object) -> None:
+    """Require the two released built-in TypedLogSink impl identities exactly once."""
+    if not isinstance(records, list):
+        raise ValueError("compatibility trait-impl contracts must be a list")
+    implementations: list[str] = []
+    for record in records:
+        if not isinstance(record, dict) or set(record) != TRAIT_IMPL_CONTRACT_FIELDS:
+            raise ValueError(f"malformed compatibility trait-impl contract: {record!r}")
+        implementation = record["implementation"]
+        if not isinstance(implementation, str) or not implementation.strip():
+            raise ValueError(f"compatibility trait-impl contract has no implementation: {record!r}")
+        implementations.append(implementation)
+        for field in ("baseline_declaration", "current_declaration", "conversion", "removal_rationale"):
+            if not isinstance(record[field], str) or not record[field].strip():
+                raise ValueError(f"compatibility trait-impl contract has blank {field}: {implementation}")
+        for field, revision in (("baseline_source", BASELINE_COMMIT), ("current_source", "selected_head")):
+            source = record[field]
+            if not isinstance(source, Mapping) or set(source) != TRAIT_IMPL_SOURCE_FIELDS:
+                raise ValueError(f"compatibility trait-impl contract has malformed {field}: {implementation}")
+            if source["revision"] != revision or any(
+                not isinstance(source[key], str) or not source[key].strip()
+                for key in ("path", "owner")
+            ):
+                raise ValueError(f"compatibility trait-impl contract has invalid {field}: {implementation}")
+        removable = record["removable_paths"]
+        if not isinstance(removable, list) or removable != ["crates/sc-observability/src/compat.rs"]:
+            raise ValueError(f"compatibility trait-impl contract has invalid removable paths: {implementation}")
+    duplicates = [name for name, count in Counter(implementations).items() if count > 1]
+    if duplicates:
+        raise ValueError(f"duplicate compatibility trait-impl contracts: {', '.join(sorted(duplicates))}")
+    if set(implementations) != RELEASED_TYPED_BUILTIN_IMPLS:
+        missing = sorted(RELEASED_TYPED_BUILTIN_IMPLS - set(implementations))
+        unknown = sorted(set(implementations) - RELEASED_TYPED_BUILTIN_IMPLS)
+        raise ValueError(f"compatibility trait-impl contracts drifted: missing={missing}, unknown={unknown}")
 
 
 def is_compat_source_path(relative_path: str) -> bool:

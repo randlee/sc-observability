@@ -19,6 +19,7 @@ from compatibility_registry import (  # noqa: E402
     is_compat_source_path,
     validate_compatibility_source_boundary,
     validate_contract_signatures,
+    validate_trait_impl_contracts,
     validate_trait_slot_contracts,
 )
 
@@ -150,6 +151,46 @@ class TraitSlotContractTests(unittest.TestCase):
 
     def test_removable_path_is_matched_exactly(self):
         validate_trait_slot_contracts([self.row(removable_paths=[self.PATH + ".bak", "src/observation_v2.rs"])])
+
+
+class TraitImplContractTests(unittest.TestCase):
+    def record(self, implementation, **overrides):
+        owner = implementation.rsplit("::", 1)[-1]
+        record = {
+            "implementation": implementation,
+            "baseline_declaration": f"impl crate::typed::TypedLogSink for {owner}",
+            "current_declaration": f"impl TypedLogSink for {owner}",
+            "baseline_source": {"revision": BASELINE_COMMIT, "path": "crates/sc-observability/src/sinks.rs", "owner": owner},
+            "current_source": {"revision": "selected_head", "path": "crates/sc-observability/src/compat.rs", "owner": owner},
+            "conversion": "delegates to the canonical sink and converts its context into LogSinkFailure",
+            "removable_paths": ["crates/sc-observability/src/compat.rs"],
+            "removal_rationale": "remove this released trait implementation with compat.rs after the 1.x surface retires",
+        }
+        record.update(overrides)
+        return record
+
+    def records(self):
+        return [
+            self.record("sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink"),
+            self.record("sc_observability::typed::TypedLogSink for sc_observability::ConsoleSink"),
+        ]
+
+    def test_released_builtin_impl_records_are_accepted(self):
+        validate_trait_impl_contracts(self.records())
+
+    def test_missing_released_builtin_impl_record_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "missing="):
+            validate_trait_impl_contracts(self.records()[:1])
+
+    def test_duplicate_released_builtin_impl_record_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "duplicate compatibility trait-impl"):
+            validate_trait_impl_contracts([self.records()[0], self.records()[0]])
+
+    def test_malformed_released_builtin_impl_record_is_rejected(self):
+        malformed = self.records()
+        malformed[0].pop("conversion")
+        with self.assertRaisesRegex(ValueError, "malformed compatibility trait-impl"):
+            validate_trait_impl_contracts(malformed)
 
 
 class CompatibilitySourcePathTests(unittest.TestCase):
