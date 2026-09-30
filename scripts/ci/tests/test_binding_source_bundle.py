@@ -57,6 +57,20 @@ class SourceBoundaryTests(unittest.TestCase):
         ])
         self.assertEqual(self.verify_registry_selection(source,staged,[('binding','1.0.0')]),[{'name':'tokio','version':'1.0.0','source':registry,'checksum':'tokio'}])
 
+    def test_verify_registry_selection_rejects_dependency_missing_from_source_lock(self):
+        registry='registry+https://example.invalid/index'
+        dependency='tokio 1.0.0 (registry+https://example.invalid/index)'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=[dependency]),
+        ])
+        staged=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=[dependency]),
+            self.package('tokio','1.0.0',source=registry,checksum='tokio'),
+        ])
+        with self.assertRaises(BUNDLE.BundleError) as context:
+            self.verify_registry_selection(source,staged,[('binding','1.0.0')])
+        self.assertEqual(context.exception.code,'BUNDLE_STALE_LOCK')
+
     def test_verify_registry_selection_rejects_extra_unselected_staged_registry_identity(self):
         registry='registry+https://example.invalid/index'
         source=self.registry_lock([
