@@ -154,6 +154,8 @@ class DocsApprovalEvidenceTests(unittest.TestCase):
             commands = [
                 CompletedProcess([], 0, json.dumps({'packages': [package]}), ''),
                 CompletedProcess([], 0, 'fixture-head', ''),
+                CompletedProcess([], 0, json.dumps({'packages': [package]}), ''),
+                CompletedProcess([], 0, 'fixture-head', ''),
             ]
             stderr = io.StringIO()
             with patch('validate_public_api.ROOT', root), \
@@ -162,8 +164,14 @@ class DocsApprovalEvidenceTests(unittest.TestCase):
                     patch('sys.argv', ['validate_public_api.py', 'docs']), \
                     contextlib.redirect_stderr(stderr):
                 self.assertEqual(main(), 1)
+                self.assertIn(f'missing_scoped_approvals=[\'{crate}\']', stderr.getvalue())
 
-        self.assertIn(f'missing_scoped_approvals=[\'{crate}\']', stderr.getvalue())
+                # A non-empty evidence value is the positive control: the same
+                # otherwise matching approval should satisfy the docs gate.
+                approval['crates'][crate]['evidence'] = 'positive-control evidence'
+                (root / 'docs/api-approvals/fixture.json').write_text(json.dumps(approval))
+                self.assertEqual(main(), 0)
+
 
 
 class PublicApiCliTests(unittest.TestCase):
