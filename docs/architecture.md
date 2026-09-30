@@ -988,7 +988,7 @@ No Git revision or historical blob pin is required for generated bindings.
 
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 
-- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). Superseded in part by ADR-017 (2026-09-26) for the reviewed 2.0 breaks listed in `release/public-api-major-breaks.toml`; the 1.x additive decision recorded here is unchanged.
+- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). ADR-017 (2026-09-26) described a scoped future 2.0 exception. ADR-020 confirms this additive 1.x decision governs the current release; no major-break manifest waives it.
 - **Context**: Issue #92 requests typed failure handling without a forced
   migration of consumers of published diagnostic wrappers and extension traits.
 - **Proposed decision**: Add improved failure types, classification and operation/
@@ -1154,21 +1154,27 @@ in [the CI policy](ci-policy.md).
 
 ### ADR-017: Phase D 2.0 Error Surface
 
+**Current release scope:** ADR-020 governs the compatible 1.x release. Retain the technical error/backend/lifecycle decisions below, but any 2.0 replacement, compatibility removal or version activation is deferred to a separately authorized major release.
+
 - **Status**: Accepted 2026-09-26 by the technical lead (this PR is the acceptance record); D.4 may proceed.
 - **Context**: ADR-012 protected additive 1.x compatibility, while Phase D
   explicitly targets a major release that can replace opaque wrappers and the
   temporary parallel typed surface.
-- **Decision**: For 2.0 only, replace the nine inventoried wrappers
+- **Historical 2.0 decision (deferred by ADR-020)**: For a separately authorized
+  2.0 only, replace the nine inventoried wrappers
   with same-name non-exhaustive discriminated enums, remove duplicate typed /
   legacy adapters, and use an enumerated major-break manifest compared to the
   frozen 1.4.1 API. This supersedes ADR-012 only for those reviewed breaks;
   its historical 1.x decision remains intact.
-- **Acceptance gate**: An accepted ADR commit and technical-lead ruling must
-  precede production changes. The semver validator fails every unlisted break
-  before a reviewed 2.0 baseline is generated.
+- **Current acceptance gate**: ADR-020 and PHB-003–005 govern the compatible
+  1.x release; every breaking change fails against the frozen released baseline.
+  The historical enumerated-break gate applies only after separate 2.0
+  authorization, not to current Phase D work.
 - **Contracts**: Phase D D.4; `release/public-api-major-breaks.toml`.
 
 ### ADR-018: Dual OTLP Backends And Shared Lifecycle
+
+**Current release scope:** ADR-020 governs the compatible 1.x release. Retain the technical error/backend/lifecycle decisions below, but any 2.0 replacement, compatibility removal or version activation is deferred to a separately authorized major release.
 
 - **Status**: Accepted 2026-09-26 by the technical lead (this PR is the acceptance record); D.6 may proceed.
 - **Context**: Tokio-hosted consumers need the official SDK while synchronous
@@ -1185,14 +1191,19 @@ in [the CI policy](ci-policy.md).
   `opentelemetry*` SDK family and reviewed transport dependencies; no unrelated
   dependency may be added under the OTLP feature.
 - **Acceptance gate**: The technical lead accepts the backend/protocol/runtime
-  matrix, async 2.0 lifecycle, queue/deadline behavior, and source provenance
-  before D.6 lands production code.
+  matrix, canonical async lifecycle, queue/deadline behavior, and source provenance
+  before D.6 lands production code. ADR-020 retains that technical behavior
+  while preserving released 1.x lifecycle entry points through adapters;
+  this is not permission to replace released signatures.
 - **Contracts**: OTLP-001–024; Phase D D.5–D.8.
 
 ### ADR-019: Phase D Implementation Decisions
 
+**Current release scope:** ADR-020 governs the compatible 1.x release. Retain the technical error/backend/lifecycle decisions below, but any 2.0 replacement, compatibility removal or version activation is deferred to a separately authorized major release.
+
 - **Status**: Accepted 2026-09-26 by the technical lead (PR #227 is the acceptance record).
-- **Context**: ADR-017/018 establish the 2.0 surface and dual transports. The
+- **Context**: ADR-017/018 established the original 2.0 surface proposal and dual
+  transports; ADR-020 now governs compatible 1.x adoption. The
   plan must also record the reviewed dependency-pin amendment, registry owner,
   logging structural choices and consumer migration recipe without inventing
   a second contract owner or serializing the two wave-1 contract sprints.
@@ -1221,13 +1232,16 @@ in [the CI policy](ci-policy.md).
   obs-d-13, but its wave-1 compiled fixtures use an error-parameterized private
   harness and existing baseline types, without importing obs-d-12's new
   errors or registry rows. Wave-2 runtime/bridge/builder consumers bind both
-  contract artifacts; obs-d-18 activates the canonical public exports.
+  contract artifacts. Under ADR-020, D22 freezes canonical namespace seams,
+  D23–D26 preserve released roots through adapters, and D18 integrates both.
 - **Decision — consumer migration**: obs-d-17 migrates the consumer-check and
   custom-sink/Tauri examples to canonical cause variants at each construction
   and match site, preserving diagnostic/source data and owner-only lifecycle
   capabilities. It compiles downstream open-trait implementations with
   deprecated usage denied. It does not reimplement runtime mappings or remove
-  1.x wrappers; obs-d-18 owns final removal and semver/release gates.
+  1.x wrappers. Under ADR-020, obs-d-18 owns combined compatibility/semver
+  evidence and does not remove released wrappers; D27 owns release-validation
+  tooling. Removal requires a separately authorized 2.0 release.
 - **Consequences**: Contract ownership is independent in wave 1. Shared
   artifacts have producer/consumer handoffs, and backend implementations use
   the common lifecycle. No new boundary-rule framework is authorized. Cargo
@@ -1255,10 +1269,11 @@ was reworded accordingly to describe the remaining validation.
 - **Decision — staging and ownership**: Expose the canonical errors and
   neutral signals under `sc_observability_types::v2` at the current workspace
   package version. Existing root exports retain their 1.x behavior during
-  migration. D.21 activates workspace 2.0 versions atomically; D.18 activates
-  the canonical root exports and removes the temporary compatibility surface
-  after consumer migration and the reviewed major-break/semver gates. The
-  staging module is not a permanent second API. Neutral types remain owned
+  migration. ADR-020 supersedes the original D.21 2.0 activation and D.18 root
+  replacement/removal sequence: D27 keeps coordinated compatible 1.x versions,
+  and D18 integrates canonical namespaces with functioning deprecated roots.
+  The compatibility surface remains throughout 1.x; its future removal and
+  namespace disposition require separate 2.0 authorization. Neutral types remain owned
   by `sc-observability-types`, without runtime, transport or upper-layer
   dependencies (LAY-001, PHB-002, TYP-001/002).
 - **Decision — neutral values**: `Attributes` is an ordered
@@ -1306,6 +1321,17 @@ was reworded accordingly to describe the remaining validation.
   canonical types and wire handoff in [API design](api-design.md) (section added by D.12).
   D.12 owns the types and specification, D.19/20 consume them, and D.18
   qualifies their final composition. ADR-019 remains in D.12's bead ADR list.
+
+### ADR-020: Compatible 1.x Adoption Of Phase D
+
+- **Status**: Accepted by the user in the compatibility-planning decision (2026-09-29): release as the next 1.x version, retain deprecated released APIs, and remove them only in a future separately authorized 2.0. This records that decision; it grants no implementation merge or publication authority.
+- **Decision**: Preserve released 1.4.1 signatures, type identity where reexports/aliases suffice, trait implementability/object safety, struct construction, error variants, serialization and lifecycle behavior. Apply PHB-003/004/005 to this release. The new implementation remains authoritative; old entry points adapt to it at the boundary.
+- **Namespace**: Put clean canonical APIs under `v2` only where changed released owners or signatures conflict. Genuinely additive APIs need no duplicate deprecated counterpart. All nine released crates, including the OTLP facade and macro expansion contracts, remain in the compatibility comparison. A compatibility audit row does not mandate an additional wrapper type.
+- **Removal boundary**: Keep deprecated owners/errors/conversions in separate `compat/` files wherever practical, with minimal root reexports and named deletion points. Canonical implementation must not depend on compatibility modules. Do not create another runtime, backend, queue, global logger or lifecycle to preserve old APIs.
+- **Registry ownership**: Compatibility adapters reuse the existing sole per-crate `error_codes` and constants registries (ADR-005, SRC-001–004); separate compatibility files do not authorize duplicate codes or constants.
+- **Retained architecture**: ADR-017's shared canonical diagnostic implementation, ADR-018's two backends/shared lifecycle and ADR-019's pins, registries and boundary constraints remain. Their 2.0-only root replacement/removal and version activation do not govern this release. `sc-observe` remains a dev-only OTLP dependency; this decision introduces no dependency exception.
+- **Acceptance**: Old consumers work at default lint settings; opt-in migrated consumers deny deprecated usage. Preserve diagnostic/source information through adapters, and test behavioral compatibility as well as exact released-package semver. No breaking approval entry can waive the 1.x contract. Future removal needs its own major-release decision.
+- **Contracts**: PHB-003–006, PHD-001–004 and the compatible 1.x amendment; D22 establishes usable compiled contracts, facade sprints implement adapters, D27 validates release tooling, and D18 owns the real combined proof alongside D9 collector conformance; both must pass before phase-ending review.
 
 ## 8. API-Design Consistency
 
