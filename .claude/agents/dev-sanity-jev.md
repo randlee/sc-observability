@@ -97,7 +97,7 @@ iteration=$(atm task events "$task" --all --json \
 $S/sanity-run-history \
   --vars "$scratch/sanity-$task-vars.json" --task "$task" --bead "$checked_bead" \
   --pr-number "$pr_number" --iteration "$iteration" --started-at "$run_started_at" \
-  --output "$scratch/sanity-$task-table-vars.json" --limit 6
+  --output "$scratch/sanity-$task-table-vars.json" --limit 10
 sc-compose render --strict \
   --file .claude/skills/atm-bd-orchestration/templates/sanity-run-table.md.j2 \
   --var-file "$scratch/sanity-$task-table-vars.json" \
