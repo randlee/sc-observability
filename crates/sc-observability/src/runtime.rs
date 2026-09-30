@@ -20,6 +20,8 @@ use sc_observability_types::{
 use serde::de::{DeserializeOwned, value::StrDeserializer};
 use serde_json::Value;
 
+#[cfg(test)]
+use crate::WriterShutdownTimeout;
 use crate::builder::CanonicalLoggerBuilder;
 use crate::follow::LogFollowSession;
 use crate::health::QueryHealthTracker;
@@ -1123,6 +1125,82 @@ impl LevelOwner {
             source,
             diagnostic,
         })
+    }
+}
+
+#[cfg(test)]
+mod disconnected_failure_tests {
+    use super::*;
+
+    fn logger_with_synthetic_shutdown_timeout() -> CanonicalLogger<Running> {
+        let service_name =
+            ServiceName::new("disconnected-timeout-test").expect("test service name is valid");
+        let mut config = LoggerConfig::default_for(
+            service_name,
+            std::env::temp_dir().join("sc-observability-disconnected-timeout-test"),
+        );
+        config.enable_file_sink = false;
+        config.enable_console_sink = true;
+        config.retained_log_policy.writer_shutdown_timeout =
+            WriterShutdownTimeout::new(Duration::from_millis(20));
+
+        let mut logger = CanonicalLogger::new(config).expect("test logger starts");
+        let writer = logger.runtime.writer.take().expect("logger has a writer");
+        let _ = writer.shutdown();
+
+        let timeout_context = shutdown_timed_out_error_context("synthetic shutdown timeout");
+        let last_writer_error = Some(DiagnosticSummary::from(timeout_context.diagnostic()));
+        *logger
+            .runtime
+            .writer_snapshot
+            .lock()
+            .expect("writer snapshot is available") = Some(WriterHealthSnapshot {
+            queue_depth: 0,
+            queue_capacity: logger.config.queue_capacity as u64,
+            queue_high_water_mark: 0,
+            queue_full_drops_total: 0,
+            writer_state: WriterState::Stopped,
+            last_writer_error,
+            maintenance: None,
+        });
+
+        logger
+    }
+
+    #[test]
+    fn disconnected_failure_preserves_synthetic_shutdown_timeout_classification() {
+        // This exercises defensive state only; it does not claim that a public
+        // running logger can reach a disconnected writer after shutdown consumes it.
+        let logger = logger_with_synthetic_shutdown_timeout();
+
+        let error = logger.log_disconnected_failure();
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SHUTDOWN_TIMED_OUT
+        );
+        assert_eq!(
+            error.failure_classification(),
+            FailureClassification::timeout("shutdown")
+        );
+    }
+
+    #[test]
+    fn try_disconnected_failure_preserves_synthetic_shutdown_timeout_classification() {
+        // This exercises defensive state only; it does not claim that a public
+        // running logger can reach a disconnected writer after shutdown consumes it.
+        let logger = logger_with_synthetic_shutdown_timeout();
+
+        let error = logger.try_log_disconnected_failure();
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SHUTDOWN_TIMED_OUT
+        );
+        assert_eq!(
+            error.failure_classification(),
+            FailureClassification::timeout("shutdown")
+        );
     }
 }
 
