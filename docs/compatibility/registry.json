@@ -1336,7 +1336,7 @@
         "crates/sc-observability-log/src/compat/mod.rs",
         "crates/sc-observability-log/src/lib.rs"
       ],
-      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs owns the compat::LogControl newtype, its forwarding methods, Deref and into_v2; crates/sc-observability-log/src/lib.rs re-exports it at the root. Retire both when the released root surface is removed."
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs owns the compat::LogControl facade, its forwarding methods, Deref and into_v2; crates/sc-observability-log/src/lib.rs re-exports it at the root. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard",
@@ -3392,7 +3392,7 @@
         "receiver: preserve released &self receiver at sc_observability_log::LogGuard::control boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released root LogGuard::control shim in crates/sc-observability-log/src/lib.rs returns the released compat::LogControl newtype from crates/sc-observability-log/src/compat/mod.rs over the canonical control::LogControl; v2::LogGuard::control returns v2::LogControl directly.",
+      "conversion": "The released root LogGuard::control shim in crates/sc-observability-log/src/lib.rs returns the released compat::LogControl facade from crates/sc-observability-log/src/compat/mod.rs over the canonical control::LogControl; v2::LogGuard::control returns v2::LogControl directly.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -3409,7 +3409,7 @@
         "crates/sc-observability-log/src/compat/mod.rs",
         "crates/sc-observability-log/src/lib.rs"
       ],
-      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl newtype; crates/sc-observability-log/src/lib.rs contains the retained released root shim that returns it. Retire both when the released root surface is removed."
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl facade; crates/sc-observability-log/src/lib.rs contains the retained released root shim that returns it. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard::elevate_level",
@@ -3604,7 +3604,7 @@
         "error: preserve released FlushError failure type at sc_observability_log::LogControl::flush boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released root LogControl::flush on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs calls the canonical control::LogControl::flush, then compat::legacy_flush maps its canonical error to the released root error.",
+      "conversion": "The released root LogControl::flush on the compat::LogControl facade in crates/sc-observability-log/src/compat/mod.rs calls the canonical control::LogControl::flush, then compat::legacy_flush maps its canonical error to the released root error.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3632,7 +3632,7 @@
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::health boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released root LogControl::health on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::health; there is no error translation.",
+      "conversion": "The released root LogControl::health on the compat::LogControl facade in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::health; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3660,7 +3660,7 @@
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::active_log_path boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released root LogControl::active_log_path on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::active_log_path; there is no error translation.",
+      "conversion": "The released root LogControl::active_log_path on the compat::LogControl facade in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::active_log_path; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3688,7 +3688,7 @@
         "receiver: preserve released &self receiver at sc_observability_log::LogControl::dropped_events boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released root LogControl::dropped_events on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::dropped_events; there is no error translation.",
+      "conversion": "The released root LogControl::dropped_events on the compat::LogControl facade in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::dropped_events; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3716,7 +3716,7 @@
         "error: preserve released crate::WaitError failure type at sc_observability_log::LogControl::wait_stopped boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released root LogControl::wait_stopped on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::wait_stopped; there is no error translation.",
+      "conversion": "The released root LogControl::wait_stopped on the compat::LogControl facade in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::wait_stopped; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3744,7 +3744,7 @@
         "error: preserve released EmitError failure type at sc_observability_log::LogControl::try_log boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released root LogControl::try_log on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs calls the canonical control::LogControl::try_log, then compat::legacy_emit maps its canonical error to the released root error.",
+      "conversion": "The released root LogControl::try_log on the compat::LogControl facade in crates/sc-observability-log/src/compat/mod.rs calls the canonical control::LogControl::try_log, then compat::legacy_emit maps its canonical error to the released root error.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3772,7 +3772,7 @@
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::query boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released root LogControl::query on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::query; there is no error translation.",
+      "conversion": "The released root LogControl::query on the compat::LogControl facade in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::query; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
