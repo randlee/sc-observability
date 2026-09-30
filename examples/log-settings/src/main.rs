@@ -15,10 +15,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let snapshot = EnvSnapshot::capture();
     let resolved = LogSettings::resolve(LogSettingsInputs {
         file: config.logging,
-        shared_env: LogSettings::from_env(&snapshot, EnvPrefix::new("SC")?)?,
+        shared_env: LogSettings::from_env(&snapshot, &EnvPrefix::new("SC")?)?,
         application_env: Some(LogSettings::from_application_env(
             &snapshot,
-            EnvPrefix::new("APP")?,
+            &EnvPrefix::new("APP")?,
         )?),
         default_root: PathBuf::from("./var"),
     })?;

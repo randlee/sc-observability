@@ -44,29 +44,28 @@ impl LogSettings {
     ///
     /// Returns [`LogSettingsError`] when a selected key is invalid, duplicated,
     /// unsupported, or contains an invalid value. Unrelated namespaces are ignored.
-    pub fn from_env(snapshot: &EnvSnapshot, prefix: EnvPrefix) -> Result<Self, LogSettingsError> {
-        let prefix_name = prefix.as_str().to_owned();
-        drop(prefix);
-        let namespace = format!("{prefix_name}{LOG_ENV_NAMESPACE_SUFFIX}");
-        let folded_namespace = namespace.to_ascii_uppercase();
+    pub fn from_env(snapshot: &EnvSnapshot, prefix: &EnvPrefix) -> Result<Self, LogSettingsError> {
+        let namespace = format!("{}{LOG_ENV_NAMESPACE_SUFFIX}", prefix.as_str());
         let mut seen = BTreeSet::new();
         let mut settings = Self::default();
         let mut policy = RetainedLogPolicy::default();
         let mut has_policy_override = false;
 
         for (raw_key, raw_value) in &snapshot.0 {
-            // Match before requiring UTF-8 so `SC_LOG_<invalid bytes>` cannot
-            // evade selected-namespace validation by failing `OsStr::to_str`.
-            let key_for_match = raw_key.to_string_lossy();
-            let folded_key = key_for_match.to_ascii_uppercase();
-            if !folded_key.starts_with(&folded_namespace) {
+            if !raw_key
+                .as_encoded_bytes()
+                .get(..namespace.len())
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(namespace.as_bytes()))
+            {
                 continue;
             }
             let key = raw_key.to_str().ok_or_else(|| {
                 LogSettingsError::environment(format!(
-                    "logging environment key {key_for_match} is not valid UTF-8"
+                    "logging environment key {} is not valid UTF-8",
+                    raw_key.to_string_lossy()
                 ))
             })?;
+            let folded_key = key.to_ascii_uppercase();
             if !seen.insert(folded_key) {
                 return Err(LogSettingsError::environment(format!(
                     "duplicate case-folded logging environment key {key}"
@@ -149,10 +148,10 @@ impl LogSettings {
     /// forwards the selected-namespace parsing errors from [`Self::from_env`].
     pub fn from_application_env(
         snapshot: &EnvSnapshot,
-        prefix: EnvPrefix,
+        prefix: &EnvPrefix,
     ) -> Result<Self, LogSettingsError> {
         if prefix.as_str() == SHARED_ENV_PREFIX {
-            return Err(LogSettingsError::prefix_collision(&prefix));
+            return Err(LogSettingsError::prefix_collision(prefix));
         }
         Self::from_env(snapshot, prefix)
     }

@@ -989,7 +989,7 @@ mod tests {
         )]);
         let error = LogSettings::from_env(
             &snapshot,
-            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+            &sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
         )
         .expect_err("invalid JSON must fail");
 
@@ -1011,7 +1011,7 @@ mod tests {
 
         let settings = LogSettings::from_env(
             &snapshot,
-            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+            &sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
         )
         .expect("level string must deserialize");
 
@@ -1027,7 +1027,7 @@ mod tests {
 
         let error = LogSettings::from_env(
             &snapshot,
-            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+            &sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
         )
         .expect_err("invalid level must fail");
 
