@@ -4453,7 +4453,7 @@
         "error: preserve released InitError failure type at sc_observability_otlp::Telemetry::new boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released Telemetry::new in compat.rs delegates to Telemetry::new_typed, which wraps RuntimeTelemetry::new_typed and converts InitFailure into released InitError; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4463,7 +4463,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "new"
       },
       "removable_paths": [
@@ -4588,7 +4588,7 @@
         "error: preserve released FlushError failure type at sc_observability_otlp::Telemetry::flush boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released Telemetry::flush in compat.rs delegates to flush_typed and converts FlushFailure into released FlushError; flush_typed calls the inner RuntimeTelemetry; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4598,7 +4598,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "flush"
       },
       "removable_paths": [
@@ -4642,7 +4642,7 @@
         "error: preserve released ShutdownError failure type at sc_observability_otlp::Telemetry::shutdown boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released Telemetry::shutdown in compat.rs delegates to shutdown_typed and converts ShutdownFailure into released ShutdownError; shutdown_typed calls the inner RuntimeTelemetry; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4652,7 +4652,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "shutdown"
       },
       "removable_paths": [
@@ -4750,7 +4750,7 @@
         "error: preserve released InitFailure failure type at sc_observability_otlp::OtlpEndpoint::new_typed boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The compatibility OtlpEndpoint::new_typed in compat.rs delegates to config::OtlpEndpoint::new_typed, wraps the validated endpoint, and maps ConfigFailure context to InitFailure; the canonical config type does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4760,7 +4760,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "OtlpEndpoint",
+        "owner": "config::OtlpEndpoint",
         "member": "new_typed"
       },
       "removable_paths": [
@@ -4831,7 +4831,7 @@
         "error: preserve released InitFailure failure type at sc_observability_otlp::AuthHeader::new_typed boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The compatibility AuthHeader::new_typed in compat.rs delegates to config::AuthHeader::new_typed, wraps the validated header, and maps ConfigFailure context to InitFailure; the canonical config type does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4841,7 +4841,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "AuthHeader",
+        "owner": "config::AuthHeader",
         "member": "new_typed"
       },
       "removable_paths": [
