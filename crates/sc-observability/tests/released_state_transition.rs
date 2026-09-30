@@ -195,10 +195,6 @@ fn v2_entity_validation_precedes_redaction_and_event_size_validation() {
         error.diagnostic().message,
         "log event state transition entity_id is invalid"
     );
-    assert_ne!(
-        error.diagnostic().message,
-        "log event exceeds the maximum serialized size"
-    );
     assert_eq!(
         redaction_calls.load(Ordering::SeqCst),
         0,
