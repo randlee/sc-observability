@@ -22,6 +22,7 @@ test:
 
 # Public API checks; these need the nightly toolchain (see .github/workflows/ci.yml).
 public-api:
+    python3 -m unittest discover -s scripts/ci/tests -p test_validate_public_api.py -v
     bash scripts/ci/validate_public_api_diff.sh
     python3 scripts/ci/validate_public_api_semver.py
     bash scripts/ci/validate_public_api_docs.sh
