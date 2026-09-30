@@ -10,11 +10,16 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
+use sc_observability::constants::{
+    DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX, MAX_LOG_EVENT_BYTES,
+};
 use sc_observability::v2::{EventError, Logger as CanonicalLogger};
 use sc_observability::{
-    AdmissionOutcome, JsonlLogReader, Level, LogEvent, LogQuery, Logger, LoggerConfig, ServiceName,
+    AdmissionOutcome, JsonlLogReader, Level, LogEvent, LogQuery, Logger, LoggerConfig, Redactor,
+    ServiceName,
 };
 use sc_observability_types::LevelFilter;
 use sc_observability_types::v2::FailureClassification;
@@ -24,6 +29,14 @@ use sc_observability_types::{
 };
 
 const INVALID_ID: &str = "entity invalid";
+
+struct CountingRedactor(Arc<AtomicUsize>);
+
+impl Redactor for CountingRedactor {
+    fn redact(&self, _key: &str, _value: &mut serde_json::Value) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 fn service_name() -> ServiceName {
     ServiceName::new("released-state-app").expect("valid service name")
@@ -147,6 +160,39 @@ fn v2_facade_rejects_invalid_entity_id_without_queueing() {
     assert_event_validation(&error);
 
     assert_eq!(v2_count(&logger), 1, "rejected events are never queued");
+}
+
+#[test]
+fn v2_entity_validation_precedes_redaction_and_event_size_validation() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let redaction_calls = Arc::new(AtomicUsize::new(0));
+    let mut logger_config = config(&root);
+    logger_config
+        .redaction
+        .custom_redactors
+        .push(Box::new(CountingRedactor(redaction_calls.clone())));
+    let logger = CanonicalLogger::new(logger_config).expect("logger");
+    let mut oversized = event(Some(INVALID_ID));
+    oversized.fields.insert(
+        "oversized".into(),
+        serde_json::Value::String("x".repeat(MAX_LOG_EVENT_BYTES)),
+    );
+
+    let error = logger.log(oversized).expect_err("invalid entity id");
+    assert_event_validation(&error);
+    assert_eq!(
+        error.diagnostic().message,
+        "log event state transition entity_id is invalid"
+    );
+    assert_ne!(
+        error.diagnostic().message,
+        "log event exceeds the maximum serialized size"
+    );
+    assert_eq!(
+        redaction_calls.load(Ordering::SeqCst),
+        0,
+        "canonical entity validation rejects before custom redaction"
+    );
 }
 
 #[test]
