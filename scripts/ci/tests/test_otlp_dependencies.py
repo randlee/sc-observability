@@ -41,7 +41,31 @@ class TransportPolicyTests(unittest.TestCase):
             'tonic = { workspace = true, features = ["router"] }',
             'tonic = { workspace = true }',
         )
-        self.rejects("test collector must use only dev tonic/router")
+        self.rejects("dev-dependency tonic: effective features differ from policy")
+
+    def test_test_collector_feature_expansion(self):
+        self.replace(MANIFEST, 'features = ["router"] }', 'features = ["router", "tls-ring"] }')
+        self.rejects("dev-dependency tonic: effective features differ from policy")
+
+    def test_renamed_test_collector(self):
+        self.replace(MANIFEST, 'tonic = { workspace = true, features = ["router"] }', 'tonic = { workspace = true, package = "tonic", features = ["router"] }')
+        self.rejects("dev-dependency tonic: must inherit the reviewed workspace pin")
+
+    def test_unreviewed_dev_dependency(self):
+        self.replace(MANIFEST, 'sc-observe.workspace = true', 'sc-observe.workspace = true\nserde.workspace = true')
+        self.rejects(r"dev-dependencies differ from policy: unexpected \['serde'\]")
+
+    def test_target_specific_dev_dependency(self):
+        self.replace(MANIFEST, '[lints]', "[target.'cfg(unix)'.dev-dependencies]\nserde.workspace = true\n\n[lints]")
+        self.rejects(r"dev-dependencies differ from policy: unexpected \['serde'\]")
+
+    def test_router_in_production_transport(self):
+        self.replace(MANIFEST, 'tonic = { workspace = true, optional = true }', 'tonic = { workspace = true, optional = true, features = ["router"] }')
+        self.rejects("tonic: effective dependency features differ")
+
+    def test_tonic_rejected_in_legacy_runtime(self):
+        self.replace(MANIFEST, 'legacy-http-json = ["dep:reqwest",', 'legacy-http-json = ["dep:tonic", "dep:reqwest",')
+        self.rejects("tonic: incorrect binding to legacy-http-json")
 
     def test_nonoptional_transport(self):
         self.replace(MANIFEST, 'reqwest = { workspace = true, optional = true }', 'reqwest.workspace = true')

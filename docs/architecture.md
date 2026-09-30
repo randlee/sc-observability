@@ -697,7 +697,7 @@ Important boundary:
 | `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
-| `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
+| `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` and `tonic` with `router` dev-only for integration tests; [ADR-019 amendment](#adr-019-amendment-otlp-hermetic-test-collector)) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 | `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError`/`DetachError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
 | `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
 | `sc-observability-schema` | `sc-observability-dto` (with the `schema-gen` feature) | runtime crates, binding runtimes, and host/framework crates | isolated, unpublished schema-generator crate under `bindings/schema-generator/`; emits schema artifacts from DTO wire types |
@@ -775,6 +775,13 @@ exact remaining pins in Cargo.lock and the existing boundaries manifest at
 implementation review. No wildcard approval covers an unrelated dependency. ADR-019 records this
 amendment to ADR-018; the existing boundary manifest is the single machine
 allowlist and this section is its normative explanation.
+
+The OTLP crate's only dev-dependencies are `sc-observe` and `tonic`, which
+adds the `router` feature to the reviewed transport pin for the hermetic
+integration collector. The `[dev_dependencies]` section of the same policy file
+records them; `router` is never a normal dependency feature, and `tonic` stays
+bound to `otlp-sdk` only
+([ADR-019 amendment](#adr-019-amendment-otlp-hermetic-test-collector)).
 
 ## 6.1 Query/Follow Dependency Order
 
@@ -1477,6 +1484,34 @@ was reworded accordingly to describe the remaining validation.
   helper also checks.
 - **Contracts**: ADR-004, ADR-009, ADR-019, ADR-020, LAY-001–007; D18 owns the
   composition cases.
+
+#### ADR-019 amendment: OTLP hermetic test collector
+
+- **Status**: Accepted 2026-09-30 by the Phase D lead, recording the root
+  test-only authorization for D9 (`01M3SWJRCXVHH4MY8HK1XHF3R6` /
+  `01M3SWJRWPYQEAM706WHN2WTZ5`; QA finding obs-d-9-qa-pr718-f3). The original
+  ADR-019 acceptance and the composition test harness amendment are unchanged.
+- **Context**: D9's hermetic collector serves the three generated OTLP gRPC
+  services in `sc-observability-otlp` integration tests, and tonic's
+  `Server::add_service` requires the `router` feature. ADR-019 and section 6
+  listed `sc-observe` as the only OTLP dev-dependency, and ADR-020 introduced
+  no dependency exception.
+- **Decision**: `sc-observability-otlp` takes exactly two dev-dependencies:
+  `sc-observe` and `tonic = { workspace = true, features = ["router"] }`, whose
+  effective features are `router` and `transport` with default features off.
+  No other manifest, feature, version or production dependency changes.
+- **Enforcement**: The `[dev_dependencies]` section of
+  `policy/otlp-transport.toml` is the machine record, and
+  `scripts/ci/otlp_dependencies.py` is the single validation authority. It
+  rejects any other dev-dependency, including target-specific ones, renamed or
+  non-inherited declarations, and any change in effective features.
+  `validate_dependency_bans.sh` and `validate_repo_boundaries.sh` both run it.
+- **Scope boundary**: Production transport roles are unchanged. `tonic`
+  remains an optional `otlp-sdk`-only transport with the reviewed `transport`
+  feature, the transport table rejects it in `legacy-http-json`, and the SDK
+  lock pins stay as reviewed.
+- **Contracts**: ADR-004, ADR-009, ADR-018, ADR-019, ADR-020, LAY-001–007 and
+  quality-policy RULE-007; D9 owns the collector qualification.
 
 ## 8. API-Design Consistency
 

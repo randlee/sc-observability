@@ -15,6 +15,18 @@ def effective_features(inherited, declaration) -> tuple[set[str], bool]:
     return enabled, defaults
 
 
+DEPENDENCY_KINDS = ("dependencies", "dev-dependencies", "build-dependencies")
+
+
+def dependency_sections(manifest):
+    """Yields each dependency table, including target-specific tables."""
+    for kind in DEPENDENCY_KINDS:
+        yield kind, manifest.get(kind, {})
+    for target in manifest.get("target", {}).values():
+        for kind in DEPENDENCY_KINDS:
+            yield kind, target.get(kind, {})
+
+
 def validate_transport_dependencies(root: Path) -> set[str]:
     def load(path):
         return tomllib.loads((root / path).read_text(encoding="utf-8"))
@@ -26,14 +38,29 @@ def validate_transport_dependencies(root: Path) -> set[str]:
     locked = {(p["name"], p["version"]) for p in load("Cargo.lock")["package"]}
     features = manifest["features"]
 
-    # The integration collector needs tonic's generated-service router, but
-    # only while compiling the hermetic test target.  It must never become an
-    # enabled legacy production transport edge.
-    if manifest.get("dev-dependencies", {}).get("tonic") != {
-        "workspace": True,
-        "features": ["router"],
-    }:
-        raise SystemExit("OTLP test collector must use only dev tonic/router")
+    # ADR-019 amendment: the hermetic integration collector adds tonic's
+    # generated-service router only as a dev-dependency.  The policy records
+    # every allowed dev-dependency and its exact effective features.
+    reviewed_dev = document["dev_dependencies"]
+    dev = set()
+    for kind, dependencies in dependency_sections(manifest):
+        if kind != "dev-dependencies":
+            continue
+        for key, value in dependencies.items():
+            if not isinstance(value, dict) or value.get("workspace") is not True or "package" in value:
+                raise SystemExit(f"OTLP dev-dependency {key}: must inherit the reviewed workspace pin")
+            dev.add(key)
+            if key in reviewed_dev:
+                enabled, defaults = effective_features(workspace.get(key, {}), value)
+                expected = reviewed_dev[key]
+                if enabled != set(expected["features"]) or defaults != expected["default_features"]:
+                    raise SystemExit(f"OTLP dev-dependency {key}: effective features differ from policy")
+    if dev != set(reviewed_dev):
+        raise SystemExit(
+            "OTLP dev-dependencies differ from policy: "
+            f"unexpected {sorted(dev - set(reviewed_dev))}, "
+            f"missing {sorted(set(reviewed_dev) - dev)}"
+        )
 
     # Validate the reviewed SDK closure first. A dependency can later become a
     # direct, policy-governed transport (for example tonic for generated OTLP
@@ -84,12 +111,7 @@ def validate_transport_dependencies(root: Path) -> set[str]:
         for backend in ("otlp-sdk", "legacy-http-json"):
             if (name in activated(backend)) != (backend in rule["backends"]):
                 raise SystemExit(prefix + f"incorrect binding to {backend}")
-    if "tonic" in activated("legacy-http-json"):
-        raise SystemExit("OTLP test collector tonic must not enter legacy-http-json")
     return set(policy)
-
-
-DEPENDENCY_KINDS = ("dependencies", "dev-dependencies", "build-dependencies")
 
 
 def validate_composition_harness(root: Path) -> None:
@@ -104,13 +126,6 @@ def validate_composition_harness(root: Path) -> None:
     harness_dir = (root / rule["manifest"]).parent.resolve()
     harness = load(rule["manifest"])
     prefix = "OTLP composition harness: "
-
-    def sections(manifest):
-        for kind in DEPENDENCY_KINDS:
-            yield kind, manifest.get(kind, {})
-        for target in manifest.get("target", {}).values():
-            for kind in DEPENDENCY_KINDS:
-                yield kind, target.get(kind, {})
 
     def resolve(key, declaration, manifest_dir):
         # Renamed (`package = ...`), path and workspace-inherited declarations
@@ -130,7 +145,7 @@ def validate_composition_harness(root: Path) -> None:
         raise SystemExit(prefix + "must set publish = false")
     reviewed = rule["dev_dependencies"]
     dev = set()
-    for kind, dependencies in sections(harness):
+    for kind, dependencies in dependency_sections(harness):
         if kind != "dev-dependencies" and dependencies:
             raise SystemExit(prefix + f"must not declare {kind}")
         for key, value in dependencies.items():
@@ -153,7 +168,7 @@ def validate_composition_harness(root: Path) -> None:
         member_dir = (root / member).resolve()
         if member_dir == harness_dir:
             continue
-        for _, dependencies in sections(load(f"{member}/Cargo.toml")):
+        for _, dependencies in dependency_sections(load(f"{member}/Cargo.toml")):
             for key, value in dependencies.items():
                 package, path = resolve(key, value, member_dir)
                 if package == rule["package"] or path == harness_dir:
