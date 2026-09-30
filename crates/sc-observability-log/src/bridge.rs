@@ -514,17 +514,7 @@ fn submit_parts_to_attachment(
     }
     let outcome = match state.logger.try_log_with_outcome(event) {
         Ok(outcome) => Ok(outcome),
-        Err(error) => Err(match error {
-            sc_observability_types::v2::EventError::Validation { .. } => DropCause::InvalidEvent,
-            sc_observability_types::v2::EventError::Routing { context } => {
-                match context.diagnostic().code.as_str() {
-                    "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => DropCause::QueueFull,
-                    "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => DropCause::ShutdownTimedOut,
-                    _ => DropCause::WriterDegraded,
-                }
-            }
-            _ => DropCause::WriterDegraded,
-        }),
+        Err(error) => Err(handle::event_drop_cause(&error)),
     };
     drop(call);
     outcome

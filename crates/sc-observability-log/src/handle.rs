@@ -604,15 +604,29 @@ pub(crate) fn submit_to(
     installed
         .logger
         .try_log_with_outcome(event)
-        .map_err(|error| match error {
-            EventError::Validation { .. } => DropCause::InvalidEvent,
-            EventError::Routing { context } => match context.diagnostic().code.as_str() {
-                "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => DropCause::QueueFull,
-                "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => DropCause::ShutdownTimedOut,
-                _ => DropCause::WriterDegraded,
-            },
-            _ => DropCause::WriterDegraded,
-        })
+        .map_err(|error| event_drop_cause(&error))
+}
+
+/// Classifies a canonical admission failure into the drop cause it counts as.
+///
+/// Validation is an invalid event; routing failures carrying the core logger's
+/// queue-full or shutdown-timeout code keep those causes. Every other failure is a
+/// degraded writer.
+pub(crate) fn event_drop_cause(error: &EventError) -> DropCause {
+    match error {
+        EventError::Validation { .. } => DropCause::InvalidEvent,
+        EventError::Routing { context } => {
+            let code = &context.diagnostic().code;
+            if *code == sc_observability::error_codes::LOGGER_QUEUE_FULL {
+                DropCause::QueueFull
+            } else if *code == sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT {
+                DropCause::ShutdownTimedOut
+            } else {
+                DropCause::WriterDegraded
+            }
+        }
+        _ => DropCause::WriterDegraded,
+    }
 }
 
 /// Unguarded submit core for pre-built parts: slot read, then [`submit_to`].

@@ -447,28 +447,39 @@ pub(crate) fn legacy_init(
 ) -> InitError {
     use sc_observability_types::v2::InitError as Core;
     match error {
-        Core::Configuration { context } => match context.diagnostic().code.as_str() {
-            "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED" => InitError::AlreadyInitialized,
-            "SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED" => InitError::ForeignLoggerInstalled,
-            "SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL" => InitError::UnsupportedLevel {
-                configured,
-                available,
-            },
-            _ => InitError::Logger {
-                diagnostic: operation_diagnostic(context.diagnostic()),
-            },
-        },
-        Core::Runtime { context } => match context.diagnostic().code.as_str() {
-            "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED" => InitError::RuntimeStart {
-                diagnostic: operation_diagnostic(context.diagnostic()),
-            },
-            "SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED" => InitError::IdentityResolution {
-                diagnostic: operation_diagnostic(context.diagnostic()),
-            },
-            _ => InitError::Logger {
-                diagnostic: operation_diagnostic(context.diagnostic()),
-            },
-        },
+        Core::Configuration { context } => {
+            let code = &context.diagnostic().code;
+            if *code == error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED {
+                InitError::AlreadyInitialized
+            } else if *code == error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED {
+                InitError::ForeignLoggerInstalled
+            } else if *code == error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL {
+                InitError::UnsupportedLevel {
+                    configured,
+                    available,
+                }
+            } else {
+                InitError::Logger {
+                    diagnostic: operation_diagnostic(context.diagnostic()),
+                }
+            }
+        }
+        Core::Runtime { context } => {
+            let code = &context.diagnostic().code;
+            if *code == error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED {
+                InitError::RuntimeStart {
+                    diagnostic: operation_diagnostic(context.diagnostic()),
+                }
+            } else if *code == error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED {
+                InitError::IdentityResolution {
+                    diagnostic: operation_diagnostic(context.diagnostic()),
+                }
+            } else {
+                InitError::Logger {
+                    diagnostic: operation_diagnostic(context.diagnostic()),
+                }
+            }
+        }
         _ => InitError::Logger {
             diagnostic: operation_diagnostic(error.diagnostic()),
         },
