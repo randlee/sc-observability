@@ -184,9 +184,12 @@ impl JsonlFileSink {
         rotation_max_files: usize,
         incoming_len: u64,
     ) -> Result<bool, LogSinkError> {
-        if let Ok(metadata) = fs::metadata(&self.path)
-            && metadata.len().saturating_add(incoming_len) > rotation_max_bytes
-        {
+        let metadata = match fs::metadata(&self.path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(self.mark_failure(error)),
+        };
+        if metadata.len().saturating_add(incoming_len) > rotation_max_bytes {
             for idx in (1..rotation_max_files).rev() {
                 let src = self.rotated_path(idx);
                 let dest = self.rotated_path(idx + 1);
@@ -943,6 +946,41 @@ mod tests {
         assert_eq!(
             error.diagnostic().code,
             error_codes::LOGGER_MAINTENANCE_FAILED
+        );
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[test]
+    fn rotation_metadata_not_found_is_benign() {
+        let root = temp_root("rotation-metadata-not-found");
+        let active_path = root.join("logs/service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path);
+
+        assert!(
+            !sink
+                .rotate_if_needed(u64::MAX, 1, 0)
+                .expect("missing active file does not require rotation")
+        );
+        assert_eq!(sink.health().state, SinkHealthState::Healthy);
+    }
+
+    #[test]
+    fn rotation_metadata_io_failure_marks_sink_failure() {
+        let root = temp_root("rotation-metadata-io-error");
+        let parent = root.join("logs");
+        fs::write(&parent, "not a directory").expect("create invalid log parent");
+        let active_path = parent.join("service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path.clone());
+        let metadata_error = fs::metadata(&active_path).expect_err("parent is not a directory");
+        assert_ne!(metadata_error.kind(), io::ErrorKind::NotFound);
+
+        let error = sink
+            .rotate_if_needed(u64::MAX, 1, 0)
+            .expect_err("metadata I/O failure must be surfaced");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
         );
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
     }
