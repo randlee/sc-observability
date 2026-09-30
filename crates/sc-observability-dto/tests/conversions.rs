@@ -46,6 +46,26 @@ fn decimal_domains_are_canonical() {
     );
     assert!(serde_json::from_value::<DecimalDto>(json!(1)).is_err());
 }
+
+#[test]
+fn json_number_projection_is_total_in_every_workspace_number_domain() {
+    let value = json!({
+        "signed": -1,
+        "unsigned": u64::MAX,
+        "float": 1.5,
+        "nested": [-2, 2.5]
+    });
+
+    let projected = from_json_value(value).unwrap();
+    assert!(matches!(
+        projected,
+        ValueDto::Object { value }
+            if matches!(value["signed"], ValueDto::Integer { ref value } if value.as_str() == "-1")
+                && matches!(value["unsigned"], ValueDto::Integer { ref value } if value.as_str() == u64::MAX.to_string())
+                && matches!(value["float"], ValueDto::Float { value } if value == 1.5)
+                && matches!(value["nested"], ValueDto::Array { ref value } if matches!(value[..], [ValueDto::Integer { .. }, ValueDto::Float { value: 2.5 }]))
+    ));
+}
 #[test]
 fn checked_event_preserves_integer_and_host_stamp() {
     let mut raw = event();
