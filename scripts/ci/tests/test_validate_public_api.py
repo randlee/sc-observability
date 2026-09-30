@@ -149,6 +149,9 @@ class DocsApprovalEvidenceTests(unittest.TestCase):
             (root / 'target/public-api').mkdir(parents=True)
             (root / 'docs/api-approvals').mkdir(parents=True)
             (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
+            (root / 'release/public-api-major-breaks.toml').write_text(
+                'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                'candidate_version = "1.5.0"\nbreaks = []\n')
             (root / 'target/public-api/public-api-diff.json').write_text(json.dumps(report))
             (root / 'docs/api-approvals/fixture.json').write_text(json.dumps(approval))
             commands = [
@@ -171,6 +174,56 @@ class DocsApprovalEvidenceTests(unittest.TestCase):
                 approval['crates'][crate]['evidence'] = 'positive-control evidence'
                 (root / 'docs/api-approvals/fixture.json').write_text(json.dumps(approval))
                 self.assertEqual(main(), 0)
+
+    def test_docs_mode_rejects_an_approved_removed_api_under_compatible_policy(self):
+        crate = 'sc-observability-log-macros'
+        api_sha256 = 'b' * 64
+        package = {'name': crate, 'version': '1.5.0', 'manifest_path': 'macros/Cargo.toml',
+                   'targets': [{'kind': ['proc-macro']}]}
+        policy = {'schema_version': 1, 'candidate_version': '1.5.0', 'crates': {
+            crate: {'baseline_version': '1.4.1', 'kind': 'proc-macro'}}}
+        report = {'source_commit': 'fixture-head', 'candidate_version': '1.5.0', 'crates': {
+            crate: {'status': 'changed', 'api_sha256': api_sha256}}}
+        approval = {'schema_version': 1, 'candidate_version': '1.5.0', 'crates': {
+            crate: {'status': 'approved', 'reviewer': 'quality-mgr',
+                    'scope': ['public-api'], 'api_sha256': api_sha256,
+                    'evidence': 'reviewed removed API fixture'}}}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'release').mkdir()
+            (root / 'target/public-api').mkdir(parents=True)
+            (root / 'docs/api-approvals').mkdir(parents=True)
+            (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
+            manifest_path = root / 'release/public-api-major-breaks.toml'
+            manifest_path.write_text(
+                'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                'candidate_version = "1.5.0"\nbreaks = []\n')
+            (root / 'target/public-api/public-api-diff.json').write_text(json.dumps(report))
+            (root / 'docs/api-approvals/fixture.json').write_text(json.dumps(approval))
+            commands = [
+                CompletedProcess([], 0, json.dumps({'packages': [package]}), ''),
+                CompletedProcess([], 0, 'fixture-head', ''),
+                CompletedProcess([], 0, json.dumps({'packages': [package]}), ''),
+                CompletedProcess([], 0, 'fixture-head', ''),
+            ]
+            stderr = io.StringIO()
+            with patch('validate_public_api.ROOT', root), \
+                    patch('validate_public_api.CACHE', root / 'target/public-api'), \
+                    patch('validate_public_api.run', side_effect=commands), \
+                    patch('sys.argv', ['validate_public_api.py', 'docs']), \
+                    contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                self.assertEqual(cli(), 0)
+
+                # A matching scoped approval cannot waive a declared API removal.
+                manifest_path.write_text(
+                    'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                    'candidate_version = "1.5.0"\n'
+                    'breaks = [{ id = "removed-public-api" }]\n')
+                self.assertEqual(cli(), 3)
+                self.assertIn('cannot accept enumerated breaking API exceptions',
+                              stderr.getvalue())
 
 
 

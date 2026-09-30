@@ -110,7 +110,7 @@ def main() -> int:
         raise ValueError('selected crate is not in public API policy')
     if args.crates and args.mode == 'docs':
         raise ValueError('documentation approval requires the full crate report')
-    if args.mode == 'semver':
+    if args.mode in ('semver', 'docs'):
         validate_compatible_policy(policy)
     CACHE.mkdir(parents=True, exist_ok=True)
     if args.mode == 'docs':
