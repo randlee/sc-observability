@@ -1133,6 +1133,8 @@ fn bridge_timeout(external: bool) {
     let stdout = std::io::stdout();
     let held = stdout.lock();
     backend.try_log(event(), ProducerOrigin::RustHost).unwrap();
+    let (completed_tx, completed_rx) = mpsc::sync_channel(1);
+    sc_observability_log::notify_next_flush_complete(completed_tx);
     if external {
         assert!(matches!(
             control.flush(Duration::from_millis(1)),
@@ -1151,16 +1153,19 @@ fn bridge_timeout(external: bool) {
         sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS.as_str(),
     );
     drop(held);
-    // These are explicit new host requests; the adapter itself never retries or
-    // retrieves the previous native result. Retry only the documented overlap.
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        let result = backend
-            .start_flush(Duration::from_secs(1))
-            .unwrap()
-            .wait(Duration::from_secs(2));
-        match result{Ok(_)=>break,Err(error)if error.diagnostic().code==sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS.as_str()=>{assert!(Instant::now()<deadline);std::thread::yield_now();},other=>panic!("new bridge barrier: {other:?}")}
-    }
+    // Completion is the native single-flight release, not the observer deadline.
+    // The bound is only a hang watchdog; no new flush is used to poll progress.
+    assert!(
+        completed_rx
+            .recv_timeout(CONTRACT_CASE_DEADLINE)
+            .expect("native flush completion notification"),
+        "native flush completion was notified before its in-flight flag cleared"
+    );
+    backend
+        .start_flush(Duration::from_secs(1))
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .expect("one new flush after native completion");
     drop(backend);
     crate::spawn::wait_live(1);
     host.shutdown(Duration::from_secs(2)).unwrap();
