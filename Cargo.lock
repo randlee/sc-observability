@@ -1507,6 +1507,7 @@ dependencies = [
  "temp-env",
  "tempfile",
  "thiserror",
+ "trybuild",
  "windows-sys 0.61.2",
 ]
 
