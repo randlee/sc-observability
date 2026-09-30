@@ -284,8 +284,18 @@ pub fn create_test_blocking_core_backend(
 pub fn bridge_backend(
     control: sc_observability_log::LogControl,
 ) -> Result<BridgeControlBackend, Failure> {
+    bridge_backend_v2(control.into_v2())
+}
+
+/// Attaches bounded operations to an existing canonical bridge control.
+///
+/// # Errors
+/// Returns initialization or unavailable native snapshot diagnostics.
+pub fn bridge_backend_v2(
+    control: sc_observability_log::v2::LogControl,
+) -> Result<BridgeControlBackend, Failure> {
     Ok(BridgeControlBackend {
-        shared: coordinator::bridge(control.into_v2())?,
+        shared: coordinator::bridge(control)?,
     })
 }
 impl CoreLoggerOwner {

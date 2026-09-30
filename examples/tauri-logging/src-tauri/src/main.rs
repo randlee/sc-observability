@@ -18,8 +18,8 @@ use std::{
 };
 
 struct OwnerState {
-    guard: Mutex<Option<sc_observability_log::LogGuard>>,
-    control: sc_observability_log::LogControl,
+    guard: Mutex<Option<sc_observability_log::v2::LogGuard>>,
+    control: sc_observability_log::v2::LogControl,
 }
 
 impl OwnerState {
@@ -57,36 +57,62 @@ impl OwnerState {
     }
 }
 
-fn shutdown_failure(error: sc_observability_log::ShutdownError) -> Failure {
-    use sc_observability_log::ShutdownError;
+fn shutdown_failure(error: sc_observability_log::v2::ShutdownError) -> Failure {
+    use sc_observability_log::v2::ShutdownError;
 
     match error {
-        ShutdownError::TimedOut { timeout } => {
-            let diagnostic = sc_observability_dto::Diagnostic {
-                at: sc_observability_types::Timestamp::now_utc().to_string(),
-                code: sc_observability_log::ShutdownError::TimedOut { timeout }
-                    .code()
-                    .as_str()
-                    .into(),
-                message: format!("shutdown did not complete within {timeout:?}"),
-                remediation: sc_observability_log::ShutdownError::TimedOut { timeout }
-                    .remediation()
-                    .into(),
-            };
+        ShutdownError::Timeout { context } => {
             Failure::Timeout {
-                diagnostic: Box::new(diagnostic),
+                diagnostic: dto_diagnostic(context.diagnostic()),
                 operation: "shutdown".into(),
             }
         }
-        ShutdownError::FinalFlush { diagnostic } => Failure::Io {
-            diagnostic: Box::new(diagnostic.into()),
+        ShutdownError::Drain { context } => Failure::Io {
+            diagnostic: dto_diagnostic(context.diagnostic()),
         },
-        ShutdownError::HelperSpawn { diagnostic } => Failure::Unavailable {
-            diagnostic: Box::new(diagnostic.into()),
+        other => Failure::Internal {
+            diagnostic: dto_diagnostic(other.diagnostic()),
         },
-        ShutdownError::HelperLost { diagnostic } => Failure::Internal {
-            diagnostic: Box::new(diagnostic.into()),
-        },
+    }
+}
+
+fn dto_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> Box<sc_observability_dto::Diagnostic> {
+    Box::new(sc_observability_dto::Diagnostic {
+        at: diagnostic.timestamp.to_string(),
+        code: diagnostic.code.as_str().into(),
+        message: diagnostic.message.clone(),
+        remediation: diagnostic.remediation.clone().into(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn context(message: &str) -> Box<sc_observability_types::ErrorContext> {
+        Box::new(sc_observability_types::ErrorContext::new(
+            sc_observability_types::error_codes::DIAGNOSTIC_INVALID,
+            message,
+            sc_observability_types::Remediation::recoverable("retry", ["inspect health"]),
+        ))
+    }
+
+    #[test]
+    fn canonical_shutdown_errors_keep_the_released_failure_categories() {
+        let timeout = shutdown_failure(sc_observability_log::v2::ShutdownError::Timeout {
+            context: context("timed out"),
+        });
+        assert!(matches!(
+            timeout,
+            Failure::Timeout { ref operation, .. } if operation == "shutdown"
+        ));
+        assert_eq!(timeout.diagnostic().message, "timed out");
+
+        let drain = shutdown_failure(sc_observability_log::v2::ShutdownError::Drain {
+            context: context("drain failed"),
+        });
+        assert!(matches!(drain, Failure::Io { .. }));
+        assert_eq!(drain.diagnostic().message, "drain failed");
     }
 }
 
@@ -236,7 +262,7 @@ fn main() {
             return;
         }
     };
-    let guard = match sc_observability_log::init(
+    let guard = match sc_observability_log::v2::init(
         config,
         sc_observability_log::BridgeOptions {
             default_action,
@@ -250,7 +276,7 @@ fn main() {
         }
     };
     let control = guard.control();
-    let backend = match sc_observability_binding_runtime::bridge_backend(control.clone()) {
+    let backend = match sc_observability_binding_runtime::bridge_backend_v2(control.clone()) {
         Ok(backend) => backend,
         Err(error) => {
             eprintln!("could not attach observability bridge: {error:?}");
