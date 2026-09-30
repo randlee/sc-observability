@@ -468,6 +468,40 @@ fn metric() -> MetricRecord {
     }
 }
 
+fn canonical_span_signals() -> [sc_observability_types::v2::SpanSignal; 2] {
+    use sc_observability_types::v2;
+    let trace = v2::TraceContext::new(
+        TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
+        SpanId::new("0123456789abcdef").expect("valid span id"),
+        v2::TraceFlags::default(),
+    );
+    let started = v2::SpanRecord::<v2::SpanStarted>::new(
+        Timestamp::UNIX_EPOCH,
+        service_name(),
+        ActionName::new(SPAN_NAME).expect("valid span name"),
+        trace,
+        v2::Attributes::new(),
+    );
+    let ended = started
+        .clone()
+        .end(v2::SpanStatus::Ok, DurationMs::from(10));
+    [
+        v2::SpanSignal::Started(started),
+        v2::SpanSignal::Ended(ended),
+    ]
+}
+
+fn canonical_metric() -> sc_observability_types::v2::MetricRecord {
+    use sc_observability_types::v2;
+    v2::MetricRecord::try_new(
+        Timestamp::UNIX_EPOCH,
+        service_name(),
+        MetricName::new(METRIC_NAME).expect("valid metric"),
+        v2::MetricValue::Gauge(v2::FiniteF64::new(1.0).expect("finite gauge")),
+    )
+    .expect("valid canonical gauge")
+}
+
 fn released_config(transport: OtelConfig) -> sc_observability_otlp::TelemetryConfig {
     TelemetryConfigBuilder::new(service_name())
         .enable_logs(LogsConfig::default())
@@ -599,10 +633,12 @@ fn v2_default_http_binary_exports_lossless_protobuf_for_every_signal() {
     runtime().block_on(async {
         let telemetry = v2_telemetry(v2_default_transport(&collector.endpoint()));
         telemetry.emit_log(&log_event()).expect("admit log");
-        for signal in span_signals() {
+        for signal in canonical_span_signals() {
             telemetry.emit_span(&signal).expect("admit span");
         }
-        telemetry.emit_metric(&metric()).expect("admit metric");
+        telemetry
+            .emit_metric(&canonical_metric())
+            .expect("admit metric");
 
         telemetry
             .flush_async_typed()

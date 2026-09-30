@@ -4,7 +4,8 @@
 //! dependency on this crate and judges rustc's structured diagnostics (error
 //! code and primary consumer line), never rendered text. A 1.4.1 consumer that
 //! implements every released trait with the root errors must build unchanged;
-//! a canonical consumer implements the `v2` traits; and the negative control
+//! a canonical consumer implements the `v2` traits with the `v2` span and
+//! metric models; and the negative control
 //! proves the probe fails when root-error implementations meet `v2` traits.
 #![allow(
     clippy::expect_used,
@@ -75,13 +76,11 @@ fn main() {
 const CANONICAL_CONSUMER: &str = r"use std::sync::Arc;
 
 use sc_observability_types::v2::{
-    IdentityError, LogProjector, MetricProjector, ObservationSubscriber, ProcessIdentityResolver,
-    ProjectionError, ProjectionRegistration, SpanProjector, SubscriberError,
-    SubscriberRegistration,
+    IdentityError, LogProjector, MetricProjector, MetricRecord, ObservationSubscriber,
+    ProcessIdentityResolver, ProjectionError, ProjectionRegistration, SpanProjector, SpanSignal,
+    SubscriberError, SubscriberRegistration,
 };
-use sc_observability_types::{
-    LogEvent, MetricRecord, Observation, ProcessIdentity, ProcessIdentityPolicy, SpanSignal,
-};
+use sc_observability_types::{LogEvent, Observation, ProcessIdentity, ProcessIdentityPolicy};
 
 struct Ev;
 struct Resolver;

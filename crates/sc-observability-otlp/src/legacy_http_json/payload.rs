@@ -207,6 +207,22 @@ fn span_json(span: CompleteSpan) -> Value {
     if let Some(parent) = &trace.parent_span_id {
         result["parentSpanId"] = json!(parent.as_str());
     }
+    result["flags"] = json!(u32::from(trace.flags.bits()));
+    result["links"] = record
+        .links()
+        .iter()
+        .map(|link| {
+            json!({
+                "traceId": link.trace_id.as_str(),
+                "spanId": link.span_id.as_str(),
+                "flags": u32::from(link.flags.bits()),
+                "attributes": link.attributes.iter().map(|(key, value)| json!({
+                    "key": key,
+                    "value": attribute_json(value),
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
     result
 }
 

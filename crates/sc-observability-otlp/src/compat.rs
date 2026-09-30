@@ -474,13 +474,15 @@ impl Telemetry {
 
     /// Buffers one span signal for export.
     pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError> {
-        self.inner.emit_span(span).map_err(legacy_telemetry_error)
+        self.inner
+            .emit_span_released(span)
+            .map_err(legacy_telemetry_error)
     }
 
     /// Buffers one metric record for export.
     pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError> {
         self.inner
-            .emit_metric(metric)
+            .emit_metric_released(metric)
             .map_err(legacy_telemetry_error)
     }
 
@@ -536,11 +538,11 @@ impl TelemetryEmit for Telemetry {
     }
 
     fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_span(span)
+        self.runtime().emit_span_released(span)
     }
 
     fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_metric(metric)
+        self.runtime().emit_metric_released(metric)
     }
 }
 

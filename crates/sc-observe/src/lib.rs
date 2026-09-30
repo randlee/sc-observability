@@ -45,9 +45,10 @@ use sc_observability_types::v2::{
     SubscriberRegistration as CanonicalSubscriberRegistration,
 };
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, ObservabilityHealthProvider,
-    Observable, Observation, ProjectionRegistration, Remediation, ServiceName,
-    SubscriberRegistration, TelemetryHealthState, ToolName,
+    DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, LogEvent,
+    ObservabilityHealthProvider, Observable, Observation, ObservationFilter,
+    ProjectionRegistration, Remediation, ServiceName, SubscriberRegistration, TelemetryHealthState,
+    ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -325,6 +326,19 @@ struct RuntimeState {
 struct ErasedSubscriberRegistration {
     type_id: TypeId,
     dispatch: Arc<SubscriberDispatchFn>,
+}
+
+type ProjectLogsFn<T> =
+    dyn Fn(&Observation<T>) -> Result<Vec<LogEvent>, DiagnosticSummary> + Send + Sync + 'static;
+type ProjectFn<T> =
+    dyn Fn(&Observation<T>) -> Result<(), DiagnosticSummary> + Send + Sync + 'static;
+
+/// One projector family's routes, erased to the shared dispatch shape.
+struct ProjectionRoutes<T: Observable> {
+    logs: Option<Arc<ProjectLogsFn<T>>>,
+    spans: Option<Arc<ProjectFn<T>>>,
+    metrics: Option<Arc<ProjectFn<T>>>,
+    filter: Option<Arc<dyn ObservationFilter<T>>>,
 }
 
 struct ErasedProjectionRegistration {
@@ -757,18 +771,86 @@ impl ObservabilityBuilder {
     where
         T: Observable,
     {
-        self.register_canonical_projection(registration.into())
+        // Released projectors route natively: converting their root span and
+        // metric models to the canonical family would turn values it cannot
+        // hold, such as scalar histograms, into routing failures.
+        let (log_projector, span_projector, metric_projector, filter) = registration.into_parts();
+        self.register_projection_routes(ProjectionRoutes {
+            logs: log_projector.map(|projector| -> Arc<ProjectLogsFn<T>> {
+                Arc::new(move |observation| {
+                    projector
+                        .project_logs(observation)
+                        .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
+                })
+            }),
+            spans: span_projector.map(|projector| -> Arc<ProjectFn<T>> {
+                Arc::new(move |observation| {
+                    projector
+                        .project_spans(observation)
+                        .map(drop)
+                        .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
+                })
+            }),
+            metrics: metric_projector.map(|projector| -> Arc<ProjectFn<T>> {
+                Arc::new(move |observation| {
+                    projector
+                        .project_metrics(observation)
+                        .map(drop)
+                        .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
+                })
+            }),
+            filter,
+        })
     }
 
     /// Registers one canonical typed observation projection set at construction time.
     fn register_canonical_projection<T>(
-        mut self,
+        self,
         registration: CanonicalProjectionRegistration<T>,
     ) -> Self
     where
         T: Observable,
     {
         let (log_projector, span_projector, metric_projector, filter) = registration.into_parts();
+        self.register_projection_routes(ProjectionRoutes {
+            logs: log_projector.map(|projector| -> Arc<ProjectLogsFn<T>> {
+                Arc::new(move |observation| {
+                    projector
+                        .project_logs(observation)
+                        .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
+                })
+            }),
+            spans: span_projector.map(|projector| -> Arc<ProjectFn<T>> {
+                Arc::new(move |observation| {
+                    projector
+                        .project_spans(observation)
+                        .map(drop)
+                        .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
+                })
+            }),
+            metrics: metric_projector.map(|projector| -> Arc<ProjectFn<T>> {
+                Arc::new(move |observation| {
+                    projector
+                        .project_metrics(observation)
+                        .map(drop)
+                        .map_err(|err| DiagnosticSummary::from(err.diagnostic()))
+                })
+            }),
+            filter,
+        })
+    }
+
+    /// Registers the type-erased dispatch shared by both projector families.
+    fn register_projection_routes<T>(mut self, routes: ProjectionRoutes<T>) -> Self
+    where
+        T: Observable,
+    {
+        let ProjectionRoutes {
+            logs,
+            spans,
+            metrics,
+            filter,
+        } = routes;
 
         self.projections.push(ErasedProjectionRegistration {
             type_id: TypeId::of::<T>(),
@@ -790,8 +872,8 @@ impl ObservabilityBuilder {
                     result.last_error = Some(summary);
                 };
 
-                if let Some(projector) = &log_projector {
-                    match projector.project_logs(observation) {
+                if let Some(project) = &logs {
+                    match project(observation) {
                         Ok(events) => {
                             result.matched = true;
                             for event in events {
@@ -803,21 +885,14 @@ impl ObservabilityBuilder {
                                 record_failure(err.summary());
                             }
                         }
-                        Err(err) => record_failure(DiagnosticSummary::from(err.diagnostic())),
+                        Err(summary) => record_failure(summary),
                     }
                 }
 
-                if let Some(projector) = &span_projector {
-                    match projector.project_spans(observation) {
-                        Ok(_) => result.matched = true,
-                        Err(err) => record_failure(DiagnosticSummary::from(err.diagnostic())),
-                    }
-                }
-
-                if let Some(projector) = &metric_projector {
-                    match projector.project_metrics(observation) {
-                        Ok(_) => result.matched = true,
-                        Err(err) => record_failure(DiagnosticSummary::from(err.diagnostic())),
+                for project in [&spans, &metrics].into_iter().flatten() {
+                    match project(observation) {
+                        Ok(()) => result.matched = true,
+                        Err(summary) => record_failure(summary),
                     }
                 }
 

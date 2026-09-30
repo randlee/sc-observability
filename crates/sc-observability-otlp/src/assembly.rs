@@ -22,9 +22,10 @@ use sc_observability_types::{
     TraceId,
 };
 
+use sc_observability_types::otlp::OtlpCompleteSpan;
 use sc_observability_types::v2::{
-    EventError as V2EventError, SpanEnded as V2SpanEnded, SpanEvent as V2SpanEvent,
-    SpanRecord as V2SpanRecord, SpanSignal as V2SpanSignal, SpanStarted as V2SpanStarted,
+    EventError as V2EventError, SpanEvent as V2SpanEvent, SpanRecord as V2SpanRecord,
+    SpanSignal as V2SpanSignal, SpanStarted as V2SpanStarted,
 };
 
 /// Completed span assembled from a start/event/end stream.
@@ -56,21 +57,6 @@ impl SpanAssemblyLoss {
     }
 }
 
-/// Completed 2.0 span staged for the canonical OTLP exporters.
-///
-/// The record and events retain the validated neutral model without a
-/// transport-shaped intermediate representation. In particular, the ended
-/// record owns span kind, links, status, timing, attributes, and trace flags.
-#[derive(Debug, Clone, PartialEq)]
-#[allow(
-    dead_code,
-    reason = "D.18 activates this staged 2.0 handoff after replacing the retained facade exports"
-)]
-pub(crate) struct V2CompleteSpan {
-    pub(crate) record: V2SpanRecord<V2SpanEnded>,
-    pub(crate) events: Vec<V2SpanEvent>,
-}
-
 /// Stateful span assembler used by telemetry export.
 #[expect(
     missing_debug_implementations,
@@ -85,19 +71,19 @@ pub struct SpanAssembler {
     loss: SpanAssemblyLoss,
 }
 
-/// Stateful assembler for the staged validated 2.0 span contract.
+/// Bounded assembler for the canonical 2.0 span contract.
 ///
-/// This is deliberately separate from [`SpanAssembler`]: the public facade
-/// still exposes the retained 1.x projection types until D.18 activates the
-/// canonical re-exports. Keeping both state machines here prevents a lossy
-/// conversion during that handoff.
-#[allow(
-    dead_code,
-    reason = "D.18 composes the staged 2.0 assembler through the final facade"
-)]
+/// It applies the retained [`SpanAssembler`] bounds, eviction order and loss
+/// accounting to validated canonical signals, so completed spans keep their
+/// kind, links, parent, trace flags, status, timing and events. Released root
+/// signals enter it after an infallible field-by-field conversion.
 pub(crate) struct V2SpanAssembler {
     started: HashMap<String, V2SpanRecord<V2SpanStarted>>,
     events: HashMap<String, Vec<V2SpanEvent>>,
+    started_order: VecDeque<String>,
+    max_live_spans: usize,
+    max_events_per_span: usize,
+    loss: SpanAssemblyLoss,
 }
 
 impl SpanAssembler {
@@ -122,6 +108,7 @@ impl SpanAssembler {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
         self.started.contains_key(&span_key(trace_id, span_id))
     }
@@ -238,28 +225,53 @@ impl SpanAssembler {
     }
 }
 
-#[allow(
-    dead_code,
-    reason = "D.18 invokes this staged assembler after the canonical re-export switch"
-)]
 impl V2SpanAssembler {
-    /// Creates an empty validated-signal assembler.
+    /// Creates an empty assembler with the retained live-span and event bounds.
     pub(crate) fn new() -> Self {
+        Self::with_limits(MAX_OTLP_LIVE_SPANS, MAX_OTLP_EVENTS_PER_SPAN)
+    }
+
+    /// Creates an assembler with explicit bounds; zero limits are normalized to one.
+    pub(crate) fn with_limits(max_live_spans: usize, max_events_per_span: usize) -> Self {
         Self {
             started: HashMap::new(),
             events: HashMap::new(),
+            started_order: VecDeque::new(),
+            max_live_spans: max_live_spans.max(1),
+            max_events_per_span: max_events_per_span.max(1),
+            loss: SpanAssemblyLoss::default(),
         }
     }
 
+    /// Live-span and per-span event bounds in effect.
+    #[cfg(test)]
+    pub(crate) fn limits(&self) -> (usize, usize) {
+        (self.max_live_spans, self.max_events_per_span)
+    }
+
+    pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
+        self.started.contains_key(&span_key(trace_id, span_id))
+    }
+
     /// Assembles one validated neutral signal without rebuilding its fields.
+    ///
+    /// A restarted span replaces its prior live state; a new span beyond the
+    /// live-span bound evicts the oldest live span, and an event beyond the
+    /// per-span bound is discarded. Both losses are reported by `take_loss`.
     pub(crate) fn push(
         &mut self,
         signal: V2SpanSignal,
-    ) -> Result<Option<V2CompleteSpan>, V2EventError> {
+    ) -> Result<Option<OtlpCompleteSpan>, V2EventError> {
         match signal {
             V2SpanSignal::Started(record) => {
                 let key = span_key(&record.trace().trace_id, &record.trace().span_id);
+                if self.started.contains_key(&key) {
+                    self.remove_started(&key);
+                } else if self.started.len() >= self.max_live_spans {
+                    self.evict_oldest();
+                }
                 self.events.insert(key.clone(), Vec::new());
+                self.started_order.push_back(key.clone());
                 self.started.insert(key, record);
                 Ok(None)
             }
@@ -277,32 +289,36 @@ impl V2SpanAssembler {
                         "preserve trace identifiers, parent, and flags across one span lifecycle",
                     ));
                 }
-                self.events.entry(key).or_default().push(event);
+                let events = self.events.entry(key).or_default();
+                if events.len() >= self.max_events_per_span {
+                    self.loss.evicted_events += 1;
+                } else {
+                    events.push(event);
+                }
                 Ok(None)
             }
             V2SpanSignal::Ended(record) => {
                 let key = span_key(&record.trace().trace_id, &record.trace().span_id);
-                let Some(started) = self.started.remove(&key) else {
+                let Some(started) = self.started.get(&key) else {
                     return Err(v2_lifecycle_error(
                         "received ended span without a matching started span",
                         "emit started and ended span signals with the same trace context",
                     ));
                 };
                 if started.trace() != record.trace() {
-                    self.started.insert(key, started);
                     return Err(v2_lifecycle_error(
                         "received ended span with mismatched trace context",
                         "preserve trace identifiers, parent, and flags across one span lifecycle",
                     ));
                 }
                 let Some(events) = self.events.remove(&key) else {
-                    self.started.insert(key, started);
                     return Err(v2_lifecycle_error(
                         "received ended span whose event buffer is missing",
                         "preserve started span state until its matching event buffer is available",
                     ));
                 };
-                Ok(Some(V2CompleteSpan { record, events }))
+                self.remove_started(&key);
+                Ok(Some(OtlpCompleteSpan { record, events }))
             }
         }
     }
@@ -312,11 +328,32 @@ impl V2SpanAssembler {
         let dropped = self.started.len();
         self.started.clear();
         self.events.clear();
+        self.started_order.clear();
         dropped
     }
 
+    /// Returns and clears bounded-assembly losses since the prior observation.
+    pub(crate) fn take_loss(&mut self) -> SpanAssemblyLoss {
+        std::mem::take(&mut self.loss)
+    }
+
+    fn evict_oldest(&mut self) {
+        let Some(key) = self.started_order.pop_front() else {
+            return;
+        };
+        if self.started.remove(&key).is_some() {
+            self.events.remove(&key);
+            self.loss.evicted_spans += 1;
+        }
+    }
+
+    fn remove_started(&mut self, key: &str) {
+        self.started.remove(key);
+        self.started_order.retain(|candidate| candidate != key);
+    }
+
     #[cfg(test)]
-    fn remove_event_buffer(&mut self, key: &str) -> Option<Vec<V2SpanEvent>> {
+    pub(crate) fn remove_event_buffer(&mut self, key: &str) -> Option<Vec<V2SpanEvent>> {
         self.events.remove(key)
     }
 }
@@ -327,10 +364,6 @@ impl Default for V2SpanAssembler {
     }
 }
 
-#[allow(
-    dead_code,
-    reason = "only the staged D.18 assembler activation constructs this failure"
-)]
 fn v2_lifecycle_error(message: &str, recovery: &str) -> V2EventError {
     V2EventError::Routing {
         context: Box::new(ErrorContext::new(

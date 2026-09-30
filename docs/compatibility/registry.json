@@ -663,16 +663,16 @@
       "area": "shared",
       "kind": "trait",
       "status": "restored_root",
-      "canonical": "v2::SpanProjector returning v2::ProjectionError",
+      "canonical": "v2::SpanProjector returning v2::SpanSignal and v2::ProjectionError",
       "treatment": "new_adapter",
       "baseline_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>; }",
-      "canonical_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::v2::ProjectionError>; }",
+      "canonical_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<crate::v2::SpanSignal>, crate::v2::ProjectionError>; }",
       "obligations": [
         "signature identity: preserve the released root SpanProjector declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
-        "trait: keep root SpanProjector implementable, object safe and Send + Sync; v2::SpanProjector mirrors it with crate::v2::ProjectionError",
+        "trait: keep root SpanProjector implementable, object safe and Send + Sync; v2::SpanProjector mirrors it with the canonical crate::v2::SpanSignal model and crate::v2::ProjectionError",
         "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping, and convert span and metric models explicitly, returning a ProjectionError coded SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED for a value the other family cannot represent",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -691,16 +691,16 @@
       "area": "shared",
       "kind": "trait",
       "status": "restored_root",
-      "canonical": "v2::MetricProjector returning v2::ProjectionError",
+      "canonical": "v2::MetricProjector returning v2::MetricRecord and v2::ProjectionError",
       "treatment": "new_adapter",
       "baseline_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>; }",
-      "canonical_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::v2::ProjectionError>; }",
+      "canonical_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<crate::v2::MetricRecord>, crate::v2::ProjectionError>; }",
       "obligations": [
         "signature identity: preserve the released root MetricProjector declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
-        "trait: keep root MetricProjector implementable, object safe and Send + Sync; v2::MetricProjector mirrors it with crate::v2::ProjectionError",
+        "trait: keep root MetricProjector implementable, object safe and Send + Sync; v2::MetricProjector mirrors it with the canonical crate::v2::MetricRecord model and crate::v2::ProjectionError",
         "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping, and convert span and metric models explicitly, returning a ProjectionError coded SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED for a value the other family cannot represent",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -1648,7 +1648,7 @@
         "signature identity: preserve SpanAssembler declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released root SpanAssembler remains its own public owner and returns the released EventError from push; the internal V2SpanAssembler is separate.",
+      "conversion": "The released root SpanAssembler remains its own public owner and returns the released EventError from push; the internal V2SpanAssembler is separate and applies the same live-span and event bounds, eviction order and loss accounting to canonical signals.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/assembly.rs",
@@ -1697,12 +1697,12 @@
       "canonical": "V2TelemetryProjectors",
       "treatment": "existing_pair",
       "baseline_signature": "#[expect( missing_debug_implementations, reason = \"the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract\" )] pub struct TelemetryProjectors<T> where T: Observable, { telemetry: Arc<Telemetry>, log_projector: Option<Arc<dyn LogProjector<T>>>, span_projector: Option<Arc<dyn SpanProjector<T>>>, metric_projector: Option<Arc<dyn MetricProjector<T>>>, filter: Option<Arc<dyn ObservationFilter<T>>>, }",
-      "canonical_signature": "pub struct V2TelemetryProjectors<T> where T: Observable { inner: ProjectorSet<T, RuntimeTelemetry> }",
+      "canonical_signature": "pub struct V2TelemetryProjectors<T> where T: Observable, { telemetry: Arc<RuntimeTelemetry>, log_projector: Option<Arc<dyn LogProjector<T>>>, span_projector: Option<Arc<dyn SpanProjector<T>>>, metric_projector: Option<Arc<dyn MetricProjector<T>>>, filter: Option<Arc<dyn ObservationFilter<T>>>, }",
       "obligations": [
         "signature identity: preserve TelemetryProjectors declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released TelemetryProjectors facade in compat.rs delegates to ProjectorSet using its retained Telemetry wrapper; canonical V2TelemetryProjectors uses RuntimeTelemetry and does not import compatibility code.",
+      "conversion": "The released TelemetryProjectors facade in compat.rs delegates to ProjectorSet using its retained Telemetry wrapper; canonical V2TelemetryProjectors attaches canonical v2 projectors to RuntimeTelemetry, forwards their canonical outputs without a released round trip, and does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -4557,13 +4557,13 @@
       "symbol": "sc_observability_otlp::Telemetry::emit_span",
       "owner": "sc_observability_otlp::Telemetry",
       "baseline_signature": "pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>",
-      "canonical_signature": "pub fn emit_span(&self, span: &SpanSignal) -> Result<(), sc_observability_types::v2::TelemetryError>",
+      "canonical_signature": "pub fn emit_span(&self, span: &sc_observability_types::v2::SpanSignal) -> Result<(), sc_observability_types::v2::TelemetryError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::emit_span exactly as recorded in this row baseline_signature: pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>",
         "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_span boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs delegates to the crate-private released span admission of RuntimeTelemetry, which converts the released signal to the canonical model before the shared bounded assembler, and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4584,13 +4584,13 @@
       "symbol": "sc_observability_otlp::Telemetry::emit_metric",
       "owner": "sc_observability_otlp::Telemetry",
       "baseline_signature": "pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>",
-      "canonical_signature": "pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), sc_observability_types::v2::TelemetryError>",
+      "canonical_signature": "pub fn emit_metric(&self, metric: &sc_observability_types::v2::MetricRecord) -> Result<(), sc_observability_types::v2::TelemetryError>",
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::emit_metric exactly as recorded in this row baseline_signature: pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>",
         "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_metric boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs delegates to the crate-private released metric admission of RuntimeTelemetry, which accepts a released scalar histogram without transport and converts other records to the canonical model at flush, and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -5237,7 +5237,7 @@
         "receiver: baseline declares no receiver; preserve sc_observability_otlp::TelemetryProjectors::new as an associated function"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart attaches canonical v2 projectors to RuntimeTelemetry without a released round trip.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5264,7 +5264,7 @@
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryProjectors::with_log_projector boundary"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart attaches canonical v2 projectors to RuntimeTelemetry without a released round trip.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5291,7 +5291,7 @@
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryProjectors::with_span_projector boundary"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart attaches canonical v2 projectors to RuntimeTelemetry without a released round trip.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5318,7 +5318,7 @@
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryProjectors::with_metric_projector boundary"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart attaches canonical v2 projectors to RuntimeTelemetry without a released round trip.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5345,7 +5345,7 @@
         "receiver: preserve released mut self receiver at sc_observability_otlp::TelemetryProjectors::with_filter boundary"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart attaches canonical v2 projectors to RuntimeTelemetry without a released round trip.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5372,7 +5372,7 @@
         "receiver: preserve released self receiver at sc_observability_otlp::TelemetryProjectors::into_registration boundary"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart attaches canonical v2 projectors to RuntimeTelemetry without a released round trip.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5576,15 +5576,15 @@
     {
       "symbol": "sc_observability_types::SpanProjector::project_spans",
       "baseline_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>",
-      "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::v2::ProjectionError>",
+      "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<crate::v2::SpanSignal>, crate::v2::ProjectionError>",
       "obligations": [
         "signature: preserve sc_observability_types::SpanProjector::project_spans exactly as recorded in this row baseline_signature: fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>",
         "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root SpanProjector at crates/sc-observability-types/src/projection.rs",
-        "canonical: v2::SpanProjector::project_spans keeps the same receiver and bounds and returns crate::v2::ProjectionError",
+        "canonical: v2::SpanProjector::project_spans keeps the same receiver and bounds and returns canonical crate::v2::SpanSignal values or crate::v2::ProjectionError",
         "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping, and convert span and metric models explicitly, returning a ProjectionError coded SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED for a value the other family cannot represent",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5603,15 +5603,15 @@
     {
       "symbol": "sc_observability_types::MetricProjector::project_metrics",
       "baseline_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>",
-      "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::v2::ProjectionError>",
+      "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<crate::v2::MetricRecord>, crate::v2::ProjectionError>",
       "obligations": [
         "signature: preserve sc_observability_types::MetricProjector::project_metrics exactly as recorded in this row baseline_signature: fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>",
         "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root MetricProjector at crates/sc-observability-types/src/projection.rs",
-        "canonical: v2::MetricProjector::project_metrics keeps the same receiver and bounds and returns crate::v2::ProjectionError",
+        "canonical: v2::MetricProjector::project_metrics keeps the same receiver and bounds and returns canonical crate::v2::MetricRecord values or crate::v2::ProjectionError",
         "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping, and convert span and metric models explicitly, returning a ProjectionError coded SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED for a value the other family cannot represent",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
