@@ -59,6 +59,58 @@ def _event(action: str) -> LogEvent:
     return LogEvent(level="info", target="python.runtime", action=action, fields={"value": 1})
 
 
+def _assert_retained_diagnostic(error: dict[str, object]) -> None:
+    assert isinstance(error["at"], str) and error["at"]
+    assert isinstance(error["code"], str) and error["code"]
+    assert isinstance(error["message"], str) and error["message"]
+    remediation = error["remediation"]
+    assert isinstance(remediation, dict)
+    assert remediation["kind"] in {"recoverable", "not_recoverable"}
+
+
+def test_native_runtime_preserves_released_validation_field(tmp_path: Path) -> None:
+    logger = _owned(tmp_path / "validation", "python-runtime-validation")
+    try:
+        result = json.loads(logger._native.log("{}"))
+        assert result["kind"] == "error"
+        error = result["error"]
+        assert error["kind"] == "validation"
+        assert error["field"] == "event"
+        _assert_retained_diagnostic(error)
+    finally:
+        assert isinstance(logger.shutdown(), Ok)
+
+
+def test_native_raw_event_size_is_checked_before_parsing() -> None:
+    limit = 65_536
+    payload = {
+        "schema_version": 1,
+        "level": "info",
+        "target": "python.runtime",
+        "action": "raw-size-boundary",
+        "message": "",
+        "trace": None,
+        "request_id": None,
+        "correlation_id": None,
+        "outcome": None,
+        "fields": {},
+    }
+    encoded = json.dumps(payload, separators=(",", ":"))
+    payload["message"] = "x" * (limit - len(encoded))
+    boundary = json.dumps(payload, separators=(",", ":"))
+    assert len(boundary) == limit
+    assert json.loads(_native._validate_event(boundary))["kind"] == "ok"
+
+    oversized_invalid_json = "[" + (" " * limit)
+    rejected = json.loads(_native._validate_event(oversized_invalid_json))
+    assert rejected["kind"] == "error"
+    error = rejected["error"]
+    assert error["kind"] == "validation"
+    assert error["field"] == "event"
+    assert error["message"] == f"request exceeds {limit} UTF-8 bytes"
+    _assert_retained_diagnostic(error)
+
+
 def test_real_revision_exhaustion_retains_the_native_state(tmp_path: Path) -> None:
     logger = _owned(tmp_path / "revision-exhaustion", "python-runtime-revision-exhaustion")
     forced = json.loads(logger._native._test_force_revision_exhaustion())
@@ -93,9 +145,12 @@ def test_real_retained_sink_blocks_while_python_operations_progress(tmp_path: Pa
         )
         assert isinstance(logger.health(), Ok)
         assert isinstance(logger.query(LogQuery(action="held-sink")), (Ok, Err))
-        blocked_flush = logger.flush(timeout_ms=10)
-        assert isinstance(blocked_flush, Err)
-        assert blocked_flush.error.kind == "timeout"
+        flush_result = json.loads(native.flush(json.dumps(10)))
+        assert flush_result["kind"] == "error"
+        error = flush_result["error"]
+        assert error["kind"] == "timeout"
+        assert error["operation"] == "native_operation"
+        _assert_retained_diagnostic(error)
         assert json.loads(native._test_release_blocked_writer())["kind"] == "ok"
         assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
     finally:
