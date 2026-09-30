@@ -1069,14 +1069,19 @@ fn d15_sync_fixture() {
 }
 
 fn d15_timer_fixture() {
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> = Operation::new(
+        &backend.shared.dispatcher,
+        &crate::timer::shared().unwrap(),
+        crate::error::OperationKind::Shutdown,
+    );
     assert_failure(
-        Err::<(), _>(crate::error::observer_timeout(
-            crate::error::OperationKind::Shutdown,
-        )),
+        operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
         "timeout",
         Some("native_operation"),
     );
+    stop(&owner);
 }
 
 fn cross_logger_cancellation() {
