@@ -81,7 +81,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-dto"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "sc-observability-types",
  "schemars",
@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-types"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "serde",
  "serde_json",
