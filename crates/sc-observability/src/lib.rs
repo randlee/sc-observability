@@ -982,6 +982,44 @@ mod tests {
         );
     }
 
+    #[test]
+    fn settings_level_env_uses_fallible_string_deserialization() {
+        let snapshot = EnvSnapshot::from_pairs([(
+            std::ffi::OsString::from("SC_LOG_LEVEL"),
+            std::ffi::OsString::from("Info"),
+        )]);
+
+        let settings = LogSettings::from_env(
+            &snapshot,
+            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+        )
+        .expect("level string must deserialize");
+
+        assert_eq!(settings.level, Some(LevelFilter::Info));
+    }
+
+    #[test]
+    fn settings_level_env_preserves_string_deserializer_error() {
+        let snapshot = EnvSnapshot::from_pairs([(
+            std::ffi::OsString::from("SC_LOG_LEVEL"),
+            std::ffi::OsString::from("Verbose"),
+        )]);
+
+        let error = LogSettings::from_env(
+            &snapshot,
+            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+        )
+        .expect_err("invalid level must fail");
+
+        assert_eq!(error.code(), error_codes::LOG_INVALID_VALUE);
+        assert!(
+            std::error::Error::source(&error)
+                .expect("string deserializer source must be preserved")
+                .to_string()
+                .contains("unknown variant")
+        );
+    }
+
     fn log_event_with_request(
         service_name: ServiceName,
         request_id: &str,
