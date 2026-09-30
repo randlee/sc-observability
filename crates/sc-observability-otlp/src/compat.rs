@@ -728,6 +728,11 @@ mod tests {
         }
     }
 
+    // These private value-level guards check selected backend, timeout, and retry/backoff
+    // projection: `released_http_json_uses_the_nested_legacy_retry_policy` and
+    // `released_sdk_and_disabled_transports_discard_legacy_retry_settings`. The external
+    // `released_config_translation` tests cover released-bound validation, not direct
+    // inspection of this private projection or live collector/runtime behavior.
     #[test]
     fn released_http_json_uses_the_nested_legacy_retry_policy() {
         let runtime = released_transport(OtlpProtocol::HttpJson, true).into_runtime();
