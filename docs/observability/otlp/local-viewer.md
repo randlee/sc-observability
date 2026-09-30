@@ -99,9 +99,9 @@ probe.
 
 ## Captured D9 setup evidence
 
-On 2026-09-30, the managed desktop service passed the synthetic probe with run
-ID `d9-live-20260930-final2` and trace ID
-`6b9e4b2e56cf4296a4d8677da7c13785`. `searchLogs` returned the exact log body;
+On 2026-09-30, the managed desktop service passed the synthetic probe after
+its owner's launchd reload with run ID `d9-live-post-restart-final` and trace
+ID `8bdf25589e974a06b0c4291f1b2b5be8`. `searchLogs` returned the exact log body;
 `getLog` returned its trace ID; `searchSpans` returned the matching span; and
 `searchMetricSummaries` plus `getMetric` returned gauge value `42`. The same
 release artifact passed the isolated `ci` lifecycle with run ID
@@ -109,8 +109,8 @@ release artifact passed the isolated `ci` lifecycle with run ID
 the gRPC listener was reachable. The isolated PID, database, and run directory
 were removed by the harness.
 
-The managed launchd agent was reloaded by its owner after the live probe to
-apply the requested five-minute post-login delay. It was in that intentional
-delay window when a later probe attempt found no listener. The owner confirmed
-it would auto-restart; the persistent database and managed process were not
-modified by this harness.
+The managed launchd agent was reloaded by its owner to apply the requested
+five-minute post-login delay. During that intentional delay, a probe attempt
+found no listener; the owner confirmed its restart, and the post-restart probe
+above passed. The persistent database and managed process were not modified by
+this harness.
