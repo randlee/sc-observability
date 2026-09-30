@@ -113,7 +113,7 @@ pub(crate) fn bridge_health(value: bridge::BridgeHealthReport) -> dto::LogHealth
         effective_level: value.effective_level.into(),
         level_revision: value.level_revision.into(),
     };
-    let checked = dto::from_core_health(
+    let checked = dto::from_canonical_core_health(
         value.logging,
         native::LevelState {
             configured_level: value.configured_level,

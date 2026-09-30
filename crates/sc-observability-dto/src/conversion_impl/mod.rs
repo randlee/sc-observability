@@ -705,7 +705,10 @@ pub fn from_logging_health(v: core::LoggingHealthReport) -> LoggingHealthDto {
     }
 }
 /// Projects an independent core logger without inventing bridge state.
-pub fn from_core_health(value: core::LoggingHealthReport, level: core::LevelState) -> LogHealthDto {
+pub fn from_canonical_core_health(
+    value: core::LoggingHealthReport,
+    level: core::LevelState,
+) -> LogHealthDto {
     LogHealthDto {
         schema_version: 1,
         logging: from_logging_health(value),

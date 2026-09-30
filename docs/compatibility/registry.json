@@ -5723,7 +5723,7 @@
       "symbol": "sc_observability_dto::from_core_health",
       "owner": "sc_observability_dto",
       "baseline_signature": "pub fn from_core_health( value: core::LoggingHealthReport, level: core::LevelState, ) -> Result<LogHealthDto, Failure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn from_canonical_core_health( value: core::LoggingHealthReport, level: core::LevelState, ) -> LogHealthDto",
       "obligations": [
         "signature: preserve sc_observability_dto::from_core_health exactly as recorded in this row baseline_signature: pub fn from_core_health( value: core::LoggingHealthReport, level: core::LevelState, ) -> Result<LogHealthDto, Failure>",
         "error: preserve released Failure failure type at sc_observability_dto::from_core_health boundary"
@@ -5736,7 +5736,12 @@
         "owner": null,
         "member": "from_core_health"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability-dto/src/conversion_impl/mod.rs",
+        "owner": null,
+        "member": "from_canonical_core_health"
+      },
       "removable_paths": [
         "crates/sc-observability-dto/src/conversion.rs"
       ]

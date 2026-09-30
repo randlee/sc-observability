@@ -463,7 +463,7 @@ fn all_stored_event_fields_and_trusted_output_survive() {
 }
 
 #[test]
-fn complete_health_projection_and_unsigned_wire_counters() {
+fn complete_health_projection_and_unsigned_wire_counters() -> Result<(), Failure> {
     let summary = core::DiagnosticSummary {
         code: None,
         message: "summary".into(),
@@ -498,14 +498,16 @@ fn complete_health_projection_and_unsigned_wire_counters() {
         }),
         last_error: Some(summary),
     };
-    let dto = from_core_health(
-        native,
-        core::LevelState {
-            configured_level: core::LevelFilter::Info,
-            effective_level: core::LevelFilter::Debug,
-            revision: u64::MAX,
-        },
-    );
+    let level = core::LevelState {
+        configured_level: core::LevelFilter::Info,
+        effective_level: core::LevelFilter::Debug,
+        revision: u64::MAX,
+    };
+    let released: fn(core::LoggingHealthReport, core::LevelState) -> Result<LogHealthDto, Failure> =
+        from_core_health;
+    let canonical = from_canonical_core_health(native.clone(), level);
+    let dto = released(native, level)?;
+    assert_eq!(dto, canonical);
     let mut value = serde_json::to_value(&dto).unwrap();
     assert_eq!(value["logging"].as_object().unwrap().len(), 14);
     assert_eq!(
@@ -524,6 +526,7 @@ fn complete_health_projection_and_unsigned_wire_counters() {
     );
     value["level_state"]["level_revision"] = json!("-1");
     assert!(serde_json::from_value::<LogHealthDto>(value).is_err());
+    Ok(())
 }
 
 #[test]

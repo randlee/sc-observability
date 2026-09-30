@@ -239,7 +239,10 @@ impl Coordinator {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &self.backend {
                 Backend::Core { logger, .. } => {
                     let logger = logger.load_full().ok_or_else(error::closed)?;
-                    Ok(dto::from_core_health(logger.health(), logger.level_state()))
+                    Ok(dto::from_canonical_core_health(
+                        logger.health(),
+                        logger.level_state(),
+                    ))
                 }
                 Backend::Bridge(control) => Ok(conversion::bridge_health(
                     control.health().map_err(conversion::bridge_control)?,
@@ -422,7 +425,7 @@ impl Coordinator {
                         conversion::canonical(&error, conversion::Kind::Internal)
                     })?;
                     let stopped = logger.shutdown();
-                    Ok(dto::from_core_health(
+                    Ok(dto::from_canonical_core_health(
                         stopped.health(),
                         stopped.level_state(),
                     ))
@@ -550,7 +553,7 @@ fn core_from_factory(
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let (stamp, logger, level) = build()?;
-        let health = dto::from_core_health(logger.health(), logger.level_state());
+        let health = dto::from_canonical_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: ArcSwapOption::from(Some(Arc::new(logger))),
