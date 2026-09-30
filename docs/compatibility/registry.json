@@ -5236,7 +5236,8 @@
       "obligations": [
         "signature: preserve sc_observability_types::ProcessIdentityResolver::resolve exactly as recorded in this row baseline_signature: fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::ProcessIdentityResolver::resolve baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_types::ProcessIdentityResolver::resolve baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root IdentityError identity at this slot; only the facade converts IdentityError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5263,7 +5264,8 @@
       "obligations": [
         "signature: preserve sc_observability_types::ObservationSubscriber::observe exactly as recorded in this row baseline_signature: fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::ObservationSubscriber::observe baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_types::ObservationSubscriber::observe baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root SubscriberError identity at this slot; only the facade converts SubscriberError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5290,7 +5292,8 @@
       "obligations": [
         "signature: preserve sc_observability_types::LogProjector::project_logs exactly as recorded in this row baseline_signature: fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::LogProjector::project_logs baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_types::LogProjector::project_logs baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5317,7 +5320,8 @@
       "obligations": [
         "signature: preserve sc_observability_types::SpanProjector::project_spans exactly as recorded in this row baseline_signature: fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::SpanProjector::project_spans baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_types::SpanProjector::project_spans baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5344,7 +5348,8 @@
       "obligations": [
         "signature: preserve sc_observability_types::MetricProjector::project_metrics exactly as recorded in this row baseline_signature: fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::MetricProjector::project_metrics baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_types::MetricProjector::project_metrics baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5371,7 +5376,8 @@
       "obligations": [
         "signature: preserve sc_observability::LogSink::write exactly as recorded in this row baseline_signature: fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::write baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::LogSink::write baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5398,7 +5404,8 @@
       "obligations": [
         "signature: preserve sc_observability::LogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::flush baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::LogSink::flush baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5425,6 +5432,7 @@
       "obligations": [
         "signature: preserve sc_observability::LogSink::health exactly as recorded in this row baseline_signature: fn health(&self) -> SinkHealth",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::health baseline_signature",
+        "trait: preserve public implementability and Send + Sync constraints",
         "behavior: preserve the released return and side-effect semantics recorded in sc_observability::LogSink::health baseline_signature"
       ],
       "treatment": "unchanged_alias",
@@ -5450,7 +5458,8 @@
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::write exactly as recorded in this row baseline_signature: fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::write baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::typed::TypedLogSink::write baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5477,7 +5486,8 @@
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkFailure>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::flush baseline_signature",
-        "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability::typed::TypedLogSink::flush baseline_signature"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5504,6 +5514,7 @@
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::health exactly as recorded in this row baseline_signature: fn health(&self) -> SinkHealth",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::health baseline_signature",
+        "trait: preserve public implementability and Send + Sync constraints",
         "behavior: preserve the released return and side-effect semantics recorded in sc_observability::typed::TypedLogSink::health baseline_signature"
       ],
       "treatment": "unchanged_alias",
@@ -5529,6 +5540,7 @@
       "obligations": [
         "signature: preserve sc_observability::LogFilter::accepts exactly as recorded in this row baseline_signature: fn accepts(&self, event: &LogEvent) -> bool",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogFilter::accepts baseline_signature",
+        "trait: preserve public implementability and Send + Sync constraints",
         "behavior: preserve the released return and side-effect semantics recorded in sc_observability::LogFilter::accepts baseline_signature"
       ],
       "treatment": "unchanged_alias",
