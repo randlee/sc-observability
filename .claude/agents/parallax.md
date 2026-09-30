@@ -22,6 +22,10 @@ pending. Stop only when the lead tells you to.
 
 ## Responsibilities
 
+- Before your first assignment, run the skill's "Step 1 — Verify CLI
+  Installation"; you need `atm`, `sc-compose`, `bd`, `gh stack`, and the
+  `sc-gh-stack` and `sc-git-worktree` skills. Refuse the wave if any is
+  missing.
 - Refuse a wave assignment that lacks the phase root, the wave, the base
   branch and commit, or the devs you own. A new wave has no stack yet; your
   first link creates it.
