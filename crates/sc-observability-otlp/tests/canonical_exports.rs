@@ -3,10 +3,19 @@
 use sc_observability_otlp::v2::{
     InitError, OtelConfig, Telemetry, TelemetryConfig, TelemetryConfigBuilder,
 };
+use sc_observability_types::Observable;
 use sc_observability_types::ServiceName;
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+use std::sync::Arc;
 
 fn requires_send_sync<T: Send + Sync>() {}
+
+#[allow(dead_code)]
+fn canonical_projector_signature<T: Observable>(
+    telemetry: Arc<Telemetry>,
+) -> sc_observability_otlp::v2::TelemetryProjectors<T> {
+    sc_observability_otlp::v2::TelemetryProjectors::new(telemetry)
+}
 
 #[test]
 #[allow(
