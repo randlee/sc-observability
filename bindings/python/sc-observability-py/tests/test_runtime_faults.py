@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from threading import Event
 from typing import Callable
@@ -19,6 +21,7 @@ pytestmark = pytest.mark.skipif(
 
 from sc_observability import Err, LogEvent, Logger, LoggerConfig, LogQuery, Ok, create_logger, get_host_logger
 from sc_observability import _native
+from sc_observability.generated import SC_OBSERVABILITY_BINDING_INVALID_INPUT, SC_OBSERVABILITY_BINDING_TIMEOUT
 
 
 
@@ -59,13 +62,32 @@ def _event(action: str) -> LogEvent:
     return LogEvent(level="info", target="python.runtime", action=action, fields={"value": 1})
 
 
-def _assert_retained_diagnostic(error: dict[str, object]) -> None:
-    assert isinstance(error["at"], str) and error["at"]
-    assert isinstance(error["code"], str) and error["code"]
-    assert isinstance(error["message"], str) and error["message"]
+def _assert_retained_diagnostic(
+    error: dict[str, object],
+    *,
+    code: str,
+    message: str,
+    remediation_steps: list[str],
+) -> None:
+    timestamp = error["at"]
+    assert isinstance(timestamp, str)
+    timestamp_match = re.fullmatch(
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})",
+        timestamp,
+    )
+    assert timestamp_match, f"diagnostic timestamp is not RFC3339: {timestamp!r}"
+    whole_seconds, fraction, zone = timestamp_match.groups()
+    normalized_fraction = f".{fraction[:6].ljust(6, '0')}" if fraction else ""
+    parsed_timestamp = datetime.fromisoformat(
+        f"{whole_seconds}{normalized_fraction}{zone.replace('Z', '+00:00')}"
+    )
+    assert parsed_timestamp.utcoffset() is not None, "diagnostic timestamp must include a timezone"
+    assert error["code"] == code
+    assert error["message"] == message
     remediation = error["remediation"]
     assert isinstance(remediation, dict)
-    assert remediation["kind"] in {"recoverable", "not_recoverable"}
+    assert remediation["kind"] == "recoverable"
+    assert remediation["steps"] == remediation_steps
 
 
 def test_native_runtime_preserves_released_validation_field(tmp_path: Path) -> None:
@@ -76,7 +98,12 @@ def test_native_runtime_preserves_released_validation_field(tmp_path: Path) -> N
         error = result["error"]
         assert error["kind"] == "validation"
         assert error["field"] == "event"
-        _assert_retained_diagnostic(error)
+        _assert_retained_diagnostic(
+            error,
+            code=SC_OBSERVABILITY_BINDING_INVALID_INPUT,
+            message="serde_json::error::Error: missing field `schema_version`",
+            remediation_steps=["Correct the named input field and submit a new request"],
+        )
     finally:
         assert isinstance(logger.shutdown(), Ok)
 
@@ -108,7 +135,12 @@ def test_native_raw_event_size_is_checked_before_parsing() -> None:
     assert error["kind"] == "validation"
     assert error["field"] == "event"
     assert error["message"] == f"request exceeds {limit} UTF-8 bytes"
-    _assert_retained_diagnostic(error)
+    _assert_retained_diagnostic(
+        error,
+        code=SC_OBSERVABILITY_BINDING_INVALID_INPUT,
+        message=f"request exceeds {limit} UTF-8 bytes",
+        remediation_steps=["Correct the named input field and submit a new request"],
+    )
 
 
 def test_real_revision_exhaustion_retains_the_native_state(tmp_path: Path) -> None:
@@ -150,7 +182,12 @@ def test_real_retained_sink_blocks_while_python_operations_progress(tmp_path: Pa
         error = flush_result["error"]
         assert error["kind"] == "timeout"
         assert error["operation"] == "native_operation"
-        _assert_retained_diagnostic(error)
+        _assert_retained_diagnostic(
+            error,
+            code=SC_OBSERVABILITY_BINDING_TIMEOUT,
+            message="operation observation deadline elapsed",
+            remediation_steps=["Inspect operation status before deciding whether another operation is needed"],
+        )
         assert json.loads(native._test_release_blocked_writer())["kind"] == "ok"
         assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
     finally:
