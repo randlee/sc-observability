@@ -1416,7 +1416,7 @@
       "symbol": "sc_observability_otlp::OtelConfig",
       "area": "otlp",
       "kind": "config",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "OtelConfig",
       "treatment": "new_adapter",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq, Eq)] pub struct OtelConfig { /// Whether transport/export is enabled. pub enabled: bool, /// Optional OTLP endpoint URL. pub endpoint: Option<OtlpEndpoint>, /// Transport protocol to use. pub protocol: OtlpProtocol, /// Optional authorization header value. pub auth_header: Option<AuthHeader>, /// Optional CA bundle path for TLS validation. pub ca_file: Option<PathBuf>, /// Whether TLS certificate verification is skipped. pub insecure_skip_verify: bool, /// Per-export timeout. pub timeout_ms: DurationMs, /// Whether local debug export output is enabled. pub debug_local_export: bool, /// Maximum export retry attempts. pub max_retries: u32, /// Initial retry backoff. pub initial_backoff_ms: DurationMs, /// Maximum retry backoff. pub max_backoff_ms: DurationMs, }",
@@ -1436,14 +1436,15 @@
         "path": "crates/sc-observability-otlp/src/config/types.rs",
         "symbol": "OtelConfig"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfig",
       "area": "otlp",
       "kind": "config",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "TelemetryConfig",
       "treatment": "new_adapter",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq)] pub struct TelemetryConfig { /// Service name attached to all exported telemetry. pub service_name: ServiceName, /// Resource attributes attached to all exported telemetry. pub resource: ResourceAttributes, /// Transport-level OTLP configuration. pub transport: OtelConfig, /// Optional log export configuration. pub logs: Option<LogsConfig>, /// Optional trace export configuration. pub traces: Option<TracesConfig>, /// Optional metric export configuration. pub metrics: Option<MetricsConfig>, }",
@@ -1463,8 +1464,9 @@
         "path": "crates/sc-observability-otlp/src/config/types.rs",
         "symbol": "TelemetryConfig"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder",
@@ -1490,8 +1492,9 @@
         "path": "crates/sc-observability-otlp/src/config/types.rs",
         "symbol": "builder with v2::InitError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::OtlpEndpoint",
@@ -1517,8 +1520,9 @@
         "path": "crates/sc-observability-otlp/src/config/types.rs",
         "symbol": "owner with v2::InitError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::AuthHeader",
@@ -1544,8 +1548,9 @@
         "path": "crates/sc-observability-otlp/src/config/types.rs",
         "symbol": "owner with v2::InitError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::Telemetry",
@@ -1572,8 +1577,9 @@
         "path": "crates/sc-observability-otlp/src/lib.rs",
         "symbol": "Telemetry with v2::TelemetryError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::SpanAssembler",
@@ -1600,15 +1606,15 @@
         "symbol": "assembler with v2::EventError"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released assembly owner remains defined directly in assembly.rs; the canonical v2 assembler and completion types are separate internal owners, so there is no compatibility-only facade file to remove."
     },
     {
       "symbol": "sc_observability_otlp::CompleteSpan",
       "area": "otlp",
       "kind": "value",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "CompleteSpan",
-      "treatment": "new_adapter",
+      "treatment": "existing_pair",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq)] pub struct CompleteSpan { /// Final completed span record. pub record: SpanRecord<SpanEnded>, /// Ordered span events attached before completion. pub events: Vec<SpanEvent>, }",
       "canonical_signature": "#[derive(Debug, Clone, PartialEq)] pub struct CompleteSpan { /// Final completed span record. pub record: SpanRecord<SpanEnded>, /// Ordered span events attached before completion. pub events: Vec<SpanEvent>, }",
       "obligations": [
@@ -1627,22 +1633,22 @@
         "symbol": "CompleteSpan"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released assembly owner remains defined directly in assembly.rs; the canonical v2 assembler and completion types are separate internal owners, so there is no compatibility-only facade file to remove."
     },
     {
       "symbol": "sc_observability_otlp::TelemetryProjectors",
       "area": "otlp",
       "kind": "owner",
       "status": "canonical_routed",
-      "canonical": "projectors over canonical traits",
+      "canonical": "V2TelemetryProjectors",
       "treatment": "existing_pair",
       "baseline_signature": "#[expect( missing_debug_implementations, reason = \"the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract\" )] pub struct TelemetryProjectors<T> where T: Observable, { telemetry: Arc<Telemetry>, log_projector: Option<Arc<dyn LogProjector<T>>>, span_projector: Option<Arc<dyn SpanProjector<T>>>, metric_projector: Option<Arc<dyn MetricProjector<T>>>, filter: Option<Arc<dyn ObservationFilter<T>>>, }",
-      "canonical_signature": "#[expect( missing_debug_implementations, reason = \"the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract\" )] pub struct TelemetryProjectors<T> where T: Observable, { telemetry: Arc<Telemetry>, log_projector: Option<Arc<dyn LogProjector<T>>>, span_projector: Option<Arc<dyn SpanProjector<T>>>, metric_projector: Option<Arc<dyn MetricProjector<T>>>, filter: Option<Arc<dyn ObservationFilter<T>>>, }",
+      "canonical_signature": "pub struct V2TelemetryProjectors<T> where T: Observable { inner: ProjectorSet<T, RuntimeTelemetry> }",
       "obligations": [
         "signature identity: preserve TelemetryProjectors declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released TelemetryProjectors facade in compat.rs delegates to the generic ProjectorSet using its retained Telemetry wrapper; canonical V2TelemetryProjectors uses RuntimeTelemetry and does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -1651,10 +1657,11 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
-        "symbol": "projectors over canonical traits"
+        "symbol": "V2TelemetryProjectors"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     }
   ],
   "record_contract": {
@@ -4287,7 +4294,7 @@
         "member": "new"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/lib.rs"
+        "crates/sc-observability-otlp/src/compat.rs"
       ]
     },
     {
@@ -4313,7 +4320,9 @@
         "owner": "Telemetry",
         "member": "new_typed"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::emit_log",
@@ -4338,7 +4347,9 @@
         "owner": "Telemetry",
         "member": "emit_log"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::emit_span",
@@ -4363,7 +4374,9 @@
         "owner": "Telemetry",
         "member": "emit_span"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::emit_metric",
@@ -4388,7 +4401,9 @@
         "owner": "Telemetry",
         "member": "emit_metric"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::flush",
@@ -4414,7 +4429,7 @@
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/lib.rs"
+        "crates/sc-observability-otlp/src/compat.rs"
       ]
     },
     {
@@ -4440,7 +4455,9 @@
         "owner": "Telemetry",
         "member": "flush_typed"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::shutdown",
@@ -4466,7 +4483,7 @@
         "member": "shutdown"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/lib.rs"
+        "crates/sc-observability-otlp/src/compat.rs"
       ]
     },
     {
@@ -4492,7 +4509,9 @@
         "owner": "Telemetry",
         "member": "shutdown_typed"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::health",
@@ -4517,7 +4536,9 @@
         "owner": "Telemetry",
         "member": "health"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::OtlpEndpoint::new",
@@ -4528,7 +4549,7 @@
         "signature: preserve sc_observability_otlp::OtlpEndpoint::new exactly as recorded in this row baseline_signature: pub fn new(value: impl Into<String>) -> Result<Self, InitError>",
         "result identity: preserve every released Result error type and its source/code identity recorded in sc_observability_otlp::OtlpEndpoint::new baseline_signature"
       ],
-      "treatment": "unchanged_alias",
+      "treatment": "existing_pair",
       "conversion": "none; the canonical declaration is identity-preserving",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
@@ -4542,7 +4563,9 @@
         "owner": "OtlpEndpoint",
         "member": "new"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::OtlpEndpoint::new_typed",
@@ -4568,7 +4591,7 @@
         "member": "new_typed"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/config/types.rs"
+        "crates/sc-observability-otlp/src/compat.rs"
       ]
     },
     {
@@ -4594,7 +4617,9 @@
         "owner": "OtlpEndpoint",
         "member": "as_str"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::AuthHeader::new",
@@ -4619,7 +4644,9 @@
         "owner": "AuthHeader",
         "member": "new"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::AuthHeader::new_typed",
@@ -4645,7 +4672,7 @@
         "member": "new_typed"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/config/types.rs"
+        "crates/sc-observability-otlp/src/compat.rs"
       ]
     },
     {
@@ -4671,7 +4698,9 @@
         "owner": "AuthHeader",
         "member": "as_str"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::new",
@@ -4696,7 +4725,9 @@
         "owner": "TelemetryConfigBuilder",
         "member": "new"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::with_resource",
@@ -4721,7 +4752,9 @@
         "owner": "TelemetryConfigBuilder",
         "member": "with_resource"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::with_transport",
@@ -4746,7 +4779,9 @@
         "owner": "TelemetryConfigBuilder",
         "member": "with_transport"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::enable_logs",
@@ -4771,7 +4806,9 @@
         "owner": "TelemetryConfigBuilder",
         "member": "enable_logs"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::enable_traces",
@@ -4796,7 +4833,9 @@
         "owner": "TelemetryConfigBuilder",
         "member": "enable_traces"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::enable_metrics",
@@ -4821,7 +4860,9 @@
         "owner": "TelemetryConfigBuilder",
         "member": "enable_metrics"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::build",
@@ -4846,7 +4887,9 @@
         "owner": "TelemetryConfigBuilder",
         "member": "build"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryConfigBuilder::build_typed",
@@ -4871,7 +4914,9 @@
         "owner": "TelemetryConfigBuilder",
         "member": "build_typed"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::SpanAssembler::new",
@@ -4977,13 +5022,13 @@
       "symbol": "sc_observability_otlp::TelemetryProjectors::new",
       "owner": "sc_observability_otlp::TelemetryProjectors",
       "baseline_signature": "pub fn new(telemetry: Arc<Telemetry>) -> Self",
-      "canonical_signature": "pub fn new(telemetry: Arc<Telemetry>) -> Self",
+      "canonical_signature": "pub fn new(telemetry: Arc<RuntimeTelemetry>) -> Self",
       "obligations": [
         "signature: preserve sc_observability_otlp::TelemetryProjectors::new exactly as recorded in this row baseline_signature: pub fn new(telemetry: Arc<Telemetry>) -> Self",
         "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::new baseline_signature"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -4993,10 +5038,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
-        "owner": "TelemetryProjectors",
+        "owner": "V2TelemetryProjectors",
         "member": "new"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryProjectors::with_log_projector",
@@ -5007,8 +5054,8 @@
         "signature: preserve sc_observability_otlp::TelemetryProjectors::with_log_projector exactly as recorded in this row baseline_signature: pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self",
         "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::with_log_projector baseline_signature"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5018,10 +5065,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
-        "owner": "TelemetryProjectors",
+        "owner": "V2TelemetryProjectors",
         "member": "with_log_projector"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryProjectors::with_span_projector",
@@ -5032,8 +5081,8 @@
         "signature: preserve sc_observability_otlp::TelemetryProjectors::with_span_projector exactly as recorded in this row baseline_signature: pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self",
         "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::with_span_projector baseline_signature"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5043,10 +5092,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
-        "owner": "TelemetryProjectors",
+        "owner": "V2TelemetryProjectors",
         "member": "with_span_projector"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryProjectors::with_metric_projector",
@@ -5057,8 +5108,8 @@
         "signature: preserve sc_observability_otlp::TelemetryProjectors::with_metric_projector exactly as recorded in this row baseline_signature: pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self",
         "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::with_metric_projector baseline_signature"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5068,10 +5119,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
-        "owner": "TelemetryProjectors",
+        "owner": "V2TelemetryProjectors",
         "member": "with_metric_projector"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryProjectors::with_filter",
@@ -5082,8 +5135,8 @@
         "signature: preserve sc_observability_otlp::TelemetryProjectors::with_filter exactly as recorded in this row baseline_signature: pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self",
         "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::with_filter baseline_signature"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5093,10 +5146,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
-        "owner": "TelemetryProjectors",
+        "owner": "V2TelemetryProjectors",
         "member": "with_filter"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_otlp::TelemetryProjectors::into_registration",
@@ -5107,8 +5162,8 @@
         "signature: preserve sc_observability_otlp::TelemetryProjectors::into_registration exactly as recorded in this row baseline_signature: pub fn into_registration(self) -> ProjectionRegistration<T>",
         "behavior: preserve the released arguments, return type, generic/lifetime constraints, and side effects recorded in sc_observability_otlp::TelemetryProjectors::into_registration baseline_signature"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released TelemetryProjectors method is retained in compat.rs; the canonical V2TelemetryProjectors counterpart uses the generic projector implementation with RuntimeTelemetry.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -5118,10 +5173,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
-        "owner": "TelemetryProjectors",
+        "owner": "V2TelemetryProjectors",
         "member": "into_registration"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability_log::init",
