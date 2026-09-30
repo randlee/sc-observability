@@ -5,8 +5,9 @@
 use sc_observability_binding_runtime::HostLoggingBackend;
 use sc_observability_dto::{
     AdmissionDto, Failure, HealthRequest, LogEventDto, LogHealthDto, LogSnapshotDto, QueryRequest,
-    TryLogRequest, WireEnvelope, decode_event, decode_query, decode_timeout, is_protected_key,
-    normalize_field_key,
+    TryLogRequest, WireEnvelope,
+    constants::{MAX_CONTAINER_DEPTH, MAX_WIRE_PAYLOAD_BYTES},
+    decode_event, decode_query, decode_timeout, is_protected_key, normalize_field_key,
 };
 use sc_observability_types::v2;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -18,8 +19,6 @@ use std::{
 };
 
 const SCHEMA_VERSION: u32 = 1;
-const MAX_REQUEST_BYTES: usize = 65_536;
-const MAX_DEPTH: usize = 32;
 const MAX_QUERY_TARGETS: usize = 64;
 const DEFAULT_QUERY_TIMEOUT_MS: u32 = 2_000;
 const REDACTED: &str = "[REDACTED]";
@@ -48,11 +47,17 @@ impl AdapterPolicy {
                 "target allowlist exceeds the query fan-out bound",
             ));
         }
-        if self.max_request_bytes == 0 || self.max_request_bytes as usize > MAX_REQUEST_BYTES {
-            return Err(invalid("policy.max_request_bytes", "must be in 1..65536"));
+        if self.max_request_bytes == 0 || self.max_request_bytes as usize > MAX_WIRE_PAYLOAD_BYTES {
+            return Err(invalid(
+                "policy.max_request_bytes",
+                format!("must be in 1..{MAX_WIRE_PAYLOAD_BYTES}"),
+            ));
         }
-        if self.max_depth == 0 || self.max_depth as usize > MAX_DEPTH {
-            return Err(invalid("policy.max_depth", "must be in 1..32"));
+        if self.max_depth == 0 || self.max_depth as usize > MAX_CONTAINER_DEPTH {
+            return Err(invalid(
+                "policy.max_depth",
+                format!("must be in 1..{MAX_CONTAINER_DEPTH}"),
+            ));
         }
         if self
             .allowed_window_labels
@@ -204,7 +209,10 @@ fn inspect(value: &Value, depth: usize, limit: usize) -> Result<(), Failure> {
     match value {
         Value::Array(values) => {
             if depth >= limit {
-                return Err(invalid("request", "maximum container depth is 32"));
+                return Err(invalid(
+                    "request",
+                    format!("maximum container depth is {MAX_CONTAINER_DEPTH}"),
+                ));
             }
             values
                 .iter()
@@ -212,7 +220,10 @@ fn inspect(value: &Value, depth: usize, limit: usize) -> Result<(), Failure> {
         }
         Value::Object(values) => {
             if depth >= limit {
-                return Err(invalid("request", "maximum container depth is 32"));
+                return Err(invalid(
+                    "request",
+                    format!("maximum container depth is {MAX_CONTAINER_DEPTH}"),
+                ));
             }
             values
                 .values()
@@ -752,8 +763,8 @@ mod tests {
         let policy = AdapterPolicy {
             allowed_window_labels: ["main".into()].into(),
             allowed_targets: ["app".into()].into(),
-            max_request_bytes: 65_537,
-            max_depth: 32,
+            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32 + 1,
+            max_depth: MAX_CONTAINER_DEPTH as u32,
             redacted_field_keys: BTreeSet::new(),
         };
         assert!(policy.validate().is_err());
@@ -768,8 +779,8 @@ mod tests {
             ..AdapterPolicy {
                 allowed_window_labels: ["main".into()].into(),
                 allowed_targets: ["app".into()].into(),
-                max_request_bytes: MAX_REQUEST_BYTES as u32,
-                max_depth: MAX_DEPTH as u32,
+                max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
+                max_depth: MAX_CONTAINER_DEPTH as u32,
                 redacted_field_keys: BTreeSet::new(),
             }
         };
@@ -781,8 +792,8 @@ mod tests {
             ..AdapterPolicy {
                 allowed_window_labels: ["main".into()].into(),
                 allowed_targets: ["app".into()].into(),
-                max_request_bytes: MAX_REQUEST_BYTES as u32,
-                max_depth: MAX_DEPTH as u32,
+                max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
+                max_depth: MAX_CONTAINER_DEPTH as u32,
                 redacted_field_keys: BTreeSet::new(),
             }
         };
@@ -801,8 +812,8 @@ mod tests {
         let policy = AdapterPolicy {
             allowed_window_labels: BTreeSet::from(["main".to_owned()]),
             allowed_targets: BTreeSet::from(["app".to_owned()]),
-            max_request_bytes: MAX_REQUEST_BYTES as u32,
-            max_depth: MAX_DEPTH as u32,
+            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
+            max_depth: MAX_CONTAINER_DEPTH as u32,
             redacted_field_keys: BTreeSet::new(),
         };
         let result = parse::<QueryRequest>(
@@ -828,8 +839,8 @@ mod tests {
             policy: AdapterPolicy {
                 allowed_window_labels: ["main".into()].into(),
                 allowed_targets: ["app".into()].into(),
-                max_request_bytes: MAX_REQUEST_BYTES as u32,
-                max_depth: MAX_DEPTH as u32,
+                max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
+                max_depth: MAX_CONTAINER_DEPTH as u32,
                 redacted_field_keys: BTreeSet::new(),
             },
             query_timeout_ms: 17,
@@ -845,8 +856,8 @@ mod tests {
             allowed_targets: (0..=MAX_QUERY_TARGETS)
                 .map(|index| format!("app.{index}"))
                 .collect(),
-            max_request_bytes: MAX_REQUEST_BYTES as u32,
-            max_depth: MAX_DEPTH as u32,
+            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
+            max_depth: MAX_CONTAINER_DEPTH as u32,
             redacted_field_keys: BTreeSet::new(),
         };
         assert!(
@@ -884,18 +895,25 @@ mod tests {
 
         assert!(
             inspect(
-                &nested_objects(31, Value::Object(Default::default())),
+                &nested_objects(MAX_CONTAINER_DEPTH - 1, Value::Object(Default::default())),
                 0,
-                MAX_DEPTH
+                MAX_CONTAINER_DEPTH
             )
             .is_ok()
         );
-        assert!(inspect(&nested_objects(32, Value::Null), 0, MAX_DEPTH).is_ok());
         assert!(
             inspect(
-                &nested_objects(32, Value::Object(Default::default())),
+                &nested_objects(MAX_CONTAINER_DEPTH, Value::Null),
                 0,
-                MAX_DEPTH
+                MAX_CONTAINER_DEPTH
+            )
+            .is_ok()
+        );
+        assert!(
+            inspect(
+                &nested_objects(MAX_CONTAINER_DEPTH, Value::Object(Default::default())),
+                0,
+                MAX_CONTAINER_DEPTH
             )
             .is_err()
         );
@@ -906,8 +924,8 @@ mod tests {
         let policy = AdapterPolicy {
             allowed_window_labels: BTreeSet::from(["main".to_owned()]),
             allowed_targets: BTreeSet::from(["app".to_owned()]),
-            max_request_bytes: MAX_REQUEST_BYTES as u32,
-            max_depth: MAX_DEPTH as u32,
+            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
+            max_depth: MAX_CONTAINER_DEPTH as u32,
             redacted_field_keys: BTreeSet::new(),
         };
         let adapter = Adapter::new(Arc::new(IpcBackend), policy).unwrap();
@@ -922,10 +940,11 @@ mod tests {
             }
         });
         let overhead = serde_json::to_vec(&request).unwrap().len();
-        request["event"]["message"] = serde_json::json!("x".repeat(MAX_REQUEST_BYTES - overhead));
+        request["event"]["message"] =
+            serde_json::json!("x".repeat(MAX_WIRE_PAYLOAD_BYTES - overhead));
         assert_eq!(
             serde_json::to_vec(&request).unwrap().len(),
-            MAX_REQUEST_BYTES
+            MAX_WIRE_PAYLOAD_BYTES
         );
         let result = adapter.try_log("main", request);
         assert!(matches!(
@@ -971,8 +990,8 @@ mod tests {
         let policy = AdapterPolicy {
             allowed_window_labels: BTreeSet::from(["main".to_owned()]),
             allowed_targets: BTreeSet::from(["app".to_owned()]),
-            max_request_bytes: MAX_REQUEST_BYTES as u32,
-            max_depth: MAX_DEPTH as u32,
+            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
+            max_depth: MAX_CONTAINER_DEPTH as u32,
             redacted_field_keys: BTreeSet::new(),
         };
         let app = tauri::test::mock_builder()

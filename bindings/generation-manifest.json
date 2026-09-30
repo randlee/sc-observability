@@ -21,7 +21,7 @@
     "scripts/_binding_schema.py": "227a8d3344c32f14d94d1103b1f4f97ee1a9af53d1c0b0411b36c23425451ffa",
     "scripts/ci/validate_binding_generators.py": "3796d94bce1a1eb055b74e93da854785e8eec2cd7a9b5735712f925ce46f7db9",
     "scripts/generate_python_bindings.py": "270dc73877f89bd95d52f14066991637c104f6b6e597a7c6e815f0b64638a4ab",
-    "scripts/generate_typescript_bindings.py": "4ad56bd38d1949e95c0ac42fa626dd324716706b2861cc2f6d9feaccd1cbd99a"
+    "scripts/generate_typescript_bindings.py": "37a0d2a00a361fac8c3c588dbfe3a36c870d3c78c58c7156c59573f71c229b60"
   },
   "outputs": {
     "bindings/python/sc-observability-py/python/sc_observability/generated/__init__.py": "f87faa2b13b0ffd1174e5e59a0854750da98dab3efe2c524d83b895ee5214a84",
@@ -29,7 +29,7 @@
     "bindings/python/sc-observability-py/python/sc_observability/generated/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "bindings/schema/errors-v1.json": "aa7d43390670a6592cb16bc759dc34db4343cdb602b0a43a18cf0e53171e8fd8",
     "bindings/schema/v1.json": "c210dac14e1740bd0c985ca32a77e02cea565a1a99ebefb987b889e812c17d45",
-    "bindings/typescript/src/generated/index.ts": "b105f1106eceb10c9d96d8f7b4d184ebe34069bacccaa27fb7bbfb8f28d3405d"
+    "bindings/typescript/src/generated/index.ts": "623ff3788a9450f45d32b5d0c9c63afc21659c74a65e72b7ef50599a4723a15e"
   },
   "source_blobs": {
     "bindings/generation-toolchain.toml": "ac110f8781d41da9ea579bf6a0e9d7b6ef3ab1d7",
@@ -53,7 +53,7 @@
     "scripts/_binding_schema.py": "2147c85421a0f546b40bc0d33f2d481a55637df6",
     "scripts/ci/validate_binding_generators.py": "3f3b29cd194962955351a1bac5eda29b328939f8",
     "scripts/generate_python_bindings.py": "d9fd09c08aa10c6f50959bb09c12025d76d75e29",
-    "scripts/generate_typescript_bindings.py": "d3695e6de459ed8642f90b9ca5df1c3cf714e656"
+    "scripts/generate_typescript_bindings.py": "d4923fbbf2803fe6abe506d1d50cd5e4b234dd45"
   },
   "toolchain": {
     "python": "3.12.10",
