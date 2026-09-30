@@ -384,7 +384,9 @@ impl DroppedEvents {
 /// therefore discards the outcome (`let _ = ..`). Dropping the non-owning
 /// [`LogAttachment`] instead performs a bounded best-effort detach; it does not
 /// shut down the logger or own `LevelOwner` authority. The constant is shared
-/// only for its timeout value, not for shutdown or `LevelOwner` authority.
+/// only for its timeout value, not for shutdown or `LevelOwner` authority. It
+/// also bounds the internal shutdown [`init`] attempts when another `log::Log`
+/// implementation is already installed.
 /// Call [`LogGuard::shutdown`] explicitly whenever its `Result` matters, for
 /// example to log or retry on failure.
 pub const DEFAULT_DROP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
