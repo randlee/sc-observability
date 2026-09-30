@@ -772,7 +772,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "log-settings-example"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
@@ -901,7 +901,7 @@ dependencies = [
 
 [[package]]
 name = "otlp-legacy-example"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "sc-observability-otlp",
  "sc-observability-types",
@@ -909,7 +909,7 @@ dependencies = [
 
 [[package]]
 name = "otlp-sdk-example"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "sc-observability-otlp",
  "sc-observability-types",
@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "rust-python-logging"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "pyo3",
  "sc-observability",
@@ -1499,7 +1499,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "sc-observability-types",
  "serde",
@@ -1512,7 +1512,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-binding-runtime"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "arc-swap",
  "sc-observability",
@@ -1525,7 +1525,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-dto"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "sc-observability-types",
  "schemars",
@@ -1535,7 +1535,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-log"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "hostname",
  "log",
@@ -1553,14 +1553,14 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-log-consumer-check"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "sc-observability-log",
 ]
 
 [[package]]
 name = "sc-observability-log-macros"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1569,7 +1569,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-otlp"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "getrandom 0.4.3",
  "httpdate",
@@ -1589,7 +1589,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-py"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "pyo3",
  "sc-observability",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-types"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1612,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observe"
-version = "2.0.0"
+version = "1.5.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",

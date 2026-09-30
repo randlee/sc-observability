@@ -49,161 +49,45 @@ def registry_absent(crate: str) -> bool:
         raise
 
 
-def major_breaks(policy: dict) -> list[dict]:
-    """Read exact reviewed API changes; patterns and crate-wide waivers are unsupported."""
+def validate_compatible_policy(policy: dict) -> None:
+    """Fail closed unless the active candidate is a compatible 1.x release."""
     path = ROOT / 'release/public-api-major-breaks.toml'
     manifest = tomllib.loads(path.read_text(encoding='utf-8'))
-    if (manifest.get('schema_version') != 1
-            or manifest.get('candidate_version') != policy['candidate_version']
-            or manifest.get('baseline_version') != '1.4.1'):
-        raise ValueError('major-break manifest must match candidate and frozen 1.4.1 baseline')
+    candidate = policy.get('candidate_version', '')
+    if (policy.get('schema_version') != 1
+            or manifest.get('schema_version') != 1
+            or not isinstance(candidate, str)
+            or manifest.get('candidate_version') != candidate
+            or manifest.get('baseline_version') != '1.4.1'
+            or not re.fullmatch(r'1\.\d+\.\d+', candidate)
+            or tuple(map(int, candidate.split('.'))) <= (1, 4, 1)):
+        raise ValueError('compatible API policy and break manifest must select a release after the frozen 1.4.1 baseline')
+    if not policy.get('crates') or any(
+            settings.get('baseline_version') != '1.4.1'
+            for settings in policy['crates'].values()):
+        raise ValueError('every published crate requires the actual frozen 1.4.1 baseline')
     entries = manifest.get('breaks', [])
-    ids, removals = set(), set()
-    for entry in entries:
-        if (not all(isinstance(entry.get(key), str) and entry[key].strip()
-                    for key in ('id', 'crate', 'old', 'reason', 'authority', 'migration'))
-                or not isinstance(entry.get('new'), str)
-                or entry['crate'] not in policy['crates']
-                or entry['id'] in ids or (entry['crate'], entry['old']) in removals):
-            raise ValueError('major-break manifest contains an invalid or duplicate entry')
-        ids.add(entry['id'])
-        removals.add((entry['crate'], entry['old']))
-    return entries
+    if not isinstance(entries, list) or entries:
+        raise ValueError('compatible 1.x release cannot accept enumerated breaking API exceptions')
+    return None
 
 
-def check_major_diff(crate: str, output: str, entries: list[dict]) -> list[str]:
-    """Require exact old/new public-api lines for every removal or changed signature."""
+def compatible_diff_problems(output: str) -> list[str]:
+    """Allow additive public-api rows while rejecting removals and signature changes."""
     sections = ('Removed items from the public API', 'Changed items in the public API',
                 'Added items to the public API')
     if not all(section in output for section in sections):
         raise ValueError('public-api output lacks required diff sections')
-    removed = normalize_removed_items(
-        {line[1:] for line in output.splitlines() if line.startswith('-')}, entries
-    )
-    added = {line[1:] for line in output.splitlines() if line.startswith('+')}
-    scoped = [entry for entry in entries if entry['crate'] == crate]
-    listed = {entry['old'] for entry in scoped}
-    problems = [f'unlisted API break: {item}' for item in sorted(removed - listed)]
-    for entry in scoped:
-        if entry['old'] not in removed:
-            problems.append(f"stale break entry: {entry['id']}")
-        elif entry['new'] and entry['new'] not in added:
-            problems.append(f"replacement differs from reviewed break: {entry['id']}")
+    section = None
+    problems = []
+    for line in output.splitlines():
+        if line in sections:
+            section = line
+        elif line.startswith('-'):
+            problems.append(f'incompatible API removal or change: {line[1:]}')
+        elif line.startswith('+') and section != 'Added items to the public API':
+            problems.append(f'incompatible API signature change: {line[1:]}')
     return problems
-
-
-_DERIVED_METHODS = {
-    "borrow", "borrow_mut", "clone", "clone_into", "clone_to_uninit", "deserialize",
-    "eq", "fmt", "from", "into", "serialize", "to_owned", "to_string", "try_from",
-    "try_into", "type_id",
-}
-
-
-def normalize_removed_items(items: set[str], entries: list[dict]) -> set[str]:
-    """Drop cargo-public-api's mechanically-derived descendants.
-
-    The break manifest records source-level removals/signature changes.  Rust
-    auto-trait, serde, conversion, and enum/struct-member rows are consequences
-    of those roots and are not independently reviewable breaks.  Keep custom
-    impls and every explicit manifest line so this remains an exact, scoped
-    normalisation rather than a crate-wide waiver.
-    """
-    listed = {entry["old"] for entry in entries}
-    removed_roots = set()
-    for item in listed:
-        match = re.match(r"pub (?:struct|enum) ([^ (]+)", item)
-        if match:
-            removed_roots.add(match.group(1))
-
-    normalized = set()
-    for item in items:
-        if item in listed:
-            normalized.add(item)
-            continue
-        if item.startswith(("impl core::", "impl alloc::", "impl serde", "impl<")):
-            continue
-        if re.match(r"pub type .+::(?:Error|Owned) = ", item):
-            continue
-        method = re.match(r"pub (?:unsafe )?fn [^:]+::([A-Za-z_][A-Za-z_0-9]*)\(", item)
-        if method and method.group(1) in _DERIVED_METHODS:
-            continue
-        owner = re.match(r"(?:pub (?:enum|struct|type|fn)?\s*|impl )([^:]+::[^:]+)", item)
-        if owner and any(
-            item_owner == root or item_owner.startswith(root + "::")
-            for root in removed_roots
-            for item_owner in [owner.group(1)]
-        ):
-            continue
-        normalized.add(item)
-    return normalized
-
-
-def approved_structural_items(crate: str, entries: list[dict]) -> set[tuple[str, ...]]:
-    """Project exact reviewed API lines into cargo-semver-checks diagnostic tuples."""
-    approved = set()
-    for entry in entries:
-        if entry['crate'] != crate:
-            continue
-        old, new = entry['old'], entry['new']
-        module = re.fullmatch(r'pub mod (sc_observability_otlp::(?:constants|error_codes))', old)
-        constant = re.fullmatch(r'pub const sc_observability_otlp::(constants|error_codes)::([A-Z_]+): .+', old)
-        trait = re.fullmatch(r'impl core::panic::unwind_safe::(RefUnwindSafe|UnwindSafe) for sc_observability_log::LogControl', old)
-        if module and not new:
-            approved.add(('module_missing', module[1]))
-        elif constant and not new:
-            approved.add(('pub_module_level_const_missing', constant[2], constant[1] + '.rs'))
-        elif trait and new == old.replace('impl ', 'impl !', 1):
-            approved.add(('auto_trait_impl_removed', 'LogControl', trait[1]))
-        elif (old == 'pub struct sc_observability_otlp::OtelConfig'
-              and new == '#[non_exhaustive] ' + old):
-            approved.add(('struct_marked_non_exhaustive', 'OtelConfig'))
-    return approved
-
-
-def structural_diagnostics_are_enumerated(crate: str, output: str, entries: list[dict],
-                                           returncode: int, stderr: str = '') -> bool:
-    """Require exact coverage of every finding in real cargo-semver-checks stdout.
-
-    Findings exit with status 1. Crashes/signals and build errors cannot become
-    approved breaks, even when they also emit a complete approved diagnostic.
-    Progress on stderr is kept separate from the strictly parsed finding rows.
-    """
-    approved = approved_structural_items(crate, entries)
-    if returncode != 1 or not approved:
-        return False
-    if re.search(r"(?im)^\s*(?:error(?:\[|:)|could not compile|process didn't exit|command failed|thread .* panicked)", output + stderr):
-        return False
-    if re.search(r'(?m)^\s*(?:--- failure |Failed in:)', stderr):
-        return False  # Findings belong on stdout; never ignore extra stderr rows.
-    patterns = {
-        'module_missing': r'  mod (sc_observability_otlp::[a-z_]+), previously in file .+:[0-9]+',
-        'pub_module_level_const_missing': r'  ([A-Z_]+) in file .*/sc-observability-otlp-1\.4\.1/src/([^/]+\.rs):[0-9]+',
-        'struct_marked_non_exhaustive': r'  struct ([A-Za-z_][A-Za-z_0-9]*) in .*/crates/sc-observability-otlp/src/config\.rs:[0-9]+',
-        'auto_trait_impl_removed': r'  type ([A-Za-z_][A-Za-z_0-9]*) is no longer ([A-Za-z_][A-Za-z_0-9]*), in .*/crates/sc-observability-log/src/control\.rs:[0-9]+',
-    }
-    # Split only on complete, unindented headers. Any stray or malformed header
-    # remains in a row/description and fails validation below.
-    blocks = re.split(r'(?m)^--- failure ', output.strip())
-    if blocks[0] or len(blocks) == 1:
-        return False
-    observed, rules = set(), set()
-    for block in blocks[1:]:
-        match = re.fullmatch(r'([a-z0-9_]+): [^\n]+ ---\n\nDescription:\n(.+?)\n\nFailed in:\n(.+?)\s*', block, re.DOTALL)
-        if not match or match[1] not in patterns or match[1] in rules:
-            return False
-        rule, description, rows = match.groups()
-        if '---' in description or 'Failed in:' in description:
-            return False
-        rules.add(rule)
-        for row in rows.splitlines():
-            item = re.fullmatch(patterns[rule], row)
-            if not item:
-                return False
-            key = (rule, *item.groups())
-            if key in observed or key not in approved:
-                return False
-            observed.add(key)
-    return observed == approved
 
 
 def main() -> int:
@@ -225,9 +109,8 @@ def main() -> int:
         raise ValueError('selected crate is not in public API policy')
     if args.crates and args.mode == 'docs':
         raise ValueError('documentation approval requires the full crate report')
-    entries = major_breaks(policy) if args.mode == 'semver' and any(
-        item['baseline_version'] and item['baseline_version'].split('.')[0] != policy['candidate_version'].split('.')[0]
-        for item in policy['crates'].values()) else []
+    if args.mode == 'semver':
+        validate_compatible_policy(policy)
     CACHE.mkdir(parents=True, exist_ok=True)
     if args.mode == 'docs':
         report = json.loads((CACHE / 'public-api-diff.json').read_text(encoding='utf-8'))
@@ -259,14 +142,10 @@ def main() -> int:
         initial = baseline is None
         if initial and not registry_absent(crate):
             raise ValueError(f'{crate}: initial-release declaration conflicts with registry; set published baseline')
-        major_semver = args.mode == 'semver' and not initial and baseline.split('.')[0] != package['version'].split('.')[0]
-        if major_semver and baseline != '1.4.1':
-            raise ValueError('major release requires frozen 1.4.1 baseline for every crate')
         proc_macro_semver = args.mode == 'semver' and settings['kind'] == 'proc-macro' and not initial
-        if args.mode == 'diff' or initial or proc_macro_semver or major_semver:
+        if args.mode == 'diff' or initial or proc_macro_semver:
             command = ['cargo', 'public-api', '--manifest-path', package['manifest_path']]
-            if not major_semver:
-                command.append('-sss')
+            command.append('-sss')
             if not initial:
                 command.extend(['diff', baseline])
         else:
@@ -279,44 +158,21 @@ def main() -> int:
         status = 'passed'
         if result.returncode != 0:
             status, failure = 'tool-error', True
-        elif major_semver:
-            problems = check_major_diff(crate, result.stdout, entries)
-            if problems:
-                status, failure = 'unlisted-or-mismatched-major-break', True
-                with (CACHE / log_name).open('a') as log:
-                    log.write('\n' + '\n'.join(problems) + '\n')
-            else:
-                status = 'enumerated-major-breaks-verified'
-                # The exact-line manifest complements the structural checker;
-                # it must never waive a required-trait-item or other failure
-                # that a text API diff alone may not classify as breaking.
-                if settings['kind'] != 'proc-macro':
-                    structural = run(['cargo', 'semver-checks', '--manifest-path',
-                                      package['manifest_path'], '--baseline-version', baseline,
-                                      '--release-type', 'minor', '--default-features'])
-                    with (CACHE / log_name).open('a') as log:
-                        log.write('\nStructural semver check:\n' + structural.stdout + structural.stderr)
-                    # A small set of D18 structural diagnostics are the direct
-                    # manifestation of enumerated compatibility retirement. Keep
-                    # all other structural failures fatal: the textual diff
-                    # cannot authorize an unrelated trait or layout break.
-                    if structural.returncode:
-                        if not structural_diagnostics_are_enumerated(
-                                crate, structural.stdout, entries, structural.returncode, structural.stderr):
-                            status, failure = 'structural-semver-failed', True
-                        else:
-                            with (CACHE / log_name).open('a') as log:
-                                log.write('\nStructural failures match enumerated D18 compatibility breaks.\n')
         elif proc_macro_semver:
-            # cargo-semver-checks rejects proc-macro targets. Require an unchanged
-            # published export surface instead; never silently skip this crate.
-            sections = ('Removed items from the public API', 'Changed items in the public API', 'Added items to the public API')
-            if not all(section in result.stdout for section in sections):
+            # cargo-semver-checks does not qualify proc-macro targets. Compare
+            # against the published API and allow additions, while rejecting
+            # every removal and changed signature.
+            try:
+                problems = compatible_diff_problems(result.stdout)
+            except ValueError:
                 status, failure = 'tool-error', True
-            elif any(line.startswith(('+', '-')) for line in result.stdout.splitlines()):
-                status, failure = 'proc-macro-api-changed', True
             else:
-                status = 'published-proc-macro-api-unchanged'
+                if problems:
+                    status, failure = 'proc-macro-api-incompatible', True
+                    with (CACHE / log_name).open('a') as log:
+                        log.write('\n' + '\n'.join(problems) + '\n')
+                else:
+                    status = 'compatible-proc-macro-api'
         elif initial:
             if not result.stdout.strip():
                 status, failure = 'tool-error', True
