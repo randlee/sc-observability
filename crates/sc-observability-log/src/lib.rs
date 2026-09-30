@@ -636,23 +636,7 @@ fn ensure_static_level(level: LevelFilter) -> Result<(), LevelFilter> {
         log::LevelFilter::Debug => LevelFilter::Debug,
         log::LevelFilter::Trace => LevelFilter::Trace,
     };
-    let requested_rank = match level {
-        LevelFilter::Trace => 0,
-        LevelFilter::Debug => 1,
-        LevelFilter::Info => 2,
-        LevelFilter::Warn => 3,
-        LevelFilter::Error => 4,
-        LevelFilter::Off => 5,
-    };
-    let available_rank = match available {
-        LevelFilter::Trace => 0,
-        LevelFilter::Debug => 1,
-        LevelFilter::Info => 2,
-        LevelFilter::Warn => 3,
-        LevelFilter::Error => 4,
-        LevelFilter::Off => 5,
-    };
-    if requested_rank < available_rank {
+    if handle::log_level_rank(level) < handle::log_level_rank(available) {
         Err(available)
     } else {
         Ok(())

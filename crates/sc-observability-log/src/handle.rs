@@ -20,6 +20,7 @@ use crate::{
 use sc_observability_types::FailureClassification;
 use sc_observability_types::v2::EventError;
 use sc_observability_types::v2::{FlushError, ShutdownError};
+use sc_observability_types::{Level, LevelFilter};
 
 /// A rejected submission: every failure of the guarded core maps to exactly one [`DropCause`].
 ///
@@ -476,31 +477,53 @@ pub(crate) fn core_enabled(level: sc_observability_types::Level) -> bool {
     level_enabled(level, effective)
 }
 
-pub(crate) fn level_enabled(
-    level: sc_observability_types::Level,
-    effective: sc_observability_types::LevelFilter,
-) -> bool {
-    level_rank(level) >= filter_rank(effective)
+pub(crate) fn level_enabled(level: Level, effective: LevelFilter) -> bool {
+    log_level_rank(level) >= log_level_rank(effective)
 }
 
-fn level_rank(level: sc_observability_types::Level) -> u8 {
-    match level {
-        sc_observability_types::Level::Trace => 0,
-        sc_observability_types::Level::Debug => 1,
-        sc_observability_types::Level::Info => 2,
-        sc_observability_types::Level::Warn => 3,
-        sc_observability_types::Level::Error => 4,
+#[derive(Clone, Copy)]
+pub(crate) enum RankedLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+    Off,
+}
+
+impl From<Level> for RankedLevel {
+    fn from(level: Level) -> Self {
+        match level {
+            Level::Trace => Self::Trace,
+            Level::Debug => Self::Debug,
+            Level::Info => Self::Info,
+            Level::Warn => Self::Warn,
+            Level::Error => Self::Error,
+        }
     }
 }
 
-fn filter_rank(level: sc_observability_types::LevelFilter) -> u8 {
-    match level {
-        sc_observability_types::LevelFilter::Trace => 0,
-        sc_observability_types::LevelFilter::Debug => 1,
-        sc_observability_types::LevelFilter::Info => 2,
-        sc_observability_types::LevelFilter::Warn => 3,
-        sc_observability_types::LevelFilter::Error => 4,
-        sc_observability_types::LevelFilter::Off => 5,
+impl From<LevelFilter> for RankedLevel {
+    fn from(filter: LevelFilter) -> Self {
+        match filter {
+            LevelFilter::Trace => Self::Trace,
+            LevelFilter::Debug => Self::Debug,
+            LevelFilter::Info => Self::Info,
+            LevelFilter::Warn => Self::Warn,
+            LevelFilter::Error => Self::Error,
+            LevelFilter::Off => Self::Off,
+        }
+    }
+}
+
+pub(crate) fn log_level_rank(level: impl Into<RankedLevel>) -> u8 {
+    match level.into() {
+        RankedLevel::Trace => 0,
+        RankedLevel::Debug => 1,
+        RankedLevel::Info => 2,
+        RankedLevel::Warn => 3,
+        RankedLevel::Error => 4,
+        RankedLevel::Off => 5,
     }
 }
 
@@ -982,7 +1005,6 @@ mod tests {
 
     #[test]
     fn shared_level_gate_covers_every_level_and_filter() {
-        use sc_observability_types::{Level, LevelFilter};
         let levels = [
             Level::Trace,
             Level::Debug,
@@ -1003,6 +1025,37 @@ mod tests {
                     level_enabled(level, filter),
                     expected,
                     "{level:?} / {filter:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn static_level_availability_covers_every_filter_pair() {
+        let filters = [
+            LevelFilter::Trace,
+            LevelFilter::Debug,
+            LevelFilter::Info,
+            LevelFilter::Warn,
+            LevelFilter::Error,
+            LevelFilter::Off,
+        ];
+        for (requested, available) in [
+            (
+                LevelFilter::Trace,
+                [true, false, false, false, false, false],
+            ),
+            (LevelFilter::Debug, [true, true, false, false, false, false]),
+            (LevelFilter::Info, [true, true, true, false, false, false]),
+            (LevelFilter::Warn, [true, true, true, true, false, false]),
+            (LevelFilter::Error, [true, true, true, true, true, false]),
+            (LevelFilter::Off, [true, true, true, true, true, true]),
+        ] {
+            for (available_filter, expected) in filters.into_iter().zip(available) {
+                assert_eq!(
+                    log_level_rank(requested) >= log_level_rank(available_filter),
+                    expected,
+                    "requested {requested:?} / available {available_filter:?}"
                 );
             }
         }
