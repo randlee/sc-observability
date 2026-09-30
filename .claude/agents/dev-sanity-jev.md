@@ -88,7 +88,7 @@ without a lead ruling.
 ## Mandatory Run Status Table
 
 After every terminal PASS or FAIL close succeeds, append the completed run to
-the repository-local, ignored ledger and render its newest six rows. Do not
+the repository-local, ignored ledger and render its newest ten rows. Do not
 run this for a refusal. Use the completion vars produced by `sanity-merge`:
 
 ```bash
