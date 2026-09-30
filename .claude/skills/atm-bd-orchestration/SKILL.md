@@ -10,7 +10,6 @@ requires:
     - name: sc-compose
     - name: jq
     - name: gh
-    - name: herdr
 depends_on:
   atm-beads: 0.x
   sc-gh-stack: 0.x
@@ -41,7 +40,7 @@ closed, each with a close reason.
 Run this before anything else in the skill:
 
 ```bash
-for c in bd atm sc-compose jq gh herdr; do command -v "$c" >/dev/null && echo "ok $c" || echo "MISSING $c"; done
+for c in bd atm sc-compose jq gh; do command -v "$c" >/dev/null && echo "ok $c" || echo "MISSING $c"; done
 bd version    # 1.3.0 or newer
 gh stack --version   # the gh-stack extension
 ```

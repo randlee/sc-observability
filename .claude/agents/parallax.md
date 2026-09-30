@@ -22,8 +22,6 @@ pending. Stop only when the lead tells you to.
 
 ## Responsibilities
 
-- Before your first assignment, run `/atm-bd-orchestration` "Step 1 —
-  Verify CLI Installation". Refuse the wave if anything is missing.
 - Refuse a wave assignment that lacks the phase root, the wave, the base
   branch and commit, or the devs you own. A new wave has no stack yet; your
   first link creates it.
