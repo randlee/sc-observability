@@ -18,6 +18,9 @@ use std::time::{Duration, Instant};
 const CONTRACT_CASE_DEADLINE: Duration = Duration::from_secs(60);
 const HUNG_CHILD_DEADLINE: Duration = Duration::from_millis(250);
 const CHILD_START_DEADLINE: Duration = Duration::from_secs(10);
+const CHILD_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const HUNG_CHILD_SLEEP: Duration = Duration::from_secs(60);
+const CHILD_OUTPUT_CHUNK_SIZE: usize = 4096;
 
 struct ChildRun {
     status: ExitStatus,
@@ -84,7 +87,7 @@ fn read_child_output(
     ready: &mpsc::Sender<()>,
 ) -> std::io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    let mut chunk = [0; 4096];
+    let mut chunk = [0; CHILD_OUTPUT_CHUNK_SIZE];
     let mut marker = readiness_marker;
     loop {
         let count = reader.read(&mut chunk)?;
@@ -140,10 +143,7 @@ fn run_test_child(
                     timed_out: false,
                 };
             }
-            if ready_receiver
-                .recv_timeout(Duration::from_millis(10))
-                .is_ok()
-            {
+            if ready_receiver.recv_timeout(CHILD_POLL_INTERVAL).is_ok() {
                 break;
             }
             if startup.elapsed() >= CHILD_START_DEADLINE {
@@ -193,7 +193,7 @@ fn run_test_child(
                 timed_out: true,
             };
         }
-        thread::sleep(Duration::from_millis(10));
+        thread::sleep(CHILD_POLL_INTERVAL);
     }
 }
 
@@ -519,7 +519,7 @@ fn contract_matrix_timeout_kills_and_reaps_child() {
         print!("{marker}");
         std::io::Write::flush(&mut std::io::stdout()).expect("flush hung-child readiness marker");
         loop {
-            thread::sleep(Duration::from_secs(60));
+            thread::sleep(HUNG_CHILD_SLEEP);
         }
     }
 
