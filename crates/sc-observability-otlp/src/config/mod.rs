@@ -24,12 +24,13 @@ pub use types::{
     OtlpEndpoint, OtlpProtocol, ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder,
     TracesConfig,
 };
+#[cfg(test)]
+pub(crate) use validation::validate_config;
+pub(crate) use validation::validate_config_typed;
 pub(crate) use validation::{
     BackendTransportBounds, RetryPolicy, ValidatedBackendConnection, ValidatedTransportBounds,
     validated_backend_connection, validated_telemetry_bounds, validated_transport_bounds,
 };
-#[cfg(test)]
-pub(crate) use validation::{validate_config, validate_config_typed};
 
 #[cfg(test)]
 use crate::error_codes;
