@@ -52,6 +52,12 @@ Every completed layer proceeds through sanity, rebase onto the ordered stack, th
 
 No implementation merge to `develop` is authorized here. D18 and D9 PASS plus full phase-ending review and explicit user authorization are required. The two requested scope/critical review iterations precede quality-mgr plan review; preserved review reports are evidence, not live scheduling authority.
 
+## Common validation
+
+Each boundary sprint completes its numbered deliverables and inventory rows with real implementations. Run `cargo check --workspace --all-features --locked`, focused owned-crate/consumer tests, and existing boundary and production-lint checks for the changed paths. D18 owns combined workspace behavior and `just validate`; boundary closure does not add unrelated full-phase integration checks.
+
+Use the documented feature/profile matrix, including the release-only static-level fixture in release profile. Preserve the exact failing command and result if blocked; never relabel a failure PASS. Old and canonical clients agree on side effects while retaining their documented result shapes; unchanged released consumers stay unchanged, and migrated examples opt into canonical APIs. Accepted policy, rebase/revalidation and immediate sanity-to-QA routing are defined in Shared execution rules above.
+
 ## Planning review record
 
 Iteration 1 scope and critical reports are attached to PR #499 (issuecomment-5902245963). The fix round clarified canonical-import/fixture handoff, D18 owner routing, macro expansion proof, the current phase map and D9 train, and D27 boundary closure. OTLP observation imports remain dev-only. The completed second review used the historical frozen bead snapshot SHA-256 `181dcf0ab9f88544c4d3a6cc5f8c8d381402635f1d7e73a5490d9fe4b6cefc7b`. That digest identifies review-2 evidence, not the current plan after quality-mgr fixes; live beads and the committed graph remain authoritative.
