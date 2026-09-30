@@ -224,6 +224,44 @@ fn paired_projection_runtimes(
     (legacy, typed)
 }
 
+fn requires_send_sync<T: Send + Sync>() {}
+
+#[test]
+fn released_typed_helpers_delegate_to_the_same_runtime_lifecycle() {
+    let typed_config = sc_observe::ObservabilityConfig::default_for_typed(
+        ToolName::new("typed-compat").expect("valid tool"),
+        temp_path("released-typed-helpers"),
+    )
+    .expect("typed config");
+    assert_eq!(
+        typed_config
+            .service_name_typed()
+            .expect("typed service name")
+            .as_str(),
+        "typed-compat"
+    );
+
+    let Err(runtime) = Observability::new_typed(typed_config) else {
+        panic!("a runtime without routes must retain the typed failure");
+    };
+    assert_eq!(runtime.diagnostic().code.as_str(), "SC_OBSERVE_INIT_FAILED");
+
+    let runtime = Observability::builder(config("released-typed-runtime"))
+        .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
+            CountingSubscriber {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+        ))))
+        .build_typed()
+        .expect("typed runtime");
+    requires_send_sync::<Observability>();
+    runtime.flush_typed().expect("typed flush");
+    runtime.shutdown_typed().expect("typed shutdown");
+    runtime
+        .shutdown_typed()
+        .expect("repeated typed shutdown is idempotent");
+}
+
 #[test]
 fn paired_filters_ordering_and_invocation_counts_match() {
     let order = Arc::new(Mutex::new(Vec::new()));
