@@ -949,22 +949,22 @@
       "status": "canonical_routed",
       "canonical": "trait returning v2::LogSinkError",
       "treatment": "new_adapter",
-      "baseline_signature": "macro invocation: assert_eq!( crate::typed::TypedLogSink::health(typed.as_ref()).state, SinkHealthState::Healthy )",
-      "canonical_signature": "macro invocation: assert_eq!( crate::typed::TypedLogSink::health(typed.as_ref()).state, SinkHealthState::Healthy )",
+      "baseline_signature": "pub trait TypedLogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>; /// Flushes buffered state. fn flush(&self) -> Result<(), LogSinkFailure> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
+      "canonical_signature": "pub trait TypedLogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>; /// Flushes buffered state. fn flush(&self) -> Result<(), LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
       "obligations": [
         "signature identity: preserve TypedLogSink declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve TypedLogSink implementability, the exact public trait bounds, and each associated method result type",
+        "trait: preserve TypedLogSink implementability, Send + Sync, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/typed.rs",
         "symbol": "sc_observability::typed::TypedLogSink"
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/typed.rs",
         "symbol": "trait returning v2::LogSinkError"
       },
       "removable_paths": [],
@@ -5020,10 +5020,11 @@
       "baseline_signature": "fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
       "canonical_signature": "fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
       "obligations": [
-        "trait: preserve public implementability and Send + Sync constraints"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root error identity at this slot; only the facade converts it to the selected-head v2 error"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/process.rs",
@@ -5036,17 +5037,20 @@
         "owner": "ProcessIdentityResolver",
         "member": "resolve"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-types/src/process.rs"
+      ]
     },
     {
       "symbol": "sc_observability_types::ObservationSubscriber::observe",
       "baseline_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
       "canonical_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
       "obligations": [
-        "trait: preserve public implementability and Send + Sync constraints"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root error identity at this slot; only the facade converts it to the selected-head v2 error"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5059,17 +5063,20 @@
         "owner": "ObservationSubscriber",
         "member": "observe"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-types/src/projection.rs"
+      ]
     },
     {
       "symbol": "sc_observability_types::LogProjector::project_logs",
       "baseline_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
       "canonical_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
       "obligations": [
-        "trait: preserve public implementability and Send + Sync constraints"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root error identity at this slot; only the facade converts it to the selected-head v2 error"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5082,17 +5089,20 @@
         "owner": "LogProjector",
         "member": "project_logs"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-types/src/projection.rs"
+      ]
     },
     {
       "symbol": "sc_observability_types::SpanProjector::project_spans",
       "baseline_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
       "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
       "obligations": [
-        "trait: preserve public implementability and Send + Sync constraints"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root error identity at this slot; only the facade converts it to the selected-head v2 error"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5105,17 +5115,20 @@
         "owner": "SpanProjector",
         "member": "project_spans"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-types/src/projection.rs"
+      ]
     },
     {
       "symbol": "sc_observability_types::MetricProjector::project_metrics",
       "baseline_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
       "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
       "obligations": [
-        "trait: preserve public implementability and Send + Sync constraints"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root error identity at this slot; only the facade converts it to the selected-head v2 error"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5128,17 +5141,20 @@
         "owner": "MetricProjector",
         "member": "project_metrics"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-types/src/projection.rs"
+      ]
     },
     {
       "symbol": "sc_observability::LogSink::write",
       "baseline_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
       "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
       "obligations": [
-        "trait: preserve public implementability and Send + Sync constraints"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root error identity at this slot; only the facade converts it to the selected-head v2 error"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -5151,17 +5167,20 @@
         "owner": "LogSink",
         "member": "write"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/lib.rs"
+      ]
     },
     {
       "symbol": "sc_observability::LogSink::flush",
       "baseline_signature": "fn flush(&self) -> Result<(), LogSinkError>",
       "canonical_signature": "fn flush(&self) -> Result<(), LogSinkError>",
       "obligations": [
-        "trait: preserve public implementability and Send + Sync constraints"
+        "trait: preserve public implementability and Send + Sync constraints",
+        "identity: retain the released root error identity at this slot; only the facade converts it to the selected-head v2 error"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -5174,7 +5193,9 @@
         "owner": "LogSink",
         "member": "flush"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/lib.rs"
+      ]
     },
     {
       "symbol": "sc_observability::LogSink::health",
