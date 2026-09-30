@@ -42,19 +42,16 @@ use config::{BackendTransportBounds, ValidatedTransportBounds, validated_telemet
 #[cfg(test)]
 use config::{validate_config_typed, validated_transport_bounds};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
+#[doc(inline)]
+pub use sc_observability_types::v2::TelemetryError;
 use sc_observability_types::v2::{ConfigFailure, ExportError};
-#[allow(
-    deprecated,
-    reason = "telemetry retains legacy error names in its published compatibility signatures"
-)]
 use sc_observability_types::{
     DiagnosticSummary, ErrorContext, LogEvent, MetricRecord, ObservabilityHealthProvider,
     Remediation, SinkName, SpanSignal, telemetry_health_provider_sealed,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
-    ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
-    TelemetryHealthState,
+    ExporterHealth, ExporterHealthState, TelemetryHealthReport, TelemetryHealthState,
 };
 use serde_json::Value;
 
@@ -80,7 +77,9 @@ pub mod v2 {
         TelemetryProjectors,
     };
     #[doc(inline)]
-    pub use sc_observability_types::v2::{ConfigFailure, EventError, FlushError, InitError, ShutdownError};
+    pub use sc_observability_types::v2::{
+        ConfigFailure, EventError, FlushError, InitError, ShutdownError,
+    };
 }
 #[cfg(feature = "sdk-test-support")]
 #[doc(inline)]

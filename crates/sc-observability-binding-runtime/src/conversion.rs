@@ -50,11 +50,11 @@ pub(crate) fn admission(value: native::AdmissionOutcome) -> dto::AdmissionDto {
         native::AdmissionOutcome::Filtered => dto::AdmissionDto::Filtered,
     }
 }
-pub(crate) fn core_admission(value: &native::EventError) -> Failure {
+pub(crate) fn core_admission(value: &native::v2::EventError) -> Failure {
     let diagnostic = value.diagnostic();
     let kind = match &value {
-        native::EventError::Validation { .. } => value.failure_classification(),
-        native::EventError::Routing { .. } => match diagnostic.code.as_str() {
+        native::v2::EventError::Validation { .. } => value.failure_classification(),
+        native::v2::EventError::Routing { .. } => match diagnostic.code.as_str() {
             "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => Kind::QueueFull,
             "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => Kind::timeout("shutdown"),
             _ => Kind::Unavailable,
@@ -63,7 +63,7 @@ pub(crate) fn core_admission(value: &native::EventError) -> Failure {
     };
     canonical(value, kind)
 }
-pub(crate) fn core_flush(error: native::FlushError) -> (native::FlushError, Kind) {
+pub(crate) fn core_flush(error: native::v2::FlushError) -> (native::v2::FlushError, Kind) {
     let kind = error.failure_classification();
     (error, kind)
 }

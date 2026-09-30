@@ -445,10 +445,10 @@ struct LegacyIdentityAdapter {
 }
 
 impl ProcessIdentityResolver for LegacyIdentityAdapter {
-    fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError> {
+    fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError> {
         self.inner
             .resolve()
-            .map_err(|failure| crate::IdentityError::Process {
+            .map_err(|failure| crate::v2::IdentityError::Process {
                 context: failure.into_context(),
             })
     }
@@ -471,10 +471,10 @@ struct LegacySubscriberAdapter<T: Observable> {
 }
 
 impl<T: Observable> ObservationSubscriber<T> for LegacySubscriberAdapter<T> {
-    fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError> {
+    fn observe(&self, observation: &Observation<T>) -> Result<(), crate::v2::SubscriberError> {
         self.inner
             .observe(observation)
-            .map_err(|failure| crate::SubscriberError::Subscriber {
+            .map_err(|failure| crate::v2::SubscriberError::Subscriber {
                 context: failure.into_context(),
             })
     }
@@ -500,12 +500,12 @@ impl<T: Observable> LogProjector<T> for LegacyLogProjectorAdapter<T> {
     fn project_logs(
         &self,
         observation: &Observation<T>,
-    ) -> Result<Vec<LogEvent>, crate::ProjectionError> {
-        self.inner
-            .project_logs(observation)
-            .map_err(|failure| crate::ProjectionError::Projection {
+    ) -> Result<Vec<LogEvent>, crate::v2::ProjectionError> {
+        self.inner.project_logs(observation).map_err(|failure| {
+            crate::v2::ProjectionError::Projection {
                 context: failure.into_context(),
-            })
+            }
+        })
     }
 }
 
@@ -532,9 +532,9 @@ impl<T: Observable> SpanProjector<T> for LegacySpanProjectorAdapter<T> {
     fn project_spans(
         &self,
         observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, crate::ProjectionError> {
+    ) -> Result<Vec<SpanSignal>, crate::v2::ProjectionError> {
         self.inner.project_spans(observation).map_err(|failure| {
-            crate::ProjectionError::Projection {
+            crate::v2::ProjectionError::Projection {
                 context: failure.into_context(),
             }
         })
@@ -564,9 +564,9 @@ impl<T: Observable> MetricProjector<T> for LegacyMetricProjectorAdapter<T> {
     fn project_metrics(
         &self,
         observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, crate::ProjectionError> {
+    ) -> Result<Vec<MetricRecord>, crate::v2::ProjectionError> {
         self.inner.project_metrics(observation).map_err(|failure| {
-            crate::ProjectionError::Projection {
+            crate::v2::ProjectionError::Projection {
                 context: failure.into_context(),
             }
         })
@@ -678,7 +678,6 @@ mod tests {
         ProjectionError as LegacyProjectionError, ShutdownError as LegacyShutdownError,
         SubscriberError as LegacySubscriberError,
     };
-    use crate::{IdentityError, ProjectionError, SubscriberError};
     use serde_json::json;
 
     fn remediation() -> Remediation {
@@ -1351,7 +1350,7 @@ mod tests {
     struct LegacyResolver;
 
     impl ProcessIdentityResolver for LegacyResolver {
-        fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
+        fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError> {
             Ok(ProcessIdentity::default())
         }
     }
@@ -1378,12 +1377,18 @@ mod tests {
 
     struct LegacyProjector;
     impl<T: Observable> LogProjector<T> for LegacyProjector {
-        fn project_logs(&self, _: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
+        fn project_logs(
+            &self,
+            _: &Observation<T>,
+        ) -> Result<Vec<LogEvent>, crate::v2::ProjectionError> {
             Ok(Vec::new())
         }
     }
     impl<T: Observable> SpanProjector<T> for LegacyProjector {
-        fn project_spans(&self, _: &Observation<T>) -> Result<Vec<SpanSignal>, ProjectionError> {
+        fn project_spans(
+            &self,
+            _: &Observation<T>,
+        ) -> Result<Vec<SpanSignal>, crate::v2::ProjectionError> {
             Ok(Vec::new())
         }
     }
@@ -1391,7 +1396,7 @@ mod tests {
         fn project_metrics(
             &self,
             _: &Observation<T>,
-        ) -> Result<Vec<MetricRecord>, ProjectionError> {
+        ) -> Result<Vec<MetricRecord>, crate::v2::ProjectionError> {
             Ok(Vec::new())
         }
     }
@@ -1404,7 +1409,7 @@ mod tests {
     }
     struct LegacySubscriber;
     impl<T: Observable> ObservationSubscriber<T> for LegacySubscriber {
-        fn observe(&self, _: &Observation<T>) -> Result<(), SubscriberError> {
+        fn observe(&self, _: &Observation<T>) -> Result<(), crate::v2::SubscriberError> {
             Ok(())
         }
     }

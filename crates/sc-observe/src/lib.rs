@@ -40,10 +40,11 @@ use sc_observability_types::v2::{
     FlushError as CanonicalFlushError, InitError as CanonicalInitError,
     ShutdownError as CanonicalShutdownError,
 };
+use sc_observability_types::v2::{FlushError, InitError, ShutdownError, SubscriberError};
 use sc_observability_types::{
-    DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError, ObservabilityHealthProvider,
-    Observable, Observation, ProjectionRegistration, Remediation, ServiceName, ShutdownError,
-    SubscriberError, SubscriberRegistration, TelemetryHealthState, ToolName,
+    DiagnosticSummary, EnvPrefix, ErrorContext, ObservabilityHealthProvider, Observable,
+    Observation, ProjectionRegistration, Remediation, ServiceName, SubscriberRegistration,
+    TelemetryHealthState, ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -679,12 +680,12 @@ mod tests {
     use sc_observability_types::typed::{
         SubscriberFailure, TypedObservationSubscriber, legacy_subscriber,
     };
+    use sc_observability_types::v2::{ProjectionError, SubscriberError};
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-        MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
-        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
-        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
-        TraceId,
+        MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity, SpanId,
+        SpanProjector, SpanRecord, SpanSignal, SpanStarted, TargetCategory, TelemetryHealthReport,
+        TelemetryHealthState, Timestamp, TraceContext, TraceId,
     };
     use serde_json::Map;
     use std::sync::mpsc;

@@ -5,7 +5,7 @@
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 use sc_observability_types::typed::InitFailure;
-use sc_observability_types::{ErrorContext, InitError, Remediation};
+use sc_observability_types::{ErrorContext, Remediation, v2::InitError};
 
 use crate::typed::{TypedLogSink, legacy_sink};
 use crate::{
@@ -154,9 +154,7 @@ impl LoggerBuilder {
     }
 
     /// Finalizes construction and returns the logger with weak level ownership.
-    pub fn build_with_level_owner(
-        self,
-    ) -> Result<(Logger<Running>, LevelOwner), sc_observability_types::InitError> {
+    pub fn build_with_level_owner(self) -> Result<(Logger<Running>, LevelOwner), InitError> {
         let (logger, control) = self.build_inner()?;
         Ok((logger, LevelOwner::new(&control)))
     }

@@ -668,6 +668,7 @@ mod legacy_compatibility {
         legacy_span_projector, legacy_subscriber, typed_identity, typed_log_projector,
         typed_metric_projector, typed_span_projector, typed_subscriber,
     };
+    use sc_observability_types::v2::{IdentityError, ProjectionError, SubscriberError};
     use sc_observability_types::*;
     use serde_json::Map;
 

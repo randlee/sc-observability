@@ -162,7 +162,7 @@ static FAIL_NEXT_COORDINATOR_RESERVATION: AtomicBool = AtomicBool::new(false);
 type ShutdownCommand = Box<dyn FnOnce() + Send + 'static>;
 
 enum ShutdownWorkerOutcome {
-    Completed(Result<(), sc_observability_types::FlushError>),
+    Completed(Result<(), sc_observability_types::v2::FlushError>),
     Panicked,
 }
 

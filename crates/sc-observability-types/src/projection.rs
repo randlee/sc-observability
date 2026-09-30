@@ -1,13 +1,7 @@
-#![allow(
-    deprecated,
-    reason = "subscriber and projector registrations retain their published legacy trait signatures"
-)]
-
 use std::sync::Arc;
 
-use crate::{
-    LogEvent, MetricRecord, Observable, Observation, ProjectionError, SpanSignal, SubscriberError,
-};
+use crate::v2::{ProjectionError, SubscriberError};
+use crate::{LogEvent, MetricRecord, Observable, Observation, SpanSignal};
 
 type SubscriberRegistrationParts<T> = (
     Arc<dyn ObservationSubscriber<T>>,
