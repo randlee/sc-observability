@@ -1,5 +1,7 @@
 //! The process-global `log` facade and the non-owning host attachment bridge.
 
+#[cfg(test)]
+use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::time::{Duration, Instant};
@@ -48,6 +50,25 @@ static DRAINED: Condvar = Condvar::new();
 #[cfg(test)]
 thread_local! {
     static ATTACHMENT_ENTRIES: Cell<usize> = const { Cell::new(0) };
+}
+
+// Test-only control of the real attachment flush helper spawn point. The
+// released attachment path has no hook and keeps its normal `Builder::spawn`.
+#[cfg(test)]
+static NEXT_ATTACHMENT_HELPER_FAULT: AtomicU8 = AtomicU8::new(0);
+#[cfg(test)]
+const ATTACHMENT_HELPER_SPAWN_FAILURE: u8 = 1;
+#[cfg(test)]
+const ATTACHMENT_HELPER_PANIC: u8 = 2;
+
+#[cfg(test)]
+fn fail_next_attachment_helper_spawn() {
+    NEXT_ATTACHMENT_HELPER_FAULT.store(ATTACHMENT_HELPER_SPAWN_FAILURE, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+fn panic_next_attachment_helper() {
+    NEXT_ATTACHMENT_HELPER_FAULT.store(ATTACHMENT_HELPER_PANIC, Ordering::SeqCst);
 }
 
 /// Open host policy evaluated after bridge event assembly and before logger admission.
@@ -559,27 +580,46 @@ pub(crate) fn flush_attached(
 
 fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), CoreFlushError> {
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    std::thread::Builder::new()
-        .name("sc-observability-log-attachment-flush".to_owned())
-        .spawn(move || {
-            // Keep the attachment call alive until the helper exits.  A timed-out
-            // caller must not be able to detach while this helper still owns the
-            // attachment's logger reference.
-            let result = call.state.logger.flush();
-            drop(call);
-            let _ = sender.send(result);
-        })
-        .map_err(|source| {
-            crate::error::flush_drain_as(
-                crate::error::operation_context_with_source(
-                    crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
-                    source.to_string(),
-                    Remediation::not_recoverable("inspect thread resource availability"),
-                    source,
-                ),
-                FailureClassification::Unavailable,
-            )
-        })?;
+    #[cfg(test)]
+    let fault = NEXT_ATTACHMENT_HELPER_FAULT.swap(0, Ordering::SeqCst);
+    let spawn = move || {
+        std::thread::Builder::new()
+            .name("sc-observability-log-attachment-flush".to_owned())
+            .spawn(move || {
+                // Keep the attachment call alive until the helper exits.  A timed-out
+                // caller must not be able to detach while this helper still owns the
+                // attachment's logger reference.
+                #[cfg(test)]
+                assert!(
+                    fault != ATTACHMENT_HELPER_PANIC,
+                    "injected attachment helper loss"
+                );
+                let result = call.state.logger.flush();
+                drop(call);
+                let _ = sender.send(result);
+            })
+    };
+    #[cfg(test)]
+    let spawn_result = if fault == ATTACHMENT_HELPER_SPAWN_FAILURE {
+        Err(std::io::Error::other(
+            "injected attachment helper spawn failure",
+        ))
+    } else {
+        spawn()
+    };
+    #[cfg(not(test))]
+    let spawn_result = spawn();
+    spawn_result.map_err(|source| {
+        crate::error::flush_drain_as(
+            crate::error::operation_context_with_source(
+                crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
+                source.to_string(),
+                Remediation::not_recoverable("inspect thread resource availability"),
+                source,
+            ),
+            FailureClassification::Unavailable,
+        )
+    })?;
     match receiver.recv_timeout(timeout) {
         Ok(Ok(())) => Ok(()),
         Ok(Err(source)) => Err(crate::error::flush_drain(source.into_context())),
@@ -709,14 +749,21 @@ mod tests {
     /// Runs `test_name` alone in a child process: these tests own the global
     /// attachment registry, installed slot and drop counters.
     fn run_isolated(child_env: &str, test_name: &str) {
-        let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
+        let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
             .args(["--exact", test_name, "--nocapture", "--test-threads=1"])
             .env(child_env, "1")
-            .status()
+            .output()
             .expect("spawn isolated bridge regression");
         assert!(
-            status.success(),
-            "isolated bridge regression failed: {status}"
+            output.status.success(),
+            "isolated bridge regression failed: {output:?}"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout)
+                .matches("running 1 test")
+                .count(),
+            1,
+            "isolated bridge regression must execute exactly one test: {output:?}"
         );
     }
 
@@ -880,5 +927,55 @@ mod tests {
         guard
             .shutdown(Duration::from_secs(5))
             .expect("installed logger shuts down");
+    }
+
+    /// The attachment bridge must retain native helper spawn/loss categories.
+    #[test]
+    fn attachment_flush_classifies_real_helper_spawn_and_loss() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_ATTACHMENT_HELPER_CLASSIFICATION_CHILD";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            attachment_flush_classifies_real_helper_spawn_and_loss_in_child();
+            return;
+        }
+        run_isolated(
+            CHILD_ENV,
+            "bridge::tests::attachment_flush_classifies_real_helper_spawn_and_loss",
+        );
+    }
+
+    fn attachment_flush_classifies_real_helper_spawn_and_loss_in_child() {
+        let root = tempfile::tempdir().expect("temporary log root");
+        let (logger, state) = attach("attachment-helper-classification", root.path());
+        let saved = Arc::downgrade(&state);
+
+        fail_next_attachment_helper_spawn();
+        let spawn = flush_attached(&saved, Duration::from_secs(1))
+            .expect_err("injected attachment spawn failure");
+        assert_eq!(
+            spawn.diagnostic().code,
+            crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED
+        );
+        assert_eq!(
+            spawn.failure_classification(),
+            FailureClassification::Unavailable
+        );
+        assert!(
+            std::error::Error::source(&spawn).is_some(),
+            "io source is retained"
+        );
+
+        panic_next_attachment_helper();
+        let lost = flush_attached(&saved, Duration::from_secs(1))
+            .expect_err("injected attachment helper loss");
+        assert_eq!(
+            lost.diagnostic().code,
+            crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST
+        );
+        assert_eq!(
+            lost.failure_classification(),
+            FailureClassification::Internal
+        );
+
+        detach(logger, state);
     }
 }

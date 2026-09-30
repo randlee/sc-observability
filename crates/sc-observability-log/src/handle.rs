@@ -89,6 +89,42 @@ thread_local! {
     static NATIVE_FLUSH_CALLS: Cell<u64> = const { Cell::new(0) };
 }
 
+// A bounded, crate-private fault seam for the actual helper spawn point. It
+// is compiled only for unit tests; non-test execution always calls
+// `Builder::spawn` unchanged.
+#[cfg(test)]
+static NEXT_BOUNDED_HELPER_FAULT: AtomicU8 = AtomicU8::new(0);
+#[cfg(test)]
+static NEXT_BOUNDED_HELPER_BLOCK: OnceLock<Mutex<Option<mpsc::Receiver<()>>>> = OnceLock::new();
+
+#[cfg(test)]
+const BOUNDED_HELPER_SPAWN_FAILURE: u8 = 1;
+#[cfg(test)]
+const BOUNDED_HELPER_PANIC: u8 = 2;
+#[cfg(test)]
+const BOUNDED_HELPER_BLOCK: u8 = 3;
+
+#[cfg(test)]
+fn fail_next_bounded_helper_spawn() {
+    NEXT_BOUNDED_HELPER_FAULT.store(BOUNDED_HELPER_SPAWN_FAILURE, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+fn panic_next_bounded_helper() {
+    NEXT_BOUNDED_HELPER_FAULT.store(BOUNDED_HELPER_PANIC, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+fn block_next_bounded_helper() -> mpsc::SyncSender<()> {
+    let (release, blocked) = mpsc::sync_channel(0);
+    *NEXT_BOUNDED_HELPER_BLOCK
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(blocked);
+    NEXT_BOUNDED_HELPER_FAULT.store(BOUNDED_HELPER_BLOCK, Ordering::SeqCst);
+    release
+}
+
 #[cfg(test)]
 pub(crate) fn reset_native_flush_calls() {
     NATIVE_FLUSH_CALLS.with(|calls| calls.set(0));
@@ -756,17 +792,47 @@ fn run_bounded_in<T: Send + 'static>(
         state: Arc::clone(&state),
         detached,
     };
-    std::thread::Builder::new()
-        .name("sc-observability-log-helper".to_owned())
-        .spawn(move || {
-            // Keep `exit` alive until the result is in the channel.  A caller
-            // that loses the timeout race can then observe a completed helper
-            // with `try_recv`, never with an unbounded second receive.
-            let _exit = exit;
-            let value = work();
-            let _ = tx.send(value);
-        })
-        .map_err(|source| BoundedError::Spawn { source })?;
+    #[cfg(test)]
+    let fault = NEXT_BOUNDED_HELPER_FAULT.swap(0, Ordering::SeqCst);
+    let spawn = move || {
+        std::thread::Builder::new()
+            .name("sc-observability-log-helper".to_owned())
+            .spawn(move || {
+                // Keep `exit` alive until the result is in the channel.  A caller
+                // that loses the timeout race can then observe a completed helper
+                // with `try_recv`, never with an unbounded second receive.
+                let _exit = exit;
+                #[cfg(test)]
+                assert!(
+                    fault != BOUNDED_HELPER_PANIC,
+                    "injected bounded helper loss"
+                );
+                #[cfg(test)]
+                if fault == BOUNDED_HELPER_BLOCK {
+                    NEXT_BOUNDED_HELPER_BLOCK
+                        .get_or_init(|| Mutex::new(None))
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .take()
+                        .expect("bounded helper block receiver")
+                        .recv()
+                        .expect("bounded helper block release");
+                }
+                let value = work();
+                let _ = tx.send(value);
+            })
+    };
+    #[cfg(test)]
+    let spawn_result = if fault == BOUNDED_HELPER_SPAWN_FAILURE {
+        Err(std::io::Error::other(
+            "injected bounded helper spawn failure",
+        ))
+    } else {
+        spawn()
+    };
+    #[cfg(not(test))]
+    let spawn_result = spawn();
+    spawn_result.map_err(|source| BoundedError::Spawn { source })?;
     match rx.recv_timeout(timeout) {
         Ok(value) => Ok(value),
         Err(RecvTimeoutError::Disconnected) => Err(BoundedError::WorkerLost),
@@ -1118,6 +1184,132 @@ mod tests {
             0,
             "facade flush must not invoke the native flush boundary"
         );
+    }
+
+    /// The real native flush producer owns helper spawn/loss classification.
+    /// Run alone because it installs the process-global slot.
+    #[test]
+    fn native_flush_classifies_real_helper_spawn_and_loss() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_NATIVE_HELPER_CLASSIFICATION_CHILD";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            native_flush_classifies_real_helper_spawn_and_loss_in_child();
+            return;
+        }
+        let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "--exact",
+                "handle::tests::native_flush_classifies_real_helper_spawn_and_loss",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD_ENV, "1")
+            .output()
+            .expect("spawn isolated native helper classification regression");
+        assert!(
+            output.status.success(),
+            "isolated native helper regression failed: {output:?}"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout)
+                .matches("running 1 test")
+                .count(),
+            1,
+            "isolated native helper regression must execute exactly one test: {output:?}"
+        );
+    }
+
+    fn native_flush_classifies_real_helper_spawn_and_loss_in_child() {
+        let root = tempfile::tempdir().expect("temporary log root");
+        let service = sc_observability_types::ServiceName::new("native-helper-classification")
+            .expect("service name");
+        let logger =
+            sc_observability::v2::Logger::new(sc_observability::v2::LoggerConfig::default_for(
+                service.clone(),
+                root.path().to_path_buf(),
+            ))
+            .expect("host logger");
+        let installed = Arc::new(Installed {
+            logger: Arc::new(logger),
+            service,
+            identity: sc_observability_types::ProcessIdentity::default(),
+            options: crate::BridgeOptions {
+                default_action: sc_observability_types::ActionName::new("log.record")
+                    .expect("action name"),
+                parse_bracket_action: false,
+            },
+        });
+        *SLOT.write().unwrap_or_else(PoisonError::into_inner) = Some(Arc::clone(&installed));
+        set_lifecycle(BridgeLifecycle::Running);
+
+        fail_next_bounded_helper_spawn();
+        let spawn = flush_installed(Duration::from_secs(1)).expect_err("injected spawn failure");
+        assert_eq!(
+            spawn.diagnostic().code,
+            crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED
+        );
+        assert_eq!(
+            spawn.failure_classification(),
+            FailureClassification::Unavailable
+        );
+        assert!(
+            std::error::Error::source(&spawn).is_some(),
+            "io source is retained"
+        );
+
+        panic_next_bounded_helper();
+        let lost = flush_installed(Duration::from_secs(1)).expect_err("injected helper loss");
+        assert_eq!(
+            lost.diagnostic().code,
+            crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST
+        );
+        assert_eq!(
+            lost.failure_classification(),
+            FailureClassification::Internal
+        );
+
+        let release = block_next_bounded_helper();
+        let timed_out = flush_installed(Duration::from_millis(10)).expect_err("blocked helper");
+        assert_eq!(
+            timed_out.diagnostic().code,
+            crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT
+        );
+        assert_eq!(
+            timed_out.failure_classification(),
+            FailureClassification::timeout("flush")
+        );
+        let in_progress = flush_installed(Duration::from_secs(1)).expect_err("one flight only");
+        assert_eq!(
+            in_progress.diagnostic().code,
+            crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
+        );
+        assert_eq!(
+            in_progress.failure_classification(),
+            FailureClassification::QueueFull
+        );
+        release.send(()).expect("release blocked helper");
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while FLUSH_IN_FLIGHT.load(Ordering::SeqCst) {
+            assert!(
+                Instant::now() < deadline,
+                "blocked helper did not release flight"
+            );
+            std::thread::yield_now();
+        }
+
+        set_lifecycle(BridgeLifecycle::Stopped);
+        let stopped = flush_installed(Duration::from_secs(1)).expect_err("stopped lifecycle");
+        assert_eq!(
+            stopped.diagnostic().code,
+            crate::error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING
+        );
+        assert_eq!(
+            stopped.failure_classification(),
+            FailureClassification::Closed
+        );
+
+        let _ = SLOT.write().unwrap_or_else(PoisonError::into_inner).take();
+        set_lifecycle(BridgeLifecycle::Stopped);
+        drop(installed);
     }
 
     struct ReleaseOnDrop(Option<mpsc::SyncSender<()>>);

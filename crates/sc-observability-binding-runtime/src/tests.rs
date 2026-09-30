@@ -1213,28 +1213,54 @@ fn bridge_canonical_v2() {
     drop(root);
 }
 fn native_diagnostic_fidelity() {
-    let diagnostic = native::OperationDiagnostic {
-        code: native::ErrorCode::new_static("SC_NATIVE_FIXTURE"),
-        message: "exact native message".into(),
-        remediation: native::Remediation::recoverable("first", ["second"]),
-        at: native::Timestamp::UNIX_EPOCH,
-    };
-    let error = native::v2::FlushError::classified_drain(
-        Box::new(native::ErrorContext::new(
-            diagnostic.code.clone(),
-            diagnostic.message.clone(),
-            diagnostic.remediation.clone(),
-        )),
-        native::FailureClassification::Internal,
-    );
-    let failure = crate::conversion::bridge_flush(&error);
-    assert!(matches!(failure, Failure::Internal { .. }));
-    assert_eq!(failure.diagnostic().code, diagnostic.code.as_str());
-    assert_eq!(failure.diagnostic().message, diagnostic.message);
-    assert_eq!(
-        failure.diagnostic().remediation,
-        diagnostic.remediation.into()
-    );
+    // These are transparent cross-crate fixtures. Real producer coverage for
+    // these values lives in the log crate; this table proves both DTO and the
+    // existing runtime conversion project the same native-owned category.
+    for (code, classification, expected_kind) in [
+        (
+            "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED",
+            native::FailureClassification::Unavailable,
+            "unavailable",
+        ),
+        (
+            "SC_OBSERVABILITY_LOG_HELPER_LOST",
+            native::FailureClassification::Internal,
+            "internal",
+        ),
+    ] {
+        let diagnostic = native::OperationDiagnostic {
+            code: native::ErrorCode::new_static(code),
+            message: format!("exact native message for {code}"),
+            remediation: native::Remediation::recoverable("first", ["second"]),
+            at: native::Timestamp::UNIX_EPOCH,
+        };
+        let error = native::v2::FlushError::classified_drain(
+            Box::new(native::ErrorContext::new(
+                diagnostic.code.clone(),
+                diagnostic.message.clone(),
+                diagnostic.remediation.clone(),
+            )),
+            classification,
+        );
+        let canonical = dto::CanonicalFailureDto::try_from(&error).expect("DTO projection");
+        let runtime = crate::conversion::bridge_flush(&error);
+        assert_eq!(
+            serde_json::to_value(&canonical).expect("DTO serialization")["kind"],
+            expected_kind,
+            "canonical DTO kind for {code}"
+        );
+        assert_eq!(
+            serde_json::to_value(&runtime).expect("runtime serialization")["kind"],
+            expected_kind,
+            "runtime conversion kind for {code}"
+        );
+        assert_eq!(runtime.diagnostic().code, diagnostic.code.as_str());
+        assert_eq!(runtime.diagnostic().message, diagnostic.message);
+        assert_eq!(
+            runtime.diagnostic().remediation,
+            diagnostic.remediation.into()
+        );
+    }
 }
 
 fn d15_callback_fixture() {
