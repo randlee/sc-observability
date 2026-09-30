@@ -33,8 +33,8 @@ mod legacy_http_json;
 #[cfg(feature = "otlp-sdk")]
 mod sdk;
 
-mod constants;
-mod error_codes;
+pub mod constants;
+pub mod error_codes;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
