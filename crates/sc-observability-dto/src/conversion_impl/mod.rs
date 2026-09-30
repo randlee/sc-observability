@@ -20,6 +20,9 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
+const UNREGISTERED_CODE_REMEDIATION: &str =
+    "Inspect the diagnostic code and follow the emitting component's recovery guidance";
+
 /// Host-selected values that cannot be supplied through an input DTO.
 #[derive(Debug, Clone)]
 pub struct EventStamp {
@@ -31,6 +34,9 @@ pub struct EventStamp {
     pub identity: core::ProcessIdentity,
 }
 /// Constructs a boundary diagnostic using the sole binding-owned registry.
+///
+/// Native producers may retain codes outside that registry. Those diagnostics
+/// receive an explicit recovery step rather than an empty recoverable payload.
 pub fn boundary_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic {
     let entry = error_codes::REGISTRY
         .iter()
@@ -42,7 +48,7 @@ pub fn boundary_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic
         remediation: RemediationDto::Recoverable {
             steps: entry
                 .map(|entry| vec![entry.remediation.into()])
-                .unwrap_or_default(),
+                .unwrap_or_else(|| vec![UNREGISTERED_CODE_REMEDIATION.into()]),
         },
     }
 }
