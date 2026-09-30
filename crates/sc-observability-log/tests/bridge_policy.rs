@@ -14,7 +14,7 @@ use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegis
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
     BridgeOptions, EventLevel, LoggerConfig, PolicyRejection, ServiceName, TargetCategory,
-    attach_logger,
+    attach_logger, instrument,
 };
 use sc_observability_types::LogEvent;
 use serde_json::json;
@@ -34,6 +34,14 @@ struct PanicPolicy;
 impl BridgeEventPolicy for PanicPolicy {
     fn decide(&self, _: &LogEvent) -> BridgeEventDecision {
         panic!("policy panic fixture")
+    }
+}
+
+struct Admit;
+
+impl BridgeEventPolicy for Admit {
+    fn decide(&self, _: &LogEvent) -> BridgeEventDecision {
+        BridgeEventDecision::Admit
     }
 }
 
@@ -93,6 +101,9 @@ fn event() -> BridgeEvent {
         trace: None,
     }
 }
+
+#[instrument(name = "policy.attached", skip_all)]
+fn instrumented_attachment_fixture() {}
 
 fn attach_with(
     policy: Arc<dyn BridgeEventPolicy>,
@@ -163,15 +174,44 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
 
     let (_root, mut attachment, host, events) = attach_with(Arc::new(PanicPolicy));
     let control = attachment.control();
+    let before = control
+        .dropped_events()
+        .get(sc_observability_log::DropCause::LoggerPanicked);
     assert!(matches!(
         control.try_log(event()),
         Err(sc_observability_log::v2::EmitError::Panicked)
     ));
+    let after = control
+        .dropped_events()
+        .get(sc_observability_log::DropCause::LoggerPanicked);
+    assert_eq!(after, before + 1);
     assert!(events.lock().expect("recording lock").is_empty());
     attachment.detach(Duration::from_secs(2)).expect("detach");
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases attachment logger"));
     let _ = host.shutdown();
+}
+
+#[test]
+fn instrumented_completion_is_routed_through_attachment() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    let (_root, mut attachment, host, events) = attach_with(Arc::new(Admit));
+    let control = attachment.control();
+
+    instrumented_attachment_fixture();
+    control
+        .flush(Duration::from_secs(2))
+        .expect("flush instrumented event");
+
+    let events = events.lock().expect("recording lock");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].action.as_str(), "policy.attached");
+    drop(events);
+
+    attachment.detach(Duration::from_secs(2)).expect("detach");
+    Arc::try_unwrap(host)
+        .unwrap_or_else(|_| panic!("detach releases attachment logger"))
+        .shutdown();
 }
 
 #[test]
