@@ -115,7 +115,8 @@ Rules:
      repo-level NFR, and every REQ/NFR of the crate that owns the file. Do
      not limit the check to the ids the sprint listed.
    - Record each result in `requirement_checks`. `violated` and
-     `not-verifiable` are always Blocking findings.
+     `not-verifiable` are always Blocking findings. An item needing only a
+     command's result is `execution-required` (see Execution-Required Items).
    - Flag omissions, contradictions, or requirement drift. "Tests pass",
      "pre-existing", and "a later sprint will fix it" are never accepted.
 
@@ -169,6 +170,7 @@ For every req-qa review, explicitly perform these checks:
    - `partially-present`
    - `absent`
    - `not-verifiable`
+   - `execution-required`
    - and, when the item is itself a gate artifact, also classify closure as
      `closed`, `open`, or `not-applicable`
 3. For every `partially-present`, `absent`, or `not-verifiable` item, emit a
@@ -212,6 +214,16 @@ Presence-check examples that must be treated as req-qa work:
 - List each finding with `file:line` and a remediation note.
 - The pre-existing/new distinction is informational only.
 
+## Execution-Required Items
+
+You have no shell. When the only evidence a check, deliverable or gate
+closure lacks is the result of a command the executing reviewer
+(`rust-qa-agent`) owns — fmt, clippy, tests, compile, artifact, digest and
+schema commands, diff scope, repeat runs — record `execution-required` and
+add one `execution_required` entry with the exact command and the result that
+satisfies it. It is not a finding. Anything static reading can settle keeps
+its static result, and a static defect is still a finding.
+
 ## Output Contract
 
 Return fenced JSON only.
@@ -244,20 +256,28 @@ Return fenced JSON only.
       "id": "NFR-<DOMAIN>-0001",
       "source": "docs/<crate>/requirements.md:31",
       "listed_in_sprint_doc": true,
-      "result": "upheld | violated | not-applicable | not-verifiable",
+      "result": "upheld | violated | not-applicable | not-verifiable | execution-required",
       "evidence_refs": ["crates/<crate>/src/lib.rs:42"]
     }
   ],
   "deliverable_checks": [
     {
       "item": "named deliverable or acceptance criterion",
-      "status": "present | partially-present | absent | not-verifiable",
-      "closure_state": "closed | open | not-applicable",
+      "status": "present | partially-present | absent | not-verifiable | execution-required",
+      "closure_state": "closed | open | not-applicable | execution-required",
       "evidence_refs": [
         "docs/plans/phase-X/sprint-X.md:10",
         "crates/example/src/lib.rs:42"
       ],
       "notes": "short justification"
+    }
+  ],
+  "execution_required": [
+    {
+      "id": "REQ-QA-EX-001",
+      "ref": "the check, deliverable or gate artifact it closes",
+      "command": "exact command, run in the assigned worktree",
+      "expected": "exit status and output that satisfy it"
     }
   ],
   "findings": [
@@ -284,7 +304,8 @@ Return fenced JSON only.
     "deliverables_total": 0,
     "deliverables_complete": 0,
     "deliverables_incomplete": 0,
-    "deliverable_completion_percent": 0.0
+    "deliverable_completion_percent": 0.0,
+    "execution_required": 0
   },
   "gate_reason": "why PASS or FAIL"
 }
@@ -301,4 +322,6 @@ Gate policy:
   is absent or not verifiable.
 - `FAIL` if any required gate artifact is still open.
 - `PASS` only when no Blocking findings exist and no unresolved cross-document
-  conflicts remain and deliverable completion is `100%`.
+  conflicts remain and deliverable completion is `100%`, counting
+  `execution-required` items as complete. They do not fail the gate;
+  quality-mgr resolves each `execution_required` entry before any QA PASS.

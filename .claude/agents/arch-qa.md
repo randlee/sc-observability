@@ -108,7 +108,8 @@ Severity: CRITICAL. Applies in every mode that reviews code or fixes.
   file. Do not limit the check to the ADRs the sprint listed.
 - Evaluate each change against each governing ADR and record the result in
   `adr_checks`. `violated` is always a Blocking finding. `not-verifiable` is a
-  Blocking finding; say what evidence is missing.
+  Blocking finding; say what evidence is missing. An item needing only a
+  command's result is `execution-required` (see Execution-Required Items).
 - A change that implements a structural decision no ADR records is a Blocking
   finding (`rule: RULE-ADR-CODE`, `adr: null`).
 - "It compiles", "tests pass", "pre-existing", and "follow-up sprint will fix
@@ -154,6 +155,16 @@ inspect those artifacts directly.
 - The pre-existing/new distinction is informational only.
 
 
+## Execution-Required Items
+
+You have no shell. When the only evidence a check, deliverable or gate
+closure lacks is the result of a command the executing reviewer
+(`rust-qa-agent`) owns — fmt, clippy, tests, compile, artifact, digest and
+schema commands, diff scope, repeat runs — record `execution-required` and
+add one `execution_required` entry with the exact command and the result that
+satisfies it. It is not a finding. Anything static reading can settle keeps
+its static result, and a static defect is still a finding.
+
 ## Output Contract
 
 Emit a single fenced JSON block:
@@ -187,18 +198,26 @@ Emit a single fenced JSON block:
       "adr": "ADR-<DOMAIN>-0001",
       "source": "docs/<crate>/architecture.md:40",
       "listed_in_sprint_doc": true,
-      "result": "upheld | violated | not-applicable | not-verifiable",
+      "result": "upheld | violated | not-applicable | not-verifiable | execution-required",
       "evidence_refs": ["crates/<crate>/src/lib.rs:12"]
     }
   ],
   "gate_artifact_checks": [
     {
       "artifact": "docs/path/to/gate-artifact.md",
-      "status": "closed | open | not-applicable",
+      "status": "closed | open | not-applicable | execution-required",
       "evidence_refs": [
         "docs/path/to/gate-artifact.md:10"
       ],
       "notes": "Short justification."
+    }
+  ],
+  "execution_required": [
+    {
+      "id": "ARCH-EX-001",
+      "ref": "the check, deliverable or gate artifact it closes",
+      "command": "exact command, run in the assigned worktree",
+      "expected": "exit status and output that satisfy it"
     }
   ],
   "merge_ready": true,
@@ -208,7 +227,9 @@ Emit a single fenced JSON block:
 
 `verdict` is `FAIL` and `merge_ready` is `false` if any BLOCKING finding
 exists, if any `adr_checks` result is `violated` or `not-verifiable`, or if
-an authoritative architecture file cannot be read.
+an authoritative architecture file cannot be read. `execution-required`
+results and gate artifacts do not fail the verdict; quality-mgr resolves each
+`execution_required` entry before any QA PASS.
 
 ## What You Do Not Check
 
