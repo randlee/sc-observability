@@ -30,9 +30,11 @@ The deprecated 1.4.x compatibility APIs remain available in 1.5.0:
 
 ## Validation baseline
 
-All nine candidate workspace API packages are checked against their published
-1.4.1 packages. `sc-observability-tauri` is a separate workspace with the same
-1.4.1 baseline, but its standalone API/publication qualification remains
-deferred in `release/bindings-artifacts.toml`; it is not included in this
-workspace API-policy count. No breaking API exceptions are accepted for this
-1.x candidate.
+The nine candidate workspace API packages are checked against their published
+1.4.1 packages. The separately published `sc-observability-tauri` crate is
+excluded from this workspace API check; its recorded 1.4.1 baseline is not a
+qualification result. Its standalone API/publication qualification remains
+deferred in `release/bindings-artifacts.toml`. The blocking validator asserts
+that the candidate and exactly approved deferred package sets cover every
+published crate. No breaking API exceptions are accepted for this 1.x
+candidate.

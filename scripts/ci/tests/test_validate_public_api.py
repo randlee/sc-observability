@@ -11,13 +11,27 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from validate_public_api import cli, compatible_diff_problems, main, validate_compatible_policy  # noqa: E402
+from validate_public_api import (  # noqa: E402
+    cli, compatible_diff_problems, main, validate_api_package_roster,
+    validate_compatible_policy,
+)
 from validate_version_literals import (  # noqa: E402
     validate_cargo_lock, validate_inventory_candidate, validate_package_lock,
 )
 
 
 class CompatiblePolicyTests(unittest.TestCase):
+    deferred_tauri = {
+        'package': 'sc-observability-tauri',
+        'baselineVersion': '1.4.1',
+        'reason': (
+            'The Tauri adapter is a separate workspace and remains pending its '
+            'standalone API/publication qualification in '
+            'release/bindings-artifacts.toml; it is not one of this candidate\'s '
+            'nine workspace API packages.'
+        ),
+    }
+
     def policy(self):
         return {
             'schema_version': 1,
@@ -26,6 +40,90 @@ class CompatiblePolicyTests(unittest.TestCase):
                 'baseline_version': '1.4.1', 'kind': 'proc-macro',
             }},
         }
+
+    @classmethod
+    def write_package_roster(cls, root, *, candidate_packages=None, deferred=None,
+                             published_packages=None):
+        candidate_packages = candidate_packages or ['sc-observability-log-macros']
+        deferred = [cls.deferred_tauri.copy()] if deferred is None else deferred
+        published_packages = published_packages or [
+            'sc-observability-log-macros', 'sc-observability-tauri',
+        ]
+        (root / 'release/release-inventory.json').write_text(json.dumps({
+            'qualificationCandidate': {
+                'packages': candidate_packages,
+                'deferredStandalonePackages': deferred,
+            },
+        }))
+        (root / 'release/publish-artifacts.toml').write_text(
+            ''.join(f'[[crates]]\npackage = "{package}"\n' for package in published_packages)
+        )
+
+    def test_package_roster_requires_exact_candidate_and_deferred_coverage(self):
+        valid_inventory = {
+            'qualificationCandidate': {
+                'packages': ['sc-observability-log-macros'],
+                'deferredStandalonePackages': [self.deferred_tauri.copy()],
+            },
+        }
+        valid_artifacts = {'crates': [
+            {'package': 'sc-observability-log-macros'},
+            {'package': 'sc-observability-tauri'},
+        ]}
+        validate_api_package_roster(self.policy(), valid_inventory, valid_artifacts)
+
+        cases = [
+            ('duplicate candidate', {
+                'qualificationCandidate': {
+                    'packages': ['sc-observability-log-macros', 'sc-observability-log-macros'],
+                    'deferredStandalonePackages': [self.deferred_tauri.copy()],
+                },
+            }, valid_artifacts, 'duplicate packages'),
+            ('duplicate deferred package', {
+                'qualificationCandidate': {
+                    'packages': ['sc-observability-log-macros'],
+                    'deferredStandalonePackages': [
+                        self.deferred_tauri.copy(), self.deferred_tauri.copy(),
+                    ],
+                },
+            }, valid_artifacts, 'contains duplicate packages'),
+            ('omitted artifact', valid_inventory, {
+                'crates': valid_artifacts['crates'] + [{'package': 'sc-observability-dto'}],
+            }, r"omitted=\['sc-observability-dto'\]"),
+            ('duplicate artifact', valid_inventory, {
+                'crates': valid_artifacts['crates'] + [{'package': 'sc-observability-tauri'}],
+            }, 'duplicate crate packages'),
+            ('changed exemption metadata', {
+                'qualificationCandidate': {
+                    'packages': ['sc-observability-log-macros'],
+                    'deferredStandalonePackages': [{
+                        **self.deferred_tauri, 'baselineVersion': '1.4.0',
+                    }],
+                },
+            }, valid_artifacts, 'exact approved exemption'),
+            ('missing approved deferral', {
+                'qualificationCandidate': {
+                    'packages': ['sc-observability-log-macros'],
+                    'deferredStandalonePackages': [],
+                },
+            }, valid_artifacts, 'exact approved exemption'),
+        ]
+        for name, inventory, artifacts, error in cases:
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, error):
+                validate_api_package_roster(self.policy(), inventory, artifacts)
+
+        unknown_inventory = {
+            'qualificationCandidate': {
+                'packages': ['sc-observability-log-macros', 'sc-observability-unknown'],
+                'deferredStandalonePackages': [self.deferred_tauri.copy()],
+            },
+        }
+        policy_with_unknown = self.policy()
+        policy_with_unknown['crates']['sc-observability-unknown'] = {
+            'baseline_version': '1.4.1', 'kind': 'lib',
+        }
+        with self.assertRaisesRegex(ValueError, r"unknown=\['sc-observability-unknown'\]"):
+            validate_api_package_roster(policy_with_unknown, unknown_inventory, valid_artifacts)
 
     def diff(self, *, removal='', changed='', addition=''):
         return ('Removed items from the public API\n' + (removal or '(none)') + '\n'
@@ -53,6 +151,7 @@ class CompatiblePolicyTests(unittest.TestCase):
             root = Path(temporary)
             (root / 'release').mkdir()
             manifest_path = root / 'release/public-api-major-breaks.toml'
+            self.write_package_roster(root)
             cases = [
                 ('schema_version = 1\nbaseline_version = "1.4.1"\ncandidate_version = "1.5.0"\nbreaks = []\n', True),
                 ('schema_version = 1\nbaseline_version = "1.4.0"\ncandidate_version = "1.5.0"\nbreaks = []\n', False),
@@ -76,6 +175,7 @@ class CompatiblePolicyTests(unittest.TestCase):
             (root / 'release/public-api-major-breaks.toml').write_text(
                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
                 'candidate_version = "1.5.0"\nbreaks = []\n')
+            self.write_package_roster(root)
             crate = 'sc-observability-log-macros'
             package = {'name': crate, 'version': '1.5.0', 'manifest_path': 'macros/Cargo.toml',
                        'targets': [{'kind': ['proc-macro']}]}
@@ -111,6 +211,7 @@ class CompatiblePolicyTests(unittest.TestCase):
                 (root / 'release').mkdir()
                 (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
                 (root / 'release/public-api-major-breaks.toml').write_text(valid_manifest)
+                self.write_package_roster(root)
                 commands = [
                     CompletedProcess([], 0, json.dumps({'packages': [package]}), ''),
                     CompletedProcess([], 0, 'fixture-head', ''),
@@ -139,6 +240,10 @@ class CompatiblePolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / 'release').mkdir()
+            CompatiblePolicyTests.write_package_roster(
+                root, candidate_packages=[crate],
+                published_packages=[crate, 'sc-observability-tauri'],
+            )
             (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
             (root / 'release/public-api-major-breaks.toml').write_text(valid_manifest)
             commands = [
@@ -164,6 +269,31 @@ class CompatiblePolicyTests(unittest.TestCase):
             self.assertEqual(report['crates'][crate]['exit_code'], 1)
             self.assertEqual(report['crates'][crate]['command'], semver_command)
 
+    def test_blocking_semver_mode_rejects_an_unaccounted_published_crate(self):
+        crate = 'sc-observability-log-macros'
+        package = {'name': crate, 'version': '1.5.0', 'manifest_path': 'macros/Cargo.toml',
+                   'targets': [{'kind': ['proc-macro']}]}
+        policy = self.policy()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'release').mkdir()
+            (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
+            (root / 'release/public-api-major-breaks.toml').write_text(
+                'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                'candidate_version = "1.5.0"\nbreaks = []\n')
+            self.write_package_roster(root, published_packages=[
+                'sc-observability-log-macros', 'sc-observability-tauri', 'sc-observability-dto',
+            ])
+            stderr = io.StringIO()
+            with patch('validate_public_api.ROOT', root), \
+                    patch('validate_public_api.CACHE', root / 'cache'), \
+                    patch('validate_public_api.run', return_value=CompletedProcess(
+                        [], 0, json.dumps({'packages': [package]}), '')), \
+                    patch('sys.argv', ['validate_public_api.py', 'semver']), \
+                    contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(stderr):
+                self.assertEqual(cli(), 3)
+        self.assertIn('omitted=', stderr.getvalue())
 
 class DocsApprovalEvidenceTests(unittest.TestCase):
     def test_changed_api_without_approval_evidence_fails_closed(self):
@@ -183,6 +313,10 @@ class DocsApprovalEvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / 'release').mkdir()
+            CompatiblePolicyTests.write_package_roster(
+                root, candidate_packages=[crate],
+                published_packages=[crate, 'sc-observability-tauri'],
+            )
             (root / 'target/public-api').mkdir(parents=True)
             (root / 'docs/api-approvals').mkdir(parents=True)
             (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
@@ -229,6 +363,10 @@ class DocsApprovalEvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / 'release').mkdir()
+            CompatiblePolicyTests.write_package_roster(
+                root, candidate_packages=[crate],
+                published_packages=[crate, 'sc-observability-tauri'],
+            )
             (root / 'target/public-api').mkdir(parents=True)
             (root / 'docs/api-approvals').mkdir(parents=True)
             (root / 'release/public-api-policy.json').write_text(json.dumps(policy))

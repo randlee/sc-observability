@@ -18,6 +18,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / 'target/public-api'
 
+# This is the sole approved exception to workspace API-policy qualification.
+# Keep the inventory metadata exact so the release gate cannot turn the
+# standalone Tauri deferral into a general exclusion mechanism.
+APPROVED_DEFERRED_STANDALONE_PACKAGES = [
+    {
+        'package': 'sc-observability-tauri',
+        'baselineVersion': '1.4.1',
+        'reason': (
+            'The Tauri adapter is a separate workspace and remains pending its '
+            'standalone API/publication qualification in '
+            'release/bindings-artifacts.toml; it is not one of this candidate\'s '
+            'nine workspace API packages.'
+        ),
+    },
+]
+
 
 def approval_for(crate: str, version: str, directory: Path, api_sha256: str) -> bool:
     for path in directory.glob('*.json'):
@@ -49,11 +65,63 @@ def registry_absent(crate: str) -> bool:
         raise
 
 
+def validate_api_package_roster(policy: dict, inventory: dict, publish_artifacts: dict) -> None:
+    """Require workspace candidates plus the exact approved deferral to cover every published crate."""
+    candidate = inventory.get('qualificationCandidate')
+    if not isinstance(candidate, dict):
+        raise ValueError('release inventory must define qualificationCandidate')
+
+    candidate_names = candidate.get('packages')
+    deferred = candidate.get('deferredStandalonePackages')
+    artifact_crates = publish_artifacts.get('crates')
+    if not isinstance(candidate_names, list) or any(
+            not isinstance(name, str) or not name for name in candidate_names):
+        raise ValueError('qualificationCandidate.packages must be a list of package names')
+    if not isinstance(deferred, list) or any(not isinstance(item, dict) for item in deferred):
+        raise ValueError(
+            'qualificationCandidate.deferredStandalonePackages must be a list of package records'
+        )
+    deferred_names = [item.get('package') for item in deferred]
+    if any(not isinstance(name, str) or not name for name in deferred_names):
+        raise ValueError('deferred standalone API package records must name a package')
+    if not isinstance(artifact_crates, list) or any(not isinstance(item, dict) for item in artifact_crates):
+        raise ValueError('publish-artifacts manifest must define a crates list')
+    published_names = [item.get('package') for item in artifact_crates]
+    if any(not isinstance(name, str) or not name for name in published_names):
+        raise ValueError('every publish-artifacts crate must name a package')
+
+    all_names = candidate_names + deferred_names
+    if len(candidate_names) != len(set(candidate_names)):
+        raise ValueError('qualificationCandidate.packages contains duplicate packages')
+    if len(deferred_names) != len(set(deferred_names)):
+        raise ValueError('qualificationCandidate.deferredStandalonePackages contains duplicate packages')
+    if len(published_names) != len(set(published_names)):
+        raise ValueError('publish-artifacts manifest contains duplicate crate packages')
+    if len(all_names) != len(set(all_names)):
+        raise ValueError('candidate and deferred API package sets overlap')
+    if deferred != APPROVED_DEFERRED_STANDALONE_PACKAGES:
+        raise ValueError('deferred standalone API package metadata differs from the exact approved exemption')
+
+    policy_names = policy.get('crates')
+    if not isinstance(policy_names, dict) or set(policy_names) != set(candidate_names):
+        raise ValueError('public API policy must name exactly the qualification candidate packages')
+    if set(all_names) != set(published_names):
+        missing = sorted(set(published_names) - set(all_names))
+        unknown = sorted(set(all_names) - set(published_names))
+        raise ValueError(
+            'candidate and deferred API package sets must exactly match publish-artifacts crates '
+            f'(omitted={missing}, unknown={unknown})'
+        )
+
+
 def validate_compatible_policy(policy: dict, root: Path | None = None) -> None:
     """Fail closed unless the active candidate is a compatible 1.x release."""
     root = ROOT if root is None else root
     path = root / 'release/public-api-major-breaks.toml'
     manifest = tomllib.loads(path.read_text(encoding='utf-8'))
+    inventory = json.loads((root / 'release/release-inventory.json').read_text(encoding='utf-8'))
+    publish_artifacts = tomllib.loads((root / 'release/publish-artifacts.toml').read_text(encoding='utf-8'))
+    validate_api_package_roster(policy, inventory, publish_artifacts)
     candidate = policy.get('candidate_version', '')
     if (policy.get('schema_version') != 1
             or manifest.get('schema_version') != 1
