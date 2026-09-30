@@ -292,7 +292,7 @@ impl WaitError {
 }
 
 /// Canonical operation errors used by the public bridge API.
-pub use sc_observability_types::{FlushError, InitError, ShutdownError};
+pub use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
 
 /// Build the original operation context carried by the canonical error families.
 pub(crate) fn operation_context(

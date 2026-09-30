@@ -108,7 +108,7 @@ fn logging_only_consumer_observes_facade_event_and_shutdown_health_contracts() {
     let failure = logger
         .log(invalid_event)
         .expect_err("invalid event failure");
-    let sc_observability_types::EventError::Validation { context } = failure else {
+    let sc_observability_types::v2::EventError::Validation { context } = failure else {
         panic!("expected the canonical validation variant");
     };
     assert_eq!(context.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);

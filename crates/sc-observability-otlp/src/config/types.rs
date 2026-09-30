@@ -7,12 +7,8 @@ use super::validation::{
 };
 use crate::constants;
 use sc_observability_types::typed::InitFailure;
-use sc_observability_types::v2::ConfigFailure;
-#[allow(
-    deprecated,
-    reason = "OTLP config retains InitError in its published compatibility signatures"
-)]
-use sc_observability_types::{DurationMs, InitError, ServiceName};
+use sc_observability_types::v2::{ConfigFailure, InitError};
+use sc_observability_types::{DurationMs, ServiceName};
 use serde_json::{Map, Value};
 
 /// Supported OTLP transport protocols.

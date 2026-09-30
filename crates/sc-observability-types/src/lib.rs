@@ -57,12 +57,16 @@ pub use diagnostic::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, RecoverableSteps, Remediation,
 };
 #[doc(inline)]
-pub use errors::ObservationError;
-#[doc(inline)]
-pub use errors_v2::{
-    EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ProjectionError,
-    ShutdownError, SubscriberError, TelemetryError,
+#[allow(
+    deprecated,
+    reason = "the root exports retain released compatibility wrappers during the transition"
+)]
+pub use errors::{
+    EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
+    ProjectionError, ShutdownError, SubscriberError, TelemetryError,
 };
+#[doc(inline)]
+pub use errors_v2::{ConfigFailure, FailureClassification, MetricModelError};
 #[doc(inline)]
 pub use events::{LogEvent, Observable, Observation};
 #[doc(inline)]

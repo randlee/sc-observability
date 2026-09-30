@@ -17,17 +17,12 @@ use std::collections::{HashMap, VecDeque};
 use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::error_codes;
 use sc_observability_types::typed::EventFailure;
-#[allow(
-    deprecated,
-    reason = "span assembly retains its published EventError adapter boundary"
-)]
 use sc_observability_types::{
-    ErrorContext, EventError, Remediation, SpanEnded, SpanEvent, SpanRecord, SpanSignal,
-    SpanStarted,
+    ErrorContext, Remediation, SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted,
 };
 
 use sc_observability_types::v2::{
-    EventError as V2EventError, SpanEnded as V2SpanEnded, SpanEvent as V2SpanEvent,
+    EventError, EventError as V2EventError, SpanEnded as V2SpanEnded, SpanEvent as V2SpanEvent,
     SpanRecord as V2SpanRecord, SpanSignal as V2SpanSignal, SpanStarted as V2SpanStarted,
 };
 
