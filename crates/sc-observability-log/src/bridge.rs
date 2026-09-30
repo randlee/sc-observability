@@ -17,25 +17,28 @@ use sc_observability_types::{
     OperationDiagnostic, ProcessIdentity, Remediation, ServiceName, Timestamp,
 };
 
-const MODE_EMPTY: u8 = 0;
-const MODE_OWNED: u8 = 1;
-const MODE_ATTACHED: u8 = 2;
-const MODE_CLOSING: u8 = 3;
-const MODE_STOPPED: u8 = 4;
-const MODE_DETACHED: u8 = 5;
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AttachmentMode {
+    Empty,
+    Owned,
+    Attached,
+    Closing,
+    Stopped,
+    Detached,
+}
 
 // One authority for attachment lifecycle, slot membership, and entered calls.
 // Never acquire this lock while holding a logger lock or invoking host callbacks.
 // INSTALLED only records permanent facade installation; it is never drain state.
 struct AttachmentRegistry {
-    mode: u8,
+    mode: AttachmentMode,
     state: Option<Arc<AttachmentState>>,
     in_flight: usize,
     abandoned: bool,
 }
 
 static ATTACHMENT: Mutex<AttachmentRegistry> = Mutex::new(AttachmentRegistry {
-    mode: MODE_EMPTY,
+    mode: AttachmentMode::Empty,
     state: None,
     in_flight: 0,
     abandoned: false,
@@ -234,8 +237,8 @@ impl Drop for AttachmentCompletion {
         let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
         registry.in_flight -= 1;
         let retired = if registry.in_flight == 0 {
-            let retired = if registry.mode == MODE_CLOSING && registry.abandoned {
-                registry.mode = MODE_DETACHED;
+            let retired = if registry.mode == AttachmentMode::Closing && registry.abandoned {
+                registry.mode = AttachmentMode::Detached;
                 registry.state.take()
             } else {
                 None
@@ -256,7 +259,7 @@ fn enter_attachment(saved: Option<&Weak<AttachmentState>>) -> Option<AttachmentC
     #[cfg(test)]
     ATTACHMENT_ENTRIES.with(|entries| entries.set(entries.get() + 1));
     let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
-    if registry.mode != MODE_ATTACHED {
+    if registry.mode != AttachmentMode::Attached {
         return None;
     }
     let state = registry.state.as_ref()?;
@@ -346,23 +349,23 @@ pub fn attach_logger(
 ) -> Result<LogAttachment, DetachError> {
     let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
     let mode = registry.mode;
-    if !matches!(mode, MODE_EMPTY | MODE_DETACHED) {
+    if !matches!(mode, AttachmentMode::Empty | AttachmentMode::Detached) {
         return Err(DetachError::foreign_logger_installed());
     }
 
-    let first_facade = if mode == MODE_EMPTY {
+    let first_facade = if mode == AttachmentMode::Empty {
         handle::INSTALLED
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_ok()
     } else {
         false
     };
-    if mode == MODE_EMPTY && !first_facade {
+    if mode == AttachmentMode::Empty && !first_facade {
         return Err(DetachError::foreign_logger_installed());
     }
     if first_facade {
         if log::set_boxed_logger(Box::new(Bridge)).is_err() {
-            registry.mode = MODE_STOPPED;
+            registry.mode = AttachmentMode::Stopped;
             return Err(DetachError::foreign_logger_installed());
         }
         log::set_max_level(log::LevelFilter::Trace);
@@ -380,7 +383,7 @@ pub fn attach_logger(
         last_policy_rejection: Mutex::new(None),
     });
     registry.state = Some(Arc::clone(&state));
-    registry.mode = MODE_ATTACHED;
+    registry.mode = AttachmentMode::Attached;
     registry.abandoned = false;
     Ok(LogAttachment { state: Some(state) })
 }
@@ -391,7 +394,7 @@ fn close_attachment(
     dropping: bool,
 ) -> Result<(), DetachError> {
     let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
-    if registry.mode != MODE_ATTACHED
+    if registry.mode != AttachmentMode::Attached
         || !registry
             .state
             .as_ref()
@@ -399,7 +402,7 @@ fn close_attachment(
     {
         return Err(DetachError::not_installed());
     }
-    registry.mode = MODE_CLOSING;
+    registry.mode = AttachmentMode::Closing;
     // Overflow means no representable deadline: wait until the entered calls
     // drain rather than panic or truncate the caller's requested duration.
     let deadline = Instant::now().checked_add(timeout);
@@ -426,12 +429,12 @@ fn close_attachment(
             // The last call completes the transition after this handle goes away.
             registry.abandoned = true;
         } else {
-            registry.mode = MODE_ATTACHED;
+            registry.mode = AttachmentMode::Attached;
         }
         return Err(DetachError::timeout());
     }
     registry.state.take();
-    registry.mode = MODE_DETACHED;
+    registry.mode = AttachmentMode::Detached;
     Ok(())
 }
 
@@ -482,7 +485,7 @@ pub(crate) fn is_attached() -> bool {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .mode
-        == MODE_ATTACHED
+        == AttachmentMode::Attached
 }
 
 pub(crate) fn submit_parts_if_attached(
@@ -633,13 +636,13 @@ pub(crate) fn mark_owned_running() {
     ATTACHMENT
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .mode = MODE_OWNED;
+        .mode = AttachmentMode::Owned;
 }
 
 pub(crate) fn mark_owned_stopped() {
     let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
-    if registry.mode == MODE_OWNED {
-        registry.mode = MODE_STOPPED;
+    if registry.mode == AttachmentMode::Owned {
+        registry.mode = AttachmentMode::Stopped;
     }
 }
 
@@ -743,7 +746,7 @@ mod tests {
                 registry.state.is_none(),
                 "unit test owns attachment registry"
             );
-            registry.mode = MODE_ATTACHED;
+            registry.mode = AttachmentMode::Attached;
             registry.state = Some(Arc::clone(&state));
             registry.in_flight = 0;
             registry.abandoned = false;
@@ -765,7 +768,7 @@ mod tests {
 
         close_attachment(&state, Duration::from_secs(5), false)
             .expect("all entered calls drain before releasing the host logger");
-        ATTACHMENT.lock().expect("attachment registry").mode = MODE_EMPTY;
+        ATTACHMENT.lock().expect("attachment registry").mode = AttachmentMode::Empty;
         drop(state);
         Arc::try_unwrap(logger)
             .unwrap_or_else(|_| panic!("attachment call releases the host logger"))
