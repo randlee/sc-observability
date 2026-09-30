@@ -18,7 +18,9 @@
     "crates/sc-observability-otlp/src/assembly.rs",
     "crates/sc-observability-otlp/src/config/types.rs"
   ],
-  "compat_root_reexport_exceptions": [],
+  "compat_root_reexport_exceptions": [
+    "crates/sc-observability/src/lib.rs"
+  ],
   "dispositions": {
     "restored_root": "Released root identity is present in the current source.",
     "canonical_routed": "Current production implementation uses the v2 contract; D23 owns legacy facade adaptation.",

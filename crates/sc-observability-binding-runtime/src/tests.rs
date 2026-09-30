@@ -582,10 +582,10 @@ struct HeldSink {
     reason = "test sink preserves the public legacy LogSink trait"
 )]
 impl sc_observability::LogSink for HeldSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
         Ok(())
     }
-    fn flush(&self) -> Result<(), native::v2::LogSinkError> {
+    fn flush(&self) -> Result<(), native::LogSinkError> {
         self.flushes.fetch_add(1, Ordering::SeqCst);
         if self.armed.swap(false, Ordering::SeqCst) {
             self.gate.arrive();
@@ -610,7 +610,7 @@ struct BlockingWriteSink {
     reason = "test sink preserves the public legacy LogSink trait"
 )]
 impl sc_observability::LogSink for BlockingWriteSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
         self.gate.arrive();
         Ok(())
     }
@@ -631,18 +631,16 @@ struct FlushFailSink;
     reason = "test sink preserves the public legacy LogSink trait"
 )]
 impl sc_observability::LogSink for FlushFailSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), native::v2::LogSinkError> {
-        Err(native::v2::LogSinkError::Flush {
-            context: Box::new(native::ErrorContext::new(
-                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                "test sink intentionally fails flush",
-                native::Remediation::recoverable("retry after repairing the sink", ["retry"]),
-            )),
-        })
+    fn flush(&self) -> Result<(), native::LogSinkError> {
+        Err(native::LogSinkError(Box::new(native::ErrorContext::new(
+            sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+            "test sink intentionally fails flush",
+            native::Remediation::recoverable("retry after repairing the sink", ["retry"]),
+        ))))
     }
 
     fn health(&self) -> native::SinkHealth {

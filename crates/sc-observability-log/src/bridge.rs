@@ -500,11 +500,11 @@ pub(crate) fn submit_parts_if_attached(
     if let Err(cause) = policy_allows(state, &event) {
         return Ok(Err(handle::Rejection::drop_cause(&cause)));
     }
-    Ok(match state.logger.try_log_with_outcome(event) {
+    Ok(match state.logger.try_log_with_outcome_canonical(event) {
         Ok(outcome) => Ok(outcome),
         Err(error) => Err(match error {
-            sc_observability::EventError::Validation { .. } => DropCause::InvalidEvent,
-            sc_observability::EventError::Routing { context } => {
+            sc_observability_types::v2::EventError::Validation { .. } => DropCause::InvalidEvent,
+            sc_observability_types::v2::EventError::Routing { context } => {
                 match context.diagnostic().code.as_str() {
                     "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => DropCause::QueueFull,
                     "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => DropCause::ShutdownTimedOut,
@@ -561,7 +561,7 @@ fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), crate::Flus
             // Keep the attachment call alive until the helper exits.  A timed-out
             // caller must not be able to detach while this helper still owns the
             // attachment's logger reference.
-            let result = call.state.logger.flush();
+            let result = call.state.logger.flush_canonical();
             drop(call);
             let _ = sender.send(result);
         })

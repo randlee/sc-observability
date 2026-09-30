@@ -43,7 +43,7 @@ struct RecordingSink {
 
 #[allow(deprecated)]
 impl LogSink for RecordingSink {
-    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         self.events
             .lock()
             .expect("recording lock")
@@ -124,7 +124,7 @@ fn attach_with_config(
     builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
-    let logger = Arc::new(builder.build().expect("host logger"));
+    let logger = Arc::new(builder.build_canonical().expect("host logger"));
     // Keep the host Arc in the attachment fixture; successful detach proves
     // that the attachment itself released its Arc in the lifecycle fixture.
     let options = AttachmentOptions::new(
