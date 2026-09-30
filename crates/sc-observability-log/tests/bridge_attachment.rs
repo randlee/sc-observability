@@ -37,7 +37,7 @@ impl LogSink for RecordingSink {
     fn write(
         &self,
         event: &sc_observability_types::LogEvent,
-    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
+    ) -> Result<(), sc_observability_types::LogSinkError> {
         self.events
             .lock()
             .expect("recording lock")
@@ -117,7 +117,7 @@ fn recording_logger() -> (Arc<sc_observability::Logger>, Arc<Mutex<Vec<LogEvent>
     builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
-    let logger = builder.build().expect("host logger");
+    let logger = builder.build_canonical().expect("host logger");
     (Arc::new(logger), events)
 }
 
@@ -140,11 +140,11 @@ impl LogSink for BlockingFlushSink {
     fn write(
         &self,
         _event: &sc_observability_types::LogEvent,
-    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
+    ) -> Result<(), sc_observability_types::LogSinkError> {
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
         if let Some(entered) = self.entered.lock().expect("entered lock").take() {
             entered.send(()).expect("flush entered receiver");
         }
@@ -179,7 +179,7 @@ fn blocking_logger(
     builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink::new(
         entered, release,
     ))));
-    Arc::new(builder.build().expect("host logger"))
+    Arc::new(builder.build_canonical().expect("host logger"))
 }
 
 fn event() -> BridgeEvent {

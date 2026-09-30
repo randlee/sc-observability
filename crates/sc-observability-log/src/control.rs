@@ -184,7 +184,7 @@ pub(crate) fn submit_event(
     event: sc_observability_types::LogEvent,
 ) -> Result<EmitOutcome, EmitError> {
     logger
-        .try_log_with_outcome(event)
+        .try_log_with_outcome_canonical(event)
         .map_err(|error| core_emit_error(&error))
 }
 
@@ -271,12 +271,12 @@ fn diagnostic_from_context(
     }
 }
 
-pub(crate) fn core_emit_error(error: &sc_observability::EventError) -> EmitError {
+pub(crate) fn core_emit_error(error: &sc_observability_types::v2::EventError) -> EmitError {
     match error {
-        sc_observability::EventError::Validation { context } => EmitError::InvalidEvent {
+        sc_observability_types::v2::EventError::Validation { context } => EmitError::InvalidEvent {
             diagnostic: diagnostic_from_context(context),
         },
-        sc_observability::EventError::Routing { context } => {
+        sc_observability_types::v2::EventError::Routing { context } => {
             let diagnostic = diagnostic_from_context(context);
             match diagnostic.code.as_str() {
                 "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => EmitError::QueueFull { diagnostic },

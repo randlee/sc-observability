@@ -18,7 +18,7 @@ use crate::{
     DropCause, DroppedEvents, FlushError, ShutdownError, ShutdownOutcome, ShutdownReport,
     UnconfirmedShutdown, health,
 };
-use sc_observability::EventError;
+use sc_observability_types::v2::EventError;
 
 /// A rejected submission: every failure of the guarded core maps to exactly one [`DropCause`].
 ///
@@ -176,7 +176,7 @@ fn shutdown_command(
             run_shutdown_work_hook();
             let sole = take_sole(installed);
             let logger = take_sole(sole.logger);
-            let flushed = logger.flush();
+            let flushed = logger.flush_canonical();
             let stopped = logger.shutdown();
             health::store_level_state(stopped.level_state());
             if let Some(report) = health::read_report(&stopped) {
@@ -577,7 +577,7 @@ pub(crate) fn submit_to(
     event.trace = crate::context::current_trace();
     installed
         .logger
-        .try_log_with_outcome(event)
+        .try_log_with_outcome_canonical(event)
         .map_err(|error| match error {
             EventError::Validation { .. } => DropCause::InvalidEvent,
             EventError::Routing { context } => match context.diagnostic().code.as_str() {
@@ -926,7 +926,7 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
     let flush = move || {
         // Released when the flush returns or unwinds, before the result is sent.
         let _flight = flight;
-        installed.logger.flush()
+        installed.logger.flush_canonical()
     };
     match run_bounded(timeout, flush) {
         Ok(Ok(())) => Ok(()),

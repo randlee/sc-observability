@@ -453,13 +453,14 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
         }
     };
     let (service, enable_file_sink) = (config.service_name.clone(), config.enable_file_sink);
-    let (logger, level_owner) = match sc_observability::Logger::new_with_level_owner(config) {
-        Ok(logger) => logger,
-        Err(source) => {
-            INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
-            return Err(source);
-        }
-    };
+    let (logger, level_owner) =
+        match sc_observability::Logger::new_with_level_owner_canonical(config) {
+            Ok(logger) => logger,
+            Err(source) => {
+                INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
+                return Err(source);
+            }
+        };
     if let Err(source) = handle::reserve_shutdown_coordinator() {
         INSTALLED.store(false, Ordering::SeqCst);
         return Err(error::init_runtime(
