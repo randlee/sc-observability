@@ -183,6 +183,10 @@ fn read_request(stream: &mut std::net::TcpStream) -> String {
 const RETRY_OBSERVER_SERVER_WATCHDOG: Duration = Duration::from_secs(8);
 const RETRY_OBSERVER_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const RETRY_OBSERVER_NEGATIVE_WINDOW: Duration = Duration::from_millis(100);
+const RETRY_SLEEP_BUDGET_REQUEST_CONSUMPTION: Duration = Duration::from_millis(800);
+const RETRY_SLEEP_BUDGET_SEQUENCE_TIMEOUT_MS: u64 = 1_500;
+const RETRY_SLEEP_BUDGET_MAX_OBSERVED_DELAY: Duration = Duration::from_millis(700);
+const RETRY_SLEEP_BUDGET_BACKOFF_MS: u64 = 2_000;
 
 fn accept_retry_observer_request(listener: &TcpListener, deadline: Instant) -> std::net::TcpStream {
     loop {
@@ -303,6 +307,77 @@ fn join_retry_observer_server(server: thread::JoinHandle<()>) {
         thread::sleep(RETRY_OBSERVER_ACCEPT_POLL_INTERVAL);
     }
     server.join().expect("retry-observer server exits cleanly");
+}
+
+fn retry_sleep_budget_server(
+    listener: TcpListener,
+    send_retryable_response: bool,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        listener
+            .set_nonblocking(true)
+            .expect("make retry-budget listener nonblocking");
+        let deadline = Instant::now() + RETRY_OBSERVER_SERVER_WATCHDOG;
+        let mut first = accept_retry_observer_request(&listener, deadline);
+        set_retry_observer_io_deadlines(&first, deadline);
+        let request = read_retry_observer_request(&mut first, deadline);
+        assert!(request.contains("\"hello\""));
+        thread::sleep(RETRY_SLEEP_BUDGET_REQUEST_CONSUMPTION);
+        if send_retryable_response {
+            first
+                .write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 2\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("write delayed retry response");
+        }
+    })
+}
+
+fn assert_retry_sleep_uses_post_request_remaining(send_retryable_response: bool) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = retry_sleep_budget_server(listener, send_retryable_response);
+    let (delay_tx, delay_rx) = mpsc::channel();
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry_timeout(
+        format!("http://{address}"),
+        retry_policy(
+            1,
+            RETRY_SLEEP_BUDGET_BACKOFF_MS,
+            RETRY_SLEEP_BUDGET_BACKOFF_MS,
+            RETRY_SLEEP_BUDGET_SEQUENCE_TIMEOUT_MS,
+            RETRY_SLEEP_BUDGET_SEQUENCE_TIMEOUT_MS,
+            50,
+        ),
+        1_200,
+        1,
+        Some(delay_tx),
+    )
+    .expect("construct exporter");
+    let export_thread = thread::spawn(move || exporter.send_payload_sync("logs", &logs_payload()));
+    let delay = delay_rx
+        .recv_timeout(RETRY_OBSERVER_SERVER_WATCHDOG)
+        .expect("retry entered the observed backoff");
+    let result = export_thread.join().expect("join export thread");
+    join_retry_observer_server(server);
+
+    assert!(
+        delay <= RETRY_SLEEP_BUDGET_MAX_OBSERVED_DELAY,
+        "retry sleep {delay:?} exceeded the post-request remaining budget"
+    );
+    assert!(matches!(
+        result,
+        Err(sc_observability_types::v2::ExportError::RetryDeadlineExhausted { .. })
+    ));
+}
+
+#[test]
+fn retryable_response_caps_jittered_sleep_by_post_request_remaining() {
+    assert_retry_sleep_uses_post_request_remaining(true);
+}
+
+#[test]
+fn transport_error_caps_jittered_sleep_by_post_request_remaining() {
+    assert_retry_sleep_uses_post_request_remaining(false);
 }
 
 // Adapted from `otlp_http_exporter_loads_custom_ca_bundle` at immutable

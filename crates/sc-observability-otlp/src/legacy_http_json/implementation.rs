@@ -594,8 +594,7 @@ fn send_with_retries(
                     .and_then(|value| parse_retry_after(value, SystemTime::now()))
                     .map(|delay| delay.min(config.retry.retry_after_cap));
                 let delay = server_delay.unwrap_or(fallback.min(config.retry.max_backoff));
-                let delay =
-                    apply_jitter(delay, config.retry.jitter_percent, &mut rng).min(remaining);
+                let delay = retry_wait_delay(delay, config, started, cancel, &mut rng)?;
                 if !wait_for_retry(config, delay, cancel) {
                     return Err(shutdown_cancelled_error());
                 }
@@ -604,11 +603,13 @@ fn send_with_retries(
                 if attempt >= config.retry.max_retries {
                     return Err(retry_attempts_exhausted_with_source(error));
                 }
-                let delay = apply_jitter(
-                    fallback.min(config.retry.max_backoff).min(remaining),
-                    config.retry.jitter_percent,
+                let delay = retry_wait_delay(
+                    fallback.min(config.retry.max_backoff),
+                    config,
+                    started,
+                    cancel,
                     &mut rng,
-                );
+                )?;
                 if !wait_for_retry(config, delay, cancel) {
                     return Err(shutdown_cancelled_error());
                 }
@@ -617,6 +618,26 @@ fn send_with_retries(
         attempt = attempt.saturating_add(1);
         fallback = fallback.saturating_mul(2).min(config.retry.max_backoff);
     }
+}
+
+fn retry_wait_delay(
+    delay: Duration,
+    config: &LegacyHttpJsonConfig,
+    started: Instant,
+    cancel: &AtomicBool,
+    rng: &mut u64,
+) -> Result<Duration, ExportError> {
+    if cancel.load(Ordering::Acquire) {
+        return Err(shutdown_cancelled_error());
+    }
+    let remaining = config
+        .retry
+        .sequence_timeout
+        .saturating_sub(started.elapsed());
+    if remaining.is_zero() {
+        return Err(retry_deadline_error());
+    }
+    Ok(apply_jitter(delay, config.retry.jitter_percent, rng).min(remaining))
 }
 
 pub(super) fn selected_request_timeout(request_timeout: Duration, remaining: Duration) -> Duration {
