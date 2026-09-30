@@ -2540,15 +2540,21 @@ a more precise row below.
 | `IncompleteSpanDropped` | `OTLP_INCOMPLETE_SPAN_DROPPED` | legacy `ShutdownFailure` compatibility | shutdown drops unmatched span state | emit matching ended signals before shutdown | count only | on a new complete sequence |
 | `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
 
-Core `error_codes.rs` owns `SC_LOG_SINK_REGISTRATION_DUPLICATE`,
-`SC_LOG_SINK_REGISTRATION_INVALID`, `SC_LOG_SINK_REGISTRATION_CLOSED`, and
-the D.1-owned settings constants `SC_LOG_SETTINGS_PREFIX_COLLISION`,
-`SC_LOG_SETTINGS_INVALID_ENVIRONMENT`, `SC_LOG_SETTINGS_UNKNOWN_KEY`,
-`SC_LOG_SETTINGS_INVALID_VALUE`, and `SC_LOG_SETTINGS_RESOLUTION`. `LOG-001`
-through `LOG-005` are requirement IDs and are not diagnostic codes. The bridge
-registry owns `SC_LOG_DETACH_TIMEOUT`,
-`SC_LOG_DETACH_NOT_INSTALLED`, `SC_LOG_FOREIGN_LOGGER_INSTALLED`.
-DTO and routing registry values retain their existing meanings.
+The `SC_LOG_` family is used by three separately owned public registries; it
+does not define one universal prefix owner. Core `error_codes.rs` owns
+`SC_LOG_SINK_REGISTRATION_DUPLICATE`, `SC_LOG_SINK_REGISTRATION_INVALID`,
+`SC_LOG_SINK_REGISTRATION_CLOSED`, and the D.1-owned settings constants
+`SC_LOG_SETTINGS_PREFIX_COLLISION`, `SC_LOG_SETTINGS_INVALID_ENVIRONMENT`,
+`SC_LOG_SETTINGS_UNKNOWN_KEY`, `SC_LOG_SETTINGS_INVALID_VALUE`, and
+`SC_LOG_SETTINGS_RESOLUTION`. The `sc-observability-log` registry owns
+`SC_LOG_DETACH_TIMEOUT`, `SC_LOG_DETACH_NOT_INSTALLED`, and
+`SC_LOG_FOREIGN_LOGGER_INSTALLED`; the `sc-observability-types` registry owns
+the `SC_LOG_QUERY_*` codes. `LOG-001` through `LOG-005` are requirement IDs,
+not diagnostic codes. The existing log-registry uniqueness test checks exact
+string disjointness among the core, log, and types `error_codes::ALL` lists;
+it does not claim workspace-wide uniqueness or cover codes outside those
+enumerated registries. DTO and routing registry values retain their existing
+meanings.
 
 ### Neutral signals
 
