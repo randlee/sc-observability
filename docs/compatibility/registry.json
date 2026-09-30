@@ -781,9 +781,9 @@
       "symbol": "sc_observability::LogError",
       "area": "core",
       "kind": "error",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "v2::EventError",
-      "treatment": "new_adapter",
+      "treatment": "existing_pair",
       "baseline_signature": "#[allow( deprecated, reason = \"LogError is the retained legacy boundary paired with LogFailure\" )] #[derive(Debug, PartialEq, Serialize, Deserialize, Error)] pub enum LogError { #[error(transparent)] /// The event failed validation before queue admission. InvalidEvent(EventError), #[error(\"{0}\")] /// The writer thread is degraded and cannot accept more work reliably. WriterDegraded(#[source] Box<ErrorContext>), #[error(\"{0}\")] /// The logger exceeded the shutdown timeout threshold while draining the writer thread. ShutdownTimedOut(#[source] Box<ErrorContext>), }",
       "canonical_signature": "macro invocation: context_error!( EventError, Validation => crate::error_codes::DIAGNOSTIC_INVALID, Routing => crate::error_codes::DIAGNOSTIC_INVALID )",
       "obligations": [
@@ -792,7 +792,7 @@
         "error mapping: preserve LogError source/context ownership and its released diagnostic/code identity at the root boundary",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "root LogError is the released declaration in compat.rs; compat::legacy_log maps canonical v2::EventError Validation to InvalidEvent and Routing by diagnostic code to the released routing variants",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -803,16 +803,19 @@
         "path": "crates/sc-observability-types/src/errors_v2.rs",
         "symbol": "v2::EventError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/lib.rs"
+      ],
+      "removal_rationale": "compat.rs owns the retained LogError declaration and compat::legacy_log; lib.rs re-exports it with pub use compat::{LogError, TryLogError}. Both are removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability::TryLogError",
       "area": "core",
       "kind": "error",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "v2::EventError",
-      "treatment": "new_adapter",
+      "treatment": "existing_pair",
       "baseline_signature": "#[allow( deprecated, reason = \"TryLogError is the retained legacy boundary paired with TryLogFailure\" )] #[derive(Debug, PartialEq, Serialize, Deserialize, Error)] pub enum TryLogError { #[error(transparent)] /// The event failed validation before queue admission. InvalidEvent(EventError), #[error(\"{0}\")] /// The bounded queue is full and the record was not admitted. QueueFull(#[source] Box<ErrorContext>), #[error(\"{0}\")] /// The writer thread is degraded and cannot accept more work reliably. WriterDegraded(#[source] Box<ErrorContext>), #[error(\"{0}\")] /// The logger exceeded the shutdown timeout threshold while draining the writer thread. ShutdownTimedOut(#[source] Box<ErrorContext>), }",
       "canonical_signature": "macro invocation: context_error!( EventError, Validation => crate::error_codes::DIAGNOSTIC_INVALID, Routing => crate::error_codes::DIAGNOSTIC_INVALID )",
       "obligations": [
@@ -821,7 +824,7 @@
         "error mapping: preserve TryLogError source/context ownership and its released diagnostic/code identity at the root boundary",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "root TryLogError is the released declaration in compat.rs; compat::legacy_try_log maps canonical v2::EventError Validation to InvalidEvent and Routing by diagnostic code to the released routing variants",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -832,8 +835,11 @@
         "path": "crates/sc-observability-types/src/errors_v2.rs",
         "symbol": "v2::EventError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/lib.rs"
+      ],
+      "removal_rationale": "compat.rs owns the retained TryLogError declaration and compat::legacy_try_log; lib.rs re-exports it with pub use compat::{LogError, TryLogError}. Both are removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability::LoggerConfig",
@@ -1008,9 +1014,9 @@
       "symbol": "sc_observability::LogFilter",
       "area": "core",
       "kind": "trait",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "root filter",
-      "treatment": "new_adapter",
+      "treatment": "unchanged_alias",
       "baseline_signature": "pub trait LogFilter: Send + Sync { /// Returns whether the sink should receive the event. fn accepts(&self, event: &LogEvent) -> bool; }",
       "canonical_signature": "pub trait LogFilter: Send + Sync { /// Returns whether the sink should receive the event. fn accepts(&self, event: &LogEvent) -> bool; }",
       "obligations": [
@@ -1018,7 +1024,7 @@
         "trait: preserve LogFilter implementability, Send + Sync, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "LogFilter is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -1030,22 +1036,22 @@
         "symbol": "root filter"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LogFilter is the shared released owner in crates/sc-observability/src/lib.rs, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability::LogFollowSession",
       "area": "core",
       "kind": "owner",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "root session",
-      "treatment": "new_adapter",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug)] pub struct LogFollowSession { active_log_path: PathBuf, query: LogQuery, tracked_files: Vec<TrackedFile>, health: Arc<QueryHealthTracker>, shutdown: Option<Arc<AtomicBool>>, }",
       "canonical_signature": "#[derive(Debug)] pub struct LogFollowSession { active_log_path: PathBuf, query: LogQuery, tracked_files: Vec<TrackedFile>, health: Arc<QueryHealthTracker>, shutdown: Option<Arc<AtomicBool>>, }",
       "obligations": [
         "signature identity: preserve LogFollowSession declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "LogFollowSession is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/follow.rs",
@@ -1057,22 +1063,22 @@
         "symbol": "root session"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LogFollowSession is the shared released owner in crates/sc-observability/src/follow.rs, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability::JsonlLogReader",
       "area": "core",
       "kind": "owner",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "root reader",
-      "treatment": "new_adapter",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug, Clone)] pub struct JsonlLogReader { active_log_path: PathBuf, }",
       "canonical_signature": "#[derive(Debug, Clone)] pub struct JsonlLogReader { active_log_path: PathBuf, }",
       "obligations": [
         "signature identity: preserve JsonlLogReader declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "JsonlLogReader is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/jsonl_reader.rs",
@@ -1084,7 +1090,7 @@
         "symbol": "root reader"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "JsonlLogReader is the shared released owner in crates/sc-observability/src/jsonl_reader.rs, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability::RetainedSinkFaultInjector",
@@ -1261,7 +1267,7 @@
       "symbol": "sc_observability_log::EmitError",
       "area": "log",
       "kind": "error",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "EmitError",
       "treatment": "existing_pair",
       "baseline_signature": "#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)] #[serde(tag = \"kind\", content = \"value\", rename_all = \"snake_case\")] pub enum EmitError { /// A producer field cannot be represented safely. #[error(\"invalid field {raw_key:?}: {reason}\")] InvalidField { /// The producer-supplied key that was rejected. raw_key: String, /// The specific key-validation failure. reason: FieldKeyError, }, /// The core rejected the assembled event. #[error(\"invalid event: {diagnostic}\")] InvalidEvent { /// The core diagnostic explaining the invalid event. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core queue is full. #[error(\"writer queue is full: {diagnostic}\")] QueueFull { /// The core diagnostic describing queue saturation. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The writer cannot accept more work. #[error(\"writer is degraded: {diagnostic}\")] WriterDegraded { /// The core diagnostic describing the writer failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core shutdown deadline has elapsed. #[error(\"logger shutdown timed out: {diagnostic}\")] ShutdownTimedOut { /// The core diagnostic describing the elapsed shutdown deadline. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The lifecycle is no longer running. #[error(\"logger is not running: {phase:?}\")] NotRunning { /// The lifecycle phase observed when emission was attempted. phase: LifecyclePhase, }, /// The producer re-entered the guarded path. #[error(\"reentrant emission\")] Reentrant, /// A logger callback panic was contained. #[error(\"logger callback panicked\")] Panicked, }",
