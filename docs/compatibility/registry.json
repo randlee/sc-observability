@@ -19,8 +19,9 @@
     "crates/sc-observability-otlp/src/config/types.rs"
   ],
   "compat_root_reexport_exceptions": [
+    "crates/sc-observability/src/lib.rs",
     "crates/sc-observability-log/src/lib.rs",
-    "crates/sc-observability/src/lib.rs"
+    "crates/sc-observability-otlp/src/lib.rs"
   ],
   "dispositions": {
     "restored_root": "Released root identity is present in the current source.",
