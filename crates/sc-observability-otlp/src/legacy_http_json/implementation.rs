@@ -6,9 +6,12 @@
 //! overall retry-sequence deadline. The blocking client is owned exclusively
 //! by one private worker thread.
 
-#![allow(
-    dead_code,
-    reason = "D.18 wires this staged legacy backend into the facade after D.8"
+#![cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D.18 wires this staged legacy backend into the facade after D.8"
+    )
 )]
 
 use std::fs;
