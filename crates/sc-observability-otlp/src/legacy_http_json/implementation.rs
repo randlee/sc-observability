@@ -712,6 +712,12 @@ fn apply_jitter(delay: Duration, percent: u8, state: &mut u64) -> Duration {
     Duration::from_millis(u64::try_from(millis.min(u128::from(u64::MAX))).unwrap_or(u64::MAX))
 }
 
+/// Seeds retry jitter from OS entropy, with a deterministic fallback if it is unavailable.
+///
+/// The fixed `0xa5a5_5a5a_1234_5678` pattern keeps the worker's PRNG usable
+/// without treating the fallback as entropy. If several workers take this
+/// path, they start with the same seed and lose jitter decorrelation, so their
+/// retries may align.
 fn seed_from_os() -> u64 {
     let mut seed = [0_u8; 8];
     if getrandom::fill(&mut seed).is_ok() {
