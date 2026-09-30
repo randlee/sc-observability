@@ -164,9 +164,8 @@ def _sha256(path: Path) -> str:
 def start(args: argparse.Namespace) -> None:
     binary = Path(args.binary).expanduser().resolve(strict=True)
     state = Path(args.state_dir).expanduser().resolve()
-    state.mkdir(parents=True, exist_ok=True)
-    if (state / "viewer.pid").exists():
-        raise HarnessError(f"state directory already records an instance: {state}")
+    if state.exists() and (not state.is_dir() or any(state.iterdir())):
+        raise HarnessError(f"state directory is not empty: {state}")
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise HarnessError(f"viewer binary is not executable: {binary}")
     actual_hash = _sha256(binary)
@@ -182,24 +181,34 @@ def start(args: argparse.Namespace) -> None:
     if len({port for _, port in ports}) != 3 or any(not _port_available(h, p) for h, p in ports):
         raise HarnessError("one or more selected ports are occupied; choose explicit free ports; "
                            "the harness will not stop the existing listener")
+    state_created = not state.exists()
+    state.mkdir(parents=True, exist_ok=True)
     database = (state / "viewer.duckdb").resolve()
     command = [str(binary), "--host", args.host, "--http", str(args.http),
                "--grpc", str(args.grpc), "--browser-port", str(args.ui),
                "--open-browser=false", "--db", str(database), "--db-max-size", "2GB"]
-    log = (state / "viewer.log").open("ab")
+    log_path = state / "viewer.log"
+    log = None
     try:
+        log = log_path.open("ab")
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
                                    stdout=log, stderr=subprocess.STDOUT,
                                    start_new_session=True)
     except BaseException:
-        log.close()
-        (state / "viewer.log").unlink(missing_ok=True)
+        if log is not None:
+            log.close()
+        log_path.unlink(missing_ok=True)
+        if state_created:
+            try:
+                state.rmdir()
+            except OSError:
+                pass
         raise
-    metadata = {"pid": process.pid, "binary": str(binary), "sha256": actual_hash,
-                "version": args.version, "database": str(database),
-                "host": args.host, "http": args.http, "grpc": args.grpc,
-                "ui": args.ui, "started_at": time.time()}
     try:
+        metadata = {"pid": process.pid, "binary": str(binary), "sha256": actual_hash,
+                    "version": args.version, "database": str(database),
+                    "host": args.host, "http": args.http, "grpc": args.grpc,
+                    "ui": args.ui, "started_at": time.time()}
         (state / "viewer.json").write_text(json.dumps(metadata, indent=2) + "\n")
         (state / "viewer.pid").write_text(f"{process.pid}\n")
         deadline = time.monotonic() + READY_SECONDS
@@ -233,6 +242,13 @@ def start(args: argparse.Namespace) -> None:
             (state / "viewer.pid").unlink(missing_ok=True)
             (state / "viewer.json").unlink(missing_ok=True)
             (state / "viewer.log").unlink(missing_ok=True)
+            database.unlink(missing_ok=True)
+            Path(str(database) + ".wal").unlink(missing_ok=True)
+            if state_created:
+                try:
+                    state.rmdir()
+                except OSError:
+                    pass
         raise
     finally:
         log.close()

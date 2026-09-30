@@ -8,8 +8,9 @@ SHA-256 `e4a0051f827e6a40f52b097f490d7832af85bae577f4b33a69a986112c7618a4`.
 The same source commit is recorded in
 [`release.json`](../../../scripts/ci/fixtures/otlp/desktop-viewer/release.json).
 The pin supports macOS Apple Silicon (`darwin_arm64`) only. CI wiring belongs
-to obs-d-9 deliverable 3 in `otlp-conformance.yml`; that job owns invoking the
-downloader and harness. Do not resolve `latest` at run time.
+to obs-d-9 deliverable 3 in `otlp-conformance.yml`; that job owns future
+invocation of the downloader and harness, and is not wired yet. Do not resolve
+`latest` at run time.
 
 Documentation constraints: OTLP-023 and DOC-003.
 
@@ -40,22 +41,24 @@ Logs are at `~/Library/Logs/otel-desktop-viewer.log` and
 `~/Library/Logs/otel-desktop-viewer.err.log`. Never stop a process just because
 it occupies one of the defaults; select explicit free port overrides instead.
 
-## Isolated CI instance
+## Isolated viewer invocation
 
-The harness is standard-library Python. CI runs on the pinned artifact's
-`darwin_arm64` platform, downloads and verifies it, then starts an isolated
-instance with a disposable database:
+The harness is standard-library Python. The commands below show a local run of
+the pinned `darwin_arm64` artifact: download and verify it, then start an
+isolated instance with a disposable database. Current CI does not invoke these
+commands; obs-d-9 deliverable 3 owns adding that wiring.
 
 ```sh
 VIEWER_RELEASE=scripts/ci/fixtures/otlp/desktop-viewer/release.json
 VIEWER_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$VIEWER_RELEASE")"
 VIEWER_SHA256="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["binary_sha256"])' "$VIEWER_RELEASE")"
+VIEWER_STATE_DIR="${TMPDIR:-/tmp}/sc-observability-d9-viewer-$$"
 python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py build/otel-desktop-viewer
 python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py ci \
   --binary build/otel-desktop-viewer \
   --version "$VIEWER_VERSION" \
   --binary-sha256 "$VIEWER_SHA256" \
-  --state-dir "$RUNNER_TEMP/sc-observability-d9-viewer"
+  --state-dir "$VIEWER_STATE_DIR"
 ```
 
 The downloader verifies the archive digest and extracted executable digest. The
@@ -68,7 +71,7 @@ cleanup after a failed probe. The individual `start`, `status`, `probe`, and
 `stop` commands are available for local diagnosis.
 The probe uses bounded synthetic data (`service.name=sc-observability-d9`, a
 unique `test.run_id`, and backend `setup-probe`) and has a 120-second query
-deadline. Ordinary CI stays offline from Grafana credentials.
+deadline. It needs no Grafana credentials.
 
 ## Verified JSON-RPC contract
 
@@ -115,11 +118,12 @@ was `8bdf25589e974a06b0c4291f1b2b5be8`. The owner reported that `searchLogs`
 returned the exact log body, `getLog` returned its trace ID, `searchSpans`
 returned the matching span, and `searchMetricSummaries` plus `getMetric`
 returned gauge value `42`. The owner also reported that the same release
-artifact passed the isolated `ci` lifecycle with run ID `d9-ci-query-final`,
-that all three empty protobuf requests returned HTTP 200, and that the gRPC
-listener was reachable. The isolated PID, database, and run directory were
-reported removed by the harness. Raw command output was not retained, so these
-results are owner-attested and not independently verifiable from this checkout.
+artifact passed a local isolated `ci`-subcommand lifecycle with run ID
+`d9-ci-query-final`, that all three empty protobuf requests returned HTTP 200,
+and that the gRPC listener was reachable. The isolated PID, database, and run
+directory were reported removed by the harness. Raw command output was not
+retained, so these results are owner-attested and not independently verifiable
+from this checkout.
 
 The managed launchd agent was reloaded by its owner to apply the requested
 five-minute post-login delay. During that intentional delay, a probe attempt
