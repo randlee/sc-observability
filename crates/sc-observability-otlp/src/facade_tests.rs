@@ -1677,6 +1677,66 @@ mod entity_admission {
         v2.flush().expect("flush");
         assert_eq!(exported(&v2_exporter), 0);
     }
+    /// Owns the parity logger and its unique log root. Dropping it shuts the
+    /// logger down before removing that root, also while an assertion unwinds.
+    struct LoggerRoot {
+        logger: Option<sc_observability::v2::Logger>,
+        root: std::path::PathBuf,
+    }
+
+    impl LoggerRoot {
+        fn new(service: ServiceName) -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "sc-otlp-entity-parity-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .expect("time")
+                    .as_nanos()
+            ));
+            let mut guard = Self { logger: None, root };
+            let logger_config =
+                sc_observability::LoggerConfig::default_for(service, guard.root.clone());
+            guard.logger = Some(sc_observability::v2::Logger::new(logger_config).expect("logger"));
+            guard
+        }
+
+        fn logger(&self) -> &sc_observability::v2::Logger {
+            self.logger.as_ref().expect("logger runs until drop")
+        }
+    }
+
+    impl Drop for LoggerRoot {
+        fn drop(&mut self) {
+            if let Some(logger) = self.logger.take() {
+                let _stopped = logger.shutdown();
+            }
+            // Never panic here: a second panic during unwinding aborts the test binary.
+            if let Err(error) = std::fs::remove_dir_all(&self.root)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                eprintln!("failed to remove {}: {error}", self.root.display());
+            }
+        }
+    }
+
+    #[test]
+    fn logger_root_is_removed_when_an_assertion_unwinds() {
+        let payload = std::panic::catch_unwind(|| {
+            let guard = LoggerRoot::new(service_name());
+            guard
+                .logger()
+                .log(event_with_id("worker-1"))
+                .expect("valid id");
+            guard.logger().flush().expect("flush");
+            assert!(guard.root.exists(), "the logger wrote under its root");
+            std::panic::panic_any(guard.root.clone());
+        })
+        .expect_err("the fixture body panics");
+        let root = payload.downcast::<std::path::PathBuf>().expect("root path");
+        assert!(!root.exists(), "{} survived unwinding", root.display());
+    }
+
     #[test]
     fn v2_logger_and_v2_emit_log_accept_and_reject_entity_ids_identically() {
         let long_valid = "a".repeat(512);
@@ -1697,18 +1757,8 @@ mod entity_admission {
             ("a:b".into(), "colon"),
         ];
 
-        let service = service_name();
-        let log_root = std::env::temp_dir().join(format!(
-            "sc-otlp-entity-parity-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .expect("time")
-                .as_nanos()
-        ));
-        let logger_config =
-            sc_observability::LoggerConfig::default_for(service.clone(), log_root.clone());
-        let logger = sc_observability::v2::Logger::new(logger_config).expect("logger");
+        let guard = LoggerRoot::new(service_name());
+        let logger = guard.logger();
         let (telemetry, _exporter) = active();
 
         for (id, label) in cases {
@@ -1721,7 +1771,5 @@ mod entity_admission {
                 assert!(matches!(error, TelemetryError::Event(_)), "{label}");
             }
         }
-        let _stopped = logger.shutdown();
-        let _ = std::fs::remove_dir_all(&log_root);
     }
 }
