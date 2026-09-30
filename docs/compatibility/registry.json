@@ -1302,7 +1302,7 @@
         "signature identity: preserve LogControl declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released root sc_observability_log::LogControl is the compat::LogControl newtype over the canonical control::LogControl (v2::LogControl) in crates/sc-observability-log/src/compat/mod.rs: it forwards through its methods and Deref, exposes into_v2, and translates only flush and try_log errors through compat::legacy_flush and compat::legacy_emit. crates/sc-observability-log/src/lib.rs re-exports it at the root.",
+      "conversion": "The released root sc_observability_log::LogControl is a zero-sized compat facade in crates/sc-observability-log/src/compat/mod.rs over one static unattached canonical control::LogControl (v2::LogControl): its methods and Deref route through that static control, into_v2 returns a new unattached canonical control, and only flush and try_log errors translate through compat::legacy_flush and compat::legacy_emit. crates/sc-observability-log/src/lib.rs re-exports it at the root.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",

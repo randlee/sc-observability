@@ -324,20 +324,27 @@ impl EmitError {
 
 #[derive(Debug, Clone)]
 /// Cloneable, non-owning control for the installed released 1.x bridge.
-pub struct LogControl(control::LogControl);
+pub struct LogControl {
+    _private: (),
+}
+
+/// The canonical control every released root control routes through; root
+/// controls never carry an attachment, so this one global is identical to
+/// each value the root facade used to hold.
+static ROOT_CONTROL: control::LogControl = control::LogControl::new();
 
 impl LogControl {
     pub(crate) const fn new() -> Self {
-        Self(control::LogControl::new())
+        Self { _private: () }
     }
 
     /// Converts this released 1.x control into its canonical v2 facade.
     ///
-    /// Both facades retain the same weak attachment reference and process
-    /// runtime; this conversion does not create another owner or lifecycle.
+    /// Returns a new unattached canonical control over the same process-wide
+    /// bridge; this conversion does not create another owner or lifecycle.
     #[must_use]
     pub fn into_v2(self) -> crate::v2::LogControl {
-        self.0
+        control::LogControl::new()
     }
 
     /// Requests a bounded flush using the released root error variants.
@@ -346,7 +353,7 @@ impl LogControl {
     ///
     /// Returns the legacy timeout, writer, helper, in-progress, or stopped variant.
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
-        self.0
+        ROOT_CONTROL
             .flush(timeout)
             .map_err(|error| legacy_flush(&error, timeout))
     }
@@ -357,7 +364,7 @@ impl LogControl {
     ///
     /// Returns `ControlError::Unavailable` when no report is retained.
     pub fn health(&self) -> Result<crate::BridgeHealthReport, crate::ControlError> {
-        self.0.health()
+        ROOT_CONTROL.health()
     }
 
     /// Returns the path captured during logger initialization.
@@ -366,13 +373,13 @@ impl LogControl {
     ///
     /// Returns `ControlError::Unavailable` when no path snapshot is available.
     pub fn active_log_path(&self) -> Result<Option<PathBuf>, crate::ControlError> {
-        self.0.active_log_path()
+        ROOT_CONTROL.active_log_path()
     }
 
     /// Snapshots exact-once dropped-event counters.
     #[must_use]
     pub fn dropped_events(&self) -> crate::DroppedEvents {
-        self.0.dropped_events()
+        ROOT_CONTROL.dropped_events()
     }
 
     /// Waits for completion of the already-started owner shutdown.
@@ -384,7 +391,7 @@ impl LogControl {
         &self,
         timeout: Duration,
     ) -> Result<crate::ShutdownReport, crate::WaitError> {
-        self.0.wait_stopped(timeout)
+        ROOT_CONTROL.wait_stopped(timeout)
     }
 
     /// Submits a typed event through the process-wide bridge.
@@ -393,7 +400,7 @@ impl LogControl {
     ///
     /// Returns one of the released typed admission errors after exact-once accounting.
     pub fn try_log(&self, event: crate::BridgeEvent) -> Result<crate::EmitOutcome, EmitError> {
-        self.0.try_log(event).map_err(legacy_emit)
+        ROOT_CONTROL.try_log(event).map_err(legacy_emit)
     }
 
     /// Executes a typed core query.
@@ -405,7 +412,7 @@ impl LogControl {
         &self,
         query: &sc_observability_types::LogQuery,
     ) -> Result<sc_observability_types::LogSnapshot, crate::ControlError> {
-        self.0.query(query)
+        ROOT_CONTROL.query(query)
     }
 }
 
@@ -429,7 +436,7 @@ pub(crate) fn legacy_emit(error: crate::error::EmitError) -> EmitError {
 impl Deref for LogControl {
     type Target = control::LogControl;
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &ROOT_CONTROL
     }
 }
 
@@ -575,6 +582,15 @@ mod tests {
                 "released errors expose diagnostics rather than a new source chain"
             );
         }};
+    }
+
+    #[test]
+    fn released_log_control_keeps_released_auto_traits() {
+        fn assert_traits<
+            T: Send + Sync + Unpin + std::panic::UnwindSafe + std::panic::RefUnwindSafe,
+        >() {
+        }
+        assert_traits::<LogControl>();
     }
 
     #[test]
