@@ -59,6 +59,10 @@ pub use sc_observability_types::{
     SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp, WriterState,
 };
 #[doc(inline)]
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 pub use sc_observability_types::{EventError, FlushError, InitError, LogSinkError};
 
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
@@ -433,6 +437,10 @@ pub trait LogFilter: Send + Sync {
 /// This trait is intentionally open for downstream implementations. Adding
 /// required methods or tightening object-safety guarantees is therefore a
 /// semver-significant public API change.
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 pub trait LogSink: Send + Sync {
     /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
@@ -1376,7 +1384,7 @@ mod tests {
         assert!(
             context
                 .source()
-                .is_some_and(|source| source.is::<std::io::Error>())
+                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
         );
         let health = LogSink::health(&sink);
         assert_eq!(health.state, SinkHealthState::DegradedDropping);
@@ -2232,7 +2240,7 @@ mod tests {
         assert!(
             context
                 .source()
-                .is_some_and(|source| source.is::<std::io::Error>())
+                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
         );
         let flush = legacy.flush().expect_err("flush fails");
         assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_TYPED_FLUSH");
@@ -2285,7 +2293,7 @@ mod tests {
         assert!(
             context
                 .source()
-                .is_some_and(|source| source.is::<std::io::Error>())
+                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
         );
         assert_eq!(
             error.0.diagnostic().message,

@@ -1,3 +1,7 @@
+#![expect(
+    deprecated,
+    reason = "this fixture verifies the released 1.x error signatures"
+)]
 //! Compile-only 1.x root-surface proof over the shared canonical runtime.
 
 use sc_observability::{
