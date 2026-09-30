@@ -6,6 +6,53 @@ import tomllib
 from pathlib import Path
 
 
+HISTORICAL_LOCKS = {
+    Path("crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-baseline/Cargo.lock"),
+    Path("crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-consumer/Cargo.lock"),
+    Path("docs/plans/phase-b/evidence/b3-final/Cargo.lock"),
+}
+
+
+def is_candidate_package(name: str) -> bool:
+    # This private code generator has its own independent 0.1.0 tool version.
+    return name != "sc-observability-schema" and (
+        name.startswith("sc-observability") or name == "sc-observe"
+    )
+
+
+def validate_cargo_lock(path: Path, version: str) -> None:
+    lock = tomllib.loads(path.read_text(encoding="utf-8"))
+    for package in lock.get("package", []):
+        name = package.get("name", "")
+        if is_candidate_package(name) and package.get("version") != version:
+            raise ValueError(f"{path}: {name} must resolve to candidate version {version}")
+
+
+def validate_package_lock(path: Path, version: str) -> None:
+    lock = json.loads(path.read_text(encoding="utf-8"))
+    candidates = []
+    for key, package in lock.get("packages", {}).items():
+        name = package.get("name")
+        if not name and key.startswith("node_modules/"):
+            name = key.removeprefix("node_modules/")
+        if name and name.startswith("@synaptic-canvas/sc-observability"):
+            candidates.append((name, package.get("version")))
+    if not candidates:
+        root_name = lock.get("name")
+        if root_name and root_name.startswith("@synaptic-canvas/sc-observability"):
+            candidates.append((root_name, lock.get("version")))
+    for name, locked_version in candidates:
+        if locked_version != version:
+            raise ValueError(f"{path}: {name} must resolve to candidate version {version}")
+
+
+def validate_inventory_candidate(path: Path, version: str) -> None:
+    inventory = json.loads(path.read_text(encoding="utf-8"))
+    candidate = inventory.get("qualificationCandidate", {}).get("version")
+    if candidate != version:
+        raise ValueError(f"{path}: qualificationCandidate.version must be {version}, found {candidate!r}")
+
+
 def validate(root: Path) -> None:
     workspace = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]
     version = workspace["package"]["version"]
@@ -55,6 +102,20 @@ def validate(root: Path) -> None:
     python_policy = json.loads((root / "release/python-platform-policy.json").read_text(encoding="utf-8"))
     if python_policy.get("candidate_version") != version:
         raise ValueError("Python release policy candidate must match the workspace release version")
+
+    for lock_path in root.rglob("Cargo.lock"):
+        relative = lock_path.relative_to(root)
+        if relative in HISTORICAL_LOCKS or any(
+            part in {".git", ".beads", "target", "node_modules"} for part in relative.parts
+        ):
+            continue
+        validate_cargo_lock(lock_path, version)
+    for lock_path in root.rglob("package-lock.json"):
+        relative = lock_path.relative_to(root)
+        if any(part in {".git", ".beads", "target", "node_modules"} for part in relative.parts):
+            continue
+        validate_package_lock(lock_path, version)
+    validate_inventory_candidate(root / "release/release-inventory.json", version)
 
     def package_version(path: Path) -> str:
         if path.name == "pyproject.toml":
