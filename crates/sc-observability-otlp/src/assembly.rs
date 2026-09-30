@@ -309,24 +309,26 @@ impl V2SpanAssembler {
                     record.trace().trace_id.as_str(),
                     record.trace().span_id.as_str(),
                 );
-                let Some(started) = self.started.get(&key) else {
+                let Some(started) = self.started.remove(&key) else {
                     return Err(v2_lifecycle_error(
                         "received ended span without a matching started span",
                         "emit started and ended span signals with the same trace context",
                     ));
                 };
                 if started.trace() != record.trace() {
+                    self.started.insert(key, started);
                     return Err(v2_lifecycle_error(
                         "received ended span with mismatched trace context",
                         "preserve trace identifiers, parent, and flags across one span lifecycle",
                     ));
                 }
-                self.started
-                    .remove(&key)
-                    .expect("started span was checked before removal");
-                let events = self.events.remove(&key).expect(
-                    "started span always has an event buffer; this is an internal invariant",
-                );
+                let Some(events) = self.events.remove(&key) else {
+                    self.started.insert(key, started);
+                    return Err(v2_lifecycle_error(
+                        "received ended span whose event buffer is missing",
+                        "preserve started span state until its matching event buffer is available",
+                    ));
+                };
                 Ok(Some(V2CompleteSpan { record, events }))
             }
         }
@@ -338,6 +340,11 @@ impl V2SpanAssembler {
         self.started.clear();
         self.events.clear();
         dropped
+    }
+
+    #[cfg(test)]
+    fn remove_event_buffer(&mut self, key: &str) -> Option<Vec<V2SpanEvent>> {
+        self.events.remove(key)
     }
 }
 
@@ -468,6 +475,32 @@ mod tests {
         let error = assembler
             .push(V2SpanSignal::Ended(ended))
             .expect_err("different flags are not the same lifecycle");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::OTLP_SPAN_ASSEMBLY_FAILED
+        );
+        assert_eq!(assembler.flush_incomplete(), 1);
+    }
+
+    #[test]
+    fn v2_assembly_missing_event_buffer_returns_error_without_dropping_started_span() {
+        let trace = trace(0x01);
+        let started_record = started(trace.clone());
+        let ended = started_record
+            .clone()
+            .end(SpanStatus::Ok, DurationMs::from(1));
+        let key = span_key(trace.trace_id.as_str(), trace.span_id.as_str());
+        let mut assembler = V2SpanAssembler::new();
+
+        assembler
+            .push(V2SpanSignal::Started(started_record))
+            .expect("started signal");
+        assert!(assembler.remove_event_buffer(&key).is_some());
+
+        let error = assembler
+            .push(V2SpanSignal::Ended(ended))
+            .expect_err("missing event buffer is a lifecycle failure, not a panic");
 
         assert_eq!(
             error.diagnostic().code,
