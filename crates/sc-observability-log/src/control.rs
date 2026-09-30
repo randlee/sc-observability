@@ -4,11 +4,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use crate::error::EmitError;
 use crate::health::BridgeLifecycle;
 use crate::{
-    BridgeHealthReport, ControlError, EmitError, FieldKeyError, FlushError, LifecyclePhase, handle,
-    health, mapping,
+    BridgeHealthReport, ControlError, FieldKeyError, LifecyclePhase, handle, health, mapping,
 };
+use sc_observability_types::v2::FlushError;
 
 /// Typed direct producer input. Bridge-owned envelope identity and timestamps
 /// remain absent, so a caller cannot replace host provenance.

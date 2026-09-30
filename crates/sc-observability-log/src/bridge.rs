@@ -8,9 +8,11 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
-use crate::control::BridgeEvent;
+use crate::control::{BridgeEvent, LogControl};
+use crate::error::EmitError;
 use crate::handle;
-use crate::{DropCause, EmitError, LogControl, mapping};
+use crate::{DropCause, mapping};
+use sc_observability_types::v2::FlushError as CoreFlushError;
 use sc_observability_types::{
     AdmissionOutcome, ErrorCode, ErrorContext, LogEvent, OperationDiagnostic, ProcessIdentity,
     Remediation, ServiceName, Timestamp,
@@ -547,13 +549,13 @@ pub(crate) fn submit_current_control(event: BridgeEvent) -> Result<AdmissionOutc
 pub(crate) fn flush_attached(
     saved: &Weak<AttachmentState>,
     timeout: Duration,
-) -> Result<(), crate::FlushError> {
+) -> Result<(), CoreFlushError> {
     let call = enter_attachment(Some(saved))
         .ok_or_else(|| attachment_flush_error("saved attachment is not installed"))?;
     flush_call(call, timeout)
 }
 
-fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), crate::FlushError> {
+fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), CoreFlushError> {
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     std::thread::Builder::new()
         .name("sc-observability-log-attachment-flush".to_owned())
@@ -596,13 +598,13 @@ fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), crate::Flus
     }
 }
 
-pub(crate) fn flush_current_attachment(timeout: Duration) -> Result<(), crate::FlushError> {
+pub(crate) fn flush_current_attachment(timeout: Duration) -> Result<(), CoreFlushError> {
     let call = enter_attachment(None)
         .ok_or_else(|| attachment_flush_error("no logger attachment is installed"))?;
     flush_call(call, timeout)
 }
 
-fn attachment_flush_error(message: &str) -> crate::FlushError {
+fn attachment_flush_error(message: &str) -> CoreFlushError {
     crate::error::flush_drain(crate::error::operation_context(
         crate::error_codes::SC_LOG_DETACH_NOT_INSTALLED,
         message,

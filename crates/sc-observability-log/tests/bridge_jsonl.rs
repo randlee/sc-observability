@@ -118,9 +118,9 @@ fn assert_facade_flush_is_noop() {
 fn assert_second_init_rejected(root: &Path) {
     let second = sc_observability_log::init(config(root), options());
     let error = second.unwrap_err();
-    assert!(matches!(error, InitError::Configuration { .. }));
+    assert!(matches!(error, InitError::AlreadyInitialized));
     assert_eq!(
-        error.diagnostic().code.as_str(),
+        error.code().as_str(),
         "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED"
     );
 }

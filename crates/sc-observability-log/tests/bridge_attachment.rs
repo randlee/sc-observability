@@ -11,10 +11,11 @@ use std::time::Duration;
 
 #[allow(deprecated)]
 use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegistration};
+use sc_observability_log::v2::{EmitError, FlushError};
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
-    BridgeOptions, DetachError, EventLevel, FlushError, InitError, LoggerConfig, ServiceName,
-    TargetCategory, attach_logger,
+    BridgeOptions, DetachError, EventLevel, InitError, LoggerConfig, ServiceName, TargetCategory,
+    attach_logger,
 };
 use sc_observability_types::LogEvent;
 
@@ -260,7 +261,7 @@ fn timeout_retains_attachment_for_retry_and_stale_control_is_rejected() {
         .expect("retry detach");
     assert!(matches!(
         control.try_log(event()),
-        Err(sc_observability_log::EmitError::NotInstalled)
+        Err(EmitError::NotInstalled)
     ));
 
     let host =
@@ -322,9 +323,9 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         },
     )
     .unwrap_err();
-    assert!(matches!(init_error, InitError::Configuration { .. }));
+    assert!(matches!(init_error, InitError::AlreadyInitialized));
     assert_eq!(
-        init_error.diagnostic().code.as_str(),
+        init_error.code().as_str(),
         "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED"
     );
     first.detach(Duration::from_secs(2)).expect("first detach");
@@ -335,7 +336,7 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
     let mut second = attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("reattach");
     assert!(matches!(
         stale.try_log(event()),
-        Err(sc_observability_log::EmitError::NotInstalled)
+        Err(EmitError::NotInstalled)
     ));
     let flush_error = stale.flush(Duration::ZERO).unwrap_err();
     assert_eq!(
@@ -376,7 +377,7 @@ fn dropped_attachment_finishes_detaching_when_last_call_drains() {
     drop(attachment); // Bounded drop expires while the policy is held.
     assert!(matches!(
         stale.try_log(event()),
-        Err(sc_observability_log::EmitError::NotInstalled)
+        Err(EmitError::NotInstalled)
     ));
     let flush_error = stale.flush(Duration::ZERO).unwrap_err();
     assert_eq!(

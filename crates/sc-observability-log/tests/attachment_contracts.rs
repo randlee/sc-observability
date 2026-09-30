@@ -6,7 +6,8 @@
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use sc_observability_log::{BridgeOptions, InitError};
+use sc_observability_log::BridgeOptions;
+use sc_observability_types::v2::InitError;
 use sc_observability_types::{
     ActionName, ErrorCode, ErrorContext, Level, LogEvent, OBSERVATION_ENVELOPE_VERSION,
     ProcessIdentity, Remediation, SchemaVersion, ServiceName, TargetCategory, Timestamp,
