@@ -149,7 +149,18 @@ impl LoggerBuilder {
     }
 
     /// Finalizes construction and returns the logger runtime.
-    pub fn build(self) -> Result<Logger<Running>, InitError> {
+    ///
+    /// # Panics
+    ///
+    /// Panics when the writer runtime cannot start, preserving the released
+    /// infallible builder contract.
+    pub fn build(self) -> Logger<Running> {
+        self.build_canonical()
+            .expect("existing infallible builder expects writer thread startup")
+    }
+
+    /// Finalizes construction with the canonical recoverable error surface.
+    pub fn build_canonical(self) -> Result<Logger<Running>, InitError> {
         self.build_inner().map(|(logger, _)| logger)
     }
 
