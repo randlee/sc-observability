@@ -47,7 +47,17 @@ use sc_observability_types::{ErrorContext, LogEvent, Remediation, error_codes};
 pub(super) use super::payload::{build_logs_payload, log_record};
 use super::payload::{build_metrics_payload, build_traces_payload, metric_record, span_record};
 
+/// Caps untrusted server-provided `Retry-After` values before date or integer parsing.
+///
+/// 128 bytes leaves room for the standard HTTP-date and integer-seconds forms,
+/// including long delays, while rejecting oversized input. Raising this limit
+/// would allow larger remote-controlled values into the parser.
 const RETRY_AFTER_HEADER_LIMIT: usize = 128;
+
+/// Bounds idle worker and cancellation polling while avoiding a tight busy loop.
+///
+/// Five milliseconds keeps shutdown/control observation responsive without
+/// repeatedly waking the worker at CPU speed; changing it shifts that latency/CPU trade-off.
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 #[cfg(test)]
