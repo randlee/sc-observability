@@ -1,0 +1,30 @@
+{
+  "runs": [
+    {
+      "task": "obs-d-30.chain.sanity",
+      "sprint": "d-30",
+      "phase": "d",
+      "commit": "4f1c2a9e7b3d5f60812a4c9e0b7d3f5a1c2e4b6d",
+      "pr_number": 412,
+      "findings": 0,
+      "verdict": "PASS",
+      "iteration": 2,
+      "completed_at": "2026-09-29T17:42:10Z",
+      "completed_local": "10:42",
+      "duration": "6m05s"
+    },
+    {
+      "task": "obs-d-30.chain.sanity",
+      "sprint": "d-30",
+      "phase": "d",
+      "commit": "9b2e7c1d4a6f8e03b5c7d9f1a3e5c7b9d1f3a5c7",
+      "pr_number": 412,
+      "findings": 2,
+      "verdict": "FAIL",
+      "iteration": 1,
+      "completed_at": "2026-09-29T16:58:31Z",
+      "completed_local": "09:58",
+      "duration": "8m47s"
+    }
+  ]
+}

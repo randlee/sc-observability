@@ -1,14 +1,27 @@
 #!/usr/bin/env bash
-# Validate a phase plan in beads against its sprints.jsonl. Four checks, nothing else:
-#   1. dependencies: for every tuple [Y, sanity-Y, [X, ...]], sprint Y has a blocks edge to sanity-X;
-#   2. every sprint bead validates against SprintBead (scripts/bead_schema.py, published as schemas/sprint-bead.schema.json);
-#   3. every sanity bead validates against SanityBead, and its metadata.dev_bead is its sprint;
-#   4. bd doctor reports no error;
-#   5. only epics live at the top level: no open bead created since the phase root has no parent.
+# Validate a phase plan in beads against its sprints.jsonl. The format of sprints.jsonl picks the checks.
 #
-#   validate-plan --root <id> [--index <sprints.jsonl>]                 live beads
-#   validate-plan --file <plan.jsonl> --root <id> [--index <sprints.jsonl>]   rendered plan, before `bd import`
-#   validate-plan --beads <beads.json> --root <id> --index <sprints.jsonl> --no-doctor   test input
+# Container rows [sprint, wave, [deps]] (scripts/sprint_index_common.py, scripts/bead_schema.py):
+#   plan mode (the default):
+#     1. every sprint container validates against SprintBead (published as schemas/sprint-bead.schema.json):
+#        stage:sprint, one wave:<n> label equal to metadata.wave, deliverables, difficulty, pr_target, ...;
+#     2. its metadata.sprint and metadata.wave match its tuple, no prerequisite is in a later wave, and every
+#        open stage:sprint child of the root is a tuple;
+#   execution mode, after the pour, also:
+#     3. every sprint has one complete chain: <sprint>.chain under the sprint, .dev/.sanity/.qa under the chain
+#        (ChainStep, schemas/chain-step.schema.json), sanity blocks on dev, qa blocks on sanity;
+#     4. each .chain.dev's cross-sprint blocks edges are exactly the declared ones; a missing or weakened edge fails.
+# Legacy rows [sprint, sanity bead, [deps]], in either mode:
+#     1. dependencies: for every tuple [Y, sanity-Y, [X, ...]], sprint Y has a blocks edge to sanity-X;
+#     2. every sprint bead validates against LegacySprintBead (schemas/legacy-sprint-bead.schema.json);
+#     3. every sanity bead validates against SanityBead, and its metadata.dev_bead is its sprint.
+# Both formats:
+#     bd doctor reports no error, and only epics live at the top level: no open bead created since the phase
+#     root has no parent.
+#
+#   validate-plan [--mode plan|execution] --root <id> [--index <sprints.jsonl>]                 live beads
+#   validate-plan [--mode plan|execution] --file <plan.jsonl> --root <id> [--index <sprints.jsonl>]   rendered plan, before `bd import`
+#   validate-plan [--mode plan|execution] --beads <beads.json> --root <id> --index <sprints.jsonl> --no-doctor   test input
 #
 # The plan is read from origin/develop:docs/plans/phase-<p>/sprints.jsonl unless --index names a file.
 # Prints one "<bead>: <problem>" line per problem. Exit 0 valid, 5 problems, 2 could not run.
@@ -16,19 +29,21 @@
 set -uo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-file="" beads="" root="" index="" doctor=1
+file="" beads="" root="" index="" doctor=1 mode=plan
 while [ $# -gt 0 ]; do
   case "$1" in
     --file) file=$2; shift 2 ;;
     --beads) beads=$2; shift 2 ;;
     --root) root=$2; shift 2 ;;
     --index) index=$2; shift 2 ;;
+    --mode) mode=$2; shift 2 ;;
     --no-doctor) doctor=0; shift ;;
     --scope) shift 2 ;;  # accepted from older callers; every check is phase-wide
     *) echo "validate-plan: unknown argument $1" >&2; exit 2 ;;
   esac
 done
 [ -n "$root" ] || { echo "validate-plan: pass --root" >&2; exit 2; }
+case "$mode" in plan|execution) ;; *) echo "validate-plan: --mode is plan or execution, not $mode" >&2; exit 2 ;; esac
 for c in bd jq git python3; do
   command -v "$c" >/dev/null || { echo "validate-plan: $c not on PATH; see atm-beads/references/installation-and-troubleshooting.md" >&2; exit 2; }
 done
@@ -45,7 +60,9 @@ if [ -z "$index" ]; then
   index="$scratch/sprints.jsonl"
 fi
 jq -e -s 'all(type == "array" and length == 3)' "$index" >/dev/null 2>&1 \
-  || { echo "$root: $index is not sprints.jsonl tuples [sprint, sanity_bead, [prerequisite sprints]]"; exit 5; }
+  || { echo "$root: $index is not sprints.jsonl tuples [sprint, wave, [prerequisite sprints]]"; exit 5; }
+format=$(python3 "$here/sprint_index_common.py" format "$index"); rc=$?
+case $rc in 0) ;; 5) echo "$root: $format"; exit 5 ;; *) echo "validate-plan: sprint_index_common.py failed to run" >&2; exit 2 ;; esac
 
 # the beads, as one JSON array
 prefix=${root%%phase-*}
@@ -53,12 +70,20 @@ if [ -n "$beads" ]; then
   cp "$beads" "$scratch/beads.json"
 elif [ -n "$file" ]; then
   jq -s . "$file" > "$scratch/beads.json" || { echo "validate-plan: $file is not JSONL" >&2; exit 2; }
+elif [ "$format" = container ]; then
+  # bd list carries metadata, parent and dependencies, and does not fail on a chain that is not poured yet
+  bd list --all -n 0 --json > "$scratch/beads.json" 2>"$scratch/bd.err" \
+    || { echo "validate-plan: bd list failed: $(cat "$scratch/bd.err")" >&2; exit 2; }
 else
   # shellcheck disable=SC2046
   bd show $(jq -r --arg p "$prefix" '"\($p)\(.[0])", .[1]' "$index") --json > "$scratch/beads.json" 2>"$scratch/bd.err" \
     || { echo "validate-plan: bd show failed: $(cat "$scratch/bd.err")" >&2; exit 2; }
 fi
 
+if [ "$format" = container ]; then
+  problems=$(python3 "$here/sprint_index_common.py" check "$index" "$scratch/beads.json" "$root" "$mode"); rc=$?
+  case $rc in 0|5) ;; *) echo "validate-plan: the checks failed to run" >&2; exit 2 ;; esac
+else
 problems=$(jq -r -n --arg p "$prefix" --slurpfile plan "$index" --slurpfile all "$scratch/beads.json" '
   def blocks: [(.dependencies // [])[] | select((.type // .dependency_type) == "blocks") | (.depends_on_id // .id)];
   ($all[0] | map({key: .id, value: .}) | from_entries) as $by
@@ -77,14 +102,15 @@ problems=$(jq -r -n --arg p "$prefix" --slurpfile plan "$index" --slurpfile all 
         else empty end )
     end
 ') || { echo "validate-plan: the checks failed to run" >&2; exit 2; }
+fi
 
-# 2, 3. bead schemas
+# bead schemas (a container plan's chain steps are checked once poured)
 schema=$(python3 "$here/bead_schema.py" validate "$scratch/beads.json" "$index" "$prefix"); rc=$?
 case $rc in 0|5) ;; *) echo "validate-plan: bead_schema.py failed to run" >&2; exit 2 ;; esac
 problems=$(printf '%s\n%s' "$problems" "$schema" | sed '/^$/d')
 
-# 5. epics only at the top level (closed beads are history and are not checked)
-if [ -n "$beads" ]; then cp "$scratch/beads.json" "$scratch/everything.json"
+# epics only at the top level (closed beads are history and are not checked)
+if [ -n "$beads" ] || { [ "$format" = container ] && [ -z "$file" ]; }; then cp "$scratch/beads.json" "$scratch/everything.json"
 else bd list --all -n 0 --json > "$scratch/everything.json" 2>"$scratch/bd.err" \
   || { echo "validate-plan: bd list failed: $(cat "$scratch/bd.err")" >&2; exit 2; }; fi
 roots=$(jq -r --arg root "$root" '
@@ -94,7 +120,7 @@ roots=$(jq -r --arg root "$root" '
   || { echo "validate-plan: the top-level check failed to run" >&2; exit 2; }
 problems=$(printf '%s\n%s' "$problems" "$roots" | sed '/^$/d')
 
-# 4. bd doctor
+# bd doctor
 if [ "$doctor" -eq 1 ]; then
   report=$(bd doctor --json 2>/dev/null)
   echo "$report" | jq -e .checks >/dev/null 2>&1 || { echo "validate-plan: bd doctor produced no JSON" >&2; exit 2; }

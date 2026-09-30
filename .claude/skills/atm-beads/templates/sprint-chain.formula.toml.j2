@@ -1,0 +1,60 @@
+# sprint-chain 0.1.0: the dev -> sanity -> QA chain poured under one sprint container at plan complete.
+# Render with `sc-compose bead render` (compose variables: sprint_bead, phase, sprint, wave, stack,
+# layer, pr_target, difficulty, sanity_member, qa_member), then bond once: `bd mol bond sprint-chain <sprint> --type parallel --ref chain`.
+# Never re-bond (sc-compose #613). Labels and metadata are baked here: bd substitutes only titles,
+# descriptions and notes. No YAML frontmatter: `sc-compose bead render` does not strip it.
+formula = "sprint-chain"
+description = "{{{ sprint }}}: dev -> dev-sanity -> qa"
+version = 1
+type = "workflow"
+
+[[steps]]
+id = "dev"
+title = "{{{ sprint }}}: dev"
+type = "task"
+labels = ["phase-{{{ phase }}}", "stage:dev", "stack:{{{ stack }}}", "wave:{{{ wave }}}"]
+[steps.metadata]
+sprint_bead = "{{{ sprint_bead }}}"
+sprint = "{{{ sprint }}}"
+stack = "{{{ stack }}}"
+layer = "{{{ layer }}}"
+phase = "{{{ phase }}}"
+wave = {{{ wave }}}
+difficulty = "{{{ difficulty }}}"
+pr_target = "{{{ pr_target }}}"
+
+[[steps]]
+id = "sanity"
+title = "{{{ sprint }}}: dev-sanity"
+type = "task"
+needs = ["dev"]
+assignee = "{{{ sanity_member }}}"
+labels = ["phase-{{{ phase }}}", "stage:dev-sanity", "stack:{{{ stack }}}", "wave:{{{ wave }}}"]
+[steps.metadata]
+sprint_bead = "{{{ sprint_bead }}}"
+sprint = "{{{ sprint }}}"
+stack = "{{{ stack }}}"
+layer = "{{{ layer }}}"
+dev_bead = "{{{ sprint_bead }}}.chain.dev"
+phase = "{{{ phase }}}"
+wave = {{{ wave }}}
+difficulty = "{{{ difficulty }}}"
+pr_target = "{{{ pr_target }}}"
+
+[[steps]]
+id = "qa"
+title = "{{{ sprint }}}: qa"
+type = "task"
+needs = ["sanity"]
+assignee = "{{{ qa_member }}}"
+labels = ["phase-{{{ phase }}}", "stage:qa", "stack:{{{ stack }}}", "wave:{{{ wave }}}"]
+[steps.metadata]
+sprint_bead = "{{{ sprint_bead }}}"
+sprint = "{{{ sprint }}}"
+stack = "{{{ stack }}}"
+layer = "{{{ layer }}}"
+checked_bead = "{{{ sprint_bead }}}.chain.dev"
+phase = "{{{ phase }}}"
+wave = {{{ wave }}}
+difficulty = "{{{ difficulty }}}"
+pr_target = "{{{ pr_target }}}"

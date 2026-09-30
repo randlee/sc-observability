@@ -1,7 +1,7 @@
 ---
 name: finding-bead
-version: 0.2.0
-description: One QA or review finding. It carries the governing `requirements` and `adrs` of the sprint it traces to (`sprint_bead`), so every fix and fix QA has them, however deep the fix-on-fix chain. Priority follows severity (blocking 1, important 2, minor 4) so `bd ready` queues blocking findings ahead of planned dev. Render strictly, then `jq -c .` into the import JSONL.
+version: 0.3.0
+description: One QA or review finding. A blocking finding is a child of its sprint container (`sprint_bead`) and holds the sprint open; an important or minor finding is a child of the phase root (`phase_root`) and holds only the phase. It carries the governing `requirements` and `adrs` of the sprint it traces to (`sprint_bead`), so every fix and fix QA has them, however deep the fix-on-fix chain. Priority follows severity (blocking 1, important 2, minor 4) so `bd ready` queues blocking findings ahead of planned dev. Render strictly, then `jq -c .` into the import JSONL.
 format: json
 required_variables:
   - id
@@ -16,6 +16,7 @@ required_variables:
   - reviewer
   - finding_ref
   - sprint_bead
+  - phase_root
   - requirements
   - adrs
   - title
@@ -26,9 +27,13 @@ required_variables:
 optional_variables:
   - assignee
   - blocked_by
+  - pr_number
+  - wave
 defaults:
   assignee: ""
   blocked_by: []
+  pr_number: null
+  wave: null
 ---
 {% if severity not in ["blocking", "important", "minor"] %}ERROR: severity must be blocking, important or minor, got {{ severity }}
 {% endif %}{% if screen not in ["keep", "not_applicable", "ceremony", "concern_valid_remedy_ceremony"] %}ERROR: screen must be a ceremony-finding-screen verdict, got {{ screen }}
@@ -46,7 +51,7 @@ defaults:
   "acceptance_criteria": {{ "- [ ] the remedy (design) is applied at every occurrence in scope\n- [ ] a test or check that reproduces the defect passes at the fix head\n- [ ] the repository's validation passes" | tojson }},
   "labels": {{ ["phase-" ~ phase, "stage:finding", "stack:" ~ stack, "severity:" ~ severity] | tojson }},
   "dependencies": [
-    {"issue_id": {{ id | tojson }}, "depends_on_id": {{ sprint_bead | tojson }}, "type": "parent-child"},
+    {"issue_id": {{ id | tojson }}, "depends_on_id": {{ (sprint_bead if severity == "blocking" else phase_root) | tojson }}, "type": "parent-child"},
     {"issue_id": {{ id | tojson }}, "depends_on_id": {{ qa_bead | tojson }}, "type": "discovered-from"}{% for b in blocked_by %},
     {"issue_id": {{ id | tojson }}, "depends_on_id": {{ b | tojson }}, "type": "blocks"}{% endfor %}
   ],
@@ -62,6 +67,9 @@ defaults:
     "reviewer": {{ reviewer | tojson }},
     "finding_ref": {{ finding_ref | tojson }},
     "sprint_bead": {{ sprint_bead | tojson }},
+    "qa_bead": {{ qa_bead | tojson }},
+    "pr_number": {{ pr_number | tojson }},
+    "wave": {{ wave | tojson }},
     "requirements": {{ requirements | tojson }},
     "adrs": {{ adrs | tojson }}
   }

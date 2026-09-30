@@ -65,6 +65,9 @@ agents:
   sc-sanity-jev:
     version: 0.3.0
     path: .claude/agents/sc-sanity-jev.md
+  parallax:
+    version: 0.1.0
+    path: .claude/agents/parallax.md
 
 # Role -> ATM member. Skills name the role; the member's startup prompt in
 # .atm.toml names the directive it runs. Member names are team-unique

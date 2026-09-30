@@ -8,5 +8,6 @@
   "lead": "obs-lead",
   "cc": "",
   "primary_checkout": "/Users/randlee/github/sc-observability",
-  "phase_root": "obs-phase-d"
+  "phase_root": "obs-phase-d",
+  "severity": "important"
 }

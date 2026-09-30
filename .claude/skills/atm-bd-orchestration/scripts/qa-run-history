@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Append a closed QA round to the repository-local ignored QA metrics logs.
+
+append --task --phase --sprint --pr-number --iteration --verdict --tested --findings [--dry-run]
+
+Writes one row to `.sc/qa-log/phase-<p>.jsonl` (this round's own non-ceremony findings)
+and one to `.sc/qa-log/phase-<p>-stats.jsonl` (a live phase-wide finding snapshot from
+`bd`), both under one lock in the primary checkout. `--dry-run` prints both rows instead.
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import re
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable
+
+from bd_commands import FINDING_LABEL
+
+Runner = Callable[..., subprocess.CompletedProcess[str]]
+SEVERITIES = ("blocking", "important", "minor")
+FINDING_ID = re.compile(r"-f[0-9]+(\.[0-9]+)?$")
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"qa-run-history: {message}")
+
+
+def bd_json(runner: Runner, *args: str) -> Any:
+    argv = ["bd", *args]
+    try:
+        proc = runner(argv, capture_output=True, text=True)
+    except OSError as exc:
+        fail(f"{' '.join(argv[:3])} failed: {exc}")
+    if proc.returncode:
+        fail(f"{' '.join(argv[:3])} failed: {(proc.stderr or '').strip() or (proc.stdout or '').strip()}")
+    try:
+        return json.loads(proc.stdout or "null")
+    except ValueError as exc:
+        fail(f"{' '.join(argv[:3])} returned invalid JSON: {exc}")
+
+
+def primary_root() -> Path:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            check=True, capture_output=True, text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        fail(f"cannot locate repository common directory: {exc}")
+    return Path(result.stdout.strip()).parent
+
+
+def field(row: dict[str, Any], name: str) -> Any:
+    """A rendered finding keeps screen/severity in metadata; accept a top-level value too."""
+    if row.get(name) is not None:
+        return row[name]
+    metadata = row.get("metadata")
+    return metadata.get(name) if isinstance(metadata, dict) else None
+
+
+def severity(row: dict[str, Any]) -> str:
+    value = field(row, "severity")
+    if isinstance(value, str) and value:
+        return value.lower()
+    for label in row.get("labels") or []:
+        if isinstance(label, str) and label.startswith("severity:"):
+            return label.split(":", 1)[1].lower()
+    return ""
+
+
+def round_counts(path: Path) -> dict[str, int]:
+    """This round's filed findings by severity, excluding ceremony; a missing file is zero findings."""
+    counts = dict.fromkeys(SEVERITIES, 0)
+    if path.exists():
+        try:
+            lines = path.read_text().splitlines()
+            rows = [json.loads(line) for line in lines if line.strip()]
+        except (OSError, json.JSONDecodeError) as exc:
+            fail(f"cannot read findings {path}: {exc}")
+        for row in rows:
+            if not isinstance(row, dict):
+                fail(f"findings {path} holds a non-object row")
+            if field(row, "screen") != "ceremony" and field(row, "severity") in counts:
+                counts[field(row, "severity")] += 1
+    return counts
+
+
+def is_finding(row: dict[str, Any], phase: str) -> bool:
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    return metadata.get("phase") == phase and (
+        FINDING_LABEL in (row.get("labels") or []) or bool(FINDING_ID.search(str(row.get("id", "")))))
+
+
+def duration_since(runner: Runner, task: str, completed: datetime) -> str:
+    issues = bd_json(runner, "show", task, "--json")
+    created = issues[0].get("created_at") if isinstance(issues, list) and issues and isinstance(issues[0], dict) else None
+    try:
+        started = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+    except ValueError:
+        fail(f"{task} has no valid created_at: {created!r}")
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    elapsed = max(0, round((completed - started).total_seconds()))
+    return f"{elapsed // 60}m{elapsed % 60:02d}s"
+
+
+def pr_number(value: str) -> int | None:
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def dump(row: dict[str, Any]) -> str:
+    return json.dumps(row, separators=(",", ":"))
+
+
+def append_line(path: Path, row: dict[str, Any]) -> None:
+    with path.open("a", encoding="utf-8") as log:
+        log.write(dump(row) + "\n")
+        log.flush()
+        os.fsync(log.fileno())
+
+
+def append(args: argparse.Namespace, runner: Runner) -> None:
+    completed = datetime.now(timezone.utc)
+    completed_at = completed.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    completed_local = completed.astimezone().strftime("%H:%M")
+    counts = round_counts(args.findings)
+    round_row = {
+        "completed_at": completed_at, "completed_local": completed_local,
+        "duration": duration_since(runner, args.task, completed), "phase": args.phase,
+        "sprint": args.sprint, "task": args.task, "pr_number": pr_number(args.pr_number),
+        "iteration": args.iteration, "verdict": args.verdict, "tested": args.tested,
+        "fnd": sum(counts.values()), "blk": counts["blocking"], "imp": counts["important"], "min": counts["minor"],
+    }
+    rows = bd_json(runner, "list", "--all", "-n", "0", "--json") or []
+    findings = [row for row in rows if isinstance(row, dict) and is_finding(row, args.phase)]
+    open_findings = [row for row in findings if row.get("status") != "closed"]
+    by_severity = lambda name: sum(1 for row in open_findings if severity(row) == name)
+    stats_row = {
+        "snapshot_at": completed_at, "snapshot_local": completed_local, "phase": args.phase,
+        "trigger_task": args.task, "tot": len(findings), "open": len(open_findings),
+        "blk": by_severity("blocking"), "imp": by_severity("important"), "min": by_severity("minor"),
+    }
+    if args.dry_run:
+        print(dump(round_row))
+        print(dump(stats_row))
+        return
+    log_dir = primary_root() / ".sc" / "qa-log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    with (log_dir / f"phase-{args.phase}.jsonl.lock").open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        append_line(log_dir / f"phase-{args.phase}.jsonl", round_row)
+        append_line(log_dir / f"phase-{args.phase}-stats.jsonl", stats_row)
+        fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def main(argv: list[str] | None = None, runner: Runner = subprocess.run) -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest="command", required=True)
+    add = commands.add_parser("append", help="append one round row and one stats row")
+    add.add_argument("--task", required=True)
+    add.add_argument("--phase", required=True)
+    add.add_argument("--sprint", required=True)
+    add.add_argument("--pr-number", required=True, help="PR number, or empty for none")
+    add.add_argument("--iteration", required=True, type=int)
+    add.add_argument("--verdict", required=True, choices=("PASS", "FAIL"))
+    add.add_argument("--tested", required=True, help="checked bead, or the carried finding(s) comma-separated")
+    add.add_argument("--findings", required=True, type=Path, help="this round's findings.jsonl; may be missing")
+    add.add_argument("--dry-run", action="store_true", help="print both rows instead of appending")
+    args = parser.parse_args(argv)
+    if not re.fullmatch(r"[a-z][a-z0-9_-]*", args.phase):
+        fail(f"invalid --phase {args.phase!r}")
+    if args.iteration < 1:
+        fail("--iteration must be positive")
+    append(args, runner)
+
+
+if __name__ == "__main__":
+    main()

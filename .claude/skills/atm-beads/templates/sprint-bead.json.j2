@@ -1,20 +1,19 @@
 ---
 name: sprint-bead
-version: 0.2.0
-description: One sprint bead of a plan written to beads. Every mandatory plan field is a required variable, so a strict render fails when one is missing. `requirements` and `adrs` are lists of governing ids, or exactly ["NONE"] when the sprint has none. Render strictly, then `jq -c .` into the import JSONL.
+version: 0.3.0
+description: One sprint container of a plan written to beads. It carries the sprint doc and its wave and is never dispatched; its dev, sanity and QA steps are poured under it at plan complete from `sprint-chain.formula.toml.j2`, and cross-sprint edges run between those steps. Every mandatory plan field is a required variable, so a strict render fails when one is missing. `requirements` and `adrs` are lists of governing ids, or exactly ["NONE"] when the sprint has none. Render strictly, then `jq -c .` into the import JSONL.
 format: json
 required_variables:
   - id
   - parent
   - phase
   - sprint
+  - wave
   - title
-  - assignee
   - stack
   - layer
-  - branch
   - pr_target
-  - worktree
+  - difficulty
   - relation
   - closure_type
   - target_boundary
@@ -26,38 +25,36 @@ required_variables:
   - adrs
 optional_variables:
   - priority
-  - blocked_by
   - model_class
   - release_train
 defaults:
   priority: 2
-  blocked_by: []
   model_class: ""
   release_train: ""
 ---
-{
+{% if difficulty not in ["hard", "normal", "fast"] %}ERROR: difficulty must be hard, normal, or fast
+{% endif %}{% if (wave | int | string) != (wave | string) %}ERROR: wave must be an integer
+{% endif %}{
   "id": {{ id | tojson }},
   "title": {{ (sprint ~ ": " ~ title) | tojson }},
-  "issue_type": "task",
+  "issue_type": "epic",
   "status": "open",
   "priority": {{ priority }},
-  "assignee": {{ assignee | tojson }},
   "description": {{ description | tojson }},
   "design": {{ design | tojson }},
   "acceptance_criteria": {{ acceptance_criteria | tojson }},
-  "labels": {{ (["phase-" ~ phase, "stage:dev", "stack:" ~ stack] + (["train:" ~ release_train] if release_train else [])) | tojson }},
+  "labels": {{ (["phase-" ~ phase, "stage:sprint", "wave:" ~ wave, "stack:" ~ stack] + (["train:" ~ release_train] if release_train else [])) | tojson }},
   "dependencies": [
-    {"issue_id": {{ id | tojson }}, "depends_on_id": {{ parent | tojson }}, "type": "parent-child"}{% for b in blocked_by %},
-    {"issue_id": {{ id | tojson }}, "depends_on_id": {{ b | tojson }}, "type": "blocks"}{% endfor %}
+    {"issue_id": {{ id | tojson }}, "depends_on_id": {{ parent | tojson }}, "type": "parent-child"}
   ],
   "metadata": {
     "phase": {{ phase | tojson }},
     "sprint": {{ sprint | tojson }},
+    "wave": {{ wave | tojson }},
     "stack": {{ stack | tojson }},
     "layer": {{ layer | tojson }},
-    "branch": {{ branch | tojson }},
     "pr_target": {{ pr_target | tojson }},
-    "worktree": {{ worktree | tojson }},
+    "difficulty": {{ difficulty | tojson }},
     "relation": {{ relation | tojson }},
     "closure_type": {{ closure_type | tojson }},
     "target_boundary": {{ target_boundary | tojson }},

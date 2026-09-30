@@ -1,0 +1,367 @@
+#!/usr/bin/env python3
+"""Print the lead's wave oversight view from the beads and the sanity ledger. Read-only.
+
+Usage:
+  wave-monitor --root <phase root> [--wave <n>] [--limit 10]
+
+Prints, in order: the sanity table (newest completed first, rendered with
+`sc-compose render --strict` of templates/sanity-run-table.md.j2), the
+timezone of Done, iteration signals, ledger reconciliation (missing, stale,
+rows without commit evidence), handoffs missing a stage or stale after a
+restack, and the open important and minor finding counts under the root.
+Discrepancies are findings, not failures: exit 0 when everything printed,
+2 when `bd`, the ledger or the render fails. Never writes beads, ATM or the
+ledger.
+"""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime
+import json
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+from typing import Any, Callable
+
+from bd_commands import FINDING_LABEL, SANITY_LABEL, BdCommandError
+
+Runner = Callable[..., subprocess.CompletedProcess[str]]
+TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "sanity-run-table.md.j2"
+QA_LABEL = "stage:qa"
+SPRINT_LABEL = "stage:sprint"
+RESTACK = re.compile(r"^\s*restack:\s*(\S+)\s*->\s*(\S+)\s*$", re.MULTILINE)
+TABLE_FIELDS = {"sprint": "?", "pr_number": None, "findings": 0, "verdict": "?",
+                "completed_local": "?", "duration": "?", "iteration": 0}
+
+
+class MonitorError(RuntimeError):
+    pass
+
+
+def run(runner: Runner, argv: list[str]) -> str:
+    error = BdCommandError if argv[0] == "bd" else MonitorError
+    try:
+        proc = runner(argv, capture_output=True, text=True)
+    except OSError as exc:
+        raise error(f"{' '.join(argv[:3])} failed: {exc}") from exc
+    if proc.returncode:
+        detail = (proc.stderr or "").strip() or (proc.stdout or "").strip()
+        raise error(f"{' '.join(argv[:3])} failed: {detail}")
+    return proc.stdout or ""
+
+
+def bd_json(runner: Runner, *args: str) -> Any:
+    try:
+        return json.loads(run(runner, ["bd", *args]) or "null")
+    except ValueError as exc:
+        raise BdCommandError(f"bd {args[0]} returned invalid JSON: {exc}") from exc
+
+
+def meta(row: dict[str, Any] | None) -> dict[str, Any]:
+    value = (row or {}).get("metadata")
+    return value if isinstance(value, dict) else {}
+
+
+def labels(row: dict[str, Any]) -> list[str]:
+    return row.get("labels") or []
+
+
+def is_closed(row: dict[str, Any] | None) -> bool:
+    return bool(row) and row.get("status") == "closed"
+
+
+def severity(row: dict[str, Any]) -> str:
+    value = meta(row).get("severity")
+    if isinstance(value, str) and value:
+        return value.lower()
+    return next((l.split(":", 1)[1].lower() for l in labels(row) if l.startswith("severity:")), "")
+
+
+def verdict_of(row: dict[str, Any]) -> str:
+    reason = str(row.get("close_reason") or "").strip().upper()
+    return next((v for v in ("PASS", "FAIL") if reason.startswith(v)), "")
+
+
+def phase_of(root: dict[str, Any]) -> str:
+    value = meta(root).get("phase")
+    if isinstance(value, str) and value:
+        return value.removeprefix("phase-")
+    for label in labels(root):
+        if label.startswith("phase-"):
+            return label.removeprefix("phase-")
+    match = re.search(r"phase-([A-Za-z0-9_-]+)$", str(root.get("id") or ""))
+    if not match:
+        raise MonitorError(f"cannot derive a phase from root {root.get('id')!r}")
+    return match.group(1)
+
+
+def as_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+# ---- ledger ---------------------------------------------------------------
+
+def ledger_path(runner: Runner, phase: str) -> Path:
+    """`.sc/sanity-log/phase-<p>.jsonl` under the primary checkout, as sanity-run-history finds it."""
+    common = run(runner, ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]).strip()
+    return Path(common).parent / ".sc" / "sanity-log" / f"phase-{phase}.jsonl"
+
+
+def load_ledger(path: Path) -> list[dict[str, Any]]:
+    """Rows in append order; a truncated final line is skipped, as sanity-run-history does."""
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text().splitlines()
+    except OSError as exc:
+        raise MonitorError(f"cannot read ledger {path}: {exc}") from exc
+    rows = []
+    for number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError as exc:
+            if number == len(lines):
+                print(f"wave-monitor: skipping truncated final line in {path}: {exc}", file=sys.stderr)
+                continue
+            raise MonitorError(f"ledger {path}:{number}: {exc}") from exc
+        if not isinstance(row, dict):
+            raise MonitorError(f"ledger {path}:{number} is not a JSON object")
+        rows.append(row)
+    return rows
+
+
+def render_table(runner: Runner, runs: list[dict[str, Any]]) -> str:
+    view = [{**TABLE_FIELDS, **{k: row[k] for k in TABLE_FIELDS if k in row}} for row in runs]
+    with tempfile.TemporaryDirectory(prefix="wave-monitor-") as scratch:
+        var_file = Path(scratch) / "sanity-view.json"
+        var_file.write_text(json.dumps({"runs": view}))
+        return run(runner, ["sc-compose", "render", "--strict", "--root", str(TEMPLATE.parents[1]), "--file", str(TEMPLATE),
+                            "--var-file", str(var_file)]).rstrip("\n")
+
+
+def timezone_line() -> str:
+    now = datetime.now().astimezone()
+    offset = now.strftime("%z")
+    return f"Done is local time: {now.tzname()} (UTC{offset[:3]}:{offset[3:]})"
+
+
+def signal(row: dict[str, Any]) -> str:
+    iteration = as_int(row.get("iteration")) or 0
+    findings = as_int(row.get("findings")) or 0
+    if iteration >= 4:
+        return "**PROBLEM**"
+    if iteration == 3 and row.get("verdict") == "FAIL":
+        return "investigate"
+    if iteration == 2 and findings > 1:
+        return "suspect"
+    return ""
+
+
+def row_label(row: dict[str, Any]) -> str:
+    return (f"{row.get('task') or '?'} ({row.get('sprint') or '?'}) iteration {row.get('iteration', '?')} "
+            f"{row.get('verdict') or '?'} findings {row.get('findings', '?')}")
+
+
+# ---- beads ----------------------------------------------------------------
+
+class Phase:
+    def __init__(self, root: dict[str, Any], rows: list[dict[str, Any]]):
+        self.root = root
+        self.by_id = {row["id"]: row for row in rows if isinstance(row, dict) and row.get("id")}
+        self.by_id.setdefault(root["id"], root)
+        self.children: dict[str, list[str]] = {}
+        for row in self.by_id.values():
+            if row.get("parent"):
+                self.children.setdefault(row["parent"], []).append(row["id"])
+
+    def under(self, bead: str) -> list[dict[str, Any]]:
+        out, queue, seen = [], list(self.children.get(bead, [])), {bead}
+        while queue:
+            bead_id = queue.pop(0)
+            if bead_id in seen:
+                continue
+            seen.add(bead_id)
+            out.append(self.by_id[bead_id])
+            queue.extend(self.children.get(bead_id, []))
+        return out
+
+    def findings(self) -> list[dict[str, Any]]:
+        return [row for row in self.by_id.values() if FINDING_LABEL in labels(row)]
+
+    def open_blocking_under(self, bead: str) -> list[str]:
+        return sorted(row["id"] for row in self.under(bead)
+                      if FINDING_LABEL in labels(row) and not is_closed(row) and severity(row) == "blocking")
+
+    def sanity_beads(self) -> list[dict[str, Any]]:
+        return [row for row in self.by_id.values()
+                if SANITY_LABEL in labels(row) or row["id"].endswith(".chain.sanity")]
+
+    def sanity_of(self, bead: str) -> list[dict[str, Any]]:
+        return [row for row in self.sanity_beads() if meta(row).get("dev_bead") == bead or row.get("parent") == bead]
+
+    def qa_of(self, bead: str) -> list[dict[str, Any]]:
+        return [row for row in self.by_id.values() if QA_LABEL in labels(row)
+                and (meta(row).get("checked_bead") == bead or row.get("parent") == bead)]
+
+    def sprint_of(self, bead: dict[str, Any]) -> dict[str, Any] | None:
+        return self.by_id.get(str(meta(bead).get("sprint_bead") or ""))
+
+
+def short(text: Any, width: int = 70) -> str:
+    text = " ".join(str(text or "no reason").split())
+    return text if len(text) <= width else text[:width - 1] + "…"
+
+
+def reconcile(phase: Phase, rows: list[dict[str, Any]], shown: list[dict[str, Any]]) -> list[str]:
+    """Missing and stale sanity evidence; rows without `commit` are counted, and listed when shown in the table."""
+    latest: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        latest[str(row.get("task") or "")] = row  # the newest iteration speaks for the bead's close
+    out = []
+    for bead in sorted(phase.sanity_beads(), key=lambda r: r["id"]):
+        if not is_closed(bead):
+            continue
+        row = latest.get(bead["id"])
+        if row is None:
+            out.append(f"missing: {bead['id']} closed ({short(bead.get('close_reason'))}) with no ledger row")
+            continue
+        closed_as = verdict_of(bead)
+        if closed_as != row.get("verdict"):
+            out.append(f"stale: {bead['id']} ledger verdict {row.get('verdict')} but close reason "
+                       f"{short(bead.get('close_reason'))!r}")
+        elif row.get("verdict") == "PASS":
+            checked_id = meta(bead).get("dev_bead") or bead.get("parent")
+            checked = phase.by_id.get(str(checked_id or ""))
+            head = meta(checked).get("stack_head")  # none: legacy or not integrated, which Handoffs reports
+            if head and meta(checked).get("sanity_pass_commit") != head:
+                out.append(f"stale: {bead['id']} PASS but {checked['id']} sanity_pass_commit "
+                           f"{meta(checked).get('sanity_pass_commit')} is not stack_head {meta(checked).get('stack_head')}")
+    legacy = [row for row in rows if not row.get("commit")]
+    if legacy:
+        out.append(f"missing commit evidence: {len(legacy)} of {len(rows)} ledger rows have no commit")
+        out.extend(f"missing commit evidence: {row_label(row)}" for row in shown if not row.get("commit"))
+    return out
+
+
+def handoff_wave(phase: Phase, bead: dict[str, Any]) -> int | None:
+    if FINDING_LABEL in labels(bead):
+        wave = as_int(meta(bead).get("exec_wave"))
+        if wave is not None or severity(bead) != "blocking":
+            return wave
+    return as_int(meta(phase.sprint_of(bead)).get("wave"))  # a chain dev step, or a blocking finding in its sprint's wave
+
+
+def handoffs(phase: Phase, wave: int | None) -> list[dict[str, Any]]:
+    out = []
+    for bead in phase.by_id.values():
+        if bead["id"].endswith(".chain.dev"):
+            if not is_closed(bead):
+                continue
+        elif FINDING_LABEL in labels(bead):
+            fixed = is_closed(bead) and str(bead.get("close_reason") or "").strip().lower().startswith("fixed")
+            if not fixed and (is_closed(bead) or not meta(bead).get("fixed_at_commit")):
+                continue
+        else:
+            continue
+        if wave is None or handoff_wave(phase, bead) == wave:
+            out.append(bead)
+    return sorted(out, key=lambda r: r["id"])
+
+
+def missing_stage(phase: Phase, bead: dict[str, Any]) -> str:
+    info = meta(bead)
+    head = info.get("stack_head")
+    if not head:
+        return "integrated"
+    if info.get("sanity_pass_commit") != head or not any(
+            is_closed(row) and verdict_of(row) == "PASS" for row in phase.sanity_of(bead["id"])):
+        return "sanity"
+    qa_at_head = any(is_closed(row) and meta(row).get("commit") == head for row in phase.qa_of(bead["id"]))
+    chain_qa = bead["id"].endswith(".chain.dev") and is_closed(phase.by_id.get(bead["id"][:-len("dev")] + "qa"))
+    if not qa_at_head and not chain_qa:
+        return "qa"
+    sprint = phase.sprint_of(bead) if bead["id"].endswith(".chain.dev") else None
+    if phase.open_blocking_under(bead["id"]) or (sprint and phase.open_blocking_under(sprint["id"])):
+        return "findings"
+    return ""
+
+
+def restack_stale(bead: dict[str, Any]) -> str:
+    head = meta(bead).get("stack_head")
+    for old, new in RESTACK.findall(str(bead.get("notes") or "")):
+        if head and new == head and meta(bead).get("sanity_pass_commit") != head:
+            return f"stale: {bead['id']} restacked {old} -> {new}; sanity_pass_commit {meta(bead).get('sanity_pass_commit')}"
+    return ""
+
+
+def main(argv: list[str] | None = None, runner: Runner = subprocess.run) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--root", required=True)
+    parser.add_argument("--wave", type=int)
+    parser.add_argument("--limit", type=int, default=10)
+    args = parser.parse_args(argv)
+    if args.limit < 0:
+        parser.error("--limit must be zero (all) or positive")
+    try:
+        root = (bd_json(runner, "show", args.root, "--json") or [None])[0]
+        if not isinstance(root, dict):
+            raise MonitorError(f"bd show {args.root} returned no bead")
+        p = phase_of(root)
+        phase = Phase(root, bd_json(runner, "list", "--all", "-n", "0", "--label", f"phase-{p}", "--json") or [])
+        rows = load_ledger(ledger_path(runner, p))
+        newest = list(reversed(rows))
+        shown = newest if args.limit == 0 else newest[:args.limit]
+        table = render_table(runner, shown)
+    except (BdCommandError, MonitorError) as exc:
+        print(f"wave-monitor: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"## Sanity runs: phase {p}\n")
+    print(table)
+    print()
+    print(timezone_line())
+
+    print("\n## Iteration signals\n")
+    print("Oversight signals only, separate from SANITY.ROUND_CAP and QA ROUND_CAP.")
+    flagged = [(signal(row), row) for row in newest if signal(row)]
+    for flag, row in flagged:
+        print(f"- {flag}: {row_label(row)}")
+    if not flagged:
+        print("- none")
+
+    print("\n## Ledger reconciliation\n")
+    for line in reconcile(phase, rows, shown) or ["none"]:
+        print(f"- {line}")
+
+    scope = f"wave {args.wave}" if args.wave is not None else "whole phase"
+    print(f"\n## Handoffs: {scope}\n")
+    complete = 0
+    for bead in handoffs(phase, args.wave):
+        stage, stale = missing_stage(phase, bead), restack_stale(bead)
+        if stage:
+            print(f"- {bead['id']}: missing {stage}")
+        if stale:
+            print(f"- {stale}")
+        complete += not stage and not stale
+    print(f"- {complete} complete")
+
+    counts = {"important": 0, "minor": 0}
+    for row in phase.under(root["id"]):
+        if FINDING_LABEL in labels(row) and not is_closed(row) and severity(row) in counts:
+            counts[severity(row)] += 1
+    print("\n## Open findings under the root\n")
+    print(f"- important: {counts['important']}\n- minor: {counts['minor']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""Report whether a sprint container may be closed. Read-only.
+
+Usage:
+  sprint-closable <sprint-bead>
+
+Exit 0 and print `closable` when `<sprint>.chain.dev`, `.chain.sanity` and
+`.chain.qa` are closed and no open finding with severity blocking exists at
+any depth under the sprint. Important and minor findings never count, and the
+chain bead itself need not be closed. Otherwise exit 1 with one reason per
+line; a sprint with no chain prints `no chain`. Exit 2 when `bd` fails.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from typing import Any, Callable
+
+from bd_commands import FINDING_LABEL, BdCommandError
+
+Runner = Callable[..., subprocess.CompletedProcess[str]]
+CHAIN_STEPS = ("dev", "sanity", "qa")
+
+
+def bd_json(runner: Runner, *args: str) -> Any:
+    argv = ["bd", *args]
+    try:
+        proc = runner(argv, capture_output=True, text=True)
+    except OSError as exc:
+        raise BdCommandError(f"{' '.join(argv[:3])} failed: {exc}") from exc
+    if proc.returncode:
+        detail = (proc.stderr or "").strip() or (proc.stdout or "").strip()
+        raise BdCommandError(f"{' '.join(argv[:3])} failed: {detail}")
+    try:
+        return json.loads(proc.stdout or "null")
+    except ValueError as exc:
+        raise BdCommandError(f"{' '.join(argv[:3])} returned invalid JSON: {exc}") from exc
+
+
+def descendants(runner: Runner, bead: str) -> list[dict[str, Any]]:
+    """Every bead under `bead`, walking parent-child links breadth first."""
+    found: dict[str, dict[str, Any]] = {}
+    queue = [bead]
+    while queue:
+        parent = queue.pop(0)
+        rows = bd_json(runner, "list", "--all", "-n", "0", "--parent", parent, "--json") or []
+        for row in rows:
+            if isinstance(row, dict) and row.get("id") and row["id"] not in found and row["id"] != bead:
+                found[row["id"]] = row
+                queue.append(row["id"])
+    return list(found.values())
+
+
+def severity(row: dict[str, Any]) -> str:
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    value = metadata.get("severity")
+    if isinstance(value, str) and value:
+        return value.lower()
+    for label in row.get("labels") or []:
+        if label.startswith("severity:"):
+            return label.split(":", 1)[1].lower()
+    return ""
+
+
+def is_open_blocking_finding(row: dict[str, Any]) -> bool:
+    return (FINDING_LABEL in (row.get("labels") or []) and row.get("status") != "closed"
+            and severity(row) == "blocking")
+
+
+def reasons(sprint: str, rows: list[dict[str, Any]]) -> list[str]:
+    by_id = {row["id"]: row for row in rows}
+    if f"{sprint}.chain" not in by_id:
+        return ["no chain"]
+    out = []
+    for step in CHAIN_STEPS:
+        bead = by_id.get(f"{sprint}.chain.{step}")
+        if bead is None:
+            out.append(f"{step} step {sprint}.chain.{step} missing")
+        elif bead.get("status") != "closed":
+            out.append(f"{step} step {sprint}.chain.{step} is {bead.get('status') or 'open'}")
+    for row in sorted(rows, key=lambda r: r["id"]):
+        if is_open_blocking_finding(row):
+            out.append(f"blocking finding {row['id']} is {row.get('status') or 'open'} (parent {row.get('parent') or '?'})")
+    return out
+
+
+def main(argv: list[str] | None = None, runner: Runner = subprocess.run) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("sprint")
+    args = parser.parse_args(argv)
+    try:
+        bd_json(runner, "show", args.sprint, "--json")
+        found = reasons(args.sprint, descendants(runner, args.sprint))
+    except BdCommandError as exc:
+        print(f"sprint-closable: {exc}", file=sys.stderr)
+        return 2
+    if found:
+        print("\n".join(found))
+        return 1
+    print("closable")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -10,7 +10,7 @@ class ImportingDocsTests(unittest.TestCase):
         self.assertIn('9. **Wire the plan gate**', procedure)
         self.assertIn('**Mandatory:** write the phase definition', procedure)
         self.assertIn('in the same commit as the plan', procedure)
-        self.assertIn('scripts/validate-plan --root <root>', procedure)
+        self.assertIn('scripts/validate-plan --mode plan --root <root>', procedure)
         self.assertNotIn('After importing a phase plan, export the sprint index', skill)
 
 

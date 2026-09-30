@@ -5,13 +5,15 @@ Usage:
   sanity-split --task <sanity bead> --bead <dev bead> --worktree <path>
                --branch <branch> --commit <commit> --base <base>
                --lint-command '<cmd>' --scratch <dir>
-               [--bead-json <file>] [--split-only] [--template <path>]
-               [--lint-timeout-seconds <n>]
+               [--bead-json <file>] [--sprint-bead-json <file>] [--split-only]
+               [--template <path>] [--lint-timeout-seconds <n>]
   sanity-split lint-supervisor --worktree <path> --command '<cmd>' --log <file>
                --exit-file <file> [--timeout-seconds <n>]
 
 Reads the checked bead (`bd show <bead> --json`, or `--bead-json`), parses the
-numbered list under `## Deliverables`, pins the target commit, lists the files
+numbered list under `## Deliverables` (for a chain dev step, of its sprint
+container `metadata.sprint_bead`, read with `bd show` or `--sprint-bead-json`,
+which also supplies `owned_paths`), pins the target commit, lists the files
 changed since the base, renders `dev-sanity-assignment.json.j2` once per
 deliverable with `sc-compose`, starts the lint command detached in the
 worktree, and prints one JSON manifest to stdout:
@@ -76,25 +78,41 @@ def die(code, message):
     return code
 
 
-def load_bead(args):
-    if args.bead_json:
+def load_bead(args, bead=None, bead_json=None, flag="--bead-json"):
+    bead = bead or args.bead
+    bead_json = args.bead_json if bead_json is None else bead_json
+    if bead_json:
         try:
-            data = json.loads(Path(args.bead_json).read_text())
+            data = json.loads(Path(bead_json).read_text())
         except (OSError, ValueError) as exc:
-            raise Fail(1, f"cannot read --bead-json: {exc}")
+            raise Fail(1, f"cannot read {flag}: {exc}")
     else:
-        run = subprocess.run(["bd", "show", args.bead, "--json"], capture_output=True, text=True)
+        run = subprocess.run(["bd", "show", bead, "--json"], capture_output=True, text=True)
         if run.returncode != 0:
-            raise Fail(3, f"bd show {args.bead} failed: {run.stderr.strip()}")
+            raise Fail(3, f"bd show {bead} failed: {run.stderr.strip()}")
         try:
             data = json.loads(run.stdout)
         except ValueError:
-            raise Fail(3, f"bd show {args.bead} did not print JSON")
+            raise Fail(3, f"bd show {bead} did not print JSON")
     if isinstance(data, list):
         data = data[0] if data else None
-    if not isinstance(data, dict) or data.get("id") != args.bead:
-        raise Fail(3, f"bead {args.bead} not found in bead JSON")
+    if not isinstance(data, dict) or data.get("id") != bead:
+        raise Fail(3, f"bead {bead} not found in bead JSON")
     return data
+
+
+def is_chain_step(bead):
+    """A chain dev step (`<sprint>.chain.dev`): stage:dev under a sprint container; a legacy dev bead is itself stage:sprint."""
+    labels = bead.get("labels") or []
+    return "stage:dev" in labels and "stage:sprint" not in labels and bool((bead.get("metadata") or {}).get("sprint_bead"))
+
+
+def plan_source(args, bead):
+    """The bead whose description and owned_paths define the deliverables: the sprint container for a chain
+    dev step; the checked bead itself for a legacy dev bead or a finding."""
+    if not is_chain_step(bead):
+        return bead
+    return load_bead(args, bead["metadata"]["sprint_bead"], args.sprint_bead_json or "", "--sprint-bead-json")
 
 
 ITEM = re.compile(r"^(\d+)\.\s+(\S.*)$")
@@ -340,6 +358,7 @@ def main():
     for flag in ("--task", "--bead", "--worktree", "--branch", "--commit", "--base", "--lint-command", "--scratch"):
         parser.add_argument(flag, required=True)
     parser.add_argument("--bead-json")
+    parser.add_argument("--sprint-bead-json")
     parser.add_argument("--split-only", action="store_true")
     parser.add_argument("--template", type=Path, default=TEMPLATE)
     parser.add_argument("--lint-timeout-seconds", type=int, default=1800)
@@ -349,8 +368,9 @@ def main():
         return 1
     try:
         bead = load_bead(args)
-        deliverables = parse_deliverables(bead.get("description") or "")
-        owned = (bead.get("metadata") or {}).get("owned_paths") or []
+        source = plan_source(args, bead)
+        deliverables = parse_deliverables(source.get("description") or "")
+        owned = (source.get("metadata") or {}).get("owned_paths") or []
         if args.split_only:
             sha, base_sha, files, lint = args.commit, args.base, [], None
         else:

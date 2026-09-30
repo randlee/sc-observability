@@ -1,6 +1,6 @@
 # Dev Sanity Check
 
-The assignment for a sanity check bead. When and how it runs is in
+The assignment for a sanity check: a sprint's chain step `<sprint>.chain.sanity`, or a fix sanity bead. When and how it runs is in
 [`orchestrating.md`](orchestrating.md) ("Dev Sanity Check").
 
 ## Recipient
@@ -13,7 +13,7 @@ role to a team-unique member in `roles:` of `.claude/agents/registry.yaml`
 here). The role contract is
 [`../../atm-bd-orchestration/roles/dev-sanity.md`](../../atm-bd-orchestration/roles/dev-sanity.md).
 
-The sanity check bead's `assignee` is that member:
+The sanity check's `assignee` is that member (baked into the chain at the pour as `sanity_member`):
 `.claude/skills/atm-beads/scripts/resolve-role dev-sanity`. `validate-plan`
 rejects any other assignee, and a member that is not in `atm members`. If
 the team has no such member, lead adds one before the plan is imported (the
