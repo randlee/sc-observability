@@ -585,7 +585,7 @@ fn retained_wrong_auth_fixture_is_rejected_without_credential_diagnostic() {
 }
 
 #[test]
-fn malformed_ca_bundle_returns_transport_error() {
+fn malformed_ca_bundle_fails_client_construction() {
     let ca_file = custom_ca_file(
         "-----BEGIN CERTIFICATE-----\nnot-base64-certificate-data\n-----END CERTIFICATE-----\n",
     );
@@ -596,12 +596,17 @@ fn malformed_ca_bundle_returns_transport_error() {
     );
     fs::remove_file(&ca_file).expect("remove malformed CA fixture");
 
-    assert!(
-        matches!(
-            result,
-            Err(sc_observability_types::v2::ExportError::Transport { .. })
-        ),
-        "malformed CA bundle must fail with a transport error"
+    let Err(sc_observability_types::v2::ExportError::Transport { context }) = result else {
+        panic!("malformed CA bundle must fail HTTP client construction");
+    };
+    assert_eq!(
+        context.diagnostic().code,
+        sc_observability_types::error_codes::otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+    );
+    assert_eq!(
+        context.diagnostic().message,
+        "failed to build HTTP client",
+        "malformed CA bytes should reach client construction, not the read or parse branch"
     );
 }
 
