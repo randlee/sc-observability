@@ -127,6 +127,43 @@ class CompatiblePolicyTests(unittest.TestCase):
                                  'compatible-proc-macro-api' if kind == 'additive'
                                  else 'proc-macro-api-incompatible')
 
+    def test_lib_semver_command_uses_baseline_release_type_all_features_and_fails_closed(self):
+        crate = 'sc-observability'
+        package = {'name': crate, 'version': '1.5.0', 'manifest_path': 'crates/sc-observability/Cargo.toml',
+                   'targets': [{'kind': ['lib']}]}
+        policy = {'schema_version': 1, 'candidate_version': '1.5.0', 'crates': {
+            crate: {'baseline_version': '1.4.1', 'kind': 'lib'}}}
+        valid_manifest = ('schema_version = 1\nbaseline_version = "1.4.1"\n'
+                          'candidate_version = "1.5.0"\nbreaks = []\n')
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'release').mkdir()
+            (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
+            (root / 'release/public-api-major-breaks.toml').write_text(valid_manifest)
+            commands = [
+                CompletedProcess([], 0, json.dumps({'packages': [package]}), ''),
+                CompletedProcess([], 0, 'fixture-head', ''),
+                CompletedProcess(['cargo', 'semver-checks'], 1, '', 'fixture semver failure'),
+            ]
+            with patch('validate_public_api.ROOT', root), \
+                    patch('validate_public_api.CACHE', root / 'cache'), \
+                    patch('validate_public_api.run', side_effect=commands) as mocked_run, \
+                    patch('sys.argv', ['validate_public_api.py', 'semver']), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(), 2)
+
+            semver_command = mocked_run.call_args_list[-1].args[0]
+            self.assertEqual(semver_command[:2], ['cargo', 'semver-checks'])
+            self.assertIn('--baseline-version', semver_command)
+            self.assertEqual(semver_command[semver_command.index('--baseline-version') + 1], '1.4.1')
+            self.assertEqual(semver_command[semver_command.index('--release-type') + 1], 'minor')
+            self.assertIn('--all-features', semver_command)
+            report = json.loads((root / 'cache/public-api-semver.json').read_text())
+            self.assertEqual(report['crates'][crate]['status'], 'tool-error')
+            self.assertEqual(report['crates'][crate]['exit_code'], 1)
+            self.assertEqual(report['crates'][crate]['command'], semver_command)
+
 
 class DocsApprovalEvidenceTests(unittest.TestCase):
     def test_changed_api_without_approval_evidence_fails_closed(self):

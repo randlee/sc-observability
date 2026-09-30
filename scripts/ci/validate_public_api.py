@@ -37,7 +37,7 @@ def run(command: list[str]) -> subprocess.CompletedProcess:
 
 
 def registry_absent(crate: str) -> bool:
-    request = urllib.request.Request(f'https://crates.io/api/v1/crates/{crate}', headers={'User-Agent': 'sc-observability-api-qualification/1.4.0'})
+    request = urllib.request.Request(f'https://crates.io/api/v1/crates/{crate}', headers={'User-Agent': 'sc-observability-api-qualification/1.5.0'})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             if response.status != 200:
@@ -151,7 +151,7 @@ def main() -> int:
                 command.extend(['diff', baseline])
         else:
             same_minor = baseline.split('.')[:2] == package['version'].split('.')[:2]
-            command = ['cargo', 'semver-checks', '--manifest-path', package['manifest_path'], '--baseline-version', baseline, '--release-type', 'patch' if same_minor else 'minor', '--default-features']
+            command = ['cargo', 'semver-checks', '--manifest-path', package['manifest_path'], '--baseline-version', baseline, '--release-type', 'patch' if same_minor else 'minor', '--all-features']
         result = run(command)
         output = result.stdout + result.stderr
         log_name = f'{crate}-{args.mode}.log'
