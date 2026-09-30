@@ -192,6 +192,52 @@ fn typed_registration_reports_duplicate_invalid_and_closed_sinks() {
 }
 
 #[test]
+fn typed_registration_detects_a_sink_already_added_through_raw_registration() {
+    let duplicate = Arc::new(RecordingTypedSink::default());
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
+    builder.register_sink(SinkRegistration::typed(duplicate.clone()));
+
+    let Err(error) = builder.register_typed_sink(duplicate) else {
+        panic!("typed registration must detect the raw duplicate");
+    };
+    assert_diagnostic_info(&error);
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE
+    );
+}
+
+#[test]
+fn raw_registration_accepts_degraded_sinks_and_preserves_filtering() {
+    let degraded = Arc::new(RecordingTypedSink::default());
+    *degraded.state.write().expect("sink health poisoned") = SinkHealthState::DegradedDropping;
+    let filtered = Arc::new(RecordingTypedSink::default());
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
+
+    builder.register_sink(SinkRegistration::typed(degraded.clone()));
+    builder
+        .register_sink(SinkRegistration::typed(filtered.clone()).with_filter(Arc::new(AllowInfo)));
+    let logger = builder
+        .build()
+        .expect("raw registration accepts both sinks");
+
+    logger.log(event()).expect("admit info event");
+    let mut rejected = event();
+    rejected.level = Level::Error;
+    logger.log(rejected).expect("admit error event");
+    logger.flush().expect("wait for registered sinks");
+
+    assert_eq!(
+        degraded.health_snapshot().state,
+        SinkHealthState::DegradedDropping
+    );
+    assert_eq!(degraded.writes.load(Ordering::SeqCst), 2);
+    assert!(degraded.flushes.load(Ordering::SeqCst) >= 1);
+    assert_eq!(filtered.writes.load(Ordering::SeqCst), 1);
+    assert!(filtered.flushes.load(Ordering::SeqCst) >= 1);
+}
+
+#[test]
 fn released_typed_adapter_preserves_failure_diagnostic_and_source() {
     struct FailingReleasedSink;
 
