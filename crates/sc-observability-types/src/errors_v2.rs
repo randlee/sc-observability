@@ -579,6 +579,17 @@ mod tests {
         )
     }
 
+    fn helper_lost_context(message: &str) -> ErrorContext {
+        ErrorContext::new(
+            crate::ErrorCode::new_static("SC_OBSERVABILITY_LOG_HELPER_LOST"),
+            message,
+            crate::Remediation::not_recoverable("inspect the lost helper"),
+        )
+        .source(Box::new(ExportError::Transport {
+            context: Box::new(context("retained export cause")),
+        }))
+    }
+
     #[test]
     fn drain_classification_prefers_explicit_native_value_and_finds_nested_export_source() {
         let export = ExportError::Transport {
@@ -608,6 +619,40 @@ mod tests {
             error.failure_classification(),
             FailureClassification::Unavailable
         );
+    }
+
+    #[test]
+    fn helper_lost_drain_retains_internal_classification_and_export_source() {
+        let flush = FlushError::classified_drain(
+            Box::new(helper_lost_context("flush helper lost")),
+            FailureClassification::Internal,
+        );
+        let shutdown = ShutdownError::classified_drain(
+            Box::new(helper_lost_context("shutdown helper lost")),
+            FailureClassification::Internal,
+        );
+
+        macro_rules! assert_helper_lost {
+            ($error:expr, $message:literal) => {
+                assert_eq!(
+                    $error.diagnostic().code,
+                    crate::ErrorCode::new_static("SC_OBSERVABILITY_LOG_HELPER_LOST")
+                );
+                assert_eq!($error.diagnostic().message, $message);
+                assert_eq!(
+                    $error.failure_classification(),
+                    FailureClassification::Internal
+                );
+                assert!(matches!(
+                    $error.export_cause(),
+                    Some(ExportError::Transport { context })
+                        if context.diagnostic().message == "retained export cause"
+                ));
+            };
+        }
+
+        assert_helper_lost!(flush, "flush helper lost");
+        assert_helper_lost!(shutdown, "shutdown helper lost");
     }
 
     #[test]
