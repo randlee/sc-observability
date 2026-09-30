@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-use sc_observability_log::v2::{BridgeEvent, BridgeOptions, FlushError, LogControl, LogGuard, ShutdownError};
+use sc_observability_log::v2::{
+    BridgeEvent, BridgeOptions, FlushError, LogControl, LogGuard, ShutdownError,
+};
 
 #[test]
 fn canonical_log_exports_have_real_public_signatures() {
