@@ -74,7 +74,7 @@ fn inputs_reject_missing_unknown_and_invalid_versions() {
     let mut raw = event();
     raw["schema_version"] = json!(2);
     assert!(matches!(
-        decode_event(raw),
+        to_core_event(decode_event(raw).unwrap(), stamp()),
         Err(Failure::UnsupportedVersion { received: 2, .. })
     ));
     let mut raw = event();
@@ -88,7 +88,7 @@ fn typed_constructor_codes_survive_dto_validation() {
     let mut raw = event();
     raw["target"] = json!("invalid target");
     assert!(matches!(
-        decode_event(raw),
+        to_core_event(decode_event(raw).unwrap(), stamp()),
         Err(Failure::Validation { diagnostic, field })
             if field == "target"
                 && diagnostic.code == core::error_codes::VALUE_VALIDATION_FAILED.as_str()
@@ -149,7 +149,7 @@ fn query_defaults_and_inclusive_bounds() {
         json!({"schema_version":1,"since":"1970-01-01T01:00:00+01:00"}),
         json!({"schema_version":1,"field_matches":[{"field":"","value":{"kind":"null"}}]}),
     ] {
-        assert!(decode_query(raw).is_err());
+        assert!(decode_query(raw).and_then(to_core_query).is_err());
     }
     let query=decode_query(json!({"schema_version":1,"limit":1000,"field_matches":[{"field":"sc_observability.binding.language","value":{"kind":"string","value":"python"}}]})).unwrap();
     assert_eq!(query.limit, 1000);

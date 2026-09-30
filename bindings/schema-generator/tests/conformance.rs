@@ -138,8 +138,14 @@ fn semantic_negatives_have_exact_failure_kinds_and_codes() {
         let error = match case["operation"].as_str().unwrap() {
             "metric" => decode_metric(value).unwrap_err(),
             "span" => decode_span(value).unwrap_err(),
-            "event" => decode_event(value).unwrap_err(),
-            "query" => decode_query(value).unwrap_err(),
+            "event" => decode_event(value)
+                .and_then(|event| to_core_event(event, EventStamp {
+                    service: serde_json::from_value(serde_json::json!("conformance")).unwrap(),
+                    timestamp: serde_json::from_value(serde_json::json!("1970-01-01T00:00:00Z")).unwrap(),
+                    identity: Default::default(),
+                }))
+                .unwrap_err(),
+            "query" => decode_query(value).and_then(to_core_query).unwrap_err(),
             "level" => decode_level_request(value).unwrap_err(),
             "timeout" => decode_timeout(value).unwrap_err(),
             "envelope" => decode_envelope::<AdmissionDto>(value).unwrap_err(),
