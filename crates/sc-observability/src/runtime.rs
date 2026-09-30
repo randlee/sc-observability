@@ -568,6 +568,12 @@ impl Logger<Running> {
         LoggerBuilder::new(config)
     }
 
+    /// Starts a construction-time builder that reports the released typed
+    /// initialization failure.
+    pub fn builder_typed(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitFailure> {
+        LoggerBuilder::new_typed(config)
+    }
+
     /// Creates a logger with the configured built-in sinks and runtime state.
     pub fn new(config: crate::LoggerConfig) -> Result<Self, InitError> {
         LoggerBuilder::new(config)?.build_canonical()
@@ -583,6 +589,14 @@ impl Logger<Running> {
         config: crate::LoggerConfig,
     ) -> Result<(Self, LevelOwner), InitError> {
         LoggerBuilder::new(config)?.build_with_level_owner()
+    }
+
+    /// Creates a logger and level owner with the released typed startup
+    /// failure.
+    pub fn new_with_level_owner_typed(
+        config: crate::LoggerConfig,
+    ) -> Result<(Self, LevelOwner), InitFailure> {
+        LoggerBuilder::new_typed(config)?.build_with_level_owner_typed()
     }
 
     /// Validates, redacts, and admits one structured log event into the writer queue.
