@@ -3352,13 +3352,13 @@
       "symbol": "sc_observability_log::LogGuard::flush",
       "owner": "sc_observability_log::LogGuard",
       "baseline_signature": "pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
-      "canonical_signature": "pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
+      "canonical_signature": "pub fn flush(&self, timeout: Duration) -> Result<(), sc_observability_types::v2::FlushError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::flush exactly as recorded in this row baseline_signature: pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
         "error: preserve released FlushError failure type at sc_observability_log::LogGuard::flush boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogGuard::flush shim in crates/sc-observability-log/src/lib.rs calls handle::flush_installed, then compat::legacy_flush maps sc_observability_types::v2::FlushError to the released sc_observability_log::FlushError; v2::LogGuard::flush returns the canonical error directly.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -3368,10 +3368,14 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-log/src/lib.rs",
-        "owner": "LogGuard",
+        "owner": "v2::LogGuard",
         "member": "flush"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains compat::legacy_flush; crates/sc-observability-log/src/lib.rs contains the retained released root shim that invokes it. Retire that shim and its error mapping when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard::shutdown",
