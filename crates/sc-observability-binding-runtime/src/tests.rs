@@ -1261,6 +1261,60 @@ fn native_diagnostic_fidelity() {
             diagnostic.remediation.into()
         );
     }
+
+    let diagnostic = native::OperationDiagnostic {
+        code: native::error_codes::DIAGNOSTIC_INVALID,
+        message: "exact unclassified drain message".into(),
+        remediation: native::Remediation::recoverable("inspect the export cause", ["retry later"]),
+        at: native::Timestamp::UNIX_EPOCH,
+    };
+    let error = native::v2::FlushError::Drain {
+        context: Box::new(
+            native::ErrorContext::new(
+                diagnostic.code.clone(),
+                diagnostic.message.clone(),
+                diagnostic.remediation.clone(),
+            )
+            .source(Box::new(native::v2::ExportError::QueueFull {
+                context: Box::new(native::ErrorContext::new(
+                    native::error_codes::otlp::OTLP_QUEUE_FULL,
+                    "export queue is full",
+                    native::Remediation::recoverable("reduce export load", ["retry later"]),
+                )),
+            })),
+        ),
+    };
+    let canonical = dto::CanonicalFailureDto::try_from(&error).expect("DTO projection");
+    let runtime = crate::conversion::bridge_flush(&error);
+
+    assert_eq!(
+        serde_json::to_value(&canonical).expect("DTO serialization")["kind"],
+        "queue_full",
+        "canonical DTO derives kind from the unclassified drain's export cause"
+    );
+    assert_eq!(
+        serde_json::to_value(&runtime).expect("runtime serialization")["kind"],
+        "queue_full",
+        "runtime conversion derives kind from the unclassified drain's export cause"
+    );
+    assert_eq!(runtime.diagnostic().code, diagnostic.code.as_str());
+    assert_eq!(runtime.diagnostic().message, diagnostic.message);
+    assert_eq!(
+        runtime.diagnostic().remediation,
+        diagnostic.remediation.clone().into()
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.code,
+        diagnostic.code.as_str()
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.message,
+        diagnostic.message
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.remediation,
+        diagnostic.remediation.into()
+    );
 }
 
 fn d15_callback_fixture() {
