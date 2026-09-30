@@ -526,9 +526,12 @@ impl HostLoggingBackend for TestBlockedBackend {
     }
 }
 
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "the normal extension compiles this CI seam as a no-op; test-hooks returns a tagged failure"
+#[cfg_attr(
+    not(feature = "test-hooks"),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "the normal extension compiles this CI seam as a no-op; test-hooks returns a tagged failure"
+    )
 )]
 fn test_fault(operation: &str) -> Result<(), Failure> {
     #[cfg(feature = "test-hooks")]
@@ -1139,7 +1142,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[cfg(test)]
-#[allow(
+#[expect(
     clippy::assertions_on_constants,
     clippy::manual_let_else,
     clippy::needless_borrow,
