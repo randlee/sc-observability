@@ -150,7 +150,7 @@ pub enum EmitError {
         /// Details about the writer failure.
         diagnostic: sc_observability_types::OperationDiagnostic,
     },
-    /// Logger shutdown exceeded its deadline during admission.
+    /// The core shutdown deadline has elapsed.
     #[error("logger shutdown timed out: {diagnostic}")]
     ShutdownTimedOut {
         /// Details about the shutdown timeout.

@@ -40,9 +40,12 @@ fn assert_logger_diagnostic(
     message: &str,
     remediation: &Remediation,
 ) {
-    let InitError::Logger { diagnostic } =
-        result.expect_err("public init must reject configuration")
-    else {
+    let error = result.expect_err("public init must reject configuration");
+    assert_eq!(error.code().as_str(), "SC_OBSERVABILITY_LOGGER_INIT_FAILED");
+    assert_eq!(&error.remediation(), remediation);
+    assert!(std::error::Error::source(&error).is_none());
+
+    let InitError::Logger { diagnostic } = error else {
         panic!("public init must preserve the released Logger variant");
     };
     assert_eq!(
