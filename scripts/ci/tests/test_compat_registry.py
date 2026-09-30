@@ -15,6 +15,7 @@ from compatibility_registry import (  # noqa: E402
     is_allowed_compat_reference_source,
     is_compat_source_path,
     validate_compatibility_source_boundary,
+    validate_contract_signatures,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -39,6 +40,45 @@ class BaselineSignatureTests(unittest.TestCase):
     def test_prefix_match_is_exact(self):
         self.assertFalse(has_placeholder_baseline_signature(
             "released public identity for sc_observability_types::IdentityError"))
+
+
+class ContractSignatureTests(unittest.TestCase):
+    SIGNATURE = "pub struct IdentityError(pub Box<ErrorContext>);"
+
+    def row(self, **overrides):
+        row = {"symbol": "sc_observability_types::IdentityError", "treatment": "unchanged_alias",
+               "baseline_signature": self.SIGNATURE, "canonical_signature": self.SIGNATURE}
+        row.update(overrides)
+        return row
+
+    def test_equal_unchanged_alias_is_accepted(self):
+        validate_contract_signatures([self.row()])
+
+    def test_unchanged_alias_with_different_signatures_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "unchanged_alias baseline and canonical signatures differ"):
+            validate_contract_signatures([self.row(canonical_signature="pub enum IdentityError { Process }")])
+
+    def test_different_signatures_are_accepted_for_existing_pair(self):
+        validate_contract_signatures([self.row(
+            treatment="existing_pair", canonical_signature="pub enum IdentityError { Process }")])
+
+    def test_placeholder_canonical_signature_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "placeholder canonical contract"):
+            validate_contract_signatures([self.row(
+                treatment="existing_pair",
+                canonical_signature="released public nominal identity `v2::IdentityError`")])
+
+    def test_empty_canonical_signature_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "placeholder canonical contract"):
+            validate_contract_signatures([self.row(treatment="existing_pair", canonical_signature="")])
+
+    def test_missing_canonical_signature_is_left_to_the_restoration_rule(self):
+        validate_contract_signatures([self.row(treatment="restoration", canonical_signature=None)])
+
+    def test_placeholder_baseline_signature_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "placeholder baseline contract"):
+            validate_contract_signatures([self.row(
+                baseline_signature="released public nominal identity `IdentityError`")])
 
 
 class CompatibilitySourcePathTests(unittest.TestCase):

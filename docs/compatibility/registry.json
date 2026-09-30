@@ -1173,7 +1173,7 @@
       "kind": "error",
       "status": "canonical_routed",
       "canonical": "v2::InitError",
-      "treatment": "unchanged_alias",
+      "treatment": "existing_pair",
       "baseline_signature": "#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)] #[serde(tag = \"kind\", content = \"value\", rename_all = \"snake_case\")] pub enum InitError { /// The bridge is already installed (or being installed) in this process. #[error(\"sc-observability-log is already initialized in this process\")] AlreadyInitialized, /// Another `log::Log` implementation owns the `log` facade. #[error(\"another log::Log implementation is already installed\")] ForeignLoggerInstalled, /// The requested baseline cannot be represented by the executable's /// compile-time `log` cap. This is rejected before global installation. #[error(\"configured level {configured:?} exceeds available static level {available:?}\")] UnsupportedLevel { /// Requested configured baseline. configured: LevelFilter, /// Most verbose facade level compiled into this executable. available: LevelFilter, }, /// `ProcessIdentityPolicy::Resolver` failed, or `Auto` could not resolve a non-empty hostname. #[error(\"process identity resolution failed: {diagnostic}\")] IdentityResolution { /// Stable diagnostic projected from the resolver failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// `sc_observability::Logger::new` failed. #[error(\"sc-observability logger construction failed: {diagnostic}\")] Logger { /// Stable diagnostic projected from the core construction failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// Required lifecycle coordination could not be reserved before facade installation. #[error(\"could not start bridge lifecycle coordination: {diagnostic}\")] RuntimeStart { /// Stable startup diagnostic without an opaque helper source. diagnostic: sc_observability_types::OperationDiagnostic, }, }",
       "canonical_signature": "macro invocation: context_error!( InitError, Configuration => crate::error_codes::DIAGNOSTIC_INVALID, Runtime => crate::error_codes::DIAGNOSTIC_INVALID )",
       "obligations": [
@@ -1181,7 +1181,7 @@
         "wire: preserve InitError serde derives and tag/content/rename attributes recorded in baseline_signature",
         "error mapping: preserve InitError source/context ownership and its released diagnostic/code identity at the root boundary"
       ],
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "conversion": "canonical sc_observability_types::v2::InitError converts to the released root InitError only in crates/sc-observability-log/src/compat/mod.rs (legacy_init); canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -1192,8 +1192,10 @@
         "path": "crates/sc-observability-types/src/errors_v2.rs",
         "symbol": "v2::InitError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists: the selected-head declaration remains the retained implementation."
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "compat/mod.rs owns the released root InitError declaration and its legacy_init conversion and is removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability_log::FlushError",
@@ -1201,7 +1203,7 @@
       "kind": "error",
       "status": "canonical_routed",
       "canonical": "v2::FlushError",
-      "treatment": "unchanged_alias",
+      "treatment": "existing_pair",
       "baseline_signature": "#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)] #[serde(tag = \"kind\", content = \"value\", rename_all = \"snake_case\")] pub enum FlushError { /// The writer did not acknowledge the flush within `timeout`. #[error(\"flush did not complete within {timeout:?}\")] TimedOut { /// The timeout that elapsed. timeout: Duration, }, /// A sink flush failed or the writer disconnected. #[error(\"sc-observability flush failed: {diagnostic}\")] Logger { /// Stable diagnostic projected from the core flush failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The flush helper thread could not be started. #[error(\"could not start the flush helper thread: {diagnostic}\")] HelperSpawn { /// Stable diagnostic for the helper-start failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The flush helper thread ended without a result. #[error(\"the flush helper thread ended without a result: {diagnostic}\")] HelperLost { /// Stable diagnostic for the missing helper result. diagnostic: sc_observability_types::OperationDiagnostic, }, /// A previous flush helper is still running (possibly detached after its caller's /// timeout); no new helper was started and nothing new was flushed. #[error(\"a previous flush is still running; no new flush was started\")] InProgress, /// The owner has stopped accepting flush requests. #[error(\"the logger is not running: {phase:?}\")] NotRunning { /// The lifecycle phase observed when the flush was requested. phase: LifecyclePhase, }, }",
       "canonical_signature": "macro invocation: context_error!(FlushError, Drain => crate::error_codes::DIAGNOSTIC_INVALID)",
       "obligations": [
@@ -1209,7 +1211,7 @@
         "wire: preserve FlushError serde derives and tag/content/rename attributes recorded in baseline_signature",
         "error mapping: preserve FlushError source/context ownership and its released diagnostic/code identity at the root boundary"
       ],
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "conversion": "canonical sc_observability_types::v2::FlushError converts to the released root FlushError only in crates/sc-observability-log/src/compat/mod.rs (legacy_flush); canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -1220,8 +1222,10 @@
         "path": "crates/sc-observability-types/src/errors_v2.rs",
         "symbol": "v2::FlushError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists: the selected-head declaration remains the retained implementation."
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "compat/mod.rs owns the released root FlushError declaration and its legacy_flush conversion and is removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability_log::ShutdownError",
@@ -1229,7 +1233,7 @@
       "kind": "error",
       "status": "canonical_routed",
       "canonical": "v2::ShutdownError",
-      "treatment": "unchanged_alias",
+      "treatment": "existing_pair",
       "baseline_signature": "#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)] #[serde(tag = \"kind\", content = \"value\", rename_all = \"snake_case\")] pub enum ShutdownError { /// Sole ownership, final flush and writer join did not finish within `timeout`. #[error(\"shutdown did not complete within {timeout:?}\")] TimedOut { /// The timeout that elapsed. timeout: Duration, }, /// The final flush failed; the logger was still shut down. #[error(\"final flush failed; the logger was still shut down: {diagnostic}\")] FinalFlush { /// Stable diagnostic projected from the final core flush failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The shutdown helper thread could not be started. #[error(\"could not start the shutdown helper thread: {diagnostic}\")] HelperSpawn { /// Stable diagnostic for the coordinator-send failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The shutdown helper thread ended without a result. #[error(\"the shutdown helper thread ended without a result: {diagnostic}\")] HelperLost { /// Stable diagnostic for the missing coordinator result. diagnostic: sc_observability_types::OperationDiagnostic, }, }",
       "canonical_signature": "macro invocation: context_error!( ShutdownError, Timeout => crate::error_codes::DIAGNOSTIC_INVALID, Drain => crate::error_codes::DIAGNOSTIC_INVALID )",
       "obligations": [
@@ -1237,7 +1241,7 @@
         "wire: preserve ShutdownError serde derives and tag/content/rename attributes recorded in baseline_signature",
         "error mapping: preserve ShutdownError source/context ownership and its released diagnostic/code identity at the root boundary"
       ],
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "conversion": "canonical sc_observability_types::v2::ShutdownError converts to the released root ShutdownError only in crates/sc-observability-log/src/compat/mod.rs (legacy_shutdown); canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -1248,8 +1252,10 @@
         "path": "crates/sc-observability-types/src/errors_v2.rs",
         "symbol": "v2::ShutdownError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists: the selected-head declaration remains the retained implementation."
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "compat/mod.rs owns the released root ShutdownError declaration and its legacy_shutdown conversion and is removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability_log::EmitError",

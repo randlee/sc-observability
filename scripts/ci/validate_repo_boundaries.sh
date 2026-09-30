@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path('.github/scripts').resolve()))
 sys.path.insert(0, str(Path('scripts/ci').resolve()))
 from release_manifest import workspace_members
 from compatibility_registry import (
-    has_placeholder_baseline_signature,
     validate_compatibility_source_boundary,
+    validate_contract_signatures,
 )
 
 def is_release_manifest(path: Path, workspace_toml: Path):
@@ -176,13 +176,10 @@ if any(not required_record_fields.issubset(row) for row in all_contract_rows):
     raise SystemExit("compatibility registry has an incomplete contract record")
 if {row["treatment"] for row in all_contract_rows} - allowed_treatments:
     raise SystemExit("compatibility registry has an unknown four-way treatment")
-if any(
-    not isinstance(row["baseline_signature"], str)
-    or not row["baseline_signature"]
-    or has_placeholder_baseline_signature(row["baseline_signature"])
-    for row in all_contract_rows
-):
-    raise SystemExit("compatibility registry has an unsigned or placeholder baseline contract")
+try:
+    validate_contract_signatures(all_contract_rows)
+except ValueError as error:
+    raise SystemExit(error) from error
 if any(row["canonical_signature"] is None and row["treatment"] != "restoration" for row in all_contract_rows):
     raise SystemExit("missing canonical signatures must be explicit restoration records")
 try:

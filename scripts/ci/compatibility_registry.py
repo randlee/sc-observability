@@ -38,6 +38,22 @@ def has_placeholder_baseline_signature(signature: str) -> bool:
     return any(signature.startswith(prefix) for prefix in PLACEHOLDER_BASELINE_SIGNATURE_PREFIXES)
 
 
+def validate_contract_signatures(rows: Iterable[dict]) -> None:
+    """Reject unsigned or placeholder signatures and unequal unchanged aliases."""
+    for row in rows:
+        symbol = row.get("symbol")
+        baseline = row["baseline_signature"]
+        canonical = row["canonical_signature"]
+        if not isinstance(baseline, str) or not baseline or has_placeholder_baseline_signature(baseline):
+            raise ValueError(f"compatibility registry has an unsigned or placeholder baseline contract: {symbol}")
+        if canonical is not None and (
+            not isinstance(canonical, str) or not canonical or has_placeholder_baseline_signature(canonical)
+        ):
+            raise ValueError(f"compatibility registry has an unsigned or placeholder canonical contract: {symbol}")
+        if row["treatment"] == "unchanged_alias" and canonical != baseline:
+            raise ValueError(f"unchanged_alias baseline and canonical signatures differ: {symbol}")
+
+
 def is_compat_source_path(relative_path: str) -> bool:
     """Return whether a repository-relative path is a compatibility source file."""
     normalized = relative_path.lstrip("/")
