@@ -266,9 +266,7 @@ impl JsonlFileSink {
         let Some(parent) = self.path.parent() else {
             return Ok(0);
         };
-        let Ok(entries) = fs::read_dir(parent) else {
-            return Ok(0);
-        };
+        let entries = fs::read_dir(parent).map_err(|error| self.mark_failure(error))?;
 
         let mut retained_files = Vec::new();
         for entry in entries {
@@ -915,6 +913,32 @@ mod tests {
                 maintenance_max_work_per_pass: None,
             })
             .expect_err("maintenance failure");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_MAINTENANCE_FAILED
+        );
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[test]
+    fn retained_prune_read_dir_failure_uses_maintenance_error_code() {
+        let root = temp_root("maintenance-read-dir-error");
+        let parent = root.join("logs");
+        fs::write(&parent, "not a directory").expect("create invalid log parent");
+        let active_path = parent.join("service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path);
+
+        let error = sink
+            .perform_maintenance(&RetainedLogPolicy {
+                rotation_max_bytes: bytes(u64::MAX),
+                rotation_max_files: file_count(1),
+                retention_max_age: retention_secs(3600),
+                maintenance_cadence: cadence_secs(60),
+                writer_shutdown_timeout: join_secs(5),
+                maintenance_max_work_per_pass: None,
+            })
+            .expect_err("reading the regular-file log parent must fail maintenance");
 
         assert_eq!(
             error.diagnostic().code,
