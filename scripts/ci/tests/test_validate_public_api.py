@@ -125,6 +125,127 @@ class CompatiblePolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"unknown=\['sc-observability-unknown'\]"):
             validate_api_package_roster(policy_with_unknown, unknown_inventory, valid_artifacts)
 
+    def test_policy_crates_must_match_candidate_packages_independently(self):
+        cases = [
+            ('policy omits candidate',
+             ['sc-observability-log-macros', 'sc-observability'],
+             {'sc-observability-log-macros'}),
+            ('policy adds non-candidate',
+             ['sc-observability-log-macros'],
+             {'sc-observability-log-macros', 'sc-observability'}),
+        ]
+        for name, candidate_packages, policy_packages in cases:
+            inventory = {
+                'qualificationCandidate': {
+                    'packages': candidate_packages,
+                    'deferredStandalonePackages': [self.deferred_tauri.copy()],
+                },
+            }
+            artifacts = {'crates': [
+                {'package': 'sc-observability-log-macros'},
+                *([{'package': 'sc-observability'}]
+                  if 'sc-observability' in candidate_packages else []),
+                {'package': 'sc-observability-tauri'},
+            ]}
+            policy = {'crates': {package: {} for package in policy_packages}}
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    ValueError,
+                    'public API policy must name exactly the qualification candidate packages'):
+                validate_api_package_roster(policy, inventory, artifacts)
+
+    def test_candidate_and_exact_deferred_package_overlap_is_rejected(self):
+        inventory = {
+            'qualificationCandidate': {
+                'packages': ['sc-observability-log-macros', 'sc-observability-tauri'],
+                'deferredStandalonePackages': [self.deferred_tauri.copy()],
+            },
+        }
+        policy = {'crates': {
+            'sc-observability-log-macros': {},
+            'sc-observability-tauri': {},
+        }}
+        artifacts = {'crates': [
+            {'package': 'sc-observability-log-macros'},
+            {'package': 'sc-observability-tauri'},
+        ]}
+        with self.assertRaisesRegex(
+                ValueError, 'candidate and deferred API package sets overlap'):
+            validate_api_package_roster(policy, inventory, artifacts)
+
+    def test_package_roster_shape_guards_report_specific_value_errors(self):
+        valid_inventory = {
+            'qualificationCandidate': {
+                'packages': ['sc-observability-log-macros'],
+                'deferredStandalonePackages': [self.deferred_tauri.copy()],
+            },
+        }
+        valid_artifacts = {'crates': [
+            {'package': 'sc-observability-log-macros'},
+            {'package': 'sc-observability-tauri'},
+        ]}
+        cases = [
+            ('candidate is not an object',
+             {'qualificationCandidate': None}, valid_artifacts,
+             'release inventory must define qualificationCandidate'),
+            ('candidate packages is not a list',
+             {'qualificationCandidate': {
+                 'packages': None,
+                 'deferredStandalonePackages': [self.deferred_tauri.copy()],
+             }}, valid_artifacts,
+             'qualificationCandidate.packages must be a list of package names'),
+            ('candidate package is not a string',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros', None],
+                 'deferredStandalonePackages': [self.deferred_tauri.copy()],
+             }}, valid_artifacts,
+             'qualificationCandidate.packages must be a list of package names'),
+            ('candidate package is empty',
+             {'qualificationCandidate': {
+                 'packages': [''],
+                 'deferredStandalonePackages': [self.deferred_tauri.copy()],
+             }}, valid_artifacts,
+             'qualificationCandidate.packages must be a list of package names'),
+            ('deferred packages is not a list',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros'],
+                 'deferredStandalonePackages': None,
+             }}, valid_artifacts,
+             'qualificationCandidate.deferredStandalonePackages must be a list of package records'),
+            ('deferred record is not an object',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros'],
+                 'deferredStandalonePackages': [None],
+             }}, valid_artifacts,
+             'qualificationCandidate.deferredStandalonePackages must be a list of package records'),
+            ('deferred record package is missing',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros'],
+                 'deferredStandalonePackages': [{'reason': 'fixture'}],
+             }}, valid_artifacts,
+             'deferred standalone API package records must name a package'),
+            ('deferred record package is empty',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros'],
+                 'deferredStandalonePackages': [{'package': ''}],
+             }}, valid_artifacts,
+             'deferred standalone API package records must name a package'),
+            ('artifact crates is not a list',
+             valid_inventory, {'crates': None},
+             'publish-artifacts manifest must define a crates list'),
+            ('artifact crate is not an object',
+             valid_inventory, {'crates': [None]},
+             'publish-artifacts manifest must define a crates list'),
+            ('artifact package is missing',
+             valid_inventory, {'crates': [{}]},
+             'every publish-artifacts crate must name a package'),
+            ('artifact package is empty',
+             valid_inventory, {'crates': [{'package': ''}]},
+             'every publish-artifacts crate must name a package'),
+        ]
+        for name, inventory, artifacts, error in cases:
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, error):
+                validate_api_package_roster(self.policy(), inventory, artifacts)
+
     def diff(self, *, removal='', changed='', addition=''):
         return ('Removed items from the public API\n' + (removal or '(none)') + '\n'
                 'Changed items in the public API\n' + (changed or '(none)') + '\n'
