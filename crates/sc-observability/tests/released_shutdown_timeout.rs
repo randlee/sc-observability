@@ -1,4 +1,8 @@
-//! Released shutdown-timeout error-surface compatibility coverage.
+//! Defensive released shutdown-timeout variant-preservation coverage.
+//!
+//! A real writer shutdown timeout is retained by `Logger<Stopped>::health()`;
+//! this fixture covers only the released error-wrapper conversions retained for
+//! defensive compatibility.
 
 use sc_observability::{ErrorContext, LogError, TryLogError, error_codes};
 use sc_observability_types::Remediation;
@@ -13,7 +17,7 @@ fn timeout_context() -> Box<ErrorContext> {
 }
 
 #[test]
-fn released_shutdown_timeout_variants_preserve_the_typed_contract() {
+fn defensive_shutdown_timeout_variants_preserve_typed_conversions() {
     assert!(matches!(
         LogFailure::from(LogError::ShutdownTimedOut(timeout_context())),
         LogFailure::ShutdownTimedOut(_)
