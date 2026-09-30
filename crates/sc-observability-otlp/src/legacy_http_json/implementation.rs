@@ -18,8 +18,6 @@ use std::fs;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
-#[cfg(test)]
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
@@ -65,9 +63,6 @@ const RETRY_AFTER_HEADER_LIMIT: usize = 128;
 /// Five milliseconds keeps shutdown/control observation responsive without
 /// repeatedly waking the worker at CPU speed; changing it shifts that latency/CPU trade-off.
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(5);
-
-#[cfg(test)]
-static RETRY_WAIT_HOOK: OnceLock<Mutex<Option<mpsc::Sender<()>>>> = OnceLock::new();
 
 /// Per-worker gates control ordering, never the readiness result or timeout.
 #[cfg(test)]
@@ -661,7 +656,7 @@ fn wait_for_retry(config: &LegacyHttpJsonConfig, duration: Duration, cancel: &At
     wait_cancelable_with_observer(duration, cancel, observer)
 }
 
-fn wait_cancelable_with_observer(
+pub(super) fn wait_cancelable_with_observer(
     duration: Duration,
     cancel: &AtomicBool,
     observer: Option<&Sender<Duration>>,
@@ -670,7 +665,6 @@ fn wait_cancelable_with_observer(
     let _ = observer;
     #[cfg(test)]
     {
-        notify_retry_wait_started();
         if let Some(sender) = observer {
             // std::sync::mpsc::Sender is unbounded, so send is nonblocking
             // for this test-only notification and cannot lose a pre-wait
@@ -688,29 +682,6 @@ fn wait_cancelable_with_observer(
         thread::sleep(remaining.min(WORKER_POLL_INTERVAL));
     }
     false
-}
-
-#[cfg(test)]
-pub(super) fn install_retry_wait_hook(sender: mpsc::Sender<()>) {
-    let hook = RETRY_WAIT_HOOK.get_or_init(|| Mutex::new(None));
-    *hook.lock().expect("retry wait hook lock") = Some(sender);
-}
-
-#[cfg(test)]
-pub(super) fn clear_retry_wait_hook() {
-    if let Some(hook) = RETRY_WAIT_HOOK.get() {
-        *hook.lock().expect("retry wait hook lock") = None;
-    }
-}
-
-#[cfg(test)]
-fn notify_retry_wait_started() {
-    let sender = RETRY_WAIT_HOOK
-        .get()
-        .and_then(|hook| hook.lock().expect("retry wait hook lock").clone());
-    if let Some(sender) = sender {
-        let _ = sender.send(());
-    }
 }
 
 fn apply_jitter(delay: Duration, percent: u8, state: &mut u64) -> Duration {

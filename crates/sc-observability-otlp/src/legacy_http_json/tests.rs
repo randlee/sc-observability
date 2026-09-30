@@ -21,8 +21,6 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-static RETRY_WAIT_TEST_LOCK: Mutex<()> = Mutex::new(());
-
 // This is a test watchdog, not the production handshake deadline (1 ms).
 const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
 const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 4_000;
@@ -182,6 +180,126 @@ fn read_request(stream: &mut std::net::TcpStream) -> String {
     String::from_utf8_lossy(&request).into_owned()
 }
 
+const RETRY_OBSERVER_SERVER_WATCHDOG: Duration = Duration::from_secs(8);
+const RETRY_OBSERVER_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const RETRY_OBSERVER_NEGATIVE_WINDOW: Duration = Duration::from_millis(100);
+
+fn accept_retry_observer_request(listener: &TcpListener, deadline: Instant) -> std::net::TcpStream {
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return stream,
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                assert!(
+                    Instant::now() < deadline,
+                    "request was not accepted before the server watchdog"
+                );
+                thread::sleep(RETRY_OBSERVER_ACCEPT_POLL_INTERVAL);
+            }
+            Err(error) => panic!("accept retry-observer request: {error}"),
+        }
+    }
+}
+
+fn set_retry_observer_io_deadlines(stream: &std::net::TcpStream, deadline: Instant) {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    assert!(!remaining.is_zero(), "server watchdog expired before I/O");
+    stream
+        .set_read_timeout(Some(remaining))
+        .expect("set retry-observer server read deadline");
+    stream
+        .set_write_timeout(Some(remaining))
+        .expect("set retry-observer server write deadline");
+}
+
+fn read_retry_observer_request(stream: &mut std::net::TcpStream, deadline: Instant) -> String {
+    let mut request = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    let mut expected_len = None;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        assert!(
+            !remaining.is_zero(),
+            "server watchdog expired before request read"
+        );
+        stream
+            .set_read_timeout(Some(remaining))
+            .expect("set retry-observer request read deadline");
+        let read = stream
+            .read(&mut buffer)
+            .expect("read complete HTTP request");
+        assert_ne!(read, 0, "client closed before sending the complete request");
+        request.extend_from_slice(&buffer[..read]);
+
+        if expected_len.is_none()
+            && let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n")
+        {
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let content_len = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .expect("HTTP request includes a valid Content-Length");
+            expected_len = Some(header_end + 4 + content_len);
+        }
+
+        if expected_len.is_some_and(|expected| request.len() >= expected) {
+            return String::from_utf8_lossy(&request).into_owned();
+        }
+    }
+}
+
+fn retrying_server(
+    listener: TcpListener,
+    first_request_tx: mpsc::Sender<()>,
+    release_first_response_rx: mpsc::Receiver<()>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        listener
+            .set_nonblocking(true)
+            .expect("make retry-observer listener nonblocking");
+        let deadline = Instant::now() + RETRY_OBSERVER_SERVER_WATCHDOG;
+        let mut first = accept_retry_observer_request(&listener, deadline);
+        set_retry_observer_io_deadlines(&first, deadline);
+        let request = read_retry_observer_request(&mut first, deadline);
+        assert!(request.contains("\"hello\""));
+        first_request_tx
+            .send(())
+            .expect("signal target request is gated at the server");
+        release_first_response_rx
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .expect("release target retry response before the server watchdog");
+        first
+            .write_all(
+                b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .expect("write retry response");
+
+        let mut retry = accept_retry_observer_request(&listener, deadline);
+        set_retry_observer_io_deadlines(&retry, deadline);
+        let request = read_retry_observer_request(&mut retry, deadline);
+        assert!(request.contains("\"hello\""));
+        retry
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("write success response");
+    })
+}
+
+fn join_retry_observer_server(server: thread::JoinHandle<()>) {
+    let deadline = Instant::now() + RETRY_OBSERVER_SERVER_WATCHDOG;
+    while !server.is_finished() {
+        assert!(
+            Instant::now() < deadline,
+            "retry-observer server did not finish before the join watchdog"
+        );
+        thread::sleep(RETRY_OBSERVER_ACCEPT_POLL_INTERVAL);
+    }
+    server.join().expect("retry-observer server exits cleanly");
+}
+
 // Adapted from `otlp_http_exporter_loads_custom_ca_bundle` at immutable
 // source 7b39f4e7f72b6845edec4eab4cd671611661445f. This valid root fixture
 // verifies retained custom-root input handling; collector/TLS endpoint
@@ -318,7 +436,6 @@ fn safety_delta_retry_classification_is_bounded() {
 
 #[test]
 fn safety_delta_shutdown_cancels_retry_wait() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let cancel = std::sync::atomic::AtomicBool::new(false);
     cancel.store(true, Ordering::Release);
     assert!(!super::implementation::wait_cancelable(
@@ -756,7 +873,6 @@ fn terminal_client_status_is_not_retried() {
 
 #[test]
 fn response_loss_retries_the_same_batch_without_false_success_drop() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
@@ -788,7 +904,6 @@ fn response_loss_retries_the_same_batch_without_false_success_drop() {
 
 #[test]
 fn loopback_retry_after_is_capped_before_the_next_request() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
@@ -828,7 +943,6 @@ fn loopback_retry_after_is_capped_before_the_next_request() {
 
 #[test]
 fn loopback_fallback_jitter_preserves_an_ordered_retry_sequence() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
@@ -877,7 +991,6 @@ fn loopback_fallback_jitter_preserves_an_ordered_retry_sequence() {
 }
 
 fn drop_without_shutdown_abandons_pending_admission(entered_tokio: bool) {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let server = thread::spawn(move || {
@@ -954,7 +1067,6 @@ fn drop_without_shutdown_abandons_pending_admission_in_entered_tokio() {
 
 #[test]
 fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
@@ -1114,7 +1226,6 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
 
 #[test]
 fn loopback_retry_attempt_limit_returns_typed_exhaustion() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
@@ -1152,7 +1263,6 @@ fn loopback_retry_attempt_limit_returns_typed_exhaustion() {
 
 #[test]
 fn shutdown_cancels_an_actual_retry_backoff() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let server = thread::spawn(move || {
@@ -1165,11 +1275,16 @@ fn shutdown_cancels_an_actual_retry_backoff() {
             )
             .expect("write retry response");
     });
-    let exporter = Arc::new(
-        OtlpHttpExporter::for_endpoint(format!("http://{address}")).expect("construct exporter"),
-    );
     let (retry_wait_tx, retry_wait_rx) = mpsc::channel();
-    super::implementation::install_retry_wait_hook(retry_wait_tx);
+    let exporter = Arc::new(
+        OtlpHttpExporter::for_endpoint_with_retry(
+            format!("http://{address}"),
+            retry_policy(3, 100, 200, 5_000, 4_000, 0),
+            1,
+            Some(retry_wait_tx),
+        )
+        .expect("construct exporter"),
+    );
     let export = Arc::clone(&exporter);
     let export_thread = thread::spawn(move || {
         export.send_payload_sync(
@@ -1177,10 +1292,12 @@ fn shutdown_cancels_an_actual_retry_backoff() {
             &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
         )
     });
-    retry_wait_rx
-        .recv_timeout(Duration::from_secs(1))
-        .expect("request entered the retry backoff");
-    super::implementation::clear_retry_wait_hook();
+    assert_eq!(
+        retry_wait_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("request entered the retry backoff"),
+        Duration::from_secs(4)
+    );
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -1203,21 +1320,154 @@ fn shutdown_cancels_an_actual_retry_backoff() {
 
 #[test]
 fn retry_wait_notification_is_retained_before_receiver_waits() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let (notification_tx, notification_rx) = mpsc::channel();
-    super::implementation::install_retry_wait_hook(notification_tx);
 
     let cancel = std::sync::atomic::AtomicBool::new(true);
-    assert!(!super::implementation::wait_cancelable(
+    assert!(!super::implementation::wait_cancelable_with_observer(
         Duration::ZERO,
-        &cancel
+        &cancel,
+        Some(&notification_tx),
     ));
-    super::implementation::clear_retry_wait_hook();
 
     assert!(
-        notification_rx.try_recv().is_ok(),
+        notification_rx
+            .try_recv()
+            .is_ok_and(|delay| delay.is_zero()),
         "retry notification remains queued until the receiver waits"
     );
+}
+
+struct RetryObserverUnrelated {
+    delay: mpsc::Receiver<Duration>,
+    exporter: Arc<OtlpHttpExporter>,
+    export: thread::JoinHandle<Result<(), sc_observability_types::v2::ExportError>>,
+    server: thread::JoinHandle<()>,
+}
+
+fn start_unrelated_retry_observer() -> RetryObserverUnrelated {
+    let unrelated_listener = TcpListener::bind("127.0.0.1:0").expect("bind unrelated listener");
+    let unrelated_address = unrelated_listener
+        .local_addr()
+        .expect("unrelated listener address");
+    let unrelated_server = thread::spawn(move || {
+        unrelated_listener
+            .set_nonblocking(true)
+            .expect("make unrelated listener nonblocking");
+        let deadline = Instant::now() + RETRY_OBSERVER_SERVER_WATCHDOG;
+        let mut stream = accept_retry_observer_request(&unrelated_listener, deadline);
+        set_retry_observer_io_deadlines(&stream, deadline);
+        let request = read_retry_observer_request(&mut stream, deadline);
+        assert!(request.contains("\"hello\""));
+        stream
+            .write_all(
+                b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .expect("write unrelated retry response");
+    });
+
+    let (unrelated_delay_tx, unrelated_delay_rx) = mpsc::channel();
+    let exporter = Arc::new(
+        OtlpHttpExporter::for_endpoint_with_retry(
+            format!("http://{unrelated_address}"),
+            retry_policy(1, 10_000, 10_000, 30_000, 1_000, 0),
+            1,
+            Some(unrelated_delay_tx),
+        )
+        .expect("construct unrelated exporter"),
+    );
+    let for_export = Arc::clone(&exporter);
+    let export = thread::spawn(move || for_export.send_payload_sync("logs", &logs_payload()));
+    RetryObserverUnrelated {
+        delay: unrelated_delay_rx,
+        exporter,
+        export,
+        server: unrelated_server,
+    }
+}
+
+#[test]
+fn retry_wait_observer_is_scoped_to_its_worker() {
+    const UNRELATED_DELAY: Duration = Duration::from_secs(10);
+    const TARGET_DELAY: Duration = Duration::from_millis(100);
+    const OBSERVER_WATCHDOG: Duration = Duration::from_secs(2);
+
+    let target_listener = TcpListener::bind("127.0.0.1:0").expect("bind target listener");
+    let target_address = target_listener
+        .local_addr()
+        .expect("target listener address");
+    let (target_request_tx, target_request_rx) = mpsc::channel();
+    let (release_target_response_tx, release_target_response_rx) = mpsc::channel();
+    let target_server = retrying_server(
+        target_listener,
+        target_request_tx,
+        release_target_response_rx,
+    );
+    let (target_delay_tx, target_delay_rx) = mpsc::channel();
+    let target_exporter = OtlpHttpExporter::for_endpoint_with_retry_timeout(
+        format!("http://{target_address}"),
+        retry_policy(1, 100, 100, 10_000, 6_000, 0),
+        6_000,
+        1,
+        Some(target_delay_tx),
+    )
+    .expect("construct target exporter");
+    let target_export =
+        thread::spawn(move || target_exporter.send_payload_sync("logs", &logs_payload()));
+    target_request_rx
+        .recv_timeout(OBSERVER_WATCHDOG)
+        .expect("target request reaches the server and waits for its response gate");
+
+    let unrelated = start_unrelated_retry_observer();
+    assert_eq!(
+        unrelated
+            .delay
+            .recv_timeout(OBSERVER_WATCHDOG)
+            .expect("unrelated worker entered its retry wait"),
+        UNRELATED_DELAY
+    );
+
+    assert!(
+        matches!(
+            target_delay_rx.recv_timeout(RETRY_OBSERVER_NEGATIVE_WINDOW),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ),
+        "unrelated retry wait cannot notify the live target observer"
+    );
+    release_target_response_tx
+        .send(())
+        .expect("release target request to enter its own retry wait");
+
+    assert_eq!(
+        target_delay_rx
+            .recv_timeout(OBSERVER_WATCHDOG)
+            .expect("target worker entered its own retry wait"),
+        TARGET_DELAY
+    );
+    target_export
+        .join()
+        .expect("join target export")
+        .expect("target retry succeeds");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let shutdown = runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(1), unrelated.exporter.shutdown_async()).await
+    });
+    assert!(
+        shutdown.is_ok(),
+        "shutdown did not cancel unrelated retry wait"
+    );
+    assert!(matches!(
+        unrelated
+            .export
+            .join()
+            .expect("join unrelated export")
+            .expect_err("unrelated retry wait is cancelled"),
+        sc_observability_types::v2::ExportError::ShutdownCancelledRetry { .. }
+    ));
+    join_retry_observer_server(target_server);
+    join_retry_observer_server(unrelated.server);
 }
 
 #[test]
@@ -1315,7 +1565,6 @@ fn shutdown_blocking_is_rejected_from_entered_tokio() {
 
 #[test]
 fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
-    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
