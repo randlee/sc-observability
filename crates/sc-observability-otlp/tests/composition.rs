@@ -1,7 +1,7 @@
 //! Public composition checks for enabled and disabled transport selection.
 
-use sc_observability_otlp::{
-    ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, Telemetry,
+use sc_observability_otlp::v2::{
+    ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
     TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::{
@@ -37,7 +37,7 @@ fn event() -> LogEvent {
     }
 }
 
-fn config(transport: OtelConfig) -> sc_observability_otlp::TelemetryConfig {
+fn config(transport: OtelConfig) -> sc_observability_otlp::v2::TelemetryConfig {
     TelemetryConfigBuilder::new(service())
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
@@ -74,7 +74,7 @@ fn sdk_backend_rejects_http_json_protocol_instead_of_switching_backend() {
     let mut transport = OtelConfig::default();
     transport.enabled = true;
     transport.backend = ExporterBackend::OpenTelemetrySdk;
-    transport.protocol = sc_observability_otlp::OtlpProtocol::HttpJson;
+    transport.protocol = OtlpProtocol::HttpJson;
     transport.endpoint =
         Some(OtlpEndpoint::new_typed("https://otel.example.internal").expect("endpoint"));
     let Err(error) = Telemetry::new(config(transport)) else {
@@ -91,7 +91,7 @@ fn legacy_backend_rejects_grpc_protocol_instead_of_switching_backend() {
     let mut transport = OtelConfig::default();
     transport.enabled = true;
     transport.backend = ExporterBackend::LegacyHttpJson;
-    transport.protocol = sc_observability_otlp::OtlpProtocol::Grpc;
+    transport.protocol = OtlpProtocol::Grpc;
     transport.endpoint =
         Some(OtlpEndpoint::new_typed("https://otel.example.internal").expect("endpoint"));
     let Err(error) = Telemetry::new(config(transport)) else {

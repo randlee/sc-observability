@@ -1,7 +1,15 @@
 use super::*;
+use crate::config::{
+    ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
+    TelemetryConfigBuilder, TracesConfig,
+};
 use crate::testing::{
     LifecycleCall, RecordingLifecycle, RecordingLogExporter, RecordingMetricExporter,
     RecordingTraceExporter,
+};
+use crate::{
+    CanonicalTelemetryError as TelemetryError, RuntimeTelemetry as Telemetry,
+    RuntimeTelemetryConfig as TelemetryConfig,
 };
 use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::{

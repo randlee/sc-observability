@@ -5,9 +5,13 @@
 
 use std::sync::Arc;
 
+use sc_observability_otlp::v2::{
+    OtelConfig as V2OtelConfig, OtlpEndpoint as V2OtlpEndpoint, Telemetry as V2Telemetry,
+    TelemetryConfig as V2TelemetryConfig, TelemetryConfigBuilder as V2TelemetryConfigBuilder,
+};
 use sc_observability_otlp::{
-    LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
-    TelemetryProjectors, TracesConfig,
+    LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TelemetryProjectors,
+    TracesConfig,
 };
 use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
@@ -139,8 +143,10 @@ impl TypedMetricProjector<AgentPayload> for TypedStaticMetricProjector {
 
 fn disabled_telemetry_config() -> sc_observability_otlp::TelemetryConfig {
     // Local projection fixture; exporter routing uses the private injection seam.
-    let mut transport = OtelConfig::default();
-    transport.enabled = false;
+    let transport = OtelConfig {
+        enabled: false,
+        ..OtelConfig::default()
+    };
     TelemetryConfigBuilder::new(service_name())
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
@@ -150,12 +156,13 @@ fn disabled_telemetry_config() -> sc_observability_otlp::TelemetryConfig {
         .expect("valid telemetry config")
 }
 
-fn enabled_telemetry_config() -> sc_observability_otlp::TelemetryConfig {
-    let mut transport = OtelConfig::default();
+fn enabled_telemetry_config() -> V2TelemetryConfig {
+    let mut transport = V2OtelConfig::default();
     transport.enabled = true;
-    transport.endpoint =
-        Some(OtlpEndpoint::new("https://otel.example.internal").expect("valid OTLP endpoint"));
-    TelemetryConfigBuilder::new(service_name())
+    transport.endpoint = Some(
+        V2OtlpEndpoint::new_typed("https://otel.example.internal").expect("valid OTLP endpoint"),
+    );
+    V2TelemetryConfigBuilder::new(service_name())
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
@@ -325,7 +332,7 @@ fn typed_projector_inputs_forward_through_retained_registration() {
 
 #[test]
 fn enabled_configuration_rejects_unavailable_backend() {
-    let Err(error) = Telemetry::new(enabled_telemetry_config()) else {
+    let Err(error) = V2Telemetry::new(enabled_telemetry_config()) else {
         panic!("enabled configuration must not receive a fallback exporter");
     };
 
@@ -349,7 +356,7 @@ fn enabled_sdk_telemetry_awaits_shared_lifecycle_and_closes_admission() {
         .build()
         .expect("caller runtime");
     runtime.block_on(async {
-        let telemetry = Telemetry::new_typed(enabled_telemetry_config())
+        let telemetry = V2Telemetry::new(enabled_telemetry_config())
             .expect("enabled SDK telemetry is constructed on its caller runtime");
 
         assert!(telemetry.flush_typed().is_err());
@@ -380,10 +387,11 @@ fn admitted_sdk_export_failure_reaches_public_health_once() {
         .expect("caller runtime");
     runtime.block_on(async {
         let mut config = enabled_telemetry_config();
-        config.transport.endpoint =
-            Some(OtlpEndpoint::new("http://127.0.0.1:1").expect("valid unavailable endpoint"));
+        config.transport.endpoint = Some(
+            V2OtlpEndpoint::new_typed("http://127.0.0.1:1").expect("valid unavailable endpoint"),
+        );
         config.transport.timeout_ms = Some(DurationMs::from(1));
-        let telemetry = Telemetry::new_typed(config).expect("SDK telemetry construction");
+        let telemetry = V2Telemetry::new_typed(config).expect("SDK telemetry construction");
 
         telemetry
             .emit_log(&log_event(service_name(), "export failure"))
