@@ -6,12 +6,13 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use sc_observability_types::typed::{EventFailure, InitFailure};
+use sc_observability_types::v2::{EventError, FlushError, InitError};
 use sc_observability_types::{
     AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext,
-    EventError, FlushError, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter,
-    LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
-    MaintenanceHealthReport, MaintenanceWorkerState, OperationDiagnostic, QueryError,
-    QueryHealthState, Remediation, SinkHealth, SinkHealthState, Timestamp, WriterState,
+    LevelChange, LevelChangeError, LevelChangeSource, LevelFilter, LevelState, LogQuery,
+    LogSnapshot, LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport,
+    MaintenanceWorkerState, OperationDiagnostic, QueryError, QueryHealthState, Remediation,
+    SinkHealth, SinkHealthState, Timestamp, WriterState,
 };
 use serde_json::Value;
 
@@ -563,21 +564,19 @@ impl LoggerRuntime {
 
 impl Logger<Running> {
     /// Starts a construction-time builder for sink registration.
-    pub fn builder(
-        config: crate::LoggerConfig,
-    ) -> Result<LoggerBuilder, sc_observability_types::InitError> {
+    pub fn builder(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitError> {
         LoggerBuilder::new(config)
     }
 
     /// Creates a logger with the configured built-in sinks and runtime state.
-    pub fn new(config: crate::LoggerConfig) -> Result<Self, sc_observability_types::InitError> {
+    pub fn new(config: crate::LoggerConfig) -> Result<Self, InitError> {
         LoggerBuilder::new(config)?.build()
     }
 
     /// Creates a logger together with weak authority for runtime level changes.
     pub fn new_with_level_owner(
         config: crate::LoggerConfig,
-    ) -> Result<(Self, LevelOwner), sc_observability_types::InitError> {
+    ) -> Result<(Self, LevelOwner), InitError> {
         LoggerBuilder::new(config)?.build_with_level_owner()
     }
 

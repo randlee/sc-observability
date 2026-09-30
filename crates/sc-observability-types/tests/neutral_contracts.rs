@@ -301,8 +301,8 @@ fn cloned_canonical_error_preserves_source_identity() {
     let cloned = original.clone();
     let original_source = std::error::Error::source(original.context())
         .expect("original context must retain its source");
-    let cloned_source = std::error::Error::source(cloned.context())
-        .expect("cloned context must retain its source");
+    let cloned_source =
+        std::error::Error::source(cloned.context()).expect("cloned context must retain its source");
 
     assert!(std::ptr::eq(original_source, cloned_source));
     assert_eq!(original_source.to_string(), "sentinel source");
@@ -668,6 +668,7 @@ mod legacy_compatibility {
         legacy_span_projector, legacy_subscriber, typed_identity, typed_log_projector,
         typed_metric_projector, typed_span_projector, typed_subscriber,
     };
+    use sc_observability_types::v2::{IdentityError, ProjectionError, SubscriberError};
     use sc_observability_types::*;
     use serde_json::Map;
 

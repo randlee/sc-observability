@@ -133,6 +133,17 @@ pub enum ObservationError {
     RoutingFailure(#[source] Box<ErrorContext>),
 }
 
+/// Telemetry emit error returned by the released root `Telemetry` operations.
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+pub enum TelemetryError {
+    /// The telemetry runtime has already been shut down.
+    #[error("telemetry runtime is shut down")]
+    Shutdown,
+    /// Export or span-assembly work failed for the requested telemetry operation.
+    #[error("{0}")]
+    ExportFailure(#[source] Box<ErrorContext>),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

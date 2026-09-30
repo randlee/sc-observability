@@ -34,11 +34,7 @@ pub(crate) use validation::{validate_config, validate_config_typed};
 #[cfg(test)]
 use crate::error_codes;
 #[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "compatibility tests exercise the retained InitError signatures"
-)]
-use sc_observability_types::{InitError, typed::InitFailure};
+use sc_observability_types::{typed::InitFailure, v2::InitError};
 #[cfg(test)]
 use serde_json::{Map, Value};
 

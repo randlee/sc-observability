@@ -6,18 +6,10 @@ use super::types::{
     TelemetryConfig,
 };
 use crate::{constants, error_codes};
-#[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "compatibility tests retain the legacy InitError signature"
-)]
-use sc_observability_types::InitError;
 use sc_observability_types::typed::InitFailure;
 use sc_observability_types::v2::ConfigFailure;
-#[allow(
-    deprecated,
-    reason = "OTLP config retains InitError in its published compatibility signatures"
-)]
+#[cfg(test)]
+use sc_observability_types::v2::InitError;
 use sc_observability_types::{DurationMs, ErrorContext, Remediation};
 use serde_json::Value;
 

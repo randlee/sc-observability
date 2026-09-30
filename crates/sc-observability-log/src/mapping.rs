@@ -11,7 +11,7 @@
 
 use std::borrow::Cow;
 
-use sc_observability_types::IdentityError as CanonicalIdentityError;
+use sc_observability_types::v2::IdentityError as CanonicalIdentityError;
 use sc_observability_types::{
     ActionName, ErrorContext, Level, LogEvent, Observation, ProcessIdentity, ProcessIdentityPolicy,
     Remediation, ServiceName, TargetCategory,
@@ -406,8 +406,9 @@ pub(crate) fn assemble_event(
 mod tests {
     use std::sync::Arc;
 
+    use sc_observability_types::v2::IdentityError;
     use sc_observability_types::{
-        ErrorCode, ErrorContext, IdentityError, ProcessIdentityResolver, Remediation, constants,
+        ErrorCode, ErrorContext, ProcessIdentityResolver, Remediation, constants,
     };
 
     use super::*;
