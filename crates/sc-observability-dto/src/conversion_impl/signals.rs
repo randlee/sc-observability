@@ -389,30 +389,54 @@ pub fn decode_span(value: Value) -> Result<core::v2::SpanSignal, Failure> {
 pub fn decode_canonical_envelope<T: DeserializeOwned>(
     value: Value,
 ) -> Result<CanonicalWireEnvelope<T>, Failure> {
-    match decode_envelope::<T>(value.clone())? {
-        WireEnvelope::Ok {
-            schema_version,
-            value,
-        } => Ok(CanonicalWireEnvelope::Ok {
-            schema_version,
-            value,
-        }),
-        WireEnvelope::Error {
-            schema_version,
-            error,
-        } => {
-            let mut raw = value["error"].clone();
-            if let Failure::UnknownRemote { remote_kind, .. } = error {
-                raw["kind"] = Value::String("unknown_remote".into());
-                raw["remote_kind"] = Value::String(remote_kind);
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid_input("response", "expected envelope object"))?;
+    let raw_version = object
+        .get("schema_version")
+        .and_then(Value::as_u64)
+        .and_then(|version| u32::try_from(version).ok())
+        .ok_or_else(|| invalid_input("response", "invalid schema version"))?;
+    version(raw_version)?;
+    match object.get("kind").and_then(Value::as_str) {
+        Some("ok") => {
+            if object.contains_key("error") {
+                return Err(invalid_input("response", "conflicting envelope payload"));
             }
-            let error: CanonicalFailureDto = decode(raw, "response.error")?;
-            let d = error.diagnostic();
-            native_diagnostic(stored_diagnostic_dto(d.clone()))?;
+            let value = object
+                .get("value")
+                .ok_or_else(|| invalid_input("response", "missing value"))?
+                .clone();
+            Ok(CanonicalWireEnvelope::Ok {
+                schema_version: 1,
+                value: decode(value, "response")?,
+            })
+        }
+        Some("error") => {
+            if object.contains_key("value") {
+                return Err(invalid_input("response", "conflicting envelope payload"));
+            }
+            let raw = object
+                .get("error")
+                .ok_or_else(|| invalid_input("response", "missing error"))?;
+            let tag = raw
+                .get("kind")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid_input("response", "missing failure kind"))?;
+            let error = if CanonicalFailureDto::KNOWN_KINDS.contains(&tag) {
+                decode(raw.clone(), "response.error")?
+            } else {
+                CanonicalFailureDto::UnknownRemote {
+                    diagnostic: Box::new(decode(raw.clone(), "response.error")?),
+                    remote_kind: tag.into(),
+                }
+            };
+            native_diagnostic(stored_diagnostic_dto(error.diagnostic().clone()))?;
             Ok(CanonicalWireEnvelope::Error {
-                schema_version,
+                schema_version: 1,
                 error,
             })
         }
+        _ => Err(invalid_input("response", "invalid result kind")),
     }
 }

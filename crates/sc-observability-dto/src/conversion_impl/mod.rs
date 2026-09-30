@@ -806,22 +806,7 @@ pub fn decode_envelope<T: DeserializeOwned>(value: Value) -> Result<WireEnvelope
                 .get("kind")
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid_input("response", "missing failure kind"))?;
-            const KNOWN: &[&str] = &[
-                "validation",
-                "queue_full",
-                "below_baseline",
-                "unsupported_level",
-                "permission_denied",
-                "closed",
-                "unavailable",
-                "io",
-                "timeout",
-                "cancelled",
-                "unsupported_version",
-                "internal",
-                "unknown_remote",
-            ];
-            let error = if KNOWN.contains(&tag) {
+            let error = if Failure::<Diagnostic>::KNOWN_KINDS.contains(&tag) {
                 checked(serde_json::from_value(error.clone()), "response")?
             } else {
                 Failure::UnknownRemote {

@@ -188,6 +188,25 @@ pub enum Failure<D = Diagnostic> {
 }
 
 impl<D> Failure<D> {
+    /// Serde tags accepted by the version-one failure representation.
+    ///
+    /// Kept with the enum so legacy and canonical decoders share one authority.
+    pub const KNOWN_KINDS: &[&str] = &[
+        "validation",
+        "queue_full",
+        "below_baseline",
+        "unsupported_level",
+        "permission_denied",
+        "closed",
+        "unavailable",
+        "io",
+        "timeout",
+        "cancelled",
+        "unsupported_version",
+        "internal",
+        "unknown_remote",
+    ];
+
     /// Returns the original diagnostic without parsing display text.
     pub fn diagnostic(&self) -> &D {
         match self {
