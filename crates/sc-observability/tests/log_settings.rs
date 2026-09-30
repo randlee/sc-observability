@@ -44,6 +44,25 @@ fn settings_error_codes_match_documented_stable_names() {
     }
 }
 
+fn assert_invalid_value_with_source_contract(error: &LogSettingsError) {
+    let diagnostic = error.context().diagnostic();
+    assert_eq!(diagnostic.code.as_str(), "SC_LOG_SETTINGS_INVALID_VALUE");
+    assert_eq!(
+        diagnostic.message,
+        "invalid logging environment value for SC_LOG_ROTATION_MAX_BYTES"
+    );
+    assert_eq!(
+        diagnostic.docs.as_deref(),
+        Some("docs/logging/d-1-log-settings.md")
+    );
+    let source = error
+        .context()
+        .source()
+        .and_then(|source| source.downcast_ref::<serde_json::Error>())
+        .expect("invalid JSON settings value retains its serde_json parse error");
+    assert_eq!(source.to_string(), "expected ident at line 1 column 2");
+}
+
 #[test]
 fn settings_errors_include_actionable_recovery_steps_and_docs() {
     let invalid_value = LogSettings::from_env(
@@ -77,60 +96,64 @@ fn settings_errors_include_actionable_recovery_steps_and_docs() {
     )
     .unwrap_err();
 
-    let assert_remediation =
-        |name: &str, error: &LogSettingsError, expected: &[&str], has_source: bool| {
-            let diagnostic = error.context().diagnostic();
-            assert_eq!(
-                diagnostic.docs.as_deref(),
-                Some("docs/logging/d-1-log-settings.md")
-            );
-            let Remediation::Recoverable { steps } = &diagnostic.remediation else {
-                panic!("settings errors must be recoverable");
-            };
-            assert!(steps.steps().len() >= 2, "{name}: {}", error.code());
-            let steps = steps.steps().join(" ");
-            for expected in expected {
-                assert!(steps.contains(expected), "{name}: {}", error.code());
-            }
-            if has_source {
-                assert!(error.source().is_some(), "{name}");
-            }
+    let assert_remediation = |name: &str, error: &LogSettingsError, expected: &[&str]| {
+        let diagnostic = error.context().diagnostic();
+        assert_eq!(
+            diagnostic.docs.as_deref(),
+            Some("docs/logging/d-1-log-settings.md")
+        );
+        let Remediation::Recoverable { steps } = &diagnostic.remediation else {
+            panic!("settings errors must be recoverable");
         };
-    for (name, error, expected, has_source) in [
+        assert!(steps.steps().len() >= 2, "{name}: {}", error.code());
+        let steps = steps.steps().join(" ");
+        for expected in expected {
+            assert!(steps.contains(expected), "{name}: {}", error.code());
+        }
+    };
+    for (name, error, expected) in [
         (
             "invalid value",
             &invalid_value,
-            &["SC_LOG_ROTATION_MAX_BYTES", "lowercase true or false"][..],
-            false,
+            &[
+                "SC_LOG_ROTATION_MAX_BYTES",
+                "SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS",
+                "lowercase true or false",
+            ][..],
         ),
         (
             "invalid environment",
             &invalid_environment,
             &["exact ${prefix}_LOG_ prefix casing"][..],
-            false,
         ),
         (
             "unknown key",
             &unknown_key,
-            &["SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS"][..],
-            false,
+            &[
+                "SC_LOG_ROTATION_MAX_BYTES",
+                "SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS",
+            ][..],
         ),
         (
             "prefix collision",
             &prefix_collision,
             &["Application prefixes use exact case"][..],
-            false,
         ),
-        ("resolution", &resolution, &["logRoot"][..], false),
+        ("resolution", &resolution, &["logRoot"][..]),
         (
             "invalid value with source",
             &invalid_value_with_source,
-            &["SC_LOG_ROTATION_MAX_BYTES"][..],
-            true,
+            &[
+                "SC_LOG_ROTATION_MAX_BYTES",
+                "SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS",
+                "lowercase true or false",
+            ][..],
         ),
     ] {
-        assert_remediation(name, error, expected, has_source);
+        assert_remediation(name, error, expected);
     }
+
+    assert_invalid_value_with_source_contract(&invalid_value_with_source);
 }
 
 #[test]

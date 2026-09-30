@@ -160,7 +160,7 @@ fn settings_serde_defaults() {
 }
 
 #[test]
-fn log_root_validation() {
+fn log_root_precedence() {
     let resolved = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
         file: Some(FixtureLogSettings {
             log_root: Some(PathBuf::from("configured")),
