@@ -5557,7 +5557,8 @@
         "signature: preserve sc_observability::LogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::flush baseline_signature",
         "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart"
+        "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart",
+        "default method: preserve the released provided default body (Ok(()))"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
@@ -5639,7 +5640,8 @@
         "signature: preserve sc_observability::typed::TypedLogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkFailure>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::flush baseline_signature",
         "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart"
+        "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart",
+        "default method: preserve the released provided default body (Ok(()))"
       ],
       "treatment": "new_adapter",
       "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
