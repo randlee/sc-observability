@@ -35,14 +35,6 @@
       ],
       "reason": "max_age_days is a deprecated public field of RetentionPolicy, and RetentionPolicy is not deprecated: JsonlFileSink::new in sinks.rs still takes it. Rust declares a field only inside its struct, so the field cannot move to src/compat without moving the whole struct.",
       "removal_point": "At the next major version, delete the RetentionPolicy::max_age_days field, its Default initializer and its read in the JsonlFileSink legacy retention path. RetentionPolicy itself is kept."
-    },
-    {
-      "file": "crates/sc-observability-otlp/src/assembly.rs",
-      "deprecated_symbols": [
-        "push"
-      ],
-      "reason": "push is a deprecated inherent method on SpanAssembler that only maps the result of the public push_typed into the released root EventError. No dependency requires it to stay in assembly.rs: a second inherent impl block in the crate's existing src/compat.rs could own it. It stays here because this exception record changes no production source.",
-      "removal_point": "At the next major version, delete SpanAssembler::push. push_typed and the rest of SpanAssembler are kept."
     }
   ],
   "compat_root_reexport_exceptions": [
@@ -5165,7 +5157,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-otlp/src/assembly.rs",
+        "path": "crates/sc-observability-otlp/src/compat.rs",
         "owner": "SpanAssembler",
         "member": "push"
       },

@@ -24,7 +24,7 @@ use crate::projectors::{
     AttachedLogProjector, AttachedMetricProjector, AttachedSpanProjector, ProjectorSet,
     TelemetryEmit,
 };
-use crate::{RuntimeTelemetry, constants, error_codes};
+use crate::{CompleteSpan, RuntimeTelemetry, constants, error_codes};
 use sc_observability_types::typed::{
     FlushFailure, InitFailure, ShutdownFailure, TypedLogProjector, TypedMetricProjector,
     TypedSpanProjector, typed_log_projector, typed_metric_projector, typed_span_projector,
@@ -32,8 +32,8 @@ use sc_observability_types::typed::{
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 #[allow(deprecated)]
 use sc_observability_types::{
-    DurationMs, ErrorContext, FlushError, InitError, LogEvent, LogProjector, MetricProjector,
-    MetricRecord, Observable, Observation, ObservationFilter, ProjectionError,
+    DurationMs, ErrorContext, EventError, FlushError, InitError, LogEvent, LogProjector,
+    MetricProjector, MetricRecord, Observable, Observation, ObservationFilter, ProjectionError,
     ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanProjector, SpanSignal,
     TelemetryError,
 };
@@ -681,6 +681,21 @@ fn legacy_telemetry_error(error: CanonicalTelemetryError) -> TelemetryError {
             TelemetryError::ExportFailure(error.into_context())
         }
         _ => TelemetryError::ExportFailure(error.into_context()),
+    }
+}
+
+impl crate::SpanAssembler {
+    /// Pushes one lifecycle signal through the assembler.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility assembler method keeps the published EventError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use SpanAssembler::push_typed(); see migrate-error-api.md."
+    )]
+    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError> {
+        self.push_typed(signal).map_err(Into::into)
     }
 }
 

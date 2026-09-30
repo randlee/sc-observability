@@ -357,7 +357,6 @@ class DeprecatedOwnerExceptionRecordTests(unittest.TestCase):
         registry = json.loads((REPO_ROOT / "docs/compatibility/registry.json").read_text(encoding="utf-8"))
         records = deprecated_owner_exception_records(registry)
         self.assertEqual(sorted(records), [
-            "crates/sc-observability-otlp/src/assembly.rs",
             "crates/sc-observability-types/src/errors.rs",
             "crates/sc-observability/src/lib.rs",
         ])

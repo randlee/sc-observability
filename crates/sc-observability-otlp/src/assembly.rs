@@ -17,13 +17,9 @@ use std::collections::{HashMap, VecDeque};
 use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::error_codes;
 use sc_observability_types::typed::EventFailure;
-#[allow(
-    deprecated,
-    reason = "the retained released SpanAssembler::push signature returns the root EventError"
-)]
 use sc_observability_types::{
-    ErrorContext, EventError, Remediation, SpanEnded, SpanEvent, SpanId, SpanRecord, SpanSignal,
-    SpanStarted, TraceId,
+    ErrorContext, Remediation, SpanEnded, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
+    TraceId,
 };
 
 use sc_observability_types::v2::{
@@ -128,19 +124,6 @@ impl SpanAssembler {
 
     pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
         self.started.contains_key(&span_key(trace_id, span_id))
-    }
-
-    /// Pushes one lifecycle signal through the assembler.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility assembler method keeps the published EventError signature"
-    )]
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use SpanAssembler::push_typed(); see migrate-error-api.md."
-    )]
-    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError> {
-        self.push_typed(signal).map_err(Into::into)
     }
 
     /// Pushes one lifecycle signal through the assembler with a neutral failure.
