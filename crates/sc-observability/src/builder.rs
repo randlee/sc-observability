@@ -60,6 +60,18 @@ impl CanonicalLoggerBuilder {
     /// let _logger = builder.build();
     /// ```
     pub fn new(config: LoggerConfig) -> Result<Self, CanonicalInitError> {
+        if QueueCapacity::new(config.queue_capacity).is_none() {
+            return Err(CanonicalInitError::Configuration {
+                context: InitFailure::logger_initialization(
+                    "logger queue capacity must be greater than zero",
+                    Remediation::recoverable(
+                        "set LoggerConfig.queue_capacity to a positive value before constructing the logger",
+                        ["increase queue_capacity to at least 1"],
+                    ),
+                )
+                .into_context(),
+            });
+        }
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let mut sinks = Vec::new();
         let mut file_sink = None;

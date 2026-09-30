@@ -854,7 +854,7 @@
         "signature identity: preserve LoggerConfig declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The shared LoggerConfig retains the released public field identities. LoggerBuilder validates queue_capacity through QueueCapacity::new at the build boundary before constructing the writer; no public configuration facade conversion is required.",
+      "conversion": "The shared LoggerConfig retains the released public field identities. LoggerBuilder validates queue_capacity through QueueCapacity::new at construction before sink validation or constructing the writer; no public configuration facade conversion is required.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
