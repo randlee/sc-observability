@@ -44,10 +44,16 @@ def validate_contract_signatures(rows: Iterable[dict]) -> None:
         symbol = row.get("symbol")
         baseline = row["baseline_signature"]
         canonical = row["canonical_signature"]
-        if not isinstance(baseline, str) or not baseline or has_placeholder_baseline_signature(baseline):
+        if (
+            not isinstance(baseline, str)
+            or not baseline.strip()
+            or has_placeholder_baseline_signature(baseline.strip())
+        ):
             raise ValueError(f"compatibility registry has an unsigned or placeholder baseline contract: {symbol}")
         if canonical is not None and (
-            not isinstance(canonical, str) or not canonical or has_placeholder_baseline_signature(canonical)
+            not isinstance(canonical, str)
+            or not canonical.strip()
+            or has_placeholder_baseline_signature(canonical.strip())
         ):
             raise ValueError(f"compatibility registry has an unsigned or placeholder canonical contract: {symbol}")
         if row["treatment"] == "unchanged_alias" and canonical != baseline:

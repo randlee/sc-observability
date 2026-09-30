@@ -89,6 +89,17 @@ class ContractSignatureTests(unittest.TestCase):
                 treatment="existing_pair",
                 canonical_signature="released public nominal identity `v2::IdentityError`")])
 
+    def test_whitespace_only_canonical_signature_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "placeholder canonical contract"):
+            validate_contract_signatures([self.row(
+                treatment="existing_pair", canonical_signature="   ")])
+
+    def test_padded_placeholder_canonical_signature_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "placeholder canonical contract"):
+            validate_contract_signatures([self.row(
+                treatment="existing_pair",
+                canonical_signature=" released public nominal identity `v2::IdentityError` ")])
+
     def test_empty_canonical_signature_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "placeholder canonical contract"):
             validate_contract_signatures([self.row(treatment="existing_pair", canonical_signature="")])
@@ -100,6 +111,15 @@ class ContractSignatureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "placeholder baseline contract"):
             validate_contract_signatures([self.row(
                 baseline_signature="released public nominal identity `IdentityError`")])
+
+    def test_whitespace_only_baseline_signature_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "placeholder baseline contract"):
+            validate_contract_signatures([self.row(baseline_signature="   ")])
+
+    def test_padded_placeholder_baseline_signature_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "placeholder baseline contract"):
+            validate_contract_signatures([self.row(
+                baseline_signature=" released public nominal identity `IdentityError` ")])
 
 
 class TraitSlotContractTests(unittest.TestCase):
