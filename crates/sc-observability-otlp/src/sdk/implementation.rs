@@ -7,9 +7,12 @@
 //! no SDK-specific record construction, so either transport retains the
 //! caller-runtime, admission, and resource-grouping invariants.
 
-#![allow(
-    dead_code,
-    reason = "D.18 composes these crate-private scheduling primitives after the transport decision"
+#![cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D.18 composes these crate-private scheduling primitives after the transport decision"
+    )
 )]
 
 use std::future::Future;
