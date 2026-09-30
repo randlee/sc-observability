@@ -75,6 +75,27 @@ jobs:
         run: >-
           python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py
           "$RUNNER_TEMP/otel-desktop-viewer"
+      - name: Select isolated free viewer ports
+        run: |
+          python3 - <<'PY'
+          import os
+          import socket
+          from pathlib import Path
+
+          listeners = []
+          try:
+              for _ in range(3):
+                  listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  listener.bind(("127.0.0.1", 0))
+                  listeners.append(listener)
+              ports = [listener.getsockname()[1] for listener in listeners]
+          finally:
+              for listener in listeners:
+                  listener.close()
+          with Path(os.environ["GITHUB_ENV"]).open("a") as output:
+              for name, port in zip(("D9_VIEWER_HTTP", "D9_VIEWER_GRPC", "D9_VIEWER_UI"), ports):
+                  output.write(f"{name}={port}\n")
+          PY
       - name: Start an owned isolated desktop viewer
         run: |
           viewer_state="$RUNNER_TEMP/sc-observability-d9-viewer"
@@ -84,19 +105,28 @@ jobs:
             --version "$VIEWER_VERSION" \
             --binary-sha256 "$VIEWER_BINARY_SHA256" \
             --state-dir "$viewer_state" \
-            --host 127.0.0.1 --http 52118 --grpc 52117 --ui 52100
+            --host 127.0.0.1 --http "$D9_VIEWER_HTTP" \
+            --grpc "$D9_VIEWER_GRPC" --ui "$D9_VIEWER_UI"
       - name: Run legacy public factory against the pinned viewer
         run: >-
-          D9_VIEWER_LEGACY_ADDRESS=127.0.0.1:52118
+          D9_VIEWER_LEGACY_ADDRESS=127.0.0.1:$D9_VIEWER_HTTP
           cargo test --locked -p sc-observability-otlp
           --test full_stack_integration --features legacy-http-json
           -- --ignored public_legacy_factory_exports_three_signals_to_the_pinned_desktop_viewer
+      - name: Query legacy public-factory output in the pinned viewer
+        run: >-
+          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py assert-production
+          --state-dir "$VIEWER_STATE_DIR" --backend legacy
       - name: Run SDK public factory against the pinned viewer
         run: >-
-          D9_VIEWER_SDK_ADDRESS=127.0.0.1:52117
+          D9_VIEWER_SDK_ADDRESS=127.0.0.1:$D9_VIEWER_GRPC
           cargo test --locked -p sc-observability-otlp
           --test full_stack_integration --features otlp-sdk
           -- --ignored public_sdk_factory_exports_three_signals_to_the_pinned_desktop_viewer
+      - name: Query SDK public-factory output in the pinned viewer
+        run: >-
+          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py assert-production
+          --state-dir "$VIEWER_STATE_DIR" --backend sdk
       - name: Remove the owned desktop viewer state
         if: always()
         run: >-

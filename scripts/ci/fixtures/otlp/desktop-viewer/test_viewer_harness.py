@@ -17,20 +17,117 @@ import viewer_harness as harness
 
 
 def _record(state: Path, proc: subprocess.Popen[bytes], database: Path,
-            *, binary: str = sys.executable) -> None:
+            *, binary: str | None = None) -> None:
+    command = harness._command_args(proc.pid)
+    if binary is None and command:
+        binary = command[0]
+    if binary is None:
+        raise AssertionError("test process has no recorded executable")
     (state / "viewer.pid").write_text(f"{proc.pid}\n")
     (state / "viewer.json").write_text(json.dumps({
         "pid": proc.pid, "binary": binary, "database": str(database)}))
 
 
 def _owned_process(database: Path, *, ignore_term: bool = False) -> subprocess.Popen[bytes]:
-    code = "import time; time.sleep(30)"
+    code = "trap - TERM; sleep 30"
     if ignore_term:
-        code = "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"
-    return subprocess.Popen([sys.executable, "-c", code, "--db", str(database)])
+        code = "trap '' TERM; sleep 30"
+    # Use a stable direct executable rather than macOS's Python launcher; the
+    # test records the actual command identity that the safety guard verifies.
+    return subprocess.Popen(["/bin/sh", "-c", code, "--db", str(database)])
+
+
+def _sdk_viewer_responses(*, log_service: str = "test-service", span_status: str = "Error",
+                          distractor_first: bool = False) -> tuple[object, object]:
+    """Return the exact decoded fields used by the production-viewer oracle."""
+    metrics = [
+        {"id": "sum", "name": "agent.canonical.events_total", "metricType": "Sum"},
+        {"id": "gauge", "name": "agent.canonical.queue_depth", "metricType": "Gauge"},
+        {"id": "zero", "name": "agent.canonical.histogram.zero", "metricType": "Histogram"},
+        {"id": "one", "name": "agent.canonical.histogram.one", "metricType": "Histogram"},
+        {"id": "many", "name": "agent.canonical.histogram.many", "metricType": "Histogram"},
+    ]
+    span = {
+        "spanID": "1234567890abcdef", "parentSpanID": "abcdef0123456789",
+        "name": "agent.run", "kind": "Client", "flags": 1, "statusCode": span_status,
+        "r": 1, "attributes": [{"key": "corpus.phase", "value": "decoded"}],
+        "events": [{"name": "tool.call", "attributes": [
+            {"key": "sc.observability.span_event.parent_span_id", "value": "abcdef0123456789"},
+            {"key": "sc.observability.span_event.span_id", "value": "1234567890abcdef"},
+            {"key": "sc.observability.span_event.trace_flags", "value": "1"},
+            {"key": "sc.observability.span_event.trace_id", "value": "1234567890abcdef1234567890abcdef"},
+        ]}],
+        "links": [{"traceID": "fedcba9876543210fedcba9876543210", "spanID": "fedcba9876543210",
+                   "flags": 3, "attributes": [{"key": "link.reason", "value": "follows"}]}],
+    }
+    rows = [{"spanData": span}]
+    if distractor_first:
+        rows.insert(0, {"spanData": {
+            "spanID": "feedfacefeedface", "parentSpanID": "abcdef0123456789",
+            "name": "agent.run", "kind": "Client", "flags": 1, "statusCode": "Error",
+        }})
+
+    def wait(_base: str, method: str, _params: list[object], _needle: str,
+             _deadline: float) -> object:
+        if method == "searchLogs":
+            return [{"id": "log-1", "bodyPreview": "d9-viewer-sdk-factory"}]
+        if method == "searchSpans":
+            return {"traceID": "1234567890abcdef1234567890abcdef", "resources": {
+                "1": {"attributes": [{"key": "service.name", "value": "test-service"}]},
+            }, "spans": rows}
+        if method != "searchMetricSummaries":
+            raise AssertionError(f"unexpected viewer method: {method}")
+        return metrics
+
+    def query(_base: str, method: str, params: list[object]) -> object:
+        if method == "getLog":
+            return {"body": "d9-viewer-sdk-factory", "severityText": "INFO", "severityNumber": 9,
+                    "resource": {"attributes": [{"key": "service.name", "value": log_service}]},
+                    "attributes": [{"key": "corpus.phase", "value": "decoded"},
+                                   {"key": "event.name", "value": "agent.observe"},
+                                   {"key": "log.target", "value": "test.agent"}]}
+        point = {"doubleValue": 7.0, "sum": 555.0, "count": 10,
+                 "explicitBounds": [1.0, 10.0, 100.0], "bucketCounts": [1, 2, 3, 4]}
+        if params[0] == "gauge":
+            point = {"doubleValue": 3.0}
+        elif params[0] == "zero":
+            point = {"count": 3, "sum": 4.5, "explicitBounds": [], "bucketCounts": [3]}
+        elif params[0] == "one":
+            point = {"count": 3, "sum": 20.0, "explicitBounds": [5.0], "bucketCounts": [1, 2]}
+        return {"timeseries": [{"datapoints": [point]}]}
+
+    return wait, query
 
 
 class ViewerHarnessSafetyTests(unittest.TestCase):
+    def test_production_assertion_queries_sdk_records_without_submitting_a_probe(self) -> None:
+        metadata = {"host": "127.0.0.1", "ui": 8000}
+        wait, query = _sdk_viewer_responses(distractor_first=True)
+
+        with mock.patch.object(harness, "_owned", return_value=(123, metadata)), \
+                mock.patch.object(harness, "_wait_rpc", side_effect=wait) as wait_rpc, \
+                mock.patch.object(harness, "rpc", side_effect=query) as rpc:
+            harness.assert_production(argparse.Namespace(state_dir="/owned", backend="sdk"))
+
+        self.assertEqual(wait_rpc.call_count, 3)
+        self.assertEqual(rpc.call_count, 6)
+
+    def test_production_assertion_rejects_corrupt_matched_span_field(self) -> None:
+        wait, query = _sdk_viewer_responses(span_status="Ok", distractor_first=True)
+        with mock.patch.object(harness, "_owned", return_value=(123, {"host": "127.0.0.1", "ui": 8000})), \
+                mock.patch.object(harness, "_wait_rpc", side_effect=wait), \
+                mock.patch.object(harness, "rpc", side_effect=query):
+            with self.assertRaisesRegex(harness.HarnessError, "statusCode"):
+                harness.assert_production(argparse.Namespace(state_dir="/owned", backend="sdk"))
+
+    def test_production_assertion_rejects_corrupt_matched_log_resource(self) -> None:
+        wait, query = _sdk_viewer_responses(log_service="wrong-service")
+        with mock.patch.object(harness, "_owned", return_value=(123, {"host": "127.0.0.1", "ui": 8000})), \
+                mock.patch.object(harness, "_wait_rpc", side_effect=wait), \
+                mock.patch.object(harness, "rpc", side_effect=query):
+            with self.assertRaisesRegex(harness.HarnessError, "production log resource"):
+                harness.assert_production(argparse.Namespace(state_dir="/owned", backend="sdk"))
+
     def test_start_occupied_port_writes_no_state_and_does_not_signal_listener(self) -> None:
         with tempfile.TemporaryDirectory() as temp, socket.socket() as listener:
             root = Path(temp)
