@@ -55,7 +55,7 @@
     }
   ],
   "qualificationCandidate": {
-    "version": "2.0.0",
+    "version": "1.5.0",
     "publication": "pending_phase_c_sc_publish_and_owner_authorization",
     "packages": [
       "sc-observability-types",
@@ -66,8 +66,14 @@
       "sc-observability-log",
       "sc-observability-dto",
       "sc-observability-binding-runtime",
-      "sc-observability-tauri",
       "sc-observability-py"
+    ],
+    "deferredStandalonePackages": [
+      {
+        "package": "sc-observability-tauri",
+        "baselineVersion": "1.4.1",
+        "reason": "The Tauri adapter is a separate workspace and remains pending its standalone API/publication qualification in release/bindings-artifacts.toml; it is not one of this candidate's nine workspace API packages."
+      }
     ],
     "bindingInventory": "release/bindings-artifacts.toml",
     "bindingChannels": ["crates.io", "pypi", "npm"],
