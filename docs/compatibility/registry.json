@@ -2561,7 +2561,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/runtime.rs",
-        "owner": "CanonicalLogger<Running>",
+        "owner": "v2::Logger<Running>",
         "member": "emit_legacy"
       },
       "removable_paths": [
