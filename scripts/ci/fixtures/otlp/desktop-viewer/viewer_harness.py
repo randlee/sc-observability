@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import signal
 import socket
 import subprocess
@@ -81,14 +82,14 @@ def _tcp_listener(host: str, port: int, timeout: float = 2) -> bool:
     return True
 
 
-def _command_line(pid: int) -> str | None:
+def _command_args(pid: int) -> list[str] | None:
     if sys.platform.startswith("linux"):
         try:
             stat = Path(f"/proc/{pid}/stat").read_text().split()
             if len(stat) > 2 and stat[2] == "Z":
                 return None
             raw = Path(f"/proc/{pid}/cmdline").read_bytes()
-            return raw.replace(b"\0", b" ").decode() or None
+            return [part.decode() for part in raw.split(b"\0") if part] or None
         except OSError:
             return None
     try:
@@ -99,7 +100,16 @@ def _command_line(pid: int) -> str | None:
     fields = result.stdout.strip().split(None, 1)
     if not fields or fields[0].startswith("Z"):
         return None
-    return fields[-1] if len(fields) > 1 else None
+    try:
+        return shlex.split(fields[1]) if len(fields) > 1 else None
+    except ValueError:
+        return None
+
+
+def _command_line(pid: int) -> str | None:
+    """Compatibility helper for status display and older local callers."""
+    args = _command_args(pid)
+    return " ".join(args) if args else None
 
 
 def _owned(state: Path) -> tuple[int, dict[str, Any]]:
@@ -109,10 +119,24 @@ def _owned(state: Path) -> tuple[int, dict[str, Any]]:
         raise HarnessError(f"no harness-owned instance recorded in {state}")
     pid = int(pid_file.read_text().strip())
     metadata = json.loads(meta_file.read_text())
-    command = _command_line(pid)
-    marker = str(metadata["database"])
-    if command is None or marker not in command:
-        raise HarnessError(f"refusing to signal PID {pid}: process identity does not match {marker}")
+    try:
+        if int(metadata["pid"]) != pid:
+            raise HarnessError(f"refusing to signal PID {pid}: pid file and metadata disagree")
+        binary = str(metadata["binary"])
+        database = str(metadata["database"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HarnessError(f"refusing to signal PID {pid}: incomplete process metadata") from error
+    args = _command_args(pid)
+    db_index = args.index("--db") + 1 if args and "--db" in args else -1
+    executable = args[0] if args else ""
+    try:
+        executable_matches = Path(executable).resolve() == Path(binary).resolve()
+    except (OSError, RuntimeError):
+        executable_matches = False
+    if (not args or not executable_matches or db_index < 1 or db_index >= len(args)
+            or args[db_index] != database):
+        raise HarnessError(
+            f"refusing to signal PID {pid}: process identity does not match recorded binary and database")
     return pid, metadata
 
 
@@ -163,18 +187,23 @@ def start(args: argparse.Namespace) -> None:
                "--grpc", str(args.grpc), "--browser-port", str(args.ui),
                "--open-browser=false", "--db", str(database), "--db-max-size", "2GB"]
     log = (state / "viewer.log").open("ab")
-    process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
-                               stdout=log, stderr=subprocess.STDOUT,
-                               start_new_session=True)
+    try:
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
+                                   stdout=log, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+    except BaseException:
+        log.close()
+        (state / "viewer.log").unlink(missing_ok=True)
+        raise
     metadata = {"pid": process.pid, "binary": str(binary), "sha256": actual_hash,
                 "version": args.version, "database": str(database),
                 "host": args.host, "http": args.http, "grpc": args.grpc,
                 "ui": args.ui, "started_at": time.time()}
-    (state / "viewer.json").write_text(json.dumps(metadata, indent=2) + "\n")
-    (state / "viewer.pid").write_text(f"{process.pid}\n")
-    deadline = time.monotonic() + READY_SECONDS
-    ui_url = f"http://{args.host}:{args.ui}/"
     try:
+        (state / "viewer.json").write_text(json.dumps(metadata, indent=2) + "\n")
+        (state / "viewer.pid").write_text(f"{process.pid}\n")
+        deadline = time.monotonic() + READY_SECONDS
+        ui_url = f"http://{args.host}:{args.ui}/"
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise HarnessError(f"viewer exited during startup; inspect {state / 'viewer.log'}")
@@ -185,16 +214,28 @@ def start(args: argparse.Namespace) -> None:
             except (OSError, TimeoutError, urllib.error.URLError):
                 time.sleep(0.25)
         raise HarnessError(f"viewer did not become ready within {READY_SECONDS}s; inspect {state / 'viewer.log'}")
-    except HarnessError:
-        process.terminate()
+    except BaseException:
         try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
-        (state / "viewer.pid").unlink(missing_ok=True)
-        (state / "viewer.json").unlink(missing_ok=True)
+            if process.poll() is None:
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass
+                    process.wait(timeout=5)
+        finally:
+            (state / "viewer.pid").unlink(missing_ok=True)
+            (state / "viewer.json").unlink(missing_ok=True)
+            (state / "viewer.log").unlink(missing_ok=True)
         raise
+    finally:
+        log.close()
 
 
 def status(args: argparse.Namespace) -> None:
@@ -215,17 +256,38 @@ def stop(args: argparse.Namespace) -> None:
     os.kill(pid, signal.SIGTERM)
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
-        if _command_line(pid) is None:
+        if _command_args(pid) is None:
             break
         time.sleep(0.1)
     else:
-        raise HarnessError(f"owned viewer PID {pid} did not stop within {args.timeout}s")
+        if _command_args(pid) is not None:
+            # Revalidate ownership immediately before escalation in case the
+            # PID exited and was reused while the graceful deadline elapsed.
+            checked_pid, _ = _owned(state)
+            if checked_pid != pid:
+                raise HarnessError(f"refusing to force-stop changed viewer PID {pid}")
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if _command_args(pid) is None:
+                    try:
+                        os.waitpid(pid, os.WNOHANG)
+                    except ChildProcessError:
+                        pass
+                    break
+                time.sleep(0.05)
+            else:
+                raise HarnessError(f"owned viewer PID {pid} did not stop after SIGKILL")
     (state / "viewer.pid").unlink(missing_ok=True)
     (state / "viewer.json").unlink(missing_ok=True)
     if args.remove_state:
         # Remove only this tool's database and its log, never a configured desktop DB.
         assert database is not None
         database.unlink(missing_ok=True)
+        Path(str(database) + ".wal").unlink(missing_ok=True)
         (state / "viewer.log").unlink(missing_ok=True)
         state.rmdir()
     print(json.dumps({"status": "stopped", "pid": pid, "state_dir": str(state),
