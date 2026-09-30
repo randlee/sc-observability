@@ -692,6 +692,26 @@ mod tests {
 
     #[test]
     fn facade_record_enters_an_attachment_once() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_BRIDGE_ENTRY_CHILD";
+        const TEST_NAME: &str = "bridge::tests::facade_record_enters_an_attachment_once";
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            facade_record_enters_an_attachment_once_in_child();
+            return;
+        }
+
+        let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, "1")
+            .status()
+            .expect("spawn isolated bridge regression");
+        assert!(
+            status.success(),
+            "isolated bridge regression failed: {status}"
+        );
+    }
+
+    fn facade_record_enters_an_attachment_once_in_child() {
         let root = tempfile::tempdir().expect("temporary log root");
         let service = ServiceName::new("bridge-entry-test").expect("service name");
         let logger = Arc::new(
