@@ -9,9 +9,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use sc_observability::RetainedLogPolicy;
-use sc_observability_otlp::{
+use sc_observability_otlp::v2::{
     AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
-    TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
+    ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::typed::ProjectionFailure;
 use sc_observability_types::{
@@ -143,7 +143,7 @@ fn build_observability(
     };
 
     let telemetry_config = telemetry_config_from_env(service.clone())?;
-    let telemetry = Arc::new(Telemetry::new(telemetry_config)?);
+    let telemetry = Arc::new(Telemetry::new_typed(telemetry_config)?);
 
     let runtime = Observability::builder(observability_config)
         .register_projection(
@@ -171,17 +171,17 @@ fn build_observability(
 
     emit_example_sequence(&runtime, service, mode)?;
     runtime.flush()?;
-    telemetry.flush()?;
+    telemetry.flush_typed()?;
 
     match mode {
         RunMode::Normal => {
-            telemetry.shutdown()?;
+            telemetry.shutdown_typed()?;
             runtime.shutdown()?;
         }
         RunMode::FailOpen => {
             // OTLP-009: this path intentionally leaves one started span without a
             // matching end so shutdown drops it and records fail-open export loss.
-            let _ = telemetry.shutdown();
+            let _ = telemetry.shutdown_typed();
             runtime.shutdown()?;
         }
     }
@@ -304,7 +304,7 @@ fn telemetry_config_from_env(
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
         .with_transport(transport)
-        .with_resource(sc_observability_otlp::ResourceAttributes {
+        .with_resource(ResourceAttributes {
             attributes: [
                 ("service.namespace".to_string(), json!("atm")),
                 ("service.name".to_string(), json!("atm")),
@@ -433,7 +433,7 @@ where
 // The ATM adapter's projector callback still uses the typed extension trait;
 // move the canonical telemetry context through that boundary unchanged.
 fn canonical_telemetry_to_projection_failure(
-    error: sc_observability_otlp::TelemetryError,
+    error: sc_observability_otlp::v2::TelemetryError,
 ) -> ProjectionFailure {
     ProjectionFailure::from_context(error.into_context())
 }

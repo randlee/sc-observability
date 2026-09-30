@@ -4,7 +4,7 @@
 //! Tokio host only. D.18 owns wiring this adapter into the root telemetry
 //! facade, so this example must not activate a second lifecycle or exporter.
 
-use sc_observability_otlp::{
+use sc_observability_otlp::v2::{
     ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpProtocol, TelemetryConfigBuilder,
     TracesConfig,
 };

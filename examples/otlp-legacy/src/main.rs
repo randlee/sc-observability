@@ -1,6 +1,6 @@
 //! Minimal D.21 legacy HTTP/JSON configuration fixture.
 
-use sc_observability_otlp::{
+use sc_observability_otlp::v2::{
     ExporterBackend, LogsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, TelemetryConfigBuilder,
 };
 use sc_observability_types::ServiceName;
