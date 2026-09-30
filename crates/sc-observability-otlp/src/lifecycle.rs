@@ -485,6 +485,11 @@ impl LifecycleWaiter {
     fn new(operation: Arc<Operation>) -> Self {
         Self { operation }
     }
+
+    #[cfg(test)]
+    pub(crate) fn expire_for_test(&self) {
+        self.operation.finish(Err(lifecycle_timeout_error()));
+    }
 }
 
 impl Future for LifecycleWaiter {

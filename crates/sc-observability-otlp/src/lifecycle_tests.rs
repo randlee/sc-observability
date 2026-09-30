@@ -564,15 +564,11 @@ fn empty_flush_excludes_first_later_admission() {
 
 #[test]
 fn admission_failure_after_timed_out_window_reaches_next_barrier() {
-    let transport = OtelConfig {
-        timeout_ms: Some(1.into()),
-        lifecycle_flush_timeout_ms: Some(2.into()),
-        ..OtelConfig::default()
-    };
-    let (core, _, _, released) = fixture(None, &transport);
+    let (core, _, _, released) = fixture(None, &OtelConfig::default());
     let admission = core.admit(SignalKind::Logs, (), 1).unwrap();
     let mut expired = core.flush_async();
-    thread::sleep(Duration::from_millis(5));
+    assert!(poll_once(&mut expired).is_pending());
+    expired.expire_for_test();
     assert!(matches!(
         poll_once(&mut expired),
         Poll::Ready(Err(ExportError::LifecycleTimeout { .. }))
@@ -837,16 +833,10 @@ fn cancelled_waiter_can_be_replaced_without_duplicate_shutdown() {
 
 #[test]
 fn lifecycle_deadline_and_runtime_termination_are_typed() {
-    let transport = OtelConfig {
-        timeout_ms: Some(1.into()),
-        lifecycle_flush_timeout_ms: Some(2.into()),
-        lifecycle_shutdown_timeout_ms: Some(2.into()),
-        ..OtelConfig::default()
-    };
-    let (core, _, _, _) = fixture(None, &transport);
+    let (core, _, _, _) = fixture(None, &OtelConfig::default());
     let mut flush = core.flush_async();
     assert!(poll_once(&mut flush).is_pending());
-    thread::sleep(Duration::from_millis(5));
+    flush.expire_for_test();
     let Poll::Ready(result) = poll_once(&mut flush) else {
         panic!("deadline result remained pending")
     };
