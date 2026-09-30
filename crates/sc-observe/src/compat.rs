@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
-#[allow(
+#[expect(
     deprecated,
     reason = "root methods retain the released compatibility error wrappers"
 )]
@@ -20,7 +20,7 @@ use sc_observability_types::{ServiceName, ToolName};
 
 use crate::{Observability, ObservabilityBuilder, ObservabilityConfig, RunningFlushError};
 
-#[allow(
+#[expect(
     deprecated,
     reason = "root methods retain the released compatibility error wrappers"
 )]
@@ -28,7 +28,7 @@ fn legacy_init_error(error: InitError) -> LegacyInitError {
     LegacyInitError(error.into_context())
 }
 
-#[allow(
+#[expect(
     deprecated,
     reason = "root methods retain the released compatibility error wrappers"
 )]
@@ -36,7 +36,7 @@ fn legacy_flush_error(error: FlushError) -> LegacyFlushError {
     LegacyFlushError(error.into_context())
 }
 
-#[allow(
+#[expect(
     deprecated,
     reason = "root methods retain the released compatibility error wrappers"
 )]
@@ -47,7 +47,7 @@ fn legacy_running_flush_error(error: RunningFlushError) -> LegacyFlushError {
     }
 }
 
-#[allow(
+#[expect(
     deprecated,
     reason = "root methods retain the released compatibility error wrappers"
 )]
@@ -73,7 +73,7 @@ impl ObservabilityConfig {
     ///
     /// assert_eq!(config.tool_name.as_str(), "demo-tool");
     /// ```
-    #[allow(
+    #[expect(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
@@ -86,7 +86,7 @@ impl ObservabilityConfig {
     }
 
     /// Derives a service name while retaining the released root failure contract.
-    #[allow(
+    #[expect(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
@@ -111,7 +111,7 @@ impl ObservabilityConfig {
 
 impl Observability {
     /// Constructs the shared runtime with the released root failure contract.
-    #[allow(
+    #[expect(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
@@ -129,7 +129,7 @@ impl Observability {
     ///
     /// Panics if the runtime's internal logger-state mutex is poisoned, including
     /// while waiting for an in-progress shutdown to finish.
-    #[allow(
+    #[expect(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
@@ -148,7 +148,7 @@ impl Observability {
     /// Panics if the runtime's internal logger-state mutex is poisoned. It also
     /// resumes panics from logger shutdown, including panics from poisoned
     /// writer-snapshot or query-health mutexes.
-    #[allow(
+    #[expect(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
@@ -179,7 +179,7 @@ impl Observability {
 
 impl ObservabilityBuilder {
     /// Finalizes the shared builder with the released root failure contract.
-    #[allow(
+    #[expect(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
     )]
@@ -198,7 +198,7 @@ impl ObservabilityBuilder {
 }
 
 #[cfg(test)]
-#[allow(deprecated, reason = "tests exercise the released root error wrappers")]
+#[expect(deprecated, reason = "tests exercise the released root error wrappers")]
 mod tests {
     use super::*;
     use sc_observability_types::{DiagnosticInfo, ErrorCode, ErrorContext, Remediation};
