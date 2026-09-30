@@ -794,3 +794,60 @@ fn contract_tests_v2_log_retains_flags_and_integer_attributes() {
     let exporter: Arc<dyn LogExporter> = Arc::new(CheckLog(log.clone()));
     exporter.export_logs(&[log]).unwrap();
 }
+
+#[test]
+fn released_checked_delays_preserve_zero_without_weakening_canonical_validation() {
+    for timeout in [1_000_u64, 60_001] {
+        let budget = timeout.max(30_000);
+        let transport = OtelConfig {
+            timeout_ms: Some(timeout.into()),
+            lifecycle_flush_timeout_ms: Some(budget.into()),
+            lifecycle_shutdown_timeout_ms: Some(budget.into()),
+            legacy_retry: Some(LegacyRetryPolicy {
+                initial_backoff_ms: Some(0_u64.into()),
+                max_backoff_ms: Some(0_u64.into()),
+                retry_sequence_timeout_ms: Some(budget.into()),
+                ..LegacyRetryPolicy::default()
+            }),
+            endpoint: Some(
+                super::config::OtlpEndpoint::new_typed("http://127.0.0.1:4318").unwrap(),
+            ),
+            ..legacy_config()
+        };
+        assert!(matches!(
+            validated_transport_bounds(&transport),
+            Err(ConfigFailure::ZeroDuration { .. })
+        ));
+        let config = super::config::TelemetryConfig {
+            service_name: sc_observability_types::ServiceName::new("released-bounds").unwrap(),
+            resource: super::config::ResourceAttributes::default(),
+            transport,
+            logs: Some(super::config::LogsConfig::default()),
+            traces: None,
+            metrics: None,
+        };
+        let bounds = super::config::validated_released_telemetry_bounds(&config).unwrap();
+        let BackendTransportBounds::Legacy(retry) = bounds.backend() else {
+            panic!("legacy bounds")
+        };
+        assert_eq!(retry.initial_backoff().get(), std::time::Duration::ZERO);
+        assert_eq!(retry.max_backoff().get(), std::time::Duration::ZERO);
+        assert_eq!(
+            bounds.request_timeout().get(),
+            std::time::Duration::from_millis(timeout)
+        );
+        assert_eq!(
+            bounds.lifecycle().flush().get(),
+            std::time::Duration::from_millis(budget)
+        );
+        assert_eq!(
+            bounds.lifecycle().shutdown().get(),
+            std::time::Duration::from_millis(budget)
+        );
+        assert_eq!(
+            retry.sequence_timeout().get(),
+            std::time::Duration::from_millis(budget)
+        );
+        assert!(super::config::prepared_backend_connection(&config.transport, &bounds).is_ok());
+    }
+}

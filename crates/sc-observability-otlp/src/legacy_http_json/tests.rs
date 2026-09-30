@@ -1169,3 +1169,62 @@ fn shutdown_blocking_is_rejected_from_entered_tokio() {
         Err(sc_observability_types::v2::ExportError::BlockingBackendInAsyncContext { .. })
     ));
 }
+
+#[test]
+fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_server = Arc::clone(&calls);
+    let server = thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let request = read_request(&mut stream);
+            assert!(request.contains("\"hello\""));
+            calls_server.fetch_add(1, Ordering::Relaxed);
+            stream
+                .write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("write response");
+        }
+    });
+    let transport = crate::config::OtelConfig {
+        enabled: true,
+        backend: crate::config::ExporterBackend::LegacyHttpJson,
+        protocol: crate::config::OtlpProtocol::HttpJson,
+        endpoint: Some(
+            crate::config::OtlpEndpoint::new_typed(format!("http://{address}")).unwrap(),
+        ),
+        legacy_retry: Some(retry_policy(1, 0, 0, 30_000, 20, 0)),
+        ..crate::config::OtelConfig::default()
+    };
+    assert!(crate::config::validated_transport_bounds(&transport).is_err());
+    let config = crate::config::TelemetryConfig {
+        service_name: ServiceName::new("zero-delay").unwrap(),
+        resource: crate::config::ResourceAttributes::default(),
+        transport,
+        logs: Some(crate::config::LogsConfig::default()),
+        traces: None,
+        metrics: None,
+    };
+    let bounds = crate::config::validated_released_telemetry_bounds(&config).unwrap();
+    let connection =
+        crate::config::prepared_backend_connection(&config.transport, &bounds).unwrap();
+    let (delay_tx, delay_rx) = mpsc::channel();
+    let exporter = OtlpHttpExporter::for_prepared_test(&connection, &bounds, delay_tx).unwrap();
+    let error = exporter
+        .send_payload_sync("logs", &logs_payload())
+        .expect_err("retry attempt limit must stop the sequence");
+    server.join().expect("join server");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::ExportError::RetryAttemptsExhausted { .. }
+    ));
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    assert_eq!(
+        delay_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        Duration::ZERO
+    );
+}

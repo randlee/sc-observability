@@ -32,11 +32,14 @@ use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use serde_json::Value;
 
 use crate::config::{
-    AuthHeader, BackendTransportBounds, OtelConfig, RetryPolicy, ValidatedTransportBounds,
-    validated_backend_connection, validated_transport_bounds,
+    AuthHeader, BackendTransportBounds, RetryPolicy, ValidatedBackendConnection,
+    ValidatedTransportBounds,
 };
 #[cfg(test)]
-use crate::config::{ExporterBackend, OtlpProtocol};
+use crate::config::{
+    ExporterBackend, OtelConfig, OtlpProtocol, prepared_backend_connection,
+    validated_transport_bounds,
+};
 use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
     LogRecord, MetricExporter, TraceExporter,
@@ -129,6 +132,7 @@ pub(crate) struct LegacyHttpJsonConfig {
 
 impl LegacyHttpJsonConfig {
     /// Builds a worker configuration from D21's already-validated contract.
+    #[cfg(test)]
     pub(crate) fn from_otel(
         config: &OtelConfig,
     ) -> Result<(Self, ValidatedTransportBounds), ExportError> {
@@ -136,37 +140,45 @@ impl LegacyHttpJsonConfig {
             validated_transport_bounds(config).map_err(|error| ExportError::Transport {
                 context: error.into_context(),
             })?;
-        let connection =
-            validated_backend_connection(config).map_err(|error| ExportError::Transport {
+        let connection = prepared_backend_connection(config, &bounds).map_err(|error| {
+            ExportError::Transport {
                 context: error.into_context(),
-            })?;
+            }
+        })?;
+        Ok((Self::from_prepared(&connection, &bounds)?, bounds))
+    }
+
+    fn from_prepared(
+        connection: &ValidatedBackendConnection,
+        bounds: &ValidatedTransportBounds,
+    ) -> Result<Self, ExportError> {
         let BackendTransportBounds::Legacy(policy) = bounds.backend() else {
             return Err(transport_error(
-                "legacy HTTP/JSON configuration was not validated for the legacy backend",
+                "prepared transport is not the legacy backend",
             ));
         };
-        let endpoint = connection.endpoint().as_str().to_owned();
-        Ok((
-            Self {
-                endpoint: endpoint.trim_end_matches('/').to_owned(),
-                auth_header: connection
-                    .auth_header()
-                    .map(AuthHeader::as_str)
-                    .map(str::to_owned),
-                ca_file: connection.ca_file().cloned(),
-                insecure_skip_verify: config.insecure_skip_verify,
-                request_timeout: bounds.request_timeout().get(),
-                lifecycle_flush_timeout: bounds.lifecycle().flush().get(),
-                lifecycle_shutdown_timeout: bounds.lifecycle().shutdown().get(),
-                retry: RetrySettings::from_policy(policy),
-                jitter_seed: seed_from_os(),
-                #[cfg(test)]
-                retry_delay_observer: None,
-                #[cfg(test)]
-                startup_hooks: None,
-            },
-            bounds,
-        ))
+        Ok(Self {
+            endpoint: connection
+                .endpoint()
+                .as_str()
+                .trim_end_matches('/')
+                .to_owned(),
+            auth_header: connection
+                .auth_header()
+                .map(AuthHeader::as_str)
+                .map(str::to_owned),
+            ca_file: connection.ca_file().cloned(),
+            insecure_skip_verify: false,
+            request_timeout: bounds.request_timeout().get(),
+            lifecycle_flush_timeout: bounds.lifecycle().flush().get(),
+            lifecycle_shutdown_timeout: bounds.lifecycle().shutdown().get(),
+            retry: RetrySettings::from_policy(policy),
+            jitter_seed: seed_from_os(),
+            #[cfg(test)]
+            retry_delay_observer: None,
+            #[cfg(test)]
+            startup_hooks: None,
+        })
     }
 }
 
@@ -775,14 +787,26 @@ pub(crate) struct OtlpHttpExporter {
 }
 
 impl OtlpHttpExporter {
-    /// Creates the legacy exporter from D21's validated transport config.
-    pub(crate) fn from_config(config: &OtelConfig) -> Result<Self, ExportError> {
-        let (worker_config, bounds) = LegacyHttpJsonConfig::from_otel(config)?;
+    fn from_prepared(
+        worker_config: LegacyHttpJsonConfig,
+        bounds: &ValidatedTransportBounds,
+    ) -> Result<Self, ExportError> {
         let endpoint = worker_config.endpoint.clone();
         Ok(Self {
-            backend: LegacyBackend::new(worker_config, &bounds)?,
+            backend: LegacyBackend::new(worker_config, bounds)?,
             endpoint,
         })
+    }
+
+    #[cfg(test)]
+    pub(super) fn for_prepared_test(
+        connection: &ValidatedBackendConnection,
+        bounds: &ValidatedTransportBounds,
+        observer: Sender<Duration>,
+    ) -> Result<Self, ExportError> {
+        let mut worker_config = LegacyHttpJsonConfig::from_prepared(connection, bounds)?;
+        worker_config.retry_delay_observer = Some(observer);
+        Self::from_prepared(worker_config, bounds)
     }
 
     #[cfg(test)]
@@ -1020,8 +1044,12 @@ impl ExporterLifecycle for OtlpHttpExporter {
 }
 
 /// Builds the crate-private exporter set consumed by the D18 facade handoff.
-pub(crate) fn build_exporter_set(config: &OtelConfig) -> Result<ExporterSet, ExportError> {
-    let exporter = Arc::new(OtlpHttpExporter::from_config(config)?);
+pub(crate) fn build_exporter_set(
+    connection: &ValidatedBackendConnection,
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ExportError> {
+    let worker_config = LegacyHttpJsonConfig::from_prepared(connection, bounds)?;
+    let exporter = Arc::new(OtlpHttpExporter::from_prepared(worker_config, bounds)?);
     Ok(ExporterSet {
         logs: exporter.clone(),
         traces: exporter.clone(),

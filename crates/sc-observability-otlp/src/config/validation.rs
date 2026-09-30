@@ -125,8 +125,22 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
 pub(crate) fn validated_telemetry_bounds(
     config: &TelemetryConfig,
 ) -> Result<ValidatedTransportBounds, InitFailure> {
-    let bounds =
-        validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
+    validated_telemetry_bounds_with_delays(config, false)
+}
+
+/// Released conversion admits immediate retry delays; every other bound remains checked.
+pub(crate) fn validated_released_telemetry_bounds(
+    config: &TelemetryConfig,
+) -> Result<ValidatedTransportBounds, InitFailure> {
+    validated_telemetry_bounds_with_delays(config, true)
+}
+
+fn validated_telemetry_bounds_with_delays(
+    config: &TelemetryConfig,
+    immediate: bool,
+) -> Result<ValidatedTransportBounds, InitFailure> {
+    let bounds = validated_transport_bounds_with_delays(&config.transport, immediate)
+        .map_err(config_failure_to_init_failure)?;
     if config.transport.enabled && config.transport.endpoint.is_none() {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
@@ -350,8 +364,8 @@ pub(crate) enum BackendTransportBounds {
 #[derive(Debug)]
 pub(crate) struct RetryPolicy {
     max_retries: u32,
-    initial_backoff: PositiveDuration,
-    max_backoff: PositiveDuration,
+    initial_backoff: RetryDelay,
+    max_backoff: RetryDelay,
     sequence_timeout: PositiveDuration,
     retry_after_cap: PositiveDuration,
     jitter: BoundedPercent,
@@ -365,10 +379,10 @@ impl RetryPolicy {
     pub(crate) const fn max_retries(&self) -> u32 {
         self.max_retries
     }
-    pub(crate) const fn initial_backoff(&self) -> PositiveDuration {
+    pub(crate) const fn initial_backoff(&self) -> RetryDelay {
         self.initial_backoff
     }
-    pub(crate) const fn max_backoff(&self) -> PositiveDuration {
+    pub(crate) const fn max_backoff(&self) -> RetryDelay {
         self.max_backoff
     }
     pub(crate) const fn sequence_timeout(&self) -> PositiveDuration {
@@ -382,10 +396,39 @@ impl RetryPolicy {
     }
 }
 
+/// Internal retry delay proven either immediate by released compatibility
+/// validation or strictly positive by canonical validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RetryDelay {
+    Immediate,
+    Positive(PositiveDuration),
+}
+
+impl RetryDelay {
+    #[cfg(any(test, feature = "legacy-http-json"))]
+    pub(crate) const fn get(self) -> Duration {
+        match self {
+            Self::Immediate => Duration::ZERO,
+            Self::Positive(value) => value.get(),
+        }
+    }
+
+    const fn positive(value: PositiveDuration) -> Self {
+        Self::Positive(value)
+    }
+}
+
 /// Resolves defaults and validates a transport in the documented first-failure
 /// order. This is crate-visible for backend factories and contract tests.
 pub(crate) fn validated_transport_bounds(
     config: &OtelConfig,
+) -> Result<ValidatedTransportBounds, ConfigFailure> {
+    validated_transport_bounds_with_delays(config, false)
+}
+
+fn validated_transport_bounds_with_delays(
+    config: &OtelConfig,
+    immediate: bool,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
     let legacy_retry_field = first_legacy_retry_field(config);
     let timeout = resolve_duration(
@@ -427,33 +470,16 @@ pub(crate) fn validated_transport_bounds(
     }
     let legacy_retry =
         if config.enabled && matches!(config.backend, ExporterBackend::LegacyHttpJson) {
-            Some(resolve_retry(config.legacy_retry.as_ref(), &timeout)?)
+            Some(resolve_retry(
+                config.legacy_retry.as_ref(),
+                &timeout,
+                immediate,
+            )?)
         } else {
             None
         };
-    if !(1..=constants::MAX_OTLP_QUEUE_CAPACITY).contains(&queue_capacity.value) {
-        return Err(config_failure(
-            ConfigFailureKind::InvalidQueueCapacity,
-            error_codes::OTLP_CONFIG_QUEUE_CAPACITY,
-            format!(
-                "queue capacity must be in 1..={}",
-                constants::MAX_OTLP_QUEUE_CAPACITY
-            ),
-            queue_capacity.field,
-            queue_capacity.origin,
-        ));
-    }
-    if queue_byte_capacity.value == 0
-        || queue_byte_capacity.value > constants::MAX_OTLP_QUEUE_BYTE_CAPACITY
-    {
-        return Err(config_failure(
-            ConfigFailureKind::InvalidQueueByteCapacity,
-            error_codes::OTLP_CONFIG_QUEUE_BYTE_CAPACITY,
-            "queue byte capacity must be in 1..=64 MiB",
-            queue_byte_capacity.field,
-            queue_byte_capacity.origin,
-        ));
-    }
+    let (queue_capacity, queue_byte_capacity) =
+        checked_queue_bounds(&queue_capacity, &queue_byte_capacity)?;
 
     let backend = if config.enabled {
         match config.backend {
@@ -483,8 +509,8 @@ pub(crate) fn validated_transport_bounds(
 
     Ok(ValidatedTransportBounds {
         protocol: config.protocol,
-        queue_capacity: QueueCapacity(queue_capacity.value),
-        queue_byte_capacity: QueueByteCapacity(queue_byte_capacity.value),
+        queue_capacity,
+        queue_byte_capacity,
         request_timeout,
         lifecycle: LifecycleBounds {
             flush: lifecycle_flush_timeout,
@@ -492,6 +518,39 @@ pub(crate) fn validated_transport_bounds(
         },
         backend,
     })
+}
+
+fn checked_queue_bounds(
+    queue_capacity: &ResolvedField<usize>,
+    queue_byte_capacity: &ResolvedField<usize>,
+) -> Result<(QueueCapacity, QueueByteCapacity), ConfigFailure> {
+    if !(1..=constants::MAX_OTLP_QUEUE_CAPACITY).contains(&queue_capacity.value) {
+        return Err(config_failure(
+            ConfigFailureKind::InvalidQueueCapacity,
+            error_codes::OTLP_CONFIG_QUEUE_CAPACITY,
+            format!(
+                "queue capacity must be in 1..={}",
+                constants::MAX_OTLP_QUEUE_CAPACITY
+            ),
+            queue_capacity.field,
+            queue_capacity.origin,
+        ));
+    }
+    if queue_byte_capacity.value == 0
+        || queue_byte_capacity.value > constants::MAX_OTLP_QUEUE_BYTE_CAPACITY
+    {
+        return Err(config_failure(
+            ConfigFailureKind::InvalidQueueByteCapacity,
+            error_codes::OTLP_CONFIG_QUEUE_BYTE_CAPACITY,
+            "queue byte capacity must be in 1..=64 MiB",
+            queue_byte_capacity.field,
+            queue_byte_capacity.origin,
+        ));
+    }
+    Ok((
+        QueueCapacity(queue_capacity.value),
+        QueueByteCapacity(queue_byte_capacity.value),
+    ))
 }
 
 /// Returns the connection values only after the transport's ordinary ordered
@@ -504,7 +563,15 @@ pub(crate) fn validated_transport_bounds(
 pub(crate) fn validated_backend_connection(
     config: &OtelConfig,
 ) -> Result<ValidatedBackendConnection, ConfigFailure> {
-    let _ = validated_transport_bounds(config)?;
+    let bounds = validated_transport_bounds(config)?;
+    prepared_backend_connection(config, &bounds)
+}
+
+/// Consume checked bounds without revalidating their compatibility-only retry delays.
+pub(crate) fn prepared_backend_connection(
+    config: &OtelConfig,
+    _bounds: &ValidatedTransportBounds,
+) -> Result<ValidatedBackendConnection, ConfigFailure> {
     let endpoint = config.endpoint.clone().ok_or_else(|| {
         invalid_endpoint(
             "enabled telemetry requires an endpoint",
@@ -598,6 +665,7 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<PositiveDuration, Conf
 fn resolve_retry(
     raw: Option<&LegacyRetryPolicy>,
     timeout: &ResolvedField<u64>,
+    immediate: bool,
 ) -> Result<RetryPolicy, ConfigFailure> {
     let raw = raw.cloned().unwrap_or_default();
     let initial = resolve_duration(
@@ -631,8 +699,15 @@ fn resolve_retry(
             ValueOrigin::Default
         },
     };
-    let initial_backoff = checked_duration(&initial)?;
-    let max_backoff = checked_duration(&maximum)?;
+    let delay = |value: &ResolvedField<u64>| {
+        if immediate && value.value == 0 {
+            Ok(RetryDelay::Immediate)
+        } else {
+            checked_duration(value).map(RetryDelay::positive)
+        }
+    };
+    let initial_backoff = delay(&initial)?;
+    let max_backoff = delay(&maximum)?;
     let sequence_timeout = checked_duration(&sequence)?;
     let retry_after_cap = checked_duration(&after_cap)?;
     if maximum.value < initial.value {
