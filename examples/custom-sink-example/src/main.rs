@@ -3,8 +3,7 @@
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 
-use sc_observability::typed::TypedLogSink;
-use sc_observability::v2::{LogSinkError, LoggerBuilder};
+use sc_observability::v2::{LogSink, LogSinkError, LoggerBuilder};
 use sc_observability::{
     ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent, LogFilter,
     LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity,
@@ -103,7 +102,7 @@ impl AuditSink {
     }
 }
 
-impl TypedLogSink for AuditSink {
+impl LogSink for AuditSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         let mut stderr = io::stderr().lock();
         writeln!(

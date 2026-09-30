@@ -8,7 +8,7 @@
   "source_audit": {
     "inventory": "D18 recovery inventory",
     "nominal_contracts": 58,
-    "inherent_or_free_callables": 141,
+    "inherent_or_free_callables": 143,
     "trait_slots": 12
   },
   "deprecated_owner_exceptions": [
@@ -905,7 +905,7 @@
       "canonical": "sc_observability::v2::LoggerBuilder",
       "treatment": "existing_pair",
       "baseline_signature": "#[expect( missing_debug_implementations, reason = \"the builder stores registration trait objects whose debug representation is not part of the public API\" )] pub struct LoggerBuilder { config: LoggerConfig, file_sink: Option<Arc<JsonlFileSink>>, sinks: Vec<SinkRegistration>, }",
-      "canonical_signature": "#[expect( missing_debug_implementations, reason = \"the builder stores registration trait objects whose debug representation is not part of the public API\" )] pub struct LoggerBuilder { config: LoggerConfig, file_sink: Option<Arc<JsonlFileSink>>, sinks: Vec<SinkRegistration>, typed_sinks: Vec<Arc<dyn TypedLogSink>>, }",
+      "canonical_signature": "#[expect( missing_debug_implementations, reason = \"the builder stores registration trait objects whose debug representation is not part of the public API\" )] pub struct LoggerBuilder { config: LoggerConfig, file_sink: Option<Arc<JsonlFileSink>>, sinks: Vec<SinkRegistration>, }",
       "obligations": [
         "signature identity: preserve LoggerBuilder declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "trait: preserve LoggerBuilder implementability, the exact public trait bounds, and each associated method result type",
@@ -932,16 +932,16 @@
       "area": "core",
       "kind": "trait",
       "status": "canonical_routed",
-      "canonical": "root trait returning v2::LogSinkError",
+      "canonical": "v2::LogSink",
       "treatment": "new_adapter",
       "baseline_signature": "#[allow( deprecated, reason = \"LogSink preserves its published LogSinkError trait signature\" )] pub trait LogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>; /// Flushes any buffered sink state. fn flush(&self) -> Result<(), LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
-      "canonical_signature": "pub trait LogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>; /// Flushes any buffered sink state. fn flush(&self) -> Result<(), LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
+      "canonical_signature": "pub trait LogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>; /// Flushes any buffered sink state. fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
       "obligations": [
         "signature identity: preserve LogSink declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "trait: preserve LogSink implementability, Send + Sync, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released root trait stays byte-identical in compat.rs; the runtime stores the canonical v2::LogSink, and SinkRegistration::new adapts a released sink to it exactly once; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -949,27 +949,29 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
-        "symbol": "root trait returning v2::LogSinkError"
+        "path": "crates/sc-observability/src/sink.rs",
+        "symbol": "v2::LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the released root LogSink declaration, its built-in impls, and the root-to-canonical registration adapter; remove them when the release policy retires the root sink trait."
     },
     {
       "symbol": "sc_observability::typed::TypedLogSink",
       "area": "core",
       "kind": "trait",
       "status": "canonical_routed",
-      "canonical": "trait returning v2::LogSinkError",
+      "canonical": "v2::LogSink",
       "treatment": "new_adapter",
       "baseline_signature": "pub trait TypedLogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>; /// Flushes buffered state. fn flush(&self) -> Result<(), LogSinkFailure> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
-      "canonical_signature": "pub trait TypedLogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>; /// Flushes buffered state. fn flush(&self) -> Result<(), LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
+      "canonical_signature": "pub trait LogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>; /// Flushes any buffered sink state. fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
       "obligations": [
         "signature identity: preserve TypedLogSink declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "trait: preserve TypedLogSink implementability, Send + Sync, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released typed trait keeps its LogSinkFailure signature in compat.rs and is published at typed::TypedLogSink; legacy_sink and typed_sink adapt it at the released boundary only; canonical registration takes v2::LogSink directly and never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/typed.rs",
@@ -977,21 +979,24 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/typed.rs",
-        "symbol": "trait returning v2::LogSinkError"
+        "path": "crates/sc-observability/src/sink.rs",
+        "symbol": "v2::LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/typed.rs"
+      ],
+      "removal_rationale": "compat.rs owns the released TypedLogSink declaration and legacy_sink/typed_sink adapters, and typed.rs only re-exports them at the released path; remove both when the release policy retires the typed sink adapters."
     },
     {
       "symbol": "sc_observability::SinkRegistration",
       "area": "core",
       "kind": "owner",
       "status": "canonical_routed",
-      "canonical": "root registration",
+      "canonical": "root registration storing canonical v2::LogSink",
       "treatment": "existing_pair",
       "baseline_signature": "#[derive(Clone)] #[expect( missing_debug_implementations, reason = \"registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract\" )] pub struct SinkRegistration { /// Concrete sink implementation. pub(crate) sink: Arc<dyn LogSink>, /// Optional sink-local filter. pub(crate) filter: Option<Arc<dyn LogFilter>>, }",
-      "canonical_signature": "#[derive(Clone)] #[expect( missing_debug_implementations, reason = \"registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract\" )] pub struct SinkRegistration { /// Concrete sink implementation. pub(crate) sink: Arc<dyn LogSink>, /// Optional sink-local filter. pub(crate) filter: Option<Arc<dyn LogFilter>>, }",
+      "canonical_signature": "#[derive(Clone)] #[expect( missing_debug_implementations, reason = \"registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract\" )] pub struct SinkRegistration { /// Canonical sink implementation stored exactly as registered. pub(crate) sink: Arc<dyn v2::LogSink>, /// Optional sink-local filter. pub(crate) filter: Option<Arc<dyn LogFilter>>, }",
       "obligations": [
         "signature identity: preserve SinkRegistration declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
@@ -1005,10 +1010,12 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/lib.rs",
-        "symbol": "root registration"
+        "symbol": "root registration storing canonical v2::LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the released SinkRegistration::new adapter; the canonical SinkRegistration::typed constructor and registration storage stay outside compat."
     },
     {
       "symbol": "sc_observability::LogFilter",
@@ -1116,8 +1123,10 @@
         "path": "crates/sc-observability/src/sinks.rs",
         "symbol": "root injector over canonical LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the released wrap method and the root LogSink impl of the canonical fault sink; the injector state and canonical fault sink stay in sinks.rs."
     },
     {
       "symbol": "sc_observability::JsonlFileSink",
@@ -1143,8 +1152,10 @@
         "path": "crates/sc-observability/src/sinks.rs",
         "symbol": "root sink implementing canonical LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the thin released root LogSink impl that forwards to the canonical v2::LogSink impl in sinks.rs; remove it when the release policy retires the root sink trait."
     },
     {
       "symbol": "sc_observability::ConsoleSink",
@@ -1170,8 +1181,10 @@
         "path": "crates/sc-observability/src/sinks.rs",
         "symbol": "root sink implementing canonical LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the thin released root LogSink impl that forwards to the canonical v2::LogSink impl in sinks.rs; remove it when the release policy retires the root sink trait."
     },
     {
       "symbol": "sc_observability_log::InitError",
@@ -2962,13 +2975,14 @@
       "symbol": "sc_observability::SinkRegistration::new",
       "owner": "sc_observability::SinkRegistration",
       "baseline_signature": "pub fn new(sink: Arc<dyn LogSink>) -> Self",
-      "canonical_signature": "pub fn new(sink: Arc<dyn LogSink>) -> Self",
+      "canonical_signature": "pub fn typed(sink: Arc<dyn v2::LogSink>) -> Self",
       "obligations": [
         "signature: preserve sc_observability::SinkRegistration::new exactly as recorded in this row baseline_signature: pub fn new(sink: Arc<dyn LogSink>) -> Self",
-        "receiver: baseline declares no receiver; preserve sc_observability::SinkRegistration::new as an associated function"
+        "receiver: baseline declares no receiver; preserve sc_observability::SinkRegistration::new as an associated function",
+        "adaptation: adapt the released LogSink to the canonical v2::LogSink exactly once here; SinkRegistration::typed stores the canonical Arc and filter without any adapter"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "new adapts the released root LogSink to v2::LogSink once in compat.rs and stores it through the canonical SinkRegistration::typed constructor",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -2977,11 +2991,13 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/builder.rs",
         "owner": "SinkRegistration",
-        "member": "new"
+        "member": "typed"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::SinkRegistration::with_filter",
@@ -3167,13 +3183,14 @@
       "symbol": "sc_observability::RetainedSinkFaultInjector::wrap",
       "owner": "sc_observability::RetainedSinkFaultInjector",
       "baseline_signature": "pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink>",
-      "canonical_signature": "pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink>",
+      "canonical_signature": "pub(crate) fn fault_sink(&self, inner: Arc<dyn v2::LogSink>) -> FaultInjectingSink",
       "obligations": [
         "signature: preserve sc_observability::RetainedSinkFaultInjector::wrap exactly as recorded in this row baseline_signature: pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink>",
-        "receiver: preserve released &self receiver at sc_observability::RetainedSinkFaultInjector::wrap boundary"
+        "receiver: preserve released &self receiver at sc_observability::RetainedSinkFaultInjector::wrap boundary",
+        "adaptation: adapt the released input sink to v2::LogSink once, wrap it in the canonical fault sink, and return it only through the released root LogSink boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "wrap adapts the released sink to v2::LogSink, wraps it with the canonical fault sink built by fault_sink, and returns it through the released root impl",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/sinks.rs",
@@ -3184,9 +3201,11 @@
         "revision": "selected_head",
         "path": "crates/sc-observability/src/sinks.rs",
         "owner": "RetainedSinkFaultInjector",
-        "member": "wrap"
+        "member": "fault_sink"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::RetainedSinkFaultInjector::force_degraded",
@@ -5335,6 +5354,56 @@
       ]
     },
     {
+      "symbol": "sc_observability::typed::legacy_sink",
+      "owner": null,
+      "baseline_signature": "pub fn legacy_sink(value: Arc<dyn TypedLogSink>) -> Arc<dyn LogSink>",
+      "canonical_signature": null,
+      "obligations": [
+        "signature: preserve sc_observability::typed::legacy_sink exactly as recorded in this row baseline_signature: pub fn legacy_sink(value: Arc<dyn TypedLogSink>) -> Arc<dyn LogSink>",
+        "attribute: preserve #[must_use] on sc_observability::typed::legacy_sink",
+        "trait: the released typed::TypedLogSink keeps its LogSinkFailure write/flush signature and default flush; the adapter preserves health, diagnostic, remediation and source chain in both directions",
+        "error: preserve released LogSinkFailure failure type at the boundary; adapt exactly once with no canonical round trip"
+      ],
+      "treatment": "restoration",
+      "conversion": "restore the released free function in compat.rs, published at typed:: through typed.rs; it adapts between the released root LogSink and the released typed TypedLogSink and never touches the canonical v2::LogSink",
+      "baseline_source": {
+        "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
+        "path": "crates/sc-observability/src/typed.rs",
+        "owner": null,
+        "member": "legacy_sink"
+      },
+      "canonical_source": null,
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/typed.rs"
+      ]
+    },
+    {
+      "symbol": "sc_observability::typed::typed_sink",
+      "owner": null,
+      "baseline_signature": "pub fn typed_sink(value: Arc<dyn LogSink>) -> Arc<dyn TypedLogSink>",
+      "canonical_signature": null,
+      "obligations": [
+        "signature: preserve sc_observability::typed::typed_sink exactly as recorded in this row baseline_signature: pub fn typed_sink(value: Arc<dyn LogSink>) -> Arc<dyn TypedLogSink>",
+        "attribute: preserve #[must_use] on sc_observability::typed::typed_sink",
+        "trait: the released typed::TypedLogSink keeps its LogSinkFailure write/flush signature and default flush; the adapter preserves health, diagnostic, remediation and source chain in both directions",
+        "error: preserve released LogSinkFailure failure type at the boundary; adapt exactly once with no canonical round trip"
+      ],
+      "treatment": "restoration",
+      "conversion": "restore the released free function in compat.rs, published at typed:: through typed.rs; it adapts between the released root LogSink and the released typed TypedLogSink and never touches the canonical v2::LogSink",
+      "baseline_source": {
+        "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
+        "path": "crates/sc-observability/src/typed.rs",
+        "owner": null,
+        "member": "typed_sink"
+      },
+      "canonical_source": null,
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/typed.rs"
+      ]
+    },
+    {
       "symbol": "sc_observability_log::init",
       "owner": "sc_observability_log",
       "baseline_signature": "pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
@@ -5530,7 +5599,7 @@
     {
       "symbol": "sc_observability::LogSink::write",
       "baseline_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
-      "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
+      "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>",
       "obligations": [
         "signature: preserve sc_observability::LogSink::write exactly as recorded in this row baseline_signature: fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::write baseline_signature",
@@ -5538,7 +5607,7 @@
         "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released slot stays in compat.rs with its released error type; the canonical v2::LogSink slot is stored by the runtime and registration adapts once at the boundary; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -5547,18 +5616,18 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/sink.rs",
         "owner": "LogSink",
         "member": "write"
       },
       "removable_paths": [
-        "crates/sc-observability/src/lib.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::LogSink::flush",
       "baseline_signature": "fn flush(&self) -> Result<(), LogSinkError>",
-      "canonical_signature": "fn flush(&self) -> Result<(), LogSinkError>",
+      "canonical_signature": "fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) }",
       "obligations": [
         "signature: preserve sc_observability::LogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::flush baseline_signature",
@@ -5567,7 +5636,7 @@
         "default method: preserve the released provided default body (Ok(()))"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released slot stays in compat.rs with its released error type; the canonical v2::LogSink slot is stored by the runtime and registration adapts once at the boundary; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -5576,12 +5645,12 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/sink.rs",
         "owner": "LogSink",
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observability/src/lib.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -5595,7 +5664,7 @@
         "behavior: preserve the released return and side-effect semantics recorded in sc_observability::LogSink::health baseline_signature"
       ],
       "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "conversion": "none; health has no error type: the released slot in compat.rs delegates directly to the canonical v2::LogSink health slot and returns the same SinkHealth unchanged",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -5604,16 +5673,19 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/sink.rs",
         "owner": "LogSink",
         "member": "health"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "the released health slot is declared in compat.rs; remove it with the released trait."
     },
     {
       "symbol": "sc_observability::typed::TypedLogSink::write",
       "baseline_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>",
-      "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
+      "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>",
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::write exactly as recorded in this row baseline_signature: fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::write baseline_signature",
@@ -5621,7 +5693,7 @@
         "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released slot stays in compat.rs with its released error type; the canonical v2::LogSink slot is stored by the runtime and registration adapts once at the boundary; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/typed.rs",
@@ -5630,18 +5702,19 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/typed.rs",
-        "owner": "TypedLogSink",
+        "path": "crates/sc-observability/src/sink.rs",
+        "owner": "LogSink",
         "member": "write"
       },
       "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ]
     },
     {
       "symbol": "sc_observability::typed::TypedLogSink::flush",
       "baseline_signature": "fn flush(&self) -> Result<(), LogSinkFailure>",
-      "canonical_signature": "fn flush(&self) -> Result<(), LogSinkError>",
+      "canonical_signature": "fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) }",
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkFailure>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::flush baseline_signature",
@@ -5650,7 +5723,7 @@
         "default method: preserve the released provided default body (Ok(()))"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released slot stays in compat.rs with its released error type; the canonical v2::LogSink slot is stored by the runtime and registration adapts once at the boundary; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/typed.rs",
@@ -5659,11 +5732,12 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/typed.rs",
-        "owner": "TypedLogSink",
+        "path": "crates/sc-observability/src/sink.rs",
+        "owner": "LogSink",
         "member": "flush"
       },
       "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ]
     },
@@ -5678,7 +5752,7 @@
         "behavior: preserve the released return and side-effect semantics recorded in sc_observability::typed::TypedLogSink::health baseline_signature"
       ],
       "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "conversion": "none; health has no error type: the released slot in compat.rs delegates directly to the canonical v2::LogSink health slot and returns the same SinkHealth unchanged",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/typed.rs",
@@ -5687,11 +5761,15 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/typed.rs",
-        "owner": "TypedLogSink",
+        "path": "crates/sc-observability/src/sink.rs",
+        "owner": "LogSink",
         "member": "health"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/typed.rs"
+      ],
+      "removal_rationale": "the released health slot is declared in compat.rs; remove it with the released trait."
     },
     {
       "symbol": "sc_observability::LogFilter::accepts",

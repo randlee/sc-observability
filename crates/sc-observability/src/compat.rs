@@ -19,14 +19,203 @@ use sc_observability_types::v2::{
 };
 
 use crate::builder::CanonicalLoggerBuilder;
-use crate::typed::TypedLogSink;
+#[cfg(feature = "fault-injection")]
+use crate::sinks::FaultInjectingSink;
+use crate::sinks::{ConsoleSink, JsonlFileSink};
 use crate::{
     AdmissionOutcome, CanonicalLogger, ErrorContext, EventError, FlushError, InitError, LevelOwner,
-    LevelState, LogEvent, LogFailure, LogQuery, Logger, LoggerBuilder, LoggerConfig,
-    LoggingHealthReport, Running, SinkRegistration, Stopped, TryLogFailure, error_codes,
+    LevelState, LogEvent, LogFailure, LogQuery, LogSinkError, Logger, LoggerBuilder, LoggerConfig,
+    LoggingHealthReport, Running, SinkHealth, SinkRegistration, Stopped, TryLogFailure,
+    error_codes,
 };
 use sc_observability_types::QueryError;
+use sc_observability_types::typed::LogSinkFailure;
+use sc_observability_types::v2::LogSinkError as CanonicalLogSinkError;
 use std::sync::Arc;
+
+/// One concrete event sink used by the logger runtime.
+///
+/// This trait is intentionally open for downstream implementations. Adding
+/// required methods or tightening object-safety guarantees is therefore a
+/// semver-significant public API change.
+#[allow(
+    deprecated,
+    reason = "LogSink preserves its published LogSinkError trait signature"
+)]
+pub trait LogSink: Send + Sync {
+    /// Writes one event to the sink.
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
+
+    /// Flushes any buffered sink state.
+    fn flush(&self) -> Result<(), LogSinkError> {
+        Ok(())
+    }
+
+    /// Returns the current sink health snapshot.
+    fn health(&self) -> SinkHealth;
+}
+
+/// A logger sink that reports neutral typed failures.
+pub trait TypedLogSink: Send + Sync {
+    /// Writes one event to the sink.
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>;
+
+    /// Flushes buffered state.
+    fn flush(&self) -> Result<(), LogSinkFailure> {
+        Ok(())
+    }
+
+    /// Returns the current sink health snapshot.
+    fn health(&self) -> SinkHealth;
+}
+
+/// Adapts a typed sink to the retained registration trait.
+#[must_use]
+pub fn legacy_sink(value: Arc<dyn TypedLogSink>) -> Arc<dyn LogSink> {
+    Arc::new(LegacySinkAdapter { value })
+}
+
+/// Adapts a retained sink to the typed sink trait.
+#[must_use]
+pub fn typed_sink(value: Arc<dyn LogSink>) -> Arc<dyn TypedLogSink> {
+    Arc::new(TypedSinkAdapter { value })
+}
+
+/// Released typed sink -> released root sink.
+struct LegacySinkAdapter {
+    value: Arc<dyn TypedLogSink>,
+}
+
+impl LogSink for LegacySinkAdapter {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        self.value.write(event).map_err(Into::into)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        self.value.flush().map_err(Into::into)
+    }
+
+    fn health(&self) -> SinkHealth {
+        self.value.health()
+    }
+}
+
+/// Released root sink -> released typed sink.
+struct TypedSinkAdapter {
+    value: Arc<dyn LogSink>,
+}
+
+impl TypedLogSink for TypedSinkAdapter {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
+        self.value.write(event).map_err(Into::into)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkFailure> {
+        self.value.flush().map_err(Into::into)
+    }
+
+    fn health(&self) -> SinkHealth {
+        self.value.health()
+    }
+}
+
+/// Released root sink -> canonical sink, applied once at registration.
+struct RootSinkAdapter {
+    value: Arc<dyn LogSink>,
+}
+
+impl crate::sink::LogSink for RootSinkAdapter {
+    fn write(&self, event: &LogEvent) -> Result<(), CanonicalLogSinkError> {
+        self.value
+            .write(event)
+            .map_err(|error| CanonicalLogSinkError::Write { context: error.0 })
+    }
+
+    fn flush(&self) -> Result<(), CanonicalLogSinkError> {
+        self.value
+            .flush()
+            .map_err(|error| CanonicalLogSinkError::Flush { context: error.0 })
+    }
+
+    fn health(&self) -> SinkHealth {
+        self.value.health()
+    }
+}
+
+/// Converts a canonical sink error at the released root trait boundary.
+///
+/// The released error wraps the typed failure's context, which keeps the exact
+/// nested legacy source shape.
+pub(crate) fn legacy_sink_error(error: CanonicalLogSinkError) -> LogSinkError {
+    LogSinkFailure::from_context(error.into_context()).into()
+}
+
+impl SinkRegistration {
+    /// Wraps a released sink for logger registration.
+    ///
+    /// The released [`LogSink`] is adapted to the canonical sink trait exactly
+    /// once here; the registration stores the adapter and no filter.
+    pub fn new(sink: Arc<dyn LogSink>) -> Self {
+        Self::typed(Arc::new(RootSinkAdapter { value: sink }))
+    }
+}
+
+impl LogSink for JsonlFileSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::write(self, event).map_err(legacy_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
+
+impl LogSink for ConsoleSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::write(self, event).map_err(legacy_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
+
+#[cfg(feature = "fault-injection")]
+impl LogSink for FaultInjectingSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::write(self, event).map_err(legacy_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
+
+#[cfg(feature = "fault-injection")]
+impl crate::RetainedSinkFaultInjector {
+    /// Wraps one retained sink so its health can be forced during validation.
+    ///
+    /// `Arc<dyn LogSink>` is intentionally preserved in this public signature
+    /// because `SinkRegistration::new()` takes `Arc<dyn LogSink>` and this
+    /// helper exists solely to compose with that registration surface. The
+    /// released sink is adapted to the canonical trait once, wrapped by the
+    /// canonical fault sink, and returned through its released root impl.
+    pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink> {
+        Arc::new(self.fault_sink(Arc::new(RootSinkAdapter { value: sink })))
+    }
+}
 
 /// Blocking queue-admission error surface retained for 1.x callers.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
@@ -142,10 +331,10 @@ impl LoggerBuilder {
         self
     }
 
-    /// Registers a released typed sink before building the shared runtime.
+    /// Registers a canonical typed sink before building the shared runtime.
     pub fn register_typed_sink(
         &mut self,
-        sink: Arc<dyn TypedLogSink>,
+        sink: Arc<dyn crate::sink::LogSink>,
     ) -> Result<&mut Self, crate::SinkRegistrationError> {
         self.inner.register_typed_sink(sink)?;
         Ok(self)

@@ -164,9 +164,9 @@ if {row["status"] for row in symbols} - {"restored_root", "canonical_routed", "p
     raise SystemExit("compatibility registry has an unknown disposition")
 allowed_treatments = {"unchanged_alias", "existing_pair", "new_adapter", "restoration"}
 all_contract_rows = symbols + registry.get("method_contracts", []) + registry.get("trait_slot_contracts", [])
-if len(registry.get("method_contracts", [])) != 141:
-    raise SystemExit("compatibility registry must contain all 141 audited inherent/free callables")
-if len({row.get("symbol") for row in registry["method_contracts"]}) != 141:
+if len(registry.get("method_contracts", [])) != 143:
+    raise SystemExit("compatibility registry must contain all 143 audited inherent/free callables")
+if len({row.get("symbol") for row in registry["method_contracts"]}) != 143:
     raise SystemExit("compatibility callable records must have unique symbols")
 if len(registry.get("trait_slot_contracts", [])) != 12:
     raise SystemExit("compatibility registry must contain all 12 audited trait slots")
