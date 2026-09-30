@@ -22,7 +22,7 @@ fn from_attributes(value: &core::v2::Attributes) -> Result<BTreeMap<String, Valu
         .map(|(key, value)| {
             Ok((
                 key.clone(),
-                from_json_value_total(checked(serde_json::to_value(value), "attributes")?),
+                from_json_value(checked(serde_json::to_value(value), "attributes")?)?,
             ))
         })
         .collect()
