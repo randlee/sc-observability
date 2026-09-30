@@ -1,13 +1,15 @@
 """Mutation regressions for the existing OTLP boundary/dependency gates."""
 import shutil
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
-from scripts.ci.otlp_dependencies import validate_transport_dependencies
+from scripts.ci.otlp_dependencies import validate_composition_harness, validate_transport_dependencies
 
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = "crates/sc-observability-otlp/Cargo.toml"
+HARNESS = "tests/sc-observability-composition/Cargo.toml"
 
 
 class TransportPolicyTests(unittest.TestCase):
@@ -88,6 +90,83 @@ class TransportPolicyTests(unittest.TestCase):
     def test_implicit_default_transport(self):
         self.replace("Cargo.toml", 'version = "=0.33.0", default-features = false', 'version = "=0.33.0", default-features = true')
         self.rejects("effective dependency features differ")
+
+
+
+class CompositionHarnessTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        members = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["members"]
+        for relative in ["Cargo.toml", "policy/otlp-transport.toml"] + [f"{m}/Cargo.toml" for m in members]:
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, target)
+
+    def replace(self, relative, before, after):
+        path = self.root / relative
+        text = path.read_text()
+        self.assertIn(before, text)
+        path.write_text(text.replace(before, after))
+
+    def rejects(self, text):
+        with self.assertRaisesRegex(SystemExit, text):
+            validate_composition_harness(self.root)
+
+    def test_reviewed_harness(self):
+        validate_composition_harness(self.root)
+
+    def test_published_harness(self):
+        self.replace(HARNESS, "publish = false", "publish = true")
+        self.rejects("must set publish = false")
+
+    def test_production_reverse_edge(self):
+        self.replace(
+            MANIFEST,
+            "[dev-dependencies]\n",
+            '[dev-dependencies]\nharness = { package = "sc-observability-composition", path = "../../tests/sc-observability-composition" }\n',
+        )
+        self.rejects("crates/sc-observability-otlp must not depend on the harness")
+
+    def test_proto_moved_to_normal_dependencies(self):
+        self.replace(HARNESS, "opentelemetry-proto.workspace = true\n", "")
+        self.replace(HARNESS, "[dev-dependencies]", "[dependencies]\nopentelemetry-proto.workspace = true\n\n[dev-dependencies]")
+        self.rejects("must not declare dependencies")
+
+    def test_target_specific_build_dependency(self):
+        self.replace(HARNESS, "[lints]", '[target.\'cfg(unix)\'.build-dependencies]\ntonic.workspace = true\n\n[lints]')
+        self.rejects("must not declare build-dependencies")
+
+    def test_unpinned_collector_dependency(self):
+        self.replace(HARNESS, "tonic.workspace = true", 'tonic = "0.14"')
+        self.rejects("tonic must inherit the reviewed workspace pin")
+
+    def test_collector_feature_expansion(self):
+        self.replace(HARNESS, "tonic.workspace = true", 'tonic = { workspace = true, features = ["router"] }')
+        self.rejects("tonic effective features differ from policy")
+
+    def test_collector_default_features_enabled(self):
+        self.replace(HARNESS, "opentelemetry-proto.workspace = true", "opentelemetry-proto = { workspace = true, default-features = true }")
+        self.replace("Cargo.toml", 'opentelemetry-proto = { version = "=0.33.0", default-features = false', 'opentelemetry-proto = { version = "=0.33.0", default-features = true')
+        self.rejects("opentelemetry-proto effective features differ from policy")
+
+    def test_workspace_feature_drift(self):
+        self.replace("Cargo.toml", 'features = ["rt", "rt-multi-thread", "macros", "time"]', 'features = ["rt", "rt-multi-thread", "macros", "time", "net"]')
+        self.rejects("tokio effective features differ from policy")
+
+    def test_target_section_feature_expansion(self):
+        self.replace(HARNESS, "tonic.workspace = true\n", "")
+        self.replace(HARNESS, "[lints]", '[target.\'cfg(unix)\'.dev-dependencies]\ntonic = { workspace = true, features = ["router"] }\n\n[lints]')
+        self.rejects("tonic effective features differ from policy")
+
+    def test_otlp_backend_feature_removed(self):
+        self.replace(HARNESS, 'features = ["otlp-sdk", "legacy-http-json"]', 'features = ["otlp-sdk"]')
+        self.rejects("sc-observability-otlp effective features differ from policy")
+
+    def test_unreviewed_dev_dependency(self):
+        self.replace(HARNESS, "tonic.workspace = true", "tonic.workspace = true\nopentelemetry.workspace = true")
+        self.rejects(r"unexpected \['opentelemetry'\]")
 
 
 if __name__ == "__main__":

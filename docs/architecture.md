@@ -702,6 +702,7 @@ Important boundary:
 | `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
 | `sc-observability-schema` | `sc-observability-dto` (with the `schema-gen` feature) | runtime crates, binding runtimes, and host/framework crates | isolated, unpublished schema-generator crate under `bindings/schema-generator/`; emits schema artifacts from DTO wire types |
 | `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
+| `sc-observability-composition` | dev-dependencies only: `sc-observability`, `sc-observability-log`, `sc-observe`, `sc-observability-otlp`, `sc-observability-types`, `tokio`, `serde_json`, `tempfile`, and `tonic`/`opentelemetry-proto` for loopback collector fixtures | any normal or build dependency; any workspace crate depending on it; `agent-team-mail-*` | unpublished (`publish = false`) test harness at `tests/sc-observability-composition` for the D18 real composition cases; no library surface ([ADR-019/ADR-020 amendment](#adr-019adr-020-amendment-composition-test-harness)) |
 | `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
 
 † This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) follows ADR-011's accepted companion-boundary decision.
@@ -1417,6 +1418,38 @@ was reworded accordingly to describe the remaining validation.
 - **Retained architecture**: ADR-017's shared canonical diagnostic implementation, ADR-018's two backends/shared lifecycle and ADR-019's pins, registries and boundary constraints remain. Their 2.0-only root replacement/removal and version activation do not govern this release. `sc-observe` remains a dev-only OTLP dependency; this decision introduces no dependency exception.
 - **Acceptance**: Old consumers work at default lint settings; opt-in migrated consumers deny deprecated usage. Preserve diagnostic/source information through adapters, and test behavioral compatibility as well as exact released-package semver. No breaking approval entry can waive the 1.x contract. Future removal needs its own major-release decision.
 - **Contracts**: PHB-003–006, PHD-001–004 and the compatible 1.x amendment; D22 establishes usable compiled contracts, facade sprints implement adapters, D27 validates release tooling, and D18 owns the real combined proof alongside D9 collector conformance; both must pass before phase-ending review.
+
+#### ADR-019/ADR-020 amendment: composition test harness
+
+- **Status**: Accepted 2026-09-30 by the Phase D lead as a new, narrow
+  test-only exception (QA finding obs-d-18-combined-bridge-harness-qa-pr714-f1).
+  No earlier approval covered it.
+- **Context**: D18's real composition cases run the released and canonical
+  stacks against loopback OTLP collectors. Decoding gRPC and protobuf requests
+  needs `tonic` and `opentelemetry-proto`, which ADR-004/ADR-009 otherwise
+  reserve for `sc-observability-otlp`. ADR-020 introduced no dependency
+  exception.
+- **Decision**: The workspace member `sc-observability-composition`
+  (`tests/sc-observability-composition`) sets `publish = false`, has no normal
+  or build dependencies, including target-specific sections, and takes
+  exactly these dev-dependencies: `sc-observability`, `sc-observability-log`,
+  `sc-observe`, `sc-observability-otlp`, `sc-observability-types`, `tokio`,
+  `serde_json`, `tempfile`, `tonic` and `opentelemetry-proto`. No workspace
+  crate may depend on it.
+- **Enforcement**: The `[composition_harness]` section of
+  `policy/otlp-transport.toml` is the machine record.
+  `scripts/ci/otlp_dependencies.py` resolves renamed, path and
+  workspace-inherited declarations and rejects a published harness, any
+  normal or build dependency, any change to the dev-dependency set, and any
+  reverse edge from a workspace member. `validate_repo_boundaries.sh` runs it.
+- **Scope boundary**: This is not a blanket test exception. Production OTLP
+  ownership, the ADR-009 check that `sc-observability-types`,
+  `sc-observability` and `sc-observe` take no OTLP/OpenTelemetry dependency,
+  and the transport table and pins are unchanged. `tonic` and
+  `opentelemetry-proto` must inherit the reviewed workspace pins, which the
+  helper also checks.
+- **Contracts**: ADR-004, ADR-009, ADR-019, ADR-020, LAY-001–007; D18 owns the
+  composition cases.
 
 ## 8. API-Design Consistency
 
