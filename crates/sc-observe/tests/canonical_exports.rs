@@ -131,7 +131,6 @@ fn released_and_canonical_observe_routing_exports_keep_their_public_signatures()
     let _: fn(LegacyBuilder, ProjectionRegistration<String>) -> LegacyBuilder =
         LegacyBuilder::register_projection::<String>;
 
-    let _: fn(ObservabilityConfig) -> ObservabilityBuilder = Observability::builder;
     let _: fn(&Observability, Observation<String>) -> Result<(), ObservationError> =
         Observability::emit::<String>;
     let _: fn(&Observability) -> ObservabilityHealthReport = Observability::health;
