@@ -3,6 +3,7 @@ set -euo pipefail
 
 python3 - <<'PY'
 from pathlib import Path
+import json
 import re
 import subprocess
 import sys
@@ -124,6 +125,39 @@ for crate_root in shared_crate_roots:
             p for p in crate_root.rglob("*")
             if p.suffix in {".rs", ".toml"} and p.is_file()
         )
+
+# D22 compatible-contract boundary. The one source-audited registry is the
+# authority for released-path exceptions while facades are progressively moved
+# into `src/compat`. Canonical source may never reach back into that module;
+# roots may re-export compat owners only when a registry exception records it.
+registry_path = root / "docs/compatibility/registry.json"
+if not registry_path.exists():
+    raise SystemExit("docs/compatibility/registry.json is missing")
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+if registry.get("registry_version") != 1:
+    raise SystemExit("compatibility registry version is missing or unsupported")
+if registry.get("baseline", {}).get("commit") != "c578912653233c7dc678fefe5af575118dbbaaa1":
+    raise SystemExit("compatibility registry baseline is not the pinned v1.4.1 audit")
+symbols = registry.get("symbols", [])
+required_symbol_fields = {"symbol", "area", "kind", "status", "canonical"}
+if len(symbols) != 58 or len({row.get("symbol") for row in symbols}) != 58:
+    raise SystemExit("compatibility registry must contain each of the 58 audited symbols once")
+if any(not required_symbol_fields.issubset(row) for row in symbols):
+    raise SystemExit("compatibility registry has an incomplete symbol row")
+if {row["status"] for row in symbols} - {"restored_root", "canonical_routed", "pending_d23_wrapper"}:
+    raise SystemExit("compatibility registry has an unknown disposition")
+deprecated_exceptions = set(registry.get("deprecated_owner_exceptions", []))
+root_reexport_exceptions = set(registry.get("compat_root_reexport_exceptions", []))
+compat_reference = re.compile(r"(?:crate::)?compat::|::compat::")
+for path in source_files:
+    relative = path.relative_to(root).as_posix()
+    text = path.read_text(encoding="utf-8")
+    is_compat_source = "/src/compat/" in f"/{relative}"
+    if not is_compat_source and compat_reference.search(text):
+        if path.name != "lib.rs" or relative not in root_reexport_exceptions:
+            raise SystemExit(f"canonical source imports compatibility module: {relative}")
+    if "#[deprecated" in text and not is_compat_source and relative not in deprecated_exceptions:
+        raise SystemExit(f"deprecated owner is outside compat without registry exception: {relative}")
 
 for path in source_files:
     text = path.read_text(encoding="utf-8")
