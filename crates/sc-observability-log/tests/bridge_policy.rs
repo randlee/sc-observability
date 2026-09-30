@@ -97,6 +97,7 @@ fn event() -> BridgeEvent {
 fn attach_with(
     policy: Arc<dyn BridgeEventPolicy>,
 ) -> (
+    tempfile::TempDir,
     sc_observability_log::LogAttachment,
     Arc<sc_observability::Logger>,
     Arc<Mutex<Vec<LogEvent>>>,
@@ -108,12 +109,12 @@ fn attach_with_config(
     policy: Arc<dyn BridgeEventPolicy>,
     configure: impl FnOnce(&mut LoggerConfig),
 ) -> (
+    tempfile::TempDir,
     sc_observability_log::LogAttachment,
     Arc<sc_observability::Logger>,
     Arc<Mutex<Vec<LogEvent>>>,
 ) {
     let root = tempfile::tempdir().expect("temp root");
-    let root = Box::leak(Box::new(root));
     let mut config = LoggerConfig::default_for(
         ServiceName::new("policy").expect("service"),
         root.path().to_path_buf(),
@@ -135,13 +136,13 @@ fn attach_with_config(
         policy,
     );
     let attachment = attach_logger(Arc::clone(&logger), options).expect("attach");
-    (attachment, logger, events)
+    (root, attachment, logger, events)
 }
 
 #[test]
 fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let (mut attachment, host, events) = attach_with(Arc::new(Deny));
+    let (_root, mut attachment, host, events) = attach_with(Arc::new(Deny));
     let control = attachment.control();
     let before = control
         .dropped_events()
@@ -160,7 +161,7 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases attachment logger"));
     let _ = host.shutdown();
 
-    let (mut attachment, host, events) = attach_with(Arc::new(PanicPolicy));
+    let (_root, mut attachment, host, events) = attach_with(Arc::new(PanicPolicy));
     let control = attachment.control();
     assert!(matches!(
         control.try_log(event()),
@@ -176,7 +177,7 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
 #[test]
 fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let (mut attachment, host, events) = attach_with_config(
+    let (_root, mut attachment, host, events) = attach_with_config(
         Arc::new(AllowlistAndBound {
             max_message_bytes: 64,
         }),
@@ -252,7 +253,7 @@ fn every_policy_reason_has_concrete_steps_and_facade_diagnostics() {
         PolicyRejection::PayloadTooLarge,
         PolicyRejection::Invalid,
     ] {
-        let (mut attachment, host, events) = attach_with(Arc::new(Reject(reason)));
+        let (_root, mut attachment, host, events) = attach_with(Arc::new(Reject(reason)));
         let control = attachment.control();
         let before = control
             .dropped_events()

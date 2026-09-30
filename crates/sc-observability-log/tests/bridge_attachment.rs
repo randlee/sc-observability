@@ -90,23 +90,24 @@ fn options(policy: Arc<dyn BridgeEventPolicy>) -> AttachmentOptions {
     )
 }
 
-fn logger() -> Arc<sc_observability::Logger> {
+fn logger() -> (tempfile::TempDir, Arc<sc_observability::Logger>) {
     let root = tempfile::tempdir().expect("temp root");
-    // Keep the root alive for the duration of the process-local fixture by
-    // leaking only this test's temporary directory handle.
-    let root = Box::leak(Box::new(root));
-    Arc::new(
+    let logger = Arc::new(
         sc_observability::Logger::new(LoggerConfig::default_for(
             ServiceName::new("attachment").expect("service"),
             root.path().to_path_buf(),
         ))
         .expect("host logger"),
-    )
+    );
+    (root, logger)
 }
 
-fn recording_logger() -> (Arc<sc_observability::Logger>, Arc<Mutex<Vec<LogEvent>>>) {
+fn recording_logger() -> (
+    tempfile::TempDir,
+    Arc<sc_observability::Logger>,
+    Arc<Mutex<Vec<LogEvent>>>,
+) {
     let root = tempfile::tempdir().expect("temp root");
-    let root = Box::leak(Box::new(root));
     let mut config = LoggerConfig::default_for(
         ServiceName::new("attachment-recording").expect("service"),
         root.path().to_path_buf(),
@@ -119,7 +120,7 @@ fn recording_logger() -> (Arc<sc_observability::Logger>, Arc<Mutex<Vec<LogEvent>
         events: Arc::clone(&events),
     })));
     let logger = builder.build_canonical().expect("host logger");
-    (Arc::new(logger), events)
+    (root, Arc::new(logger), events)
 }
 
 struct BlockingFlushSink {
@@ -167,9 +168,8 @@ impl LogSink for BlockingFlushSink {
 fn blocking_logger(
     entered: mpsc::Sender<()>,
     release: mpsc::Receiver<()>,
-) -> Arc<sc_observability::Logger> {
+) -> (tempfile::TempDir, Arc<sc_observability::Logger>) {
     let root = tempfile::tempdir().expect("temp root");
-    let root = Box::leak(Box::new(root));
     let mut config = LoggerConfig::default_for(
         ServiceName::new("attachment-blocking-flush").expect("service"),
         root.path().to_path_buf(),
@@ -180,7 +180,10 @@ fn blocking_logger(
     builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink::new(
         entered, release,
     ))));
-    Arc::new(builder.build_canonical().expect("host logger"))
+    (
+        root,
+        Arc::new(builder.build_canonical().expect("host logger")),
+    )
 }
 
 fn event() -> BridgeEvent {
@@ -200,7 +203,7 @@ fn event() -> BridgeEvent {
 #[test]
 fn attachment_routes_direct_and_macro_calls_and_recovers_host_ownership() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let (host, events) = recording_logger();
+    let (_root, host, events) = recording_logger();
     let mut attachment =
         attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach host logger");
     let control = attachment.control();
@@ -244,7 +247,7 @@ fn timeout_retains_attachment_for_retry_and_stale_control_is_rejected() {
         entered: Mutex::new(Some(entered_tx)),
         release: Mutex::new(Some(release_rx)),
     });
-    let host = logger();
+    let (_root, host) = logger();
     let mut attachment = attach_logger(Arc::clone(&host), options(policy)).expect("attach");
     let control = attachment.control();
     let worker = std::thread::spawn(|| log::info!(target: "attachment::blocking", "blocked"));
@@ -274,7 +277,7 @@ fn timed_out_flush_keeps_attachment_owned_logger_until_helper_drains() {
     let _serial = TEST_LOCK.lock().expect("test lock");
     let (entered_tx, entered_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
-    let host = blocking_logger(entered_tx, release_rx);
+    let (_root, host) = blocking_logger(entered_tx, release_rx);
     let mut attachment =
         attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach");
     let control = attachment.control();
@@ -304,7 +307,7 @@ fn timed_out_flush_keeps_attachment_owned_logger_until_helper_drains() {
 #[test]
 fn reattachment_rejects_old_control_and_init_while_attached() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let host = logger();
+    let (_root, host) = logger();
     let mut first =
         attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("first attach");
     assert!(matches!(
@@ -312,10 +315,11 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         Err(DetachError::ForeignLoggerInstalled { .. })
     ));
     let stale = first.control();
+    let owned_root = tempfile::tempdir().expect("owned conflict temp root");
     let init_error = sc_observability_log::init(
         LoggerConfig::default_for(
             ServiceName::new("owned-conflict").expect("service"),
-            std::env::temp_dir().join("owned-conflict"),
+            owned_root.path().to_path_buf(),
         ),
         BridgeOptions {
             default_action: ActionName::new("log.record").expect("action"),
@@ -332,7 +336,7 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("first detach releases logger"));
     host.shutdown();
 
-    let host = logger();
+    let (_root, host) = logger();
     let mut second = attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("reattach");
     assert!(matches!(
         stale.try_log(event()),
@@ -359,7 +363,7 @@ fn dropped_attachment_finishes_detaching_when_last_call_drains() {
     let _serial = TEST_LOCK.lock().expect("test lock");
     let (entered_tx, entered_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
-    let host = logger();
+    let (_root, host) = logger();
     let attachment = attach_logger(
         Arc::clone(&host),
         options(Arc::new(Blocking {
@@ -409,7 +413,7 @@ fn detach_max_duration_waits_for_entered_call_without_overflow() {
     let _serial = TEST_LOCK.lock().expect("test lock");
     let (entered_tx, entered_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
-    let host = logger();
+    let (_root, host) = logger();
     let mut attachment = attach_logger(
         Arc::clone(&host),
         options(Arc::new(Blocking {
@@ -448,7 +452,7 @@ fn detach_max_duration_waits_for_entered_call_without_overflow() {
 #[test]
 fn logging_detach_race_releases_all_logger_arcs_before_success() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let mut host = logger();
+    let (_root, mut host) = logger();
     for _ in 0..100 {
         let (entered_tx, entered_rx) = mpsc::channel();
         let (release_tx, release_rx) = mpsc::channel();
@@ -487,7 +491,7 @@ fn flush_detach_race_releases_all_logger_arcs_before_success() {
     for _ in 0..32 {
         let (entered_tx, entered_rx) = mpsc::channel();
         let (release_tx, release_rx) = mpsc::channel();
-        let host = blocking_logger(entered_tx, release_rx);
+        let (_root, host) = blocking_logger(entered_tx, release_rx);
         let mut attachment =
             attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach");
         let control = attachment.control();
