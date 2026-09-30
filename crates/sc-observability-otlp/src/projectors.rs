@@ -180,11 +180,14 @@ impl TelemetryEmit for RuntimeTelemetry {
 }
 
 macro_rules! projector_facade {
-    ($facade:ident, $runtime:ty) => {
+    ($facade:ident, $runtime:ty, $summary:literal, $details:literal) => {
         #[expect(
             missing_debug_implementations,
             reason = "the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract"
         )]
+        #[doc = $summary]
+        #[doc = ""]
+        #[doc = $details]
         pub struct $facade<T>
         where
             T: Observable,
@@ -235,8 +238,18 @@ macro_rules! projector_facade {
     };
 }
 
-projector_facade!(TelemetryProjectors, Telemetry);
-projector_facade!(V2TelemetryProjectors, RuntimeTelemetry);
+projector_facade!(
+    TelemetryProjectors,
+    Telemetry,
+    "Wrap observation projectors for the released OTLP telemetry API.",
+    "Attach log, span, and metric projectors and an optional filter, then call `into_registration` to register them with the observation routing layer. Projected outputs are also forwarded to the supplied telemetry runtime."
+);
+projector_facade!(
+    V2TelemetryProjectors,
+    RuntimeTelemetry,
+    "Wrap observation projectors for the canonical OTLP telemetry API.",
+    "Attach log, span, and metric projectors and an optional filter, then call `into_registration` to register them with the observation routing layer. Projected outputs are also forwarded to the supplied v2 telemetry runtime."
+);
 
 struct AttachedLogProjector<T, R>
 where
