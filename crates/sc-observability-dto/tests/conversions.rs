@@ -82,6 +82,19 @@ fn inputs_reject_missing_unknown_and_invalid_versions() {
     assert!(decode_event(raw).is_err());
     assert!(decode_level_request(json!({"kind":"reset","level":"trace"})).is_err());
 }
+
+#[test]
+fn typed_constructor_codes_survive_dto_validation() {
+    let mut raw = event();
+    raw["target"] = json!("invalid target");
+    assert!(matches!(
+        decode_event(raw),
+        Err(Failure::Validation { diagnostic, field })
+            if field == "target"
+                && diagnostic.code == core::error_codes::VALUE_VALIDATION_FAILED.as_str()
+                && matches!(diagnostic.remediation, RemediationDto::Recoverable { ref steps } if !steps.is_empty())
+    ));
+}
 #[test]
 fn spoofed_provenance_is_rejected_at_all_depths() {
     for key in [
