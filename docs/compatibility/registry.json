@@ -1707,7 +1707,7 @@
         "signature identity: preserve TelemetryProjectors declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released TelemetryProjectors facade and its TelemetryEmit for Telemetry plus released LogProjector/SpanProjector/MetricProjector implementations for Attached*Projector are in compat.rs. ProjectorSet, TelemetryEmit, and Attached*Projector definitions are in projectors.rs; the canonical V2TelemetryProjectors path shares these definitions, so only the released facade and adapter implementations are removable.",
+      "conversion": "The released root TelemetryProjectors export in lib.rs (69-72) forwards to the compat.rs facade (554-620), which uses ProjectorSet (projectors.rs:31-41, 51-116), AttachedParts (43-49), TelemetryEmit (118-122; implemented for Telemetry in compat.rs:535-547), and AttachedLogProjector/AttachedSpanProjector/AttachedMetricProjector with their TypedLogProjector/TypedSpanProjector/TypedMetricProjector implementations (projectors.rs:266-348). The released LogProjector/SpanProjector/MetricProjector forwarding implementations are in compat.rs:629-674. The v2 V2TelemetryProjectors implementation (projectors.rs:134-210) instead wraps canonical projectors with CanonicalAttached (213-258) and telemetry_to_projection_error (260-264); it does not use the released projector plumbing. telemetry_to_projection_failure (350-352) is used only by the three released Typed*Projector implementations.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -1719,11 +1719,19 @@
         "symbol": "V2TelemetryProjectors"
       },
       "removable_paths": [
+        "crates/sc-observability-otlp/src/lib.rs::root compat re-export of TelemetryProjectors (lines 69-72)",
         "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::{new, with_log_projector, with_span_projector, with_metric_projector, with_filter, into_registration}",
         "crates/sc-observability-otlp/src/compat.rs::TelemetryEmit for Telemetry",
-        "crates/sc-observability-otlp/src/compat.rs::{LogProjector, SpanProjector, MetricProjector} for Attached*Projector"
+        "crates/sc-observability-otlp/src/compat.rs::{LogProjector, SpanProjector, MetricProjector} for Attached*Projector",
+        "crates/sc-observability-otlp/src/projectors.rs::ProjectorSet<T, R> and impl ProjectorSet<T, R> (lines 31-41, 51-116); used by compat.rs::TelemetryProjectors",
+        "crates/sc-observability-otlp/src/projectors.rs::AttachedParts<T, R> type alias (lines 43-49); returned by ProjectorSet::into_attached and consumed by compat.rs::TelemetryProjectors::into_registration",
+        "crates/sc-observability-otlp/src/projectors.rs::TelemetryEmit trait (lines 118-122); implemented only by compat.rs::TelemetryEmit for Telemetry (lines 535-547)",
+        "crates/sc-observability-otlp/src/projectors.rs::AttachedLogProjector<T, R> and impl TypedLogProjector<T> for AttachedLogProjector<T, R> (lines 266-292); forwarded through compat.rs::impl LogProjector<T> for AttachedLogProjector<T, R> (lines 629-638)",
+        "crates/sc-observability-otlp/src/projectors.rs::AttachedSpanProjector<T, R> and impl TypedSpanProjector<T> for AttachedSpanProjector<T, R> (lines 294-320); forwarded through compat.rs::impl SpanProjector<T> for AttachedSpanProjector<T, R> (lines 644-655)",
+        "crates/sc-observability-otlp/src/projectors.rs::AttachedMetricProjector<T, R> and impl TypedMetricProjector<T> for AttachedMetricProjector<T, R> (lines 322-348); forwarded through compat.rs::impl MetricProjector<T> for AttachedMetricProjector<T, R> (lines 662-674)",
+        "crates/sc-observability-otlp/src/projectors.rs::telemetry_to_projection_failure (lines 350-352); called only by the three released Typed*Projector implementations above"
       ],
-      "removal_rationale": "Remove only the released TelemetryProjectors facade and released TelemetryEmit/projector-trait adapter implementations in compat.rs. ProjectorSet, TelemetryEmit, and Attached*Projector plumbing in projectors.rs is shared with V2TelemetryProjectors and remains; neither source file is wholly removable."
+      "removal_rationale": "The released TelemetryProjectors root re-export and compat facade, TelemetryEmit implementation, and released projector-trait forwarding implementations may be removed together with their projectors.rs-only ProjectorSet/AttachedParts/TelemetryEmit/Attached*Projector and Typed*Projector implementation plumbing and telemetry_to_projection_failure helper. The source inventory shows those projectors.rs declarations are only consumed by the released compat path. Preserve the independent V2TelemetryProjectors, CanonicalAttached, and telemetry_to_projection_error path; projectors.rs is not wholly removable."
     }
   ],
   "record_contract": {
