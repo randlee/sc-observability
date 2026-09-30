@@ -371,9 +371,7 @@ fn complete_health_projection_and_unsigned_wire_counters() {
         }),
         last_error: Some(summary),
     };
-    let project_health: fn(core::LoggingHealthReport, core::LevelState) -> LogHealthDto =
-        from_core_health;
-    let dto = project_health(
+    let dto = from_core_health(
         native,
         core::LevelState {
             configured_level: core::LevelFilter::Info,
