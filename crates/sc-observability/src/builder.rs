@@ -80,6 +80,11 @@ impl LoggerBuilder {
         })
     }
 
+    /// Creates a builder with the released typed initialization failure.
+    pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
+        Self::new(config).map_err(|error| InitFailure::from_context(error.into_context()))
+    }
+
     /// Registers one additional sink before the logger runtime is built.
     pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self {
         self.sinks.push(registration);
@@ -164,10 +169,24 @@ impl LoggerBuilder {
         self.build_inner().map(|(logger, _)| logger)
     }
 
+    /// Finalizes construction with the released typed initialization failure.
+    pub fn build_typed(self) -> Result<Logger<Running>, InitFailure> {
+        self.build_canonical()
+            .map_err(|error| InitFailure::from_context(error.into_context()))
+    }
+
     /// Finalizes construction and returns the logger with weak level ownership.
     pub fn build_with_level_owner(self) -> Result<(Logger<Running>, LevelOwner), InitError> {
         let (logger, control) = self.build_inner()?;
         Ok((logger, LevelOwner::new(&control)))
+    }
+
+    /// Finalizes construction with the released typed initialization failure.
+    pub fn build_with_level_owner_typed(
+        self,
+    ) -> Result<(Logger<Running>, LevelOwner), InitFailure> {
+        self.build_with_level_owner()
+            .map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     fn build_inner(self) -> Result<(Logger<Running>, Arc<Mutex<LevelControl>>), InitError> {
