@@ -47,6 +47,10 @@ use crate::errors::{
     ProjectionError as LegacyProjectionError, ShutdownError as LegacyShutdownError,
     SubscriberError as LegacySubscriberError,
 };
+use crate::errors_v2::{
+    FlushError as CanonicalFlushError, InitError as CanonicalInitError,
+    ShutdownError as CanonicalShutdownError,
+};
 use crate::{
     Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, LogEvent, LogProjector, MetricProjector,
     MetricRecord, Observable, Observation, ObservationSubscriber, ProcessIdentity,
@@ -361,6 +365,24 @@ pub enum TryLogFailure {
     /// Writer shutdown exceeded its configured timeout.
     #[error("{0}")]
     ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
+impl From<CanonicalInitError> for InitFailure {
+    fn from(value: CanonicalInitError) -> Self {
+        Self::from_context(value.into_context())
+    }
+}
+
+impl From<CanonicalFlushError> for FlushFailure {
+    fn from(value: CanonicalFlushError) -> Self {
+        Self::from_context(value.into_context())
+    }
+}
+
+impl From<CanonicalShutdownError> for ShutdownFailure {
+    fn from(value: CanonicalShutdownError) -> Self {
+        Self::from_context(value.into_context())
+    }
 }
 
 impl_legacy_classification!(LegacyIdentityError, IdentityFailure, IdentityFailureKind);
@@ -1228,6 +1250,47 @@ mod tests {
             ExportFailure,
             ExportFailureKind::Export,
             "OTLP_EXPORT_TERMINAL"
+        );
+    }
+
+    #[test]
+    fn canonical_observe_errors_convert_without_reconstructing_context() {
+        macro_rules! assert_conversion {
+            ($constructor:expr, $failure:ty, $kind:path, $code:literal) => {{
+                let original = context_with_source($code);
+                let context_pointer = std::ptr::from_ref(original.as_ref()) as usize;
+                let backtrace_pointer = std::ptr::from_ref(original.backtrace()) as usize;
+                let timestamp = original.diagnostic().timestamp;
+                let canonical = $constructor(original);
+                let typed: $failure = canonical.into();
+                assert_eq!(typed.kind(), $kind);
+                assert_context_fidelity(
+                    typed.context(),
+                    context_pointer,
+                    backtrace_pointer,
+                    timestamp,
+                    "failure; caused by: source",
+                );
+            }};
+        }
+
+        assert_conversion!(
+            |context| CanonicalInitError::Configuration { context },
+            InitFailure,
+            InitFailureKind::ObservationInitialization,
+            "SC_OBSERVE_INIT_FAILED"
+        );
+        assert_conversion!(
+            |context| CanonicalFlushError::Drain { context },
+            FlushFailure,
+            FlushFailureKind::ObservationFlush,
+            "SC_OBSERVE_FLUSH_FAILED"
+        );
+        assert_conversion!(
+            |context| CanonicalShutdownError::Drain { context },
+            ShutdownFailure,
+            ShutdownFailureKind::TelemetryFlush,
+            "OTLP_FLUSH_FAILED"
         );
     }
 
