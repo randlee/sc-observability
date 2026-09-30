@@ -78,6 +78,20 @@ pub use sinks::RetainedSinkFaultInjector;
 #[doc(inline)]
 pub use sinks::{ConsoleSink, JsonlFileSink};
 
+/// Opt-in canonical logging facade for the compatible 1.x transition.
+///
+/// The released root remains the compatibility surface. This module exposes
+/// the same production implementation under a stable opt-in namespace without
+/// creating a second logger runtime.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::{
+        ConsoleSink, JsonlFileSink, Logger, LoggerBuilder, LoggerConfig, RetainedLogPolicy,
+    };
+    #[doc(inline)]
+    pub use sc_observability_types::v2::{EventError, FlushError, InitError, LogSinkError};
+}
+
 pub(crate) use maintenance::DiagnosticAdmitter;
 pub(crate) use runtime::{LevelControl, LoggerRuntime};
 
