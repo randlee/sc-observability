@@ -125,6 +125,44 @@ class CompatiblePolicyTests(unittest.TestCase):
                                  else 'proc-macro-api-incompatible')
 
 
+class DocsApprovalEvidenceTests(unittest.TestCase):
+    def test_changed_api_without_approval_evidence_fails_closed(self):
+        crate = 'sc-observability-log-macros'
+        api_sha256 = 'a' * 64
+        package = {'name': crate, 'version': '1.5.0', 'manifest_path': 'macros/Cargo.toml',
+                   'targets': [{'kind': ['proc-macro']}]}
+        policy = {'schema_version': 1, 'candidate_version': '1.5.0', 'crates': {
+            crate: {'baseline_version': '1.4.1', 'kind': 'proc-macro'}}}
+        report = {'source_commit': 'fixture-head', 'candidate_version': '1.5.0', 'crates': {
+            crate: {'status': 'changed', 'api_sha256': api_sha256}}}
+        # This otherwise matching approval is invalid because it has no evidence.
+        approval = {'schema_version': 1, 'candidate_version': '1.5.0', 'crates': {
+            crate: {'status': 'approved', 'reviewer': 'quality-mgr',
+                    'scope': ['public-api'], 'api_sha256': api_sha256}}}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'release').mkdir()
+            (root / 'target/public-api').mkdir(parents=True)
+            (root / 'docs/api-approvals').mkdir(parents=True)
+            (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
+            (root / 'target/public-api/public-api-diff.json').write_text(json.dumps(report))
+            (root / 'docs/api-approvals/fixture.json').write_text(json.dumps(approval))
+            commands = [
+                CompletedProcess([], 0, json.dumps({'packages': [package]}), ''),
+                CompletedProcess([], 0, 'fixture-head', ''),
+            ]
+            stderr = io.StringIO()
+            with patch('validate_public_api.ROOT', root), \
+                    patch('validate_public_api.CACHE', root / 'target/public-api'), \
+                    patch('validate_public_api.run', side_effect=commands), \
+                    patch('sys.argv', ['validate_public_api.py', 'docs']), \
+                    contextlib.redirect_stderr(stderr):
+                self.assertEqual(main(), 1)
+
+        self.assertIn(f'missing_scoped_approvals=[\'{crate}\']', stderr.getvalue())
+
+
 class PublicApiCliTests(unittest.TestCase):
     def test_unhandled_validator_failure_uses_distinct_crash_exit_code(self):
         stderr = io.StringIO()
