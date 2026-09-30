@@ -75,7 +75,8 @@
         "symbol": "v2::IdentityError"
       },
       "removable_paths": [
-        "crates/sc-observability-types/src/lib.rs"
+        "crates/sc-observability-types/src/lib.rs",
+        "crates/sc-observability-types/src/errors.rs"
       ],
       "removal_rationale": "crates/sc-observability-types/src/lib.rs is the retained root export site; remove the temporary re-export when the release policy retires this legacy surface."
     },
