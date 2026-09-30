@@ -52,38 +52,20 @@ impl OwnerState {
         };
         drop(owner);
         let result = guard.shutdown(timeout).map_err(shutdown_failure);
-        let _ = self.control.wait_stopped(Duration::ZERO);
+        if let Err(error) = self.control.wait_stopped(Duration::ZERO) {
+            eprintln!("could not observe observability host shutdown completion: {error}");
+        }
         result
     }
 }
 
 fn shutdown_failure(error: sc_observability_log::v2::ShutdownError) -> Failure {
-    use sc_observability_log::v2::ShutdownError;
-
-    match error {
-        ShutdownError::Timeout { context } => {
-            Failure::Timeout {
-                diagnostic: dto_diagnostic(context.diagnostic()),
-                operation: "shutdown".into(),
-            }
-        }
-        ShutdownError::Drain { context } => Failure::Io {
-            diagnostic: dto_diagnostic(context.diagnostic()),
-        },
-        other => Failure::Internal {
-            diagnostic: dto_diagnostic(other.diagnostic()),
-        },
-    }
+    sc_observability_dto::failure_from_classification(
+        error.diagnostic(),
+        error.failure_classification(),
+    )
 }
 
-fn dto_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> Box<sc_observability_dto::Diagnostic> {
-    Box::new(sc_observability_dto::Diagnostic {
-        at: diagnostic.timestamp.to_string(),
-        code: diagnostic.code.as_str().into(),
-        message: diagnostic.message.clone(),
-        remediation: diagnostic.remediation.clone().into(),
-    })
-}
 
 #[cfg(test)]
 mod tests {
