@@ -115,12 +115,16 @@ lists the nine families and their named causes.
 | `sc-observability-log` | `init`, `LogGuard`, `LogControl`, local lifecycle error enums | `v2::{init, LogGuard, LogControl}` with shared `InitError`, `FlushError`, `ShutdownError` |
 | `sc-observability-otlp` | `Telemetry`, `TelemetryConfig`, `OtelConfig` with the 1.4.1 protocol mapping | `v2::{Telemetry, TelemetryConfig, OtelConfig}` with an explicit `ExporterBackend` |
 
-Root and `v2` values do not share state. Building a root `Logger` and a
-`v2::Logger` creates two loggers, each with its own runtime, queue and
-lifecycle. The only conversions between the two surfaces are:
+Independently constructing a root `Logger` and a `v2::Logger` creates two
+loggers, each with its own runtime, queue and lifecycle. Consuming a logger
+or builder through `From` instead preserves its existing inner state; it
+changes the public surface without constructing another runtime. Available
+conversions and shared views include:
 
+- `From` in both directions between `sc_observability::Logger<State>` and
+  `sc_observability::v2::Logger<State>`, preserving the inner logger and state;
 - `From` in both directions between `sc_observability::LoggerBuilder` and
-  `sc_observability::v2::LoggerBuilder`;
+  `sc_observability::v2::LoggerBuilder`, preserving the builder configuration;
 - `sc_observability_log::LogControl::into_v2`, which returns a `v2` control
   over the same process-wide bridge;
 - `sc_observe::v2::ObservabilityConfig`, which dereferences to the root

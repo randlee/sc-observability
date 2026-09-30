@@ -1,4 +1,4 @@
-//! Package-consumer compatibility contract for the compatible 2.x release.
+//! Package-consumer compatibility contract for the compatible 1.x release.
 //!
 //! A released 1.x consumer (crate-root `Logger`, `LogError`, ...) and a clean
 //! v2 consumer (`sc_observability::v2`) are driven side by side through public
