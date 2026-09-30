@@ -403,7 +403,7 @@ impl ExporterLifecycle for Worker {
     }
 }
 
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "the dedicated worker takes ownership of its channels and validated config"
 )]
