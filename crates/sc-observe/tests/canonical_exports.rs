@@ -1,12 +1,16 @@
 //! Compile-only public-signature proof for the opt-in observation facade.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
-use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 #[allow(deprecated)]
 use sc_observability_types::{
     FlushError as LegacyFlushError, InitError as LegacyInitError, ServiceName,
     ShutdownError as LegacyShutdownError, ToolName,
+};
+use sc_observability_types::{
+    ObservabilityHealthProvider, ObservabilityHealthReport, Observation, ObservationError,
+    ProjectionRegistration, SubscriberRegistration,
+    typed::{FlushFailure, InitFailure, ShutdownFailure},
 };
 use sc_observe::v2::{
     FlushError, InitError, Observability, ObservabilityBuilder, ObservabilityConfig, ShutdownError,
@@ -80,6 +84,32 @@ fn released_typed_helpers_keep_their_public_signatures() {
         LegacyObservability::shutdown_typed;
     let _: fn(LegacyBuilder) -> Result<LegacyObservability, InitFailure> =
         LegacyBuilder::build_typed;
+}
+
+#[allow(deprecated)]
+#[test]
+fn released_and_canonical_observe_routing_exports_keep_their_public_signatures() {
+    let _: fn(LegacyConfig) -> LegacyBuilder = LegacyObservability::builder;
+    let _: fn(&LegacyObservability, Observation<String>) -> Result<(), ObservationError> =
+        LegacyObservability::emit::<String>;
+    let _: fn(&LegacyObservability) -> ObservabilityHealthReport = LegacyObservability::health;
+    let _: fn(LegacyBuilder, Arc<dyn ObservabilityHealthProvider>) -> LegacyBuilder =
+        LegacyBuilder::with_observability_health_provider;
+    let _: fn(LegacyBuilder, SubscriberRegistration<String>) -> LegacyBuilder =
+        LegacyBuilder::register_subscriber::<String>;
+    let _: fn(LegacyBuilder, ProjectionRegistration<String>) -> LegacyBuilder =
+        LegacyBuilder::register_projection::<String>;
+
+    let _: fn(ObservabilityConfig) -> ObservabilityBuilder = Observability::builder;
+    let _: fn(&Observability, Observation<String>) -> Result<(), ObservationError> =
+        Observability::emit::<String>;
+    let _: fn(&Observability) -> ObservabilityHealthReport = Observability::health;
+    let _: fn(ObservabilityBuilder, Arc<dyn ObservabilityHealthProvider>) -> ObservabilityBuilder =
+        ObservabilityBuilder::with_observability_health_provider;
+    let _: fn(ObservabilityBuilder, SubscriberRegistration<String>) -> ObservabilityBuilder =
+        ObservabilityBuilder::register_subscriber::<String>;
+    let _: fn(ObservabilityBuilder, ProjectionRegistration<String>) -> ObservabilityBuilder =
+        ObservabilityBuilder::register_projection::<String>;
 }
 
 #[allow(deprecated)]
