@@ -12,10 +12,10 @@ use sc_observability_types::v2::{
 };
 use sc_observability_types::{
     AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, EntityId, EnvPrefix,
-    ErrorContext, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter, LevelState,
-    LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport,
-    MaintenanceWorkerState, OperationDiagnostic, QueryError, QueryHealthState, Remediation,
-    SinkHealth, SinkHealthState, Timestamp, WriterState,
+    ErrorContext, FailureClassification, LevelChange, LevelChangeError, LevelChangeSource,
+    LevelFilter, LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
+    MaintenanceHealthReport, MaintenanceWorkerState, OperationDiagnostic, QueryError,
+    QueryHealthState, Remediation, SinkHealth, SinkHealthState, Timestamp, WriterState,
 };
 use serde::de::{DeserializeOwned, value::StrDeserializer};
 use serde_json::Value;
@@ -699,8 +699,8 @@ impl CanonicalLogger<Running> {
             Err(TryEnqueueError::Full) => {
                 let summary = writer.record_queue_full_drop();
                 self.record_last_error(summary);
-                Err(CanonicalEventError::Routing {
-                    context: Box::new(ErrorContext::new(
+                Err(CanonicalEventError::classified_routing(
+                    Box::new(ErrorContext::new(
                         error_codes::LOGGER_QUEUE_FULL,
                         "writer queue is full",
                         Remediation::recoverable(
@@ -711,7 +711,8 @@ impl CanonicalLogger<Running> {
                             ],
                         ),
                     )),
-                })
+                    FailureClassification::QueueFull,
+                ))
             }
             Err(TryEnqueueError::Disconnected) => Err(self.try_log_disconnected_failure()),
         }
@@ -887,9 +888,10 @@ impl CanonicalLogger<Running> {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
             {
-                CanonicalEventError::Routing {
-                    context: Box::new(shutdown_timed_out_error_context(&summary.message)),
-                }
+                CanonicalEventError::classified_routing(
+                    Box::new(shutdown_timed_out_error_context(&summary.message)),
+                    FailureClassification::timeout("shutdown"),
+                )
             }
             Some(summary) => CanonicalEventError::Routing {
                 context: Box::new(writer_degraded_error_context(&format!(
@@ -910,9 +912,10 @@ impl CanonicalLogger<Running> {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
             {
-                CanonicalEventError::Routing {
-                    context: Box::new(shutdown_timed_out_error_context(&summary.message)),
-                }
+                CanonicalEventError::classified_routing(
+                    Box::new(shutdown_timed_out_error_context(&summary.message)),
+                    FailureClassification::timeout("shutdown"),
+                )
             }
             Some(summary) => CanonicalEventError::Routing {
                 context: Box::new(writer_degraded_error_context(&format!(

@@ -1024,6 +1024,27 @@ fn core_sink_and_shutdown() {
     crate::spawn::wait_live(1);
     assert!(sink.flushes.load(Ordering::SeqCst) >= 1);
 }
+
+fn core_shutdown_timeout_admission_failure() {
+    let error = native::v2::EventError::classified_routing(
+        Box::new(native::ErrorContext::new(
+            sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+            "writer thread did not stop within 10ms",
+            native::Remediation::recoverable(
+                "wait for the writer thread to recover",
+                ["retry after shutdown"],
+            ),
+        )),
+        native::v2::FailureClassification::timeout("shutdown"),
+    );
+
+    assert_failure(
+        Err::<(), _>(crate::conversion::core_admission(&error)),
+        sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT.as_str(),
+        "timeout",
+        Some("shutdown"),
+    );
+}
 fn admission32(close: bool) {
     let (_root, owner, backend) = core();
     let gate = Gate::new();
@@ -1288,6 +1309,7 @@ fn d15_conversion_fixture() {
 fn d15_coordinator_fixture() {
     core_admission_and_flush_faults();
     core_sink_and_shutdown();
+    core_shutdown_timeout_admission_failure();
 }
 
 fn d15_operation_fixture() {
