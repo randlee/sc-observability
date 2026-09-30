@@ -292,7 +292,17 @@ fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result
 }
 /// Encodes JSON values losslessly, distinguishing integer and float domains.
 pub fn from_json_value(value: Value) -> Result<ValueDto, Failure> {
-    Ok(match value {
+    Ok(from_json_value_total(value))
+}
+
+/// Encodes a `serde_json::Value` using the workspace's finite `Number` domains.
+///
+/// The public conversion retains its `Result` signature for released API
+/// compatibility. Without `serde_json`'s `arbitrary_precision` feature, every
+/// non-integer `Number` is backed by an `f64`, so recursive JSON projection is
+/// total and does not create a synthetic binding failure.
+fn from_json_value_total(value: Value) -> ValueDto {
+    match value {
         Value::Null => ValueDto::Null {},
         Value::Bool(value) => ValueDto::Boolean { value },
         Value::String(value) => ValueDto::String { value },
@@ -305,28 +315,25 @@ pub fn from_json_value(value: Value) -> Result<ValueDto, Failure> {
                 ValueDto::Float {
                     value: value
                         .as_f64()
-                        .ok_or_else(|| invalid_input("value", "unrepresentable float"))?,
+                        .expect("non-arbitrary serde_json numbers are representable f64 values"),
                 }
             }
         }
         Value::Array(value) => ValueDto::Array {
-            value: value
-                .into_iter()
-                .map(from_json_value)
-                .collect::<Result<_, _>>()?,
+            value: value.into_iter().map(from_json_value_total).collect(),
         },
         Value::Object(value) => ValueDto::Object {
             value: value
                 .into_iter()
-                .map(|(k, v)| Ok((k, from_json_value(v)?)))
-                .collect::<Result<_, Failure>>()?,
+                .map(|(key, value)| (key, from_json_value_total(value)))
+                .collect(),
         },
-    })
+    }
 }
-fn from_fields(fields: Map<String, Value>) -> Result<BTreeMap<String, ValueDto>, Failure> {
+fn from_fields(fields: Map<String, Value>) -> BTreeMap<String, ValueDto> {
     fields
         .into_iter()
-        .map(|(k, v)| Ok((k, from_json_value(v)?)))
+        .map(|(key, value)| (key, from_json_value_total(value)))
         .collect()
 }
 fn trace(value: TraceContextDto) -> Result<core::TraceContext, Failure> {
@@ -597,21 +604,16 @@ pub fn from_core_event(v: core::LogEvent) -> Result<StoredEventDto, Failure> {
         request_id: v.request_id.map(|v| v.as_str().into()),
         correlation_id: v.correlation_id.map(|v| v.as_str().into()),
         outcome: v.outcome.map(|v| v.as_str().into()),
-        fields: from_fields(v.fields)?,
-        diagnostic: v
-            .diagnostic
-            .map(|d| {
-                Ok(StoredDiagnosticDto {
-                    timestamp: d.timestamp.to_string(),
-                    code: d.code.as_str().into(),
-                    message: d.message,
-                    cause: d.cause,
-                    remediation: d.remediation.into(),
-                    docs: d.docs,
-                    details: from_fields(d.details)?,
-                })
-            })
-            .transpose()?,
+        fields: from_fields(v.fields),
+        diagnostic: v.diagnostic.map(|d| StoredDiagnosticDto {
+            timestamp: d.timestamp.to_string(),
+            code: d.code.as_str().into(),
+            message: d.message,
+            cause: d.cause,
+            remediation: d.remediation.into(),
+            docs: d.docs,
+            details: from_fields(d.details),
+        }),
         state_transition: v.state_transition.map(|v| StateTransitionDto {
             entity_kind: v.entity_kind.as_str().into(),
             entity_id: v.entity_id.map(|value| value.as_str().into()),
