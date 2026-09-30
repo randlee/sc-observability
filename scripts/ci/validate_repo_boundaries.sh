@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+python3 -m unittest discover -s scripts/ci/tests -p test_compat_registry.py -v
+
 python3 - <<'PY'
 from pathlib import Path
 import json
@@ -9,7 +11,9 @@ import subprocess
 import sys
 import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
+sys.path.insert(0, str(Path('scripts/ci').resolve()))
 from release_manifest import workspace_members
+from compatibility_registry import has_placeholder_baseline_signature
 
 def is_release_manifest(path: Path, workspace_toml: Path):
     data = load_toml(path)
@@ -169,8 +173,13 @@ if any(not required_record_fields.issubset(row) for row in all_contract_rows):
     raise SystemExit("compatibility registry has an incomplete contract record")
 if {row["treatment"] for row in all_contract_rows} - allowed_treatments:
     raise SystemExit("compatibility registry has an unknown four-way treatment")
-if any(not isinstance(row["baseline_signature"], str) or not row["baseline_signature"] for row in all_contract_rows):
-    raise SystemExit("compatibility registry has an unsigned baseline contract")
+if any(
+    not isinstance(row["baseline_signature"], str)
+    or not row["baseline_signature"]
+    or has_placeholder_baseline_signature(row["baseline_signature"])
+    for row in all_contract_rows
+):
+    raise SystemExit("compatibility registry has an unsigned or placeholder baseline contract")
 if any(row["canonical_signature"] is None and row["treatment"] != "restoration" for row in all_contract_rows):
     raise SystemExit("missing canonical signatures must be explicit restoration records")
 deprecated_exceptions = set(registry.get("deprecated_owner_exceptions", []))
