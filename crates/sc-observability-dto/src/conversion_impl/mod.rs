@@ -6,7 +6,7 @@ use crate::constants::{
 use crate::error_codes;
 use crate::{
     AdmissionDto, AggregationTemporalityDto, AvailabilityDto, CanonicalDiagnosticDto,
-    CanonicalFailureDto, CanonicalWireEnvelope, ChangeDiagnosticDto, Diagnostic,
+    CanonicalFailureDto, CanonicalWireEnvelope, ChangeDiagnosticDto, DecimalDtoError, Diagnostic,
     DiagnosticSummaryDto, Failure, HistogramPointDto, LevelChangeDto, LevelChangeSourceDto,
     LevelDto, LevelFilterDto, LevelRequestDto, LevelStateDto, LogEventDto, LogHealthDto,
     LogOrderDto, LogQueryDto, LogSnapshotDto, LoggingHealthDto, MaintenanceHealthDto,
@@ -18,6 +18,7 @@ use crate::{
 use sc_observability_types as core;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
+use std::any::Any;
 use std::collections::BTreeMap;
 
 const UNREGISTERED_CODE_REMEDIATION: &str =
@@ -62,11 +63,34 @@ pub fn invalid_input(field: impl Into<String>, message: impl Into<String>) -> Fa
         field: field.into(),
     }
 }
-fn checked<T, E: std::fmt::Display>(
+fn checked<T, E: std::fmt::Display + 'static>(
     value: std::result::Result<T, E>,
     field: &str,
 ) -> Result<T, Failure> {
-    value.map_err(|error| invalid_input(field, error.to_string()))
+    value.map_err(|error| {
+        let source = &error as &dyn Any;
+        let code = source
+            .downcast_ref::<core::ValueValidationError>()
+            .map(|error| error.code().as_str())
+            .or_else(|| {
+                source
+                    .downcast_ref::<DecimalDtoError>()
+                    .map(|error| error.code())
+            });
+        let diagnostic = code.map_or_else(
+            || {
+                boundary_diagnostic(
+                    error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT,
+                    error.to_string(),
+                )
+            },
+            |code| boundary_diagnostic(code, error.to_string()),
+        );
+        Failure::Validation {
+            diagnostic: Box::new(diagnostic),
+            field: field.into(),
+        }
+    })
 }
 fn version(version: u32) -> Result<(), Failure> {
     if version == 1 {
