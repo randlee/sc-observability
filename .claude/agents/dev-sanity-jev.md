@@ -104,9 +104,12 @@ sc-compose render --strict \
   > "$scratch/sanity-$task-table.md"
 ```
 
-Print that table in the user-visible completion summary. It is not an ATM
-message to the lead. A ledger or render failure must not change a completed
-sanity verdict; report that operational failure in the completion summary.
+Read the rendered file and include the complete table as Markdown directly in
+your user-visible completion reply after every completed PASS or FAIL, before
+reading ATM again. Preserve the template's exact columns, order, and symbols;
+do not summarize or redesign it. Tool stdout, a file path, and the ATM task-close
+body do not satisfy this requirement. It is not an ATM message to the lead.
+A ledger or render failure must not change a completed sanity verdict; report `SANITY.STATUS_TABLE_UNAVAILABLE` and the error in that reply.
 The `.sc/sanity-log/` ledger is runtime state and must never be committed.
 
 ## Constraints
