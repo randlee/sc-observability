@@ -37,39 +37,70 @@ fn canonical_observe_exports_have_real_public_signatures() {
 
 #[test]
 fn released_root_observe_exports_keep_their_error_identities() {
+    // Each method is bound on its own, with no type annotation, so the
+    // expectation can only be fulfilled by that method's own deprecation.
+    // The signature is then pinned separately; that statement names the
+    // deprecated released error types and allows only that use.
     #[expect(
         deprecated,
         reason = "the released default_for deprecation must remain externally observable"
     )]
-    let _: fn(ToolName, PathBuf) -> Result<LegacyConfig, LegacyInitError> =
-        LegacyConfig::default_for;
+    let default_for = LegacyConfig::default_for;
+    #[allow(
+        deprecated,
+        reason = "the pin names the deprecated released error type"
+    )]
+    let _: fn(ToolName, PathBuf) -> Result<LegacyConfig, LegacyInitError> = default_for;
     #[expect(
         deprecated,
         reason = "the released service_name deprecation must remain externally observable"
     )]
-    let _: fn(&LegacyConfig) -> Result<ServiceName, LegacyInitError> = LegacyConfig::service_name;
+    let service_name = LegacyConfig::service_name;
+    #[allow(
+        deprecated,
+        reason = "the pin names the deprecated released error type"
+    )]
+    let _: fn(&LegacyConfig) -> Result<ServiceName, LegacyInitError> = service_name;
     #[expect(
         deprecated,
         reason = "the released Observability::new deprecation must remain externally observable"
     )]
-    let _: fn(LegacyConfig) -> Result<LegacyObservability, LegacyInitError> =
-        LegacyObservability::new;
+    let new = LegacyObservability::new;
+    #[allow(
+        deprecated,
+        reason = "the pin names the deprecated released error type"
+    )]
+    let _: fn(LegacyConfig) -> Result<LegacyObservability, LegacyInitError> = new;
     #[expect(
         deprecated,
         reason = "the released Observability::flush deprecation must remain externally observable"
     )]
-    let _: fn(&LegacyObservability) -> Result<(), LegacyFlushError> = LegacyObservability::flush;
+    let flush = LegacyObservability::flush;
+    #[allow(
+        deprecated,
+        reason = "the pin names the deprecated released error type"
+    )]
+    let _: fn(&LegacyObservability) -> Result<(), LegacyFlushError> = flush;
     #[expect(
         deprecated,
         reason = "the released Observability::shutdown deprecation must remain externally observable"
     )]
-    let _: fn(&LegacyObservability) -> Result<(), LegacyShutdownError> =
-        LegacyObservability::shutdown;
+    let shutdown = LegacyObservability::shutdown;
+    #[allow(
+        deprecated,
+        reason = "the pin names the deprecated released error type"
+    )]
+    let _: fn(&LegacyObservability) -> Result<(), LegacyShutdownError> = shutdown;
     #[expect(
         deprecated,
         reason = "the released ObservabilityBuilder::build deprecation must remain externally observable"
     )]
-    let _: fn(LegacyBuilder) -> Result<LegacyObservability, LegacyInitError> = LegacyBuilder::build;
+    let build = LegacyBuilder::build;
+    #[allow(
+        deprecated,
+        reason = "the pin names the deprecated released error type"
+    )]
+    let _: fn(LegacyBuilder) -> Result<LegacyObservability, LegacyInitError> = build;
 }
 
 #[test]
