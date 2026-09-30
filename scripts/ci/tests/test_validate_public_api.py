@@ -153,13 +153,30 @@ class CompatiblePolicyTests(unittest.TestCase):
             manifest_path = root / 'release/public-api-major-breaks.toml'
             self.write_package_roster(root)
             cases = [
-                ('schema_version = 1\nbaseline_version = "1.4.1"\ncandidate_version = "1.5.0"\nbreaks = []\n', True),
-                ('schema_version = 1\nbaseline_version = "1.4.0"\ncandidate_version = "1.5.0"\nbreaks = []\n', False),
-                ('schema_version = 1\nbaseline_version = "1.4.1"\ncandidate_version = "2.0.0"\nbreaks = []\n', False),
-                ('schema_version = 1\nbaseline_version = "1.4.1"\ncandidate_version = "1.5.0"\nbreaks = [{ id = "waiver" }]\n', False),
+                ('explicit empty break list',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\nbreaks = []\n', True),
+                ('wrong baseline',
+                 'schema_version = 1\nbaseline_version = "1.4.0"\n'
+                 'candidate_version = "1.5.0"\nbreaks = []\n', False),
+                ('major candidate',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "2.0.0"\nbreaks = []\n', False),
+                ('nonempty break list',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\nbreaks = [{ id = "waiver" }]\n', False),
+                ('non-list breaks',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\nbreaks = "none"\n', False),
+                ('missing breaks key',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\n', False),
+                ('misspelled breaks key',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\nbreak = [{ id = "waiver" }]\n', False),
             ]
-            for contents, accepted in cases:
-                with self.subTest(contents=contents):
+            for name, contents, accepted in cases:
+                with self.subTest(name=name):
                     manifest_path.write_text(contents)
                     with patch('validate_public_api.ROOT', root):
                         if accepted:
@@ -167,6 +184,42 @@ class CompatiblePolicyTests(unittest.TestCase):
                         else:
                             with self.assertRaises(ValueError):
                                 validate_compatible_policy(self.policy())
+
+    def test_cli_rejects_missing_or_misspelled_break_key_before_api_tools(self):
+        crate = 'sc-observability-log-macros'
+        package = {'name': crate, 'version': '1.5.0', 'manifest_path': 'macros/Cargo.toml',
+                   'targets': [{'kind': ['proc-macro']}]}
+        policy = {'schema_version': 1, 'candidate_version': '1.5.0', 'crates': {
+            crate: {'baseline_version': '1.4.1', 'kind': 'proc-macro'}}}
+        invalid_manifests = {
+            'missing': ('schema_version = 1\nbaseline_version = "1.4.1"\n'
+                        'candidate_version = "1.5.0"\n'),
+            'misspelled': ('schema_version = 1\nbaseline_version = "1.4.1"\n'
+                           'candidate_version = "1.5.0"\n'
+                           'break = [{ id = "waiver" }]\n'),
+        }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'release').mkdir()
+            (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
+            self.write_package_roster(root, candidate_packages=[crate])
+            for name, manifest in invalid_manifests.items():
+                with self.subTest(name=name):
+                    (root / 'release/public-api-major-breaks.toml').write_text(manifest)
+                    stderr = io.StringIO()
+                    with patch('validate_public_api.ROOT', root), \
+                            patch('validate_public_api.CACHE', root / 'cache'), \
+                            patch('validate_public_api.run', return_value=CompletedProcess(
+                                ['cargo', 'metadata'], 0,
+                                json.dumps({'packages': [package]}), '')) as mocked_run, \
+                            patch('sys.argv', ['validate_public_api.py', 'semver']), \
+                            contextlib.redirect_stdout(io.StringIO()), \
+                            contextlib.redirect_stderr(stderr):
+                        self.assertEqual(cli(), 3)
+                    self.assertEqual(mocked_run.call_count, 1)
+                    self.assertIn('compatible 1.x release cannot accept enumerated breaking API exceptions',
+                                  stderr.getvalue())
 
     def test_missing_or_wrong_package_baseline_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
