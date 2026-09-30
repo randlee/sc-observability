@@ -1331,7 +1331,7 @@ was reworded accordingly to describe the remaining validation.
 - **Registry ownership**: Compatibility adapters reuse the existing sole per-crate `error_codes` and constants registries (ADR-005, SRC-001–004); separate compatibility files do not authorize duplicate codes or constants.
 - **Retained architecture**: ADR-017's shared canonical diagnostic implementation, ADR-018's two backends/shared lifecycle and ADR-019's pins, registries and boundary constraints remain. Their 2.0-only root replacement/removal and version activation do not govern this release. `sc-observe` remains a dev-only OTLP dependency; this decision introduces no dependency exception.
 - **Acceptance**: Old consumers work at default lint settings; opt-in migrated consumers deny deprecated usage. Preserve diagnostic/source information through adapters, and test behavioral compatibility as well as exact released-package semver. No breaking approval entry can waive the 1.x contract. Future removal needs its own major-release decision.
-- **Contracts**: PHB-003–006, PHD-001–004 and the compatible 1.x amendment; D22 establishes usable compiled contracts, facade sprints implement adapters, D27 validates release tooling, and D18 owns the real combined proof before D9 conformance.
+- **Contracts**: PHB-003–006, PHD-001–004 and the compatible 1.x amendment; D22 establishes usable compiled contracts, facade sprints implement adapters, D27 validates release tooling, and D18 owns the real combined proof alongside D9 collector conformance; both must pass before phase-ending review.
 
 ## 8. API-Design Consistency
 

@@ -10,42 +10,47 @@ All nine crates have a released 1.4.1 baseline, including `sc-observability-otlp
 
 Deprecated owners, legacy errors and conversions belong in dedicated `src/compat/` files wherever practical. Crate roots contain only necessary reexports. Canonical modules must not depend on compatibility modules. Adapters delegate into one runtime/backend/lifecycle; they preserve old signatures, error variants and source chains, behavior, trait/auto-trait guarantees, public config literals and wire formats. Existing released typed and macro-generated helper APIs remain obligations. Keep the released event field shape where internal validation avoids duplicating the event/query graph.
 
-D22 audits the existing inventory against the selected implementation head and freezes exact per-symbol treatment and removable files/exports in one `docs/compatibility/registry.json`, with canonical signatures in `docs/compatibility/signatures.md`. Implementation owners update that shared registry through its owner when a verified removal point changes; they do not create parallel ledgers. D18 derives actual additional handwritten type/method counts once from the combined implementation, distinguishing existing pairs, restorations, adapters, aliases and reexports. The current audit's 58 affected nominal contracts and 141 retained callable contracts are **not** counts of new wrappers. No removal occurs now.
+The current audit's 58 affected nominal contracts and 141 retained callable contracts are **not** counts of new wrappers. The shared execution rules below name the one maintained contract/removal inventory and final count owner. No removal occurs now.
 
 The pinned comparison is v1.4.1 `c578912653233c7dc678fefe5af575118dbbaaa1` versus audited candidate `17155bd313c1a0b4b958417b22208b0d4e320f79`. D22 reconciles later D18 repairs without accepting later blanket 2.0 approvals. The existing audit is at `sc-observability-recovery/compatibility-inventory` alongside the repository; D22 maintains the selected contract/removal registry, and D18 reports final implemented counts.
 
-## Eight compatibility sprints within wave 3
+## Scheduling and ownership
 
-| Stage | Sprint | Owner | Boundary / output |
-|---|---|---|---|
-| Contracts | D22 `obs-d-22` | cobs | Shared released types plus real canonical facade exports, exact compiled compatibility contract implementing accepted ADR-020 |
-| Parallel adapters | D23 `obs-d-23` | cobs | Core/logger source and tests |
-| Parallel adapters | D24 `obs-d-24` | cobs2 | Observation facade source and tests |
-| Parallel adapters | D25 `obs-d-25` | lobs | Log bridge plus existing macro producer/external consumer proof |
-| Parallel adapters | D26 `obs-d-26` | lobs2 | Released OTLP facade source and tests |
-| Parallel release work | D27 `obs-d-27` | lobs | Versions, manifests/locks, compatible release validation and CI |
-| Parallel bindings | D28 `obs-d-28` | cobs2 | DTO, binding-runtime, language bindings and examples source; manifests remain D27-owned |
-| Integration | Existing D18 `obs-d-18` | cobs | Combined verification, migration documentation and final actual count report |
+There are seven new sprints (D22–D28) and one amended sprint (D18): eight compatibility sprints. Existing D9 remains a separate conformance sprint, giving nine active sprints and 27 graph entries including historical work. The longest execution path is three development stages, maximum stage width five, and four existing developers limit immediate concurrency to four.
 
-There are seven new sprints (D22–D28) and one amended sprint (D18), totaling eight compatibility sprints. Existing D9 conformance follows D18 and remains separate, giving nine active sprints and 27 graph entries including historical work. Wave 3 contains D22–D28 and D18, with internal contracts → parallel boundaries → integration stages; D9 remains wave 4. Bead metadata and labels use numeric waves 3/4 and `wave:3`/`wave:4`.
+Historical phase grouping and execution readiness are different fields. `metadata.phase_wave` and `phase-wave:N` retain group 3 for compatibility/D18 and group 4 for D9. `metadata.wave` and `wave:N` describe the actual execution levels below.
 
-The compatibility critical path remains three development stages, with theoretical width six; the existing four developer agents limit immediate execution width to four. Including D9, the path remains four stages because collector qualification consumes the integrated library. The existing D9→D18 dependency is retained, not newly added; the three-stage baseline excludes that already separate conformance sprint.
+| Execution wave | Historical phase group | Sprint / owner | Prerequisite sprint artifacts | Boundary / output |
+|---|---|---|---|---|
+| 1 | 3 | D22 / cobs | None | Real compiled shared compatibility contracts and export seams |
+| 1 | 3 | D27 / lobs | None | Fixture-backed release validation, versions, manifests/locks and CI |
+| 2 | 3 | D23 / cobs | D22 | Core/logger source and tests |
+| 2 | 3 | D24 / cobs2 | D22 | Observation facade source and tests |
+| 2 | 3 | D25 / lobs | D22 | Log bridge plus thin macro producer/external consumer proof |
+| 2 | 3 | D26 / lobs2 | D22 | Released OTLP facade and real exporters |
+| 2 | 3 | D28 / cobs2 | D22 | Atomic DTO/binding-runtime/language conversion and example compatibility |
+| 3 | 3 | D18 / cobs | D22–D28 | Combined verification, migration docs and final actual count report |
+| 3 | 4 | D9 / cobs | D22 + D26 | Real collector conformance against the completed exporter |
 
-D22 explicitly owns the source-audited prerequisite canonical import paths and one `tests/canonical_exports.rs` fixture per facade; the bead lists exact files and transfers them after D22 sanity to D23–D26 or D28 as appropriate. D28 receives the prerequisite binding/example import seams; its subsequent adapter work has one implementation owner. Only changed canonical identities move to `types::v2`/peer `v2`; unchanged aliases/constants and released consumer fixtures keep their paths.
+These prerequisites resolve to sanity gates in the committed graph. D27 uses accepted policy and release-validator fixtures, so it consumes no D22 implementation artifact and runs alongside D22. D9 consumes D26's actual exporter and D22's compatible contracts; the former D9→D18 edge is removed. D9 need not wait for unrelated binding/release integration. Both D18 and D9 must pass before phase-ending review; neither substitutes for the other.
 
-D22 supplies **compiled production** canonical exports backed by existing new implementations, not fake mocks. Core/observe/log/OTLP facade roots initially belong to D22 for this narrow publication, then transfer to D23–D26. Frozen canonical signatures let each facade owner consume peers' existing implementation while restoring only its own old surface. Shared type source remains D22-owned. D27 owns manifests, locks and release tooling; the parallel facade sprints own their source/tests and D28 owns DTO/binding-runtime/binding/example source, excluding package manifests and locks. Contract drift requires a scoped D22 amendment, not silently serializing unrelated sprints.
+D22 supplies compiled production exports backed by the existing implementation, never fake mocks. Its bead has one `owned_paths` list and structured `ownership_transfers` selectors: every granted prerequisite import/export/fixture path is sequentially handed to D23–D26 or D28 after D22 sanity. These are not concurrent editing permissions. Shared type source stays D22-owned. Only changed canonical identities move to `types::v2` or peer canonical namespaces; unchanged identities/constants and released-consumer fixtures retain their paths.
 
-All new dev beads and amended D18 depend on `obs-phase-d-plan-qa-2`. D23–D28 also depend on D22 sanity. D18 consumes all seven new sanity gates and retained original prerequisite gates. Each sanity PASS routes immediately to quality-mgr QA; D18 closes only after constituent QA and combined QA pass. Important findings and repair beads are closed only by quality-mgr.
+D27 owns manifests, locks and release tooling. D23–D26 own their respective facade source/tests. D28 owns DTO/binding-runtime/binding/example source, excluding manifests/locks; its boundary exception is the atomic native-failure-to-wire conversion plus its thin language consumers, which must agree on a single representation. It does not introduce another sprint or runtime. OTLP observation imports remain dev-only.
 
-## One implementation stack and review sequence
+D18 has no implicit permission to edit facade, binding or release implementation. Combination defects return to D22–D28 owners. D18 owns its explicit combined-test fence, migration docs and final count report. D9's scope lives in its bead; the old sprint markdown projection is not an implementation deliverable.
 
-Planned layers 19–25 are D22–D28, after historical D20; D18 and D9 move to 26 and 27. These are planned append positions, not claims about current Git state. Before provisioning, the lead records the actual published stack tip and links layers in completion order. Planned parent WIP/rebase is a finalization concern, not an inferred execution hold. Every completed layer is sanity checked, rebased onto the ordered stack, then QA checked at its final reviewed head. Any changed reviewed behavior gets the necessary renewed checks.
+## Shared execution rules
 
-The user requires two review iterations: cobs using `critical-plan-reviewer.md` and a background reviewer using `plan-scope-reviewer.md`, with fixes after each iteration, followed by quality-mgr plan review. The plan gate prevents implementation dispatch until review passes. This amendment does not repeat prior passed runtime work or close important findings based merely on task-completion messages.
+Accepted ADR-020 and the amended governing requirements/ADRs must be present at the reviewed planning revision before any sprint starts. D22 implements this policy; it does not create a future authorization dependency. The plan gate `obs-phase-d-plan-qa-2` blocks implementation dispatch until quality-mgr approves the amendment. That approval completes planning only; the current user implementation hold remains until explicitly released.
 
-Final acceptance includes unchanged released consumers, clean opt-in canonical consumers, both backend paths, bindings/schema/wheels and exact released-package semver comparison. D27 closes a release-validation boundary using baseline/additive positive fixtures, breaking/missing-evidence negative fixtures, and version/CI coherence. D18 alone runs the real combined consumer and all-crate semver gate. D9 and the full phase-ending review precede any implementation landing on `develop`, which still requires user authorization.
+The one compatibility inventory/removal list is D22-owned `docs/compatibility/registry.json`, with signatures in `docs/compatibility/signatures.md`. Other owners submit changes through D22 rather than concurrently editing shared documents or creating separate ledgers. Contract drift is a scoped owner change, then consumers revalidate. After the parallel sanity gates pass, registry.json transfers to D18 for final accounting; signature policy stays D22-owned. D18 derives actual additional handwritten type/method counts once from the combined implementation.
 
-D18 has no implicit authority to edit facade source or release tooling. Combination defects return to D22–D28 owners. D18 owns combined verification, its explicitly scoped composition-test fence, migration docs and the final count report; it does not implement DTO/binding-runtime/language-binding/example migrations. Macro syntax/expansion remains unchanged by default; D25 owns any strictly required routing repair plus the existing external consumer-check proof, as a thin producer/consumer exception. Contract and boundary checks remain scoped (workspace build, owned tests, boundary/production lint); D18 owns combined workspace behavior.
+Implementation remains one ordered stack on `integrate/phase-d`. Planned positions are D22–D28 at layers 19–25, D18 at 26 and D9 at 27; these are append intent, not current Git state or execution dependencies. Before provisioning, the lead records the published stack tip and actual targets. A chained `pr_target` or parent WIP affects finalization and rebasing, not starting ready scoped work. Completion order may change the recorded physical layer order without adding execution holds.
+
+Every completed layer proceeds through sanity, rebase onto the ordered stack, then immediate quality-mgr QA at its final reviewed head; changed behavior receives the necessary renewed checks. Important findings and repair beads are closed only by quality-mgr. Contract/boundary checks stay scoped to workspace build, owned tests and boundary/production lint. D27 proves baseline/additive success, breaking/missing-evidence rejection and version/CI coherence using fixtures. D18 alone proves the real combined old/new consumer and all-crate semver behavior; D9 proves real collector conformance.
+
+No implementation merge to `develop` is authorized here. D18 and D9 PASS plus full phase-ending review and explicit user authorization are required. The two requested scope/critical review iterations precede quality-mgr plan review; preserved review reports are evidence, not live scheduling authority.
 
 ## Planning review record
 

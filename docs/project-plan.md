@@ -500,7 +500,7 @@ The detailed sprint-by-sprint execution record remains in
 
 ## Phase D — Host logging, OTLP restoration, and distribution completion
 
-**Current release decision:** ADR-020 and the [compatible 1.x amendment](plans/phase-d/compatible-1x-amendment.md) supersede the historical 2.0 activation/removal sequence below. Active work is D22 contracts → parallel D23–D27 → D18 combined integration → retained D9 conformance. Released APIs remain functional through deprecated adapters. No implementation merge to develop precedes full phase-ending review and user authorization.
+**Current release decision:** ADR-020 and the [compatible 1.x amendment](plans/phase-d/compatible-1x-amendment.md) supersede the historical 2.0 activation/removal sequence below. Active work is D22 contracts plus independent D27 release tooling, then parallel D23–D26/D28 adapters, then D18 combined integration alongside retained D9 conformance. D9 consumes D22/D26, not D18 test/report output. Released APIs remain functional through deprecated adapters. No implementation merge to develop precedes full phase-ending review and user authorization.
 
 ### Historical execution record (not current dispatch scope)
 
