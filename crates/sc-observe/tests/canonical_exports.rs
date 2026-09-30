@@ -3,7 +3,11 @@
 use std::path::PathBuf;
 
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
-use sc_observability_types::{ServiceName, ToolName};
+#[allow(deprecated)]
+use sc_observability_types::{
+    FlushError as LegacyFlushError, InitError as LegacyInitError, ServiceName,
+    ShutdownError as LegacyShutdownError, ToolName,
+};
 use sc_observe::v2::{
     FlushError, InitError, Observability, ObservabilityBuilder, ObservabilityConfig, ShutdownError,
 };
@@ -27,6 +31,20 @@ fn canonical_observe_exports_have_real_public_signatures() {
     let _: fn(&Observability) -> Result<(), ShutdownError> = Observability::shutdown;
 
     requires_send_sync::<Observability>();
+}
+
+#[allow(deprecated)]
+#[test]
+fn released_root_observe_exports_keep_their_error_identities() {
+    let _: fn(ToolName, PathBuf) -> Result<LegacyConfig, LegacyInitError> =
+        LegacyConfig::default_for;
+    let _: fn(&LegacyConfig) -> Result<ServiceName, LegacyInitError> = LegacyConfig::service_name;
+    let _: fn(LegacyConfig) -> Result<LegacyObservability, LegacyInitError> =
+        LegacyObservability::new;
+    let _: fn(&LegacyObservability) -> Result<(), LegacyFlushError> = LegacyObservability::flush;
+    let _: fn(&LegacyObservability) -> Result<(), LegacyShutdownError> =
+        LegacyObservability::shutdown;
+    let _: fn(LegacyBuilder) -> Result<LegacyObservability, LegacyInitError> = LegacyBuilder::build;
 }
 
 #[test]

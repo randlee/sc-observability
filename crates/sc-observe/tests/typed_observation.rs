@@ -9,6 +9,8 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+#[allow(deprecated)]
+use sc_observability_types::InitError as LegacyInitError;
 use sc_observability_types::typed::{
     ClassifiedError, ProjectionFailure, SubscriberFailure, TypedLogProjector, TypedMetricProjector,
     TypedObservationSubscriber, TypedSpanProjector, legacy_log_projector, legacy_metric_projector,
@@ -693,25 +695,33 @@ fn invalid_deserialized_names_are_rejected() {
 #[test]
 fn typed_and_legacy_construction_failures_classify_consistently() {
     let legacy_config = config("legacy-new-empty");
-    let typed_config = config("typed-new-empty");
+    let typed_config = sc_observe::v2::ObservabilityConfig::default_for(
+        ToolName::new("typed-observe").expect("valid tool"),
+        temp_path("typed-new-empty"),
+    )
+    .expect("canonical config");
     let Err(legacy_new) = Observability::new(legacy_config) else {
         panic!("legacy new without routes must fail");
     };
-    let Err(new_empty) = Observability::new(typed_config) else {
+    let Err(new_empty) = sc_observe::v2::Observability::new(typed_config) else {
         panic!("new without routes must fail");
     };
-    assert!(matches!(
-        &legacy_new,
-        CanonicalInitError::Configuration { .. }
-    ));
+    let LegacyInitError(legacy_context) = legacy_new;
+    assert_eq!(
+        legacy_context.diagnostic().code,
+        sc_observe::error_codes::OBSERVABILITY_INIT_FAILED
+    );
     assert!(matches!(
         &new_empty,
         CanonicalInitError::Configuration { .. }
     ));
-    assert_eq!(legacy_new.diagnostic().code, new_empty.diagnostic().code);
+    assert_eq!(
+        legacy_context.diagnostic().code,
+        new_empty.diagnostic().code
+    );
 
-    let Err(empty) = Observability::builder(
-        sc_observe::ObservabilityConfig::default_for(
+    let Err(empty) = sc_observe::v2::Observability::builder(
+        sc_observe::v2::ObservabilityConfig::default_for(
             ToolName::new("typed-observe").expect("valid tool"),
             temp_path("empty"),
         )
@@ -728,7 +738,7 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     )
     .expect("legacy config");
     legacy_config.queue_capacity = 0;
-    let mut typed_config = sc_observe::ObservabilityConfig::default_for(
+    let mut typed_config = sc_observe::v2::ObservabilityConfig::default_for(
         ToolName::new("typed-observe").expect("valid tool"),
         temp_path("typed-logger-failure"),
     )
@@ -744,26 +754,23 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     else {
         panic!("legacy zero queue capacity must fail");
     };
-    let Err(typed_logger_failure) = Observability::builder(typed_config)
+    let Err(typed_logger_failure) = sc_observe::v2::Observability::builder(typed_config)
         .register_subscriber(registration)
         .build()
     else {
         panic!("typed zero queue capacity must fail");
     };
-    assert!(matches!(
-        &legacy_logger_failure,
-        CanonicalInitError::Runtime { .. }
-    ));
+    let LegacyInitError(legacy_context) = legacy_logger_failure;
     assert!(matches!(
         &typed_logger_failure,
         CanonicalInitError::Runtime { .. }
     ));
     assert_eq!(
-        legacy_logger_failure.diagnostic().code,
+        legacy_context.diagnostic().code,
         typed_logger_failure.diagnostic().code
     );
     assert!(
-        legacy_logger_failure
+        legacy_context
             .diagnostic()
             .message
             .contains("queue capacity")
