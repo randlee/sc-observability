@@ -9,7 +9,218 @@
     "inventory": "D18 recovery inventory",
     "nominal_contracts": 58,
     "inherent_or_free_callables": 143,
-    "trait_slots": 12
+    "trait_slots": 12,
+    "additional_handwritten": {
+      "revision": "f36dab934f2b4775a4e0280db7aac24d6d868560",
+      "method": "docs/migration/source-accounting.md",
+      "rule": "additional handwritten = restorations + added wrappers with a declaration in compat, the released errors.rs wrappers, an inline v2 module or a canonical twin; aliases, re-exports and existing pairs add none",
+      "crates": {
+        "sc-observability-types": {
+          "aliases": {
+            "types": 3,
+            "callables": 20
+          },
+          "existing_pairs": {
+            "types": 8,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 10,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 5,
+            "callables": 5
+          },
+          "additional_handwritten": {
+            "types": 15,
+            "callables": 5
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability": {
+          "aliases": {
+            "types": 4,
+            "callables": 18
+          },
+          "existing_pairs": {
+            "types": 8,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 2
+          },
+          "added_wrappers": {
+            "types": 2,
+            "callables": 35
+          },
+          "additional_handwritten": {
+            "types": 2,
+            "callables": 37
+          },
+          "trait_impls": 2,
+          "pending_not_implemented": 0
+        },
+        "sc-observe": {
+          "aliases": {
+            "types": 0,
+            "callables": 4
+          },
+          "existing_pairs": {
+            "types": 3,
+            "callables": 6
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 6
+          },
+          "added_wrappers": {
+            "types": 3,
+            "callables": 14
+          },
+          "additional_handwritten": {
+            "types": 3,
+            "callables": 20
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability-log": {
+          "aliases": {
+            "types": 0,
+            "callables": 5
+          },
+          "existing_pairs": {
+            "types": 6,
+            "callables": 5
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 3
+          },
+          "added_wrappers": {
+            "types": 1,
+            "callables": 21
+          },
+          "additional_handwritten": {
+            "types": 1,
+            "callables": 24
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability-otlp": {
+          "aliases": {
+            "types": 0,
+            "callables": 3
+          },
+          "existing_pairs": {
+            "types": 7,
+            "callables": 17
+          },
+          "restorations": {
+            "types": 1,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 2,
+            "callables": 16
+          },
+          "additional_handwritten": {
+            "types": 3,
+            "callables": 16
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability-dto": {
+          "aliases": {
+            "types": 0,
+            "callables": 0
+          },
+          "existing_pairs": {
+            "types": 0,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 0,
+            "callables": 0
+          },
+          "additional_handwritten": {
+            "types": 0,
+            "callables": 0
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 1
+        },
+        "sc-observability-binding-runtime": {
+          "aliases": {
+            "types": 0,
+            "callables": 0
+          },
+          "existing_pairs": {
+            "types": 0,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 0,
+            "callables": 1
+          },
+          "additional_handwritten": {
+            "types": 0,
+            "callables": 1
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability-log-macros": {
+          "aliases": {
+            "types": 0,
+            "callables": 0
+          },
+          "existing_pairs": {
+            "types": 0,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 0,
+            "callables": 0
+          },
+          "additional_handwritten": {
+            "types": 0,
+            "callables": 0
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        }
+      },
+      "pending_not_implemented": [
+        "sc_observability_dto::from_core_health"
+      ],
+      "unchanged_alias_rows_served_by_retained_compat_pairs": [
+        "sc_observe::ObservabilityConfig::default_for",
+        "sc_observe::ObservabilityConfig::service_name",
+        "sc_observe::Observability::new",
+        "sc_observe::Observability::flush",
+        "sc_observe::Observability::shutdown",
+        "sc_observe::ObservabilityBuilder::build",
+        "sc_observability_otlp::SpanAssembler::push"
+      ]
+    }
   },
   "deprecated_owner_exceptions": [
     {
