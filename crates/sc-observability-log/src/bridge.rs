@@ -1,8 +1,4 @@
 //! The process-global `log` facade and the non-owning host attachment bridge.
-#![allow(
-    deprecated,
-    reason = "D2 binds the retained bridge compatibility methods until the D18 migration"
-)]
 
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
@@ -204,8 +200,8 @@ impl DetachError {
 
 /// Shared state retained by an attachment, its controls, and in-flight calls.
 pub(crate) struct AttachmentState {
-    pub(crate) logger: Arc<sc_observability::v2::Logger>,
-    pub(crate) options: crate::BridgeOptions,
+    logger: Arc<sc_observability::v2::Logger>,
+    options: crate::BridgeOptions,
     policy: Arc<dyn BridgeEventPolicy>,
     service: ServiceName,
     identity: ProcessIdentity,
