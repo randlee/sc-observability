@@ -1,6 +1,8 @@
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 
 use sc_observability::{
@@ -660,6 +662,18 @@ fn permits_empty_root_until_effective_resolution_and_rejects_unknown_case_and_pr
 fn rejects_non_utf8_key_in_selected_namespace() {
     let snapshot = EnvSnapshot::from_pairs([(
         OsString::from_vec(b"SC_LOG_\xFF".to_vec()),
+        OsString::from("ignored"),
+    )]);
+
+    let error = LogSettings::from_env(&snapshot, EnvPrefix::new("SC").unwrap()).unwrap_err();
+    assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
+}
+
+#[cfg(windows)]
+#[test]
+fn rejects_non_utf8_key_in_selected_namespace() {
+    let snapshot = EnvSnapshot::from_pairs([(
+        OsString::from_wide(&[0x0053, 0x0043, 0x005F, 0xD800]),
         OsString::from("ignored"),
     )]);
 
