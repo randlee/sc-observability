@@ -6,7 +6,7 @@ use std::sync::Arc;
 use sc_observability::typed::{TypedLogSink, legacy_sink, typed_sink};
 use sc_observability::*;
 use sc_observability_types::v2::LogSinkError as TypedSinkError;
-use sc_observability_types::{ErrorCode, Remediation};
+use sc_observability_types::{DiagnosticInfo, ErrorCode, Remediation};
 use serde_json::Map;
 
 fn assert_send_sync<T: Send + Sync>(_: &T) {}
@@ -99,11 +99,23 @@ fn released_sink_adapters_round_trip_and_preserve_failure_sources() {
         .write(&test_event())
         .expect_err("legacy-to-typed adapter preserves failure");
     assert_eq!(error.diagnostic().code.as_str(), "RELEASED_SINK_FAILURE");
-    assert!(std::error::Error::source(&error).is_some());
+    assert_eq!(
+        std::error::Error::source(&error)
+            .expect("typed error preserves the legacy sink source")
+            .to_string(),
+        "legacy sink source"
+    );
     let error = round_trip
         .write(&test_event())
         .expect_err("typed-to-legacy adapter preserves failure");
-    assert!(std::error::Error::source(&error).is_some());
+    assert_eq!(error.diagnostic().code.as_str(), "RELEASED_SINK_FAILURE");
+    assert_eq!(
+        std::error::Error::source(&error)
+            .and_then(std::error::Error::source)
+            .expect("legacy error preserves the underlying sink source")
+            .to_string(),
+        "legacy sink source"
+    );
 }
 
 fn test_event() -> LogEvent {
