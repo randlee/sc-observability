@@ -514,10 +514,9 @@ impl RuntimeTelemetry {
         }
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         if let SpanSignal::Ended(record) = span
-            && !runtime.span_assembler.has_started(
-                record.trace().trace_id.as_str(),
-                record.trace().span_id.as_str(),
-            )
+            && !runtime
+                .span_assembler
+                .has_started(&record.trace().trace_id, &record.trace().span_id)
         {
             self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
             let context = ErrorContext::new(
