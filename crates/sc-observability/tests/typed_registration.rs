@@ -228,7 +228,7 @@ fn typed_registration_adapter_preserves_failure_diagnostic_and_source() {
     assert!(
         context
             .source()
-            .is_some_and(|source| source.is::<io::Error>())
+            .is_some_and(<dyn std::error::Error>::is::<io::Error>)
     );
     assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
 }

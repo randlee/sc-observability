@@ -33,13 +33,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
-use sc_observability::{
-    EventError, Logger, LoggerConfig, QueueCapacity, RetainedLogPolicy, Running, Stopped,
-};
-use sc_observability_types::v2::SubscriberError;
+use sc_observability::{Logger, LoggerConfig, QueueCapacity, RetainedLogPolicy, Running, Stopped};
 use sc_observability_types::v2::{
-    FlushError as CanonicalFlushError, InitError as CanonicalInitError,
-    ShutdownError as CanonicalShutdownError,
+    EventError, FlushError as CanonicalFlushError, InitError as CanonicalInitError,
+    ShutdownError as CanonicalShutdownError, SubscriberError,
 };
 use sc_observability_types::{
     DiagnosticSummary, EnvPrefix, ErrorContext, ObservabilityHealthProvider, Observable,
@@ -499,7 +496,7 @@ impl Observability {
                 .expect("observability logger poisoned");
         }
         match &*logger {
-            LoggerHandle::Running(logger) => logger.flush(),
+            LoggerHandle::Running(logger) => logger.flush_canonical(),
             LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => Ok(()),
         }
     }
@@ -713,11 +710,11 @@ impl ObservabilityBuilder {
                         Ok(events) => {
                             result.matched = true;
                             for event in events {
-                                if let Err(err) = logger.log(event) {
+                                if let Err(err) = logger.log_canonical(event) {
                                     record_failure(log_error_summary(&err));
                                 }
                             }
-                            if let Err(err) = logger.flush() {
+                            if let Err(err) = logger.flush_canonical() {
                                 record_failure(DiagnosticSummary::from(err.diagnostic()));
                             }
                         }
@@ -759,7 +756,7 @@ impl ObservabilityBuilder {
                 )),
             });
         }
-        let logger = Logger::new(self.config.logger_config()?)?;
+        let logger = Logger::new_canonical(self.config.logger_config()?)?;
         Ok(Observability {
             logger: Mutex::new(LoggerHandle::Running(logger)),
             logger_changed: Condvar::new(),
@@ -1413,11 +1410,12 @@ mod tests {
         // test-control channel. A timeout/disconnect releases failed tests.
         release: Mutex<mpsc::Receiver<()>>,
     }
+    #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
     impl LogSink for BlockingFlushSink {
-        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
             Ok(())
         }
-        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
             if self.armed.swap(false, Ordering::SeqCst) {
                 let _ = self.entered.send(());
                 let _ = self
@@ -1431,13 +1429,13 @@ mod tests {
             if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 0 {
                 let _ = self.seed_completed.send(());
             }
-            Err(sc_observability_types::v2::LogSinkError::Flush {
-                context: Box::new(ErrorContext::new(
+            Err(sc_observability_types::LogSinkError(Box::new(
+                ErrorContext::new(
                     sc_observability::error_codes::LOGGER_FLUSH_FAILED,
                     "controlled flush failure",
                     Remediation::not_recoverable("test fixture"),
-                )),
-            })
+                ),
+            )))
         }
         fn health(&self) -> SinkHealth {
             SinkHealth {
@@ -1474,8 +1472,10 @@ mod tests {
             entered: entered_tx,
             release: Mutex::new(release_rx),
         })));
-        let logger = builder.build().expect("built logger");
-        logger.flush().expect_err("seed logging failure counter");
+        let logger = builder.build_canonical().expect("built logger");
+        logger
+            .flush_canonical()
+            .expect_err("seed logging failure counter");
         seed_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("seed flush completed before shutdown is armed");
@@ -1724,8 +1724,9 @@ mod tests {
     }
 
     #[test]
+    #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
     fn flush_forwards_logger_flush_behavior_directly() {
-        use sc_observability_types::v2::LogSinkError;
+        use sc_observability_types::LogSinkError;
 
         struct FlushFailSink {
             flush_calls: Arc<AtomicU64>,
@@ -1739,13 +1740,11 @@ mod tests {
 
             fn flush(&self) -> Result<(), LogSinkError> {
                 let call = self.flush_calls.fetch_add(1, Ordering::SeqCst);
-                let result = Err(LogSinkError::Flush {
-                    context: Box::new(ErrorContext::new(
-                        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                        "flush failed",
-                        Remediation::not_recoverable("test sink intentionally fails flush"),
-                    )),
-                });
+                let result = Err(LogSinkError(Box::new(ErrorContext::new(
+                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                    "flush failed",
+                    Remediation::not_recoverable("test sink intentionally fails flush"),
+                ))));
                 if call == 0 {
                     let _ = self.flush_completed.send(());
                 }
@@ -1788,7 +1787,7 @@ mod tests {
                 flush_calls: flush_calls.clone(),
                 flush_completed,
             })));
-            let logger = builder.build().expect("built logger");
+            let logger = builder.build_canonical().expect("built logger");
 
             let runtime = Observability {
                 logger: Mutex::new(LoggerHandle::Running(logger)),

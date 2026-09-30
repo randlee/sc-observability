@@ -4,6 +4,11 @@
 //! the public boundary, so root callers and canonical callers share one
 //! writer, sink fan-out, and lifecycle.
 
+#![expect(
+    deprecated,
+    reason = "this removable compatibility module implements released 1.x error signatures"
+)]
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

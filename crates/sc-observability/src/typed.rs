@@ -41,6 +41,10 @@ struct LegacySinkAdapter {
     value: Arc<dyn TypedLogSink>,
 }
 
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 impl LogSink for LegacySinkAdapter {
     fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         self.value
@@ -63,6 +67,10 @@ struct TypedSinkAdapter {
     value: Arc<dyn LogSink>,
 }
 
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 impl TypedLogSink for TypedSinkAdapter {
     fn write(&self, event: &LogEvent) -> Result<(), CanonicalLogSinkError> {
         self.value

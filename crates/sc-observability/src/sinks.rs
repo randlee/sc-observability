@@ -375,6 +375,10 @@ impl JsonlFileSink {
     }
 }
 
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 impl LogSink for JsonlFileSink {
     fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         (|| -> Result<(), LogSinkError> {
@@ -523,6 +527,10 @@ impl ConsoleSink {
     }
 }
 
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 impl LogSink for ConsoleSink {
     fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         (|| -> Result<(), LogSinkError> {
@@ -629,6 +637,10 @@ impl FaultInjectingSink {
 }
 
 #[cfg(feature = "fault-injection")]
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 impl LogSink for FaultInjectingSink {
     fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         if let Some(state) = self.current_state() {
@@ -702,6 +714,10 @@ where
     }
 }
 
+#[expect(
+    deprecated,
+    reason = "convert canonical sink errors at the retained 1.x trait boundary"
+)]
 fn legacy_sink_error(error: LogSinkError) -> sc_observability_types::LogSinkError {
     LogSinkFailure::from_context(error.into_context()).into()
 }
