@@ -207,23 +207,7 @@ pub struct ObservabilityConfig {
 }
 
 impl ObservabilityConfig {
-    /// Builds the documented v1 defaults from a tool name and log root.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::path::PathBuf;
-    /// use sc_observability_types::ToolName;
-    /// use sc_observe::ObservabilityConfig;
-    ///
-    /// let config = ObservabilityConfig::default_for(
-    ///     ToolName::new("demo-tool").expect("valid tool"),
-    ///     PathBuf::from("logs"),
-    /// )
-    /// .expect("valid config");
-    ///
-    /// assert_eq!(config.tool_name.as_str(), "demo-tool");
-    /// ```
+    /// Builds defaults with canonical initialization errors.
     pub(crate) fn default_for_v2(
         tool_name: ToolName,
         log_root: PathBuf,
@@ -478,11 +462,6 @@ impl Observability {
     }
 
     /// Flushes the attached logger. Routing itself does not keep an async queue in v1.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the attached logger encounters a poisoned internal mutex while
-    /// flushing its registered sinks.
     pub(crate) fn flush_v2(&self) -> Result<(), CanonicalFlushError> {
         let mut logger = self.logger.lock().expect("observability logger poisoned");
         while matches!(&*logger, LoggerHandle::ShuttingDown) {
@@ -502,11 +481,6 @@ impl Observability {
     }
 
     /// Shuts down the routing runtime. Repeated calls are idempotent.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the attached logger encounters a poisoned internal mutex while
-    /// flushing sinks or updating query/follow health during shutdown.
     #[expect(
         clippy::unnecessary_wraps,
         reason = "the canonical public facade preserves its Result lifecycle signature"
