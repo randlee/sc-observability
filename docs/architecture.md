@@ -1408,6 +1408,33 @@ was reworded accordingly to describe the remaining validation.
   exhaustion remain redacted `OTLP_EXPORT_TERMINAL` transport results. D.18
   retains final facade activation and any future SDK-path replacement.
 
+#### ADR-019 amendment: deferred DTO attribute projection
+
+- **Status**: Accepted 2026-09-30 by the Phase D lead, recording Rand's
+  2026-09-27 scope ruling in
+  [Phase D accepted limitations](plans/phase-d/known-limitations.md#dto-attribute-projection).
+  This is accepted scope reduction, not a fix or a QA PASS; the original
+  ADR-019 acceptance is unchanged.
+- **Context**: The staged neutral signal amendment assigns tagged attribute
+  values to D.19's checked projections. DTO-to-native conversion currently
+  feeds generic JSON attribute values into the native tagged `AttributeValue`
+  parser, so a metric or span DTO with nonempty attributes can fail
+  conversion.
+- **Decision**: Nonempty DTO attribute projection is deferred to backlog item
+  `obs-dto-attribute-projection`, outside the Phase D completion gates. D.19's
+  numeric, histogram, temporal, error and schema requirements remain in force;
+  the verified metric DTO path uses empty attributes. The
+  `metric_attributes_round_trip` reproduction in
+  `crates/sc-observability-dto/tests/canonical_contracts.rs` stays ignored and
+  is reported as ignored, not passed. No attribute converter change is part of
+  Phase D.
+- **Consequences**: Round trips of nonempty DTO attributes are not guaranteed
+  in this release, and the staged amendment's DTO tagged-attribute statements
+  describe the deferred target rather than delivered behavior. Native Rust
+  attributes and histograms are unaffected. A future change must implement
+  attribute projection in both directions, including signed/unsigned integer
+  distinctions, and enable the reproduction.
+
 ### ADR-020: Compatible 1.x Adoption Of Phase D
 
 - **Status**: Accepted by the user in the compatibility-planning decision (2026-09-29): release as the next 1.x version, retain deprecated released APIs, and remove them only in a future separately authorized 2.0. This records that decision; it grants no implementation merge or publication authority.
