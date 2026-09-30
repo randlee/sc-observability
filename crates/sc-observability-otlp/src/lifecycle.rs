@@ -71,8 +71,10 @@ pub(crate) struct LifecycleHealth {
     pub(crate) admitted_bytes: usize,
     /// Dropped records by signal: logs, traces, metrics.
     pub(crate) dropped_by_signal: [u64; 3],
-    /// Whether any admission or lifecycle operation degraded health.
+    /// Whether a signal or the latest lifecycle operation is currently degraded.
     pub(crate) degraded: bool,
+    /// Current degradation by signal: logs, traces, metrics.
+    pub(crate) degraded_by_signal: [bool; 3],
     /// Last diagnostic recorded by the lifecycle core.
     pub(crate) last_error: Option<DiagnosticSummary>,
 }
@@ -83,9 +85,9 @@ impl LifecycleHealth {
         self.dropped_by_signal.iter().sum()
     }
 
-    /// Returns terminal losses for one signal family.
-    pub(crate) fn dropped_for(&self, signal: SignalKind) -> u64 {
-        self.dropped_by_signal[signal.index()]
+    /// Returns whether one signal family is currently degraded.
+    pub(crate) fn degraded_for(&self, signal: SignalKind) -> bool {
+        self.degraded_by_signal[signal.index()]
     }
 }
 
@@ -171,7 +173,10 @@ struct CoreState {
     #[cfg(not(feature = "legacy-http-json"))]
     active: BTreeSet<u64>,
     dropped_by_signal: [u64; 3],
-    degraded: bool,
+    // Set by a signal's terminal loss; cleared by its next successful export.
+    degraded_by_signal: [bool; 3],
+    // Reflects the most recently completed flush or shutdown.
+    operation_degraded: bool,
     last_error: Option<DiagnosticSummary>,
     // Failures completed outside an active barrier belong to the next window.
     // Each window needs only one representative error, not a history of admissions.
@@ -250,7 +255,8 @@ impl LifecycleCore {
                     #[cfg(not(feature = "legacy-http-json"))]
                     active: BTreeSet::new(),
                     dropped_by_signal: [0; 3],
-                    degraded: false,
+                    degraded_by_signal: [false; 3],
+                    operation_degraded: false,
                     last_error: None,
                     pending_failure: None,
                     flush: None,
@@ -452,7 +458,8 @@ impl LifecycleCore {
             admitted_records: state.admitted_records,
             admitted_bytes: state.admitted_bytes,
             dropped_by_signal: state.dropped_by_signal,
-            degraded: state.degraded,
+            degraded: state.operation_degraded || state.degraded_by_signal.contains(&true),
+            degraded_by_signal: state.degraded_by_signal,
             last_error: state.last_error.clone(),
         }
     }
@@ -462,7 +469,7 @@ impl LifecycleCore {
 impl LifecycleInner {
     fn record_drop(state: &mut CoreState, signal: SignalKind, error: Option<&ExportError>) {
         state.dropped_by_signal[signal.index()] += 1;
-        state.degraded = true;
+        state.degraded_by_signal[signal.index()] = true;
         if let Some(error) = error {
             state.last_error = Some(DiagnosticSummary::from(error.diagnostic()));
         }
@@ -499,6 +506,8 @@ impl LifecycleInner {
             if !captured {
                 state.pending_failure.get_or_insert(snapshot);
             }
+        } else {
+            state.degraded_by_signal[signal.index()] = false;
         }
         let waiters = std::mem::take(&mut state.barrier_wakers);
         drop(state);
@@ -859,11 +868,12 @@ impl Operation {
         if self.kind == OperationKind::Shutdown {
             self.inner.state.lock().expect("lifecycle state lock").phase = LifecycleState::Shutdown;
         }
+        let mut lifecycle_state = self.inner.state.lock().expect("lifecycle state lock");
+        lifecycle_state.operation_degraded = completion.snapshot.is_some();
         if let Some(snapshot) = &completion.snapshot {
-            let mut lifecycle_state = self.inner.state.lock().expect("lifecycle state lock");
-            lifecycle_state.degraded = true;
             lifecycle_state.last_error = Some(DiagnosticSummary::from(&snapshot.diagnostic));
         }
+        drop(lifecycle_state);
         let waiters = std::mem::take(&mut *self.waiters.lock().expect("operation waiters lock"));
         for waiter in waiters {
             waiter.wake();

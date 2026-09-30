@@ -194,14 +194,15 @@ impl Default for ExporterRuntime {
     }
 }
 
-/// Merges facade-local assembly state with the lifecycle core's terminal loss ownership.
+/// Merges facade-local assembly state with the lifecycle core's current
+/// per-signal degradation; cumulative loss counts never force a state.
 fn merged_lifecycle_status(
     runtime: &ExporterRuntime,
     lifecycle: Option<&LifecycleHealth>,
     signal: SignalKind,
 ) -> ExporterRuntime {
     let mut status = runtime.clone();
-    if lifecycle.is_some_and(|health| health.dropped_for(signal) > 0) {
+    if lifecycle.is_some_and(|health| health.degraded_for(signal)) {
         status.state = ExporterHealthState::Degraded;
         if status.last_error.is_none() {
             status.last_error = lifecycle.and_then(|health| health.last_error.clone());

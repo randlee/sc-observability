@@ -2005,3 +2005,324 @@ mod canonical_ingress {
         assert_ne!(runtime.metric_status.state, ExporterHealthState::Degraded);
     }
 }
+
+#[cfg(all(feature = "otlp-sdk", feature = "legacy-http-json"))]
+mod current_health_recovery {
+    //! Public health follows current backend delivery on both backends: a
+    //! loopback collector rejects scripted requests, then accepts them.
+
+    use std::collections::HashMap;
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpListener, TcpStream};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex, PoisonError};
+    use std::thread::{self, JoinHandle};
+    use std::time::Duration;
+
+    use super::*;
+    use crate::TelemetryHealthState;
+
+    /// Bounds an idle kept-alive connection so collector shutdown cannot stall.
+    const CONNECTION_IO_TIMEOUT: Duration = Duration::from_secs(3);
+
+    /// Answers `400` to the first `n` requests on each scripted path, then `200`.
+    struct Collector {
+        address: SocketAddr,
+        stop: Arc<AtomicBool>,
+        handle: Option<JoinHandle<()>>,
+    }
+
+    impl Collector {
+        fn start(rejections: &[(&'static str, usize)]) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
+            let address = listener.local_addr().expect("collector address");
+            let stop = Arc::new(AtomicBool::new(false));
+            let remaining = Arc::new(Mutex::new(
+                rejections.iter().copied().collect::<HashMap<_, _>>(),
+            ));
+            let handle = {
+                let stop = Arc::clone(&stop);
+                thread::spawn(move || accept_loop(&listener, &stop, &remaining))
+            };
+            Self {
+                address,
+                stop,
+                handle: Some(handle),
+            }
+        }
+
+        fn endpoint(&self) -> String {
+            format!("http://{}", self.address)
+        }
+    }
+
+    impl Drop for Collector {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            // Wakes the blocking accept so it observes the stop flag.
+            let _ = TcpStream::connect(self.address);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn accept_loop(
+        listener: &TcpListener,
+        stop: &AtomicBool,
+        remaining: &Arc<Mutex<HashMap<&'static str, usize>>>,
+    ) {
+        let mut connections = Vec::new();
+        for stream in listener.incoming() {
+            if stop.load(Ordering::SeqCst) {
+                break;
+            }
+            let Ok(stream) = stream else { break };
+            let remaining = Arc::clone(remaining);
+            connections.push(thread::spawn(move || serve(stream, &remaining)));
+        }
+        for connection in connections {
+            let _ = connection.join();
+        }
+    }
+
+    fn serve(mut stream: TcpStream, remaining: &Mutex<HashMap<&'static str, usize>>) {
+        if stream
+            .set_read_timeout(Some(CONNECTION_IO_TIMEOUT))
+            .is_err()
+            || stream
+                .set_write_timeout(Some(CONNECTION_IO_TIMEOUT))
+                .is_err()
+        {
+            return;
+        }
+        while let Some(path) = read_request_path(&mut stream) {
+            let status = remaining
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get_mut(path.as_str())
+                .filter(|left| **left > 0)
+                .map_or(200, |left| {
+                    *left -= 1;
+                    400
+                });
+            let head = format!("HTTP/1.1 {status} Scripted\r\nContent-Length: 0\r\n\r\n");
+            if stream.write_all(head.as_bytes()).is_err() || stream.flush().is_err() {
+                return;
+            }
+        }
+    }
+
+    /// Reads one HTTP/1.1 request and returns its path.
+    fn read_request_path(stream: &mut TcpStream) -> Option<String> {
+        let mut buffer = Vec::new();
+        let mut chunk = [0_u8; 4096];
+        let head_end = loop {
+            if let Some(position) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                break position;
+            }
+            let read = stream.read(&mut chunk).ok()?;
+            if read == 0 {
+                return None;
+            }
+            buffer.extend_from_slice(&chunk[..read]);
+        };
+        let head = String::from_utf8_lossy(&buffer[..head_end]).into_owned();
+        let content_length = head
+            .split("\r\n")
+            .filter_map(|line| line.split_once(':'))
+            .find(|(name, _)| name.trim().eq_ignore_ascii_case("content-length"))
+            .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        let mut body_read = buffer.len() - (head_end + 4);
+        while body_read < content_length {
+            let read = stream.read(&mut chunk).ok()?;
+            if read == 0 {
+                return None;
+            }
+            body_read += read;
+        }
+        head.split_whitespace().nth(1).map(str::to_owned)
+    }
+
+    enum Backend {
+        Sdk(tokio::runtime::Runtime),
+        Legacy,
+    }
+
+    impl Backend {
+        fn all() -> [Self; 2] {
+            [
+                Self::Sdk(
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("caller runtime"),
+                ),
+                Self::Legacy,
+            ]
+        }
+
+        fn telemetry(&self, endpoint: &str) -> Telemetry {
+            let (backend, protocol) = match self {
+                Self::Sdk(_) => (ExporterBackend::OpenTelemetrySdk, OtlpProtocol::HttpBinary),
+                Self::Legacy => (ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson),
+            };
+            let config = TelemetryConfigBuilder::new(service_name())
+                .enable_logs(LogsConfig::default())
+                .enable_traces(TracesConfig::default())
+                .with_transport(OtelConfig {
+                    enabled: true,
+                    backend,
+                    protocol,
+                    endpoint: Some(OtlpEndpoint::new_typed(endpoint).expect("valid endpoint")),
+                    ..OtelConfig::default()
+                })
+                .build_typed()
+                .expect("valid telemetry config");
+            let _entered = match self {
+                Self::Sdk(runtime) => Some(runtime.enter()),
+                Self::Legacy => None,
+            };
+            Telemetry::new_typed(config).expect("backend telemetry")
+        }
+
+        fn flush(&self, telemetry: &Telemetry) -> Result<(), FlushFailure> {
+            match self {
+                Self::Sdk(runtime) => runtime.block_on(telemetry.flush_async_typed()),
+                Self::Legacy => telemetry.flush_typed(),
+            }
+        }
+
+        fn shutdown(&self, telemetry: &Telemetry) {
+            let result = match self {
+                Self::Sdk(runtime) => runtime.block_on(telemetry.shutdown_async_typed()),
+                Self::Legacy => telemetry.shutdown_typed(),
+            };
+            result.expect("shutdown after recovery");
+        }
+
+        fn name(&self) -> &'static str {
+            match self {
+                Self::Sdk(_) => "sdk",
+                Self::Legacy => "legacy",
+            }
+        }
+    }
+
+    fn emit_log_and_span(telemetry: &Telemetry) {
+        telemetry
+            .emit_log(&log_event(service_name(), "recovery"))
+            .expect("admit log");
+        let (started, ended) = complete_span_signals();
+        telemetry
+            .emit_span_released(&started)
+            .expect("admit started");
+        telemetry.emit_span_released(&ended).expect("admit ended");
+    }
+
+    fn states(telemetry: &Telemetry) -> (TelemetryHealthState, Vec<ExporterHealthState>) {
+        let health = telemetry.health();
+        (
+            health.state,
+            health
+                .exporter_statuses
+                .iter()
+                .map(|status| status.state)
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn successful_export_after_failure_restores_current_health_on_both_backends() {
+        for backend in Backend::all() {
+            let collector = Collector::start(&[("/v1/logs", 1)]);
+            let telemetry = backend.telemetry(&collector.endpoint());
+
+            telemetry
+                .emit_log(&log_event(service_name(), "rejected"))
+                .expect("admit log");
+            assert!(backend.flush(&telemetry).is_err(), "{}", backend.name());
+            let failed = telemetry.health();
+            assert_eq!(failed.state, TelemetryHealthState::Degraded, "{failed:?}");
+            assert_eq!(
+                failed.exporter_statuses[0].state,
+                ExporterHealthState::Degraded
+            );
+            assert_eq!(failed.dropped_exports_total, 1, "{failed:?}");
+
+            telemetry
+                .emit_log(&log_event(service_name(), "accepted"))
+                .expect("admit log");
+            backend.flush(&telemetry).expect("second export succeeds");
+            let recovered = telemetry.health();
+            assert_eq!(
+                recovered.state,
+                TelemetryHealthState::Healthy,
+                "{}: {recovered:?}",
+                backend.name()
+            );
+            assert!(
+                recovered
+                    .exporter_statuses
+                    .iter()
+                    .all(|status| status.state == ExporterHealthState::Healthy
+                        && status.last_error.is_none()),
+                "{recovered:?}"
+            );
+            assert_eq!(recovered.dropped_exports_total, 1, "{recovered:?}");
+            assert_eq!(recovered.last_error, failed.last_error, "retained history");
+            backend.shutdown(&telemetry);
+        }
+    }
+
+    #[test]
+    fn recovered_signal_is_healthy_while_another_failing_signal_keeps_aggregate_degraded() {
+        for backend in Backend::all() {
+            let collector = Collector::start(&[("/v1/logs", 1), ("/v1/traces", usize::MAX)]);
+            let telemetry = backend.telemetry(&collector.endpoint());
+
+            emit_log_and_span(&telemetry);
+            assert!(backend.flush(&telemetry).is_err(), "{}", backend.name());
+            assert_eq!(
+                states(&telemetry),
+                (
+                    TelemetryHealthState::Degraded,
+                    vec![
+                        ExporterHealthState::Degraded,
+                        ExporterHealthState::Degraded,
+                        ExporterHealthState::Healthy
+                    ]
+                ),
+                "{}",
+                backend.name()
+            );
+
+            emit_log_and_span(&telemetry);
+            assert!(backend.flush(&telemetry).is_err(), "traces still rejected");
+            let health = telemetry.health();
+            assert_eq!(
+                states(&telemetry),
+                (
+                    TelemetryHealthState::Degraded,
+                    vec![
+                        ExporterHealthState::Healthy,
+                        ExporterHealthState::Degraded,
+                        ExporterHealthState::Healthy
+                    ]
+                ),
+                "{}: {health:?}",
+                backend.name()
+            );
+            assert!(
+                health.exporter_statuses[0].last_error.is_none(),
+                "{health:?}"
+            );
+            assert!(
+                health.exporter_statuses[1].last_error.is_some(),
+                "{health:?}"
+            );
+            assert_eq!(health.dropped_exports_total, 3, "{health:?}");
+        }
+    }
+}
