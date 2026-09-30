@@ -21,7 +21,16 @@ close. Read-only; writes nothing.
      `snapshot_local`, `tot`, `open`, `blk`, `imp`, `min`, `trigger_task`.
    - **Log B — per-round events** (`phase-<p>.jsonl`): columns
      `completed_local`, `task`, `sprint`, `tested`, `iteration`, `verdict`,
-     `blk`, `imp`, `min`, `fnd`, `duration`, `pr_number`.
+     `blk`, `imp`, `min`, `fnd`, `duration`, `pr_number`, `superseded`.
+3. Resolve Log B per (`task`, `iteration`) before rendering it. A later row
+   with `correction: true` replaces the round's current row unless its
+   `supersedes_verdict` names a different verdict. Show the round once, with
+   verdict `<new> (corrected from <old>)`, or `<verdict> (corrected)` when the
+   verdict is unchanged, and list the replaced rows' file line numbers in
+   `superseded`. Mark every other row that repeats a
+   (`task`, `iteration`) `conflict`, and show all of those rows. Totals and
+   current verdicts count resolved rounds only; conflicted rounds are shown,
+   never counted.
 
 ## Output
 

@@ -168,11 +168,14 @@ The script computes both rows; never write, compute or carry a row by hand.
   `blk`/`imp`/`min` (open findings by severity). This is the same query used to answer "how
   many findings are open" ad hoc; it gives velocity and a closure estimate
   across rounds, and ties out against `phase-<p>.jsonl` at phase end (sum of
-  its `fnd` across all rounds reconciles with this log's final `tot`).
+  its `fnd` over rounds resolved per (`task`, `iteration`) as the qa-report
+  skill resolves them reconciles with this log's final `tot`).
 
 When you display either log's timestamps to the operator, convert to 24h
 local; the logs themselves keep both the UTC and local strings.
 
 Never edit either file by hand outside step j's append; a wrong row is
 fixed by filing a workflow-issue bead and appending a correcting row, not by
-rewriting history in place.
+rewriting history in place. The correcting row repeats the round's `task` and
+`iteration`, carries `correction: true`, and, when the verdict changes,
+`supersedes_verdict`.
