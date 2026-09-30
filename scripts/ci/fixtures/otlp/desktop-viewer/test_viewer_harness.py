@@ -48,7 +48,7 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
                 with self.assertRaisesRegex(harness.HarnessError, "ports are occupied"):
                     harness.start(args)
                 kill.assert_not_called()
-            self.assertEqual(list((root / "state").iterdir()), [])
+            self.assertFalse((root / "state").exists())
 
     def test_refuses_pid_whose_command_line_only_contains_database_substring(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -111,6 +111,25 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
             self.assertFalse((state / "viewer.pid").exists())
             self.assertFalse((state / "viewer.json").exists())
             self.assertFalse((state / "viewer.log").exists())
+            self.assertFalse(state.exists(), "failed start must remove its newly created state directory")
+
+    def test_failed_start_preserves_preexisting_empty_state_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / "state"
+            state.mkdir()
+            binary = root / "viewer"
+            binary.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
+            binary.chmod(0o755)
+            args = argparse.Namespace(binary=str(binary), state_dir=str(state),
+                                      binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                                      version=None, host="127.0.0.1", http=44318,
+                                      grpc=44317, ui=48000)
+            with mock.patch.object(harness, "_request", side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    harness.start(args)
+            self.assertTrue(state.is_dir())
+            self.assertEqual(list(state.iterdir()), [])
 
     def test_stop_escalates_after_timeout_and_removes_owned_wal(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
