@@ -421,6 +421,7 @@ const CASES: &[&str] = &[
     "bridge_native_timeout",
     "bridge_external_overlap",
     "bridge_churn",
+    "bridge_canonical_v2",
     "last_handle_teardown",
     "bridge_observers_callbacks",
     "native_diagnostic_fidelity",
@@ -469,6 +470,7 @@ fn contract_matrix() {
             "bridge_native_timeout" => bridge_timeout(false),
             "bridge_external_overlap" => bridge_timeout(true),
             "bridge_churn" => bridge_churn(),
+            "bridge_canonical_v2" => bridge_canonical_v2(),
             "last_handle_teardown" => last_handle_teardown(),
             "bridge_observers_callbacks" => bridge_observers_callbacks(),
             "native_diagnostic_fidelity" => native_diagnostic_fidelity(),
@@ -1155,6 +1157,39 @@ fn bridge_churn() {
         assert!(control.health().is_ok());
     }
     host.shutdown(Duration::from_secs(2)).unwrap();
+}
+fn bridge_canonical_v2() {
+    let (root, mut config) = config();
+    config.enable_console_sink = true;
+    let host = sc_observability_log::v2::init(
+        config,
+        sc_observability_log::BridgeOptions {
+            default_action: native::ActionName::new("bridge.canonical").unwrap(),
+            parse_bracket_action: false,
+        },
+    )
+    .unwrap();
+    let control = host.control();
+    let backend = bridge_backend_v2(control.clone()).unwrap();
+
+    backend.try_log(event(), ProducerOrigin::RustHost).unwrap();
+    backend
+        .start_query(query())
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .unwrap();
+    backend
+        .start_flush(Duration::from_secs(2))
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .unwrap();
+    control.flush(Duration::from_secs(2)).unwrap();
+    assert!(control.health().is_ok());
+
+    drop(backend);
+    crate::spawn::wait_live(1);
+    host.shutdown(Duration::from_secs(2)).unwrap();
+    drop(root);
 }
 fn native_diagnostic_fidelity() {
     let diagnostic = native::OperationDiagnostic {
