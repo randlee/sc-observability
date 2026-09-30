@@ -50,6 +50,17 @@ pub use sc_observability_types::{
     ObservabilityHealthReport, ObservationError, ObservationHealthState,
 };
 
+/// Opt-in canonical observation facade for the compatible 1.x transition.
+///
+/// These re-exports share the production routing implementation with the
+/// released root facade.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::{Observability, ObservabilityBuilder, ObservabilityConfig};
+    #[doc(inline)]
+    pub use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
+}
+
 /// Top-level configuration for the observation routing runtime.
 ///
 /// Routing owns tool identity, log-root selection, env-prefix derivation, and

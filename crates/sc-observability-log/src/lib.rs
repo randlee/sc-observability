@@ -152,6 +152,17 @@ pub use sc_observability_types::{
 #[doc(inline)]
 pub use sc_observability_log_macros::{debug, error, event, info, instrument, trace, warn};
 
+/// Opt-in canonical bridge facade for the compatible 1.x transition.
+///
+/// The bridge and its lifecycle remain single-owner production state; this is
+/// a namespace seam only.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::{BridgeEvent, BridgeOptions, LogControl, LogGuard};
+    #[doc(inline)]
+    pub use sc_observability_types::v2::{EventError, FlushError, InitError, ShutdownError};
+}
+
 /// tracing-compatible level type (mirrors the `tracing::Level` constants).
 ///
 /// It has no `PartialOrd`/`Ord`: tracing orders by verbosity, which would
