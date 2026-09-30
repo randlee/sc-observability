@@ -1,7 +1,102 @@
 //! Canonical error and signal conversions, with deferred limitations named below.
 use sc_observability_dto::*;
 use sc_observability_types::{self as core, v2};
+use serde::de::{self, DeserializeSeed, MapAccess, Visitor};
 use serde_json::{Value, json};
+use std::{cell::RefCell, fmt};
+
+thread_local! {
+    static SERDE_UNKNOWN_VARIANT_EXPECTED: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
+}
+
+#[derive(Debug)]
+struct CapturedUnknownVariant;
+
+impl fmt::Display for CapturedUnknownVariant {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("captured unknown variant")
+    }
+}
+
+impl std::error::Error for CapturedUnknownVariant {}
+
+impl de::Error for CapturedUnknownVariant {
+    fn custom<T: fmt::Display>(_message: T) -> Self {
+        Self
+    }
+
+    fn unknown_variant(_variant: &str, expected: &'static [&'static str]) -> Self {
+        SERDE_UNKNOWN_VARIANT_EXPECTED.with(|captured| {
+            captured
+                .borrow_mut()
+                .push(expected.iter().map(|tag| (*tag).to_owned()).collect());
+        });
+        Self
+    }
+}
+
+struct UnknownFailureKindDeserializer;
+
+impl<'de> de::Deserializer<'de> for UnknownFailureKindDeserializer {
+    type Error = CapturedUnknownVariant;
+
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_map(UnknownFailureKindMap { emitted_key: false })
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string bytes byte_buf
+        option unit unit_struct newtype_struct seq tuple tuple_struct map struct enum identifier
+        ignored_any
+    }
+}
+
+struct UnknownFailureKindMap {
+    emitted_key: bool,
+}
+
+impl<'de> MapAccess<'de> for UnknownFailureKindMap {
+    type Error = CapturedUnknownVariant;
+
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
+    where
+        K: DeserializeSeed<'de>,
+    {
+        if self.emitted_key {
+            return Ok(None);
+        }
+        self.emitted_key = true;
+        seed.deserialize(de::value::StrDeserializer::new("kind"))
+            .map(Some)
+    }
+
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        seed.deserialize(de::value::StrDeserializer::new("future_failure_kind"))
+    }
+}
+
+fn serde_generated_failure_kinds<T>() -> Vec<String>
+where
+    T: serde::de::DeserializeOwned,
+{
+    SERDE_UNKNOWN_VARIANT_EXPECTED.with(|captured| captured.borrow_mut().clear());
+    assert!(T::deserialize(UnknownFailureKindDeserializer).is_err());
+    SERDE_UNKNOWN_VARIANT_EXPECTED.with(|captured| {
+        let mut captures = std::mem::take(&mut *captured.borrow_mut());
+        assert_eq!(
+            captures.len(),
+            1,
+            "expected one serde unknown-variant capture"
+        );
+        captures.pop().unwrap()
+    })
+}
 
 fn fixture(name: &str) -> Value {
     let cases: Vec<Value> = serde_json::from_str(include_str!(
@@ -294,23 +389,6 @@ fn canonical_envelope_decodes_each_declared_failure_kind() {
         },
     ];
 
-    let mut declared_kinds = failures
-        .iter()
-        .map(|error| {
-            serde_json::to_value(error).unwrap()["kind"]
-                .as_str()
-                .unwrap()
-                .to_owned()
-        })
-        .collect::<Vec<_>>();
-    declared_kinds.sort_unstable();
-    let mut known_kinds = CanonicalFailureDto::KNOWN_KINDS
-        .iter()
-        .map(|kind| (*kind).to_owned())
-        .collect::<Vec<_>>();
-    known_kinds.sort_unstable();
-    assert_eq!(declared_kinds, known_kinds);
-
     for error in failures {
         let expected = CanonicalWireEnvelope::<AdmissionDto>::Error {
             schema_version: 1,
@@ -321,6 +399,23 @@ fn canonical_envelope_decodes_each_declared_failure_kind() {
             expected
         );
     }
+}
+
+#[test]
+fn serde_generated_failure_kinds_match_known_kinds() {
+    let mut known_kinds = CanonicalFailureDto::KNOWN_KINDS
+        .iter()
+        .map(|kind| (*kind).to_owned())
+        .collect::<Vec<_>>();
+    known_kinds.sort_unstable();
+
+    let mut legacy_kinds = serde_generated_failure_kinds::<Failure<Diagnostic>>();
+    legacy_kinds.sort_unstable();
+    assert_eq!(legacy_kinds, known_kinds);
+
+    let mut canonical_kinds = serde_generated_failure_kinds::<CanonicalFailureDto>();
+    canonical_kinds.sort_unstable();
+    assert_eq!(canonical_kinds, known_kinds);
 }
 
 #[test]
