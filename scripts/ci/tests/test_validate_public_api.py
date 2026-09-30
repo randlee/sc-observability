@@ -12,6 +12,9 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from validate_public_api import cli, compatible_diff_problems, main, validate_compatible_policy  # noqa: E402
+from validate_version_literals import (  # noqa: E402
+    validate_cargo_lock, validate_inventory_candidate, validate_package_lock,
+)
 
 
 class CompatiblePolicyTests(unittest.TestCase):
@@ -134,6 +137,41 @@ class PublicApiCliTests(unittest.TestCase):
 
         self.assertEqual(status, 3)
         self.assertIn('ValueError: version mismatch', stderr.getvalue())
+
+
+class CandidateVersionLockTests(unittest.TestCase):
+    def test_cargo_lock_rejects_a_stale_sc_observability_package(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            lock = Path(temporary) / "Cargo.lock"
+            lock.write_text('[[package]]\nname = "sc-observability-types"\nversion = "2.0.0"\n')
+            with self.assertRaisesRegex(ValueError, "candidate version 1.5.0"):
+                validate_cargo_lock(lock, "1.5.0")
+
+    def test_cargo_lock_accepts_candidate_package_versions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            lock = Path(temporary) / "Cargo.lock"
+            lock.write_text('[[package]]\nname = "sc-observability-types"\nversion = "1.5.0"\n')
+            validate_cargo_lock(lock, "1.5.0")
+
+    def test_package_lock_rejects_stale_candidate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            lock = Path(temporary) / "package-lock.json"
+            lock.write_text(json.dumps({"name": "@synaptic-canvas/sc-observability", "version": "2.0.0",
+                                       "packages": {"": {"name": "@synaptic-canvas/sc-observability",
+                                                           "version": "2.0.0"}}}))
+            with self.assertRaisesRegex(ValueError, "candidate version 1.5.0"):
+                validate_package_lock(lock, "1.5.0")
+
+    def test_inventory_candidate_must_match_workspace_candidate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            inventory = Path(temporary) / "release-inventory.json"
+            inventory.write_text(json.dumps({"releaseVersion": "1.1.0",
+                                             "qualificationCandidate": {"version": "1.5.0"}}))
+            validate_inventory_candidate(inventory, "1.5.0")
+            inventory.write_text(json.dumps({"releaseVersion": "1.1.0",
+                                             "qualificationCandidate": {"version": "2.0.0"}}))
+            with self.assertRaisesRegex(ValueError, "qualificationCandidate.version must be 1.5.0"):
+                validate_inventory_candidate(inventory, "1.5.0")
 
 
 if __name__ == '__main__':
