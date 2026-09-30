@@ -2,6 +2,10 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use sc_observability_types::v2::{
+    ProjectionRegistration as CanonicalProjectionRegistration,
+    SubscriberRegistration as CanonicalSubscriberRegistration,
+};
 #[allow(deprecated)]
 use sc_observability_types::{
     FlushError as LegacyFlushError, InitError as LegacyInitError, ServiceName,
@@ -136,10 +140,14 @@ fn released_and_canonical_observe_routing_exports_keep_their_public_signatures()
     let _: fn(&Observability) -> ObservabilityHealthReport = Observability::health;
     let _: fn(ObservabilityBuilder, Arc<dyn ObservabilityHealthProvider>) -> ObservabilityBuilder =
         ObservabilityBuilder::with_observability_health_provider;
-    let _: fn(ObservabilityBuilder, SubscriberRegistration<String>) -> ObservabilityBuilder =
-        ObservabilityBuilder::register_subscriber::<String>;
-    let _: fn(ObservabilityBuilder, ProjectionRegistration<String>) -> ObservabilityBuilder =
-        ObservabilityBuilder::register_projection::<String>;
+    let _: fn(
+        ObservabilityBuilder,
+        CanonicalSubscriberRegistration<String>,
+    ) -> ObservabilityBuilder = ObservabilityBuilder::register_subscriber::<String>;
+    let _: fn(
+        ObservabilityBuilder,
+        CanonicalProjectionRegistration<String>,
+    ) -> ObservabilityBuilder = ObservabilityBuilder::register_projection::<String>;
 }
 
 #[allow(deprecated)]

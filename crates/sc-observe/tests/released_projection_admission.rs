@@ -5,11 +5,15 @@
 //! admission and records a projection failure. Flush-failure identity per
 //! facade is covered by the in-crate tests, where a failing sink can be
 //! injected into the logger.
+#![allow(
+    deprecated,
+    reason = "the released projector trait returns the retained root ProjectionError"
+)]
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sc_observability_types::v2::ProjectionError;
+use sc_observability_types::ProjectionError;
 use sc_observability_types::{
     ActionName, Level, LogEvent, LogProjector, Observation, OutcomeLabel, ProcessIdentity,
     ProjectionRegistration, SchemaVersion, ServiceName, StateName, StateTransition, TargetCategory,
@@ -96,7 +100,7 @@ fn v2_runtime(name: &str, id: &'static str) -> sc_observe::v2::Observability {
     let config = sc_observe::v2::ObservabilityConfig::default_for(tool_name(), temp_path(name))
         .expect("v2 config");
     sc_observe::v2::Observability::builder(config)
-        .register_projection(registration(id))
+        .register_projection(registration(id).into())
         .build()
         .expect("v2 runtime")
 }

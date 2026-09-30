@@ -40,7 +40,9 @@ use sc_observability::{
 use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::v2::{
     EventError, FlushError as CanonicalFlushError, InitError as CanonicalInitError,
+    ProjectionRegistration as CanonicalProjectionRegistration,
     ShutdownError as CanonicalShutdownError, SubscriberError,
+    SubscriberRegistration as CanonicalSubscriberRegistration,
 };
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, ObservabilityHealthProvider,
@@ -60,9 +62,9 @@ pub mod v2 {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
+    use sc_observability_types::v2::{ProjectionRegistration, SubscriberRegistration};
     use sc_observability_types::{
-        ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, ServiceName,
-        SubscriberRegistration, ToolName,
+        ObservabilityHealthProvider, Observable, Observation, ServiceName, ToolName,
     };
 
     #[doc(inline)]
@@ -172,7 +174,7 @@ pub mod v2 {
         where
             T: Observable,
         {
-            Self(self.0.register_subscriber(registration))
+            Self(self.0.register_canonical_subscriber(registration))
         }
 
         /// Registers one typed observation projection set on the shared builder.
@@ -180,7 +182,7 @@ pub mod v2 {
         where
             T: Observable,
         {
-            Self(self.0.register_projection(registration))
+            Self(self.0.register_canonical_projection(registration))
         }
 
         /// Finalizes the shared builder with canonical initialization errors.
@@ -732,7 +734,18 @@ impl ObservabilityBuilder {
     ///
     /// Panics if internal type-erased routing calls this registration with the
     /// wrong observation payload type.
-    pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self
+    pub fn register_subscriber<T>(self, registration: SubscriberRegistration<T>) -> Self
+    where
+        T: Observable,
+    {
+        self.register_canonical_subscriber(registration.into())
+    }
+
+    /// Registers one canonical typed observation subscriber at construction time.
+    fn register_canonical_subscriber<T>(
+        mut self,
+        registration: CanonicalSubscriberRegistration<T>,
+    ) -> Self
     where
         T: Observable,
     {
@@ -764,7 +777,18 @@ impl ObservabilityBuilder {
     ///
     /// Panics if internal type-erased routing calls this registration with the
     /// wrong observation payload type.
-    pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self
+    pub fn register_projection<T>(self, registration: ProjectionRegistration<T>) -> Self
+    where
+        T: Observable,
+    {
+        self.register_canonical_projection(registration.into())
+    }
+
+    /// Registers one canonical typed observation projection set at construction time.
+    fn register_canonical_projection<T>(
+        mut self,
+        registration: CanonicalProjectionRegistration<T>,
+    ) -> Self
     where
         T: Observable,
     {
@@ -909,12 +933,12 @@ mod tests {
     use sc_observability_types::typed::{
         SubscriberFailure, TypedObservationSubscriber, legacy_subscriber,
     };
-    use sc_observability_types::v2::{ProjectionError, SubscriberError};
     use sc_observability_types::{
         ActionName, Diagnostic, DiagnosticInfo, ErrorCode, Level, LogEvent, MetricKind, MetricName,
         MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity,
-        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, TargetCategory,
-        TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+        ProjectionError, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
+        SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
+        TraceContext, TraceId,
     };
     use serde_json::Map;
     use std::sync::mpsc;
@@ -950,13 +974,11 @@ mod tests {
 
     impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
         fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
-            Err(SubscriberError::Subscriber {
-                context: Box::new(ErrorContext::new(
-                    error_codes::OBSERVATION_ROUTING_FAILURE,
-                    "subscriber failed",
-                    Remediation::not_recoverable("test subscriber intentionally fails"),
-                )),
-            })
+            Err(SubscriberError(Box::new(ErrorContext::new(
+                error_codes::OBSERVATION_ROUTING_FAILURE,
+                "subscriber failed",
+                Remediation::not_recoverable("test subscriber intentionally fails"),
+            ))))
         }
     }
 
@@ -1038,13 +1060,11 @@ mod tests {
             &self,
             _observation: &Observation<AgentEvent>,
         ) -> Result<Vec<LogEvent>, ProjectionError> {
-            Err(ProjectionError::Projection {
-                context: Box::new(ErrorContext::new(
-                    error_codes::OBSERVATION_ROUTING_FAILURE,
-                    "projector failed",
-                    Remediation::not_recoverable("test projector intentionally fails"),
-                )),
-            })
+            Err(ProjectionError(Box::new(ErrorContext::new(
+                error_codes::OBSERVATION_ROUTING_FAILURE,
+                "projector failed",
+                Remediation::not_recoverable("test projector intentionally fails"),
+            ))))
         }
     }
 

@@ -20,15 +20,22 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::config::{ExporterBackend, LegacyRetryPolicy, TelemetryConfig as RuntimeConfig};
-use crate::projectors::{ProjectorSet, TelemetryEmit};
+use crate::projectors::{
+    AttachedLogProjector, AttachedMetricProjector, AttachedSpanProjector, ProjectorSet,
+    TelemetryEmit,
+};
 use crate::{RuntimeTelemetry, constants, error_codes};
-use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+use sc_observability_types::typed::{
+    FlushFailure, InitFailure, ShutdownFailure, TypedLogProjector, TypedMetricProjector,
+    TypedSpanProjector, typed_log_projector, typed_metric_projector, typed_span_projector,
+};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 #[allow(deprecated)]
 use sc_observability_types::{
     DurationMs, ErrorContext, FlushError, InitError, LogEvent, LogProjector, MetricProjector,
-    MetricRecord, Observable, ObservationFilter, ProjectionRegistration, Remediation, ServiceName,
-    ShutdownError, SpanProjector, SpanSignal, TelemetryError,
+    MetricRecord, Observable, Observation, ObservationFilter, ProjectionError,
+    ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanProjector, SpanSignal,
+    TelemetryError,
 };
 
 /// The released 1.4.1 OTLP protocol set.
@@ -560,19 +567,25 @@ where
 
     /// Attaches a log projector whose output is also forwarded into telemetry.
     pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
-        self.inner = self.inner.with_log_projector(projector);
+        self.inner = self
+            .inner
+            .with_log_projector(typed_log_projector(projector));
         self
     }
 
     /// Attaches a span projector whose output is also forwarded into telemetry.
     pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
-        self.inner = self.inner.with_span_projector(projector);
+        self.inner = self
+            .inner
+            .with_span_projector(typed_span_projector(projector));
         self
     }
 
     /// Attaches a metric projector whose output is also forwarded into telemetry.
     pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
-        self.inner = self.inner.with_metric_projector(projector);
+        self.inner = self
+            .inner
+            .with_metric_projector(typed_metric_projector(projector));
         self
     }
 
@@ -584,7 +597,75 @@ where
 
     /// Converts the wrapped helper into ordinary observation registration.
     pub fn into_registration(self) -> ProjectionRegistration<T> {
-        self.inner.into_registration()
+        let (log, span, metric, filter) = self.inner.into_attached();
+        let mut registration = ProjectionRegistration::new();
+        if let Some(projector) = log {
+            registration = registration.with_log_projector(projector);
+        }
+        if let Some(projector) = span {
+            registration = registration.with_span_projector(projector);
+        }
+        if let Some(projector) = metric {
+            registration = registration.with_metric_projector(projector);
+        }
+        if let Some(filter) = filter {
+            registration = registration.with_filter(filter);
+        }
+        registration
+    }
+}
+
+// The released projector traits report the retained root error; the context is
+// moved from the typed failure unchanged.
+
+#[allow(
+    deprecated,
+    reason = "the released projector trait returns the retained root ProjectionError"
+)]
+impl<T, R> LogProjector<T> for AttachedLogProjector<T, R>
+where
+    T: Observable,
+    R: TelemetryEmit,
+{
+    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
+        TypedLogProjector::project_logs(self, observation)
+            .map_err(|failure| ProjectionError(failure.into_context()))
+    }
+}
+
+#[allow(
+    deprecated,
+    reason = "the released projector trait returns the retained root ProjectionError"
+)]
+impl<T, R> SpanProjector<T> for AttachedSpanProjector<T, R>
+where
+    T: Observable,
+    R: TelemetryEmit,
+{
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
+        TypedSpanProjector::project_spans(self, observation)
+            .map_err(|failure| ProjectionError(failure.into_context()))
+    }
+}
+
+#[allow(
+    deprecated,
+    reason = "the released projector trait returns the retained root ProjectionError"
+)]
+impl<T, R> MetricProjector<T> for AttachedMetricProjector<T, R>
+where
+    T: Observable,
+    R: TelemetryEmit,
+{
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionError> {
+        TypedMetricProjector::project_metrics(self, observation)
+            .map_err(|failure| ProjectionError(failure.into_context()))
     }
 }
 

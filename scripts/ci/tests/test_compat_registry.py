@@ -17,6 +17,7 @@ from compatibility_registry import (  # noqa: E402
     is_compat_source_path,
     validate_compatibility_source_boundary,
     validate_contract_signatures,
+    validate_trait_slot_contracts,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -80,6 +81,36 @@ class ContractSignatureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "placeholder baseline contract"):
             validate_contract_signatures([self.row(
                 baseline_signature="released public nominal identity `IdentityError`")])
+
+
+class TraitSlotContractTests(unittest.TestCase):
+    PATH = "crates/sc-observability-types/src/observation_v2.rs"
+
+    def row(self, **overrides):
+        row = {"symbol": "sc_observability_types::ProcessIdentityResolver::resolve", "treatment": "new_adapter",
+               "baseline_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>",
+               "canonical_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError>",
+               "canonical_source": {"path": self.PATH}, "removable_paths": []}
+        row.update(overrides)
+        return row
+
+    def test_qualified_signature_change_is_accepted(self):
+        validate_trait_slot_contracts([self.row()])
+
+    def test_new_adapter_with_equal_signatures_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "new_adapter baseline and canonical signatures are equal"):
+            validate_trait_slot_contracts([self.row(canonical_signature=self.row()["baseline_signature"])])
+
+    def test_equal_signatures_are_accepted_for_unchanged_alias(self):
+        validate_trait_slot_contracts([self.row(
+            treatment="unchanged_alias", canonical_signature=self.row()["baseline_signature"])])
+
+    def test_removable_canonical_source_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "removable_paths contains its canonical source"):
+            validate_trait_slot_contracts([self.row(removable_paths=[self.PATH])])
+
+    def test_removable_path_is_matched_exactly(self):
+        validate_trait_slot_contracts([self.row(removable_paths=[self.PATH + ".bak", "src/observation_v2.rs"])])
 
 
 class CompatibilitySourcePathTests(unittest.TestCase):

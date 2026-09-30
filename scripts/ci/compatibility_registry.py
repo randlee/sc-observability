@@ -54,6 +54,17 @@ def validate_contract_signatures(rows: Iterable[dict]) -> None:
             raise ValueError(f"unchanged_alias baseline and canonical signatures differ: {symbol}")
 
 
+def validate_trait_slot_contracts(rows: Iterable[dict]) -> None:
+    """Reject trait-slot adapters without a signature change or with a removable canonical path."""
+    for row in rows:
+        symbol = row.get("symbol")
+        if row["treatment"] == "new_adapter" and row["baseline_signature"] == row["canonical_signature"]:
+            raise ValueError(f"trait-slot new_adapter baseline and canonical signatures are equal: {symbol}")
+        canonical_path = (row.get("canonical_source") or {}).get("path")
+        if canonical_path is not None and canonical_path in row["removable_paths"]:
+            raise ValueError(f"trait-slot removable_paths contains its canonical source: {symbol}")
+
+
 def is_compat_source_path(relative_path: str) -> bool:
     """Return whether a repository-relative path is a compatibility source file."""
     normalized = relative_path.lstrip("/")

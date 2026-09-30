@@ -55,6 +55,20 @@ counterpart, `v2::LogSink`, without turning the canonical trait
 implementation into compat. The released `LogSink` and `TypedLogSink`
 declarations live in `compat.rs`, which is their removable path.
 
+The released `ProcessIdentityResolver` and subscriber/projector traits are
+restored in place with their root errors and stay for all of 1.x, so their
+rows list no removable path. Their signatures are printed with qualified
+errors (`crate::IdentityError` against `crate::v2::IdentityError`); the
+canonical traits and registrations live in
+`crates/sc-observability-types/src/observation_v2.rs` under `types::v2`.
+Released and v2 registrations convert with `From`, and
+`ProcessIdentityPolicy::v2_resolver` accepts a v2 resolver; the private
+adapters behind both move the error context without wrapping it. The root
+`ObservabilityBuilder::register_subscriber` and `register_projection` convert
+their released registration this way. A trait-slot `new_adapter` row whose
+qualified signatures are equal, or whose `removable_paths` contains its
+canonical source path, fails validation.
+
 ## Compatibility decisions frozen by D22
 
 - Shared legacy errors are a **restoration** at the released root; canonical

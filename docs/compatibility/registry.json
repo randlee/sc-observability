@@ -558,17 +558,17 @@
       "symbol": "sc_observability_types::ProcessIdentityResolver",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::IdentityError",
+      "status": "restored_root",
+      "canonical": "v2::ProcessIdentityResolver returning v2::IdentityError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait ProcessIdentityResolver: Send + Sync { /// Resolves the process identity to attach to emitted records. /// /// # Errors /// /// Returns [`IdentityError`] when the resolver cannot produce a valid /// process identity. fn resolve(&self) -> Result<ProcessIdentity, IdentityError>; }",
-      "canonical_signature": "pub trait ProcessIdentityResolver: Send + Sync { /// Resolves the process identity to attach to emitted records. /// /// # Errors /// /// Returns [`IdentityError`] when the resolver cannot produce a valid /// process identity. fn resolve(&self) -> Result<ProcessIdentity, IdentityError>; }",
+      "baseline_signature": "pub trait ProcessIdentityResolver: Send + Sync { /// Resolves the process identity to attach to emitted records. /// /// # Errors /// /// Returns [`IdentityError`] when the resolver cannot produce a valid /// process identity. fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>; }",
+      "canonical_signature": "pub trait ProcessIdentityResolver: Send + Sync { /// Resolves the process identity to attach to emitted records. /// /// # Errors /// /// Returns [`crate::v2::IdentityError`] when the resolver cannot produce a valid /// process identity. fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError>; }",
       "obligations": [
-        "signature identity: preserve ProcessIdentityResolver declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve ProcessIdentityResolver implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root ProcessIdentityResolver declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root ProcessIdentityResolver implementable, object safe and Send + Sync; v2::ProcessIdentityResolver mirrors it with crate::v2::IdentityError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "ProcessIdentityPolicy::v2_resolver wraps a v2::ProcessIdentityResolver in a private adapter that moves the v2::IdentityError context into the root IdentityError; the released trait is used as-is",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/process.rs",
@@ -576,27 +576,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/process.rs",
-        "symbol": "root trait returning v2::IdentityError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::ProcessIdentityResolver"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::ObservationSubscriber",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::SubscriberError",
+      "status": "restored_root",
+      "canonical": "v2::ObservationSubscriber returning v2::SubscriberError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait ObservationSubscriber<T>: Send + Sync where T: Observable, { /// Consumes one routed observation. /// /// # Errors /// /// Returns [`SubscriberError`] when the subscriber rejects or cannot /// process the observation. fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>; }",
-      "canonical_signature": "pub trait ObservationSubscriber<T>: Send + Sync where T: Observable, { /// Consumes one routed observation. /// /// # Errors /// /// Returns [`SubscriberError`] when the subscriber rejects or cannot /// process the observation. fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>; }",
+      "baseline_signature": "pub trait ObservationSubscriber<T>: Send + Sync where T: Observable, { /// Consumes one routed observation. /// /// # Errors /// /// Returns [`SubscriberError`] when the subscriber rejects or cannot /// process the observation. fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError>; }",
+      "canonical_signature": "pub trait ObservationSubscriber<T>: Send + Sync where T: Observable, { /// Consumes one routed observation. /// /// # Errors /// /// Returns [`crate::v2::SubscriberError`] when the subscriber rejects or cannot /// process the observation. fn observe(&self, observation: &Observation<T>) -> Result<(), crate::v2::SubscriberError>; }",
       "obligations": [
-        "signature identity: preserve ObservationSubscriber declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve ObservationSubscriber implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root ObservationSubscriber declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root ObservationSubscriber implementable, object safe and Send + Sync; v2::ObservationSubscriber mirrors it with crate::v2::SubscriberError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root SubscriberRegistration and v2::SubscriberRegistration; private adapters move the error context between SubscriberError and v2::SubscriberError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -604,27 +604,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
-        "symbol": "root trait returning v2::SubscriberError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::ObservationSubscriber"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::LogProjector",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::ProjectionError",
+      "status": "restored_root",
+      "canonical": "v2::LogProjector returning v2::ProjectionError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait LogProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more log events. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive log output /// for the supplied observation. fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>; }",
-      "canonical_signature": "pub trait LogProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more log events. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive log output /// for the supplied observation. fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>; }",
+      "baseline_signature": "pub trait LogProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more log events. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive log output /// for the supplied observation. fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::ProjectionError>; }",
+      "canonical_signature": "pub trait LogProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more log events. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive log output /// for the supplied observation. fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::v2::ProjectionError>; }",
       "obligations": [
-        "signature identity: preserve LogProjector declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve LogProjector implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root LogProjector declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root LogProjector implementable, object safe and Send + Sync; v2::LogProjector mirrors it with crate::v2::ProjectionError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -632,27 +632,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
-        "symbol": "root trait returning v2::ProjectionError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::LogProjector"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::SpanProjector",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::ProjectionError",
+      "status": "restored_root",
+      "canonical": "v2::SpanProjector returning v2::ProjectionError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>; }",
-      "canonical_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>; }",
+      "baseline_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>; }",
+      "canonical_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::v2::ProjectionError>; }",
       "obligations": [
-        "signature identity: preserve SpanProjector declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve SpanProjector implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root SpanProjector declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root SpanProjector implementable, object safe and Send + Sync; v2::SpanProjector mirrors it with crate::v2::ProjectionError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -660,27 +660,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
-        "symbol": "root trait returning v2::ProjectionError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::SpanProjector"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::MetricProjector",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::ProjectionError",
+      "status": "restored_root",
+      "canonical": "v2::MetricProjector returning v2::ProjectionError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>; }",
-      "canonical_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>; }",
+      "baseline_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>; }",
+      "canonical_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::v2::ProjectionError>; }",
       "obligations": [
-        "signature identity: preserve MetricProjector declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve MetricProjector implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root MetricProjector declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root MetricProjector implementable, object safe and Send + Sync; v2::MetricProjector mirrors it with crate::v2::ProjectionError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -688,11 +688,11 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
-        "symbol": "root trait returning v2::ProjectionError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::MetricProjector"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::ProcessIdentityPolicy",
@@ -4347,14 +4347,15 @@
     {
       "symbol": "sc_observe::ObservabilityBuilder::register_subscriber",
       "owner": "sc_observe::ObservabilityBuilder",
-      "baseline_signature": "pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self where T: Observable,",
-      "canonical_signature": "pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self where T: Observable,",
+      "baseline_signature": "pub fn register_subscriber<T>(mut self, registration: sc_observability_types::SubscriberRegistration<T>) -> Self where T: Observable,",
+      "canonical_signature": "pub fn register_subscriber<T>(self, registration: sc_observability_types::v2::SubscriberRegistration<T>) -> Self where T: Observable,",
       "obligations": [
-        "signature: preserve sc_observe::ObservabilityBuilder::register_subscriber exactly as recorded in this row baseline_signature: pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self where T: Observable,",
-        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_subscriber boundary"
+        "signature: preserve sc_observe::ObservabilityBuilder::register_subscriber as recorded in baseline_signature; the by-value receiver (mut self vs self) is not an API difference",
+        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_subscriber boundary",
+        "conversion: released callbacks keep their Arc identity and every error they return reaches routing with its original context and source"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the root method converts its released SubscriberRegistration with From into v2::SubscriberRegistration and registers it through the same private path as sc_observe::v2::ObservabilityBuilder::register_subscriber; the supplied objects and filter are kept",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observe/src/lib.rs",
@@ -4364,7 +4365,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observe/src/lib.rs",
-        "owner": "ObservabilityBuilder",
+        "owner": "v2::ObservabilityBuilder",
         "member": "register_subscriber"
       },
       "removable_paths": []
@@ -4372,14 +4373,15 @@
     {
       "symbol": "sc_observe::ObservabilityBuilder::register_projection",
       "owner": "sc_observe::ObservabilityBuilder",
-      "baseline_signature": "pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self where T: Observable,",
-      "canonical_signature": "pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self where T: Observable,",
+      "baseline_signature": "pub fn register_projection<T>(mut self, registration: sc_observability_types::ProjectionRegistration<T>) -> Self where T: Observable,",
+      "canonical_signature": "pub fn register_projection<T>(self, registration: sc_observability_types::v2::ProjectionRegistration<T>) -> Self where T: Observable,",
       "obligations": [
-        "signature: preserve sc_observe::ObservabilityBuilder::register_projection exactly as recorded in this row baseline_signature: pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self where T: Observable,",
-        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_projection boundary"
+        "signature: preserve sc_observe::ObservabilityBuilder::register_projection as recorded in baseline_signature; the by-value receiver (mut self vs self) is not an API difference",
+        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_projection boundary",
+        "conversion: released callbacks keep their Arc identity and every error they return reaches routing with its original context and source"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the root method converts its released ProjectionRegistration with From into v2::ProjectionRegistration and registers it through the same private path as sc_observe::v2::ObservabilityBuilder::register_projection; the supplied objects and filter are kept",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observe/src/lib.rs",
@@ -4389,7 +4391,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observe/src/lib.rs",
-        "owner": "ObservabilityBuilder",
+        "owner": "v2::ObservabilityBuilder",
         "member": "register_projection"
       },
       "removable_paths": []
@@ -5458,16 +5460,16 @@
   "trait_slot_contracts": [
     {
       "symbol": "sc_observability_types::ProcessIdentityResolver::resolve",
-      "baseline_signature": "fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
-      "canonical_signature": "fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
+      "baseline_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>",
+      "canonical_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError>",
       "obligations": [
-        "signature: preserve sc_observability_types::ProcessIdentityResolver::resolve exactly as recorded in this row baseline_signature: fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::ProcessIdentityResolver::resolve baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root IdentityError identity at this slot; only the facade converts IdentityError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::ProcessIdentityResolver::resolve exactly as recorded in this row baseline_signature: fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync bounds of the root ProcessIdentityResolver at crates/sc-observability-types/src/process.rs",
+        "canonical: v2::ProcessIdentityResolver::resolve keeps the same receiver and bounds and returns crate::v2::IdentityError",
+        "identity: conversion moves the Box<ErrorContext> between crate::IdentityError and crate::v2::IdentityError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "ProcessIdentityPolicy::v2_resolver wraps a v2::ProcessIdentityResolver in a private adapter that moves the v2::IdentityError context into the root IdentityError; the released trait is used as-is",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/process.rs",
@@ -5476,26 +5478,25 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/process.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "ProcessIdentityResolver",
         "member": "resolve"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/process.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::ObservationSubscriber::observe",
-      "baseline_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
-      "canonical_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
+      "baseline_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError>",
+      "canonical_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), crate::v2::SubscriberError>",
       "obligations": [
-        "signature: preserve sc_observability_types::ObservationSubscriber::observe exactly as recorded in this row baseline_signature: fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::ObservationSubscriber::observe baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root SubscriberError identity at this slot; only the facade converts SubscriberError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::ObservationSubscriber::observe exactly as recorded in this row baseline_signature: fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root ObservationSubscriber at crates/sc-observability-types/src/projection.rs",
+        "canonical: v2::ObservationSubscriber::observe keeps the same receiver and bounds and returns crate::v2::SubscriberError",
+        "identity: conversion moves the Box<ErrorContext> between crate::SubscriberError and crate::v2::SubscriberError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root SubscriberRegistration and v2::SubscriberRegistration; private adapters move the error context between SubscriberError and v2::SubscriberError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5504,26 +5505,25 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "ObservationSubscriber",
         "member": "observe"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/projection.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::LogProjector::project_logs",
-      "baseline_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
-      "canonical_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
+      "baseline_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::ProjectionError>",
+      "canonical_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::v2::ProjectionError>",
       "obligations": [
-        "signature: preserve sc_observability_types::LogProjector::project_logs exactly as recorded in this row baseline_signature: fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::LogProjector::project_logs baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::LogProjector::project_logs exactly as recorded in this row baseline_signature: fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::ProjectionError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root LogProjector at crates/sc-observability-types/src/projection.rs",
+        "canonical: v2::LogProjector::project_logs keeps the same receiver and bounds and returns crate::v2::ProjectionError",
+        "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5532,26 +5532,25 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "LogProjector",
         "member": "project_logs"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/projection.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::SpanProjector::project_spans",
-      "baseline_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
-      "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
+      "baseline_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>",
+      "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::v2::ProjectionError>",
       "obligations": [
-        "signature: preserve sc_observability_types::SpanProjector::project_spans exactly as recorded in this row baseline_signature: fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::SpanProjector::project_spans baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::SpanProjector::project_spans exactly as recorded in this row baseline_signature: fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root SpanProjector at crates/sc-observability-types/src/projection.rs",
+        "canonical: v2::SpanProjector::project_spans keeps the same receiver and bounds and returns crate::v2::ProjectionError",
+        "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5560,26 +5559,25 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "SpanProjector",
         "member": "project_spans"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/projection.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::MetricProjector::project_metrics",
-      "baseline_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
-      "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
+      "baseline_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>",
+      "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::v2::ProjectionError>",
       "obligations": [
-        "signature: preserve sc_observability_types::MetricProjector::project_metrics exactly as recorded in this row baseline_signature: fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::MetricProjector::project_metrics baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::MetricProjector::project_metrics exactly as recorded in this row baseline_signature: fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root MetricProjector at crates/sc-observability-types/src/projection.rs",
+        "canonical: v2::MetricProjector::project_metrics keeps the same receiver and bounds and returns crate::v2::ProjectionError",
+        "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5588,13 +5586,12 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "MetricProjector",
         "member": "project_metrics"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/projection.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability::LogSink::write",

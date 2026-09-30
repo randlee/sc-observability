@@ -668,7 +668,6 @@ mod legacy_compatibility {
         legacy_span_projector, legacy_subscriber, typed_identity, typed_log_projector,
         typed_metric_projector, typed_span_projector, typed_subscriber,
     };
-    use sc_observability_types::v2::{IdentityError, ProjectionError, SubscriberError};
     use sc_observability_types::*;
     use serde_json::Map;
 
@@ -1047,7 +1046,7 @@ mod legacy_compatibility {
         let error = legacy_identity(identity.clone())
             .resolve()
             .expect_err("failure expected");
-        assert_context(error.context(), identity.expected_pointer);
+        assert_context(&error.0, identity.expected_pointer);
         assert_eq!(identity_calls.load(Ordering::SeqCst), 1);
 
         let subscriber_context = context("SC_OBSERVE_OBSERVATION_ROUTING_FAILURE");
@@ -1061,7 +1060,7 @@ mod legacy_compatibility {
         let error = legacy_subscriber(subscriber.clone())
             .observe(&observation())
             .expect_err("failure expected");
-        assert_context(error.context(), subscriber.expected_pointer);
+        assert_context(&error.0, subscriber.expected_pointer);
         assert_eq!(subscriber_calls.load(Ordering::SeqCst), 1);
 
         let (log_failure, log_pointer) =
@@ -1084,15 +1083,15 @@ mod legacy_compatibility {
         let error = legacy_log_projector(projectors.clone())
             .project_logs(&observation())
             .expect_err("failure expected");
-        assert_context(error.context(), projectors.log_pointer);
+        assert_context(&error.0, projectors.log_pointer);
         let error = legacy_span_projector(projectors.clone())
             .project_spans(&observation())
             .expect_err("failure expected");
-        assert_context(error.context(), projectors.span_pointer);
+        assert_context(&error.0, projectors.span_pointer);
         let error = legacy_metric_projector(projectors.clone())
             .project_metrics(&observation())
             .expect_err("failure expected");
-        assert_context(error.context(), projectors.metric_pointer);
+        assert_context(&error.0, projectors.metric_pointer);
         assert_eq!(projectors.log_calls.load(Ordering::SeqCst), 1);
         assert_eq!(projectors.span_calls.load(Ordering::SeqCst), 1);
         assert_eq!(projectors.metric_calls.load(Ordering::SeqCst), 1);
@@ -1105,9 +1104,7 @@ mod legacy_compatibility {
         let identity_calls = Arc::new(AtomicUsize::new(0));
         let identity = Arc::new(LegacyIdentityError {
             calls: Arc::clone(&identity_calls),
-            failure: Mutex::new(Some(IdentityError::Process {
-                context: identity_context,
-            })),
+            failure: Mutex::new(Some(IdentityError(identity_context))),
             expected_pointer: identity_pointer,
         });
         let error = typed_identity(identity.clone())
@@ -1122,9 +1119,7 @@ mod legacy_compatibility {
         let subscriber_calls = Arc::new(AtomicUsize::new(0));
         let subscriber = Arc::new(LegacySubscriberError {
             calls: Arc::clone(&subscriber_calls),
-            failure: Mutex::new(Some(SubscriberError::Subscriber {
-                context: subscriber_context,
-            })),
+            failure: Mutex::new(Some(SubscriberError(subscriber_context))),
             expected_pointer: subscriber_pointer,
         });
         let error = typed_subscriber(subscriber.clone())
@@ -1144,15 +1139,9 @@ mod legacy_compatibility {
             log_calls: Arc::new(AtomicUsize::new(0)),
             span_calls: Arc::new(AtomicUsize::new(0)),
             metric_calls: Arc::new(AtomicUsize::new(0)),
-            log: Mutex::new(Some(ProjectionError::Projection {
-                context: log_context,
-            })),
-            span: Mutex::new(Some(ProjectionError::Projection {
-                context: span_context,
-            })),
-            metric: Mutex::new(Some(ProjectionError::Projection {
-                context: metric_context,
-            })),
+            log: Mutex::new(Some(ProjectionError(log_context))),
+            span: Mutex::new(Some(ProjectionError(span_context))),
+            metric: Mutex::new(Some(ProjectionError(metric_context))),
             log_pointer,
             span_pointer,
             metric_pointer,
@@ -1258,5 +1247,253 @@ mod legacy_compatibility {
         let _: Arc<dyn LogProjector<String>> = Arc::new(LegacySuccess);
         let _: Arc<dyn SpanProjector<String>> = Arc::new(LegacySuccess);
         let _: Arc<dyn MetricProjector<String>> = Arc::new(LegacySuccess);
+    }
+}
+
+mod released_canonical_conversion {
+    //! Released root registrations keep the caller's objects; conversions to and
+    //! from the canonical `v2` family move the original error context.
+
+    #![allow(
+        deprecated,
+        reason = "the released root traits report the retained root errors"
+    )]
+
+    use std::sync::{Arc, Mutex};
+
+    use sc_observability_types::v2;
+    use sc_observability_types::*;
+
+    fn context() -> Box<ErrorContext> {
+        Box::new(
+            ErrorContext::new(
+                ErrorCode::new_static("CONVERSION_TEST_FAILED"),
+                "conversion failure",
+                Remediation::not_recoverable("conversion test remediation"),
+            )
+            .source(Box::new(std::io::Error::other("conversion source"))),
+        )
+    }
+
+    fn observation() -> Observation<String> {
+        Observation::new(
+            ServiceName::new("conversion-test").expect("valid service"),
+            "payload".to_string(),
+        )
+    }
+
+    /// The addresses a moved context must keep: the context and its source.
+    fn identity(context: &ErrorContext) -> (usize, usize) {
+        let source = std::error::Error::source(context).expect("context source");
+        (
+            std::ptr::from_ref(context) as usize,
+            std::ptr::from_ref(source).cast::<()>() as usize,
+        )
+    }
+
+    /// Returns its one boxed context exactly once, from either family.
+    struct Once(Mutex<Option<Box<ErrorContext>>>);
+
+    impl Once {
+        fn new() -> (Arc<Self>, (usize, usize)) {
+            let context = context();
+            let expected = identity(&context);
+            (Arc::new(Self(Mutex::new(Some(context)))), expected)
+        }
+
+        fn take(&self) -> Box<ErrorContext> {
+            self.0
+                .lock()
+                .expect("unpoisoned")
+                .take()
+                .expect("fixture invoked once")
+        }
+    }
+
+    impl ProcessIdentityResolver for Once {
+        fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
+            Err(IdentityError(self.take()))
+        }
+    }
+
+    impl ObservationSubscriber<String> for Once {
+        fn observe(&self, _: &Observation<String>) -> Result<(), SubscriberError> {
+            Err(SubscriberError(self.take()))
+        }
+    }
+
+    impl LogProjector<String> for Once {
+        fn project_logs(&self, _: &Observation<String>) -> Result<Vec<LogEvent>, ProjectionError> {
+            Err(ProjectionError(self.take()))
+        }
+    }
+
+    impl SpanProjector<String> for Once {
+        fn project_spans(
+            &self,
+            _: &Observation<String>,
+        ) -> Result<Vec<SpanSignal>, ProjectionError> {
+            Err(ProjectionError(self.take()))
+        }
+    }
+
+    impl MetricProjector<String> for Once {
+        fn project_metrics(
+            &self,
+            _: &Observation<String>,
+        ) -> Result<Vec<MetricRecord>, ProjectionError> {
+            Err(ProjectionError(self.take()))
+        }
+    }
+
+    /// Returns its one boxed context exactly once through the `v2` traits.
+    struct CanonicalOnce(Once);
+
+    impl CanonicalOnce {
+        fn new() -> (Arc<Self>, (usize, usize)) {
+            let context = context();
+            let expected = identity(&context);
+            (Arc::new(Self(Once(Mutex::new(Some(context))))), expected)
+        }
+    }
+
+    impl v2::ProcessIdentityResolver for CanonicalOnce {
+        fn resolve(&self) -> Result<ProcessIdentity, v2::IdentityError> {
+            Err(v2::IdentityError::Process {
+                context: self.0.take(),
+            })
+        }
+    }
+
+    impl v2::ObservationSubscriber<String> for CanonicalOnce {
+        fn observe(&self, _: &Observation<String>) -> Result<(), v2::SubscriberError> {
+            Err(v2::SubscriberError::Subscriber {
+                context: self.0.take(),
+            })
+        }
+    }
+
+    impl v2::LogProjector<String> for CanonicalOnce {
+        fn project_logs(
+            &self,
+            _: &Observation<String>,
+        ) -> Result<Vec<LogEvent>, v2::ProjectionError> {
+            Err(v2::ProjectionError::Projection {
+                context: self.0.take(),
+            })
+        }
+    }
+
+    struct AcceptAll;
+
+    impl ObservationFilter<String> for AcceptAll {
+        fn accepts(&self, _: &Observation<String>) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn released_registrations_return_the_supplied_objects() {
+        let (subscriber, _) = Once::new();
+        let subscriber: Arc<dyn ObservationSubscriber<String>> = subscriber;
+        let filter: Arc<dyn ObservationFilter<String>> = Arc::new(AcceptAll);
+        let (returned, returned_filter) = SubscriberRegistration::new(Arc::clone(&subscriber))
+            .with_filter(Arc::clone(&filter))
+            .into_parts();
+        assert!(Arc::ptr_eq(&returned, &subscriber));
+        assert!(Arc::ptr_eq(&returned_filter.expect("filter"), &filter));
+
+        let (projector, _) = Once::new();
+        let log: Arc<dyn LogProjector<String>> = projector.clone();
+        let span: Arc<dyn SpanProjector<String>> = projector.clone();
+        let metric: Arc<dyn MetricProjector<String>> = projector;
+        let (returned_log, returned_span, returned_metric, returned_filter) =
+            ProjectionRegistration::new()
+                .with_log_projector(Arc::clone(&log))
+                .with_span_projector(Arc::clone(&span))
+                .with_metric_projector(Arc::clone(&metric))
+                .with_filter(Arc::clone(&filter))
+                .into_parts();
+        assert!(Arc::ptr_eq(&returned_log.expect("log"), &log));
+        assert!(Arc::ptr_eq(&returned_span.expect("span"), &span));
+        assert!(Arc::ptr_eq(&returned_metric.expect("metric"), &metric));
+        assert!(Arc::ptr_eq(&returned_filter.expect("filter"), &filter));
+    }
+
+    #[test]
+    fn released_to_canonical_conversion_moves_every_context() {
+        let (subscriber, expected) = Once::new();
+        let filter: Arc<dyn ObservationFilter<String>> = Arc::new(AcceptAll);
+        let converted: v2::SubscriberRegistration<String> = SubscriberRegistration::new(subscriber)
+            .with_filter(Arc::clone(&filter))
+            .into();
+        let (converted, converted_filter) = converted.into_parts();
+        assert!(Arc::ptr_eq(&converted_filter.expect("filter"), &filter));
+        let error = converted
+            .observe(&observation())
+            .expect_err("subscriber failure");
+        assert!(matches!(error, v2::SubscriberError::Subscriber { .. }));
+        assert_eq!(identity(error.context()), expected);
+        assert_eq!(error.diagnostic().code.as_str(), "CONVERSION_TEST_FAILED");
+
+        for signal in ["log", "span", "metric"] {
+            let (projector, expected) = Once::new();
+            let registration = match signal {
+                "log" => ProjectionRegistration::new().with_log_projector(projector),
+                "span" => ProjectionRegistration::new().with_span_projector(projector),
+                _ => ProjectionRegistration::new().with_metric_projector(projector),
+            };
+            let (log, span, metric, _) =
+                v2::ProjectionRegistration::from(registration).into_parts();
+            let error = match signal {
+                "log" => log.expect("log").project_logs(&observation()).map(drop),
+                "span" => span.expect("span").project_spans(&observation()).map(drop),
+                _ => metric
+                    .expect("metric")
+                    .project_metrics(&observation())
+                    .map(drop),
+            }
+            .expect_err("projection failure");
+            assert_eq!(identity(error.context()), expected, "{signal}");
+            assert_eq!(error.diagnostic().message, "conversion failure", "{signal}");
+        }
+    }
+
+    #[test]
+    fn canonical_to_released_and_back_moves_the_context() {
+        let (subscriber, expected) = CanonicalOnce::new();
+        let released: SubscriberRegistration<String> =
+            v2::SubscriberRegistration::new(subscriber).into();
+        let round_trip = v2::SubscriberRegistration::from(released);
+        let error = round_trip
+            .into_parts()
+            .0
+            .observe(&observation())
+            .expect_err("subscriber failure");
+        assert_eq!(identity(error.context()), expected);
+
+        let (projector, expected) = CanonicalOnce::new();
+        let released: ProjectionRegistration<String> = v2::ProjectionRegistration::new()
+            .with_log_projector(projector)
+            .into();
+        let error = released
+            .into_parts()
+            .0
+            .expect("log")
+            .project_logs(&observation())
+            .expect_err("projection failure");
+        assert_eq!(identity(&error.0), expected);
+    }
+
+    #[test]
+    fn canonical_resolver_policy_moves_the_context() {
+        let (resolver, expected) = CanonicalOnce::new();
+        let ProcessIdentityPolicy::Resolver(released) =
+            ProcessIdentityPolicy::v2_resolver(resolver)
+        else {
+            panic!("v2_resolver builds the resolver policy");
+        };
+        let error = released.resolve().expect_err("resolver failure");
+        assert_eq!(identity(&error.0), expected);
     }
 }

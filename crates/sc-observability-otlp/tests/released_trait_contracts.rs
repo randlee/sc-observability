@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use sc_observability_otlp::{
     LogsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TelemetryProjectors,
 };
-use sc_observability_types::v2::ProjectionError;
+use sc_observability_types::ProjectionError;
 use sc_observability_types::{
     ActionName, Level, LogEvent, LogProjector, ObservabilityHealthProvider, Observation,
     ProcessIdentity, SchemaVersion, ServiceName, TargetCategory, TelemetryHealthReport,
@@ -156,5 +156,90 @@ fn released_projectors_register_with_observability_and_run_for_old_consumers() {
     );
 
     runtime.shutdown().expect("routing runtime shuts down");
+    telemetry.shutdown().expect("released telemetry shuts down");
+}
+
+struct AcceptAll;
+
+impl sc_observability_types::ObservationFilter<ProjectedPayload> for AcceptAll {
+    fn accepts(&self, _: &Observation<ProjectedPayload>) -> bool {
+        true
+    }
+}
+
+/// Fails once with a context whose source address the helper must preserve.
+struct FailingProjector(std::sync::Mutex<Option<Box<sc_observability_types::ErrorContext>>>);
+
+impl LogProjector<ProjectedPayload> for FailingProjector {
+    fn project_logs(
+        &self,
+        _: &Observation<ProjectedPayload>,
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
+        Err(ProjectionError(
+            self.0
+                .lock()
+                .expect("unpoisoned")
+                .take()
+                .expect("projector invoked once"),
+        ))
+    }
+}
+
+/// The released helper keeps 1.4.1 behavior: the caller's filter comes back
+/// unchanged, each projector is wrapped once for telemetry forwarding and runs
+/// once per call, and a projector error keeps its context and source.
+#[test]
+fn released_projector_helper_preserves_filter_behavior_and_error_identity() {
+    let telemetry = Arc::new(disabled_telemetry());
+    let projected = Arc::new(AtomicUsize::new(0));
+    let filter: Arc<dyn sc_observability_types::ObservationFilter<ProjectedPayload>> =
+        Arc::new(AcceptAll);
+    let (log, span, metric, returned_filter) = TelemetryProjectors::new(telemetry.clone())
+        .with_log_projector(Arc::new(CountingProjector(Arc::clone(&projected))))
+        .with_filter(Arc::clone(&filter))
+        .into_registration()
+        .into_parts();
+    assert!(Arc::ptr_eq(&returned_filter.expect("filter"), &filter));
+    assert!(span.is_none() && metric.is_none());
+    let events = log
+        .expect("log projector")
+        .project_logs(&Observation::new(service(), ProjectedPayload))
+        .expect("released projector output");
+    assert_eq!(events.len(), 1);
+    assert_eq!(projected.load(Ordering::SeqCst), 1);
+
+    let context = Box::new(
+        sc_observability_types::ErrorContext::new(
+            sc_observability_types::ErrorCode::new_static("RELEASED_PROJECTOR_FAILED"),
+            "released projector failed",
+            sc_observability_types::Remediation::not_recoverable("fix the projector"),
+        )
+        .source(Box::new(std::io::Error::other("projector source"))),
+    );
+    let context_address = std::ptr::from_ref(context.as_ref()) as usize;
+    let source_address = std::error::Error::source(context.as_ref())
+        .map(|source| std::ptr::from_ref(source).cast::<()>() as usize)
+        .expect("context source");
+    let (log, _, _, _) = TelemetryProjectors::new(telemetry.clone())
+        .with_log_projector(Arc::new(FailingProjector(std::sync::Mutex::new(Some(
+            context,
+        )))))
+        .into_registration()
+        .into_parts();
+    let error = log
+        .expect("log projector")
+        .project_logs(&Observation::new(service(), ProjectedPayload))
+        .expect_err("released projector failure");
+    assert_eq!(
+        std::ptr::from_ref(error.0.as_ref()) as usize,
+        context_address
+    );
+    let source = std::error::Error::source(error.0.as_ref()).expect("preserved source");
+    assert_eq!(
+        std::ptr::from_ref(source).cast::<()>() as usize,
+        source_address
+    );
+    assert_eq!(error.0.diagnostic().message, "released projector failed");
+
     telemetry.shutdown().expect("released telemetry shuts down");
 }

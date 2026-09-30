@@ -1540,6 +1540,15 @@ mod entity_admission {
         fn project_logs(
             &self,
             _observation: &Observation<u8>,
+        ) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
+            Ok(vec![event_with_id(self.0)])
+        }
+    }
+
+    impl sc_observability_types::v2::LogProjector<u8> for FixedLogProjector {
+        fn project_logs(
+            &self,
+            _observation: &Observation<u8>,
         ) -> Result<Vec<LogEvent>, sc_observability_types::v2::ProjectionError> {
             Ok(vec![event_with_id(self.0)])
         }
@@ -1644,9 +1653,10 @@ mod entity_admission {
 
         let (v2, v2_exporter) = active();
         let v2 = Arc::new(v2);
-        let registration: ProjectionRegistration<u8> = V2TelemetryProjectors::new(v2.clone())
-            .with_log_projector(Arc::new(FixedLogProjector(INVALID_ID)))
-            .into_registration();
+        let registration: sc_observability_types::v2::ProjectionRegistration<u8> =
+            V2TelemetryProjectors::new(v2.clone())
+                .with_log_projector(Arc::new(FixedLogProjector(INVALID_ID)))
+                .into_registration();
         let (log_projector, _, _, _) = registration.into_parts();
         let error = log_projector
             .expect("log projector")

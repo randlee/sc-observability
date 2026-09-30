@@ -18,11 +18,11 @@ use sc_observability_otlp::v2::{
 use sc_observability_otlp::{
     LogsConfig, Telemetry, TelemetryConfigBuilder, TelemetryError, TelemetryProjectors,
 };
-use sc_observability_types::v2::{FailureClassification, ProjectionError};
+use sc_observability_types::v2::FailureClassification;
 use sc_observability_types::{
     ActionName, ErrorContext, Level, LogEvent, LogProjector, Observation, OutcomeLabel,
-    ProcessIdentity, ProjectionRegistration, Remediation, SchemaVersion, ServiceName, StateName,
-    StateTransition, TargetCategory, Timestamp, error_codes,
+    ProcessIdentity, ProjectionError, ProjectionRegistration, Remediation, SchemaVersion,
+    ServiceName, StateName, StateTransition, TargetCategory, Timestamp, error_codes,
 };
 use serde_json::Map;
 
@@ -155,6 +155,15 @@ impl LogProjector<u8> for InvalidIdProjector {
     }
 }
 
+impl sc_observability_types::v2::LogProjector<u8> for InvalidIdProjector {
+    fn project_logs(
+        &self,
+        _observation: &Observation<u8>,
+    ) -> Result<Vec<LogEvent>, sc_observability_types::v2::ProjectionError> {
+        Ok(vec![event_with_id(INVALID_ID)])
+    }
+}
+
 #[test]
 fn projector_helpers_forward_to_their_own_admission_mode() {
     let observation = Observation::new(service_name(), 1_u8);
@@ -169,9 +178,10 @@ fn projector_helpers_forward_to_their_own_admission_mode() {
         .expect("root projector ingress accepts");
     assert_eq!(events.len(), 1);
 
-    let v2: ProjectionRegistration<u8> = V2TelemetryProjectors::new(Arc::new(v2_disabled()))
-        .with_log_projector(Arc::new(InvalidIdProjector))
-        .into_registration();
+    let v2: sc_observability_types::v2::ProjectionRegistration<u8> =
+        V2TelemetryProjectors::new(Arc::new(v2_disabled()))
+            .with_log_projector(Arc::new(InvalidIdProjector))
+            .into_registration();
     let (projector, _, _, _) = v2.into_parts();
     let events = projector
         .expect("v2 log projector")
