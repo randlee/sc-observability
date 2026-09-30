@@ -7,8 +7,8 @@ use sc_observability_otlp::{
     ResourceAttributes, Telemetry, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, DurationMs, ErrorCode, FlushError, InitError, Level, LogEvent,
-    Observable, ProcessIdentity, Remediation, SchemaVersion, ServiceName, ShutdownError,
+    ActionName, Diagnostic, DiagnosticInfo, DurationMs, ErrorCode, FlushError, InitError, Level,
+    LogEvent, Observable, ProcessIdentity, Remediation, SchemaVersion, ServiceName, ShutdownError,
     TargetCategory, TelemetryError, Timestamp,
 };
 use serde_json::Map;
@@ -59,12 +59,22 @@ fn released_projector_signature<T: Observable>(
 #[test]
 fn released_struct_literals_and_result_signatures_remain_source_compatible() {
     let _: fn(String) -> Result<OtlpEndpoint, InitError> = OtlpEndpoint::new;
+    let _: fn(String) -> Result<OtlpEndpoint, sc_observability_types::typed::InitFailure> =
+        OtlpEndpoint::new_typed;
     let _: fn(String) -> Result<AuthHeader, InitError> = AuthHeader::new;
+    let _: fn(String) -> Result<AuthHeader, sc_observability_types::typed::InitFailure> =
+        AuthHeader::new_typed;
     let _: fn(TelemetryConfigBuilder) -> Result<TelemetryConfig, InitError> =
         TelemetryConfigBuilder::build;
     let _: fn(TelemetryConfig) -> Result<Telemetry, InitError> = Telemetry::new;
+    let _: fn(TelemetryConfig) -> Result<Telemetry, sc_observability_types::typed::InitFailure> =
+        Telemetry::new_typed;
     let _: fn(&Telemetry) -> Result<(), FlushError> = Telemetry::flush;
+    let _: fn(&Telemetry) -> Result<(), sc_observability_types::typed::FlushFailure> =
+        Telemetry::flush_typed;
     let _: fn(&Telemetry) -> Result<(), ShutdownError> = Telemetry::shutdown;
+    let _: fn(&Telemetry) -> Result<(), sc_observability_types::typed::ShutdownFailure> =
+        Telemetry::shutdown_typed;
     let _: fn(&Telemetry, &LogEvent) -> Result<(), TelemetryError> = Telemetry::emit_log;
     let _: fn(&Telemetry, &sc_observability_types::SpanSignal) -> Result<(), TelemetryError> =
         Telemetry::emit_span;
@@ -124,5 +134,33 @@ fn released_builder_keeps_both_error_contracts() {
     assert_eq!(
         config.logs.expect("configured logs").batch_size,
         LogsConfig::default().batch_size
+    );
+}
+
+#[test]
+fn released_facade_maps_invalid_configuration_to_the_legacy_error_owner() {
+    let transport = OtelConfig {
+        enabled: true,
+        ..OtelConfig::default()
+    };
+    let config = TelemetryConfig {
+        service_name: service(),
+        resource: ResourceAttributes::default(),
+        transport,
+        logs: Some(LogsConfig::default()),
+        traces: None,
+        metrics: None,
+    };
+
+    let Err(legacy) = Telemetry::new(config.clone()) else {
+        panic!("missing endpoint must fail");
+    };
+    let Err(typed) = Telemetry::new_typed(config) else {
+        panic!("missing endpoint must fail");
+    };
+    assert_eq!(
+        legacy.diagnostic().code,
+        typed.diagnostic().code,
+        "compatibility conversion must preserve the canonical diagnostic"
     );
 }
