@@ -212,6 +212,11 @@ impl OtelConfig {
         };
         let legacy_retry =
             (self.enabled && backend == ExporterBackend::LegacyHttpJson).then_some(retry);
+        // Released retry settings apply only to the enabled HTTP/JSON legacy
+        // backend. HTTP/binary selects the SDK and disabled transport creates
+        // no backend, matching the published 1.4.1 conversion rule. Keep the
+        // retained flat fields empty so `legacy_retry` is the sole canonical
+        // representation when the legacy backend is selected.
         #[allow(deprecated)]
         let runtime = crate::config::OtelConfig {
             enabled: self.enabled,
@@ -223,11 +228,9 @@ impl OtelConfig {
             insecure_skip_verify: self.insecure_skip_verify,
             timeout_ms: Some(self.timeout_ms),
             debug_local_export: self.debug_local_export,
-            max_retries: legacy_retry.as_ref().and_then(|retry| retry.max_retries),
-            initial_backoff_ms: legacy_retry
-                .as_ref()
-                .and_then(|retry| retry.initial_backoff_ms),
-            max_backoff_ms: legacy_retry.as_ref().and_then(|retry| retry.max_backoff_ms),
+            max_retries: None,
+            initial_backoff_ms: None,
+            max_backoff_ms: None,
             legacy_retry,
             ..crate::config::OtelConfig::default()
         };
@@ -527,5 +530,73 @@ impl crate::telemetry_health_provider_sealed::Sealed for Telemetry {
 impl sc_observability_types::ObservabilityHealthProvider for Telemetry {
     fn telemetry_health(&self) -> crate::TelemetryHealthReport {
         self.health()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn released_transport(protocol: OtlpProtocol, enabled: bool) -> OtelConfig {
+        OtelConfig {
+            enabled,
+            protocol,
+            timeout_ms: DurationMs::from(750),
+            max_retries: 7,
+            initial_backoff_ms: DurationMs::from(125),
+            max_backoff_ms: DurationMs::from(875),
+            ..OtelConfig::default()
+        }
+    }
+
+    #[test]
+    #[expect(
+        deprecated,
+        reason = "the regression test verifies released fields leave canonical compatibility fields empty"
+    )]
+    fn released_http_json_uses_the_nested_legacy_retry_policy() {
+        let runtime = released_transport(OtlpProtocol::HttpJson, true).into_runtime();
+
+        assert_eq!(runtime.backend, ExporterBackend::LegacyHttpJson);
+        assert_eq!(runtime.timeout_ms, Some(DurationMs::from(750)));
+        assert_eq!(
+            runtime.legacy_retry,
+            Some(LegacyRetryPolicy {
+                max_retries: Some(7),
+                initial_backoff_ms: Some(DurationMs::from(125)),
+                max_backoff_ms: Some(DurationMs::from(875)),
+                ..LegacyRetryPolicy::default()
+            })
+        );
+        assert_eq!(runtime.max_retries, None);
+        assert_eq!(runtime.initial_backoff_ms, None);
+        assert_eq!(runtime.max_backoff_ms, None);
+    }
+
+    #[test]
+    #[expect(
+        deprecated,
+        reason = "the regression test verifies released fields are discarded outside the legacy backend"
+    )]
+    fn released_binary_and_disabled_transports_discard_legacy_retry_settings() {
+        for (transport, backend) in [
+            (
+                released_transport(OtlpProtocol::HttpBinary, true),
+                ExporterBackend::OpenTelemetrySdk,
+            ),
+            (
+                released_transport(OtlpProtocol::HttpJson, false),
+                ExporterBackend::LegacyHttpJson,
+            ),
+        ] {
+            let runtime = transport.into_runtime();
+
+            assert_eq!(runtime.backend, backend);
+            assert_eq!(runtime.timeout_ms, Some(DurationMs::from(750)));
+            assert_eq!(runtime.legacy_retry, None);
+            assert_eq!(runtime.max_retries, None);
+            assert_eq!(runtime.initial_backoff_ms, None);
+            assert_eq!(runtime.max_backoff_ms, None);
+        }
     }
 }
