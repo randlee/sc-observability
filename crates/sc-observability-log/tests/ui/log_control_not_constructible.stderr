@@ -1,16 +1,10 @@
-error[E0560]: struct `sc_observability_log::LogControl` has no field named `_private`
- --> tests/ui/log_control_not_constructible.rs:3:40
+error[E0624]: associated function `new` is private
+ --> tests/ui/log_control_not_constructible.rs:3:39
   |
-3 |     sc_observability_log::LogControl { _private: () }
-  |                                        ^^^^^^^^ field does not exist
+3 |     sc_observability_log::LogControl::new()
+  |                                       ^^^ private associated function
   |
  ::: src/compat/mod.rs
   |
-  | pub struct LogControl(control::LogControl);
-  |            ---------- `sc_observability_log::LogControl` defined here
-  |
-help: `sc_observability_log::LogControl` is a tuple struct, use the appropriate syntax
-  |
-3 -     sc_observability_log::LogControl { _private: () }
-3 +     sc_observability_log::LogControl(/* sc_observability_log::v2::LogControl */)
-  |
+  |     pub(crate) const fn new() -> Self {
+  |     --------------------------------- private associated function defined here
