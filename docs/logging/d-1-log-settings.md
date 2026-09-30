@@ -14,7 +14,7 @@ shared `SC` namespace; an application namespace replaces only that leading
 | Rust field | JSON key | Environment key | Representation | Default | Validation |
 | --- | --- | --- | --- | --- | --- |
 | `level` | `level` | `SC_LOG_LEVEL` | existing `LevelFilter` serde token | `info` | exact spelling and case accepted by `LevelFilter` |
-| `log_root` | `logRoot` | `SC_LOG_ROOT` | non-empty OS path | supplied `default_root` | a present empty value is invalid |
+| `log_root` | `logRoot` | `SC_LOG_ROOT` | OS path; empty values are retained during parsing | supplied `default_root` | the selected root must be non-empty (`SC_LOG_SETTINGS_RESOLUTION`) |
 | `enable_file_sink` | `enableFileSink` | `SC_LOG_FILE` | JSON boolean; environment `true` or `false` | `true` | no numeric or truthy aliases |
 | `enable_console_sink` | `enableConsoleSink` | `SC_LOG_CONSOLE` | JSON boolean; environment `true` or `false` | `false` | no numeric or truthy aliases |
 | `retained_log_policy.rotation_max_bytes` | `retainedLogPolicy.rotation_max_bytes` | `SC_LOG_ROTATION_MAX_BYTES` | canonical `ByteCount` serde, bytes | canonical policy default | existing strong-type validation |
@@ -25,12 +25,17 @@ shared `SC` namespace; an application namespace replaces only that leading
 | `retained_log_policy.maintenance_max_work_per_pass` | `retainedLogPolicy.maintenance_max_work_per_pass` | `SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS` | optional count | canonical policy default | existing policy validation |
 
 Resolution is `defaults < JSON < SC_ environment < application environment`
-for every field except `logRoot`: a non-empty JSON `logRoot` wins over both
-environment namespaces; otherwise an application root wins over `SC_LOG_ROOT`.
-Absent and JSON `null` values are unset. Present empty roots and environment
-values are invalid. `retainedLogPolicy` is atomic: a JSON policy or any one
-policy environment key replaces the whole policy; omitted policy environment
-fields use canonical defaults and never merge into JSON policy fields.
+for every field except `logRoot`. Root selection uses the first present value
+in this order: JSON, application environment, shared `SC_` environment, then
+`default_root`. An empty root parses as-is; precedence is applied before the
+selected root is validated, so a shadowed empty root is ignored and an empty
+selected root fails with `SC_LOG_SETTINGS_RESOLUTION`. A present empty JSON
+`logRoot` is selected rather than falling through. Absent and JSON `null`
+values are unset. Present empty values for other recognized `${prefix}_LOG_*`
+settings are invalid; unknown keys in the selected namespace remain errors.
+`retainedLogPolicy` is atomic: a JSON policy or any one policy environment key
+replaces the whole policy; omitted policy environment fields use canonical
+defaults and never merge into JSON policy fields.
 
 ## Environment prefix rules
 
