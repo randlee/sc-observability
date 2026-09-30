@@ -46,6 +46,7 @@ bd version    # 1.3.0 or newer
 gh stack --version   # the gh-stack extension
 ```
 
+The standalone `sc-compose` CLI is required even though `atm` embeds it.
 The `sc-gh-stack` and `sc-git-worktree` skills (synaptic-canvas plugin)
 must be installed.
 
