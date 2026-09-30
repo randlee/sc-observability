@@ -585,6 +585,27 @@ fn retained_wrong_auth_fixture_is_rejected_without_credential_diagnostic() {
 }
 
 #[test]
+fn malformed_ca_bundle_returns_transport_error() {
+    let ca_file = custom_ca_file(
+        "-----BEGIN CERTIFICATE-----\nnot-base64-certificate-data\n-----END CERTIFICATE-----\n",
+    );
+    let result = OtlpHttpExporter::for_test_config(
+        "http://127.0.0.1:1".to_owned(),
+        None,
+        Some(ca_file.clone()),
+    );
+    fs::remove_file(&ca_file).expect("remove malformed CA fixture");
+
+    assert!(
+        matches!(
+            result,
+            Err(sc_observability_types::v2::ExportError::Transport { .. })
+        ),
+        "malformed CA bundle must fail with a transport error"
+    );
+}
+
+#[test]
 fn retained_custom_ca_bundle_verifies_real_tls_exports() {
     let nonce = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
