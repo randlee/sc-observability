@@ -76,7 +76,7 @@ def reviewed_registry_closure(source_lock, staged_lock, roots):
     """
     reviewed={
         (entry['name'],entry['version'],entry['source'],entry['checksum']):entry
-        for entry in registry_identities(source_lock)
+        for entry in registry_identities({'package':lock_closure(source_lock,roots)})
     }
     selected=registry_identities({'package':lock_closure(staged_lock,roots)})
     missing=[entry for entry in selected if (entry['name'],entry['version'],entry['source'],entry['checksum']) not in reviewed]

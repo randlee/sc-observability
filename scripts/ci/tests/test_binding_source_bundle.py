@@ -42,6 +42,19 @@ class SourceBoundaryTests(unittest.TestCase):
         ])
         self.assertEqual(BUNDLE.reviewed_registry_closure(source,staged,[('binding','1.0.0')]),[{'name':'tokio','version':'1.0.0','source':registry,'checksum':'tokio'}])
 
+    def test_registry_selection_rejects_unrelated_workspace_identity(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0'),
+            self.package('unrelated','1.0.0',source=registry,checksum='reviewed'),
+        ])
+        staged=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['unrelated']),
+            self.package('unrelated','1.0.0',source=registry,checksum='reviewed'),
+        ])
+        with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+            BUNDLE.reviewed_registry_closure(source,staged,[('binding','1.0.0')])
+
     def test_registry_selection_rejects_changed_or_missing_selected_packages(self):
         registry='registry+https://example.invalid/index'
         source=self.registry_lock([
