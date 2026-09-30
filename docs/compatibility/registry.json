@@ -3,6 +3,14 @@
   "registry_version": 1,
   "baseline": {"crate_release": "v1.4.1", "commit": "c578912653233c7dc678fefe5af575118dbbaaa1"},
   "source_audit": {"inventory": "D18 recovery inventory", "nominal_contracts": 58, "inherent_or_free_callables": 141, "trait_slots": 12},
+  "deprecated_owner_exceptions": [
+    "crates/sc-observability-types/src/errors.rs",
+    "crates/sc-observability/src/lib.rs",
+    "crates/sc-observability/src/runtime.rs",
+    "crates/sc-observability-otlp/src/assembly.rs",
+    "crates/sc-observability-otlp/src/config/types.rs"
+  ],
+  "compat_root_reexport_exceptions": [],
   "dispositions": {
     "restored_root": "Released root identity is present in the current source.",
     "canonical_routed": "Current production implementation uses the v2 contract; D23 owns legacy facade adaptation.",
