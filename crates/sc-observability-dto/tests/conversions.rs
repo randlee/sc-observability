@@ -48,6 +48,44 @@ fn decimal_domains_are_canonical() {
 }
 
 #[test]
+fn decimal_dto_failures_use_registered_boundary_diagnostics() {
+    let cases = [
+        (
+            DecimalDto::new("01").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL,
+            "Use a canonical base-10 integer with no leading zeros or negative zero",
+        ),
+        (
+            DecimalDto::new("-9223372036854775809").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW,
+            "Use a value within the signed 64-bit integer range",
+        ),
+        (
+            DecimalDto::new("18446744073709551616").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW,
+            "Use a value within the unsigned 64-bit integer range",
+        ),
+        (
+            DecimalDto::new("-1").unwrap().as_u64().unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED,
+            "Use a non-negative canonical integer for this counter",
+        ),
+    ];
+
+    for (error, code, remediation) in cases {
+        assert_eq!(error.code(), code);
+        let diagnostic = boundary_diagnostic(error.code(), error.to_string());
+        assert_eq!(diagnostic.code, code);
+        assert_eq!(
+            diagnostic.remediation,
+            RemediationDto::Recoverable {
+                steps: vec![remediation.into()],
+            }
+        );
+    }
+}
+
+#[test]
 fn json_number_projection_is_total_in_every_workspace_number_domain() {
     let value = json!({
         "signed": -1,
@@ -304,7 +342,7 @@ fn paths_keep_absence_and_non_unicode() {
 #[test]
 fn registry_has_unique_literals_and_exact_remediation() {
     let mut codes = std::collections::BTreeSet::new();
-    assert_eq!(error_codes::REGISTRY.len(), 18);
+    assert_eq!(error_codes::REGISTRY.len(), 22);
     assert!(
         error_codes::REGISTRY
             .iter()
