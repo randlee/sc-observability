@@ -570,7 +570,7 @@ impl Logger<Running> {
 
     /// Creates a logger with the configured built-in sinks and runtime state.
     pub fn new(config: crate::LoggerConfig) -> Result<Self, InitError> {
-        LoggerBuilder::new(config)?.build()
+        LoggerBuilder::new(config)?.build_canonical()
     }
 
     /// Creates a logger together with weak authority for runtime level changes.
