@@ -17,8 +17,8 @@ use crate::handle;
 use crate::{DropCause, mapping};
 use sc_observability_types::v2::FlushError as CoreFlushError;
 use sc_observability_types::{
-    AdmissionOutcome, ErrorCode, ErrorContext, LogEvent, OperationDiagnostic, ProcessIdentity,
-    Remediation, ServiceName, Timestamp,
+    AdmissionOutcome, ErrorCode, ErrorContext, FailureClassification, LogEvent,
+    OperationDiagnostic, ProcessIdentity, Remediation, ServiceName, Timestamp,
 };
 
 const MODE_EMPTY: u8 = 0;
@@ -580,33 +580,38 @@ fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), CoreFlushEr
             let _ = sender.send(result);
         })
         .map_err(|source| {
-            crate::error::flush_drain(crate::error::operation_context_with_source(
-                crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
-                source.to_string(),
-                Remediation::not_recoverable("inspect thread resource availability"),
-                source,
-            ))
+            crate::error::flush_drain_as(
+                crate::error::operation_context_with_source(
+                    crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
+                    source.to_string(),
+                    Remediation::not_recoverable("inspect thread resource availability"),
+                    source,
+                ),
+                FailureClassification::Unavailable,
+            )
         })?;
     match receiver.recv_timeout(timeout) {
         Ok(Ok(())) => Ok(()),
         Ok(Err(source)) => Err(crate::error::flush_drain(source.into_context())),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            Err(crate::error::flush_drain(crate::error::operation_context(
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(crate::error::flush_drain_as(
+            crate::error::operation_context(
                 crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT,
                 format!("attachment flush did not complete within {timeout:?}"),
                 Remediation::recoverable(
                     "retry after inspecting host logger health",
                     ["use a bounded timeout"],
                 ),
-            )))
-        }
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            Err(crate::error::flush_drain(crate::error::operation_context(
+            ),
+            FailureClassification::timeout("flush"),
+        )),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(crate::error::flush_drain_as(
+            crate::error::operation_context(
                 crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
                 "attachment flush helper ended without a result",
                 Remediation::not_recoverable("inspect host logger health before retrying"),
-            )))
-        }
+            ),
+            FailureClassification::Internal,
+        )),
     }
 }
 
@@ -617,11 +622,14 @@ pub(crate) fn flush_current_attachment(timeout: Duration) -> Result<(), CoreFlus
 }
 
 fn attachment_flush_error(message: &str) -> CoreFlushError {
-    crate::error::flush_drain(crate::error::operation_context(
-        crate::error_codes::SC_LOG_DETACH_NOT_INSTALLED,
-        message,
-        Remediation::not_recoverable("attach a logger before requesting a flush"),
-    ))
+    crate::error::flush_drain_as(
+        crate::error::operation_context(
+            crate::error_codes::SC_LOG_DETACH_NOT_INSTALLED,
+            message,
+            Remediation::not_recoverable("attach a logger before requesting a flush"),
+        ),
+        FailureClassification::Closed,
+    )
 }
 
 pub(crate) fn mark_owned_running() {

@@ -7,6 +7,7 @@
 //! remains a directly serializable data contract, so consumers never parse a
 //! display string.
 
+use sc_observability_types::v2::FailureClassification;
 use sc_observability_types::{ErrorCode, ErrorContext, Remediation};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -339,12 +340,26 @@ pub(crate) fn flush_drain(context: Box<ErrorContext>) -> FlushError {
     FlushError::Drain { context }
 }
 
+pub(crate) fn flush_drain_as(
+    context: Box<ErrorContext>,
+    classification: FailureClassification,
+) -> FlushError {
+    FlushError::classified_drain(context, classification)
+}
+
 pub(crate) fn shutdown_timeout(context: Box<ErrorContext>) -> ShutdownError {
     ShutdownError::Timeout { context }
 }
 
 pub(crate) fn shutdown_drain(context: Box<ErrorContext>) -> ShutdownError {
     ShutdownError::Drain { context }
+}
+
+pub(crate) fn shutdown_drain_as(
+    context: Box<ErrorContext>,
+    classification: FailureClassification,
+) -> ShutdownError {
+    ShutdownError::classified_drain(context, classification)
 }
 
 /// Why an event was dropped on the non-blocking emit path.

@@ -78,15 +78,7 @@ pub(crate) fn query(error: &native::QueryError) -> Failure {
     context(error.diagnostic(), kind)
 }
 pub(crate) fn bridge_flush(error: &FlushError) -> Failure {
-    let kind = match error.diagnostic().code.as_str() {
-        "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT" => Kind::timeout("flush"),
-        "SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS" => Kind::QueueFull,
-        "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED" => Kind::Unavailable,
-        "SC_OBSERVABILITY_LOG_HELPER_LOST" => Kind::Internal,
-        "SC_OBSERVABILITY_LOG_NOT_RUNNING" | "SC_LOG_DETACH_NOT_INSTALLED" => Kind::Closed,
-        _ => error.failure_classification(),
-    };
-    canonical(error, kind)
+    canonical(error, error.failure_classification())
 }
 pub(crate) fn bridge_control(error: bridge::ControlError) -> Failure {
     match error {

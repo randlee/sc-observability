@@ -112,13 +112,14 @@ pub(crate) fn subscriber_waiters_full(message: impl Into<String>) -> native::v2:
 }
 
 pub(crate) fn shutdown_drain(message: impl Into<String>) -> native::v2::ShutdownError {
-    native::v2::ShutdownError::Drain {
-        context: context(
+    native::v2::ShutdownError::classified_drain(
+        context(
             ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_INTERNAL),
             message,
             Remediation::not_recoverable("inspect the retained shutdown diagnostic"),
         ),
-    }
+        native::v2::FailureClassification::Internal,
+    )
 }
 
 pub(crate) fn observer_timeout(kind: OperationKind) -> Failure {

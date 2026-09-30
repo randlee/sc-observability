@@ -928,15 +928,16 @@ fn native_diagnostic_fidelity() {
         remediation: native::Remediation::recoverable("first", ["second"]),
         at: native::Timestamp::UNIX_EPOCH,
     };
-    let error = native::v2::FlushError::Drain {
-        context: Box::new(native::ErrorContext::new(
+    let error = native::v2::FlushError::classified_drain(
+        Box::new(native::ErrorContext::new(
             diagnostic.code.clone(),
             diagnostic.message.clone(),
             diagnostic.remediation.clone(),
         )),
-    };
+        native::FailureClassification::Internal,
+    );
     let failure = crate::conversion::bridge_flush(&error);
-    assert!(matches!(failure, Failure::Io { .. }));
+    assert!(matches!(failure, Failure::Internal { .. }));
     assert_eq!(failure.diagnostic().code, diagnostic.code.as_str());
     assert_eq!(failure.diagnostic().message, diagnostic.message);
     assert_eq!(

@@ -141,20 +141,31 @@ impl EventError {
 context_error!(FlushError, Drain => crate::error_codes::DIAGNOSTIC_INVALID);
 
 impl FlushError {
+    /// Creates a drain failure with its native-owned wire classification.
+    #[must_use]
+    pub fn classified_drain(
+        mut context: Box<ErrorContext>,
+        classification: FailureClassification,
+    ) -> Self {
+        context.set_failure_classification(classification);
+        Self::Drain { context }
+    }
+
     /// Returns the typed export cause retained by a drain failure, when present.
     #[must_use]
     pub fn export_cause(&self) -> Option<&ExportError> {
-        std::error::Error::source(self.context())
-            .and_then(|source| source.downcast_ref::<ExportError>())
+        export_cause(self.context())
     }
 
     /// Returns the native-owned wire failure classification.
     #[must_use]
     pub fn failure_classification(&self) -> FailureClassification {
-        self.export_cause().map_or(
-            FailureClassification::Io,
-            ExportError::failure_classification,
-        )
+        self.context().failure_classification().unwrap_or_else(|| {
+            self.export_cause().map_or(
+                FailureClassification::Io,
+                ExportError::failure_classification,
+            )
+        })
     }
 }
 
@@ -165,11 +176,20 @@ context_error!(
 );
 
 impl ShutdownError {
+    /// Creates a drain failure with its native-owned wire classification.
+    #[must_use]
+    pub fn classified_drain(
+        mut context: Box<ErrorContext>,
+        classification: FailureClassification,
+    ) -> Self {
+        context.set_failure_classification(classification);
+        Self::Drain { context }
+    }
+
     /// Returns the typed export cause retained by a drain failure, when present.
     #[must_use]
     pub fn export_cause(&self) -> Option<&ExportError> {
-        std::error::Error::source(self.context())
-            .and_then(|source| source.downcast_ref::<ExportError>())
+        export_cause(self.context())
     }
 
     /// Returns the native-owned wire failure classification.
@@ -177,12 +197,25 @@ impl ShutdownError {
     pub fn failure_classification(&self) -> FailureClassification {
         match self {
             Self::Timeout { .. } => FailureClassification::timeout("shutdown"),
-            Self::Drain { .. } => self.export_cause().map_or(
-                FailureClassification::Io,
-                ExportError::failure_classification,
-            ),
+            Self::Drain { context } => context.failure_classification().unwrap_or_else(|| {
+                self.export_cause().map_or(
+                    FailureClassification::Io,
+                    ExportError::failure_classification,
+                )
+            }),
         }
     }
+}
+
+fn export_cause(context: &ErrorContext) -> Option<&ExportError> {
+    let mut source = std::error::Error::source(context);
+    while let Some(error) = source {
+        if let Some(export) = error.downcast_ref::<ExportError>() {
+            return Some(export);
+        }
+        source = std::error::Error::source(error);
+    }
+    None
 }
 
 context_error!(ProjectionError, Projection => crate::error_codes::DIAGNOSTIC_INVALID);
@@ -524,5 +557,74 @@ impl sealed::Sealed for TelemetryError {}
 impl DiagnosticInfo for TelemetryError {
     fn diagnostic(&self) -> &Diagnostic {
         self.diagnostic()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, thiserror::Error)]
+    #[error("export wrapper")]
+    struct ExportWrapper {
+        #[source]
+        source: ExportError,
+    }
+
+    fn context(message: &str) -> ErrorContext {
+        ErrorContext::new(
+            crate::error_codes::DIAGNOSTIC_INVALID,
+            message,
+            crate::Remediation::not_recoverable("inspect the native failure"),
+        )
+    }
+
+    #[test]
+    fn drain_classification_prefers_explicit_native_value_and_finds_nested_export_source() {
+        let export = ExportError::Transport {
+            context: Box::new(context("export transport failed")),
+        };
+        let drain = ErrorContext::new(
+            crate::error_codes::DIAGNOSTIC_INVALID,
+            "flush helper failed",
+            crate::Remediation::not_recoverable("inspect the helper"),
+        )
+        .source(Box::new(ExportWrapper { source: export }));
+        let error =
+            FlushError::classified_drain(Box::new(drain), FailureClassification::Unavailable);
+
+        let wrapper = std::error::Error::source(error.context())
+            .and_then(|source| source.downcast_ref::<ExportWrapper>())
+            .expect("drain retains its wrapper source");
+        let expected = std::error::Error::source(wrapper)
+            .and_then(|source| source.downcast_ref::<ExportError>())
+            .expect("wrapper retains its export source");
+
+        assert!(std::ptr::eq(
+            error.export_cause().expect("nested export source"),
+            expected
+        ));
+        assert_eq!(
+            error.failure_classification(),
+            FailureClassification::Unavailable
+        );
+    }
+
+    #[test]
+    fn unclassified_drain_uses_export_source_or_io_fallback() {
+        let exported = FlushError::Drain {
+            context: Box::new(context("drain").source(Box::new(ExportError::QueueFull {
+                context: Box::new(context("transport")),
+            }))),
+        };
+        let fallback = ShutdownError::Drain {
+            context: Box::new(context("drain without export source")),
+        };
+
+        assert_eq!(
+            exported.failure_classification(),
+            FailureClassification::QueueFull
+        );
+        assert_eq!(fallback.failure_classification(), FailureClassification::Io);
     }
 }
