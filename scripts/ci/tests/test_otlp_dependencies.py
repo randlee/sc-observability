@@ -220,6 +220,14 @@ class ShellGateIntegrationTests(unittest.TestCase):
                 target = cls.root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
+        # The copy borrows this repository's objects so nested checks can read
+        # pinned history, such as the released baseline, without a network clone.
+        objects = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-path", "objects"],
+            cwd=ROOT, check=True, capture_output=True, text=True, timeout=60,
+        ).stdout.strip()
+        subprocess.run(["git", "init", "-q", str(cls.root)], check=True, timeout=60)
+        (cls.root / ".git/objects/info/alternates").write_text(objects + "\n")
         cls.manifest = (cls.root / MANIFEST).read_text()
 
     def setUp(self):
