@@ -45,6 +45,6 @@ number of rows, display all available rows without padding or duplication.
 
 ## Output
 
-Both tables, labeled Log A and Log B, for the current phase. Nothing else. Write the
+Both tables, labeled `QA Run Log` and `QA Statistics`, for the current phase. Nothing else. Write the
 tables as markdown directly in your reply text; a command's own stdout is
 not reliably shown to the user, so never rely on tool output alone.
