@@ -12,7 +12,13 @@ use sc_observability_types::otlp::submission::{
     TelemetryClient, TelemetryClientConfig, TelemetryClientError,
 };
 #[cfg(feature = "test-double")]
-use sc_observability_types::{ErrorCode, ErrorContext, Remediation};
+use sc_observability_types::{
+    ErrorContext, Remediation,
+    otlp::submission::error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE,
+};
+
+#[cfg(feature = "test-double")]
+use crate::constants;
 
 pub(crate) fn open_client(
     config: TelemetryClientConfig,
@@ -37,20 +43,21 @@ fn open_test_double(
         DoubleScript, InMemoryTelemetryClient,
     };
 
-    let script = match std::env::var_os("SC_OTEL_TEST_DOUBLE") {
+    let script = match std::env::var_os(constants::TEST_DOUBLE_ENV) {
         Some(path) => {
             let path = std::path::PathBuf::from(path);
-            let text =
-                std::fs::read_to_string(&path).map_err(|_| TelemetryConfigError::ConfigFile {
+            let text = std::fs::read_to_string(&path).map_err(|source| {
+                TelemetryConfigError::ConfigFile {
                     path,
                     context: Box::new(ErrorContext::new(
-                        ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE"),
-                        "unable to read test double script",
+                        SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE,
+                        format!("unable to read test double script: {source}"),
                         Remediation::not_recoverable(
                             "provide a readable SC_OTEL_TEST_DOUBLE JSON file",
                         ),
                     )),
-                })?;
+                }
+            })?;
             DoubleScript::from_json(&text)?
         }
         None => DoubleScript::default(),

@@ -6,7 +6,9 @@
 
 use crate::{
     cli::{Cli, Command, EmitArgs, FlushArgs, StatusArgs},
-    client, config, exit, input,
+    client, config, constants,
+    error::CliError,
+    input,
     output::{self, Outcome},
 };
 use sc_observability_types::otlp::submission::{
@@ -30,48 +32,50 @@ pub(crate) fn run(cli: &Cli) -> u8 {
 fn validate(args: &crate::cli::InputArgs) -> Outcome {
     match input::envelope(args, None) {
         Ok(envelope) => {
-            let mut outcome = Outcome::success("validate", "validated");
+            let mut outcome =
+                Outcome::success(constants::COMMAND_VALIDATE, constants::STATE_VALIDATED);
             outcome.envelope = serde_json::from_str(&envelope.to_canonical_json()).ok();
             outcome
         }
-        Err(error) => failure("validate", &error),
+        Err(error) => failure(constants::COMMAND_VALIDATE, error),
     }
 }
 
 fn emit(cli: &Cli, args: &EmitArgs) -> Outcome {
     let envelope = match input::envelope(&args.input, args.record_key.as_deref()) {
         Ok(envelope) => envelope,
-        Err(error) => return failure("emit", &error),
+        Err(error) => return failure(constants::COMMAND_EMIT, error),
     };
     let config = match config::resolve(cli) {
         Ok(config) => config,
-        Err(error) => return failure("emit", &error),
+        Err(error) => return failure(constants::COMMAND_EMIT, error),
     };
     let client = match client::open_client(config.clone()) {
         Ok(client) => client,
-        Err(error) => return failure("emit", &error),
+        Err(error) => return failure(constants::COMMAND_EMIT, error),
     };
     let receipt = match client.emit(envelope) {
         Ok(receipt) => receipt,
-        Err(error) => return shutdown_failure("emit", client.as_ref(), &error),
+        Err(error) => return shutdown_failure(constants::COMMAND_EMIT, client.as_ref(), error),
     };
     if args.no_flush {
         let _ = client.shutdown(Duration::ZERO);
-        let mut outcome = Outcome::success("emit", "admitted_delivered");
+        let mut outcome =
+            Outcome::success(constants::COMMAND_EMIT, constants::STATE_ADMITTED_PENDING);
         outcome.receipt = Some(receipt);
         return outcome;
     }
     match client.flush_submission(&receipt.submission_id, config.emit_flush_deadline) {
         Ok(report) => {
             let _ = client.shutdown(Duration::ZERO);
-            let mut outcome = Outcome::success("emit", "admitted_delivered");
+            let mut outcome = Outcome::success(constants::COMMAND_EMIT, delivery_state(&report));
             outcome.receipt = Some(receipt);
             outcome.flush = Some(report);
             outcome
         }
         Err(error) => {
             let _ = client.shutdown(Duration::ZERO);
-            let mut outcome = failure("emit", &error);
+            let mut outcome = failure(constants::COMMAND_EMIT, error);
             outcome.receipt = Some(receipt);
             outcome
         }
@@ -81,45 +85,45 @@ fn emit(cli: &Cli, args: &EmitArgs) -> Outcome {
 fn flush(cli: &Cli, args: &FlushArgs) -> Outcome {
     let config = match config::resolve(cli) {
         Ok(config) => config,
-        Err(error) => return failure("flush", &error),
+        Err(error) => return failure(constants::COMMAND_FLUSH, error),
     };
     let client = match client::open_client(config.clone()) {
         Ok(client) => client,
-        Err(error) => return failure("flush", &error),
+        Err(error) => return failure(constants::COMMAND_FLUSH, error),
     };
     let deadline = args.timeout.unwrap_or(config.flush_deadline);
     match client.flush(deadline) {
         Ok(report) => {
             let _ = client.shutdown(Duration::ZERO);
-            let mut outcome = Outcome::success("flush", "admitted_delivered");
+            let mut outcome = Outcome::success(constants::COMMAND_FLUSH, delivery_state(&report));
             outcome.flush = Some(report);
             outcome
         }
-        Err(error) => shutdown_failure("flush", client.as_ref(), &error),
+        Err(error) => shutdown_failure(constants::COMMAND_FLUSH, client.as_ref(), error),
     }
 }
 
 fn status(cli: &Cli, args: &StatusArgs) -> Outcome {
     let query = match status_query(args) {
         Ok(query) => query,
-        Err(error) => return failure("status", &error),
+        Err(error) => return failure(constants::COMMAND_STATUS, error),
     };
     let config = match config::resolve(cli) {
         Ok(config) => config,
-        Err(error) => return failure("status", &error),
+        Err(error) => return failure(constants::COMMAND_STATUS, error),
     };
     let client = match client::open_client(config) {
         Ok(client) => client,
-        Err(error) => return failure("status", &error),
+        Err(error) => return failure("status", error),
     };
     match client.status(query) {
         Ok(status) => {
             let _ = client.shutdown(Duration::ZERO);
-            let mut outcome = Outcome::success("status", "status");
+            let mut outcome = Outcome::success(constants::COMMAND_STATUS, constants::STATE_STATUS);
             outcome.status = Some(status);
             outcome
         }
-        Err(error) => shutdown_failure("status", client.as_ref(), &error),
+        Err(error) => shutdown_failure(constants::COMMAND_STATUS, client.as_ref(), error),
     }
 }
 
@@ -146,12 +150,22 @@ fn status_query(args: &StatusArgs) -> Result<StatusQuery, TelemetryClientError> 
 fn shutdown_failure(
     command: &'static str,
     client: &dyn TelemetryClient,
-    error: &TelemetryClientError,
+    error: TelemetryClientError,
 ) -> Outcome {
     let _ = client.shutdown(Duration::ZERO);
     failure(command, error)
 }
 
-fn failure(command: &'static str, error: &TelemetryClientError) -> Outcome {
-    Outcome::failure(command, error.clone(), exit::exit_code(error))
+fn failure(command: &'static str, error: impl Into<CliError>) -> Outcome {
+    Outcome::failure(command, error.into())
+}
+
+fn delivery_state(report: &sc_observability_types::otlp::submission::FlushReport) -> &'static str {
+    if report.failed.total() > 0 || report.evicted.total() > 0 {
+        constants::STATE_ADMITTED_FAILED
+    } else if report.still_pending.total() > 0 {
+        constants::STATE_ADMITTED_PENDING
+    } else {
+        constants::STATE_ADMITTED_DELIVERED
+    }
 }

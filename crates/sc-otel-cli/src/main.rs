@@ -4,6 +4,7 @@ mod cli;
 mod client;
 mod config;
 mod constants;
+mod error;
 mod exit;
 mod input;
 mod output;

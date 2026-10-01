@@ -1,10 +1,11 @@
 //! Renders the stable machine-readable and compact text result forms.
 
-use crate::{cli::OutputFormat, constants};
+use crate::{cli::OutputFormat, constants, error::CliError};
 use sc_observability_types::otlp::submission::{
     AdmissionReceipt, FlushReport, StoreStatus, TelemetryClientError,
 };
 use serde_json::{Value, json};
+use std::{error::Error, fmt::Write};
 
 pub(crate) struct Outcome {
     pub(crate) command: &'static str,
@@ -14,7 +15,7 @@ pub(crate) struct Outcome {
     pub(crate) flush: Option<FlushReport>,
     pub(crate) status: Option<StoreStatus>,
     pub(crate) envelope: Option<Value>,
-    pub(crate) error: Option<TelemetryClientError>,
+    pub(crate) error: Option<CliError>,
 }
 
 impl Outcome {
@@ -31,13 +32,10 @@ impl Outcome {
         }
     }
 
-    pub(crate) fn failure(
-        command: &'static str,
-        error: TelemetryClientError,
-        exit_code: u8,
-    ) -> Self {
-        let flush = match &error {
-            TelemetryClientError::Delivery(
+    pub(crate) fn failure(command: &'static str, error: CliError) -> Self {
+        let exit_code = crate::exit::exit_code(&error);
+        let flush = match error.telemetry() {
+            Some(TelemetryClientError::Delivery(
                 sc_observability_types::otlp::submission::DeliveryError::DeadlineExceeded {
                     report,
                     ..
@@ -46,18 +44,18 @@ impl Outcome {
                     report,
                     ..
                 },
-            ) => Some(report.clone()),
+            )) => Some(report.clone()),
             _ => None,
         };
         Self {
             command,
             exit_code,
             state: if exit_code == constants::EXIT_DELIVERY_PENDING {
-                "admitted_pending"
+                constants::STATE_ADMITTED_PENDING
             } else if exit_code == constants::EXIT_DELIVERY_FAILED {
-                "admitted_failed"
+                constants::STATE_ADMITTED_FAILED
             } else {
-                "rejected"
+                constants::STATE_REJECTED
             },
             receipt: None,
             flush,
@@ -71,18 +69,32 @@ impl Outcome {
 pub(crate) fn print(format: OutputFormat, outcome: &Outcome) {
     match format {
         OutputFormat::Json => println!("{}", as_json(outcome)),
-        OutputFormat::Text => println!(
-            "{} {} exit={}",
-            outcome.command, outcome.state, outcome.exit_code
-        ),
+        OutputFormat::Text => print_text(outcome),
     }
 }
 
+fn print_text(outcome: &Outcome) {
+    let mut text = format!("{} exit={}", outcome.state, outcome.exit_code);
+    if let Some(receipt) = &outcome.receipt {
+        write!(text, " submission={}", receipt.submission_id)
+            .expect("writing to a String cannot fail");
+    }
+    if let Some(error) = &outcome.error {
+        write!(text, " error={}", error.code()).expect("writing to a String cannot fail");
+        eprintln!("{}: {error}", error.code());
+    }
+    println!("{text}");
+}
+
 fn as_json(outcome: &Outcome) -> Value {
-    let error = outcome
-        .error
-        .as_ref()
-        .map(|error| json!({"code": error.code().as_str(), "message": error.to_string()}));
+    let error = outcome.error.as_ref().map(|error| {
+        json!({
+            "code": error.code(),
+            "message": error.to_string(),
+            "cause": error.source().map(ToString::to_string),
+            "remediation": error.remediation(),
+        })
+    });
     json!({
         "schema": constants::RESULT_SCHEMA,
         "command": outcome.command,

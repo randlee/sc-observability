@@ -44,5 +44,6 @@ fn test_double_uses_default_script_when_script_path_is_unset() {
 
     assert!(output.status.success(), "{output:?}");
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("result JSON");
-    assert_eq!(result["state"], "admitted_delivered");
+    assert_eq!(result["state"], "admitted_pending");
+    assert!(result["flush"].is_null());
 }
