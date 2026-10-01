@@ -1,0 +1,20 @@
+service: sc-observability
+team: sc-obs
+github:
+  pr_url_template: "https://github.com/randlee/sc-observability/pull/{pr_number}"
+otlp:
+  endpoint: http://localhost:4318
+sources:
+  - path: .sc/qa-log/phase-d.jsonl
+    kind: qa
+    phase: phase-d
+  - path: .sc/sanity-log/sanity-llm.jsonl
+    kind: sanity
+    phase: phase-d
+    reviewer: sanity-llm
+  - path: .sc/sanity-log/phase-d.jsonl
+    kind: sanity
+    phase: phase-d
+  - path: .sc/qa-log/phase-d-stats.jsonl
+    kind: finding-counts
+    phase: phase-d

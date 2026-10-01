@@ -28,7 +28,7 @@ def edge_type(edge: dict[str, Any]) -> str:
     return str(edge.get("type") or edge.get("dependency_type") or "")
 
 
-def sanity_iterations(log_path: Path) -> dict[str, int]:
+def sanity_iterations(log_path: Path, phase: str | None = None) -> dict[str, int]:
     if not log_path.exists():
         return {}
     iterations: dict[str, int] = {}
@@ -45,11 +45,31 @@ def sanity_iterations(log_path: Path) -> dict[str, int]:
             raise RuntimeError(f"invalid sanity history {log_path}:{line_number}: {exc}") from exc
         if not isinstance(run, dict):
             raise RuntimeError(f"invalid sanity history record {log_path}:{line_number}")
+        if phase is not None:
+            record_phase = str(run.get("phase") or "").removeprefix("phase-")
+            if not record_phase:
+                match = re.fullmatch(r"(?:phase-)?([a-z]+)(?:[-_]?\d+)?", str(run.get("sprint", "")).lower())
+                record_phase = match.group(1) if match else ""
+            if record_phase != phase.removeprefix("phase-"):
+                continue
         if run.get("verdict") not in {"PASS", "FAIL"} or not run.get("completed_at"):
             continue
         task, iteration = run.get("task"), run.get("iteration")
         if not isinstance(task, str) or type(iteration) is not int or iteration < 1:
             raise RuntimeError(f"invalid sanity iteration {log_path}:{line_number}")
+        iterations[task] = max(iterations.get(task, 0), iteration)
+    return iterations
+
+
+def phase_sanity_iterations(log_dir: Path, phase: str) -> dict[str, int]:
+    """Merge the renamed LLM history and current phase log without counting rows.
+
+    The historical filename carries no phase, so filter its records explicitly.
+    Both reviewer rows share an iteration; the maximum counts that run once.
+    """
+    phase = phase.removeprefix("phase-")
+    iterations = sanity_iterations(log_dir / "sanity-llm.jsonl", phase)
+    for task, iteration in sanity_iterations(log_dir / f"phase-{phase}.jsonl").items():
         iterations[task] = max(iterations.get(task, 0), iteration)
     return iterations
 
@@ -273,7 +293,7 @@ def main() -> int:
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
             cwd=repo, text=True,
         ).strip())
-        sanity_runs = sanity_iterations(common_dir.parent / ".sc" / "sanity-log" / f"phase-{phase}.jsonl")
+        sanity_runs = phase_sanity_iterations(common_dir.parent / ".sc" / "sanity-log", phase)
         rows = index.get("sprints")
         if not isinstance(rows, list) or not rows:
             raise RuntimeError("sprint index contains no sprints")

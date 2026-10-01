@@ -114,8 +114,11 @@ using finding severity metadata or labels across all QA rounds for the sprint.
 A newer round never hides open findings from an older round. It is empty before QA dispatch,
 and `0:0:0` when a dispatched QA has no open findings.
 The S column shows the highest completed `iteration` for the sprint's sanity
-task from `.sc/sanity-log/phase-<p>.jsonl` in the primary checkout (located
-through Git's common directory). This cumulative value includes completed
+task from `.sc/sanity-log/phase-<p>.jsonl` and the renamed historical
+`.sc/sanity-log/sanity-llm.jsonl` in the primary checkout (located through
+Git's common directory). Filter the historical file by record `phase`, or
+its sprint-derived phase when `phase` is absent. Take the maximum iteration
+across both files; paired reviewer rows do not count as additional runs. This cumulative value includes completed
 PASS and FAIL runs; counting log lines would undercount older runs. When the
 log has no record for a sanity task, count its completed events from
 `atm task events <task> --all --json`. Blank S means zero completed runs;

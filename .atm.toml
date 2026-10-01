@@ -134,7 +134,7 @@ all = [
 
 [startup.obs-sanity]
 all = [
-  "read .claude/agents/dev-sanity-llm.md for directive",
+  "read .claude/agents/dev-sanity.md for directive",
   "Use native atm send or atm ack for messages to team-lead",
   "Use native atm read to read messages from team-members",
 ]
