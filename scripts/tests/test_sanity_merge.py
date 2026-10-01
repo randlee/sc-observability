@@ -71,6 +71,47 @@ class SanityMerge(unittest.TestCase):
         body = results if isinstance(results, str) else json.dumps(results)
         return subprocess.run([str(SCRIPT), *argv], input=body, capture_output=True, text=True)
 
+    def test_paired_reports_share_identity_preserve_conclusions_and_own_timing(self):
+        self.write_manifest(run_id="shared-run", reviewers=["sanity-llm", "sanity-jev"],
+                            operational_reviewer="sanity-llm")
+        self.lint(0)
+        reports = []
+        for reviewer, start, findings in (("sanity-llm", "1700000000", []),
+                                          ("sanity-jev", "1700000010", [FINDING])):
+            results = [self.result(1), self.result(2, findings)]
+            out = self.merge(results, str(self.manifest), TASK, DEV, SPRINT,
+                             "--reviewer", reviewer, "--started-at", start)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            report = json.loads(out.stdout)
+            self.assertEqual(report["run_id"], "shared-run")
+            self.assertEqual(report["reviewer"], reviewer)
+            self.assertEqual(report["commit"], self.sha)
+            self.assertEqual(report["operational_reviewer"], "sanity-llm")
+            self.assertEqual(report["reviewer_results"], results)
+            self.assertTrue(report["completed_at"].endswith("Z"))
+            reports.append(report)
+        self.assertEqual([r["verdict"] for r in reports], ["PASS", "FAIL"])
+        self.assertNotEqual(reports[0]["started_at"], reports[1]["started_at"])
+        self.assertGreater(reports[0]["duration_seconds"], reports[1]["duration_seconds"])
+
+    def test_single_jev_and_cannot_run_are_never_relabelled(self):
+        self.write_manifest(run_id="jev-run", reviewers=["sanity-jev"], operational_reviewer="sanity-jev")
+        self.lint(0)
+        results = [self.result(1), self.failure(code="JEV.UNAVAILABLE")]
+        out = self.merge(results, str(self.manifest), TASK, DEV, SPRINT,
+                         "--reviewer", "sanity-jev", "--started-at", "1700000000")
+        self.assertEqual(out.returncode, 3, out.stderr)
+        report = json.loads(out.stdout)
+        self.assertEqual(report["verdict"], "CANNOT_RUN")
+        self.assertIsNone(report["findings_count"])
+        self.assertEqual(report["reviewer"], "sanity-jev")
+        self.assertEqual(report["operational_reviewer"], "sanity-jev")
+        self.assertEqual(report["reviewer_results"], results)
+        rejected = self.merge([self.result(1), self.result(2)], str(self.manifest), TASK, DEV, SPRINT,
+                              "--reviewer", "sanity-llm", "--started-at", "1700000000")
+        self.assertEqual(rejected.returncode, 1)
+        self.assertEqual(rejected.stdout, "")
+
     def test_pass(self):
         self.lint(0, "ok\n")
         out = self.merge([self.result(2), self.result(1)])

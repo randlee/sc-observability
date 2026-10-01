@@ -85,3 +85,7 @@ An unfinished check returns `success: false`, `data: null`, and
 - Judge only the assigned numbered deliverable.
 - Return at most one `skipped` finding; no `error` kind exists.
 - Empty findings is success. Return fenced JSON only.
+
+If Jev is unavailable, times out, or returns invalid output, return the failure
+envelope with the actual error and deliverable number. Never label an unaided
+LLM conclusion as a Jev result. The coordinator logs this as CANNOT_RUN.

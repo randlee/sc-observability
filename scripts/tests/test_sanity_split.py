@@ -105,8 +105,28 @@ class SanitySplit(unittest.TestCase):
     def merge(self, manifest, results):
         manifest_file = self.root / "manifest.json"
         manifest_file.write_text(json.dumps(manifest))
-        return subprocess.run([str(MERGE), str(manifest_file), "obs-x-1-sanity", "obs-x-1", "x"],
+        return subprocess.run([str(MERGE), str(manifest_file), "obs-x-1-sanity", "obs-x-1", "x",
+                               "--reviewer", "sanity-llm", "--started-at", str(time.time())],
                               input=json.dumps(results), capture_output=True, text=True)
+
+    def test_selected_reviewers_share_assignments_and_one_lint(self):
+        manifests = []
+        for selected in ("both", "llm", "jev"):
+            out = self.run_split(None, None, None, "sprint/x", "develop", "--reviewers", selected,
+                                 lint="echo ran >> lint-count")
+            self.assertEqual(out.returncode, 0, out.stderr)
+            manifest = json.loads(out.stdout)
+            self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "0")
+            count_file = self.repo.wt / "lint-count"
+            self.assertEqual(count_file.read_text(), "ran\n")
+            count_file.unlink()
+            expected = ["sanity-llm", "sanity-jev"] if selected == "both" else [f"sanity-{selected}"]
+            self.assertEqual(manifest["reviewers"], expected)
+            self.assertEqual(manifest["operational_reviewer"], "sanity-jev" if selected == "jev" else "sanity-llm")
+            manifests.append(manifest)
+        self.assertEqual(len({m["run_id"] for m in manifests}), 3)
+        self.assertEqual(manifests[0]["assignments"], manifests[1]["assignments"])
+        self.assertEqual(manifests[1]["assignments"], manifests[2]["assignments"])
 
     def test_happy_path_renders_one_assignment_per_deliverable(self):
         out = self.run_split(commit=self.repo.sha[:8])
@@ -283,11 +303,15 @@ class SanitySplit(unittest.TestCase):
         self.wait_lint(manifest["lint"]["exit_file"])
         (self.repo.wt / "crates/types/src/retry.rs").write_text("pub fn is_retryable(_: u16) -> bool { true }\n")
         merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
-        self.assertEqual((merged.returncode, merged.stdout.strip()), (3, "SANITY.COMMIT_MISMATCH fatal 0"), merged.stderr)
+        self.assertEqual(merged.returncode, 3, merged.stderr)
+        self.assertEqual(json.loads(merged.stdout)["error"]["code"], "SANITY.COMMIT_MISMATCH")
+        self.assertEqual(json.loads(merged.stdout)["verdict"], "CANNOT_RUN")
         git(self.repo.wt, "checkout", "-q", "--", ".")
         git(self.repo.wt, "checkout", "-q", "develop")
         merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
-        self.assertEqual((merged.returncode, merged.stdout.strip()), (3, "SANITY.COMMIT_MISMATCH fatal 0"), merged.stderr)
+        self.assertEqual(merged.returncode, 3, merged.stderr)
+        self.assertEqual(json.loads(merged.stdout)["error"]["code"], "SANITY.COMMIT_MISMATCH")
+        self.assertEqual(json.loads(merged.stdout)["verdict"], "CANNOT_RUN")
 
     def test_lint_supervisor_captures_every_part_of_a_compound_command(self):
         lint = "sh -c 'echo \"  --> src/a.rs:3:1\"; exit 1' && true"
@@ -319,7 +343,9 @@ class SanitySplit(unittest.TestCase):
         leftover = subprocess.run(["pgrep", "-f", "sleep 3017"], capture_output=True, text=True)
         self.assertEqual(leftover.stdout.strip(), "", "the lint command survived its timeout")
         merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
-        self.assertEqual((merged.returncode, merged.stdout.strip()), (3, "SANITY.LINT_UNAVAILABLE fatal 0"))
+        self.assertEqual(merged.returncode, 3, merged.stderr)
+        self.assertEqual(json.loads(merged.stdout)["error"]["code"], "SANITY.LINT_UNAVAILABLE")
+        self.assertEqual(json.loads(merged.stdout)["verdict"], "CANNOT_RUN")
 
     def test_lint_supervisor_is_stopped_with_its_process_group(self):
         out = self.run_split(lint="sleep 3018")

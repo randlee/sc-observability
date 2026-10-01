@@ -5,6 +5,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -15,6 +16,15 @@ SPEC.loader.exec_module(module)
 
 
 class ParentLayerTests(unittest.TestCase):
+    def test_comparison_report_cannot_create_children(self):
+        report = {"run_id": "paired", "reviewer": "sanity-jev", "operational_reviewer": "sanity-llm"}
+        with patch.object(sys, "argv", ["sanity-create-findings", "--task", "t", "--bead", "b",
+                                       "--vars", "unused.json", "--reviewer", "sc-sanity-jev", "--actor", "a"]), \
+             patch.object(module, "load_vars", return_value=report), \
+             patch.object(module, "command") as command:
+            self.assertEqual(module.main(), 2)
+            command.assert_not_called()
+
     def test_blocking_child_ranks_one_above_its_parent(self):
         self.assertEqual([module.child_priority("blocking", p) for p in (0, 1, 2, 3, 4, 5)], [1, 1, 1, 2, 3, 4])
         self.assertEqual(module.child_priority("minor", 1), 4)
