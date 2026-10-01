@@ -1,4 +1,4 @@
-//! Minimal D.21 legacy HTTP/JSON configuration fixture.
+//! Minimal synchronous HTTP/JSON configuration fixture.
 
 use sc_observability_otlp::v2::{
     ExporterBackend, LogsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, TelemetryConfigBuilder,
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_typed()?;
 
     println!(
-        "validated legacy OTLP/HTTP JSON contract for {} at {}",
+        "validated synchronous OTLP/HTTP JSON contract for {} at {}",
         config.service_name,
         config
             .transport

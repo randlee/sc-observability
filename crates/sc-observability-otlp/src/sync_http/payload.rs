@@ -1,7 +1,6 @@
 //! Synchronous HTTP OTLP record conversion and JSON wire serialization.
 //!
-//! Kept separate from transport, worker lifecycle, and retry policy. The
-//! transplanted encoding behavior is unchanged by this module boundary.
+//! Kept separate from transport, worker lifecycle, and retry policy.
 
 use std::collections::BTreeMap;
 
