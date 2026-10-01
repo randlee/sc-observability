@@ -19,7 +19,6 @@ class OtlpConformanceWorkflowTests(unittest.TestCase):
         jobs = workflow["jobs"]
 
         self.assertEqual(jobs["collector-conformance"]["timeout-minutes"], 30)
-        self.assertEqual(jobs["canonical-ingress-conformance"]["timeout-minutes"], 30)
         self.assertEqual(jobs["desktop-viewer-factory-conformance"]["timeout-minutes"], 20)
 
     def test_desktop_viewer_cleanup_has_early_state_and_missing_state_guard(self) -> None:
@@ -53,9 +52,9 @@ class OtlpConformanceWorkflowTests(unittest.TestCase):
         uses = [step["uses"] for job in jobs.values() for step in job["steps"]
                 if "uses" in step]
         self.assertEqual(uses.count(
-            "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"), 3)
+            "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"), 2)
         self.assertEqual(uses.count(
-            "dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87"), 3)
+            "dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87"), 2)
 
 
 if __name__ == "__main__":

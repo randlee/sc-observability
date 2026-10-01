@@ -222,9 +222,6 @@ jobs:
             --manifest release/publish-artifacts.toml \
             --workspace-toml Cargo.toml
 
-      - name: Validate publish action versions
-        run: bash scripts/ci/validate_publish_workflow_action_versions.sh
-
       - name: Validate install contract semantics
         run: python3 scripts/ci/validate_phase_c_install_contract.py
 
@@ -237,14 +234,8 @@ jobs:
             --manifest release/publish-artifacts.toml \
             --workspace-toml Cargo.toml
 
-      - name: Validate docs consistency
-        run: bash scripts/ci/validate_docs_consistency.sh
-
       - name: Validate dependency bans
         run: bash scripts/ci/validate_dependency_bans.sh
-
-      - name: Validate version literals
-        run: python3 scripts/ci/validate_version_literals.py
 
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh

@@ -135,8 +135,6 @@ The following can be added once behavior exists:
 
 Phase-A validation additions once the phase starts landing:
 
-- `bash scripts/ci/validate_writer_thread_lock.sh` for the A.1 normative-doc
-  lock
 - `bash scripts/ci/validate_public_api_diff.sh` for additive public API diffs
 - `python3 scripts/ci/validate_public_api_semver.py` for semver-breaking API diffs
 - `bash scripts/ci/validate_public_api_docs.sh` for machine-checkable API
