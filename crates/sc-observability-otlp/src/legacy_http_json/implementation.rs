@@ -1137,6 +1137,9 @@ fn telemetry_error_to_export_error(error: TelemetryError) -> ExportError {
             context: Box::new(error_with_code(
                 error_codes::otlp::OTLP_EXPORT_TERMINAL,
                 "legacy admission returned an unknown telemetry error",
+                Remediation::not_recoverable(
+                    "inspect the legacy admission failure before submitting a new batch",
+                ),
             )),
         },
     }
@@ -1194,46 +1197,61 @@ fn transport_error_with_source(
     }
 }
 
-fn error_with_code(code: sc_observability_types::ErrorCode, message: &str) -> ErrorContext {
-    ErrorContext::new(
-        code,
-        message,
-        Remediation::recoverable("inspect telemetry health and retry", [] as [&str; 0]),
-    )
+fn error_with_code(
+    code: sc_observability_types::ErrorCode,
+    message: &str,
+    remediation: Remediation,
+) -> ErrorContext {
+    ErrorContext::new(code, message, remediation)
 }
 
-fn worker_terminated_error() -> ExportError {
+pub(super) fn worker_terminated_error() -> ExportError {
     ExportError::WorkerTerminated {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_WORKER_TERMINATED,
             "legacy HTTP worker terminated",
+            Remediation::recoverable(
+                "restart the legacy HTTP exporter",
+                ["resubmit any batch that was not acknowledged"],
+            ),
         )),
     }
 }
 
-fn queue_full_error() -> ExportError {
+pub(super) fn queue_full_error() -> ExportError {
     ExportError::QueueFull {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_QUEUE_FULL,
             "legacy HTTP worker admission is full",
+            Remediation::recoverable(
+                "wait for legacy HTTP worker capacity",
+                ["retry the export after capacity is available"],
+            ),
         )),
     }
 }
 
-fn shutdown_cancelled_error() -> ExportError {
+pub(super) fn shutdown_cancelled_error() -> ExportError {
     ExportError::ShutdownCancelledRetry {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
             "legacy retry was cancelled by shutdown",
+            Remediation::not_recoverable(
+                "the legacy HTTP exporter is shutting down and cannot retry this batch",
+            ),
         )),
     }
 }
 
-fn retry_deadline_error() -> ExportError {
+pub(super) fn retry_deadline_error() -> ExportError {
     ExportError::RetryDeadlineExhausted {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED,
             "legacy retry sequence exceeded its deadline",
+            Remediation::recoverable(
+                "restore collector availability before retrying the export",
+                ["increase the retry sequence deadline only when the delivery budget permits"],
+            ),
         )),
     }
 }
@@ -1245,6 +1263,10 @@ fn retry_attempts_exhausted_error(status: u16) -> ExportError {
             &format!(
                 "legacy collector returned retryable HTTP status {status} until attempts were exhausted"
             ),
+            Remediation::recoverable(
+                "wait for the collector to recover before retrying the export",
+                [] as [&str; 0],
+            ),
         )),
     }
 }
@@ -1255,17 +1277,24 @@ fn retry_attempts_exhausted_with_source(error: reqwest::Error) -> ExportError {
             error_with_code(
                 error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
                 "legacy transport retries were exhausted",
+                Remediation::recoverable(
+                    "restore collector connectivity before retrying the export",
+                    [] as [&str; 0],
+                ),
             )
             .source(Box::new(error)),
         ),
     }
 }
 
-fn non_retryable_status_error(status: u16) -> ExportError {
+pub(super) fn non_retryable_status_error(status: u16) -> ExportError {
     ExportError::NonRetryableHttpStatus {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL,
             &format!("legacy collector returned terminal HTTP status {status}"),
+            Remediation::not_recoverable(
+                "correct the collector request, credentials, or endpoint before submitting a new batch",
+            ),
         )),
     }
 }
@@ -1275,6 +1304,9 @@ fn blocking_in_async_error() -> ExportError {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT,
             "blocking legacy lifecycle cannot run from an entered Tokio runtime",
+            Remediation::not_recoverable(
+                "use the asynchronous legacy lifecycle API from an entered Tokio runtime",
+            ),
         )),
     }
 }
