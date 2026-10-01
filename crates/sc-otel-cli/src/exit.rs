@@ -6,6 +6,7 @@ use sc_observability_types::otlp::submission::{DeliveryError, TelemetryClientErr
 pub(crate) fn exit_code(error: &CliError) -> u8 {
     match error {
         CliError::Input(_) => constants::EXIT_INVALID_INPUT,
+        CliError::Internal(_) => constants::EXIT_INTERNAL,
         CliError::Telemetry(error) => telemetry_exit_code(error),
     }
 }

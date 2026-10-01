@@ -34,7 +34,15 @@ fn validate(args: &crate::cli::InputArgs) -> Outcome {
         Ok(envelope) => {
             let mut outcome =
                 Outcome::success(constants::COMMAND_VALIDATE, constants::STATE_VALIDATED);
-            outcome.envelope = serde_json::from_str(&envelope.to_canonical_json()).ok();
+            outcome.envelope = match serde_json::to_value(envelope) {
+                Ok(envelope) => Some(envelope),
+                Err(error) => {
+                    return failure(
+                        constants::COMMAND_VALIDATE,
+                        CliError::Internal(format!("unable to render validated envelope: {error}")),
+                    );
+                }
+            };
             outcome
         }
         Err(error) => failure(constants::COMMAND_VALIDATE, error),
@@ -59,25 +67,22 @@ fn emit(cli: &Cli, args: &EmitArgs) -> Outcome {
         Err(error) => return shutdown_failure(constants::COMMAND_EMIT, client.as_ref(), error),
     };
     if args.no_flush {
-        let _ = client.shutdown(Duration::ZERO);
         let mut outcome =
             Outcome::success(constants::COMMAND_EMIT, constants::STATE_ADMITTED_PENDING);
         outcome.receipt = Some(receipt);
-        return outcome;
+        return finish_shutdown(constants::COMMAND_EMIT, client.as_ref(), outcome);
     }
     match client.flush_submission(&receipt.submission_id, config.emit_flush_deadline) {
         Ok(report) => {
-            let _ = client.shutdown(Duration::ZERO);
             let mut outcome = Outcome::success(constants::COMMAND_EMIT, delivery_state(&report));
             outcome.receipt = Some(receipt);
             outcome.flush = Some(report);
-            outcome
+            finish_shutdown(constants::COMMAND_EMIT, client.as_ref(), outcome)
         }
         Err(error) => {
-            let _ = client.shutdown(Duration::ZERO);
             let mut outcome = failure(constants::COMMAND_EMIT, error);
             outcome.receipt = Some(receipt);
-            outcome
+            finish_shutdown(constants::COMMAND_EMIT, client.as_ref(), outcome)
         }
     }
 }
@@ -94,10 +99,9 @@ fn flush(cli: &Cli, args: &FlushArgs) -> Outcome {
     let deadline = args.timeout.unwrap_or(config.flush_deadline);
     match client.flush(deadline) {
         Ok(report) => {
-            let _ = client.shutdown(Duration::ZERO);
             let mut outcome = Outcome::success(constants::COMMAND_FLUSH, delivery_state(&report));
             outcome.flush = Some(report);
-            outcome
+            finish_shutdown(constants::COMMAND_FLUSH, client.as_ref(), outcome)
         }
         Err(error) => shutdown_failure(constants::COMMAND_FLUSH, client.as_ref(), error),
     }
@@ -118,10 +122,9 @@ fn status(cli: &Cli, args: &StatusArgs) -> Outcome {
     };
     match client.status(query) {
         Ok(status) => {
-            let _ = client.shutdown(Duration::ZERO);
             let mut outcome = Outcome::success(constants::COMMAND_STATUS, constants::STATE_STATUS);
             outcome.status = Some(status);
-            outcome
+            finish_shutdown(constants::COMMAND_STATUS, client.as_ref(), outcome)
         }
         Err(error) => shutdown_failure(constants::COMMAND_STATUS, client.as_ref(), error),
     }
@@ -152,7 +155,12 @@ fn shutdown_failure(
     client: &dyn TelemetryClient,
     error: TelemetryClientError,
 ) -> Outcome {
-    let _ = client.shutdown(Duration::ZERO);
+    if let Err(shutdown) = client.shutdown(Duration::ZERO) {
+        eprintln!(
+            "{}: shutdown failed after command failure: {shutdown}",
+            shutdown.code()
+        );
+    }
     failure(command, error)
 }
 
@@ -167,5 +175,22 @@ fn delivery_state(report: &sc_observability_types::otlp::submission::FlushReport
         constants::STATE_ADMITTED_PENDING
     } else {
         constants::STATE_ADMITTED_DELIVERED
+    }
+}
+
+fn finish_shutdown(
+    command: &'static str,
+    client: &dyn TelemetryClient,
+    outcome: Outcome,
+) -> Outcome {
+    match client.shutdown(Duration::ZERO) {
+        Ok(_) => outcome,
+        Err(error) => {
+            let mut shutdown = failure(command, error);
+            shutdown.receipt = outcome.receipt;
+            shutdown.flush = outcome.flush.or(shutdown.flush);
+            shutdown.status = outcome.status;
+            shutdown
+        }
     }
 }

@@ -53,6 +53,8 @@ impl Error for InputError {
 pub(crate) enum CliError {
     /// Input failed before the canonical submission parser could run.
     Input(InputError),
+    /// The CLI could not render its own result payload.
+    Internal(String),
     /// A shared client or parser failure.
     Telemetry(TelemetryClientError),
 }
@@ -61,6 +63,7 @@ impl CliError {
     pub(crate) fn code(&self) -> &str {
         match self {
             Self::Input(_) => constants::ERROR_INVALID_JSON,
+            Self::Internal(_) => constants::ERROR_INTERNAL,
             Self::Telemetry(error) => error.code().as_str(),
         }
     }
@@ -70,13 +73,14 @@ impl CliError {
             Self::Input(InputError::Stdin { .. }) => "supply readable JSON on standard input",
             Self::Input(InputError::File { .. }) => "supply a readable JSON fragment file",
             Self::Input(InputError::Fragment { .. }) => "correct the JSON fragment before retrying",
+            Self::Internal(_) => "report the internal CLI failure with the result code",
             Self::Telemetry(_) => "follow the remediation attached to the telemetry diagnostic",
         }
     }
 
     pub(crate) fn telemetry(&self) -> Option<&TelemetryClientError> {
         match self {
-            Self::Input(_) => None,
+            Self::Input(_) | Self::Internal(_) => None,
             Self::Telemetry(error) => Some(error),
         }
     }
@@ -86,6 +90,7 @@ impl fmt::Display for CliError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Input(error) => error.fmt(formatter),
+            Self::Internal(message) => formatter.write_str(message),
             Self::Telemetry(error) => error.fmt(formatter),
         }
     }
@@ -95,6 +100,7 @@ impl Error for CliError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Input(error) => error.source(),
+            Self::Internal(_) => None,
             Self::Telemetry(error) => Some(error),
         }
     }
