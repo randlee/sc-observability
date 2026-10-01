@@ -5,6 +5,8 @@ use serde::de::{self, DeserializeSeed, MapAccess, Visitor};
 use serde_json::{Value, json};
 use std::{cell::RefCell, fmt};
 
+// serde's unknown_variant callback has no return channel, so interior mutability
+// captures its expected variants; thread_local keeps parallel tests isolated.
 thread_local! {
     static SERDE_UNKNOWN_VARIANT_EXPECTED: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
 }
