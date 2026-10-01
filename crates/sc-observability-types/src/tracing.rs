@@ -2,9 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    ActionName, EntityId, ErrorCode, StateName, TargetCategory, ValueValidationError, error_codes,
-};
+use crate::{ActionName, ErrorCode, StateName, TargetCategory, ValueValidationError, error_codes};
 
 macro_rules! validated_hex_id_type {
     ($name:ident, $doc:literal, $length:expr, $code:expr) => {
@@ -108,8 +106,8 @@ pub struct TraceContext {
 pub struct StateTransition {
     /// Stable category describing what changed, such as `task` or `subagent`.
     pub entity_kind: TargetCategory,
-    /// Optional validated caller-owned identifier for the entity that changed.
-    pub entity_id: Option<EntityId>,
+    /// Optional caller-owned identifier for the entity that changed.
+    pub entity_id: Option<String>,
     /// Previous stable state label.
     pub from_state: StateName,
     /// New stable state label.

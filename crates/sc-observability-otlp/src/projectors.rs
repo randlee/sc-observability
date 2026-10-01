@@ -17,15 +17,14 @@ use std::sync::Arc;
 use crate::RuntimeTelemetry;
 use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
-    typed_log_projector, typed_metric_projector, typed_span_projector,
 };
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 use sc_observability_types::v2::{
-    MetricRecord as V2MetricRecord, ProjectionError, SpanSignal as V2SpanSignal,
+    LogProjector, MetricProjector, MetricRecord as V2MetricRecord, ProjectionError,
+    ProjectionRegistration, SpanProjector, SpanSignal as V2SpanSignal,
 };
 use sc_observability_types::{
-    LogEvent, LogProjector, MetricProjector, MetricRecord, Observable, Observation,
-    ObservationFilter, ProjectionRegistration, SpanProjector, SpanSignal,
+    LogEvent, MetricRecord, Observable, Observation, ObservationFilter, SpanSignal,
 };
 
 /// Carries one validated 2.0 metric into the OTLP implementation layer.
@@ -61,11 +60,19 @@ where
     R: TelemetryEmit,
 {
     telemetry: Arc<R>,
-    log_projector: Option<Arc<dyn LogProjector<T>>>,
-    span_projector: Option<Arc<dyn SpanProjector<T>>>,
-    metric_projector: Option<Arc<dyn MetricProjector<T>>>,
+    log_projector: Option<Arc<dyn TypedLogProjector<T>>>,
+    span_projector: Option<Arc<dyn TypedSpanProjector<T>>>,
+    metric_projector: Option<Arc<dyn TypedMetricProjector<T>>>,
     filter: Option<Arc<dyn ObservationFilter<T>>>,
 }
+
+/// Telemetry-forwarding projectors and the filter taken from a [`ProjectorSet`].
+pub(crate) type AttachedParts<T, R> = (
+    Option<Arc<AttachedLogProjector<T, R>>>,
+    Option<Arc<AttachedSpanProjector<T, R>>>,
+    Option<Arc<AttachedMetricProjector<T, R>>>,
+    Option<Arc<dyn ObservationFilter<T>>>,
+);
 
 impl<T, R> ProjectorSet<T, R>
 where
@@ -84,19 +91,22 @@ where
     }
 
     /// Attaches a log projector whose output is also forwarded into telemetry.
-    pub(crate) fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
+    pub(crate) fn with_log_projector(mut self, projector: Arc<dyn TypedLogProjector<T>>) -> Self {
         self.log_projector = Some(projector);
         self
     }
 
     /// Attaches a span projector whose output is also forwarded into telemetry.
-    pub(crate) fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
+    pub(crate) fn with_span_projector(mut self, projector: Arc<dyn TypedSpanProjector<T>>) -> Self {
         self.span_projector = Some(projector);
         self
     }
 
     /// Attaches a metric projector whose output is also forwarded into telemetry.
-    pub(crate) fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
+    pub(crate) fn with_metric_projector(
+        mut self,
+        projector: Arc<dyn TypedMetricProjector<T>>,
+    ) -> Self {
         self.metric_projector = Some(projector);
         self
     }
@@ -107,39 +117,87 @@ where
         self
     }
 
-    /// Converts the wrapped helper into ordinary sc-observe projection registration.
+    /// Wraps each projector so its output is also forwarded into telemetry.
+    pub(crate) fn into_attached(self) -> AttachedParts<T, R> {
+        let log = self.log_projector.map(|inner| {
+            Arc::new(AttachedLogProjector {
+                telemetry: Arc::clone(&self.telemetry),
+                inner,
+            })
+        });
+        let span = self.span_projector.map(|inner| {
+            Arc::new(AttachedSpanProjector {
+                telemetry: Arc::clone(&self.telemetry),
+                inner,
+            })
+        });
+        let metric = self.metric_projector.map(|inner| {
+            Arc::new(AttachedMetricProjector {
+                telemetry: Arc::clone(&self.telemetry),
+                inner,
+            })
+        });
+        (log, span, metric, self.filter)
+    }
+
+    /// Converts the wrapped helper into canonical sc-observe projection registration.
     pub(crate) fn into_registration(self) -> ProjectionRegistration<T> {
+        let (log, span, metric, filter) = self.into_attached();
         let mut registration = ProjectionRegistration::new();
-
-        if let Some(inner) = self.log_projector {
-            registration = registration.with_log_projector(Arc::new(AttachedLogProjector {
-                telemetry: self.telemetry.clone(),
-                inner: typed_log_projector(inner),
-            })
-                as Arc<dyn LogProjector<T>>);
+        if let Some(projector) = log {
+            registration = registration.with_log_projector(projector);
         }
-
-        if let Some(inner) = self.span_projector {
-            registration = registration.with_span_projector(Arc::new(AttachedSpanProjector {
-                telemetry: self.telemetry.clone(),
-                inner: typed_span_projector(inner),
-            })
-                as Arc<dyn SpanProjector<T>>);
+        if let Some(projector) = span {
+            registration = registration.with_span_projector(projector);
         }
-
-        if let Some(inner) = self.metric_projector {
-            registration = registration.with_metric_projector(Arc::new(AttachedMetricProjector {
-                telemetry: self.telemetry,
-                inner: typed_metric_projector(inner),
-            })
-                as Arc<dyn MetricProjector<T>>);
+        if let Some(projector) = metric {
+            registration = registration.with_metric_projector(projector);
         }
-
-        if let Some(filter) = self.filter {
+        if let Some(filter) = filter {
             registration = registration.with_filter(filter);
         }
-
         registration
+    }
+}
+
+// Canonical projectors enter the shared typed storage by moving their context.
+
+struct CanonicalLogProjector<T: Observable>(Arc<dyn LogProjector<T>>);
+
+impl<T: Observable> TypedLogProjector<T> for CanonicalLogProjector<T> {
+    fn project_logs(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<LogEvent>, ProjectionFailure> {
+        self.0
+            .project_logs(observation)
+            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
+    }
+}
+
+struct CanonicalSpanProjector<T: Observable>(Arc<dyn SpanProjector<T>>);
+
+impl<T: Observable> TypedSpanProjector<T> for CanonicalSpanProjector<T> {
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionFailure> {
+        self.0
+            .project_spans(observation)
+            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
+    }
+}
+
+struct CanonicalMetricProjector<T: Observable>(Arc<dyn MetricProjector<T>>);
+
+impl<T: Observable> TypedMetricProjector<T> for CanonicalMetricProjector<T> {
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
+        self.0
+            .project_metrics(observation)
+            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
     }
 }
 
@@ -192,19 +250,25 @@ macro_rules! projector_facade {
 
             /// Attaches a log projector whose output is also forwarded into telemetry.
             pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
-                self.inner = self.inner.with_log_projector(projector);
+                self.inner = self
+                    .inner
+                    .with_log_projector(Arc::new(CanonicalLogProjector(projector)));
                 self
             }
 
             /// Attaches a span projector whose output is also forwarded into telemetry.
             pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
-                self.inner = self.inner.with_span_projector(projector);
+                self.inner = self
+                    .inner
+                    .with_span_projector(Arc::new(CanonicalSpanProjector(projector)));
                 self
             }
 
             /// Attaches a metric projector whose output is also forwarded into telemetry.
             pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
-                self.inner = self.inner.with_metric_projector(projector);
+                self.inner = self
+                    .inner
+                    .with_metric_projector(Arc::new(CanonicalMetricProjector(projector)));
                 self
             }
 
@@ -229,7 +293,7 @@ projector_facade!(
     "Attach log, span, and metric projectors and an optional filter, then call `into_registration` to register them with the observation routing layer. Projected outputs are also forwarded to the supplied v2 telemetry runtime."
 );
 
-struct AttachedLogProjector<T, R>
+pub(crate) struct AttachedLogProjector<T, R>
 where
     T: Observable,
     R: TelemetryEmit,
@@ -271,7 +335,7 @@ where
     }
 }
 
-struct AttachedSpanProjector<T, R>
+pub(crate) struct AttachedSpanProjector<T, R>
 where
     T: Observable,
     R: TelemetryEmit,
@@ -316,7 +380,7 @@ where
     }
 }
 
-struct AttachedMetricProjector<T, R>
+pub(crate) struct AttachedMetricProjector<T, R>
 where
     T: Observable,
     R: TelemetryEmit,

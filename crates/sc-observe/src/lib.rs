@@ -34,15 +34,20 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use sc_observability::v2::Logger;
-use sc_observability::{LoggerConfig, RetainedLogPolicy, Running, Stopped};
+use sc_observability::{
+    LogError, Logger as ReleasedLogger, LoggerConfig, RetainedLogPolicy, Running, Stopped,
+};
+use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::v2::{
     EventError, FlushError as CanonicalFlushError, InitError as CanonicalInitError,
+    ProjectionRegistration as CanonicalProjectionRegistration,
     ShutdownError as CanonicalShutdownError, SubscriberError,
+    SubscriberRegistration as CanonicalSubscriberRegistration,
 };
 use sc_observability_types::{
-    DiagnosticSummary, EnvPrefix, ErrorContext, ObservabilityHealthProvider, Observable,
-    Observation, ProjectionRegistration, Remediation, ServiceName, SubscriberRegistration,
-    TelemetryHealthState, ToolName,
+    DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, ObservabilityHealthProvider,
+    Observable, Observation, ProjectionRegistration, Remediation, ServiceName,
+    SubscriberRegistration, TelemetryHealthState, ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -57,9 +62,9 @@ pub mod v2 {
     use std::ops::{Deref, DerefMut};
     use std::path::PathBuf;
 
+    use sc_observability_types::v2::{ProjectionRegistration, SubscriberRegistration};
     use sc_observability_types::{
-        ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, ServiceName,
-        SubscriberRegistration, ToolName,
+        ObservabilityHealthProvider, Observable, Observation, ServiceName, ToolName,
     };
 
     #[doc(inline)]
@@ -169,7 +174,7 @@ pub mod v2 {
         where
             T: Observable,
         {
-            Self(self.0.register_subscriber(registration))
+            Self(self.0.register_canonical_subscriber(registration))
         }
 
         /// Registers one typed observation projection set on the shared builder.
@@ -177,7 +182,7 @@ pub mod v2 {
         where
             T: Observable,
         {
-            Self(self.0.register_projection(registration))
+            Self(self.0.register_canonical_projection(registration))
         }
 
         /// Finalizes the shared builder with canonical initialization errors.
@@ -328,7 +333,7 @@ struct ErasedProjectionRegistration {
 }
 
 enum LoggerHandle {
-    Running(Logger<Running>),
+    Running(RunningLogger),
     ShuttingDown,
     Stopped(Logger<Stopped>),
 }
@@ -336,7 +341,88 @@ enum LoggerHandle {
 type SubscriberDispatchFn =
     dyn Fn(&dyn Any) -> Result<DispatchMatch, SubscriberError> + Send + Sync + 'static;
 type ProjectionDispatchFn =
-    dyn Fn(&dyn Any, &Logger<Running>) -> ProjectionDispatchResult + Send + Sync + 'static;
+    dyn Fn(&dyn Any, &RunningLogger) -> ProjectionDispatchResult + Send + Sync + 'static;
+
+/// Admission strictness pinned when a runtime is constructed.
+///
+/// The v2 facade builds `Canonical`; the released root facade builds
+/// `Released`. No public selector or bypass exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeAdmission {
+    Canonical,
+    Released,
+}
+
+/// Running logger pinned to the admission mode of the facade that built it.
+enum RunningLogger {
+    Canonical(Logger<Running>),
+    Released(ReleasedLogger<Running>),
+}
+
+/// Flush failure carrying the native error shape of the owning facade.
+enum RunningFlushError {
+    Canonical(CanonicalFlushError),
+    Released(FlushFailure),
+}
+
+impl RunningFlushError {
+    fn summary(&self) -> DiagnosticSummary {
+        match self {
+            Self::Canonical(error) => DiagnosticSummary::from(error.diagnostic()),
+            Self::Released(failure) => DiagnosticSummary::from(failure.diagnostic()),
+        }
+    }
+
+    pub(crate) fn into_canonical(self) -> CanonicalFlushError {
+        match self {
+            Self::Canonical(error) => error,
+            Self::Released(failure) => CanonicalFlushError::Drain {
+                context: failure.into_context(),
+            },
+        }
+    }
+
+    pub(crate) fn into_released(self) -> FlushFailure {
+        match self {
+            Self::Canonical(error) => FlushFailure::from(error),
+            Self::Released(failure) => failure,
+        }
+    }
+}
+
+impl RunningLogger {
+    fn log(&self, event: sc_observability_types::LogEvent) -> Result<(), DiagnosticSummary> {
+        match self {
+            Self::Canonical(logger) => logger
+                .log(event)
+                .map_err(|error| canonical_log_error_summary(&error)),
+            Self::Released(logger) => logger
+                .log_typed(event)
+                .map_err(|failure| released_log_error_summary(&LogError::from(failure))),
+        }
+    }
+
+    fn flush(&self) -> Result<(), RunningFlushError> {
+        match self {
+            Self::Canonical(logger) => logger.flush().map_err(RunningFlushError::Canonical),
+            Self::Released(logger) => logger.flush_typed().map_err(RunningFlushError::Released),
+        }
+    }
+
+    fn health(&self) -> sc_observability_types::LoggingHealthReport {
+        match self {
+            Self::Canonical(logger) => logger.health(),
+            Self::Released(logger) => logger.health(),
+        }
+    }
+
+    fn shutdown(self) -> Logger<Stopped> {
+        match self {
+            Self::Canonical(logger) => logger.shutdown(),
+            Self::Released(logger) => Logger::from(logger.shutdown()),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DispatchMatch {
@@ -351,14 +437,32 @@ struct ProjectionDispatchResult {
     last_error: Option<DiagnosticSummary>,
 }
 
-fn log_error_summary(error: &EventError) -> DiagnosticSummary {
+fn canonical_log_error_summary(error: &EventError) -> DiagnosticSummary {
     DiagnosticSummary::from(error.diagnostic())
+}
+
+#[allow(
+    deprecated,
+    reason = "released admission reports the retained 1.x LogError summary shape"
+)]
+fn released_log_error_summary(error: &LogError) -> DiagnosticSummary {
+    match error {
+        LogError::InvalidEvent(error) => DiagnosticSummary::from(error.diagnostic()),
+        LogError::WriterDegraded(error) | LogError::ShutdownTimedOut(error) => {
+            DiagnosticSummary::from(error.diagnostic())
+        }
+    }
 }
 
 impl Observability {
     /// Builds a runtime using the documented default logger integration.
     pub(crate) fn new_v2(config: ObservabilityConfig) -> Result<Self, CanonicalInitError> {
         Self::builder(config).build_v2()
+    }
+
+    /// Builds a runtime pinned to the released root admission mode.
+    pub(crate) fn new_released(config: ObservabilityConfig) -> Result<Self, CanonicalInitError> {
+        Self::builder(config).build_released()
     }
 
     /// Starts a construction-time builder for subscribers and projections.
@@ -466,6 +570,12 @@ impl Observability {
 
     /// Flushes the attached logger. Routing itself does not keep an async queue in v1.
     pub(crate) fn flush_v2(&self) -> Result<(), CanonicalFlushError> {
+        self.flush_running()
+            .map_err(RunningFlushError::into_canonical)
+    }
+
+    /// Flushes the attached logger, keeping the owning facade's error shape.
+    fn flush_running(&self) -> Result<(), RunningFlushError> {
         let mut logger = self.logger.lock().expect("observability logger poisoned");
         while matches!(&*logger, LoggerHandle::ShuttingDown) {
             #[cfg(test)]
@@ -624,7 +734,18 @@ impl ObservabilityBuilder {
     ///
     /// Panics if internal type-erased routing calls this registration with the
     /// wrong observation payload type.
-    pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self
+    pub fn register_subscriber<T>(self, registration: SubscriberRegistration<T>) -> Self
+    where
+        T: Observable,
+    {
+        self.register_canonical_subscriber(registration.into())
+    }
+
+    /// Registers one canonical typed observation subscriber at construction time.
+    fn register_canonical_subscriber<T>(
+        mut self,
+        registration: CanonicalSubscriberRegistration<T>,
+    ) -> Self
     where
         T: Observable,
     {
@@ -656,7 +777,18 @@ impl ObservabilityBuilder {
     ///
     /// Panics if internal type-erased routing calls this registration with the
     /// wrong observation payload type.
-    pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self
+    pub fn register_projection<T>(self, registration: ProjectionRegistration<T>) -> Self
+    where
+        T: Observable,
+    {
+        self.register_canonical_projection(registration.into())
+    }
+
+    /// Registers one canonical typed observation projection set at construction time.
+    fn register_canonical_projection<T>(
+        mut self,
+        registration: CanonicalProjectionRegistration<T>,
+    ) -> Self
     where
         T: Observable,
     {
@@ -687,12 +819,12 @@ impl ObservabilityBuilder {
                         Ok(events) => {
                             result.matched = true;
                             for event in events {
-                                if let Err(err) = logger.log(event) {
-                                    record_failure(log_error_summary(&err));
+                                if let Err(summary) = logger.log(event) {
+                                    record_failure(summary);
                                 }
                             }
                             if let Err(err) = logger.flush() {
-                                record_failure(DiagnosticSummary::from(err.diagnostic()));
+                                record_failure(err.summary());
                             }
                         }
                         Err(err) => record_failure(DiagnosticSummary::from(err.diagnostic())),
@@ -721,6 +853,15 @@ impl ObservabilityBuilder {
 
     /// Finalizes registration and constructs the routing runtime.
     pub(crate) fn build_v2(self) -> Result<Observability, CanonicalInitError> {
+        self.build_with(RuntimeAdmission::Canonical)
+    }
+
+    /// Finalizes registration for the released root facade.
+    pub(crate) fn build_released(self) -> Result<Observability, CanonicalInitError> {
+        self.build_with(RuntimeAdmission::Released)
+    }
+
+    fn build_with(self, mode: RuntimeAdmission) -> Result<Observability, CanonicalInitError> {
         if self.subscribers.is_empty() && self.projections.is_empty() {
             return Err(CanonicalInitError::Configuration {
                 context: Box::new(ErrorContext::new(
@@ -734,6 +875,10 @@ impl ObservabilityBuilder {
             });
         }
         let logger = Logger::new(self.config.logger_config()?)?;
+        let logger = match mode {
+            RuntimeAdmission::Canonical => RunningLogger::Canonical(logger),
+            RuntimeAdmission::Released => RunningLogger::Released(ReleasedLogger::from(logger)),
+        };
         Ok(Observability {
             logger: Mutex::new(LoggerHandle::Running(logger)),
             logger_changed: Condvar::new(),
@@ -788,12 +933,12 @@ mod tests {
     use sc_observability_types::typed::{
         SubscriberFailure, TypedObservationSubscriber, legacy_subscriber,
     };
-    use sc_observability_types::v2::{ProjectionError, SubscriberError};
     use sc_observability_types::{
         ActionName, Diagnostic, DiagnosticInfo, ErrorCode, Level, LogEvent, MetricKind, MetricName,
         MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity,
-        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, TargetCategory,
-        TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+        ProjectionError, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
+        SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
+        TraceContext, TraceId,
     };
     use serde_json::Map;
     use std::sync::mpsc;
@@ -829,13 +974,11 @@ mod tests {
 
     impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
         fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
-            Err(SubscriberError::Subscriber {
-                context: Box::new(ErrorContext::new(
-                    error_codes::OBSERVATION_ROUTING_FAILURE,
-                    "subscriber failed",
-                    Remediation::not_recoverable("test subscriber intentionally fails"),
-                )),
-            })
+            Err(SubscriberError(Box::new(ErrorContext::new(
+                error_codes::OBSERVATION_ROUTING_FAILURE,
+                "subscriber failed",
+                Remediation::not_recoverable("test subscriber intentionally fails"),
+            ))))
         }
     }
 
@@ -917,13 +1060,11 @@ mod tests {
             &self,
             _observation: &Observation<AgentEvent>,
         ) -> Result<Vec<LogEvent>, ProjectionError> {
-            Err(ProjectionError::Projection {
-                context: Box::new(ErrorContext::new(
-                    error_codes::OBSERVATION_ROUTING_FAILURE,
-                    "projector failed",
-                    Remediation::not_recoverable("test projector intentionally fails"),
-                )),
-            })
+            Err(ProjectionError(Box::new(ErrorContext::new(
+                error_codes::OBSERVATION_ROUTING_FAILURE,
+                "projector failed",
+                Remediation::not_recoverable("test projector intentionally fails"),
+            ))))
         }
     }
 
@@ -1483,7 +1624,7 @@ mod tests {
         assert!(before.last_error.is_some());
         let (waiting_tx, waiting_rx) = mpsc::channel();
         let runtime = Arc::new(Observability {
-            logger: Mutex::new(LoggerHandle::Running(logger)),
+            logger: Mutex::new(LoggerHandle::Running(RunningLogger::Canonical(logger))),
             logger_changed: Condvar::new(),
             #[cfg(test)]
             logger_waiting: Some(waiting_tx),
@@ -1789,7 +1930,7 @@ mod tests {
             let logger = builder.build().expect("built logger");
 
             let runtime = Observability {
-                logger: Mutex::new(LoggerHandle::Running(logger)),
+                logger: Mutex::new(LoggerHandle::Running(RunningLogger::Canonical(logger))),
                 logger_changed: Condvar::new(),
                 #[cfg(test)]
                 logger_waiting: None,
@@ -1830,5 +1971,151 @@ mod tests {
             assert_eq!(logging.flush_errors_total, 1);
             assert!(logging.last_error.is_some());
         }
+    }
+    #[test]
+    #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
+    fn flush_failure_reports_the_same_diagnostic_per_facade() {
+        use sc_observability_types::LogSinkError;
+
+        struct SourceFailSink;
+
+        impl LogSink for SourceFailSink {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+                Ok(())
+            }
+
+            fn flush(&self) -> Result<(), LogSinkError> {
+                Err(LogSinkError(Box::new(
+                    ErrorContext::new(
+                        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                        "flush failed",
+                        Remediation::not_recoverable("test sink intentionally fails flush"),
+                    )
+                    .source(Box::new(std::io::Error::other("native flush sink source"))),
+                )))
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: sink_name("source-fail"),
+                    state: SinkHealthState::DegradedDropping,
+                    last_error: None,
+                }
+            }
+        }
+
+        fn failing_runtime(name: &str, mode: RuntimeAdmission) -> Observability {
+            let mut logger_config = LoggerConfig::default_for(
+                ServiceName::new("obs-app").expect("service"),
+                temp_path(name),
+            );
+            logger_config.enable_file_sink = false;
+            logger_config.enable_console_sink = false;
+            let mut builder =
+                sc_observability::v2::Logger::builder(logger_config).expect("logger builder");
+            builder.register_sink(SinkRegistration::new(Arc::new(SourceFailSink)));
+            let logger = builder.build().expect("built logger");
+            let logger = match mode {
+                RuntimeAdmission::Canonical => RunningLogger::Canonical(logger),
+                RuntimeAdmission::Released => RunningLogger::Released(ReleasedLogger::from(logger)),
+            };
+            Observability {
+                logger: Mutex::new(LoggerHandle::Running(logger)),
+                logger_changed: Condvar::new(),
+                #[cfg(test)]
+                logger_waiting: None,
+                shutdown: AtomicBool::new(false),
+                subscriber_registrations: Vec::new(),
+                projection_registrations: Vec::new(),
+                observability_health_provider: None,
+                runtime: RuntimeState::default(),
+            }
+        }
+
+        // Canonical (v2) facade: the canonical arm keeps the original context.
+        let canonical = failing_runtime("flush-source-canonical", RuntimeAdmission::Canonical);
+        let Err(error) = canonical.flush_v2() else {
+            panic!("canonical flush must report the sink failure");
+        };
+        assert!(matches!(error, CanonicalFlushError::Drain { .. }));
+        let canonical_code = error.diagnostic().code.clone();
+        assert_eq!(error.diagnostic().message, "writer flush failed");
+
+        // Released (root) facade: the released arm keeps the FlushFailure context.
+        let released = failing_runtime("flush-source-released", RuntimeAdmission::Released);
+        let Err(typed) = released.flush_typed() else {
+            panic!("released typed flush must report the sink failure");
+        };
+        assert_eq!(typed.diagnostic().code, canonical_code);
+        assert_eq!(typed.diagnostic().message, "writer flush failed");
+
+        let released = failing_runtime("flush-source-released-legacy", RuntimeAdmission::Released);
+        let Err(legacy) = released.flush() else {
+            panic!("released legacy flush must report the sink failure");
+        };
+        assert_eq!(legacy.diagnostic().code, canonical_code);
+        assert_eq!(legacy.diagnostic().message, "writer flush failed");
+
+        // A v2 flush over a released-pinned runtime still maps its own arm.
+        let released = failing_runtime("flush-source-released-v2", RuntimeAdmission::Released);
+        let Err(mapped) = released.flush_v2() else {
+            panic!("v2 flush must report the sink failure");
+        };
+        assert_eq!(mapped.diagnostic().message, "writer flush failed");
+    }
+
+    #[test]
+    fn running_flush_error_arms_preserve_context_and_source_identity() {
+        fn context() -> Box<ErrorContext> {
+            Box::new(
+                ErrorContext::new(
+                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                    "arm fixture",
+                    Remediation::not_recoverable("inspect the arm fixture"),
+                )
+                .source(Box::new(std::io::Error::other("native flush arm source"))),
+            )
+        }
+
+        // The identity proof begins at the facade input (the flush error handed to
+        // the facade conversion); it does not claim end-to-end sink-source identity.
+        // Heap addresses of the boxed context and of its boxed source.
+        fn identity(context: &ErrorContext) -> (*const (), *const ()) {
+            let source = std::error::Error::source(context).expect("context keeps its source");
+            (
+                std::ptr::from_ref(context).cast::<()>(),
+                std::ptr::from_ref(source).cast::<()>(),
+            )
+        }
+
+        let canonical_error = || {
+            let context = context();
+            let before = identity(&context);
+            (
+                RunningFlushError::Canonical(CanonicalFlushError::Drain { context }),
+                before,
+            )
+        };
+        let released_error = || {
+            let context = context();
+            let before = identity(&context);
+            (
+                RunningFlushError::Released(FlushFailure::from_context(context)),
+                before,
+            )
+        };
+
+        let (error, before) = canonical_error();
+        assert_eq!(error.summary().message, "arm fixture");
+        assert_eq!(identity(&error.into_released().into_context()), before);
+
+        let (error, before) = canonical_error();
+        assert_eq!(identity(&error.into_canonical().into_context()), before);
+
+        let (error, before) = released_error();
+        assert_eq!(identity(&error.into_canonical().into_context()), before);
+
+        let (error, before) = released_error();
+        assert_eq!(identity(&error.into_released().into_context()), before);
     }
 }

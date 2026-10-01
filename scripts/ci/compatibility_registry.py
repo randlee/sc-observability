@@ -54,6 +54,17 @@ def validate_contract_signatures(rows: Iterable[dict]) -> None:
             raise ValueError(f"unchanged_alias baseline and canonical signatures differ: {symbol}")
 
 
+def validate_trait_slot_contracts(rows: Iterable[dict]) -> None:
+    """Reject trait-slot adapters without a signature change or with a removable canonical path."""
+    for row in rows:
+        symbol = row.get("symbol")
+        if row["treatment"] == "new_adapter" and row["baseline_signature"] == row["canonical_signature"]:
+            raise ValueError(f"trait-slot new_adapter baseline and canonical signatures are equal: {symbol}")
+        canonical_path = (row.get("canonical_source") or {}).get("path")
+        if canonical_path is not None and canonical_path in row["removable_paths"]:
+            raise ValueError(f"trait-slot removable_paths contains its canonical source: {symbol}")
+
+
 def is_compat_source_path(relative_path: str) -> bool:
     """Return whether a repository-relative path is a compatibility source file."""
     normalized = relative_path.lstrip("/")
@@ -80,28 +91,53 @@ def is_allowed_compat_reference_source(
     )
 
 
+def _attribute_end(text: str, start: int) -> int:
+    """Return the offset just past the attribute opened by `#[` at `start`."""
+    depth = 0
+    for offset in range(start, len(text)):
+        if text[offset] == "[":
+            depth += 1
+        elif text[offset] == "]":
+            depth -= 1
+            if depth == 0:
+                return offset + 1
+    return len(text)
+
+
+def _owner_start(text: str, offset: int) -> int:
+    """Skip whitespace, line comments and further attributes before an owner."""
+    while offset < len(text):
+        if text[offset].isspace():
+            offset += 1
+        elif text.startswith("//", offset):
+            end = text.find("\n", offset)
+            offset = len(text) if end < 0 else end
+        elif text.startswith("#[", offset):
+            offset = _attribute_end(text, offset)
+        else:
+            break
+    return offset
+
+
 def deprecated_owner_names(text: str) -> list[str]:
-    """Return the name of each item, field or variant carrying `#[deprecated]`."""
-    lines = text.splitlines()
+    """Return the name of each item, field or variant carrying `#[deprecated]`.
+
+    The owner is the first code after the attribute block, on the attribute's
+    own line when item text follows the closing bracket.
+    """
     names = []
-    index = 0
-    while index < len(lines):
-        if not lines[index].lstrip().startswith("#[deprecated"):
-            index += 1
+    consumed = 0
+    line_start = 0
+    for line in text.splitlines(keepends=True):
+        start = line_start + len(line) - len(line.lstrip())
+        line_start += len(line)
+        if start < consumed or not text.startswith("#[deprecated", start):
             continue
-        depth = 0
-        cursor = index
-        while cursor < len(lines):
-            stripped = lines[cursor].strip()
-            is_preamble = stripped.startswith(("#[", "//")) or not stripped
-            if depth == 0 and cursor != index and not is_preamble:
-                break
-            depth += stripped.count("[") - stripped.count("]")
-            cursor += 1
-        owner = lines[cursor].strip() if cursor < len(lines) else ""
+        consumed = _owner_start(text, _attribute_end(text, start))
+        end = text.find("\n", consumed)
+        owner = text[consumed : len(text) if end < 0 else end].strip()
         match = _ITEM_NAME.search(owner) or _FIELD_OR_VARIANT_NAME.match(owner)
         names.append(match.group(1) if match else owner)
-        index = cursor
     return names
 
 

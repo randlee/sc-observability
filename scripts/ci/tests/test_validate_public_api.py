@@ -125,6 +125,139 @@ class CompatiblePolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"unknown=\['sc-observability-unknown'\]"):
             validate_api_package_roster(policy_with_unknown, unknown_inventory, valid_artifacts)
 
+    def test_policy_crates_must_match_candidate_packages_independently(self):
+        cases = [
+            ('policy omits candidate',
+             ['sc-observability-log-macros', 'sc-observability'],
+             {'sc-observability-log-macros'}),
+            ('policy adds non-candidate',
+             ['sc-observability-log-macros'],
+             {'sc-observability-log-macros', 'sc-observability'}),
+        ]
+        for name, candidate_packages, policy_packages in cases:
+            inventory = {
+                'qualificationCandidate': {
+                    'packages': candidate_packages,
+                    'deferredStandalonePackages': [self.deferred_tauri.copy()],
+                },
+            }
+            artifacts = {'crates': [
+                {'package': 'sc-observability-log-macros'},
+                *([{'package': 'sc-observability'}]
+                  if 'sc-observability' in candidate_packages else []),
+                {'package': 'sc-observability-tauri'},
+            ]}
+            policy = {'crates': {package: {} for package in policy_packages}}
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    ValueError,
+                    'public API policy must name exactly the qualification candidate packages'):
+                validate_api_package_roster(policy, inventory, artifacts)
+
+    def test_candidate_and_exact_deferred_package_overlap_is_rejected(self):
+        inventory = {
+            'qualificationCandidate': {
+                'packages': ['sc-observability-log-macros', 'sc-observability-tauri'],
+                'deferredStandalonePackages': [self.deferred_tauri.copy()],
+            },
+        }
+        policy = {'crates': {
+            'sc-observability-log-macros': {},
+            'sc-observability-tauri': {},
+        }}
+        artifacts = {'crates': [
+            {'package': 'sc-observability-log-macros'},
+            {'package': 'sc-observability-tauri'},
+        ]}
+        with self.assertRaisesRegex(
+                ValueError, 'candidate and deferred API package sets overlap'):
+            validate_api_package_roster(policy, inventory, artifacts)
+
+    def test_package_roster_shape_guards_report_specific_value_errors(self):
+        valid_inventory = {
+            'qualificationCandidate': {
+                'packages': ['sc-observability-log-macros'],
+                'deferredStandalonePackages': [self.deferred_tauri.copy()],
+            },
+        }
+        valid_artifacts = {'crates': [
+            {'package': 'sc-observability-log-macros'},
+            {'package': 'sc-observability-tauri'},
+        ]}
+        cases = [
+            ('candidate is not an object',
+             {'qualificationCandidate': None}, valid_artifacts,
+             'release inventory must define qualificationCandidate'),
+            ('candidate packages is not a list',
+             {'qualificationCandidate': {
+                 'packages': None,
+                 'deferredStandalonePackages': [self.deferred_tauri.copy()],
+             }}, valid_artifacts,
+             'qualificationCandidate.packages must be a list of package names'),
+            ('candidate package is not a string',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros', None],
+                 'deferredStandalonePackages': [self.deferred_tauri.copy()],
+             }}, valid_artifacts,
+             'qualificationCandidate.packages must be a list of package names'),
+            ('candidate package is empty',
+             {'qualificationCandidate': {
+                 'packages': [''],
+                 'deferredStandalonePackages': [self.deferred_tauri.copy()],
+             }}, valid_artifacts,
+             'qualificationCandidate.packages must be a list of package names'),
+            ('deferred packages is not a list',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros'],
+                 'deferredStandalonePackages': None,
+             }}, valid_artifacts,
+             'qualificationCandidate.deferredStandalonePackages must be a list of package records'),
+            ('deferred record is not an object',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros'],
+                 'deferredStandalonePackages': [None],
+             }}, valid_artifacts,
+             'qualificationCandidate.deferredStandalonePackages must be a list of package records'),
+            ('deferred record package is missing',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros'],
+                 'deferredStandalonePackages': [{'reason': 'fixture'}],
+             }}, valid_artifacts,
+             'deferred standalone API package records must name a package'),
+            ('deferred record package is empty',
+             {'qualificationCandidate': {
+                 'packages': ['sc-observability-log-macros'],
+                 'deferredStandalonePackages': [{'package': ''}],
+             }}, valid_artifacts,
+             'deferred standalone API package records must name a package'),
+            ('artifact crates is not a list',
+             valid_inventory, {'crates': None},
+             'publish-artifacts manifest must define a crates list'),
+            ('artifact crate is not an object',
+             valid_inventory, {'crates': [None]},
+             'publish-artifacts manifest must define a crates list'),
+            ('artifact package is missing',
+             valid_inventory, {'crates': [{}]},
+             'every publish-artifacts crate must name a package'),
+            ('artifact package is empty',
+             valid_inventory, {'crates': [{'package': ''}]},
+             'every publish-artifacts crate must name a package'),
+        ]
+        for name, inventory, artifacts, error in cases:
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, error):
+                validate_api_package_roster(self.policy(), inventory, artifacts)
+
+        policy_shape_error = (
+            'public API policy must name exactly the qualification candidate packages'
+        )
+        for name, policy_names in (
+                ('policy crates is None', None),
+                ('policy crates is not an object', ['sc-observability-log-macros'])):
+            policy = self.policy()
+            policy['crates'] = policy_names
+            with self.subTest(name=name), self.assertRaises(ValueError) as raised:
+                validate_api_package_roster(policy, valid_inventory, valid_artifacts)
+            self.assertEqual(str(raised.exception), policy_shape_error)
+
     def diff(self, *, removal='', changed='', addition=''):
         return ('Removed items from the public API\n' + (removal or '(none)') + '\n'
                 'Changed items in the public API\n' + (changed or '(none)') + '\n'
@@ -153,13 +286,30 @@ class CompatiblePolicyTests(unittest.TestCase):
             manifest_path = root / 'release/public-api-major-breaks.toml'
             self.write_package_roster(root)
             cases = [
-                ('schema_version = 1\nbaseline_version = "1.4.1"\ncandidate_version = "1.5.0"\nbreaks = []\n', True),
-                ('schema_version = 1\nbaseline_version = "1.4.0"\ncandidate_version = "1.5.0"\nbreaks = []\n', False),
-                ('schema_version = 1\nbaseline_version = "1.4.1"\ncandidate_version = "2.0.0"\nbreaks = []\n', False),
-                ('schema_version = 1\nbaseline_version = "1.4.1"\ncandidate_version = "1.5.0"\nbreaks = [{ id = "waiver" }]\n', False),
+                ('explicit empty break list',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\nbreaks = []\n', True),
+                ('wrong baseline',
+                 'schema_version = 1\nbaseline_version = "1.4.0"\n'
+                 'candidate_version = "1.5.0"\nbreaks = []\n', False),
+                ('major candidate',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "2.0.0"\nbreaks = []\n', False),
+                ('nonempty break list',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\nbreaks = [{ id = "waiver" }]\n', False),
+                ('non-list breaks',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\nbreaks = "none"\n', False),
+                ('missing breaks key',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\n', False),
+                ('misspelled breaks key',
+                 'schema_version = 1\nbaseline_version = "1.4.1"\n'
+                 'candidate_version = "1.5.0"\nbreak = [{ id = "waiver" }]\n', False),
             ]
-            for contents, accepted in cases:
-                with self.subTest(contents=contents):
+            for name, contents, accepted in cases:
+                with self.subTest(name=name):
                     manifest_path.write_text(contents)
                     with patch('validate_public_api.ROOT', root):
                         if accepted:
@@ -167,6 +317,42 @@ class CompatiblePolicyTests(unittest.TestCase):
                         else:
                             with self.assertRaises(ValueError):
                                 validate_compatible_policy(self.policy())
+
+    def test_cli_rejects_missing_or_misspelled_break_key_before_api_tools(self):
+        crate = 'sc-observability-log-macros'
+        package = {'name': crate, 'version': '1.5.0', 'manifest_path': 'macros/Cargo.toml',
+                   'targets': [{'kind': ['proc-macro']}]}
+        policy = {'schema_version': 1, 'candidate_version': '1.5.0', 'crates': {
+            crate: {'baseline_version': '1.4.1', 'kind': 'proc-macro'}}}
+        invalid_manifests = {
+            'missing': ('schema_version = 1\nbaseline_version = "1.4.1"\n'
+                        'candidate_version = "1.5.0"\n'),
+            'misspelled': ('schema_version = 1\nbaseline_version = "1.4.1"\n'
+                           'candidate_version = "1.5.0"\n'
+                           'break = [{ id = "waiver" }]\n'),
+        }
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'release').mkdir()
+            (root / 'release/public-api-policy.json').write_text(json.dumps(policy))
+            self.write_package_roster(root, candidate_packages=[crate])
+            for name, manifest in invalid_manifests.items():
+                with self.subTest(name=name):
+                    (root / 'release/public-api-major-breaks.toml').write_text(manifest)
+                    stderr = io.StringIO()
+                    with patch('validate_public_api.ROOT', root), \
+                            patch('validate_public_api.CACHE', root / 'cache'), \
+                            patch('validate_public_api.run', return_value=CompletedProcess(
+                                ['cargo', 'metadata'], 0,
+                                json.dumps({'packages': [package]}), '')) as mocked_run, \
+                            patch('sys.argv', ['validate_public_api.py', 'semver']), \
+                            contextlib.redirect_stdout(io.StringIO()), \
+                            contextlib.redirect_stderr(stderr):
+                        self.assertEqual(cli(), 3)
+                    self.assertEqual(mocked_run.call_count, 1)
+                    self.assertIn('compatible 1.x release cannot accept enumerated breaking API exceptions',
+                                  stderr.getvalue())
 
     def test_missing_or_wrong_package_baseline_fails(self):
         with tempfile.TemporaryDirectory() as temporary:

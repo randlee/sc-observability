@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import tarfile
+import tomllib
 import unittest
 import shutil
 from pathlib import Path
@@ -30,11 +31,11 @@ class SourceBoundaryTests(unittest.TestCase):
                 if key in package:lines.append(f'{key} = {json.dumps(package[key])}')
         path.write_text('\n'.join(lines)+'\n',encoding='utf-8')
 
-    def verify_registry_selection(self, source, staged, roots):
+    def verify_registry_selection(self, source, staged, roots, required_dependencies=None):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary);source_lock=directory/'reviewed-source.lock';staged_lock=directory/'Cargo.lock'
             self.write_lock(source_lock,source['package']);self.write_lock(staged_lock,staged['package'])
-            return BUNDLE.verify_registry_selection(source_lock,staged_lock,roots)
+            return BUNDLE.verify_registry_selection(source_lock,staged_lock,roots,required_dependencies)
 
     def package(self, name, version, *, source=None, checksum=None, dependencies=None):
         package={'name':name,'version':version}
@@ -87,6 +88,16 @@ class SourceBoundaryTests(unittest.TestCase):
                 ])
                 with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
                     self.verify_registry_selection(source,staged,[('binding','1.0.0')])
+
+    def test_verify_registry_selection_rejects_missing_required_manifest_edge(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['log 0.4.34 (registry+https://example.invalid/index)']),
+            self.package('log','0.4.34',source=registry,checksum='reviewed'),
+        ])
+        staged=self.registry_lock([self.package('binding','1.0.0')])
+        with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+            self.verify_registry_selection(source,staged,[('binding','1.0.0')],{('binding','1.0.0'):{'log'}})
 
     def test_read_stage_manifest_decodes_utf8_explicitly(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -290,4 +301,30 @@ class SourceBoundaryTests(unittest.TestCase):
             self.assertNotIn('name = "mio"',staged_lock)
             record=json.loads((adapter/'bundle/manifest.json').read_text(encoding='utf-8'))
             self.assertNotIn('mio',{package['name'] for package in record['registry_selection']})
+
+    def test_bundle_rejects_staged_lock_that_drops_nonoptional_root_edge(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);self.project(root,'[dependencies]\nlog="=0.4.34"\nserde_json="=1.0.149"\n')
+            (root/'.gitignore').write_text('bundle/\n')
+            self.command(root,'cargo','generate-lockfile')
+            self.command(root,'cargo','fetch','--locked')
+            self.command(root,'git','init','-q');self.command(root,'git','add','.')
+            self.command(root,'git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','required-edge fixture')
+            result=self.invoke(root);self.assertEqual(result.returncode,0,result.stderr)
+            bundle=root/'bundle';BUNDLE.verify_bundle(bundle)
+
+            staged=tomllib.loads((bundle/'Cargo.lock').read_text(encoding='utf-8'))['package']
+            root_package=next(package for package in staged if package['name']=='bundle-boundary-fixture')
+            root_package['dependencies']=[dependency for dependency in root_package['dependencies'] if dependency.split(' ',1)[0]!='log']
+            staged=[package for package in staged if package['name']!='log']
+            self.assertNotIn('log',{package['name'] for package in staged})
+            SourceBoundaryTests().write_lock(bundle/'Cargo.lock',staged)
+
+            evidence=json.loads((bundle/'manifest.json').read_text(encoding='utf-8'))
+            evidence['registry_selection']=[package for package in evidence['registry_selection'] if package['name']!='log']
+            evidence['lock_sha256']=BUNDLE.digest(bundle/'Cargo.lock')
+            evidence['files']['Cargo.lock']=BUNDLE.digest(bundle/'Cargo.lock')
+            (bundle/'manifest.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
+            with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+                BUNDLE.verify_bundle(bundle)
 if __name__=='__main__':unittest.main()

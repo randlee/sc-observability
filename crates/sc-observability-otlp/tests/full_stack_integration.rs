@@ -13,14 +13,14 @@ use sc_observability_otlp::{
     LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TelemetryProjectors,
     TracesConfig,
 };
+use sc_observability_types::ProjectionError;
 use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
     legacy_log_projector, legacy_metric_projector, legacy_span_projector,
 };
-use sc_observability_types::v2::ProjectionError;
 use sc_observability_types::{
-    ActionName, Diagnostic, DiagnosticInfo, DurationMs, EntityId, ErrorCode, Level, LogEvent,
-    LogProjector, MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
+    ActionName, Diagnostic, DiagnosticInfo, DurationMs, ErrorCode, Level, LogEvent, LogProjector,
+    MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
     ObservationFilter, OutcomeLabel, ProcessIdentity, Remediation, SchemaVersion, ServiceName,
     SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, StateTransition,
     TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext, TraceId,
@@ -115,7 +115,7 @@ impl TypedLogProjector<AgentPayload> for TypedStaticLogProjector {
     ) -> Result<Vec<LogEvent>, sc_observability_types::typed::ProjectionFailure> {
         StaticLogProjector
             .project_logs(observation)
-            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
+            .map_err(|error| ProjectionFailure::from_context(error.0))
     }
 }
 
@@ -126,7 +126,7 @@ impl TypedSpanProjector<AgentPayload> for TypedStaticSpanProjector {
     ) -> Result<Vec<SpanSignal>, sc_observability_types::typed::ProjectionFailure> {
         StaticSpanProjector
             .project_spans(observation)
-            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
+            .map_err(|error| ProjectionFailure::from_context(error.0))
     }
 }
 
@@ -137,7 +137,7 @@ impl TypedMetricProjector<AgentPayload> for TypedStaticMetricProjector {
     ) -> Result<Vec<MetricRecord>, sc_observability_types::typed::ProjectionFailure> {
         StaticMetricProjector
             .project_metrics(observation)
-            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
+            .map_err(|error| ProjectionFailure::from_context(error.0))
     }
 }
 
@@ -211,7 +211,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
         }),
         state_transition: Some(StateTransition {
             entity_kind: TargetCategory::new("agent").expect("valid target"),
-            entity_id: Some(EntityId::new("agent-123").expect("valid entity id")),
+            entity_id: Some(String::from("agent-123")),
             from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
             to_state: sc_observability_types::StateName::new("running").expect("valid state"),
             reason: None,

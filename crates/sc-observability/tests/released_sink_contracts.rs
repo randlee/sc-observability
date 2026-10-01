@@ -4,9 +4,11 @@ use std::io;
 use std::sync::Arc;
 
 use sc_observability::typed::{TypedLogSink, legacy_sink, typed_sink};
+use sc_observability::v2::LogSink as CanonicalLogSink;
 use sc_observability::*;
-use sc_observability_types::v2::LogSinkError as TypedSinkError;
-use sc_observability_types::{ErrorCode, Remediation};
+use sc_observability_types::typed::LogSinkFailure;
+use sc_observability_types::v2::LogSinkError as CanonicalLogSinkError;
+use sc_observability_types::{DiagnosticInfo, ErrorCode, Remediation};
 use serde_json::Map;
 
 fn assert_send_sync<T: Send + Sync>(_: &T) {}
@@ -41,13 +43,30 @@ impl LogSink for LegacySink {
 struct TypedSink;
 
 impl TypedLogSink for TypedSink {
-    fn write(&self, _: &LogEvent) -> Result<(), TypedSinkError> {
+    fn write(&self, _: &LogEvent) -> Result<(), LogSinkFailure> {
         Ok(())
     }
 
     fn health(&self) -> SinkHealth {
         SinkHealth {
             name: SinkName::new("released-typed").expect("static sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+/// Canonical registration sink, kept apart from the released typed fixture.
+struct CanonicalSink;
+
+impl CanonicalLogSink for CanonicalSink {
+    fn write(&self, _: &LogEvent) -> Result<(), CanonicalLogSinkError> {
+        Ok(())
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("canonical-registration").expect("static sink name"),
             state: SinkHealthState::Healthy,
             last_error: None,
         }
@@ -81,9 +100,10 @@ fn released_sink_trait_objects_are_thread_safe_and_registerable() {
     legacy_builder.build().shutdown();
 
     let mut typed_builder = LoggerBuilder::new(config()).expect("released builder");
+    typed_builder.register_sink(SinkRegistration::new(legacy_sink(typed)));
     typed_builder
-        .register_typed_sink(typed)
-        .expect("released typed registration");
+        .register_typed_sink(Arc::new(CanonicalSink))
+        .expect("canonical typed registration");
     typed_builder
         .build_typed()
         .expect("released typed build")
@@ -99,11 +119,26 @@ fn released_sink_adapters_round_trip_and_preserve_failure_sources() {
         .write(&test_event())
         .expect_err("legacy-to-typed adapter preserves failure");
     assert_eq!(error.diagnostic().code.as_str(), "RELEASED_SINK_FAILURE");
-    assert!(std::error::Error::source(&error).is_some());
+    // The released typed failure wraps the preserved context, whose own
+    // source is the original legacy sink error.
+    assert_eq!(
+        std::error::Error::source(&error)
+            .and_then(std::error::Error::source)
+            .expect("typed error preserves the legacy sink source")
+            .to_string(),
+        "legacy sink source"
+    );
     let error = round_trip
         .write(&test_event())
         .expect_err("typed-to-legacy adapter preserves failure");
-    assert!(std::error::Error::source(&error).is_some());
+    assert_eq!(error.diagnostic().code.as_str(), "RELEASED_SINK_FAILURE");
+    assert_eq!(
+        std::error::Error::source(&error)
+            .and_then(std::error::Error::source)
+            .expect("legacy error preserves the underlying sink source")
+            .to_string(),
+        "legacy sink source"
+    );
 }
 
 fn test_event() -> LogEvent {
@@ -124,4 +159,53 @@ fn test_event() -> LogEvent {
         state_transition: None,
         fields: Map::new(),
     }
+}
+
+/// Compile-time pins of the released 1.4.1 sink trait and adapter signatures.
+///
+/// The semver gate cannot see a changed associated-type error in a trait that
+/// downstream crates implement, so these coercions fail to compile if the
+/// released forms drift.
+#[expect(
+    deprecated,
+    reason = "the released root LogSink error wrapper is the contract under test"
+)]
+#[test]
+fn released_sink_trait_and_adapter_signatures_are_pinned() {
+    let _: fn(&LegacySink, &LogEvent) -> Result<(), sc_observability_types::LogSinkError> =
+        <LegacySink as LogSink>::write;
+    let _: fn(&LegacySink) -> Result<(), sc_observability_types::LogSinkError> =
+        <LegacySink as LogSink>::flush;
+    let _: fn(&LegacySink) -> SinkHealth = <LegacySink as LogSink>::health;
+
+    let _: fn(&TypedSink, &LogEvent) -> Result<(), LogSinkFailure> =
+        <TypedSink as TypedLogSink>::write;
+    let _: fn(&TypedSink) -> Result<(), LogSinkFailure> = <TypedSink as TypedLogSink>::flush;
+    let _: fn(&TypedSink) -> SinkHealth = <TypedSink as TypedLogSink>::health;
+
+    let _: fn(Arc<dyn TypedLogSink>) -> Arc<dyn LogSink> = legacy_sink;
+    let _: fn(Arc<dyn LogSink>) -> Arc<dyn TypedLogSink> = typed_sink;
+    let _: fn(Arc<dyn LogSink>) -> SinkRegistration = SinkRegistration::new;
+
+    // The released traits stay open and object safe, and keep their default
+    // flush.
+    let typed: Arc<dyn TypedLogSink> = Arc::new(TypedSink);
+    typed.flush().expect("released typed default flush");
+    let legacy: Arc<dyn LogSink> = Arc::new(LegacySink);
+    legacy.flush().expect("released root default flush");
+}
+
+#[test]
+fn canonical_and_released_sink_contracts_are_distinct_trait_slots() {
+    let _: fn(&CanonicalSink, &LogEvent) -> Result<(), CanonicalLogSinkError> =
+        <CanonicalSink as CanonicalLogSink>::write;
+    let _: fn(&CanonicalSink) -> Result<(), CanonicalLogSinkError> =
+        <CanonicalSink as CanonicalLogSink>::flush;
+    let _: fn(&CanonicalSink) -> SinkHealth = <CanonicalSink as CanonicalLogSink>::health;
+    let _: fn(SinkRegistration, Arc<dyn LogFilter>) -> SinkRegistration =
+        SinkRegistration::with_filter;
+    let _: fn(Arc<dyn CanonicalLogSink>) -> SinkRegistration = SinkRegistration::typed;
+
+    let canonical: Arc<dyn CanonicalLogSink> = Arc::new(CanonicalSink);
+    canonical.flush().expect("canonical default flush");
 }

@@ -77,15 +77,13 @@ fn checked<T, E: std::fmt::Display + 'static>(
                     .downcast_ref::<DecimalDtoError>()
                     .map(|error| error.code())
             });
-        let diagnostic = code.map_or_else(
-            || {
-                boundary_diagnostic(
-                    error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT,
-                    error.to_string(),
-                )
-            },
-            |code| boundary_diagnostic(code, error.to_string()),
-        );
+        let message = format!("{}: {error}", std::any::type_name::<E>());
+        let diagnostic = match code {
+            Some(code) => boundary_diagnostic(code, message),
+            None => {
+                boundary_diagnostic(error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT, message)
+            }
+        };
         Failure::Validation {
             diagnostic: Box::new(diagnostic),
             field: field.into(),
@@ -291,18 +289,20 @@ fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result
     })
 }
 /// Encodes JSON values losslessly, distinguishing integer and float domains.
+///
+/// A non-integer `Number` that has no `f64` representation is rejected as
+/// `invalid_input("value", "unrepresentable float")`. This workspace does not
+/// enable `serde_json`'s `arbitrary_precision` feature, but Cargo feature
+/// unification is additive: a downstream consumer that enables it makes
+/// `Number` a decimal string, and an out-of-range literal such as `1e400`
+/// then has no `f64` value. Keeping the projection fallible returns the
+/// released validation failure for that untrusted input instead of panicking.
 pub fn from_json_value(value: Value) -> Result<ValueDto, Failure> {
-    Ok(from_json_value_total(value))
+    project(value)
 }
 
-/// Encodes a `serde_json::Value` using the workspace's finite `Number` domains.
-///
-/// The public conversion retains its `Result` signature for released API
-/// compatibility. Without `serde_json`'s `arbitrary_precision` feature, every
-/// non-integer `Number` is backed by an `f64`, so recursive JSON projection is
-/// total and does not create a synthetic binding failure.
-fn from_json_value_total(value: Value) -> ValueDto {
-    match value {
+fn project(value: Value) -> Result<ValueDto, Failure> {
+    Ok(match value {
         Value::Null => ValueDto::Null {},
         Value::Bool(value) => ValueDto::Boolean { value },
         Value::String(value) => ValueDto::String { value },
@@ -312,28 +312,29 @@ fn from_json_value_total(value: Value) -> ValueDto {
             } else if let Some(v) = value.as_u64() {
                 ValueDto::Integer { value: v.into() }
             } else {
-                ValueDto::Float {
-                    value: value
-                        .as_f64()
-                        .expect("non-arbitrary serde_json numbers are representable f64 values"),
-                }
+                float_dto(value.as_f64())?
             }
         }
         Value::Array(value) => ValueDto::Array {
-            value: value.into_iter().map(from_json_value_total).collect(),
+            value: value.into_iter().map(project).collect::<Result<_, _>>()?,
         },
         Value::Object(value) => ValueDto::Object {
             value: value
                 .into_iter()
-                .map(|(key, value)| (key, from_json_value_total(value)))
-                .collect(),
+                .map(|(key, value)| Ok((key, project(value)?)))
+                .collect::<Result<_, Failure>>()?,
         },
-    }
+    })
 }
-fn from_fields(fields: Map<String, Value>) -> BTreeMap<String, ValueDto> {
+fn float_dto(value: Option<f64>) -> Result<ValueDto, Failure> {
+    value
+        .map(|value| ValueDto::Float { value })
+        .ok_or_else(|| invalid_input("value", "unrepresentable float"))
+}
+fn from_fields(fields: Map<String, Value>) -> Result<BTreeMap<String, ValueDto>, Failure> {
     fields
         .into_iter()
-        .map(|(key, value)| (key, from_json_value_total(value)))
+        .map(|(key, value)| Ok((key, project(value)?)))
         .collect()
 }
 fn trace(value: TraceContextDto) -> Result<core::TraceContext, Failure> {
@@ -604,19 +605,24 @@ pub fn from_core_event(v: core::LogEvent) -> Result<StoredEventDto, Failure> {
         request_id: v.request_id.map(|v| v.as_str().into()),
         correlation_id: v.correlation_id.map(|v| v.as_str().into()),
         outcome: v.outcome.map(|v| v.as_str().into()),
-        fields: from_fields(v.fields),
-        diagnostic: v.diagnostic.map(|d| StoredDiagnosticDto {
-            timestamp: d.timestamp.to_string(),
-            code: d.code.as_str().into(),
-            message: d.message,
-            cause: d.cause,
-            remediation: d.remediation.into(),
-            docs: d.docs,
-            details: from_fields(d.details),
-        }),
+        fields: from_fields(v.fields)?,
+        diagnostic: v
+            .diagnostic
+            .map(|d| {
+                Ok(StoredDiagnosticDto {
+                    timestamp: d.timestamp.to_string(),
+                    code: d.code.as_str().into(),
+                    message: d.message,
+                    cause: d.cause,
+                    remediation: d.remediation.into(),
+                    docs: d.docs,
+                    details: from_fields(d.details)?,
+                })
+            })
+            .transpose()?,
         state_transition: v.state_transition.map(|v| StateTransitionDto {
             entity_kind: v.entity_kind.as_str().into(),
-            entity_id: v.entity_id.map(|value| value.as_str().into()),
+            entity_id: v.entity_id,
             from_state: v.from_state.as_str().into(),
             to_state: v.to_state.as_str().into(),
             reason: v.reason,
@@ -891,3 +897,35 @@ pub use canonical::{
     failure_from_classification, failure_from_diagnostic, from_canonical_diagnostic,
 };
 pub use signals::{decode_canonical_envelope, decode_metric, decode_span};
+
+#[cfg(test)]
+mod number_projection_tests {
+    use super::*;
+
+    #[test]
+    fn float_without_an_f64_value_is_the_released_validation_failure() {
+        let Err(Failure::Validation { diagnostic, field }) = float_dto(None) else {
+            panic!("a missing f64 must be a validation failure");
+        };
+        let Failure::Validation {
+            diagnostic: expected,
+            field: expected_field,
+        } = invalid_input("value", "unrepresentable float")
+        else {
+            unreachable!("invalid_input is a validation failure");
+        };
+        assert_eq!(field, expected_field);
+        assert_eq!(
+            Diagnostic {
+                at: expected.at.clone(),
+                ..*diagnostic
+            },
+            *expected
+        );
+    }
+
+    #[test]
+    fn float_with_an_f64_value_is_a_float() {
+        assert_eq!(float_dto(Some(1.5)), Ok(ValueDto::Float { value: 1.5 }));
+    }
+}

@@ -696,16 +696,19 @@ class InputSpanRecord:
     trace: InputTraceContextV2
 
 @dataclass(frozen=True, kw_only=True)
-class InputSpanSignal0:
-    Started: InputSpanRecord
+class InputSpanSignalStarted:
+    data: InputSpanRecord
+    kind: Literal['started'] = dataclass_field(default='started', init=False)
 
 @dataclass(frozen=True, kw_only=True)
-class InputSpanSignal1:
-    Event: InputSpanEvent
+class InputSpanSignalEvent:
+    data: InputSpanEvent
+    kind: Literal['event'] = dataclass_field(default='event', init=False)
 
 @dataclass(frozen=True, kw_only=True)
-class InputSpanSignal2:
-    Ended: InputSpanRecord
+class InputSpanSignalEnded:
+    data: InputSpanRecord
+    kind: Literal['ended'] = dataclass_field(default='ended', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputStateTransition:
@@ -1582,16 +1585,19 @@ class OutputSpanRecord:
     trace: OutputTraceContextV2
 
 @dataclass(frozen=True, kw_only=True)
-class OutputSpanSignal0:
-    Started: OutputSpanRecord
+class OutputSpanSignalStarted:
+    data: OutputSpanRecord
+    kind: Literal['started'] = dataclass_field(default='started', init=False)
 
 @dataclass(frozen=True, kw_only=True)
-class OutputSpanSignal1:
-    Event: OutputSpanEvent
+class OutputSpanSignalEvent:
+    data: OutputSpanEvent
+    kind: Literal['event'] = dataclass_field(default='event', init=False)
 
 @dataclass(frozen=True, kw_only=True)
-class OutputSpanSignal2:
-    Ended: OutputSpanRecord
+class OutputSpanSignalEnded:
+    data: OutputSpanRecord
+    kind: Literal['ended'] = dataclass_field(default='ended', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputStateTransition:
@@ -1812,7 +1818,7 @@ InputResult6: TypeAlias = InputResult6Ok | InputResult6Error
 InputResult7: TypeAlias = InputResult7Ok | InputResult7Error
 InputResult8: TypeAlias = InputResult8Ok | InputResult8Error
 InputSpanKind: TypeAlias = Literal['internal'] | Literal['server'] | Literal['client'] | Literal['producer'] | Literal['consumer']
-InputSpanSignal: TypeAlias = InputSpanSignal0 | InputSpanSignal1 | InputSpanSignal2
+InputSpanSignal: TypeAlias = InputSpanSignalStarted | InputSpanSignalEvent | InputSpanSignalEnded
 InputSpanStatus: TypeAlias = Literal['Ok'] | Literal['Error'] | Literal['Unset']
 InputValue: TypeAlias = InputValueNull | InputValueBoolean | InputValueString | InputValueInteger | InputValueFloat | InputValueArray | InputValueObject
 InputWireEnvelope: TypeAlias = InputWireEnvelopeOk | InputWireEnvelopeError
@@ -1858,7 +1864,7 @@ OutputResult6: TypeAlias = OutputResult6Ok | OutputResult6Error
 OutputResult7: TypeAlias = OutputResult7Ok | OutputResult7Error
 OutputResult8: TypeAlias = OutputResult8Ok | OutputResult8Error
 OutputSpanKind: TypeAlias = Literal['internal'] | Literal['server'] | Literal['client'] | Literal['producer'] | Literal['consumer']
-OutputSpanSignal: TypeAlias = OutputSpanSignal0 | OutputSpanSignal1 | OutputSpanSignal2
+OutputSpanSignal: TypeAlias = OutputSpanSignalStarted | OutputSpanSignalEvent | OutputSpanSignalEnded
 OutputSpanStatus: TypeAlias = Literal['Ok'] | Literal['Error'] | Literal['Unset']
 OutputValue: TypeAlias = OutputValueNull | OutputValueBoolean | OutputValueString | OutputValueInteger | OutputValueFloat | OutputValueArray | OutputValueObject
 OutputWireEnvelope: TypeAlias = OutputWireEnvelopeOk | OutputWireEnvelopeError

@@ -7,10 +7,202 @@ use crate::{
 use sc_observability_dto as dto;
 use sc_observability_types as native;
 use std::future::Future;
+use std::io::Read;
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Barrier, Condvar, Mutex, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
-use std::time::Instant;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+
+const CONTRACT_CASE_DEADLINE: Duration = Duration::from_secs(60);
+const HUNG_CHILD_DEADLINE: Duration = Duration::from_millis(250);
+const CHILD_START_DEADLINE: Duration = Duration::from_secs(10);
+
+struct ChildRun {
+    status: ExitStatus,
+    stdout: String,
+    stderr: String,
+    elapsed: Duration,
+    timed_out: bool,
+}
+
+struct ReapOnDrop {
+    child: Option<Child>,
+}
+
+impl ReapOnDrop {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+
+    fn child_mut(&mut self) -> &mut Child {
+        self.child
+            .as_mut()
+            .expect("child remains guarded until it is reaped")
+    }
+
+    fn try_wait(&mut self) -> std::io::Result<Option<ExitStatus>> {
+        let status = self.child_mut().try_wait()?;
+        if status.is_some() {
+            self.child = None;
+        }
+        Ok(status)
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        self.child_mut().kill()
+    }
+
+    fn wait(&mut self) -> std::io::Result<ExitStatus> {
+        let status = self.child_mut().wait()?;
+        self.child = None;
+        Ok(status)
+    }
+}
+
+impl Drop for ReapOnDrop {
+    fn drop(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+fn capture_output(reader: JoinHandle<std::io::Result<Vec<u8>>>) -> String {
+    match reader.join() {
+        Ok(Ok(bytes)) => String::from_utf8_lossy(&bytes).into_owned(),
+        Ok(Err(error)) => format!("<capture failed: {error}>"),
+        Err(_) => "<capture thread panicked>".into(),
+    }
+}
+
+fn read_child_output(
+    mut reader: impl Read,
+    readiness_marker: Option<Vec<u8>>,
+    ready: &mpsc::Sender<()>,
+) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let mut chunk = [0; 4096];
+    let mut marker = readiness_marker;
+    loop {
+        let count = reader.read(&mut chunk)?;
+        if count == 0 {
+            return Ok(bytes);
+        }
+        bytes.extend_from_slice(&chunk[..count]);
+        if marker
+            .as_ref()
+            .is_some_and(|needle| bytes.windows(needle.len()).any(|window| window == needle))
+        {
+            let _ = ready.send(());
+            marker = None;
+        }
+    }
+}
+
+fn run_test_child(
+    test_name: &str,
+    env_name: &str,
+    env_value: &str,
+    deadline: Duration,
+    readiness_marker: Option<&str>,
+) -> ChildRun {
+    let mut child = ReapOnDrop::new(
+        Command::new(std::env::current_exe().expect("test executable path"))
+            .args(["--exact", test_name, "--nocapture"])
+            .env(env_name, env_value)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|error| panic!("spawn {test_name} ({env_value}): {error}")),
+    );
+    let stdout = child.child_mut().stdout.take().expect("piped child stdout");
+    let stderr = child.child_mut().stderr.take().expect("piped child stderr");
+    let (ready_sender, ready_receiver) = mpsc::channel();
+    let stdout_marker = readiness_marker.map(|marker| marker.as_bytes().to_vec());
+    let stderr_ready_sender = ready_sender.clone();
+    let stdout_reader =
+        thread::spawn(move || read_child_output(stdout, stdout_marker, &ready_sender));
+    let stderr_reader =
+        thread::spawn(move || read_child_output(stderr, None, &stderr_ready_sender));
+
+    if readiness_marker.is_some() {
+        let startup = Instant::now();
+        loop {
+            if let Some(status) = child.try_wait().expect("poll child during startup") {
+                return ChildRun {
+                    status,
+                    stdout: capture_output(stdout_reader),
+                    stderr: capture_output(stderr_reader),
+                    elapsed: startup.elapsed(),
+                    timed_out: false,
+                };
+            }
+            if ready_receiver
+                .recv_timeout(Duration::from_millis(10))
+                .is_ok()
+            {
+                break;
+            }
+            if startup.elapsed() >= CHILD_START_DEADLINE {
+                let kill_result = child.kill();
+                let status = child
+                    .wait()
+                    .expect("reap child that missed startup deadline");
+                let (stdout, stderr) =
+                    (capture_output(stdout_reader), capture_output(stderr_reader));
+                return ChildRun {
+                    status,
+                    stdout,
+                    stderr: format!(
+                        "{stderr}\nchild did not emit readiness marker before {CHILD_START_DEADLINE:?}; kill={kill_result:?}"
+                    ),
+                    elapsed: startup.elapsed(),
+                    timed_out: true,
+                };
+            }
+        }
+    }
+
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().expect("poll child process") {
+            return ChildRun {
+                status,
+                stdout: capture_output(stdout_reader),
+                stderr: capture_output(stderr_reader),
+                elapsed: started.elapsed(),
+                timed_out: false,
+            };
+        }
+        if started.elapsed() >= deadline {
+            let kill_result = child.kill();
+            let status = child.wait().expect("reap timed-out child process");
+            let (stdout, stderr) = (capture_output(stdout_reader), capture_output(stderr_reader));
+            return ChildRun {
+                status,
+                stdout,
+                stderr: if let Err(error) = kill_result {
+                    format!("{stderr}\nfailed to kill timed-out child: {error}")
+                } else {
+                    stderr
+                },
+                elapsed: started.elapsed(),
+                timed_out: true,
+            };
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn child_diagnostics(run: &ChildRun) -> String {
+    format!(
+        "elapsed={:?} timed_out={} status={} stdout={} stderr={}",
+        run.elapsed, run.timed_out, run.status, run.stdout, run.stderr
+    )
+}
 
 pub(crate) struct Gate {
     state: Mutex<(usize, bool)>,
@@ -128,8 +320,8 @@ fn code<T>(result: Result<T, Failure>, expected: &str) {
             let wire = serde_json::to_value(&error).expect("failure serializes to its tagged DTO");
             assert_eq!(wire["kind"], kind, "{expected} must retain its DTO kind");
             assert!(
-                serde_json::to_value(error.diagnostic())
-                    .expect("diagnostic serializes")["remediation"]
+                serde_json::to_value(error.diagnostic()).expect("diagnostic serializes")
+                    ["remediation"]
                     .is_object(),
                 "{expected} must retain remediation in its DTO"
             );
@@ -229,6 +421,7 @@ const CASES: &[&str] = &[
     "bridge_native_timeout",
     "bridge_external_overlap",
     "bridge_churn",
+    "bridge_canonical_v2",
     "last_handle_teardown",
     "bridge_observers_callbacks",
     "native_diagnostic_fidelity",
@@ -277,6 +470,7 @@ fn contract_matrix() {
             "bridge_native_timeout" => bridge_timeout(false),
             "bridge_external_overlap" => bridge_timeout(true),
             "bridge_churn" => bridge_churn(),
+            "bridge_canonical_v2" => bridge_canonical_v2(),
             "last_handle_teardown" => last_handle_teardown(),
             "bridge_observers_callbacks" => bridge_observers_callbacks(),
             "native_diagnostic_fidelity" => native_diagnostic_fidelity(),
@@ -293,23 +487,66 @@ fn contract_matrix() {
         return;
     }
     for case in CASES {
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "tests::contract_matrix", "--nocapture"])
-            .env("SC_BINDING_RUNTIME_CASE", case)
-            .output()
-            .unwrap();
+        let output = run_test_child(
+            "tests::contract_matrix",
+            "SC_BINDING_RUNTIME_CASE",
+            case,
+            CONTRACT_CASE_DEADLINE,
+            None,
+        );
+        assert!(
+            !output.timed_out,
+            "contract case {case} exceeded {CONTRACT_CASE_DEADLINE:?}; {}",
+            child_diagnostics(&output)
+        );
         assert!(
             output.status.success(),
-            "case {case}: stdout={} stderr={}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            "contract case {case} failed; {}",
+            child_diagnostics(&output)
         );
         assert!(
-            String::from_utf8_lossy(&output.stdout).contains(&format!("BINDING_CASE_PASS {case}"))
+            output.stdout.contains(&format!("BINDING_CASE_PASS {case}")),
+            "contract case {case} omitted its pass marker; {}",
+            child_diagnostics(&output)
         );
-        print!("{}", String::from_utf8_lossy(&output.stdout));
+        print!("{}", output.stdout);
     }
 }
+
+#[test]
+fn contract_matrix_timeout_kills_and_reaps_child() {
+    if let Ok(marker) = std::env::var("SC_BINDING_RUNTIME_HANG") {
+        print!("{marker}");
+        std::io::Write::flush(&mut std::io::stdout()).expect("flush hung-child readiness marker");
+        loop {
+            thread::sleep(Duration::from_secs(60));
+        }
+    }
+
+    let output = run_test_child(
+        "tests::contract_matrix_timeout_kills_and_reaps_child",
+        "SC_BINDING_RUNTIME_HANG",
+        "CONTRACT_CHILD_READY",
+        HUNG_CHILD_DEADLINE,
+        Some("CONTRACT_CHILD_READY"),
+    );
+    assert!(
+        output.timed_out,
+        "hung contract child was not stopped at its deadline; {}",
+        child_diagnostics(&output)
+    );
+    assert!(
+        !output.status.success(),
+        "killed hung contract child unexpectedly succeeded; {}",
+        child_diagnostics(&output)
+    );
+    assert!(
+        output.stdout.contains("CONTRACT_CHILD_READY"),
+        "hung-child regression did not observe the synchronized readiness marker; {}",
+        child_diagnostics(&output)
+    );
+}
+
 fn spawn_rollback(index: usize) {
     crate::spawn::fail_at(index);
     let (root, config) = config();
@@ -920,6 +1157,39 @@ fn bridge_churn() {
         assert!(control.health().is_ok());
     }
     host.shutdown(Duration::from_secs(2)).unwrap();
+}
+fn bridge_canonical_v2() {
+    let (root, mut config) = config();
+    config.enable_console_sink = true;
+    let host = sc_observability_log::v2::init(
+        config,
+        sc_observability_log::BridgeOptions {
+            default_action: native::ActionName::new("bridge.canonical").unwrap(),
+            parse_bracket_action: false,
+        },
+    )
+    .unwrap();
+    let control = host.control();
+    let backend = bridge_backend_v2(control.clone()).unwrap();
+
+    backend.try_log(event(), ProducerOrigin::RustHost).unwrap();
+    backend
+        .start_query(query())
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .unwrap();
+    backend
+        .start_flush(Duration::from_secs(2))
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .unwrap();
+    control.flush(Duration::from_secs(2)).unwrap();
+    assert!(control.health().is_ok());
+
+    drop(backend);
+    crate::spawn::wait_live(1);
+    host.shutdown(Duration::from_secs(2)).unwrap();
+    drop(root);
 }
 fn native_diagnostic_fidelity() {
     let diagnostic = native::OperationDiagnostic {

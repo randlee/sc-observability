@@ -8,7 +8,7 @@
   "source_audit": {
     "inventory": "D18 recovery inventory",
     "nominal_contracts": 58,
-    "inherent_or_free_callables": 141,
+    "inherent_or_free_callables": 143,
     "trait_slots": 12
   },
   "deprecated_owner_exceptions": [
@@ -474,17 +474,17 @@
       "symbol": "sc_observability_types::StateTransition",
       "area": "shared",
       "kind": "value",
-      "status": "pending_d23_wrapper",
-      "canonical": "v2::StateTransition",
-      "treatment": "new_adapter",
+      "status": "canonical_routed",
+      "canonical": "StateTransition",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] pub struct StateTransition { /// Stable category describing what changed, such as `task` or `subagent`. pub entity_kind: TargetCategory, /// Optional caller-owned identifier for the entity that changed. pub entity_id: Option<String>, /// Previous stable state label. pub from_state: StateName, /// New stable state label. pub to_state: StateName, /// Optional human-readable explanation for why the transition occurred. pub reason: Option<String>, /// Optional action or event name that triggered the transition. pub trigger: Option<ActionName>, }",
-      "canonical_signature": "#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] pub struct StateTransition { /// Stable category describing what changed, such as `task` or `subagent`. pub entity_kind: TargetCategory, /// Optional validated caller-owned identifier for the entity that changed. pub entity_id: Option<EntityId>, /// Previous stable state label. pub from_state: StateName, /// New stable state label. pub to_state: StateName, /// Optional human-readable explanation for why the transition occurred. pub reason: Option<String>, /// Optional action or event name that triggered the transition. pub trigger: Option<ActionName>, }",
+      "canonical_signature": "#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)] pub struct StateTransition { /// Stable category describing what changed, such as `task` or `subagent`. pub entity_kind: TargetCategory, /// Optional caller-owned identifier for the entity that changed. pub entity_id: Option<String>, /// Previous stable state label. pub from_state: StateName, /// New stable state label. pub to_state: StateName, /// Optional human-readable explanation for why the transition occurred. pub reason: Option<String>, /// Optional action or event name that triggered the transition. pub trigger: Option<ActionName>, }",
       "obligations": [
         "signature identity: preserve StateTransition declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "wire: preserve StateTransition serde derives and tag/content/rename attributes recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "StateTransition is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed. StateTransition.entity_id is the released Option<String>, so one shared LogEvent/query graph serves every facade. Canonical (v2) admission validates it as an EntityId after the version, service and level checks and rejects an invalid value as EventError::Validation, or as the additive v2::TelemetryError::Event(EventError) variant on the non_exhaustive v2 enum for OTLP emit_log (governed-interface note: no new diagnostic code or counter; the released root TelemetryError row is unchanged). Released root facades keep exact 1.4.1 acceptance with no entity check.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/tracing.rs",
@@ -493,18 +493,18 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-types/src/tracing.rs",
-        "symbol": "v2::StateTransition"
+        "symbol": "StateTransition"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "StateTransition is the shared released owner, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability_types::LogEvent",
       "area": "shared",
       "kind": "value",
-      "status": "pending_d23_wrapper",
-      "canonical": "v2::LogEvent",
-      "treatment": "new_adapter",
+      "status": "canonical_routed",
+      "canonical": "LogEvent",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] pub struct LogEvent { /// Log schema version. pub version: SchemaVersion, /// UTC event timestamp. pub timestamp: Timestamp, /// Event severity. pub level: Level, /// Service that emitted the event. pub service: ServiceName, /// Stable target/category label. pub target: TargetCategory, /// Stable action label. pub action: ActionName, /// Optional human-readable message. pub message: Option<String>, /// Process identity attached to the event. pub identity: ProcessIdentity, /// Optional trace context for correlation. pub trace: Option<TraceContext>, /// Optional request identifier. pub request_id: Option<CorrelationId>, /// Optional correlation identifier. pub correlation_id: Option<CorrelationId>, /// Optional stable outcome label. pub outcome: Option<OutcomeLabel>, /// Optional structured diagnostic payload. pub diagnostic: Option<Diagnostic>, /// Optional state transition payload. pub state_transition: Option<StateTransition>, /// Arbitrary structured event fields. pub fields: Map<String, Value>, }",
       "canonical_signature": "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] pub struct LogEvent { /// Log schema version. pub version: SchemaVersion, /// UTC event timestamp. pub timestamp: Timestamp, /// Event severity. pub level: Level, /// Service that emitted the event. pub service: ServiceName, /// Stable target/category label. pub target: TargetCategory, /// Stable action label. pub action: ActionName, /// Optional human-readable message. pub message: Option<String>, /// Process identity attached to the event. pub identity: ProcessIdentity, /// Optional trace context for correlation. pub trace: Option<TraceContext>, /// Optional request identifier. pub request_id: Option<CorrelationId>, /// Optional correlation identifier. pub correlation_id: Option<CorrelationId>, /// Optional stable outcome label. pub outcome: Option<OutcomeLabel>, /// Optional structured diagnostic payload. pub diagnostic: Option<Diagnostic>, /// Optional state transition payload. pub state_transition: Option<StateTransition>, /// Arbitrary structured event fields. pub fields: Map<String, Value>, }",
       "obligations": [
@@ -512,7 +512,7 @@
         "wire: preserve LogEvent serde derives and tag/content/rename attributes recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "LogEvent is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed. StateTransition.entity_id is the released Option<String>, so one shared LogEvent/query graph serves every facade. Canonical (v2) admission validates it as an EntityId after the version, service and level checks and rejects an invalid value as EventError::Validation, or as the additive v2::TelemetryError::Event(EventError) variant on the non_exhaustive v2 enum for OTLP emit_log (governed-interface note: no new diagnostic code or counter; the released root TelemetryError row is unchanged). Released root facades keep exact 1.4.1 acceptance with no entity check.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/events.rs",
@@ -521,18 +521,18 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-types/src/events.rs",
-        "symbol": "v2::LogEvent"
+        "symbol": "LogEvent"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LogEvent is the shared released owner, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability_types::LogSnapshot",
       "area": "shared",
       "kind": "value",
-      "status": "pending_d23_wrapper",
-      "canonical": "v2::LogSnapshot",
-      "treatment": "new_adapter",
+      "status": "canonical_routed",
+      "canonical": "LogSnapshot",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)] pub struct LogSnapshot { /// Matching events returned by the query or poll. pub events: Vec<LogEvent>, /// Whether the result set was truncated by the configured limit. pub truncated: bool, }",
       "canonical_signature": "#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)] pub struct LogSnapshot { /// Matching events returned by the query or poll. pub events: Vec<LogEvent>, /// Whether the result set was truncated by the configured limit. pub truncated: bool, }",
       "obligations": [
@@ -540,7 +540,7 @@
         "wire: preserve LogSnapshot serde derives and tag/content/rename attributes recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "LogSnapshot is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed. StateTransition.entity_id is the released Option<String>, so one shared LogEvent/query graph serves every facade. Canonical (v2) admission validates it as an EntityId after the version, service and level checks and rejects an invalid value as EventError::Validation, or as the additive v2::TelemetryError::Event(EventError) variant on the non_exhaustive v2 enum for OTLP emit_log (governed-interface note: no new diagnostic code or counter; the released root TelemetryError row is unchanged). Released root facades keep exact 1.4.1 acceptance with no entity check.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/query.rs",
@@ -549,26 +549,26 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-types/src/query.rs",
-        "symbol": "v2::LogSnapshot"
+        "symbol": "LogSnapshot"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LogSnapshot is the shared released owner, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability_types::ProcessIdentityResolver",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::IdentityError",
+      "status": "restored_root",
+      "canonical": "v2::ProcessIdentityResolver returning v2::IdentityError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait ProcessIdentityResolver: Send + Sync { /// Resolves the process identity to attach to emitted records. /// /// # Errors /// /// Returns [`IdentityError`] when the resolver cannot produce a valid /// process identity. fn resolve(&self) -> Result<ProcessIdentity, IdentityError>; }",
-      "canonical_signature": "pub trait ProcessIdentityResolver: Send + Sync { /// Resolves the process identity to attach to emitted records. /// /// # Errors /// /// Returns [`IdentityError`] when the resolver cannot produce a valid /// process identity. fn resolve(&self) -> Result<ProcessIdentity, IdentityError>; }",
+      "baseline_signature": "pub trait ProcessIdentityResolver: Send + Sync { /// Resolves the process identity to attach to emitted records. /// /// # Errors /// /// Returns [`IdentityError`] when the resolver cannot produce a valid /// process identity. fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>; }",
+      "canonical_signature": "pub trait ProcessIdentityResolver: Send + Sync { /// Resolves the process identity to attach to emitted records. /// /// # Errors /// /// Returns [`crate::v2::IdentityError`] when the resolver cannot produce a valid /// process identity. fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError>; }",
       "obligations": [
-        "signature identity: preserve ProcessIdentityResolver declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve ProcessIdentityResolver implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root ProcessIdentityResolver declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root ProcessIdentityResolver implementable, object safe and Send + Sync; v2::ProcessIdentityResolver mirrors it with crate::v2::IdentityError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "ProcessIdentityPolicy::v2_resolver wraps a v2::ProcessIdentityResolver in a private adapter that moves the v2::IdentityError context into the root IdentityError; the released trait is used as-is",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/process.rs",
@@ -576,27 +576,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/process.rs",
-        "symbol": "root trait returning v2::IdentityError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::ProcessIdentityResolver"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::ObservationSubscriber",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::SubscriberError",
+      "status": "restored_root",
+      "canonical": "v2::ObservationSubscriber returning v2::SubscriberError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait ObservationSubscriber<T>: Send + Sync where T: Observable, { /// Consumes one routed observation. /// /// # Errors /// /// Returns [`SubscriberError`] when the subscriber rejects or cannot /// process the observation. fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>; }",
-      "canonical_signature": "pub trait ObservationSubscriber<T>: Send + Sync where T: Observable, { /// Consumes one routed observation. /// /// # Errors /// /// Returns [`SubscriberError`] when the subscriber rejects or cannot /// process the observation. fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>; }",
+      "baseline_signature": "pub trait ObservationSubscriber<T>: Send + Sync where T: Observable, { /// Consumes one routed observation. /// /// # Errors /// /// Returns [`SubscriberError`] when the subscriber rejects or cannot /// process the observation. fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError>; }",
+      "canonical_signature": "pub trait ObservationSubscriber<T>: Send + Sync where T: Observable, { /// Consumes one routed observation. /// /// # Errors /// /// Returns [`crate::v2::SubscriberError`] when the subscriber rejects or cannot /// process the observation. fn observe(&self, observation: &Observation<T>) -> Result<(), crate::v2::SubscriberError>; }",
       "obligations": [
-        "signature identity: preserve ObservationSubscriber declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve ObservationSubscriber implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root ObservationSubscriber declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root ObservationSubscriber implementable, object safe and Send + Sync; v2::ObservationSubscriber mirrors it with crate::v2::SubscriberError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root SubscriberRegistration and v2::SubscriberRegistration; private adapters move the error context between SubscriberError and v2::SubscriberError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -604,27 +604,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
-        "symbol": "root trait returning v2::SubscriberError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::ObservationSubscriber"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::LogProjector",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::ProjectionError",
+      "status": "restored_root",
+      "canonical": "v2::LogProjector returning v2::ProjectionError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait LogProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more log events. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive log output /// for the supplied observation. fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>; }",
-      "canonical_signature": "pub trait LogProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more log events. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive log output /// for the supplied observation. fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>; }",
+      "baseline_signature": "pub trait LogProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more log events. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive log output /// for the supplied observation. fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::ProjectionError>; }",
+      "canonical_signature": "pub trait LogProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more log events. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive log output /// for the supplied observation. fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::v2::ProjectionError>; }",
       "obligations": [
-        "signature identity: preserve LogProjector declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve LogProjector implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root LogProjector declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root LogProjector implementable, object safe and Send + Sync; v2::LogProjector mirrors it with crate::v2::ProjectionError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -632,27 +632,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
-        "symbol": "root trait returning v2::ProjectionError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::LogProjector"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::SpanProjector",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::ProjectionError",
+      "status": "restored_root",
+      "canonical": "v2::SpanProjector returning v2::ProjectionError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>; }",
-      "canonical_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>; }",
+      "baseline_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>; }",
+      "canonical_signature": "pub trait SpanProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more span lifecycle signals. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive span /// signals for the supplied observation. fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::v2::ProjectionError>; }",
       "obligations": [
-        "signature identity: preserve SpanProjector declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve SpanProjector implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root SpanProjector declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root SpanProjector implementable, object safe and Send + Sync; v2::SpanProjector mirrors it with crate::v2::ProjectionError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -660,27 +660,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
-        "symbol": "root trait returning v2::ProjectionError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::SpanProjector"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::MetricProjector",
       "area": "shared",
       "kind": "trait",
-      "status": "canonical_routed",
-      "canonical": "root trait returning v2::ProjectionError",
+      "status": "restored_root",
+      "canonical": "v2::MetricProjector returning v2::ProjectionError",
       "treatment": "new_adapter",
-      "baseline_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>; }",
-      "canonical_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>; }",
+      "baseline_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>; }",
+      "canonical_signature": "pub trait MetricProjector<T>: Send + Sync where T: Observable, { /// Projects one observation into zero or more metric records. /// /// # Errors /// /// Returns [`crate::v2::ProjectionError`] when the projector cannot derive metric /// output for the supplied observation. fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::v2::ProjectionError>; }",
       "obligations": [
-        "signature identity: preserve MetricProjector declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
-        "trait: preserve MetricProjector implementability, Send + Sync, and each associated method result type",
-        "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
+        "signature identity: preserve the released root MetricProjector declaration form, generic parameters, bounds and method result type recorded in baseline_signature",
+        "trait: keep root MetricProjector implementable, object safe and Send + Sync; v2::MetricProjector mirrors it with crate::v2::ProjectionError",
+        "boundary: released and canonical traits convert only through private context-moving adapters in sc-observability-types; neither imports compat"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -688,11 +688,11 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
-        "symbol": "root trait returning v2::ProjectionError"
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
+        "symbol": "sc_observability_types::v2::MetricProjector"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::ProcessIdentityPolicy",
@@ -781,9 +781,9 @@
       "symbol": "sc_observability::LogError",
       "area": "core",
       "kind": "error",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "v2::EventError",
-      "treatment": "new_adapter",
+      "treatment": "existing_pair",
       "baseline_signature": "#[allow( deprecated, reason = \"LogError is the retained legacy boundary paired with LogFailure\" )] #[derive(Debug, PartialEq, Serialize, Deserialize, Error)] pub enum LogError { #[error(transparent)] /// The event failed validation before queue admission. InvalidEvent(EventError), #[error(\"{0}\")] /// The writer thread is degraded and cannot accept more work reliably. WriterDegraded(#[source] Box<ErrorContext>), #[error(\"{0}\")] /// The logger exceeded the shutdown timeout threshold while draining the writer thread. ShutdownTimedOut(#[source] Box<ErrorContext>), }",
       "canonical_signature": "macro invocation: context_error!( EventError, Validation => crate::error_codes::DIAGNOSTIC_INVALID, Routing => crate::error_codes::DIAGNOSTIC_INVALID )",
       "obligations": [
@@ -792,7 +792,7 @@
         "error mapping: preserve LogError source/context ownership and its released diagnostic/code identity at the root boundary",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "root LogError is the released declaration in compat.rs; compat::legacy_log maps canonical v2::EventError Validation to InvalidEvent and Routing by diagnostic code to the released routing variants",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -803,16 +803,19 @@
         "path": "crates/sc-observability-types/src/errors_v2.rs",
         "symbol": "v2::EventError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/lib.rs"
+      ],
+      "removal_rationale": "compat.rs owns the retained LogError declaration and compat::legacy_log; lib.rs re-exports it with pub use compat::{LogError, TryLogError}. Both are removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability::TryLogError",
       "area": "core",
       "kind": "error",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "v2::EventError",
-      "treatment": "new_adapter",
+      "treatment": "existing_pair",
       "baseline_signature": "#[allow( deprecated, reason = \"TryLogError is the retained legacy boundary paired with TryLogFailure\" )] #[derive(Debug, PartialEq, Serialize, Deserialize, Error)] pub enum TryLogError { #[error(transparent)] /// The event failed validation before queue admission. InvalidEvent(EventError), #[error(\"{0}\")] /// The bounded queue is full and the record was not admitted. QueueFull(#[source] Box<ErrorContext>), #[error(\"{0}\")] /// The writer thread is degraded and cannot accept more work reliably. WriterDegraded(#[source] Box<ErrorContext>), #[error(\"{0}\")] /// The logger exceeded the shutdown timeout threshold while draining the writer thread. ShutdownTimedOut(#[source] Box<ErrorContext>), }",
       "canonical_signature": "macro invocation: context_error!( EventError, Validation => crate::error_codes::DIAGNOSTIC_INVALID, Routing => crate::error_codes::DIAGNOSTIC_INVALID )",
       "obligations": [
@@ -821,7 +824,7 @@
         "error mapping: preserve TryLogError source/context ownership and its released diagnostic/code identity at the root boundary",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "root TryLogError is the released declaration in compat.rs; compat::legacy_try_log maps canonical v2::EventError Validation to InvalidEvent and Routing by diagnostic code to the released routing variants",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -832,8 +835,11 @@
         "path": "crates/sc-observability-types/src/errors_v2.rs",
         "symbol": "v2::EventError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/lib.rs"
+      ],
+      "removal_rationale": "compat.rs owns the retained TryLogError declaration and compat::legacy_try_log; lib.rs re-exports it with pub use compat::{LogError, TryLogError}. Both are removable when the root compatibility surface is retired."
     },
     {
       "symbol": "sc_observability::LoggerConfig",
@@ -848,7 +854,7 @@
         "signature identity: preserve LoggerConfig declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The shared LoggerConfig retains the released public field identities. LoggerBuilder validates queue_capacity through QueueCapacity::new at the build boundary before constructing the writer; no public configuration facade conversion is required.",
+      "conversion": "The shared LoggerConfig retains the released public field identities. LoggerBuilder validates queue_capacity through QueueCapacity::new at construction before sink validation or constructing the writer; no public configuration facade conversion is required.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -899,7 +905,7 @@
       "canonical": "sc_observability::v2::LoggerBuilder",
       "treatment": "existing_pair",
       "baseline_signature": "#[expect( missing_debug_implementations, reason = \"the builder stores registration trait objects whose debug representation is not part of the public API\" )] pub struct LoggerBuilder { config: LoggerConfig, file_sink: Option<Arc<JsonlFileSink>>, sinks: Vec<SinkRegistration>, }",
-      "canonical_signature": "#[expect( missing_debug_implementations, reason = \"the builder stores registration trait objects whose debug representation is not part of the public API\" )] pub struct LoggerBuilder { config: LoggerConfig, file_sink: Option<Arc<JsonlFileSink>>, sinks: Vec<SinkRegistration>, typed_sinks: Vec<Arc<dyn TypedLogSink>>, }",
+      "canonical_signature": "#[expect( missing_debug_implementations, reason = \"the builder stores registration trait objects whose debug representation is not part of the public API\" )] pub struct LoggerBuilder { config: LoggerConfig, file_sink: Option<Arc<JsonlFileSink>>, sinks: Vec<SinkRegistration>, }",
       "obligations": [
         "signature identity: preserve LoggerBuilder declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "trait: preserve LoggerBuilder implementability, the exact public trait bounds, and each associated method result type",
@@ -926,16 +932,16 @@
       "area": "core",
       "kind": "trait",
       "status": "canonical_routed",
-      "canonical": "root trait returning v2::LogSinkError",
+      "canonical": "v2::LogSink",
       "treatment": "new_adapter",
       "baseline_signature": "#[allow( deprecated, reason = \"LogSink preserves its published LogSinkError trait signature\" )] pub trait LogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>; /// Flushes any buffered sink state. fn flush(&self) -> Result<(), LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
-      "canonical_signature": "pub trait LogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>; /// Flushes any buffered sink state. fn flush(&self) -> Result<(), LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
+      "canonical_signature": "pub trait LogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>; /// Flushes any buffered sink state. fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
       "obligations": [
         "signature identity: preserve LogSink declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "trait: preserve LogSink implementability, Send + Sync, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released root trait stays byte-identical in compat.rs; the runtime stores the canonical v2::LogSink, and SinkRegistration::new adapts a released sink to it exactly once; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -943,27 +949,29 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
-        "symbol": "root trait returning v2::LogSinkError"
+        "path": "crates/sc-observability/src/sink.rs",
+        "symbol": "v2::LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the released root LogSink declaration, its built-in impls, and the root-to-canonical registration adapter; remove them when the release policy retires the root sink trait."
     },
     {
       "symbol": "sc_observability::typed::TypedLogSink",
       "area": "core",
       "kind": "trait",
       "status": "canonical_routed",
-      "canonical": "trait returning v2::LogSinkError",
+      "canonical": "v2::LogSink",
       "treatment": "new_adapter",
       "baseline_signature": "pub trait TypedLogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>; /// Flushes buffered state. fn flush(&self) -> Result<(), LogSinkFailure> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
-      "canonical_signature": "pub trait TypedLogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>; /// Flushes buffered state. fn flush(&self) -> Result<(), LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
+      "canonical_signature": "pub trait LogSink: Send + Sync { /// Writes one event to the sink. fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>; /// Flushes any buffered sink state. fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) } /// Returns the current sink health snapshot. fn health(&self) -> SinkHealth; }",
       "obligations": [
         "signature identity: preserve TypedLogSink declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "trait: preserve TypedLogSink implementability, Send + Sync, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released typed trait keeps its LogSinkFailure signature in compat.rs and is published at typed::TypedLogSink; legacy_sink and typed_sink adapt it at the released boundary only; canonical registration takes v2::LogSink directly and never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/typed.rs",
@@ -971,21 +979,24 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/typed.rs",
-        "symbol": "trait returning v2::LogSinkError"
+        "path": "crates/sc-observability/src/sink.rs",
+        "symbol": "v2::LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/typed.rs"
+      ],
+      "removal_rationale": "compat.rs owns the released TypedLogSink declaration and legacy_sink/typed_sink adapters, and typed.rs only re-exports them at the released path; remove both when the release policy retires the typed sink adapters."
     },
     {
       "symbol": "sc_observability::SinkRegistration",
       "area": "core",
       "kind": "owner",
       "status": "canonical_routed",
-      "canonical": "root registration",
+      "canonical": "root registration storing canonical v2::LogSink",
       "treatment": "existing_pair",
       "baseline_signature": "#[derive(Clone)] #[expect( missing_debug_implementations, reason = \"registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract\" )] pub struct SinkRegistration { /// Concrete sink implementation. pub(crate) sink: Arc<dyn LogSink>, /// Optional sink-local filter. pub(crate) filter: Option<Arc<dyn LogFilter>>, }",
-      "canonical_signature": "#[derive(Clone)] #[expect( missing_debug_implementations, reason = \"registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract\" )] pub struct SinkRegistration { /// Concrete sink implementation. pub(crate) sink: Arc<dyn LogSink>, /// Optional sink-local filter. pub(crate) filter: Option<Arc<dyn LogFilter>>, }",
+      "canonical_signature": "#[derive(Clone)] #[expect( missing_debug_implementations, reason = \"registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract\" )] pub struct SinkRegistration { /// Canonical sink implementation stored exactly as registered. pub(crate) sink: Arc<dyn v2::LogSink>, /// Optional sink-local filter. pub(crate) filter: Option<Arc<dyn LogFilter>>, }",
       "obligations": [
         "signature identity: preserve SinkRegistration declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
@@ -999,18 +1010,20 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability/src/lib.rs",
-        "symbol": "root registration"
+        "symbol": "root registration storing canonical v2::LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the released SinkRegistration::new adapter; the canonical SinkRegistration::typed constructor and registration storage stay outside compat."
     },
     {
       "symbol": "sc_observability::LogFilter",
       "area": "core",
       "kind": "trait",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "root filter",
-      "treatment": "new_adapter",
+      "treatment": "unchanged_alias",
       "baseline_signature": "pub trait LogFilter: Send + Sync { /// Returns whether the sink should receive the event. fn accepts(&self, event: &LogEvent) -> bool; }",
       "canonical_signature": "pub trait LogFilter: Send + Sync { /// Returns whether the sink should receive the event. fn accepts(&self, event: &LogEvent) -> bool; }",
       "obligations": [
@@ -1018,7 +1031,7 @@
         "trait: preserve LogFilter implementability, Send + Sync, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "LogFilter is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -1030,22 +1043,22 @@
         "symbol": "root filter"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LogFilter is the shared released owner in crates/sc-observability/src/lib.rs, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability::LogFollowSession",
       "area": "core",
       "kind": "owner",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "root session",
-      "treatment": "new_adapter",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug)] pub struct LogFollowSession { active_log_path: PathBuf, query: LogQuery, tracked_files: Vec<TrackedFile>, health: Arc<QueryHealthTracker>, shutdown: Option<Arc<AtomicBool>>, }",
       "canonical_signature": "#[derive(Debug)] pub struct LogFollowSession { active_log_path: PathBuf, query: LogQuery, tracked_files: Vec<TrackedFile>, health: Arc<QueryHealthTracker>, shutdown: Option<Arc<AtomicBool>>, }",
       "obligations": [
         "signature identity: preserve LogFollowSession declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "LogFollowSession is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/follow.rs",
@@ -1057,22 +1070,22 @@
         "symbol": "root session"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "LogFollowSession is the shared released owner in crates/sc-observability/src/follow.rs, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability::JsonlLogReader",
       "area": "core",
       "kind": "owner",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "root reader",
-      "treatment": "new_adapter",
+      "treatment": "unchanged_alias",
       "baseline_signature": "#[derive(Debug, Clone)] pub struct JsonlLogReader { active_log_path: PathBuf, }",
       "canonical_signature": "#[derive(Debug, Clone)] pub struct JsonlLogReader { active_log_path: PathBuf, }",
       "obligations": [
         "signature identity: preserve JsonlLogReader declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "JsonlLogReader is the shared released owner; the current declaration is identical to the baseline, so no conversion is needed",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/jsonl_reader.rs",
@@ -1084,7 +1097,7 @@
         "symbol": "root reader"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "JsonlLogReader is the shared released owner in crates/sc-observability/src/jsonl_reader.rs, not a compatibility-only facade, so no file is removable."
     },
     {
       "symbol": "sc_observability::RetainedSinkFaultInjector",
@@ -1110,8 +1123,10 @@
         "path": "crates/sc-observability/src/sinks.rs",
         "symbol": "root injector over canonical LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the released wrap method and the root LogSink impl of the canonical fault sink; the injector state and canonical fault sink stay in sinks.rs."
     },
     {
       "symbol": "sc_observability::JsonlFileSink",
@@ -1137,8 +1152,10 @@
         "path": "crates/sc-observability/src/sinks.rs",
         "symbol": "root sink implementing canonical LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the thin released root LogSink impl that forwards to the canonical v2::LogSink impl in sinks.rs; remove it when the release policy retires the root sink trait."
     },
     {
       "symbol": "sc_observability::ConsoleSink",
@@ -1164,8 +1181,10 @@
         "path": "crates/sc-observability/src/sinks.rs",
         "symbol": "root sink implementing canonical LogSink"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "compat.rs owns the thin released root LogSink impl that forwards to the canonical v2::LogSink impl in sinks.rs; remove it when the release policy retires the root sink trait."
     },
     {
       "symbol": "sc_observability_log::InitError",
@@ -1261,9 +1280,9 @@
       "symbol": "sc_observability_log::EmitError",
       "area": "log",
       "kind": "error",
-      "status": "pending_d23_wrapper",
+      "status": "canonical_routed",
       "canonical": "EmitError",
-      "treatment": "new_adapter",
+      "treatment": "existing_pair",
       "baseline_signature": "#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)] #[serde(tag = \"kind\", content = \"value\", rename_all = \"snake_case\")] pub enum EmitError { /// A producer field cannot be represented safely. #[error(\"invalid field {raw_key:?}: {reason}\")] InvalidField { /// The producer-supplied key that was rejected. raw_key: String, /// The specific key-validation failure. reason: FieldKeyError, }, /// The core rejected the assembled event. #[error(\"invalid event: {diagnostic}\")] InvalidEvent { /// The core diagnostic explaining the invalid event. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core queue is full. #[error(\"writer queue is full: {diagnostic}\")] QueueFull { /// The core diagnostic describing queue saturation. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The writer cannot accept more work. #[error(\"writer is degraded: {diagnostic}\")] WriterDegraded { /// The core diagnostic describing the writer failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core shutdown deadline has elapsed. #[error(\"logger shutdown timed out: {diagnostic}\")] ShutdownTimedOut { /// The core diagnostic describing the elapsed shutdown deadline. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The lifecycle is no longer running. #[error(\"logger is not running: {phase:?}\")] NotRunning { /// The lifecycle phase observed when emission was attempted. phase: LifecyclePhase, }, /// The producer re-entered the guarded path. #[error(\"reentrant emission\")] Reentrant, /// A logger callback panic was contained. #[error(\"logger callback panicked\")] Panicked, }",
       "canonical_signature": "#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)] #[serde(tag = \"kind\", content = \"value\", rename_all = \"snake_case\")] #[non_exhaustive] pub enum EmitError { /// A producer field cannot be represented safely. #[error(\"invalid field {raw_key:?}: {reason}\")] InvalidField { /// The producer-supplied key that was rejected. raw_key: String, /// The specific key-validation failure. reason: FieldKeyError, }, /// The core rejected the assembled event. #[error(\"invalid event: {diagnostic}\")] InvalidEvent { /// The core diagnostic explaining the invalid event. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core queue is full. #[error(\"writer queue is full: {diagnostic}\")] QueueFull { /// The core diagnostic describing queue saturation. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The writer cannot accept more work. #[error(\"writer is degraded: {diagnostic}\")] WriterDegraded { /// The core diagnostic describing the writer failure. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The core shutdown deadline has elapsed. #[error(\"logger shutdown timed out: {diagnostic}\")] ShutdownTimedOut { /// The core diagnostic describing the elapsed shutdown deadline. diagnostic: sc_observability_types::OperationDiagnostic, }, /// The lifecycle is no longer running. #[error(\"logger is not running: {phase:?}\")] NotRunning { /// The lifecycle phase observed when emission was attempted. phase: LifecyclePhase, }, /// The producer re-entered the guarded path. #[error(\"reentrant emission\")] Reentrant, /// A logger callback panic was contained. #[error(\"logger callback panicked\")] Panicked, /// The saved attachment no longer occupies the bridge slot. #[error(\"logger attachment is not installed\")] NotInstalled, }",
       "obligations": [
@@ -1272,7 +1291,7 @@
         "error mapping: preserve EmitError source/context ownership and its released diagnostic/code identity at the root boundary",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released root sc_observability_log::EmitError is declared in crates/sc-observability-log/src/compat/mod.rs and re-exported from crates/sc-observability-log/src/lib.rs; compat::legacy_emit maps the canonical crate::error::EmitError (re-exported as v2::EmitError) to it. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -1283,8 +1302,11 @@
         "path": "crates/sc-observability-log/src/error.rs",
         "symbol": "EmitError"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs owns the released root EmitError declaration and compat::legacy_emit; crates/sc-observability-log/src/lib.rs re-exports it at the root. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl",
@@ -1299,7 +1321,7 @@
         "signature identity: preserve LogControl declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released root sc_observability_log::LogControl is a zero-sized compat facade in crates/sc-observability-log/src/compat/mod.rs over one static unattached canonical control::LogControl (v2::LogControl): its methods and Deref route through that static control, into_v2 returns a new unattached canonical control, and only flush and try_log errors translate through compat::legacy_flush and compat::legacy_emit. crates/sc-observability-log/src/lib.rs re-exports it at the root.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -1310,8 +1332,11 @@
         "path": "crates/sc-observability-log/src/control.rs",
         "symbol": "LogControl with v2 errors"
       },
-      "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs owns the compat::LogControl newtype, its forwarding methods, Deref and into_v2; crates/sc-observability-log/src/lib.rs re-exports it at the root. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard",
@@ -1326,7 +1351,7 @@
         "signature identity: preserve LogGuard declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released root LogGuard in crates/sc-observability-log/src/lib.rs is the retained implementation; the canonical v2::LogGuard in crates/sc-observability-log/src/lib.rs wraps it (inner: crate::LogGuard) and returns canonical errors directly. Only the root flush, shutdown and control methods convert through compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -1338,7 +1363,7 @@
         "symbol": "LogGuard with v2 errors"
       },
       "removable_paths": [],
-      "removal_rationale": "No compatibility-only adapter exists yet. D23 must introduce and later remove its facade at an actual created path; this record intentionally does not invent one."
+      "removal_rationale": "The root LogGuard declaration is the implementation that v2::LogGuard wraps, so it has no removable path until ownership moves to v2::LogGuard; its compat-converting methods are recorded as removable on their own rows."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig",
@@ -2950,13 +2975,14 @@
       "symbol": "sc_observability::SinkRegistration::new",
       "owner": "sc_observability::SinkRegistration",
       "baseline_signature": "pub fn new(sink: Arc<dyn LogSink>) -> Self",
-      "canonical_signature": "pub fn new(sink: Arc<dyn LogSink>) -> Self",
+      "canonical_signature": "pub fn typed(sink: Arc<dyn v2::LogSink>) -> Self",
       "obligations": [
         "signature: preserve sc_observability::SinkRegistration::new exactly as recorded in this row baseline_signature: pub fn new(sink: Arc<dyn LogSink>) -> Self",
-        "receiver: baseline declares no receiver; preserve sc_observability::SinkRegistration::new as an associated function"
+        "receiver: baseline declares no receiver; preserve sc_observability::SinkRegistration::new as an associated function",
+        "adaptation: adapt the released LogSink to the canonical v2::LogSink exactly once here; SinkRegistration::typed stores the canonical Arc and filter without any adapter"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "new adapts the released root LogSink to v2::LogSink once in compat.rs and stores it through the canonical SinkRegistration::typed constructor",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -2965,11 +2991,13 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/builder.rs",
         "owner": "SinkRegistration",
-        "member": "new"
+        "member": "typed"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::SinkRegistration::with_filter",
@@ -3155,13 +3183,14 @@
       "symbol": "sc_observability::RetainedSinkFaultInjector::wrap",
       "owner": "sc_observability::RetainedSinkFaultInjector",
       "baseline_signature": "pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink>",
-      "canonical_signature": "pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink>",
+      "canonical_signature": "pub(crate) fn fault_sink(&self, inner: Arc<dyn v2::LogSink>) -> FaultInjectingSink",
       "obligations": [
         "signature: preserve sc_observability::RetainedSinkFaultInjector::wrap exactly as recorded in this row baseline_signature: pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink>",
-        "receiver: preserve released &self receiver at sc_observability::RetainedSinkFaultInjector::wrap boundary"
+        "receiver: preserve released &self receiver at sc_observability::RetainedSinkFaultInjector::wrap boundary",
+        "adaptation: adapt the released input sink to v2::LogSink once, wrap it in the canonical fault sink, and return it only through the released root LogSink boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "wrap adapts the released sink to v2::LogSink, wraps it with the canonical fault sink built by fault_sink, and returns it through the released root impl",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/sinks.rs",
@@ -3172,9 +3201,11 @@
         "revision": "selected_head",
         "path": "crates/sc-observability/src/sinks.rs",
         "owner": "RetainedSinkFaultInjector",
-        "member": "wrap"
+        "member": "fault_sink"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ]
     },
     {
       "symbol": "sc_observability::RetainedSinkFaultInjector::force_degraded",
@@ -3355,13 +3386,13 @@
       "symbol": "sc_observability_log::LogGuard::control",
       "owner": "sc_observability_log::LogGuard",
       "baseline_signature": "pub fn control(&self) -> LogControl",
-      "canonical_signature": "pub fn control(&self) -> LogControl",
+      "canonical_signature": "pub fn control(&self) -> v2::LogControl",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::control exactly as recorded in this row baseline_signature: pub fn control(&self) -> LogControl",
         "receiver: preserve released &self receiver at sc_observability_log::LogGuard::control boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogGuard::control shim in crates/sc-observability-log/src/lib.rs returns the released compat::LogControl newtype from crates/sc-observability-log/src/compat/mod.rs over the canonical control::LogControl; v2::LogGuard::control returns v2::LogControl directly.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -3371,10 +3402,14 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-log/src/lib.rs",
-        "owner": "LogGuard",
+        "owner": "v2::LogGuard",
         "member": "control"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl newtype; crates/sc-observability-log/src/lib.rs contains the retained released root shim that returns it. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard::elevate_level",
@@ -3459,13 +3494,13 @@
       "symbol": "sc_observability_log::LogGuard::shutdown",
       "owner": "sc_observability_log::LogGuard",
       "baseline_signature": "pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError>",
-      "canonical_signature": "pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError>",
+      "canonical_signature": "pub fn shutdown(mut self, timeout: Duration) -> Result<(), sc_observability_types::v2::ShutdownError>",
       "obligations": [
         "signature: preserve sc_observability_log::LogGuard::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError>",
         "error: preserve released ShutdownError failure type at sc_observability_log::LogGuard::shutdown boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogGuard::shutdown shim in crates/sc-observability-log/src/lib.rs calls handle::shutdown_sequence, then compat::legacy_shutdown maps sc_observability_types::v2::ShutdownError to the released sc_observability_log::ShutdownError; v2::LogGuard::shutdown returns the canonical error directly.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -3475,10 +3510,14 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-log/src/lib.rs",
-        "owner": "LogGuard",
+        "owner": "v2::LogGuard",
         "member": "shutdown"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains compat::legacy_shutdown; crates/sc-observability-log/src/lib.rs contains the retained released root shim that invokes it. Retire that shim and its error mapping when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogGuard::dropped_events",
@@ -3564,8 +3603,8 @@
         "signature: preserve sc_observability_log::LogControl::flush exactly as recorded in this row baseline_signature: pub fn flush(&self, timeout: Duration) -> Result<(), FlushError>",
         "error: preserve released FlushError failure type at sc_observability_log::LogControl::flush boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::flush on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs calls the canonical control::LogControl::flush, then compat::legacy_flush maps its canonical error to the released root error.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3578,7 +3617,10 @@
         "owner": "LogControl",
         "member": "flush"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::flush wrapper and compat::legacy_flush. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::health",
@@ -3589,8 +3631,8 @@
         "signature: preserve sc_observability_log::LogControl::health exactly as recorded in this row baseline_signature: pub fn health(&self) -> Result<BridgeHealthReport, ControlError>",
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::health boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::health on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::health; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3603,7 +3645,10 @@
         "owner": "LogControl",
         "member": "health"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::health forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::active_log_path",
@@ -3614,8 +3659,8 @@
         "signature: preserve sc_observability_log::LogControl::active_log_path exactly as recorded in this row baseline_signature: pub fn active_log_path(&self) -> Result<Option<PathBuf>, ControlError>",
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::active_log_path boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::active_log_path on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::active_log_path; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3628,7 +3673,10 @@
         "owner": "LogControl",
         "member": "active_log_path"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::active_log_path forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::dropped_events",
@@ -3639,8 +3687,8 @@
         "signature: preserve sc_observability_log::LogControl::dropped_events exactly as recorded in this row baseline_signature: pub fn dropped_events(&self) -> crate::DroppedEvents",
         "receiver: preserve released &self receiver at sc_observability_log::LogControl::dropped_events boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::dropped_events on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::dropped_events; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3653,7 +3701,10 @@
         "owner": "LogControl",
         "member": "dropped_events"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::dropped_events forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::wait_stopped",
@@ -3664,8 +3715,8 @@
         "signature: preserve sc_observability_log::LogControl::wait_stopped exactly as recorded in this row baseline_signature: pub fn wait_stopped( &self, timeout: Duration, ) -> Result<crate::ShutdownReport, crate::WaitError>",
         "error: preserve released crate::WaitError failure type at sc_observability_log::LogControl::wait_stopped boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::wait_stopped on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::wait_stopped; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3678,7 +3729,10 @@
         "owner": "LogControl",
         "member": "wait_stopped"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::wait_stopped forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::try_log",
@@ -3689,8 +3743,8 @@
         "signature: preserve sc_observability_log::LogControl::try_log exactly as recorded in this row baseline_signature: pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError>",
         "error: preserve released EmitError failure type at sc_observability_log::LogControl::try_log boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::try_log on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs calls the canonical control::LogControl::try_log, then compat::legacy_emit maps its canonical error to the released root error.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3703,7 +3757,10 @@
         "owner": "LogControl",
         "member": "try_log"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::try_log wrapper and compat::legacy_emit. Retire both when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::LogControl::query",
@@ -3714,8 +3771,8 @@
         "signature: preserve sc_observability_log::LogControl::query exactly as recorded in this row baseline_signature: pub fn query( &self, query: &sc_observability_types::LogQuery, ) -> Result<sc_observability_types::LogSnapshot, ControlError>",
         "error: preserve released ControlError failure type at sc_observability_log::LogControl::query boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root LogControl::query on the compat::LogControl newtype in crates/sc-observability-log/src/compat/mod.rs forwards unchanged to the canonical control::LogControl::query; there is no error translation.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/control.rs",
@@ -3728,29 +3785,38 @@
         "owner": "LogControl",
         "member": "query"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains the compat::LogControl::query forwarding method. Retire it when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::InitError::code",
       "owner": "sc_observability_log::InitError",
       "baseline_signature": "pub fn code(&self) -> ErrorCode",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn code(&self) -> crate::ErrorCode",
       "obligations": [
         "signature: preserve sc_observability_log::InitError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
         "receiver: preserve released &self receiver at sc_observability_log::InitError::code boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "existing_pair",
+      "conversion": "The released root InitError::code is declared on compat::InitError in crates/sc-observability-log/src/compat/mod.rs; the canonical sc_observability_types::v2::InitError::code generated by context_error! in crates/sc-observability-types/src/errors_v2.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
         "owner": "InitError",
         "member": "code"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability-types/src/errors_v2.rs",
+        "owner": "v2::InitError",
+        "member": "code"
+      },
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root InitError::code. Retire it with compat::InitError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::InitError::remediation",
@@ -3762,7 +3828,7 @@
         "receiver: preserve released &self receiver at sc_observability_log::InitError::remediation boundary"
       ],
       "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "conversion": "The released root InitError::remediation is restored on compat::InitError in crates/sc-observability-log/src/compat/mod.rs; sc_observability_types::v2::InitError has no remediation method, and its remediation is reached through diagnostic().",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3771,30 +3837,37 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the restored released root InitError::remediation. Retire it with compat::InitError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::FlushError::code",
       "owner": "sc_observability_log::FlushError",
       "baseline_signature": "pub fn code(&self) -> ErrorCode",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn code(&self) -> crate::ErrorCode",
       "obligations": [
         "signature: preserve sc_observability_log::FlushError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
         "receiver: preserve released &self receiver at sc_observability_log::FlushError::code boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "existing_pair",
+      "conversion": "The released root FlushError::code is declared on compat::FlushError in crates/sc-observability-log/src/compat/mod.rs; the canonical sc_observability_types::v2::FlushError::code generated by context_error! in crates/sc-observability-types/src/errors_v2.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
         "owner": "FlushError",
         "member": "code"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability-types/src/errors_v2.rs",
+        "owner": "v2::FlushError",
+        "member": "code"
+      },
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root FlushError::code. Retire it with compat::FlushError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::FlushError::remediation",
@@ -3806,7 +3879,7 @@
         "receiver: preserve released &self receiver at sc_observability_log::FlushError::remediation boundary"
       ],
       "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "conversion": "The released root FlushError::remediation is restored on compat::FlushError in crates/sc-observability-log/src/compat/mod.rs; sc_observability_types::v2::FlushError has no remediation method, and its remediation is reached through diagnostic().",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3815,30 +3888,37 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the restored released root FlushError::remediation. Retire it with compat::FlushError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::ShutdownError::code",
       "owner": "sc_observability_log::ShutdownError",
       "baseline_signature": "pub fn code(&self) -> ErrorCode",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn code(&self) -> crate::ErrorCode",
       "obligations": [
         "signature: preserve sc_observability_log::ShutdownError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
         "receiver: preserve released &self receiver at sc_observability_log::ShutdownError::code boundary"
       ],
-      "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "treatment": "existing_pair",
+      "conversion": "The released root ShutdownError::code is declared on compat::ShutdownError in crates/sc-observability-log/src/compat/mod.rs; the canonical sc_observability_types::v2::ShutdownError::code generated by context_error! in crates/sc-observability-types/src/errors_v2.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
         "owner": "ShutdownError",
         "member": "code"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability-types/src/errors_v2.rs",
+        "owner": "v2::ShutdownError",
+        "member": "code"
+      },
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root ShutdownError::code. Retire it with compat::ShutdownError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::ShutdownError::remediation",
@@ -3850,7 +3930,7 @@
         "receiver: preserve released &self receiver at sc_observability_log::ShutdownError::remediation boundary"
       ],
       "treatment": "restoration",
-      "conversion": "restore the released root signature; a later facade delegates/converts to the canonical v2 owner",
+      "conversion": "The released root ShutdownError::remediation is restored on compat::ShutdownError in crates/sc-observability-log/src/compat/mod.rs; sc_observability_types::v2::ShutdownError has no remediation method, and its remediation is reached through diagnostic().",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3859,8 +3939,9 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observability-log/src/error.rs"
-      ]
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the restored released root ShutdownError::remediation. Retire it with compat::ShutdownError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::EmitError::code",
@@ -3871,8 +3952,8 @@
         "signature: preserve sc_observability_log::EmitError::code exactly as recorded in this row baseline_signature: pub fn code(&self) -> ErrorCode",
         "receiver: preserve released &self receiver at sc_observability_log::EmitError::code boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released root EmitError::code is declared on compat::EmitError in crates/sc-observability-log/src/compat/mod.rs; the canonical crate::error::EmitError::code in crates/sc-observability-log/src/error.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3885,7 +3966,10 @@
         "owner": "EmitError",
         "member": "code"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root EmitError::code. Retire it with compat::EmitError when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_log::EmitError::remediation",
@@ -3896,8 +3980,8 @@
         "signature: preserve sc_observability_log::EmitError::remediation exactly as recorded in this row baseline_signature: pub fn remediation(&self) -> Remediation",
         "receiver: preserve released &self receiver at sc_observability_log::EmitError::remediation boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "existing_pair",
+      "conversion": "The released root EmitError::remediation is declared on compat::EmitError in crates/sc-observability-log/src/compat/mod.rs; the canonical crate::error::EmitError::remediation in crates/sc-observability-log/src/error.rs is its pair. The canonical implementation never imports compat.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/error.rs",
@@ -3910,7 +3994,10 @@
         "owner": "EmitError",
         "member": "remediation"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs declares the released root EmitError::remediation. Retire it with compat::EmitError when the released root surface is removed."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::default_for",
@@ -4260,14 +4347,15 @@
     {
       "symbol": "sc_observe::ObservabilityBuilder::register_subscriber",
       "owner": "sc_observe::ObservabilityBuilder",
-      "baseline_signature": "pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self where T: Observable,",
-      "canonical_signature": "pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self where T: Observable,",
+      "baseline_signature": "pub fn register_subscriber<T>(mut self, registration: sc_observability_types::SubscriberRegistration<T>) -> Self where T: Observable,",
+      "canonical_signature": "pub fn register_subscriber<T>(self, registration: sc_observability_types::v2::SubscriberRegistration<T>) -> Self where T: Observable,",
       "obligations": [
-        "signature: preserve sc_observe::ObservabilityBuilder::register_subscriber exactly as recorded in this row baseline_signature: pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self where T: Observable,",
-        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_subscriber boundary"
+        "signature: preserve sc_observe::ObservabilityBuilder::register_subscriber as recorded in baseline_signature; the by-value receiver (mut self vs self) is not an API difference",
+        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_subscriber boundary",
+        "conversion: released callbacks keep their Arc identity and every error they return reaches routing with its original context and source"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the root method converts its released SubscriberRegistration with From into v2::SubscriberRegistration and registers it through the same private path as sc_observe::v2::ObservabilityBuilder::register_subscriber; the supplied objects and filter are kept",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observe/src/lib.rs",
@@ -4277,7 +4365,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observe/src/lib.rs",
-        "owner": "ObservabilityBuilder",
+        "owner": "v2::ObservabilityBuilder",
         "member": "register_subscriber"
       },
       "removable_paths": []
@@ -4285,14 +4373,15 @@
     {
       "symbol": "sc_observe::ObservabilityBuilder::register_projection",
       "owner": "sc_observe::ObservabilityBuilder",
-      "baseline_signature": "pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self where T: Observable,",
-      "canonical_signature": "pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self where T: Observable,",
+      "baseline_signature": "pub fn register_projection<T>(mut self, registration: sc_observability_types::ProjectionRegistration<T>) -> Self where T: Observable,",
+      "canonical_signature": "pub fn register_projection<T>(self, registration: sc_observability_types::v2::ProjectionRegistration<T>) -> Self where T: Observable,",
       "obligations": [
-        "signature: preserve sc_observe::ObservabilityBuilder::register_projection exactly as recorded in this row baseline_signature: pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self where T: Observable,",
-        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_projection boundary"
+        "signature: preserve sc_observe::ObservabilityBuilder::register_projection as recorded in baseline_signature; the by-value receiver (mut self vs self) is not an API difference",
+        "generics: preserve released method parameter <T> with T: Observable bound at sc_observe::ObservabilityBuilder::register_projection boundary",
+        "conversion: released callbacks keep their Arc identity and every error they return reaches routing with its original context and source"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "the root method converts its released ProjectionRegistration with From into v2::ProjectionRegistration and registers it through the same private path as sc_observe::v2::ObservabilityBuilder::register_projection; the supplied objects and filter are kept",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observe/src/lib.rs",
@@ -4302,7 +4391,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observe/src/lib.rs",
-        "owner": "ObservabilityBuilder",
+        "owner": "v2::ObservabilityBuilder",
         "member": "register_projection"
       },
       "removable_paths": []
@@ -4366,7 +4455,7 @@
         "error: preserve released InitError failure type at sc_observability_otlp::Telemetry::new boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released Telemetry::new in compat.rs delegates to Telemetry::new_typed, which wraps RuntimeTelemetry::new_typed and converts InitFailure into released InitError; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4376,7 +4465,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "new"
       },
       "removable_paths": [
@@ -4501,7 +4590,7 @@
         "error: preserve released FlushError failure type at sc_observability_otlp::Telemetry::flush boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released Telemetry::flush in compat.rs delegates to flush_typed and converts FlushFailure into released FlushError; flush_typed calls the inner RuntimeTelemetry; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4511,7 +4600,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "flush"
       },
       "removable_paths": [
@@ -4555,7 +4644,7 @@
         "error: preserve released ShutdownError failure type at sc_observability_otlp::Telemetry::shutdown boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The released Telemetry::shutdown in compat.rs delegates to shutdown_typed and converts ShutdownFailure into released ShutdownError; shutdown_typed calls the inner RuntimeTelemetry; the canonical runtime does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4565,7 +4654,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/lib.rs",
-        "owner": "Telemetry",
+        "owner": "RuntimeTelemetry",
         "member": "shutdown"
       },
       "removable_paths": [
@@ -4663,7 +4752,7 @@
         "error: preserve released InitFailure failure type at sc_observability_otlp::OtlpEndpoint::new_typed boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The compatibility OtlpEndpoint::new_typed in compat.rs delegates to config::OtlpEndpoint::new_typed, wraps the validated endpoint, and maps ConfigFailure context to InitFailure; the canonical config type does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4673,7 +4762,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "OtlpEndpoint",
+        "owner": "config::OtlpEndpoint",
         "member": "new_typed"
       },
       "removable_paths": [
@@ -4744,7 +4833,7 @@
         "error: preserve released InitFailure failure type at sc_observability_otlp::AuthHeader::new_typed boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "The compatibility AuthHeader::new_typed in compat.rs delegates to config::AuthHeader::new_typed, wraps the validated header, and maps ConfigFailure context to InitFailure; the canonical config type does not import compatibility code.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/config.rs",
@@ -4754,7 +4843,7 @@
       "canonical_source": {
         "revision": "selected_head",
         "path": "crates/sc-observability-otlp/src/config/types.rs",
-        "owner": "AuthHeader",
+        "owner": "config::AuthHeader",
         "member": "new_typed"
       },
       "removable_paths": [
@@ -5267,16 +5356,66 @@
       ]
     },
     {
+      "symbol": "sc_observability::typed::legacy_sink",
+      "owner": null,
+      "baseline_signature": "pub fn legacy_sink(value: Arc<dyn TypedLogSink>) -> Arc<dyn LogSink>",
+      "canonical_signature": null,
+      "obligations": [
+        "signature: preserve sc_observability::typed::legacy_sink exactly as recorded in this row baseline_signature: pub fn legacy_sink(value: Arc<dyn TypedLogSink>) -> Arc<dyn LogSink>",
+        "attribute: preserve #[must_use] on sc_observability::typed::legacy_sink",
+        "trait: the released typed::TypedLogSink keeps its LogSinkFailure write/flush signature and default flush; the adapter preserves health, diagnostic, remediation and source chain in both directions",
+        "error: preserve released LogSinkFailure failure type at the boundary; adapt exactly once with no canonical round trip"
+      ],
+      "treatment": "restoration",
+      "conversion": "restore the released free function in compat.rs, published at typed:: through typed.rs; it adapts between the released root LogSink and the released typed TypedLogSink and never touches the canonical v2::LogSink",
+      "baseline_source": {
+        "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
+        "path": "crates/sc-observability/src/typed.rs",
+        "owner": null,
+        "member": "legacy_sink"
+      },
+      "canonical_source": null,
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/typed.rs"
+      ]
+    },
+    {
+      "symbol": "sc_observability::typed::typed_sink",
+      "owner": null,
+      "baseline_signature": "pub fn typed_sink(value: Arc<dyn LogSink>) -> Arc<dyn TypedLogSink>",
+      "canonical_signature": null,
+      "obligations": [
+        "signature: preserve sc_observability::typed::typed_sink exactly as recorded in this row baseline_signature: pub fn typed_sink(value: Arc<dyn LogSink>) -> Arc<dyn TypedLogSink>",
+        "attribute: preserve #[must_use] on sc_observability::typed::typed_sink",
+        "trait: the released typed::TypedLogSink keeps its LogSinkFailure write/flush signature and default flush; the adapter preserves health, diagnostic, remediation and source chain in both directions",
+        "error: preserve released LogSinkFailure failure type at the boundary; adapt exactly once with no canonical round trip"
+      ],
+      "treatment": "restoration",
+      "conversion": "restore the released free function in compat.rs, published at typed:: through typed.rs; it adapts between the released root LogSink and the released typed TypedLogSink and never touches the canonical v2::LogSink",
+      "baseline_source": {
+        "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
+        "path": "crates/sc-observability/src/typed.rs",
+        "owner": null,
+        "member": "typed_sink"
+      },
+      "canonical_source": null,
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/typed.rs"
+      ]
+    },
+    {
       "symbol": "sc_observability_log::init",
       "owner": "sc_observability_log",
       "baseline_signature": "pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
-      "canonical_signature": "pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
+      "canonical_signature": "pub fn init( config: crate::LoggerConfig, options: crate::BridgeOptions, ) -> Result<v2::LogGuard, sc_observability_types::v2::InitError>",
       "obligations": [
         "signature: preserve sc_observability_log::init exactly as recorded in this row baseline_signature: pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError>",
         "error: preserve released InitError failure type at sc_observability_log::init boundary"
       ],
-      "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "treatment": "new_adapter",
+      "conversion": "The released root sc_observability_log::init shim in crates/sc-observability-log/src/lib.rs calls init_canonical, then compat::legacy_init maps sc_observability_types::v2::InitError to the released sc_observability_log::InitError; v2::init returns the canonical error directly.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-log/src/lib.rs",
@@ -5287,9 +5426,13 @@
         "revision": "selected_head",
         "path": "crates/sc-observability-log/src/lib.rs",
         "owner": null,
-        "member": "init"
+        "member": "v2::init"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-log/src/compat/mod.rs",
+        "crates/sc-observability-log/src/lib.rs"
+      ],
+      "removal_rationale": "crates/sc-observability-log/src/compat/mod.rs contains compat::legacy_init; crates/sc-observability-log/src/lib.rs contains the retained released root shim that invokes it. Retire that shim and its error mapping when the released root surface is removed."
     },
     {
       "symbol": "sc_observability_dto::from_core_health",
@@ -5317,16 +5460,16 @@
   "trait_slot_contracts": [
     {
       "symbol": "sc_observability_types::ProcessIdentityResolver::resolve",
-      "baseline_signature": "fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
-      "canonical_signature": "fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
+      "baseline_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>",
+      "canonical_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError>",
       "obligations": [
-        "signature: preserve sc_observability_types::ProcessIdentityResolver::resolve exactly as recorded in this row baseline_signature: fn resolve(&self) -> Result<ProcessIdentity, IdentityError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::ProcessIdentityResolver::resolve baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root IdentityError identity at this slot; only the facade converts IdentityError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::ProcessIdentityResolver::resolve exactly as recorded in this row baseline_signature: fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync bounds of the root ProcessIdentityResolver at crates/sc-observability-types/src/process.rs",
+        "canonical: v2::ProcessIdentityResolver::resolve keeps the same receiver and bounds and returns crate::v2::IdentityError",
+        "identity: conversion moves the Box<ErrorContext> between crate::IdentityError and crate::v2::IdentityError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "ProcessIdentityPolicy::v2_resolver wraps a v2::ProcessIdentityResolver in a private adapter that moves the v2::IdentityError context into the root IdentityError; the released trait is used as-is",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/process.rs",
@@ -5335,26 +5478,25 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/process.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "ProcessIdentityResolver",
         "member": "resolve"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/process.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::ObservationSubscriber::observe",
-      "baseline_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
-      "canonical_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
+      "baseline_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError>",
+      "canonical_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), crate::v2::SubscriberError>",
       "obligations": [
-        "signature: preserve sc_observability_types::ObservationSubscriber::observe exactly as recorded in this row baseline_signature: fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::ObservationSubscriber::observe baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root SubscriberError identity at this slot; only the facade converts SubscriberError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::ObservationSubscriber::observe exactly as recorded in this row baseline_signature: fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root ObservationSubscriber at crates/sc-observability-types/src/projection.rs",
+        "canonical: v2::ObservationSubscriber::observe keeps the same receiver and bounds and returns crate::v2::SubscriberError",
+        "identity: conversion moves the Box<ErrorContext> between crate::SubscriberError and crate::v2::SubscriberError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root SubscriberRegistration and v2::SubscriberRegistration; private adapters move the error context between SubscriberError and v2::SubscriberError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5363,26 +5505,25 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "ObservationSubscriber",
         "member": "observe"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/projection.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::LogProjector::project_logs",
-      "baseline_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
-      "canonical_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
+      "baseline_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::ProjectionError>",
+      "canonical_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::v2::ProjectionError>",
       "obligations": [
-        "signature: preserve sc_observability_types::LogProjector::project_logs exactly as recorded in this row baseline_signature: fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::LogProjector::project_logs baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::LogProjector::project_logs exactly as recorded in this row baseline_signature: fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::ProjectionError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root LogProjector at crates/sc-observability-types/src/projection.rs",
+        "canonical: v2::LogProjector::project_logs keeps the same receiver and bounds and returns crate::v2::ProjectionError",
+        "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5391,26 +5532,25 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "LogProjector",
         "member": "project_logs"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/projection.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::SpanProjector::project_spans",
-      "baseline_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
-      "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
+      "baseline_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>",
+      "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::v2::ProjectionError>",
       "obligations": [
-        "signature: preserve sc_observability_types::SpanProjector::project_spans exactly as recorded in this row baseline_signature: fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, ProjectionError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::SpanProjector::project_spans baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::SpanProjector::project_spans exactly as recorded in this row baseline_signature: fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root SpanProjector at crates/sc-observability-types/src/projection.rs",
+        "canonical: v2::SpanProjector::project_spans keeps the same receiver and bounds and returns crate::v2::ProjectionError",
+        "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5419,26 +5559,25 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "SpanProjector",
         "member": "project_spans"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/projection.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability_types::MetricProjector::project_metrics",
-      "baseline_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
-      "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
+      "baseline_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>",
+      "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::v2::ProjectionError>",
       "obligations": [
-        "signature: preserve sc_observability_types::MetricProjector::project_metrics exactly as recorded in this row baseline_signature: fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, ProjectionError>",
-        "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability_types::MetricProjector::project_metrics baseline_signature",
-        "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root ProjectionError identity at this slot; only the facade converts ProjectionError to its selected-head v2 counterpart"
+        "signature: preserve sc_observability_types::MetricProjector::project_metrics exactly as recorded in this row baseline_signature: fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root MetricProjector at crates/sc-observability-types/src/projection.rs",
+        "canonical: v2::MetricProjector::project_metrics keeps the same receiver and bounds and returns crate::v2::ProjectionError",
+        "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "From converts between the released root ProjectionRegistration and v2::ProjectionRegistration; private adapters move the error context between ProjectionError and v2::ProjectionError in both directions without re-wrapping",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-types/src/projection.rs",
@@ -5447,18 +5586,17 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/observation_v2.rs",
         "owner": "MetricProjector",
         "member": "project_metrics"
       },
-      "removable_paths": [
-        "crates/sc-observability-types/src/projection.rs"
-      ]
+      "removable_paths": [],
+      "removal_rationale": "The released root trait is restored in place at its 1.4.1 path and stays for all of 1.x; the canonical v2 trait lives in observation_v2.rs, so no released path is removable."
     },
     {
       "symbol": "sc_observability::LogSink::write",
       "baseline_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
-      "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
+      "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>",
       "obligations": [
         "signature: preserve sc_observability::LogSink::write exactly as recorded in this row baseline_signature: fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::write baseline_signature",
@@ -5466,7 +5604,7 @@
         "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released slot stays in compat.rs with its released error type; the canonical v2::LogSink slot is stored by the runtime and registration adapts once at the boundary; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -5475,26 +5613,27 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/sink.rs",
         "owner": "LogSink",
         "member": "write"
       },
       "removable_paths": [
-        "crates/sc-observability/src/lib.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
       "symbol": "sc_observability::LogSink::flush",
       "baseline_signature": "fn flush(&self) -> Result<(), LogSinkError>",
-      "canonical_signature": "fn flush(&self) -> Result<(), LogSinkError>",
+      "canonical_signature": "fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) }",
       "obligations": [
         "signature: preserve sc_observability::LogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkError>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::LogSink::flush baseline_signature",
         "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart"
+        "identity: retain the released root LogSinkError identity at this slot; only the facade converts LogSinkError to its selected-head v2 counterpart",
+        "default method: preserve the released provided default body (Ok(()))"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released slot stays in compat.rs with its released error type; the canonical v2::LogSink slot is stored by the runtime and registration adapts once at the boundary; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -5503,12 +5642,12 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/sink.rs",
         "owner": "LogSink",
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observability/src/lib.rs"
+        "crates/sc-observability/src/compat.rs"
       ]
     },
     {
@@ -5522,7 +5661,7 @@
         "behavior: preserve the released return and side-effect semantics recorded in sc_observability::LogSink::health baseline_signature"
       ],
       "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "conversion": "none; health has no error type: the released slot in compat.rs delegates directly to the canonical v2::LogSink health slot and returns the same SinkHealth unchanged",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/lib.rs",
@@ -5531,16 +5670,19 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/lib.rs",
+        "path": "crates/sc-observability/src/sink.rs",
         "owner": "LogSink",
         "member": "health"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs"
+      ],
+      "removal_rationale": "the released health slot is declared in compat.rs; remove it with the released trait."
     },
     {
       "symbol": "sc_observability::typed::TypedLogSink::write",
       "baseline_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>",
-      "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>",
+      "canonical_signature": "fn write(&self, event: &LogEvent) -> Result<(), v2::LogSinkError>",
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::write exactly as recorded in this row baseline_signature: fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::write baseline_signature",
@@ -5548,7 +5690,7 @@
         "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released slot stays in compat.rs with its released error type; the canonical v2::LogSink slot is stored by the runtime and registration adapts once at the boundary; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/typed.rs",
@@ -5557,26 +5699,28 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/typed.rs",
-        "owner": "TypedLogSink",
+        "path": "crates/sc-observability/src/sink.rs",
+        "owner": "LogSink",
         "member": "write"
       },
       "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ]
     },
     {
       "symbol": "sc_observability::typed::TypedLogSink::flush",
       "baseline_signature": "fn flush(&self) -> Result<(), LogSinkFailure>",
-      "canonical_signature": "fn flush(&self) -> Result<(), LogSinkError>",
+      "canonical_signature": "fn flush(&self) -> Result<(), v2::LogSinkError> { Ok(()) }",
       "obligations": [
         "signature: preserve sc_observability::typed::TypedLogSink::flush exactly as recorded in this row baseline_signature: fn flush(&self) -> Result<(), LogSinkFailure>",
         "trait contract: preserve the released receiver, public implementability, bounds, and object-safety semantics recorded in sc_observability::typed::TypedLogSink::flush baseline_signature",
         "trait: preserve public implementability and Send + Sync constraints",
-        "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart"
+        "identity: retain the released root LogSinkFailure identity at this slot; only the facade converts LogSinkFailure to its selected-head v2 counterpart",
+        "default method: preserve the released provided default body (Ok(()))"
       ],
       "treatment": "new_adapter",
-      "conversion": "legacy root signature converts at its future facade boundary to the canonical v2 owner; canonical implementation never imports compat",
+      "conversion": "the released slot stays in compat.rs with its released error type; the canonical v2::LogSink slot is stored by the runtime and registration adapts once at the boundary; canonical implementation never imports compat",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/typed.rs",
@@ -5585,11 +5729,12 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/typed.rs",
-        "owner": "TypedLogSink",
+        "path": "crates/sc-observability/src/sink.rs",
+        "owner": "LogSink",
         "member": "flush"
       },
       "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ]
     },
@@ -5604,7 +5749,7 @@
         "behavior: preserve the released return and side-effect semantics recorded in sc_observability::typed::TypedLogSink::health baseline_signature"
       ],
       "treatment": "unchanged_alias",
-      "conversion": "none; the canonical declaration is identity-preserving",
+      "conversion": "none; health has no error type: the released slot in compat.rs delegates directly to the canonical v2::LogSink health slot and returns the same SinkHealth unchanged",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability/src/typed.rs",
@@ -5613,11 +5758,15 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/typed.rs",
-        "owner": "TypedLogSink",
+        "path": "crates/sc-observability/src/sink.rs",
+        "owner": "LogSink",
         "member": "health"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/typed.rs"
+      ],
+      "removal_rationale": "the released health slot is declared in compat.rs; remove it with the released trait."
     },
     {
       "symbol": "sc_observability::LogFilter::accepts",

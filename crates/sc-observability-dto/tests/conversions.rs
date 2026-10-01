@@ -105,14 +105,55 @@ fn inputs_reject_missing_unknown_and_invalid_versions() {
 
 #[test]
 fn typed_constructor_codes_survive_dto_validation() {
+    let source_error = core::TargetCategory::new("invalid target").unwrap_err();
+    let source_message = source_error.to_string();
     let mut raw = event();
     raw["target"] = json!("invalid target");
+    let Err(Failure::Validation { diagnostic, field }) =
+        to_core_event(decode_event(raw).unwrap(), stamp())
+    else {
+        panic!("invalid target must fail DTO validation");
+    };
+    assert_eq!(field, "target");
+    assert_eq!(
+        diagnostic.code,
+        core::error_codes::VALUE_VALIDATION_FAILED.as_str()
+    );
+    assert!(
+        diagnostic
+            .message
+            .contains(std::any::type_name::<core::ValueValidationError>())
+    );
+    assert!(diagnostic.message.contains(&source_message));
     assert!(matches!(
-        to_core_event(decode_event(raw).unwrap(), stamp()),
-        Err(Failure::Validation { diagnostic, field })
-            if field == "target"
-                && diagnostic.code == core::error_codes::VALUE_VALIDATION_FAILED.as_str()
-                && matches!(diagnostic.remediation, RemediationDto::Recoverable { ref steps } if !steps.is_empty())
+        diagnostic.remediation,
+        RemediationDto::Recoverable { ref steps } if !steps.is_empty()
+    ));
+}
+
+#[test]
+fn serde_conversion_errors_include_type_and_preserve_fallback_context() {
+    let mut raw = event();
+    raw["level"] = json!(false);
+    let source_message = serde_json::from_value::<LogEventDto>(raw.clone())
+        .unwrap_err()
+        .to_string();
+
+    let Err(Failure::Validation { diagnostic, field }) = decode_event(raw) else {
+        panic!("invalid level shape must fail DTO decoding");
+    };
+
+    assert_eq!(field, "event");
+    assert_eq!(diagnostic.code, "SC_OBSERVABILITY_BINDING_INVALID_INPUT");
+    assert!(
+        diagnostic
+            .message
+            .contains(std::any::type_name::<serde_json::Error>())
+    );
+    assert!(diagnostic.message.contains(&source_message));
+    assert!(matches!(
+        diagnostic.remediation,
+        RemediationDto::Recoverable { ref steps } if !steps.is_empty()
     ));
 }
 #[test]
@@ -349,7 +390,7 @@ fn all_stored_event_fields_and_trusted_output_survive() {
     });
     native.state_transition = Some(core::StateTransition {
         entity_kind: core::TargetCategory::new("worker").unwrap(),
-        entity_id: Some(core::EntityId::new("worker-1").unwrap()),
+        entity_id: Some("worker-1".to_string()),
         from_state: core::StateName::new("idle").unwrap(),
         to_state: core::StateName::new("active").unwrap(),
         reason: Some("work".into()),
@@ -555,4 +596,26 @@ fn diagnostic_string_and_step_bounds_are_exact_and_never_truncate() {
     );
     diagnostic.remediation = RemediationDto::Recoverable { steps: vec![] };
     validate_diagnostic(&diagnostic, "response.error").unwrap();
+}
+#[test]
+fn telemetry_event_error_projects_as_validation_not_internal() {
+    let error = core::v2::TelemetryError::Event(core::v2::EventError::Validation {
+        context: Box::new(core::ErrorContext::new(
+            core::error_codes::DIAGNOSTIC_INVALID,
+            "entity id rejected",
+            core::Remediation::recoverable("fix the id", ["rebuild the event"]),
+        )),
+    });
+    let projected = CanonicalFailureDto::try_from(&error).expect("projection succeeds");
+    match projected {
+        CanonicalFailureDto::Validation { diagnostic, field } => {
+            assert_eq!(field, "event");
+            assert_eq!(
+                diagnostic.diagnostic.code,
+                core::error_codes::DIAGNOSTIC_INVALID.as_str()
+            );
+            assert_eq!(diagnostic.diagnostic.message, "entity id rejected");
+        }
+        other => panic!("expected Validation, got {other:?}"),
+    }
 }

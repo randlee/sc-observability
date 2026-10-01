@@ -858,6 +858,27 @@ fn lifecycle_deadline_and_runtime_termination_are_typed() {
     );
 }
 
+#[test]
+fn expired_shutdown_reaches_the_monotonic_deadline_comparison() {
+    let (core, _, _, _) = fixture(None, &OtelConfig::default());
+    let mut shutdown = core.expired_shutdown_for_test();
+
+    let Poll::Ready(result) = poll_once(&mut shutdown) else {
+        panic!("expired shutdown did not reach the deadline comparison");
+    };
+    assert_eq!(
+        result
+            .expect_err("expired shutdown must time out")
+            .diagnostic()
+            .code,
+        crate::error_codes::OTLP_LIFECYCLE_TIMEOUT
+    );
+
+    let health = core.health();
+    assert!(health.degraded);
+    assert_eq!(health.phase, LifecycleState::Shutdown);
+}
+
 fn runtime_terminated() -> ExportError {
     ExportError::RuntimeTerminated {
         context: Box::new(sc_observability_types::ErrorContext::new(

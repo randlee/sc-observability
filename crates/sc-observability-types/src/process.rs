@@ -1,8 +1,14 @@
+#![allow(
+    deprecated,
+    reason = "process identity retains its published resolver signature while typed callers use explicit adapters"
+)]
+
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::v2::IdentityError;
+use crate::IdentityError;
+use crate::observation_v2 as canonical;
 
 /// Caller-resolved process identity attached to observations and log events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -41,6 +47,27 @@ impl std::fmt::Debug for ProcessIdentityPolicy {
                 f.write_str("ProcessIdentityPolicy::Resolver(<dyn ProcessIdentityResolver>)")
             }
         }
+    }
+}
+
+impl ProcessIdentityPolicy {
+    /// Delegates identity resolution to a canonical `v2` resolver.
+    ///
+    /// The resolver's error context is moved unchanged into the released
+    /// [`IdentityError`], so its code, message and source are preserved.
+    #[must_use]
+    pub fn v2_resolver(resolver: Arc<dyn canonical::ProcessIdentityResolver>) -> Self {
+        Self::Resolver(Arc::new(CanonicalResolver(resolver)))
+    }
+}
+
+struct CanonicalResolver(Arc<dyn canonical::ProcessIdentityResolver>);
+
+impl ProcessIdentityResolver for CanonicalResolver {
+    fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
+        self.0
+            .resolve()
+            .map_err(|error| IdentityError(error.into_context()))
     }
 }
 

@@ -22,7 +22,7 @@ fn from_attributes(value: &core::v2::Attributes) -> Result<BTreeMap<String, Valu
         .map(|(key, value)| {
             Ok((
                 key.clone(),
-                from_json_value_total(checked(serde_json::to_value(value), "attributes")?),
+                from_json_value(checked(serde_json::to_value(value), "attributes")?)?,
             ))
         })
         .collect()
@@ -409,7 +409,7 @@ pub fn decode_canonical_envelope<T: DeserializeOwned>(
                 .clone();
             Ok(CanonicalWireEnvelope::Ok {
                 schema_version: 1,
-                value: decode(value, "response")?,
+                value: checked(serde_json::from_value(value), "response")?,
             })
         }
         Some("error") => {
@@ -419,15 +419,17 @@ pub fn decode_canonical_envelope<T: DeserializeOwned>(
             let raw = object
                 .get("error")
                 .ok_or_else(|| invalid_input("response", "missing error"))?;
+            let diagnostic: Diagnostic = checked(serde_json::from_value(raw.clone()), "response")?;
+            validate_diagnostic(&diagnostic, "response.error")?;
             let tag = raw
                 .get("kind")
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid_input("response", "missing failure kind"))?;
             let error = if CanonicalFailureDto::KNOWN_KINDS.contains(&tag) {
-                decode(raw.clone(), "response.error")?
+                decode(raw.clone(), "response")?
             } else {
                 CanonicalFailureDto::UnknownRemote {
-                    diagnostic: Box::new(decode(raw.clone(), "response.error")?),
+                    diagnostic: Box::new(decode(raw.clone(), "response")?),
                     remote_kind: tag.into(),
                 }
             };

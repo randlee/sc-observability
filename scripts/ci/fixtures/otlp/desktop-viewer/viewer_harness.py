@@ -269,34 +269,38 @@ def stop(args: argparse.Namespace) -> None:
     state = Path(args.state_dir).expanduser().resolve()
     pid, metadata = _owned(state)
     database = _owned_database(state, metadata) if args.remove_state else None
-    os.kill(pid, signal.SIGTERM)
-    deadline = time.monotonic() + args.timeout
-    while time.monotonic() < deadline:
-        if _command_args(pid) is None:
-            break
-        time.sleep(0.1)
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
     else:
-        if _command_args(pid) is not None:
-            # Revalidate ownership immediately before escalation in case the
-            # PID exited and was reused while the graceful deadline elapsed.
-            checked_pid, _ = _owned(state)
-            if checked_pid != pid:
-                raise HarnessError(f"refusing to force-stop changed viewer PID {pid}")
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline:
-                if _command_args(pid) is None:
-                    try:
-                        os.waitpid(pid, os.WNOHANG)
-                    except ChildProcessError:
-                        pass
-                    break
-                time.sleep(0.05)
-            else:
-                raise HarnessError(f"owned viewer PID {pid} did not stop after SIGKILL")
+        deadline = time.monotonic() + args.timeout
+        while time.monotonic() < deadline:
+            if _command_args(pid) is None:
+                break
+            time.sleep(0.1)
+        else:
+            if _command_args(pid) is not None:
+                # Revalidate ownership immediately before escalation in case the
+                # PID exited and was reused while the graceful deadline elapsed.
+                checked_pid, _ = _owned(state)
+                if checked_pid != pid:
+                    raise HarnessError(f"refusing to force-stop changed viewer PID {pid}")
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if _command_args(pid) is None:
+                        try:
+                            os.waitpid(pid, os.WNOHANG)
+                        except ChildProcessError:
+                            pass
+                        break
+                    time.sleep(0.05)
+                else:
+                    raise HarnessError(f"owned viewer PID {pid} did not stop after SIGKILL")
     (state / "viewer.pid").unlink(missing_ok=True)
     (state / "viewer.json").unlink(missing_ok=True)
     if args.remove_state:

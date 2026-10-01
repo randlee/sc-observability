@@ -13,9 +13,9 @@ use std::time::{Duration, Instant};
 
 use sc_observability::{RedactionPolicy, Redactor};
 use sc_observability_log::{
-    ActionName, AdmissionOutcome, BridgeEvent, BridgeOptions, EmitError, EventLevel, LevelFilter,
-    LifecyclePhase, LoggerConfig, ServiceName, ShutdownError, ShutdownOutcome, TargetCategory,
-    WaitError,
+    ActionName, AdmissionOutcome, BridgeEvent, BridgeOptions, EmitError, EventLevel, FlushError,
+    LevelFilter, LifecyclePhase, LoggerConfig, ServiceName, ShutdownError, ShutdownOutcome,
+    TargetCategory, WaitError,
 };
 use sc_observability_types::WriterState;
 
@@ -148,6 +148,12 @@ fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
     assert!(matches!(
         control.try_log(event("rejected while stopping", serde_json::Map::new())),
         Err(EmitError::NotRunning {
+            phase: LifecyclePhase::Stopping,
+        })
+    ));
+    assert!(matches!(
+        control.flush(Duration::ZERO),
+        Err(FlushError::NotRunning {
             phase: LifecyclePhase::Stopping,
         })
     ));

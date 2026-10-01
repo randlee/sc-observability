@@ -324,20 +324,27 @@ impl EmitError {
 
 #[derive(Debug, Clone)]
 /// Cloneable, non-owning control for the installed released 1.x bridge.
-pub struct LogControl(control::LogControl);
+pub struct LogControl {
+    _private: (),
+}
+
+/// The canonical control every released root control routes through; root
+/// controls never carry an attachment, so this one global is identical to
+/// each value the root facade used to hold.
+static ROOT_CONTROL: control::LogControl = control::LogControl::new();
 
 impl LogControl {
     pub(crate) const fn new() -> Self {
-        Self(control::LogControl::new())
+        Self { _private: () }
     }
 
     /// Converts this released 1.x control into its canonical v2 facade.
     ///
-    /// Both facades retain the same weak attachment reference and process
-    /// runtime; this conversion does not create another owner or lifecycle.
+    /// Returns a new unattached canonical control over the same process-wide
+    /// bridge; this conversion does not create another owner or lifecycle.
     #[must_use]
     pub fn into_v2(self) -> crate::v2::LogControl {
-        self.0
+        control::LogControl::new()
     }
 
     /// Requests a bounded flush using the released root error variants.
@@ -346,7 +353,7 @@ impl LogControl {
     ///
     /// Returns the legacy timeout, writer, helper, in-progress, or stopped variant.
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
-        self.0
+        ROOT_CONTROL
             .flush(timeout)
             .map_err(|error| legacy_flush(&error, timeout))
     }
@@ -357,7 +364,7 @@ impl LogControl {
     ///
     /// Returns `ControlError::Unavailable` when no report is retained.
     pub fn health(&self) -> Result<crate::BridgeHealthReport, crate::ControlError> {
-        self.0.health()
+        ROOT_CONTROL.health()
     }
 
     /// Returns the path captured during logger initialization.
@@ -366,13 +373,13 @@ impl LogControl {
     ///
     /// Returns `ControlError::Unavailable` when no path snapshot is available.
     pub fn active_log_path(&self) -> Result<Option<PathBuf>, crate::ControlError> {
-        self.0.active_log_path()
+        ROOT_CONTROL.active_log_path()
     }
 
     /// Snapshots exact-once dropped-event counters.
     #[must_use]
     pub fn dropped_events(&self) -> crate::DroppedEvents {
-        self.0.dropped_events()
+        ROOT_CONTROL.dropped_events()
     }
 
     /// Waits for completion of the already-started owner shutdown.
@@ -384,7 +391,7 @@ impl LogControl {
         &self,
         timeout: Duration,
     ) -> Result<crate::ShutdownReport, crate::WaitError> {
-        self.0.wait_stopped(timeout)
+        ROOT_CONTROL.wait_stopped(timeout)
     }
 
     /// Submits a typed event through the process-wide bridge.
@@ -393,7 +400,7 @@ impl LogControl {
     ///
     /// Returns one of the released typed admission errors after exact-once accounting.
     pub fn try_log(&self, event: crate::BridgeEvent) -> Result<crate::EmitOutcome, EmitError> {
-        self.0.try_log(event).map_err(legacy_emit)
+        ROOT_CONTROL.try_log(event).map_err(legacy_emit)
     }
 
     /// Executes a typed core query.
@@ -405,7 +412,7 @@ impl LogControl {
         &self,
         query: &sc_observability_types::LogQuery,
     ) -> Result<sc_observability_types::LogSnapshot, crate::ControlError> {
-        self.0.query(query)
+        ROOT_CONTROL.query(query)
     }
 }
 
@@ -429,7 +436,7 @@ pub(crate) fn legacy_emit(error: crate::error::EmitError) -> EmitError {
 impl Deref for LogControl {
     type Target = control::LogControl;
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &ROOT_CONTROL
     }
 }
 
@@ -447,7 +454,7 @@ pub(crate) fn legacy_init(
                 configured,
                 available,
             },
-            _ => InitError::RuntimeStart {
+            _ => InitError::Logger {
                 diagnostic: operation_diagnostic(context.diagnostic()),
             },
         },
@@ -462,7 +469,7 @@ pub(crate) fn legacy_init(
                 diagnostic: operation_diagnostic(context.diagnostic()),
             },
         },
-        _ => InitError::RuntimeStart {
+        _ => InitError::Logger {
             diagnostic: operation_diagnostic(error.diagnostic()),
         },
     }
@@ -498,7 +505,7 @@ pub(crate) fn legacy_flush(
                 || diagnostic.code == error_codes::SC_LOG_DETACH_NOT_INSTALLED =>
         {
             FlushError::NotRunning {
-                phase: crate::LifecyclePhase::Stopped,
+                phase: crate::handle::lifecycle_phase(),
             }
         }
         _ => FlushError::Logger { diagnostic },
@@ -541,7 +548,50 @@ fn operation_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use super::*;
+
+    fn context(
+        code: &'static str,
+        remediation: Remediation,
+    ) -> sc_observability_types::ErrorContext {
+        sc_observability_types::ErrorContext::new(
+            ErrorCode::new_static(code),
+            format!("{code} fixture"),
+            remediation,
+        )
+        .source(Box::new(std::io::Error::other("canonical source")))
+    }
+
+    fn diagnostic(
+        code: &'static str,
+        remediation: Remediation,
+    ) -> sc_observability_types::OperationDiagnostic {
+        let context = context(code, remediation);
+        operation_diagnostic(context.diagnostic())
+    }
+
+    macro_rules! assert_root_contract {
+        ($error:expr, $code:expr, $remediation:expr) => {{
+            let error = &$error;
+            assert_eq!(error.code().as_str(), $code);
+            assert_eq!(error.remediation(), $remediation);
+            assert!(
+                Error::source(error).is_none(),
+                "released errors expose diagnostics rather than a new source chain"
+            );
+        }};
+    }
+
+    #[test]
+    fn released_log_control_keeps_released_auto_traits() {
+        fn assert_traits<
+            T: Send + Sync + Unpin + std::panic::UnwindSafe + std::panic::RefUnwindSafe,
+        >() {
+        }
+        assert_traits::<LogControl>();
+    }
 
     #[test]
     fn legacy_init_preserves_runtime_start_variant_and_diagnostic() {
@@ -562,5 +612,362 @@ mod tests {
             panic!("released coordinator failures retain RuntimeStart");
         };
         assert_eq!(diagnostic, expected);
+    }
+
+    #[test]
+    fn legacy_init_table_preserves_released_variants_and_contracts() {
+        let logger_remediation = Remediation::recoverable("repair logger configuration", ["retry"]);
+        let runtime_remediation = Remediation::recoverable("restore runtime", ["retry"]);
+
+        let cases = [
+            (
+                "configuration logger",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Configuration {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOGGER_QUEUE_CAPACITY_INVALID",
+                            logger_remediation.clone(),
+                        )),
+                    },
+                    LevelFilter::Info,
+                    LevelFilter::Trace,
+                ),
+                "SC_OBSERVABILITY_LOGGER_QUEUE_CAPACITY_INVALID",
+                logger_remediation.clone(),
+            ),
+            (
+                "runtime logger",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Runtime {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOGGER_RUNTIME_UNAVAILABLE",
+                            logger_remediation.clone(),
+                        )),
+                    },
+                    LevelFilter::Info,
+                    LevelFilter::Trace,
+                ),
+                "SC_OBSERVABILITY_LOGGER_RUNTIME_UNAVAILABLE",
+                logger_remediation.clone(),
+            ),
+            (
+                "runtime start",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Runtime {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED",
+                            runtime_remediation.clone(),
+                        )),
+                    },
+                    LevelFilter::Info,
+                    LevelFilter::Trace,
+                ),
+                "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED",
+                Remediation::recoverable(
+                    "inspect thread and resource availability, then retry initialization explicitly",
+                    std::iter::empty::<String>(),
+                ),
+            ),
+            (
+                "identity resolution",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Runtime {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED",
+                            runtime_remediation.clone(),
+                        )),
+                    },
+                    LevelFilter::Info,
+                    LevelFilter::Trace,
+                ),
+                "SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED",
+                runtime_remediation.clone(),
+            ),
+        ];
+
+        for (name, error, code, remediation) in cases {
+            match name {
+                "configuration logger" | "runtime logger" => {
+                    assert!(matches!(error, InitError::Logger { .. }));
+                }
+                "runtime start" => assert!(matches!(error, InitError::RuntimeStart { .. })),
+                "identity resolution" => {
+                    assert!(matches!(error, InitError::IdentityResolution { .. }));
+                }
+                _ => unreachable!("fixed table row"),
+            }
+            assert_root_contract!(error, code, remediation);
+        }
+    }
+
+    #[test]
+    fn legacy_flush_table_preserves_released_variants_and_contracts() {
+        let diagnostic_remediation = Remediation::recoverable("inspect logger", ["retry"]);
+        let timeout = Duration::from_millis(7);
+        let cases = [
+            (
+                "timeout",
+                "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT",
+                FlushError::TimedOut { timeout },
+                Remediation::recoverable(
+                    "retry the flush later or raise the timeout",
+                    [
+                        "a shutdown before the detached flush returns reports ShutdownError::TimedOut",
+                    ],
+                ),
+            ),
+            (
+                "helper spawn",
+                "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED",
+                legacy_flush(
+                    &sc_observability_types::v2::FlushError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
+                Remediation::not_recoverable(
+                    "inspect resource availability and retained logger health; completion is unconfirmed",
+                ),
+            ),
+            (
+                "helper lost",
+                "SC_OBSERVABILITY_LOG_HELPER_LOST",
+                legacy_flush(
+                    &sc_observability_types::v2::FlushError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_HELPER_LOST",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
+                Remediation::not_recoverable(
+                    "inspect retained lifecycle and health; do not claim worker completion",
+                ),
+            ),
+        ];
+
+        for (name, code, error, remediation) in cases {
+            match name {
+                "timeout" => assert!(matches!(error, FlushError::TimedOut { .. })),
+                "helper spawn" => assert!(matches!(error, FlushError::HelperSpawn { .. })),
+                "helper lost" => assert!(matches!(error, FlushError::HelperLost { .. })),
+                _ => unreachable!("fixed table row"),
+            }
+            assert_root_contract!(error, code, remediation);
+        }
+    }
+
+    #[test]
+    fn released_control_flush_reads_the_failed_phase_at_the_adapter_boundary() {
+        struct RestoreStopped;
+
+        impl Drop for RestoreStopped {
+            fn drop(&mut self) {
+                crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Stopped);
+            }
+        }
+
+        crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Failed);
+        let _restore = RestoreStopped;
+        let error = LogControl::new()
+            .flush(Duration::ZERO)
+            .expect_err("failed lifecycle must reject the released flush");
+        assert!(matches!(
+            error,
+            FlushError::NotRunning {
+                phase: crate::LifecyclePhase::Failed,
+            }
+        ));
+    }
+
+    #[test]
+    fn legacy_shutdown_and_emit_tables_preserve_root_contracts() {
+        let diagnostic_remediation = Remediation::recoverable("inspect logger", ["retry"]);
+        let timeout = Duration::from_millis(7);
+        let shutdown_cases = [
+            (
+                "timeout",
+                legacy_shutdown(
+                    sc_observability_types::v2::ShutdownError::Timeout {
+                        context: Box::new(context("SC_UNUSED", diagnostic_remediation.clone())),
+                    },
+                    timeout,
+                ),
+                "SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT",
+                Remediation::recoverable(
+                    "use control.wait_stopped to observe the original shutdown",
+                    std::iter::empty::<String>(),
+                ),
+            ),
+            (
+                "helper spawn",
+                legacy_shutdown(
+                    sc_observability_types::v2::ShutdownError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
+                "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED",
+                Remediation::not_recoverable(
+                    "inspect resource availability and logger health; completion is unconfirmed",
+                ),
+            ),
+            (
+                "final flush",
+                legacy_shutdown(
+                    sc_observability_types::v2::ShutdownError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
+                "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED",
+                diagnostic_remediation.clone(),
+            ),
+        ];
+        for (name, error, code, remediation) in shutdown_cases {
+            match name {
+                "timeout" => assert!(matches!(error, ShutdownError::TimedOut { .. })),
+                "helper spawn" => assert!(matches!(error, ShutdownError::HelperSpawn { .. })),
+                "final flush" => assert!(matches!(error, ShutdownError::FinalFlush { .. })),
+                _ => unreachable!("fixed table row"),
+            }
+            assert_root_contract!(error, code, remediation);
+        }
+
+        let emit_cases = [
+            (
+                "queue full",
+                legacy_emit(crate::error::EmitError::QueueFull {
+                    diagnostic: diagnostic(
+                        "SC_OBSERVABILITY_LOGGER_QUEUE_FULL",
+                        diagnostic_remediation.clone(),
+                    ),
+                }),
+                "SC_OBSERVABILITY_LOGGER_QUEUE_FULL",
+                diagnostic_remediation.clone(),
+            ),
+            (
+                "not running",
+                legacy_emit(crate::error::EmitError::NotRunning {
+                    phase: crate::LifecyclePhase::Failed,
+                }),
+                "SC_OBSERVABILITY_LOG_NOT_RUNNING",
+                Remediation::not_recoverable("the owner has stopped the bridge"),
+            ),
+        ];
+        for (name, error, code, remediation) in emit_cases {
+            match name {
+                "queue full" => assert!(matches!(error, EmitError::QueueFull { .. })),
+                "not running" => assert!(matches!(
+                    error,
+                    EmitError::NotRunning {
+                        phase: crate::LifecyclePhase::Failed
+                    }
+                )),
+                _ => unreachable!("fixed table row"),
+            }
+            assert_root_contract!(error, code, remediation);
+        }
+    }
+
+    #[test]
+    fn legacy_emit_table_covers_each_remaining_released_row() {
+        let diagnostic_remediation = Remediation::recoverable("repair writer", ["retry"]);
+        let cases = [
+            (
+                "invalid field",
+                legacy_emit(crate::error::EmitError::InvalidField {
+                    raw_key: "reserved.key".to_owned(),
+                    reason: crate::FieldKeyError::ReservedPrefix,
+                }),
+                "SC_OBSERVABILITY_LOG_INVALID_FIELD",
+                Remediation::recoverable("correct the field key", ["resubmit the event"]),
+            ),
+            (
+                "invalid event",
+                legacy_emit(crate::error::EmitError::InvalidEvent {
+                    diagnostic: diagnostic(
+                        "SC_OBSERVABILITY_LOGGER_EVENT_INVALID",
+                        diagnostic_remediation.clone(),
+                    ),
+                }),
+                "SC_OBSERVABILITY_LOGGER_EVENT_INVALID",
+                diagnostic_remediation.clone(),
+            ),
+            (
+                "writer degraded",
+                legacy_emit(crate::error::EmitError::WriterDegraded {
+                    diagnostic: diagnostic(
+                        "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED",
+                        diagnostic_remediation.clone(),
+                    ),
+                }),
+                "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED",
+                diagnostic_remediation.clone(),
+            ),
+            (
+                "shutdown timed out",
+                legacy_emit(crate::error::EmitError::ShutdownTimedOut {
+                    diagnostic: diagnostic(
+                        "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT",
+                        diagnostic_remediation.clone(),
+                    ),
+                }),
+                "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT",
+                diagnostic_remediation.clone(),
+            ),
+            (
+                "not installed",
+                legacy_emit(crate::error::EmitError::NotInstalled),
+                "SC_OBSERVABILITY_LOG_NOT_RUNNING",
+                Remediation::not_recoverable("the owner has stopped the bridge"),
+            ),
+            (
+                "reentrant",
+                legacy_emit(crate::error::EmitError::Reentrant),
+                "SC_OBSERVABILITY_LOG_REENTRANT_EMIT",
+                Remediation::not_recoverable(
+                    "remove logging from formatter, redactor, or diagnostic callbacks",
+                ),
+            ),
+            (
+                "panicked",
+                legacy_emit(crate::error::EmitError::Panicked),
+                "SC_OBSERVABILITY_LOG_LOGGER_PANICKED",
+                Remediation::not_recoverable(
+                    "repair the panicking callback; do not retry implicitly",
+                ),
+            ),
+        ];
+        for (name, error, code, remediation) in cases {
+            match name {
+                "invalid field" => assert!(matches!(error, EmitError::InvalidField { .. })),
+                "invalid event" => assert!(matches!(error, EmitError::InvalidEvent { .. })),
+                "writer degraded" => assert!(matches!(error, EmitError::WriterDegraded { .. })),
+                "shutdown timed out" => {
+                    assert!(matches!(error, EmitError::ShutdownTimedOut { .. }));
+                }
+                "not installed" => assert!(matches!(
+                    error,
+                    EmitError::NotRunning {
+                        phase: crate::LifecyclePhase::Stopped
+                    }
+                )),
+                "reentrant" => assert!(matches!(error, EmitError::Reentrant)),
+                "panicked" => assert!(matches!(error, EmitError::Panicked)),
+                _ => unreachable!("fixed table row"),
+            }
+            assert_root_contract!(error, code, remediation);
+        }
     }
 }

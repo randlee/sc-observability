@@ -14,6 +14,7 @@ mod events;
 mod health;
 mod level;
 mod metric;
+mod observation_v2;
 pub mod otlp;
 mod primitives;
 mod process;
@@ -118,6 +119,11 @@ pub mod v2 {
         ConfigFailure, EventError, ExportError, FailureClassification, FlushError, IdentityError,
         InitError, LogSinkError, MetricModelError, ProjectionError, ShutdownError, SubscriberError,
         TelemetryError,
+    };
+    #[doc(inline)]
+    pub use crate::observation_v2::{
+        LogProjector, MetricProjector, ObservationSubscriber, ProcessIdentityResolver,
+        ProjectionRegistration, SpanProjector, SubscriberRegistration,
     };
     #[doc(inline)]
     pub use crate::signals_v2::{

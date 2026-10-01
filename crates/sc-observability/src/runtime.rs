@@ -11,9 +11,9 @@ use sc_observability_types::v2::{
     InitError as CanonicalInitError,
 };
 use sc_observability_types::{
-    AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext,
-    LevelChange, LevelChangeError, LevelChangeSource, LevelFilter, LevelState, LogQuery,
-    LogSnapshot, LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport,
+    AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, EntityId, EnvPrefix,
+    ErrorContext, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter, LevelState,
+    LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport,
     MaintenanceWorkerState, OperationDiagnostic, QueryError, QueryHealthState, Remediation,
     SinkHealth, SinkHealthState, Timestamp, WriterState,
 };
@@ -44,29 +44,28 @@ impl LogSettings {
     ///
     /// Returns [`LogSettingsError`] when a selected key is invalid, duplicated,
     /// unsupported, or contains an invalid value. Unrelated namespaces are ignored.
-    pub fn from_env(snapshot: &EnvSnapshot, prefix: EnvPrefix) -> Result<Self, LogSettingsError> {
-        let prefix_name = prefix.as_str().to_owned();
-        drop(prefix);
-        let namespace = format!("{prefix_name}{LOG_ENV_NAMESPACE_SUFFIX}");
-        let folded_namespace = namespace.to_ascii_uppercase();
+    pub fn from_env(snapshot: &EnvSnapshot, prefix: &EnvPrefix) -> Result<Self, LogSettingsError> {
+        let namespace = format!("{}{LOG_ENV_NAMESPACE_SUFFIX}", prefix.as_str());
         let mut seen = BTreeSet::new();
         let mut settings = Self::default();
         let mut policy = RetainedLogPolicy::default();
         let mut has_policy_override = false;
 
         for (raw_key, raw_value) in &snapshot.0 {
-            // Match before requiring UTF-8 so `SC_LOG_<invalid bytes>` cannot
-            // evade selected-namespace validation by failing `OsStr::to_str`.
-            let key_for_match = raw_key.to_string_lossy();
-            let folded_key = key_for_match.to_ascii_uppercase();
-            if !folded_key.starts_with(&folded_namespace) {
+            if !raw_key
+                .as_encoded_bytes()
+                .get(..namespace.len())
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(namespace.as_bytes()))
+            {
                 continue;
             }
             let key = raw_key.to_str().ok_or_else(|| {
                 LogSettingsError::environment(format!(
-                    "logging environment key {key_for_match} is not valid UTF-8"
+                    "logging environment key {} is not valid UTF-8",
+                    raw_key.to_string_lossy()
                 ))
             })?;
+            let folded_key = key.to_ascii_uppercase();
             if !seen.insert(folded_key) {
                 return Err(LogSettingsError::environment(format!(
                     "duplicate case-folded logging environment key {key}"
@@ -149,10 +148,10 @@ impl LogSettings {
     /// forwards the selected-namespace parsing errors from [`Self::from_env`].
     pub fn from_application_env(
         snapshot: &EnvSnapshot,
-        prefix: EnvPrefix,
+        prefix: &EnvPrefix,
     ) -> Result<Self, LogSettingsError> {
         if prefix.as_str() == SHARED_ENV_PREFIX {
-            return Err(LogSettingsError::prefix_collision(&prefix));
+            return Err(LogSettingsError::prefix_collision(prefix));
         }
         Self::from_env(snapshot, prefix)
     }
@@ -607,8 +606,17 @@ impl CanonicalLogger<Running> {
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn log(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+        self.log_in_mode(event, AdmissionMode::Canonical)
+    }
+
+    /// Released root-facade admission: exact 1.4.1 acceptance, no entity check.
+    pub(crate) fn log_released(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+        self.log_in_mode(event, AdmissionMode::Released)
+    }
+
+    fn log_in_mode(&self, event: LogEvent, mode: AdmissionMode) -> Result<(), CanonicalEventError> {
         let event =
-            self.prepare_event(event)
+            self.prepare_event(event, mode)
                 .map_err(|failure| CanonicalEventError::Validation {
                     context: failure.into_context(),
                 })?;
@@ -656,8 +664,24 @@ impl CanonicalLogger<Running> {
         &self,
         event: LogEvent,
     ) -> Result<AdmissionOutcome, CanonicalEventError> {
+        self.try_log_with_outcome_in_mode(event, AdmissionMode::Canonical)
+    }
+
+    /// Released root-facade non-blocking admission: exact 1.4.1 acceptance, no entity check.
+    pub(crate) fn try_log_with_outcome_released(
+        &self,
+        event: LogEvent,
+    ) -> Result<AdmissionOutcome, CanonicalEventError> {
+        self.try_log_with_outcome_in_mode(event, AdmissionMode::Released)
+    }
+
+    fn try_log_with_outcome_in_mode(
+        &self,
+        event: LogEvent,
+        mode: AdmissionMode,
+    ) -> Result<AdmissionOutcome, CanonicalEventError> {
         let event =
-            self.prepare_event(event)
+            self.prepare_event(event, mode)
                 .map_err(|failure| CanonicalEventError::Validation {
                     context: failure.into_context(),
                 })?;
@@ -704,7 +728,7 @@ impl CanonicalLogger<Running> {
 
     /// Emits one structured log event through the compatibility path.
     pub(crate) fn emit_legacy(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
-        self.log(event)?;
+        self.log_released(event)?;
         if !self
             .runtime
             .writer
@@ -811,7 +835,11 @@ impl CanonicalLogger<Running> {
         }
     }
 
-    fn prepare_event(&self, event: LogEvent) -> Result<Option<LogEvent>, EventFailure> {
+    fn prepare_event(
+        &self,
+        event: LogEvent,
+        mode: AdmissionMode,
+    ) -> Result<Option<LogEvent>, EventFailure> {
         validate_event(&event, &self.config.service_name)?;
         // Filtering and mutation share this short critical section. Redaction,
         // queue waits, and writer work are intentionally outside it.
@@ -823,6 +851,9 @@ impl CanonicalLogger<Running> {
             return Ok(None);
         }
         drop(control);
+        if mode == AdmissionMode::Canonical {
+            validate_entity_id(&event)?;
+        }
         let event = self.redact_event(event);
         validate_event_size(&event)?;
         Ok(Some(event))
@@ -1138,6 +1169,36 @@ fn level_enabled(
         LevelFilter::Error => matches!(level, Level::Error),
         LevelFilter::Off => false,
     }
+}
+
+/// Admission strictness pinned by the facade that owns the entry point.
+///
+/// Canonical (v2) entry points validate `StateTransition::entity_id` as an
+/// `EntityId`; released (root 1.x) facades keep exact 1.4.1 acceptance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AdmissionMode {
+    Canonical,
+    Released,
+}
+
+/// Validates the optional state-transition entity identifier with `EntityId`.
+pub(crate) fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
+    let Some(entity_id) = event
+        .state_transition
+        .as_ref()
+        .and_then(|transition| transition.entity_id.as_deref())
+    else {
+        return Ok(());
+    };
+    EntityId::new(entity_id).map(|_| ()).map_err(|_| {
+        EventFailure::invalid_event(
+            "log event state transition entity_id is invalid",
+            Remediation::recoverable(
+                "emit a valid entity_id or omit it",
+                ["rebuild the state transition before emitting"],
+            ),
+        )
+    })
 }
 
 fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<(), EventFailure> {
