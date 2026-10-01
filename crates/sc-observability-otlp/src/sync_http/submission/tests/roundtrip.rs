@@ -235,6 +235,47 @@ fn profiles_with_distinct_dictionaries_are_submitted_separately() {
 }
 
 #[test]
+fn generated_id_and_plain_attribute_fixtures_reach_their_signal_routes() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind capture listener");
+    let exporter = submission_exporter(
+        format!("http://{}", listener.local_addr().expect("address")),
+        None,
+    );
+    let paired = fixture("paired_log_span_generated_ids");
+    let plain_attributes = fixture("plain_attribute_map");
+    let (captured, server) = capture_server(listener, &[200, 200]);
+
+    exporter
+        .export(Signal::Logs, &[paired.clone(), plain_attributes])
+        .expect("log fixtures deliver");
+    exporter
+        .export(Signal::Traces, &[paired])
+        .expect("generated-id span fixture delivers");
+
+    let logs = captured
+        .recv_timeout(CAPTURE_TIMEOUT)
+        .expect("captured logs fixture request");
+    let traces = captured
+        .recv_timeout(CAPTURE_TIMEOUT)
+        .expect("captured traces fixture request");
+    assert_eq!(server.join().expect("capture server exits"), 2);
+    assert_eq!(logs.0, "/v1/logs");
+    assert_eq!(traces.0, "/v1/traces");
+    assert_eq!(
+        logs.1["resourceLogs"][0]["scopeLogs"][0]["logRecords"][1]["attributes"],
+        serde_json::json!([
+            {"key": "a", "value": {"intValue": "2"}},
+            {"key": "z", "value": {"boolValue": true}},
+        ]),
+        "the plain attribute fixture retains its canonical key/value pairs"
+    );
+    assert!(
+        traces.1["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["traceId"].is_string(),
+        "the generated-id fixture is encoded into the trace request"
+    );
+}
+
+#[test]
 fn oversized_multi_envelope_submission_splits_at_encoded_request_limit() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind capture listener");
     let exporter = submission_exporter(
