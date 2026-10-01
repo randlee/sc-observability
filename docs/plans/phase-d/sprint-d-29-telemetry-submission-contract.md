@@ -4,7 +4,8 @@
 
 - Wave: 5.1 (wave-5 contract)
 - Stack / layer: `phase-d-wave5` stack, layer 1 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
-- Assignee / model: aobs / astra (difficulty: hard)
+- Assignee / model: aobs / astra
+- Difficulty: `hard` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `contract`
 - Target boundary: `BOUNDARY-ScObservabilityTypes` (wave-5 contract: the neutral signal types and the submission contract in `sc_observability_types::otlp`)
 - vertical_rationale: "thin file-config loader is the contract's config entry point consumed by d-30 and d-31; schema.sql is contract DDL; the staged crate-private seams in sc-observability-otlp are the contract d-33 implements against (wave-5 ruling R14)". Criteria for this otlp work are rooted at `boundary:BOUNDARY-ScObservabilityOtlp`.
@@ -585,6 +586,14 @@ pub trait IdSource {
     fn now(&mut self) -> Timestamp;
 }
 
+/// Production source used by both front ends (d-30, d-31). std only, no
+/// dependency: IDs come from `RandomState` hashing of a process-wide counter
+/// (the scheme `sc-observability-log` `context.rs` uses), never all-zero;
+/// `now` is `SystemTime::now()`.
+#[derive(Debug, Default)]
+pub struct SystemIds;
+impl IdSource for SystemIds { /* ... */ }
+
 impl SubmissionEnvelope {
     /// Single shared validation/correlation path used by Python and the CLI.
     /// - Rejects version > CURRENT (UnsupportedVersion).
@@ -686,6 +695,23 @@ pub struct SyncHttpRetryPolicyDto {
     pub retry_after_cap_ms: Option<u64>,
     pub retry_jitter_percent: Option<u8>,
 }
+```
+
+Construction from other crates. The types above are `#[non_exhaustive]`, so
+d-30 and d-31 build them only through these:
+
+```rust
+#[derive(Debug, Clone, Default)] pub struct ConfigOverrides { /* as above */ } // all None
+impl<'a> ConfigSources<'a> {
+    pub fn new(explicit: &'a ConfigOverrides, file: Option<&'a TelemetryFileConfig>,
+               env: &'a dyn Fn(&str) -> Option<String>) -> Self;
+}
+impl Secret { pub fn new(value: String) -> Self; pub fn expose(&self) -> &str; }
+impl FromStr for SubmissionId { type Err = SubmissionError; } // Validation { path: "submission_id" }
+impl FromStr for RecordKey { type Err = SubmissionError; }    // Validation { path: "record_key" }
+impl Display for SubmissionId, RecordKey;                      // the text form
+impl Serialize for AdmissionReceipt, FlushReport, StoreStatus, DeliveryStatus,
+    DeliveryState, SignalCounts, LeaseInfo;                    // the sc-otel.result/v1 field shapes
 ```
 
 ### Errors and codes
@@ -937,10 +963,10 @@ matching `ConfigOverrides` field (`--config` is passed to
 
 | Subcommand | Flags | Behavior |
 | --- | --- | --- |
-| `emit` | `--stdin` (read one `SubmissionInput` JSON document from stdin); or one or more of `--log <json\|@file>`, `--span <json\|@file>`, `--metric <json\|@file>`, `--profile <json\|@file>`; plus `--record-key <key>`, `--no-flush` | Flag fragments are a `LogInput`, `SpanInput`, `MetricInput` or `ProfilesInput` object (`@file` reads it from a file). They are assembled into one `SubmissionInput` (`version` = CURRENT, fragments appended to `logs`/`spans`/`metrics`, one `--profile` at most) and go through `SubmissionEnvelope::from_json`, exactly like `--stdin`. `--stdin` and fragment flags are mutually exclusive. After admission, `flush_submission(receipt.submission_id, emit_flush_deadline)` runs unless `--no-flush`. |
+| `emit` | `--stdin` (read one `SubmissionInput` JSON document from stdin); or one or more of `--log <json\|@file>`, `--span <json\|@file>`, `--metric <json\|@file>`, `--profile <json\|@file>`; plus `--record-key <key>` (fragment input only: with `--stdin` the document's own `record_key` applies and the flag is a usage error) and `--no-flush`. No input source is a usage error. | Flag fragments are a `LogInput`, `SpanInput`, `MetricInput` or `ProfilesInput` object (`@file` reads it from a file). They are assembled into one `SubmissionInput` (`version` = CURRENT, fragments appended to `logs`/`spans`/`metrics`, one `--profile` at most) and go through `SubmissionEnvelope::from_json`, exactly like `--stdin`. `--stdin` and fragment flags are mutually exclusive. After admission, `flush_submission(receipt.submission_id, emit_flush_deadline)` runs unless `--no-flush`. |
 | `validate` | `--stdin`, or the same fragment flags | Prints the canonical envelope; opens no store. |
 | `flush` | `--timeout <seconds>` (default `flush_deadline`) | Store-wide `flush`. |
-| `status` | `--submission <id>` (repeatable), `--record-key <key>` (repeatable) | `status` with `Summary`, `Submissions` or `RecordKeys`. |
+| `status` | `--submission <id>` (repeatable) or `--record-key <key>` (repeatable), mutually exclusive | `status` with `Submissions`, `RecordKeys`, or `Summary` when neither flag is given. |
 
 | Exit | Meaning | Source |
 | --- | --- | --- |
@@ -952,6 +978,9 @@ matching `ConfigOverrides` field (`--config` is passed to
 | 5 | Admission failure (nothing admitted) | `AdmissionError::*` |
 | 6 | Admitted but delivery not completed (pending remains) | `DeliveryError::DeadlineExceeded` |
 | 7 | Admitted but a signal failed terminally (takes precedence over 6) | `DeliveryError::TerminalFailure` |
+
+Exits 1 and 2 print a message on stderr and nothing on stdout. Every other
+exit prints exactly one `sc-otel.result/v1` object.
 
 JSON output schema (`sc-otel.result/v1`), one object on stdout:
 

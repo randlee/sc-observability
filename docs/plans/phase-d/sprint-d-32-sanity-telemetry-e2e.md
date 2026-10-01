@@ -4,7 +4,8 @@
 
 - Wave: 5.3 (wave-5 integration)
 - Stack / layer: `phase-d-wave5` stack, layer 5 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
-- Assignee / model: cobs / terra (difficulty: normal)
+- Assignee / model: cobs / terra
+- Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `integration`
 - Target boundary: wave-5 composition (installed Python wheel + installed `sc-otel` + `DurableTelemetryClient` + pinned viewer)
 - Branch: `sprint/d-32-sanity-telemetry-e2e`
@@ -46,15 +47,13 @@ the wave-5 additions.
 
 ## Deliverables
 
-Importer (root `scripts/sanity-telemetry/`):
-
-1. Add `scripts/sanity-telemetry/import_sanity.py`. It reads
+1. Importer: add `scripts/sanity-telemetry/import_sanity.py`. It reads
    `.sc/telemetry.yaml` `sources[]` (parsed with the repository's existing
    PyYAML `yaml.safe_load`; no new parser) and maps each row to a submission through
    the installed `sc_observability.telemetry` API, per the mapping tables
    below. It sets `service` and `team` as resource attributes and builds
    `pr.url` from `github.pr_url_template`. [PHD-011]
-2. Add the modes `import` (historical, read to EOF) and `follow` (tail with a
+2. Importer: add the modes `import` (historical, read to EOF) and `follow` (tail with a
    poll interval). Source progress is persisted in the checkpoint file
    `.sc/telemetry-state/checkpoints.json` (the directory is git-ignored by
    the one `.gitignore` line d-32 adds), and is written only after `emit`
@@ -63,27 +62,25 @@ Importer (root `scripts/sanity-telemetry/`):
    change → restart from 0, with record keys preventing duplicates),
    truncation (size < offset → restart from 0) and repeated imports (stable
    `record_key`). [PHD-011]
-3. Extend `.sc/telemetry.yaml` with the core `store:` keys from d-29
+3. Importer: extend `.sc/telemetry.yaml` with the core `store:` keys from d-29
    (`store.path: .sc/telemetry-state/store.sqlite`). The #788 keys stay
    unchanged. [PHD-011]
 
-End-to-end proof (root `tests/telemetry-e2e/`, CI job `telemetry-e2e`):
-
-4. Add the harness `tests/telemetry-e2e/conftest.py`. It builds the
+4. End-to-end: add the harness `tests/telemetry-e2e/conftest.py`. It builds the
    release-config wheel into a venv and installs `sc-otel` with
    `cargo install --path crates/sc-otel-cli --root $TMP --locked`. It starts
    the pinned viewer with
    `scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py start` on free
    loopback ports and an isolated state directory, and starts a loopback
    OTLP/JSON capture server for collector-capture assertions. [PHD-012]
-5. Add the viewer readback tests listed in the acceptance criteria, using the
+5. End-to-end: add the viewer readback tests listed in the acceptance criteria, using the
    viewer's JSON-RPC `POST /rpc` (`searchLogs`, `getLog`, `searchSpans`,
    `searchMetricSummaries`, `getMetric`). [PHD-012, PHD-013]
-6. Add the collector-capture tests for representations that viewer v0.5.0
+6. End-to-end: add the collector-capture tests for representations that viewer v0.5.0
    cannot query. [PHD-012, PHD-013]
-7. Add Python/CLI equivalence, offline recovery, restart, partial-delivery
+7. End-to-end: add Python/CLI equivalence, offline recovery, restart, partial-delivery
    and shared-store tests. [PHD-007, PHD-008, PHD-010, PHD-012]
-8. Add `.github/workflows/telemetry-e2e.yml` (`macos-14`, because the viewer
+8. End-to-end: add `.github/workflows/telemetry-e2e.yml` (`macos-14`, because the viewer
    pin is darwin_arm64 only), running deliverables 4–7 and the importer tests.
    Triggers: `pull_request` to `sprint/*` and `integrate/*` with a path filter
    on the wave-5 paths (`crates/sc-observability-types/src/otlp/**`,
@@ -92,16 +89,33 @@ End-to-end proof (root `tests/telemetry-e2e/`, CI job `telemetry-e2e`):
    `tests/telemetry-e2e/**`, `.sc/telemetry.yaml`, `Cargo.toml`,
    `Cargo.lock` and the workflow itself), plus `workflow_dispatch`. So it
    runs on the d-32 PR, whose base is `sprint/d-31-sc-otel-cli`. [PHD-012]
-9. Run the D18 and D9 gates over wave 5. D18: `just public-api` and
+9. Gate re-run: run the D18 and D9 gates over wave 5. D18: `just public-api` and
    `validate_error_migration.py`, run locally on the d-32 head with captured
    logs (the `ci.yml` public-API steps are `continue-on-error` for
    non-develop bases, so CI is not the evidence). D9: `otlp-conformance.yml`
    dispatched on the d-32 head SHA (its path filter does not match d-32's
    owned paths, so the PR alone would not run it). Also re-dispatch
    `telemetry-platforms.yml` on the d-32 head. [PHD-002, PHD-013]
-10. Add the user docs `docs/telemetry-submission.md`: Python and CLI usage,
+10. Docs: add the user docs `docs/telemetry-submission.md`: Python and CLI usage,
     config precedence, exit codes, the at-least-once note and the capability
     matrix link. [PHD-009, PHD-010]
+
+Items 1–3 (importer) live under `scripts/sanity-telemetry/` and close
+PHD-011. Items 4–8 (end-to-end) live under `tests/telemetry-e2e/` and the
+`telemetry-e2e` CI job, and close PHD-012 with PHD-007, PHD-008, PHD-010 and
+PHD-013. Item 9 re-runs the D18 and D9 gates (PHD-002, PHD-013).
+
+## This Sprint Does Not Close
+
+- Any change to the wave-5 public surface, the submission contract or the
+  store schema. Those are frozen at d-29 (wave-5 ruling R17), and d-33 owns
+  the store implementation.
+- Exactly-once delivery. Delivery stays at-least-once, with the duplicate
+  window documented in d-33 and ADR-021.
+- Viewer queries for representations that viewer v0.5.0 cannot query. Those
+  are proven by collector capture (item 6), not by viewer readback.
+- Grafana dashboards and Grafana testing, which are outside wave 5.
+- Merging the phase into `develop`. The user reviews the phase result first.
 
 ## Design
 

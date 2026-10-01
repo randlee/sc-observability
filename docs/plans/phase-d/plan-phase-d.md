@@ -206,8 +206,10 @@ One track. Wave 5 is its own gh stack, `phase-d-wave5`, on `integrate/phase-d` (
 - Tracks: 1. Waves: 3. Critical path: 3 (d-29 → d-33 → d-32, or through
   d-30 or d-31). Width: 3 (d-33 ∥ d-30 ∥ d-31). Sprint count: 5.
 - Edges: d-29 ← {d-26, d-28}; {d-33, d-30, d-31} ← d-29;
-  d-32 ← {d-30, d-31, d-33}. All wave-5.2 pairs are `parallel_safe`, because
-  their owned paths are disjoint.
+  d-32 ← {d-30, d-31, d-33}. Every wave-5 bead's relation is `must_follow`
+  (its edge to its parent). The wave-5.2 sprints can run in parallel with
+  each other, because their owned paths are disjoint; that sibling
+  relationship is prose only, not a bead relation.
 - Difficulty (`docs/plans/phase-d/difficulty.csv`): d-29 hard, d-33 hard,
   d-30 normal, d-31 normal, d-32 normal. Recommended agents: d-29 aobs/astra
   (contract breadth), d-33 aobs/astra (store, lease and every encoder),

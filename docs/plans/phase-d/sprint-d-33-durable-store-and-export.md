@@ -4,7 +4,8 @@
 
 - Wave: 5.2 (wave-5 layer)
 - Stack / layer: `phase-d-wave5` stack, layer 2 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
-- Assignee / model: aobs / astra (difficulty: hard)
+- Assignee / model: aobs / astra
+- Difficulty: `hard` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `boundary` (implementer)
 - Target boundary: `BOUNDARY-ScObservabilityOtlp`
 - Branch: `sprint/d-33-durable-store-and-export`
@@ -33,7 +34,8 @@
   dependency is added here), and `otlp::submission::testing::conformance`
   with `ConformanceHarness` in `sc-observability-types` (feature
   `test-double`).
-- `parallel_safe` with d-30 and d-31: the owned paths are disjoint, and all
+- Sibling note (prose only; the bead relation is `must_follow` d-29): d-33,
+  d-30 and d-31 can run in parallel. Their owned paths are disjoint, and all
   three consume only d-29 artifacts.
 - d-18 fence: d-18 owns `src/lib.rs`, `src/assembly.rs`, `src/config.rs`
   (now `src/config/`), `src/contracts.rs`, `src/projectors.rs`,

@@ -4,7 +4,8 @@
 
 - Wave: 5.2 (wave-5 layer)
 - Stack / layer: `phase-d-wave5` stack, layer 3 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
-- Assignee / model: cobs / terra (difficulty: normal)
+- Assignee / model: cobs / terra
+- Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `boundary` (consumer)
 - Target boundary: `BOUNDARY-ScObservabilityPy`
 - Branch: `sprint/d-30-python-telemetry-bindings`
@@ -36,7 +37,8 @@
   feature `test-double`, enabled by the py crate's `test-hooks`), the golden
   fixtures, the committed dependency set (no dependency is added here) and
   the list of GIL-releasing calls.
-- `parallel_safe` with d-33 and d-31: the owned paths are disjoint.
+- Sibling note (prose only; the bead relation is `must_follow` d-29): d-30,
+  d-33 and d-31 can run in parallel, because their owned paths are disjoint.
 - Landed predecessors: d-20 (Python package, `src/lib.rs`, `pyproject.toml`
   and the existing tests), d-19 (generated DTO/stubs in
   `python/sc_observability/generated/**`) and d-10 (windows-arm64 wheel build
@@ -75,8 +77,10 @@ with matching type stubs, and ship it in release wheels.
    span-only, metric-only, profile-only and combined input are accepted.
    [PHD-005, PHD-006, PHD-009]
 3. Add typed errors: `TelemetrySubmissionError`, `TelemetryAdmissionError`,
-   `TelemetryDeliveryError` and `TelemetryConfigError`, all subclasses of the
-   package's existing error base. Each exposes `.code`. The receipt, status
+   `TelemetryDeliveryError` and `TelemetryConfigError`, all subclasses of
+   `TelemetryError(Exception)` defined in `telemetry.py` (the existing
+   logging API returns `Ok`/`Err` values and has no exception base). Each
+   exposes `.code`. The receipt, status
    and flush-report types are frozen dataclasses. `flush`,
    `flush_submission` and `shutdown` raise `TelemetryDeliveryError` exactly
    when the d-29 flush result rules give `Err`, with the report attached.
@@ -99,6 +103,104 @@ with matching type stubs, and ship it in release wheels.
   the real store, and viewer readback. d-32 owns them.
 - Python/CLI equivalence. d-32 owns it.
 - Store, drain and encoding behavior. d-33 owns them.
+
+## Design
+
+The contract types and signatures are in the d-29 doc ("Submission
+contract", "Errors and codes", "Configuration and precedence",
+"TelemetryClient") and are not restated here. This section covers only what
+d-30 writes.
+
+### Module layout
+
+| File | Contents |
+| --- | --- |
+| `src/lib.rs` | Two added lines, both under `#[cfg(feature = "otlp-telemetry")]`: `mod telemetry;` and `telemetry::register(module)?;` inside the existing `_native` module function. Nothing else in the file changes. |
+| `src/telemetry/mod.rs` | `register`, the `NativeTelemetry` class, the `open` and `build_envelope` functions, and the test-hooks `_open_test_double` function. |
+| `src/telemetry/client.rs` | `ClientHandle`: `Durable(DurableTelemetryClient)` and, under `test-hooks` only, `Double(InMemoryTelemetryClient)`. It forwards every `TelemetryClient` call to the inner client. |
+| `src/telemetry/config.rs` | `ConstructorArgs` (serde form of the Python constructor arguments) → `ConfigOverrides`. Calls `load_telemetry_file` when `config` is set and `resolve_config(ConfigSources::new(&overrides, file, &env))` with `env = \|k\| std::env::var(k).ok()`. |
+| `src/telemetry/dto.rs` | `TelemetryResult<T>` with the existing `{"kind": "ok", "value"}` / `{"kind": "error", "error"}` shape, and `TelemetryErrorDto { class, code, message, report: Option<FlushReport> }`, where `class` is `submission`, `admission`, `delivery` or `config`. Values serialize with the d-29 `Serialize` impls. |
+| `python/sc_observability/telemetry.py` | `Telemetry`, `build_envelope`, the error classes and the frozen dataclasses (`AdmissionReceipt`, `FlushReport`, `SignalCounts`, `StoreStatus`, `DeliveryStatus`, `LeaseInfo`). It decodes `TelemetryResult` JSON, then either builds a dataclass or raises. |
+| `telemetry.pyi`, `__init__.py`, `__init__.pyi` | Stubs and re-exports of the names above. |
+
+### Native surface (PyO3)
+
+This follows the existing binding pattern: JSON strings cross the boundary,
+every entry point is wrapped in `contained_json` so a panic becomes an
+`internal` error result, and constructors return `(handle | None, result_json)`
+like `create_owned`.
+
+```rust
+#[pyclass(frozen)]
+struct NativeTelemetry { client: ClientHandle }   // ClientHandle: Send + Sync
+
+#[pyfunction] fn open(py: Python<'_>, args_json: &str)
+    -> PyResult<(Option<Py<NativeTelemetry>>, String)>;          // GIL released for open
+#[pyfunction] fn build_envelope(input_json: &str) -> String;      // from_json(SystemIds) + to_canonical_json; no store, GIL held
+#[cfg(feature = "test-hooks")]
+#[pyfunction] fn _open_test_double(py: Python<'_>, args_json: &str, script_json: Option<&str>)
+    -> PyResult<(Option<Py<NativeTelemetry>>, String)>;          // DoubleScript::from_json + with_script
+
+#[pymethods]
+impl NativeTelemetry {
+    fn emit(&self, py: Python<'_>, input_json: &str) -> String;   // from_json(SystemIds) then emit
+    fn flush(&self, py: Python<'_>, timeout_ms: Option<u64>) -> String;
+    fn flush_submission(&self, py: Python<'_>, submission_id: &str, timeout_ms: Option<u64>) -> String;
+    fn shutdown(&self, py: Python<'_>, timeout_ms: Option<u64>) -> String;
+    fn status(&self, py: Python<'_>, query_json: &str) -> String; // {"summary"} | {"submissions": [..]} | {"record_keys": [..]}
+}
+```
+
+A `None` timeout uses the resolved `flush_deadline`. `submission_id` and the
+query keys are parsed with the d-29 `FromStr` impls, and a parse failure is a
+`submission` error.
+
+### GIL release points
+
+Each call in the d-29 GIL list runs its client call inside `py.detach(...)`,
+the same call the logging binding uses:
+
+| Python call | Released section |
+| --- | --- |
+| `Telemetry(...)` | `load_telemetry_file`, `resolve_config` and `TelemetryClient::open` (store open and migration check) |
+| `emit` | `SubmissionEnvelope::from_json` and `TelemetryClient::emit` (durable commit) |
+| `flush` / `flush_submission` / `shutdown` | the client call, up to its deadline |
+| `status` | `TelemetryClient::status` |
+| `__exit__` | `shutdown`, as above |
+
+`build_envelope` keeps the GIL, because it does no I/O. The JSON input string
+is copied into Rust before `detach`, so no Python object is touched while
+the GIL is released.
+
+### Python surface
+
+```python
+class Telemetry:
+    def __init__(self, config: str | os.PathLike[str] | None = None, *,
+                 store_path: str | os.PathLike[str] | None = None,
+                 endpoint: str | None = None, service_name: str | None = None) -> None: ...
+    def __enter__(self) -> Telemetry: ...
+    def __exit__(self, *exc: object) -> None: ...          # shutdown(); re-raises its failure
+    def emit(self, input: Mapping[str, Any]) -> AdmissionReceipt: ...
+    def flush(self, timeout_s: float | None = None) -> FlushReport: ...
+    def flush_submission(self, submission_id: str, timeout_s: float | None = None) -> FlushReport: ...
+    def shutdown(self, timeout_s: float | None = None) -> FlushReport: ...
+    def status(self, *, submissions: Sequence[str] | None = None,
+               record_keys: Sequence[str] | None = None) -> StoreStatus: ...
+    @classmethod
+    def _with_test_double(cls, script_json: str | None = None, **kwargs: Any) -> Telemetry: ...  # test-hooks only
+
+def build_envelope(input: Mapping[str, Any]) -> str: ...
+```
+
+`emit` and `build_envelope` call `json.dumps(input)` and pass the string
+through unchanged. A `TypeError` from `json.dumps` raises
+`TelemetrySubmissionError` with the `SC_OBSERVABILITY_SUBMIT_INVALID_JSON`
+code. `status` with both keyword arguments raises `ValueError`. Error results
+map by `class` to `TelemetrySubmissionError`, `TelemetryAdmissionError`,
+`TelemetryDeliveryError` (with `.report`, a `FlushReport`) or
+`TelemetryConfigError`. An `internal` result raises `TelemetryError`.
+`timeout_s` is converted to milliseconds, rounding up.
 
 ## Acceptance criteria
 

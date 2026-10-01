@@ -4,7 +4,8 @@
 
 - Wave: 5.2 (wave-5 layer)
 - Stack / layer: `phase-d-wave5` stack, layer 4 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
-- Assignee / model: cobs / terra (difficulty: normal)
+- Assignee / model: cobs / terra
+- Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `boundary` (consumer)
 - Target boundary: `BOUNDARY-ScOtelCli`
 - Branch: `sprint/d-31-sc-otel-cli`
@@ -29,7 +30,8 @@
   (for `--config`), the CLI contract (subcommand and flag table, exit-code
   table), the `sc-otel.result/v1` schema, `InMemoryTelemetryClient`,
   `DoubleScript` and the golden fixtures.
-- `parallel_safe` with d-33 and d-30: the owned paths are disjoint.
+- Sibling note (prose only; the bead relation is `must_follow` d-29): d-31,
+  d-33 and d-30 can run in parallel, because their owned paths are disjoint.
 
 ## Goal
 
@@ -67,6 +69,109 @@ Ship the `sc-otel` binary as a thin consumer of the d-29 contract.
   store access with Python, and viewer readback. d-32 owns them.
 - Python/CLI equivalence. d-32 owns it.
 
+## Design
+
+The contract types and signatures, the subcommand and flag table, the
+exit-code table and the `sc-otel.result/v1` schema are in the d-29 doc and
+are not restated here. This section covers only what d-31 writes.
+
+### Module layout
+
+| File | Contents |
+| --- | --- |
+| `src/main.rs` | `fn main() -> ExitCode`: runs `run()` inside `std::panic::catch_unwind`. A panic prints one line on stderr and exits 1. |
+| `src/cli.rs` | The clap derive types below. |
+| `src/input.rs` | Reads `--stdin` or assembles the fragments (`@file` read, `serde_json::Value` objects appended to `logs`/`spans`/`metrics`, `profiles` set, `version` = CURRENT, `record_key` from the flag) into one `SubmissionInput` JSON string. |
+| `src/config.rs` | Global flags → `ConfigOverrides::default()` with `store_path` and `endpoint` set. `--config` → `load_telemetry_file`. Then `resolve_config(ConfigSources::new(&overrides, file, &env))` with `env = \|k\| std::env::var(k).ok()`. |
+| `src/client.rs` | `open_client(config) -> Result<Box<dyn TelemetryClient>, TelemetryClientError>`. In release builds it opens `DurableTelemetryClient::open`. In `cfg(feature = "test-double")` builds it opens `InMemoryTelemetryClient::with_script` with the script read from `SC_OTEL_TEST_DOUBLE`, or `DoubleScript::default()` if the variable is unset. |
+| `src/run.rs` | `run(cli) -> Outcome` per subcommand (table below). |
+| `src/output.rs` | `ResultObject`, a serde struct with the schema fields and `schema = "sc-otel.result/v1"`. It writes JSON (`--output json`) or one text line, `<state> exit=<n>[ submission=<id>][ error=<code>]`. Only contract fields are printed, never the config, so `auth_header` (a `Secret`) cannot reach output. |
+| `src/exit.rs` | The exit-code mapping below. |
+
+### clap command tree
+
+```rust
+#[derive(Parser)]
+#[command(name = "sc-otel", version)]
+struct Cli {
+    #[arg(long, global = true)] config: Option<PathBuf>,
+    #[arg(long, global = true)] store: Option<PathBuf>,
+    #[arg(long, global = true)] endpoint: Option<String>,
+    #[arg(long, global = true, value_enum, default_value_t = OutputFormat::Json)] output: OutputFormat,
+    #[command(subcommand)] command: Command,
+}
+#[derive(Subcommand)]
+enum Command { Emit(EmitArgs), Validate(InputArgs), Flush(FlushArgs), Status(StatusArgs) }
+
+#[derive(Args)]
+#[group(id = "source", required = true, multiple = true)]
+struct InputArgs {
+    #[arg(long, group = "source", conflicts_with_all = ["log", "span", "metric", "profile", "record_key"])]
+    stdin: bool,
+    #[arg(long, group = "source", value_name = "JSON|@FILE")] log: Vec<String>,
+    #[arg(long, group = "source", value_name = "JSON|@FILE")] span: Vec<String>,
+    #[arg(long, group = "source", value_name = "JSON|@FILE")] metric: Vec<String>,
+    #[arg(long, group = "source", value_name = "JSON|@FILE")] profile: Option<String>, // a second --profile is a clap error
+}
+#[derive(Args)]
+struct EmitArgs {
+    #[command(flatten)] input: InputArgs,
+    #[arg(long)] record_key: Option<String>,
+    #[arg(long)] no_flush: bool,
+}
+#[derive(Args)]
+struct FlushArgs { #[arg(long, value_name = "SECONDS", value_parser = parse_seconds)] timeout: Option<Duration> }
+#[derive(Args)]
+struct StatusArgs {
+    #[arg(long, conflicts_with = "record_key")] submission: Vec<String>,
+    #[arg(long)] record_key: Vec<String>,
+}
+```
+
+Parsing uses `Cli::try_parse()`. Help and version print to stdout and exit 0.
+Every other clap error prints clap's message to stderr and exits 2, with
+nothing on stdout.
+
+### Subcommand → TelemetryClient calls
+
+| Subcommand | Calls | `state` / exit |
+| --- | --- | --- |
+| `validate` | `SubmissionEnvelope::from_json(&json, &mut SystemIds)`, then `to_canonical_json`. No config resolution and no client. | `validated`, 0; on `Submission` error, `rejected`, 3 |
+| `emit` | `from_json` → resolve config → `open_client` → `emit`. Unless `--no-flush`: `flush_submission(&receipt.submission_id, config.emit_flush_deadline)`. Then `shutdown(Duration::ZERO)`. | `admitted_delivered` 0; `--no-flush`: `admitted_pending` 0, `flush: null`; deadline: `admitted_pending` 6; terminal: `admitted_failed` 7; error before admission: `rejected` 3/4/5 |
+| `flush` | resolve → `open_client` → `flush(timeout.unwrap_or(config.flush_deadline))` → `shutdown(Duration::ZERO)` | `admitted_delivered` 0, `admitted_pending` 6, `admitted_failed` 7, `rejected` 4/5 |
+| `status` | resolve → `open_client` → `status(query)`, where the query is `Submissions` (parsed with `SubmissionId::from_str`), `RecordKeys` (`RecordKey::from_str`) or `Summary` → `shutdown(Duration::ZERO)` | `status` 0, `rejected` 3/4/5 |
+
+The final `shutdown(Duration::ZERO)` only stops the drain worker and releases
+the lease (d-29: it does both even when it returns `Err`). Its `Delivery`
+result is ignored, because rows left pending stay in the store for the next
+drain. The exit code reflects only the subcommand's own call. The 7-over-6
+precedence comes from the d-29 flush result rule inside the client, so the
+CLI does no aggregation.
+
+### Exit-code mapping (`src/exit.rs`)
+
+```rust
+pub(crate) const EXIT_OK: u8 = 0;
+pub(crate) const EXIT_INTERNAL: u8 = 1;
+pub(crate) const EXIT_USAGE: u8 = 2;
+
+pub(crate) fn exit_code(error: &TelemetryClientError) -> u8 {
+    match error {
+        TelemetryClientError::Submission(_) => 3,
+        TelemetryClientError::Config(_) => 4,
+        TelemetryClientError::Admission(_) => 5,
+        TelemetryClientError::Delivery(DeliveryError::DeadlineExceeded { .. }) => 6,
+        TelemetryClientError::Delivery(DeliveryError::TerminalFailure { .. }) => 7,
+        // #[non_exhaustive]: an unmapped future variant is an internal error.
+        _ => EXIT_INTERNAL,
+    }
+}
+```
+
+Input read failures (`@file` not readable, stdin not UTF-8) are reported as
+`SubmissionError::InvalidJson` through the same path (exit 3). `exit.rs` has
+a unit test with one case per arm.
+
 ## Acceptance criteria
 
 - [ ] boundary:BOUNDARY-ScOtelCli (D1, D2): `crates/sc-otel-cli/tests/installed_golden.rs`
@@ -88,8 +193,8 @@ Ship the `sc-otel` binary as a thin consumer of the d-29 contract.
   flag, a missing `store_path`, and `DoubleScript` files for an admission
   rejection (`{"admissions":[{"outcome":"reject","kind":"disk_bound_exceeded"}]}`
   → 5), a stall (→ 6), a fail (→ 7) and a fail on one signal with a stall on
-  another (→ 7, the d-29 precedence). Every stdout parses against
-  `sc-otel.result/v1`. An `auth_header` value never appears in stdout or
+  another (→ 7, the d-29 precedence). Exit 2 leaves stdout empty; every other
+  stdout parses against `sc-otel.result/v1`. An `auth_header` value never appears in stdout or
   stderr.
 - [ ] boundary:BOUNDARY-ScOtelCli (D1, D2): `tests/flags.rs` covers every
   flag in the d-29 CLI table, including `--stdin` with fragment flags
