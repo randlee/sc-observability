@@ -16,7 +16,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "atm-beads/scripts"))
 from sprint_index_common import load_phase_plan, run_json, index_bead_pairs, phase_id
-from sprint_qa import metadata, choose_round, qa_verdict, qa_icon, findings_summary
+from sprint_qa import metadata, choose_round, qa_verdict, qa_icon, findings_summary, qa_for_bead, qa_findings
 from plan_contract import DIFFICULTY_MODELS
 
 
@@ -70,18 +70,6 @@ def historical_sanity_iterations(repo: Path, task: str) -> tuple[str, int | None
 def related_bead(bead: dict[str, Any], target: str, relation: str) -> bool:
     return any(edge_id(edge) == target and edge_type(edge) == relation
                for edge in bead.get("dependencies") or [])
-
-
-def is_qa_of(bead: dict[str, Any], dev_id: str) -> bool:
-    """A QA round of dev_id: a stage:qa child of it (phase contract: QA lives under the bead it checks, and bd
-    keeps one edge type per pair) or, for rounds created before the contract, a bead that `validates` it."""
-    if related_bead(bead, dev_id, "validates"):
-        return True
-    if "stage:qa" not in (bead.get("labels") or []):
-        return False
-    metadata = bead.get("metadata") if isinstance(bead.get("metadata"), dict) else {}
-    return related_bead(bead, dev_id, "parent-child") or bead.get("parent") == dev_id \
-        or metadata.get("checked_bead") == dev_id
 
 
 def status_icon(dev: dict[str, Any], sanity: dict[str, Any] | None,
@@ -312,7 +300,7 @@ def main() -> int:
             for dev_id in dev_ids:
                 if "stage:dev-sanity" in (bead.get("labels") or []) and related_bead(bead, dev_id, "blocks"):
                     sanity_by_dev[dev_id] = bead
-                if is_qa_of(bead, dev_id):
+                if qa_for_bead(bead, dev_id):
                     qa_by_dev.setdefault(dev_id, []).append(bead)
         selected_qa = {dev_id: choose_round(candidates) for dev_id, candidates in qa_by_dev.items()}
         for dev_id, gate_id in index_bead_pairs(index).items():
@@ -365,14 +353,7 @@ def main() -> int:
         sanity_cell = "?" if sanity_count is None else str(sanity_count) if sanity_count else ""
         qa = live_by_id.get(str(selected_qa.get(dev_id, {}).get("id"))) if selected_qa.get(dev_id) else None
         qa_ids = {str(candidate["id"]) for candidate in qa_by_dev.get(dev_id, [])}
-        findings = [
-            bead for bead in all_beads
-            if any(
-                related_bead(bead, qa_id, "discovered-from")
-                or related_bead(bead, qa_id, "parent-child")
-                for qa_id in qa_ids
-            )
-        ]
+        findings = qa_findings(all_beads, qa_ids)
         sanity_findings = [
             bead for bead in all_beads
             if sanity and (

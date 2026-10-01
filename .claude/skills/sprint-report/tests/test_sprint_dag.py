@@ -127,6 +127,28 @@ class DagTests(unittest.TestCase):
         self.assertEqual(result['work-1']['findings'], '0:0:0')
         self.assertEqual(result['work-1']['icon'], '🚩')
 
+    def test_qa_badges_survive_validates_to_parent_child_migration(self):
+        review = bead('qa', labels=['stage:qa'], reason='FAIL: findings')
+        review['metadata'] = {'checked_bead': 'work-1', 'round': 1}
+        review['dependencies'] = [{'type': 'validates', 'depends_on_id': 'work-1'}]
+        finding = bead('qa-finding', labels=['stage:finding'], status='open')
+        finding['metadata'] = {'severity': 'important'}
+        finding['dependencies'] = [
+            {'type': 'discovered-from', 'depends_on_id': 'qa'},
+            {'type': 'parent-child', 'depends_on_id': 'work-1'}]
+        self.beads.update({'qa': review, 'qa-finding': finding})
+        sanity_child = bead('finding-sanity', labels=['stage:dev-sanity'], status='open')
+        sanity_child['dependencies'] = [{'type': 'parent-child', 'depends_on_id': 'qa'}]
+        self.beads['finding-sanity'] = sanity_child
+        before = dag.qa_states(self.graph, self.beads, self.index)
+        self.assertEqual(before['work-1']['findings'], '0:1:0')
+        review['dependencies'][0]['type'] = 'parent-child'
+        after = dag.qa_states(self.graph, self.beads, self.index)
+        self.assertEqual(after, before)
+        self.assertEqual(after['work-1']['qa_beads'], ['qa'])
+        del review['metadata']['checked_bead']
+        self.assertEqual(dag.qa_states(self.graph, self.beads, self.index), before)
+
     def test_qa_pending_and_active(self):
         qa = bead('qa', status='open')
         qa['dependencies'] = [{'type': 'validates', 'depends_on_id': 'work-1'}]

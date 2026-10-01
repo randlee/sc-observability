@@ -13,7 +13,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 from sprint_index_common import run_json, index_bead_pairs, validate_index
-from sprint_qa import choose_round, qa_icon, qa_verdict, findings_summary
+from sprint_qa import choose_round, qa_icon, qa_verdict, findings_summary, qa_for_bead, qa_findings
 
 RENDERER = Path(__file__).resolve().parents[1] / 'renderer'
 NS = 'http://www.w3.org/2000/svg'
@@ -157,30 +157,14 @@ def states(graph, snapshot, index):
     return result
 
 
-def is_qa_of(bead, dev_id):
-    """A QA round of dev_id: a stage:qa child of it (phase contract; bd keeps one edge type per pair) or a
-    pre-contract round that `validates` it."""
-    edges = bead.get('dependencies') or []
-    if any(edge.get('type') == 'validates' and edge.get('depends_on_id') == dev_id for edge in edges):
-        return True
-    if 'stage:qa' not in (bead.get('labels') or []):
-        return False
-    metadata = bead.get('metadata') if isinstance(bead.get('metadata'), dict) else {}
-    return bead.get('parent') == dev_id or metadata.get('checked_bead') == dev_id or any(
-        edge.get('type') == 'parent-child' and edge.get('depends_on_id') == dev_id for edge in edges)
-
-
 def qa_states(graph, beads, index):
     """Share table QA semantics, counting open findings across every round."""
     result = {}
     for key in graph['nodes']:
-        rounds = [bead for bead in beads.values() if is_qa_of(bead, key)]
+        rounds = [bead for bead in beads.values() if qa_for_bead(bead, key)]
         selected = choose_round(rounds)
         round_ids = {bead['id'] for bead in rounds}
-        findings = [bead for bead in beads.values() if any(
-            edge.get('type') in ('discovered-from', 'parent-child')
-            and edge.get('depends_on_id') in round_ids
-            for edge in bead.get('dependencies') or [])]
+        findings = qa_findings(beads.values(), round_ids)
         icon = qa_icon(selected, findings)
         counts = findings_summary(findings) if icon == '🚩' else None
         result[key] = {'icon': icon, 'findings': counts,

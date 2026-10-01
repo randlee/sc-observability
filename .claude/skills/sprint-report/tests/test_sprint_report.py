@@ -171,6 +171,22 @@ class SprintReportTests(unittest.TestCase):
             path.write_text('\n'.join(json.dumps(run) for run in runs) + '\n')
             self.assertEqual(report.sanity_iterations(path), {'sanity-1': 13, 'sanity-2': 6})
 
+    def test_qa_discovery_supports_reparented_reviews_without_matching_findings(self):
+        parent = {'type': 'parent-child', 'depends_on_id': 'dev'}
+        for candidate in [
+            {'labels': ['stage:qa'], 'dependencies': [parent]},
+            {'labels': ['stage:qa'], 'metadata': {'checked_bead': 'dev'}},
+            {'labels': ['stage:qa'], 'parent': 'dev'},
+            {'dependencies': [{'type': 'validates', 'depends_on_id': 'dev'}]},
+            {'labels': ['stage:qa'], 'dependencies': [{'dependency_type': 'parent-child', 'id': 'dev'}]},
+        ]:
+            with self.subTest(candidate=candidate):
+                self.assertTrue(report.qa_for_bead(candidate, 'dev'))
+                self.assertFalse(report.qa_for_bead(candidate, 'other'))
+        for label in ['stage:finding', 'stage:dev-sanity', 'qa-finding']:
+            self.assertFalse(report.qa_for_bead({'labels': [label], 'dependencies': [parent]}, 'dev'))
+        self.assertFalse(report.qa_for_bead({'labels': ['stage:qa'], 'metadata': {'checked_bead': 'other'}, 'dependencies': [parent]}, 'dev'))
+
     def test_qa_table_uses_original_icons(self):
         cases = [
             (None, [], ''),
