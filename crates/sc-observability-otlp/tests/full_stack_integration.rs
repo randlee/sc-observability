@@ -387,6 +387,7 @@ fn disabled_telemetry_config_with_endpoint(
 fn enabled_telemetry_config() -> V2TelemetryConfig {
     let mut transport = V2OtelConfig::default();
     transport.enabled = true;
+    transport.timeout_ms = Some(DurationMs::from(2_000));
     transport.endpoint = Some(
         V2OtlpEndpoint::new_typed("https://otel.example.internal").expect("valid OTLP endpoint"),
     );
@@ -471,6 +472,7 @@ fn enabled_legacy_http_json_retry_config(
 fn enabled_sdk_grpc_config(address: std::net::SocketAddr) -> V2TelemetryConfig {
     let mut transport = V2OtelConfig::default();
     transport.enabled = true;
+    transport.timeout_ms = Some(DurationMs::from(2_000));
     transport.protocol = sc_observability_otlp::v2::OtlpProtocol::Grpc;
     transport.endpoint = Some(
         V2OtlpEndpoint::new_typed(format!("http://{address}"))
@@ -492,6 +494,7 @@ fn enabled_sdk_grpc_config_with_auth(
 ) -> V2TelemetryConfig {
     let mut transport = V2OtelConfig::default();
     transport.enabled = true;
+    transport.timeout_ms = Some(DurationMs::from(2_000));
     transport.protocol = sc_observability_otlp::v2::OtlpProtocol::Grpc;
     transport.endpoint = Some(
         V2OtlpEndpoint::new_typed(format!("http://{address}"))
@@ -1114,9 +1117,14 @@ fn public_legacy_factory_reports_retry_exhaustion_after_the_configured_attempts(
     let error = telemetry
         .flush_typed()
         .expect_err("retryable collector failures exhaust the configured attempt budget");
-    assert!(
-        format!("{error:?}").contains("attempts were exhausted"),
-        "the lifecycle reports retry exhaustion rather than a successful flush"
+    let export_error = std::error::Error::source(&error)
+        .and_then(std::error::Error::source)
+        .and_then(|source| source.downcast_ref::<sc_observability_types::v2::ExportError>())
+        .expect("the typed flush failure retains its typed export cause");
+    assert_eq!(
+        export_error.code(),
+        sc_observability_types::error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
+        "the retained export cause classifies exhausted legacy retry attempts with the stable error code"
     );
     assert_eq!(telemetry.health().dropped_exports_total, 1);
     collector.join().expect("collector exits");
@@ -1519,9 +1527,14 @@ fn public_sdk_factory_reports_retry_exhaustion_after_the_default_attempts() {
             .flush_async_typed()
             .await
             .expect_err("retryable collector failures exhaust the SDK retry budget");
-        assert!(
-            format!("{error:?}").contains("OTLP log export failed"),
-            "the lifecycle reports the terminal export failure"
+        let export_error = std::error::Error::source(&error)
+            .and_then(std::error::Error::source)
+            .and_then(|source| source.downcast_ref::<sc_observability_types::v2::ExportError>())
+            .expect("the typed flush failure retains its typed export cause");
+        assert_eq!(
+            export_error.code(),
+            sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL,
+            "the retained export cause classifies the SDK terminal export failure with the stable error code"
         );
         for _ in 0..4 {
             tokio::time::timeout(std::time::Duration::from_secs(2), received_attempts.recv())
@@ -2005,6 +2018,25 @@ fn public_sdk_factory_shutdown_is_idempotent() {
             .await
             .expect("second awaited SDK shutdown is idempotent");
     });
+}
+
+#[cfg(feature = "otlp-sdk")]
+#[test]
+fn sdk_hermetic_configs_bound_transport_lifecycle_requests() {
+    let address = "127.0.0.1:1".parse().expect("loopback address");
+    let configs = [
+        enabled_telemetry_config(),
+        enabled_sdk_grpc_config(address),
+        enabled_sdk_grpc_config_with_auth(address, "Bearer test-credential"),
+    ];
+
+    for config in configs {
+        assert_eq!(
+            u64::from(config.transport.timeout_ms.expect("SDK test timeout")),
+            2_000,
+            "SDK hermetic lifecycle tests must not inherit the unbounded transport default"
+        );
+    }
 }
 
 #[cfg(feature = "otlp-sdk")]
