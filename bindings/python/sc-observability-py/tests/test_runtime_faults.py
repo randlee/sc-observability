@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -232,7 +233,42 @@ def test_private_ci_fault_hook_preserves_tagged_native_results(tmp_path: Path) -
         assert isinstance(logger.shutdown(), Ok)
 
 
+_ATTACHED_PROOF_SENTINEL = "ATTACHED_NATIVE_DETACH_PROOF_PASSED"
+_ATTACHED_PROOF_WATCHDOG_SECONDS = 60
+
+
 def test_private_ci_fault_hook_covers_attached_native_results(tmp_path: Path) -> None:
+    # A missing native detach can hold the GIL while waiting for the Python
+    # thread that must release the injected host gate. Only a separate process
+    # can enforce the watchdog in that state; this is not a timing assertion.
+    command = [
+        sys.executable, "-I", "-X", "dev", "-W", "error", "-c",
+        "import runpy, sys; from pathlib import Path; "
+        "scope = runpy.run_path(sys.argv[1]); "
+        "scope['_attached_native_results'](Path(sys.argv[2])); "
+        "print(scope['_ATTACHED_PROOF_SENTINEL'], flush=True)",
+        str(Path(__file__).resolve()), str(tmp_path),
+    ]
+    try:
+        # subprocess.run kills and reaps a timed-out child and drains both pipes.
+        result = subprocess.run(
+            command, capture_output=True, text=True,
+            timeout=_ATTACHED_PROOF_WATCHDOG_SECONDS, check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        pytest.fail(
+            "attached native detach proof exceeded its process watchdog; "
+            f"stdout={error.stdout!r}, stderr={error.stderr!r}"
+        )
+    assert result.returncode == 0, (
+        f"attached native proof child failed: stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+    assert result.stdout.splitlines().count(_ATTACHED_PROOF_SENTINEL) == 1, (
+        f"attached native proof did not finish: stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+
+
+def _attached_native_results(tmp_path: Path) -> None:
     installed = json.loads(_native._test_install_owned_host(json.dumps({"service": "python-runtime-forced-attached", "log_root": str(tmp_path / "attached")}), True))
     assert installed["kind"] == "ok"
     attached = get_host_logger()
