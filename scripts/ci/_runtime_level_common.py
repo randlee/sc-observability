@@ -30,6 +30,7 @@ UNPUBLISHED_COMPANION_MEMBERS = UNPUBLISHED_COMPANION_PACKAGES + (
     "examples/otlp-sdk",
     "examples/log-settings",
     "tests/sc-observability-composition",
+    "crates/sc-otel-cli",
 )
 # The consumer-check crate is CI-only and must never be staged/published.
 PRIVATE_ONLY_COMPANION_PACKAGES = ("sc-observability-log-consumer-check",)
