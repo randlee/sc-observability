@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.5.0",
+  "source_commit": "26adc9ad36d165a8e7ba89e213bde500f320503d",
+  "crates": {
+    "sc-observability-types": {
+      "status": "pending-user-approval",
+      "reviewer": null,
+      "scope": [
+        "public-api",
+        "feature-public-api"
+      ],
+      "api_sha256": "7f7474098a900cee54db486479d2edbcae228bad9b12816e938fd0a6fbbec88c",
+      "feature_api_sha256": {
+        "test-double": "f10e9d3b8efeb377e76aa9ef4d0b9a02b85a8abe5a14336d5ba7c7319150e3d6"
+      },
+      "evidence": {
+        "default_command": "python3 scripts/ci/validate_public_api.py diff --crate sc-observability-types",
+        "feature_command": "cargo public-api --manifest-path crates/sc-observability-types/Cargo.toml -sss --features test-double",
+        "default_report": "target/public-api/public-api-diff.json"
+      }
+    },
+    "sc-observability-otlp": {
+      "status": "pending-user-approval",
+      "reviewer": null,
+      "scope": [
+        "public-api",
+        "feature-public-api"
+      ],
+      "api_sha256": "b82d3ee25b4234e470b1acd88ee765838af2ebb843aa4dfe470789d0b50cb00f",
+      "feature_api_sha256": {
+        "durable-store": "6038b669caada8ce683667b03e5509af51a19e8c80b4d3614a45f4951cac603e"
+      },
+      "evidence": {
+        "default_command": "python3 scripts/ci/validate_public_api.py diff --crate sc-observability-otlp",
+        "feature_command": "cargo public-api --manifest-path crates/sc-observability-otlp/Cargo.toml -sss --features durable-store",
+        "default_report": "target/public-api/public-api-diff.json"
+      }
+    },
+    "sc-observability-py": {
+      "status": "pending-user-approval",
+      "reviewer": null,
+      "scope": [
+        "public-api",
+        "feature-public-api"
+      ],
+      "api_sha256": "7945854ed22cd6a4353601bc922be0552dcad7b52d7b41253154c48037ea0835",
+      "feature_api_sha256": {
+        "otlp-telemetry": "0edea4fce1a4d9a76efea8bc97639c5cc0f8fc5e645b4ad4f26d06a9f1e3c996"
+      },
+      "evidence": {
+        "default_command": "python3 scripts/ci/validate_public_api.py diff --crate sc-observability-py",
+        "feature_command": "cargo public-api --manifest-path bindings/python/sc-observability-py/Cargo.toml -sss --features otlp-telemetry",
+        "default_report": "target/public-api/public-api-diff.json"
+      }
+    }
+  },
+  "approval_scope": "D29 wave-5 telemetry submission contracts for logs, spans, all five metric forms, and profiles; configuration, canonical envelopes, typed errors, test double, and staged durable client surface. Runtime persistence and export are implemented by subsequent sprints.",
+  "approval_message": null,
+  "contract_rulings": [
+    {
+      "message_id": "01M3VWCCBHT906CNTV50SVGPZ7",
+      "reviewer": "team-lead@sc-obs",
+      "scope": "Use TryFrom with SignalValidationError for LogEvent, SpanRecord<SpanEnded>, v2::MetricRecord, OtlpResource and OtlpInstrumentationScope. Null attributes are rejected at the exact path; UInt is preserved until envelope range validation."
+    }
+  ],
+  "closeout": "Pending user signature under sprint-d-29 closeout gate. This file does not assert API approval."
+}
