@@ -14,7 +14,11 @@ use clap::Parser;
 use std::{panic::AssertUnwindSafe, process::ExitCode};
 
 fn main() -> ExitCode {
-    if let Ok(exit) = std::panic::catch_unwind(AssertUnwindSafe(run)) {
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let result = std::panic::catch_unwind(AssertUnwindSafe(run));
+    std::panic::set_hook(previous_hook);
+    if let Ok(exit) = result {
         ExitCode::from(exit)
     } else {
         eprintln!("sc-otel: unexpected internal error");
@@ -31,7 +35,9 @@ fn run() -> u8 {
             } else {
                 constants::EXIT_OK
             };
-            let _ = error.print();
+            if let Err(print_error) = error.print() {
+                eprintln!("sc-otel: unable to render usage error: {print_error}");
+            }
             return exit;
         }
     };

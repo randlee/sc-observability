@@ -12,7 +12,8 @@ use crate::{
     output::{self, Outcome},
 };
 use sc_observability_types::otlp::submission::{
-    RecordKey, StatusQuery, SubmissionId, TelemetryClient, TelemetryClientError,
+    RecordKey, StatusQuery, SubmissionId, TelemetryClient, TelemetryClientConfig,
+    TelemetryClientError,
 };
 use std::{str::FromStr, time::Duration};
 
@@ -54,13 +55,9 @@ fn emit(cli: &Cli, args: &EmitArgs) -> Outcome {
         Ok(envelope) => envelope,
         Err(error) => return failure(constants::COMMAND_EMIT, error),
     };
-    let config = match config::resolve(cli) {
-        Ok(config) => config,
-        Err(error) => return failure(constants::COMMAND_EMIT, error),
-    };
-    let client = match client::open_client(config.clone()) {
+    let (config, client) = match open_client(cli, constants::COMMAND_EMIT) {
         Ok(client) => client,
-        Err(error) => return failure(constants::COMMAND_EMIT, error),
+        Err(outcome) => return outcome,
     };
     let receipt = match client.emit(envelope) {
         Ok(receipt) => receipt,
@@ -88,13 +85,9 @@ fn emit(cli: &Cli, args: &EmitArgs) -> Outcome {
 }
 
 fn flush(cli: &Cli, args: &FlushArgs) -> Outcome {
-    let config = match config::resolve(cli) {
-        Ok(config) => config,
-        Err(error) => return failure(constants::COMMAND_FLUSH, error),
-    };
-    let client = match client::open_client(config.clone()) {
+    let (config, client) = match open_client(cli, constants::COMMAND_FLUSH) {
         Ok(client) => client,
-        Err(error) => return failure(constants::COMMAND_FLUSH, error),
+        Err(outcome) => return outcome,
     };
     let deadline = args.timeout.unwrap_or(config.flush_deadline);
     match client.flush(deadline) {
@@ -112,13 +105,9 @@ fn status(cli: &Cli, args: &StatusArgs) -> Outcome {
         Ok(query) => query,
         Err(error) => return failure(constants::COMMAND_STATUS, error),
     };
-    let config = match config::resolve(cli) {
-        Ok(config) => config,
-        Err(error) => return failure(constants::COMMAND_STATUS, error),
-    };
-    let client = match client::open_client(config) {
+    let (_, client) = match open_client(cli, constants::COMMAND_STATUS) {
         Ok(client) => client,
-        Err(error) => return failure("status", error),
+        Err(outcome) => return outcome,
     };
     match client.status(query) {
         Ok(status) => {
@@ -148,6 +137,15 @@ fn status_query(args: &StatusArgs) -> Result<StatusQuery, TelemetryClientError> 
             .map(StatusQuery::RecordKeys);
     }
     Ok(StatusQuery::Summary)
+}
+
+fn open_client(
+    cli: &Cli,
+    command: &'static str,
+) -> Result<(TelemetryClientConfig, Box<dyn TelemetryClient>), Outcome> {
+    let config = config::resolve(cli).map_err(|error| failure(command, error))?;
+    let client = client::open_client(config.clone()).map_err(|error| failure(command, error))?;
+    Ok((config, client))
 }
 
 fn shutdown_failure(
