@@ -1,6 +1,6 @@
 //! The only core/bridge-to-wire runtime conversion boundary.
 use crate::ProducerOrigin;
-use dto::{Diagnostic, Failure};
+use dto::Failure;
 use native::DiagnosticInfo;
 use native::v2::FlushError;
 use sc_observability_dto as dto;
@@ -9,22 +9,14 @@ use sc_observability_types as native;
 
 /// Native-owned failure classification reused at the sole binding-to-wire boundary.
 pub(crate) type Kind = native::v2::FailureClassification;
-pub(crate) fn diagnostic(value: &native::Diagnostic) -> Diagnostic {
-    Diagnostic {
-        at: value.timestamp.to_string(),
-        code: value.code.as_str().into(),
-        message: value.message.clone(),
-        remediation: value.remediation.clone().into(),
-    }
-}
-fn failure(diagnostic: Diagnostic, kind: Kind) -> Failure {
+fn failure(diagnostic: dto::Diagnostic, kind: Kind) -> Failure {
     dto::failure_from_diagnostic(diagnostic, kind)
 }
 pub(crate) fn context(value: &native::Diagnostic, kind: Kind) -> Failure {
-    failure(diagnostic(value), kind)
+    dto::failure_from_classification(value, kind)
 }
 pub(crate) fn canonical<T: DiagnosticInfo>(value: &T, kind: Kind) -> Failure {
-    failure(diagnostic(value.diagnostic()), kind)
+    dto::failure_from_classification(value.diagnostic(), kind)
 }
 fn operation(value: native::OperationDiagnostic, kind: Kind) -> Failure {
     failure(value.into(), kind)
