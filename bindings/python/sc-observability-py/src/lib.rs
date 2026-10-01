@@ -182,86 +182,16 @@ pub fn project_canonical_failure<T: CanonicalProjection>(
     error: &T,
     kind: CanonicalWireKind,
 ) -> Failure {
-    let diagnostic = error.canonical_diagnostic();
-    let diagnostic = Box::new(sc_observability_dto::Diagnostic {
-        at: diagnostic.timestamp.to_string(),
-        code: diagnostic.code.as_str().to_owned(),
-        message: diagnostic.message.clone(),
-        remediation: diagnostic.remediation.clone().into(),
-    });
-    match kind {
-        CanonicalWireKind::Validation => Failure::Validation {
-            diagnostic,
-            field: error.canonical_name().to_owned(),
-        },
-        CanonicalWireKind::Io => Failure::Io { diagnostic },
-        CanonicalWireKind::Unavailable => Failure::Unavailable { diagnostic },
-        CanonicalWireKind::Timeout => Failure::Timeout {
-            diagnostic,
-            operation: error.canonical_name().to_owned(),
-        },
-        CanonicalWireKind::Closed => Failure::Closed { diagnostic },
-    }
-}
-
-fn canonical_context(diagnostic: &sc_observability_dto::Diagnostic) -> native::ErrorContext {
-    let remediation = match &diagnostic.remediation {
-        sc_observability_dto::RemediationDto::Recoverable { steps } => {
-            native::Remediation::Recoverable {
-                steps: native::RecoverableSteps::all(steps.clone()),
-            }
+    let classification = match kind {
+        CanonicalWireKind::Validation => {
+            v2::FailureClassification::validation(error.canonical_name())
         }
-        sc_observability_dto::RemediationDto::NotRecoverable { justification } => {
-            native::Remediation::not_recoverable(justification.clone())
-        }
+        CanonicalWireKind::Io => v2::FailureClassification::Io,
+        CanonicalWireKind::Unavailable => v2::FailureClassification::Unavailable,
+        CanonicalWireKind::Timeout => v2::FailureClassification::timeout(error.canonical_name()),
+        CanonicalWireKind::Closed => v2::FailureClassification::Closed,
     };
-    native::ErrorContext::new(
-        native::ErrorCode::new_owned(diagnostic.code.clone()),
-        diagnostic.message.clone(),
-        remediation,
-    )
-}
-
-/// Projects canonical variants at the Python language boundary after the
-/// shared runtime has returned its neutral wire failure. This preserves the
-/// runtime's policy/conversion ownership while ensuring wrapper error paths
-/// retain the canonical variant identity before serialization.
-fn project_event_failure(error: Failure) -> Failure {
-    let Failure::Validation { diagnostic, .. } = &error else {
-        return error;
-    };
-    let canonical = v2::EventError::Validation {
-        context: Box::new(canonical_context(diagnostic)),
-    };
-    project_canonical_failure(&canonical, CanonicalWireKind::Validation)
-}
-
-fn project_flush_failure(error: Failure) -> Failure {
-    match &error {
-        Failure::Io { diagnostic } => {
-            let canonical = v2::FlushError::Drain {
-                context: Box::new(canonical_context(diagnostic)),
-            };
-            project_canonical_failure(&canonical, CanonicalWireKind::Io)
-        }
-        Failure::Timeout { diagnostic, .. } => {
-            let canonical = v2::ShutdownError::Timeout {
-                context: Box::new(canonical_context(diagnostic)),
-            };
-            project_canonical_failure(&canonical, CanonicalWireKind::Timeout)
-        }
-        _ => error,
-    }
-}
-
-fn project_runtime_failure(error: Failure) -> Failure {
-    let Failure::Unavailable { diagnostic } = &error else {
-        return error;
-    };
-    let canonical = v2::InitError::Runtime {
-        context: Box::new(canonical_context(diagnostic)),
-    };
-    project_canonical_failure(&canonical, CanonicalWireKind::Unavailable)
+    sc_observability_dto::failure_from_classification(error.canonical_diagnostic(), classification)
 }
 
 fn result_json<T: Serialize>(value: Result<T, Failure>) -> String {
@@ -286,6 +216,15 @@ fn contained_json(call: impl FnOnce() -> String) -> String {
 }
 
 fn parse_value(value: &str, field: &str) -> Result<Value, Failure> {
+    if value.len() > sc_observability_dto::constants::MAX_WIRE_PAYLOAD_BYTES {
+        return Err(sc_observability_dto::invalid_input(
+            field,
+            format!(
+                "request exceeds {} UTF-8 bytes",
+                sc_observability_dto::constants::MAX_WIRE_PAYLOAD_BYTES
+            ),
+        ));
+    }
     serde_json::from_str(value)
         .map_err(|error| sc_observability_dto::invalid_input(field, error.to_string()))
 }
@@ -649,7 +588,7 @@ fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str
         .and_then(|event: LogEventDto| {
             py.detach(move || backend.try_log(event, ProducerOrigin::Python))
         });
-    result_json(result.map_err(project_event_failure))
+    result_json(result)
 }
 
 fn query_backend(
@@ -680,7 +619,7 @@ fn flush_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, timeout: 
             operation.wait(timeout)
         })
     });
-    result_json(result.map_err(project_flush_failure))
+    result_json(result)
 }
 
 impl NativeLogger {
@@ -763,7 +702,7 @@ impl NativeLogger {
         contained_json(|| match test_fault("health") {
             Ok(()) => {
                 let backend = self.backend.clone();
-                result_json(py.detach(move || backend.health().map_err(project_runtime_failure)))
+                result_json(py.detach(move || backend.health()))
             }
             Err(error) => result_json::<()>(Err(error)),
         })
@@ -877,7 +816,7 @@ impl NativeAttachedLogger {
         contained_json(|| match test_fault("health") {
             Ok(()) => {
                 let backend = self.backend.clone();
-                result_json(py.detach(move || backend.health().map_err(project_runtime_failure)))
+                result_json(py.detach(move || backend.health()))
             }
             Err(error) => result_json::<()>(Err(error)),
         })
@@ -1172,6 +1111,10 @@ mod tests {
             )),
         };
         let projected = project_canonical_failure(&error, CanonicalWireKind::Validation);
+        let expected = sc_observability_dto::failure_from_classification(
+            error.canonical_diagnostic(),
+            v2::FailureClassification::validation(error.canonical_name()),
+        );
         assert_eq!(error.canonical_name(), "EventError::Validation");
         assert_eq!(
             error.canonical_diagnostic().code,
@@ -1179,40 +1122,12 @@ mod tests {
         );
         assert!(matches!(
             projected,
-            Failure::Validation { diagnostic, field }
+            Failure::Validation { ref diagnostic, ref field }
                 if field == "EventError::Validation"
                     && diagnostic.code == native::error_codes::VALUE_VALIDATION_FAILED.as_str()
         ));
+        assert_eq!(projected, expected);
         assert_ne!(error.canonical_name(), "ValidationError");
-    }
-
-    #[test]
-    fn production_error_paths_project_canonical_variants() {
-        let validation = Failure::Validation {
-            diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
-                native::error_codes::VALUE_VALIDATION_FAILED.as_str(),
-                "invalid event",
-            )),
-            field: "event".into(),
-        };
-        assert!(matches!(
-            project_event_failure(validation),
-            Failure::Validation { field, diagnostic }
-                if field == "EventError::Validation"
-                    && diagnostic.code == native::error_codes::VALUE_VALIDATION_FAILED.as_str()
-        ));
-
-        let io = Failure::Io {
-            diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
-                native::error_codes::SC_LOG_QUERY_IO.as_str(),
-                "flush failed",
-            )),
-        };
-        assert!(matches!(
-            project_flush_failure(io),
-            Failure::Io { diagnostic }
-                if diagnostic.code == native::error_codes::SC_LOG_QUERY_IO.as_str()
-        ));
     }
 
     #[test]

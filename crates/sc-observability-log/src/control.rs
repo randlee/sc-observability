@@ -7,7 +7,8 @@ use std::time::Duration;
 use crate::error::EmitError;
 use crate::health::BridgeLifecycle;
 use crate::{
-    BridgeHealthReport, ControlError, FieldKeyError, LifecyclePhase, handle, health, mapping,
+    BridgeHealthReport, ControlError, DropCause, FieldKeyError, LifecyclePhase, handle, health,
+    mapping,
 };
 use sc_observability_types::v2::FlushError;
 
@@ -125,10 +126,6 @@ impl LogControl {
     /// # Errors
     ///
     /// Returns [`EmitError`] after exact-once accounting for a rejected event.
-    #[allow(
-        deprecated,
-        reason = "the copied bridge retains its legacy logger admission boundary"
-    )]
     pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError> {
         if let Some(saved) = &self.attachment {
             return handle::submit_guarded(|| crate::bridge::submit_control(saved, event));
@@ -176,10 +173,6 @@ impl LogControl {
     }
 }
 
-#[allow(
-    deprecated,
-    reason = "shared admission retains the legacy core boundary until D18"
-)]
 pub(crate) fn submit_event(
     logger: &sc_observability::v2::Logger,
     event: sc_observability_types::LogEvent,
@@ -273,21 +266,12 @@ fn diagnostic_from_context(
 }
 
 pub(crate) fn core_emit_error(error: &sc_observability_types::v2::EventError) -> EmitError {
-    match error {
-        sc_observability_types::v2::EventError::Validation { context } => EmitError::InvalidEvent {
-            diagnostic: diagnostic_from_context(context),
-        },
-        sc_observability_types::v2::EventError::Routing { context } => {
-            let diagnostic = diagnostic_from_context(context);
-            match diagnostic.code.as_str() {
-                "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => EmitError::QueueFull { diagnostic },
-                "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => {
-                    EmitError::ShutdownTimedOut { diagnostic }
-                }
-                _ => EmitError::WriterDegraded { diagnostic },
-            }
-        }
-        _ => EmitError::Panicked,
+    let diagnostic = diagnostic_from_context(error.context());
+    match handle::event_drop_cause(error) {
+        DropCause::InvalidEvent => EmitError::InvalidEvent { diagnostic },
+        DropCause::QueueFull => EmitError::QueueFull { diagnostic },
+        DropCause::ShutdownTimedOut => EmitError::ShutdownTimedOut { diagnostic },
+        _ => EmitError::WriterDegraded { diagnostic },
     }
 }
 
@@ -300,5 +284,72 @@ mod tests {
     #[test]
     fn control_is_send_and_sync() {
         assert_send_sync::<LogControl>();
+    }
+
+    fn core_event_error(
+        routing: bool,
+        code: &'static str,
+    ) -> sc_observability_types::v2::EventError {
+        let context = Box::new(sc_observability_types::ErrorContext::new(
+            sc_observability_types::ErrorCode::new_static(code),
+            format!("{code} message"),
+            sc_observability_types::Remediation::not_recoverable(format!("{code} remediation")),
+        ));
+        if routing {
+            sc_observability_types::v2::EventError::Routing { context }
+        } else {
+            sc_observability_types::v2::EventError::Validation { context }
+        }
+    }
+
+    #[test]
+    fn core_event_errors_share_one_classification_and_keep_their_diagnostic() {
+        for (routing, code, cause) in [
+            (
+                false,
+                "SC_OBSERVABILITY_EVENT_INVALID",
+                DropCause::InvalidEvent,
+            ),
+            (
+                false,
+                "SC_OBSERVABILITY_LOGGER_QUEUE_FULL",
+                DropCause::InvalidEvent,
+            ),
+            (
+                true,
+                "SC_OBSERVABILITY_LOGGER_QUEUE_FULL",
+                DropCause::QueueFull,
+            ),
+            (
+                true,
+                "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT",
+                DropCause::ShutdownTimedOut,
+            ),
+            (
+                true,
+                "SC_OBSERVABILITY_LOGGER_WRITER_FAILED",
+                DropCause::WriterDegraded,
+            ),
+            (
+                true,
+                "SC_OBSERVABILITY_LOGGER_QUEUE_FUL",
+                DropCause::WriterDegraded,
+            ),
+        ] {
+            let error = core_event_error(routing, code);
+            assert_eq!(handle::event_drop_cause(&error), cause, "{code}");
+            let emit = core_emit_error(&error);
+            assert_eq!(handle::Rejection::drop_cause(&emit), cause, "{code}");
+            let diagnostic = match &emit {
+                EmitError::InvalidEvent { diagnostic }
+                | EmitError::QueueFull { diagnostic }
+                | EmitError::ShutdownTimedOut { diagnostic }
+                | EmitError::WriterDegraded { diagnostic } => diagnostic,
+                other => panic!("{code} mapped to {other:?}"),
+            };
+            assert_eq!(diagnostic.code.as_str(), code);
+            assert_eq!(diagnostic.message, format!("{code} message"));
+            assert_eq!(diagnostic.remediation, error.diagnostic().remediation);
+        }
     }
 }

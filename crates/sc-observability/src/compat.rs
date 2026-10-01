@@ -150,6 +150,11 @@ pub(crate) fn legacy_sink_error(error: CanonicalLogSinkError) -> LogSinkError {
     LogSinkFailure::from_context(error.into_context()).into()
 }
 
+/// Converts a canonical sink error at the released typed sink boundary.
+fn typed_sink_error(error: CanonicalLogSinkError) -> LogSinkFailure {
+    LogSinkFailure::from_context(error.into_context())
+}
+
 impl SinkRegistration {
     /// Wraps a released sink for logger registration.
     ///
@@ -181,6 +186,34 @@ impl LogSink for ConsoleSink {
 
     fn flush(&self) -> Result<(), LogSinkError> {
         crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
+
+impl TypedLogSink for JsonlFileSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
+        crate::sink::LogSink::write(self, event).map_err(typed_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkFailure> {
+        crate::sink::LogSink::flush(self).map_err(typed_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
+
+impl TypedLogSink for ConsoleSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
+        crate::sink::LogSink::write(self, event).map_err(typed_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkFailure> {
+        crate::sink::LogSink::flush(self).map_err(typed_sink_error)
     }
 
     fn health(&self) -> SinkHealth {
@@ -264,7 +297,12 @@ impl From<LogFailure> for LogError {
             LogFailure::InvalidEvent(error) => Self::InvalidEvent(error.into()),
             LogFailure::WriterDegraded(context) => Self::WriterDegraded(context),
             LogFailure::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
-            _ => unreachable!("unknown LogFailure variants cannot be constructed by this version"),
+            _ => Self::WriterDegraded(Box::new(
+                crate::writer_degraded_error_context(
+                    "unrecognized typed blocking logger failure variant",
+                )
+                .source(Box::new(value)),
+            )),
         }
     }
 }
@@ -287,9 +325,12 @@ impl From<TryLogFailure> for TryLogError {
             TryLogFailure::QueueFull(context) => Self::QueueFull(context),
             TryLogFailure::WriterDegraded(context) => Self::WriterDegraded(context),
             TryLogFailure::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
-            _ => {
-                unreachable!("unknown TryLogFailure variants cannot be constructed by this version")
-            }
+            _ => Self::WriterDegraded(Box::new(
+                crate::writer_degraded_error_context(
+                    "unrecognized typed non-blocking logger failure variant",
+                )
+                .source(Box::new(value)),
+            )),
         }
     }
 }

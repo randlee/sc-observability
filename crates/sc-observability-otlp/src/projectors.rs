@@ -1,9 +1,9 @@
 //! Telemetry projector adapters layered on top of generic observation routing.
 //!
-//! `V2TelemetryProjectors<T>` wraps ordinary `sc-observe` projectors for one
-//! `Observable` payload type and forwards projected logs, spans, and metrics
-//! into a shared canonical `RuntimeTelemetry` without changing downstream
-//! registration paths.
+//! `V2TelemetryProjectors<T>` wraps canonical `sc-observe` projectors for one
+//! `Observable` payload type and forwards their canonical logs, spans, and
+//! metrics into a shared `RuntimeTelemetry` without any released-model round
+//! trip. The released facade keeps its own typed projector set.
 #![allow(
     clippy::must_use_candidate,
     reason = "projection-helper builders are intentionally kept lightweight and explicit without repetitive must_use decoration"
@@ -26,32 +26,6 @@ use sc_observability_types::v2::{
 use sc_observability_types::{
     LogEvent, MetricRecord, Observable, Observation, ObservationFilter, SpanSignal,
 };
-
-/// Carries one validated 2.0 metric into the OTLP implementation layer.
-///
-/// This is an identity stub until D.18 supplies the exporter conversion body.
-/// It does not itself establish field-preservation behavior; the validated
-/// metric model owns that contract today.
-#[allow(
-    dead_code,
-    reason = "D.18 activates this staged 2.0 projector after the canonical re-export switch"
-)]
-pub(crate) fn project_v2_metric(metric: V2MetricRecord) -> V2MetricRecord {
-    metric
-}
-
-/// Carries one validated 2.0 span signal into the OTLP implementation layer.
-///
-/// This is an identity stub until D.18 supplies the exporter conversion body.
-/// The validated span model owns lifecycle and field behavior today; this
-/// function only carries its input to the staged handoff.
-#[allow(
-    dead_code,
-    reason = "D.18 activates this staged 2.0 projector after the canonical re-export switch"
-)]
-pub(crate) fn project_v2_span(signal: V2SpanSignal) -> V2SpanSignal {
-    signal
-}
 
 /// Public helper for attaching telemetry export to ordinary observation projection registration.
 pub(crate) struct ProjectorSet<T, R>
@@ -139,66 +113,6 @@ where
         });
         (log, span, metric, self.filter)
     }
-
-    /// Converts the wrapped helper into canonical sc-observe projection registration.
-    pub(crate) fn into_registration(self) -> ProjectionRegistration<T> {
-        let (log, span, metric, filter) = self.into_attached();
-        let mut registration = ProjectionRegistration::new();
-        if let Some(projector) = log {
-            registration = registration.with_log_projector(projector);
-        }
-        if let Some(projector) = span {
-            registration = registration.with_span_projector(projector);
-        }
-        if let Some(projector) = metric {
-            registration = registration.with_metric_projector(projector);
-        }
-        if let Some(filter) = filter {
-            registration = registration.with_filter(filter);
-        }
-        registration
-    }
-}
-
-// Canonical projectors enter the shared typed storage by moving their context.
-
-struct CanonicalLogProjector<T: Observable>(Arc<dyn LogProjector<T>>);
-
-impl<T: Observable> TypedLogProjector<T> for CanonicalLogProjector<T> {
-    fn project_logs(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<LogEvent>, ProjectionFailure> {
-        self.0
-            .project_logs(observation)
-            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
-    }
-}
-
-struct CanonicalSpanProjector<T: Observable>(Arc<dyn SpanProjector<T>>);
-
-impl<T: Observable> TypedSpanProjector<T> for CanonicalSpanProjector<T> {
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionFailure> {
-        self.0
-            .project_spans(observation)
-            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
-    }
-}
-
-struct CanonicalMetricProjector<T: Observable>(Arc<dyn MetricProjector<T>>);
-
-impl<T: Observable> TypedMetricProjector<T> for CanonicalMetricProjector<T> {
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
-        self.0
-            .project_metrics(observation)
-            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
-    }
 }
 
 pub(crate) trait TelemetryEmit: Send + Sync + 'static {
@@ -207,91 +121,147 @@ pub(crate) trait TelemetryEmit: Send + Sync + 'static {
     fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError>;
 }
 
-impl TelemetryEmit for RuntimeTelemetry {
-    fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
-        RuntimeTelemetry::emit_log(self, event)
+/// Wrap canonical observation projectors for the canonical OTLP telemetry API.
+///
+/// Attach log, span, and metric projectors and an optional filter, then call
+/// `into_registration` to register them with the observation routing layer.
+/// Projected canonical outputs are also forwarded, unchanged, to the supplied
+/// v2 telemetry runtime.
+#[expect(
+    missing_debug_implementations,
+    reason = "the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract"
+)]
+pub struct V2TelemetryProjectors<T>
+where
+    T: Observable,
+{
+    telemetry: Arc<RuntimeTelemetry>,
+    log_projector: Option<Arc<dyn LogProjector<T>>>,
+    span_projector: Option<Arc<dyn SpanProjector<T>>>,
+    metric_projector: Option<Arc<dyn MetricProjector<T>>>,
+    filter: Option<Arc<dyn ObservationFilter<T>>>,
+}
+
+impl<T> V2TelemetryProjectors<T>
+where
+    T: Observable,
+{
+    /// Starts a wrapped projector set for one observation payload type.
+    pub fn new(telemetry: Arc<RuntimeTelemetry>) -> Self {
+        Self {
+            telemetry,
+            log_projector: None,
+            span_projector: None,
+            metric_projector: None,
+            filter: None,
+        }
     }
 
-    fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
-        RuntimeTelemetry::emit_span(self, span)
+    /// Attaches a log projector whose output is also forwarded into telemetry.
+    pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
+        self.log_projector = Some(projector);
+        self
     }
 
-    fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
-        RuntimeTelemetry::emit_metric(self, metric)
+    /// Attaches a span projector whose output is also forwarded into telemetry.
+    pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
+        self.span_projector = Some(projector);
+        self
+    }
+
+    /// Attaches a metric projector whose output is also forwarded into telemetry.
+    pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
+        self.metric_projector = Some(projector);
+        self
+    }
+
+    /// Attaches the filter the wrapped projector registration should honor.
+    pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+
+    /// Converts the wrapped helper into ordinary observation registration.
+    pub fn into_registration(self) -> ProjectionRegistration<T> {
+        let mut registration = ProjectionRegistration::new();
+        if let Some(inner) = self.log_projector {
+            registration = registration.with_log_projector(Arc::new(CanonicalAttached {
+                telemetry: Arc::clone(&self.telemetry),
+                inner,
+            }));
+        }
+        if let Some(inner) = self.span_projector {
+            registration = registration.with_span_projector(Arc::new(CanonicalAttached {
+                telemetry: Arc::clone(&self.telemetry),
+                inner,
+            }));
+        }
+        if let Some(inner) = self.metric_projector {
+            registration = registration.with_metric_projector(Arc::new(CanonicalAttached {
+                telemetry: Arc::clone(&self.telemetry),
+                inner,
+            }));
+        }
+        if let Some(filter) = self.filter {
+            registration = registration.with_filter(filter);
+        }
+        registration
     }
 }
 
-macro_rules! projector_facade {
-    ($facade:ident, $runtime:ty, $summary:literal, $details:literal) => {
-        #[expect(
-            missing_debug_implementations,
-            reason = "the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract"
-        )]
-        #[doc = $summary]
-        #[doc = ""]
-        #[doc = $details]
-        pub struct $facade<T>
-        where
-            T: Observable,
-        {
-            inner: ProjectorSet<T, $runtime>,
-        }
-
-        impl<T> $facade<T>
-        where
-            T: Observable,
-        {
-            /// Starts a wrapped projector set for one observation payload type.
-            pub fn new(telemetry: Arc<$runtime>) -> Self {
-                Self {
-                    inner: ProjectorSet::new(telemetry),
-                }
-            }
-
-            /// Attaches a log projector whose output is also forwarded into telemetry.
-            pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
-                self.inner = self
-                    .inner
-                    .with_log_projector(Arc::new(CanonicalLogProjector(projector)));
-                self
-            }
-
-            /// Attaches a span projector whose output is also forwarded into telemetry.
-            pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
-                self.inner = self
-                    .inner
-                    .with_span_projector(Arc::new(CanonicalSpanProjector(projector)));
-                self
-            }
-
-            /// Attaches a metric projector whose output is also forwarded into telemetry.
-            pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
-                self.inner = self
-                    .inner
-                    .with_metric_projector(Arc::new(CanonicalMetricProjector(projector)));
-                self
-            }
-
-            /// Attaches the filter the wrapped projector registration should honor.
-            pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
-                self.inner = self.inner.with_filter(filter);
-                self
-            }
-
-            /// Converts the wrapped helper into ordinary observation registration.
-            pub fn into_registration(self) -> ProjectionRegistration<T> {
-                self.inner.into_registration()
-            }
-        }
-    };
+/// Canonical projector whose output is also admitted by the canonical runtime.
+struct CanonicalAttached<P: ?Sized> {
+    telemetry: Arc<RuntimeTelemetry>,
+    inner: Arc<P>,
 }
 
-projector_facade!(
-    V2TelemetryProjectors,
-    RuntimeTelemetry,
-    "Wrap observation projectors for the canonical OTLP telemetry API.",
-    "Attach log, span, and metric projectors and an optional filter, then call `into_registration` to register them with the observation routing layer. Projected outputs are also forwarded to the supplied v2 telemetry runtime."
-);
+impl<T: Observable> LogProjector<T> for CanonicalAttached<dyn LogProjector<T>> {
+    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
+        let events = self.inner.project_logs(observation)?;
+        for event in &events {
+            self.telemetry
+                .emit_log(event)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(events)
+    }
+}
+
+impl<T: Observable> SpanProjector<T> for CanonicalAttached<dyn SpanProjector<T>> {
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<V2SpanSignal>, ProjectionError> {
+        let spans = self.inner.project_spans(observation)?;
+        for span in &spans {
+            self.telemetry
+                .emit_span(span)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(spans)
+    }
+}
+
+impl<T: Observable> MetricProjector<T> for CanonicalAttached<dyn MetricProjector<T>> {
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<V2MetricRecord>, ProjectionError> {
+        let metrics = self.inner.project_metrics(observation)?;
+        for metric in &metrics {
+            self.telemetry
+                .emit_metric(metric)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(metrics)
+    }
+}
+
+fn telemetry_to_projection_error(error: CanonicalTelemetryError) -> ProjectionError {
+    ProjectionError::Projection {
+        context: error.into_context(),
+    }
+}
 
 pub(crate) struct AttachedLogProjector<T, R>
 where
@@ -318,20 +288,6 @@ where
                 .map_err(telemetry_to_projection_failure)?;
         }
         Ok(events)
-    }
-}
-
-impl<T, R> LogProjector<T> for AttachedLogProjector<T, R>
-where
-    T: Observable,
-    R: TelemetryEmit,
-{
-    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
-        <Self as TypedLogProjector<T>>::project_logs(self, observation).map_err(|failure| {
-            ProjectionError::Projection {
-                context: failure.into_context(),
-            }
-        })
     }
 }
 
@@ -363,23 +319,6 @@ where
     }
 }
 
-impl<T, R> SpanProjector<T> for AttachedSpanProjector<T, R>
-where
-    T: Observable,
-    R: TelemetryEmit,
-{
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        <Self as TypedSpanProjector<T>>::project_spans(self, observation).map_err(|failure| {
-            ProjectionError::Projection {
-                context: failure.into_context(),
-            }
-        })
-    }
-}
-
 pub(crate) struct AttachedMetricProjector<T, R>
 where
     T: Observable,
@@ -408,155 +347,6 @@ where
     }
 }
 
-impl<T, R> MetricProjector<T> for AttachedMetricProjector<T, R>
-where
-    T: Observable,
-    R: TelemetryEmit,
-{
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        <Self as TypedMetricProjector<T>>::project_metrics(self, observation).map_err(|failure| {
-            ProjectionError::Projection {
-                context: failure.into_context(),
-            }
-        })
-    }
-}
-
 fn telemetry_to_projection_failure(error: CanonicalTelemetryError) -> ProjectionFailure {
     ProjectionFailure::from_context(error.into_context())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{project_v2_metric, project_v2_span};
-    use sc_observability_types::v2::{
-        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
-        MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
-        SpanStarted, SpanStatus, TraceContext, TraceFlags,
-    };
-    use sc_observability_types::{
-        ActionName, DurationMs, MetricName, ServiceName, SpanId, Timestamp, TraceId,
-    };
-
-    fn metric(value: MetricValue) -> MetricRecord {
-        MetricRecord::try_new(
-            Timestamp::UNIX_EPOCH,
-            ServiceName::new("test-service").expect("valid service"),
-            MetricName::new("test.measurement").expect("valid metric"),
-            value,
-        )
-        .expect("validated metric")
-    }
-
-    fn one_second_after_epoch() -> Timestamp {
-        serde_json::from_str("\"1970-01-01T00:00:01Z\"").expect("valid timestamp")
-    }
-
-    fn trace_context() -> TraceContext {
-        TraceContext::new(
-            TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
-            SpanId::new("0123456789abcdef").expect("valid span id"),
-            TraceFlags::new(0xa5),
-        )
-    }
-
-    #[test]
-    fn v2_span_identity_stub_returns_each_signal_input() {
-        let trace = trace_context();
-        let link = SpanLink::new(
-            TraceId::new("fedcba9876543210fedcba9876543210").expect("valid linked trace"),
-            SpanId::new("fedcba9876543210").expect("valid linked span"),
-            TraceFlags::new(0x01),
-            Attributes::from([(
-                "link.kind".to_owned(),
-                AttributeValue::String("parent".to_owned()),
-            )]),
-        );
-        let started = SpanRecord::<SpanStarted>::new(
-            Timestamp::UNIX_EPOCH,
-            ServiceName::new("test-service").expect("valid service"),
-            ActionName::new("test.operation").expect("valid action"),
-            trace.clone(),
-            Attributes::from([(
-                "scope.name".to_owned(),
-                AttributeValue::String("test".to_owned()),
-            )]),
-        )
-        .with_kind(SpanKind::Server)
-        .with_links(vec![link]);
-        let ended = started.clone().end(SpanStatus::Ok, DurationMs::from(9));
-        let event = SpanEvent {
-            timestamp: Timestamp::UNIX_EPOCH,
-            trace,
-            name: ActionName::new("test.event").expect("valid event"),
-            attributes: Attributes::from([("event.count".to_owned(), AttributeValue::UInt(1))]),
-            diagnostic: None,
-        };
-
-        let projected_started = project_v2_span(SpanSignal::Started(started.clone()));
-        let projected_event = project_v2_span(SpanSignal::Event(event.clone()));
-        let projected_ended = project_v2_span(SpanSignal::Ended(ended.clone()));
-
-        assert_eq!(projected_started, SpanSignal::Started(started));
-        assert_eq!(projected_event, SpanSignal::Event(event));
-        assert_eq!(projected_ended, SpanSignal::Ended(ended));
-    }
-
-    #[test]
-    fn v2_metric_identity_stub_returns_gauge_input() {
-        let metric = metric(MetricValue::Gauge(
-            FiniteF64::new(12.5).expect("finite gauge"),
-        ));
-
-        assert_eq!(project_v2_metric(metric.clone()), metric);
-    }
-
-    #[test]
-    fn v2_metric_identity_stub_returns_sum_input() {
-        let start = Timestamp::UNIX_EPOCH;
-        let end = one_second_after_epoch();
-        let metric = MetricRecord::try_new(
-            end,
-            ServiceName::new("test-service").expect("valid service"),
-            MetricName::new("test.sum").expect("valid metric"),
-            MetricValue::Sum {
-                value: FiniteF64::new(42.0).expect("finite sum"),
-                monotonic: true,
-                temporality: AggregationTemporality::Delta,
-                start_time: start,
-            },
-        )
-        .expect("validated sum");
-
-        assert_eq!(project_v2_metric(metric.clone()), metric);
-    }
-
-    #[test]
-    fn v2_metric_identity_stub_returns_histogram_input() {
-        let start = Timestamp::UNIX_EPOCH;
-        let end = one_second_after_epoch();
-        let point = HistogramPoint::try_new(
-            vec![FiniteF64::new(1.0).unwrap(), FiniteF64::new(10.0).unwrap()],
-            vec![2, 3, 5],
-            10,
-            FiniteF64::new(37.5).expect("finite histogram sum"),
-        )
-        .expect("validated histogram");
-        let metric = MetricRecord::try_new(
-            end,
-            ServiceName::new("test-service").expect("valid service"),
-            MetricName::new("test.histogram").expect("valid metric"),
-            MetricValue::Histogram {
-                point: point.clone(),
-                temporality: AggregationTemporality::Delta,
-                start_time: start,
-            },
-        )
-        .expect("validated histogram metric");
-
-        assert_eq!(project_v2_metric(metric.clone()), metric);
-    }
 }

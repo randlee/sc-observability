@@ -766,9 +766,12 @@ The legacy transport uses `reqwest =0.12.28` with `blocking`, `json`,
 `rustls-tls` and default features off, and `httpdate =1.0.3`; its transitive
 Tokio use does not impose a caller-owned runtime. The separate `otlp-sdk`
 feature admits the reviewed `opentelemetry*` SDK family and its explicitly
-reviewed transport dependencies only. obs-d-21 records exact remaining pins
-in Cargo.lock and the existing boundaries manifest at implementation review.
-No wildcard approval covers an unrelated dependency. ADR-019 records this
+reviewed transport dependencies only. Its `HttpBinary` terminal posts the
+projected protobuf requests through the same reviewed `reqwest =0.12.28` and
+encodes them with `prost =0.14.4` (`std`, default features off), because the
+pinned official HTTP exporters accept only SDK record types. obs-d-21 records
+exact remaining pins in Cargo.lock and the existing boundaries manifest at
+implementation review. No wildcard approval covers an unrelated dependency. ADR-019 records this
 amendment to ADR-018; the existing boundary manifest is the single machine
 allowlist and this section is its normative explanation.
 

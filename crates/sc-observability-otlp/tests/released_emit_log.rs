@@ -3,7 +3,9 @@
 //! An exporting (active) runtime can only be composed here with a backend
 //! feature and a live endpoint, so the buffered-state assertions live next to
 //! the private exporter injection seam in `src/facade_tests.rs`. This file
-//! covers every state reachable through public entry points.
+//! covers every state reachable through public entry points. The entity
+//! rejection cause check composes a legacy HTTP/JSON runtime that rejects
+//! every event before buffering, so it never exports.
 #![allow(
     deprecated,
     reason = "the test asserts the retained released root facade and its legacy error variants"
@@ -188,4 +190,94 @@ fn projector_helpers_forward_to_their_own_admission_mode() {
         .project_logs(&observation)
         .expect("a disabled canonical runtime returns before the entity check");
     assert_eq!(events.len(), 1);
+}
+
+#[cfg(feature = "legacy-http-json")]
+mod entity_rejection_cause {
+    use sc_observability::error_codes::LOGGER_INVALID_EVENT;
+    use sc_observability_otlp::LogsConfig;
+    use sc_observability_otlp::v2::{
+        EventError, ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol,
+        Telemetry as V2Telemetry, TelemetryConfigBuilder as V2TelemetryConfigBuilder,
+        TelemetryError as V2TelemetryError,
+    };
+    use sc_observability_types::v2::FailureClassification;
+    use sc_observability_types::{EntityId, Remediation, ValueValidationError};
+
+    use super::{INVALID_ID, event_with_id, service_name};
+
+    fn enabled_legacy() -> V2Telemetry {
+        let mut transport = OtelConfig::default();
+        transport.enabled = true;
+        transport.backend = ExporterBackend::LegacyHttpJson;
+        transport.protocol = OtlpProtocol::HttpJson;
+        transport.endpoint =
+            Some(OtlpEndpoint::new_typed("http://127.0.0.1:4318").expect("endpoint"));
+        let config = V2TelemetryConfigBuilder::new(service_name())
+            .enable_logs(LogsConfig::default())
+            .with_transport(transport)
+            .build_typed()
+            .expect("enabled legacy config");
+        V2Telemetry::new(config).expect("enabled legacy telemetry")
+    }
+
+    fn retained_validation_cause(error: &V2TelemetryError) -> &ValueValidationError {
+        let mut current: Option<&(dyn std::error::Error + 'static)> = Some(error);
+        while let Some(link) = current {
+            if let Some(cause) = link.downcast_ref::<ValueValidationError>() {
+                return cause;
+            }
+            current = link.source();
+        }
+        panic!("entity rejection must retain its ValueValidationError: {error:?}");
+    }
+
+    #[test]
+    fn v2_entity_rejection_retains_the_distinct_validation_cause() {
+        let telemetry = enabled_legacy();
+        let empty = telemetry
+            .emit_log(&event_with_id(""))
+            .expect_err("empty entity_id");
+        let grammar = telemetry
+            .emit_log(&event_with_id(INVALID_ID))
+            .expect_err("entity_id outside the identifier grammar");
+
+        for error in [&empty, &grammar] {
+            assert!(
+                matches!(
+                    error,
+                    V2TelemetryError::Event(EventError::Validation { .. })
+                ),
+                "{error:?}"
+            );
+            assert_eq!(
+                error.failure_classification(),
+                FailureClassification::validation("event")
+            );
+            let diagnostic = error.diagnostic();
+            assert_eq!(diagnostic.code, LOGGER_INVALID_EVENT);
+            assert_eq!(
+                diagnostic.message,
+                "log event state transition entity_id is invalid"
+            );
+            assert_eq!(
+                diagnostic.remediation,
+                Remediation::recoverable(
+                    "emit a valid entity_id or omit it",
+                    ["rebuild the state transition before emitting"],
+                )
+            );
+        }
+        let empty_cause = retained_validation_cause(&empty);
+        let grammar_cause = retained_validation_cause(&grammar);
+        assert_eq!(empty_cause, &EntityId::new("").expect_err("empty id"));
+        assert_eq!(
+            grammar_cause,
+            &EntityId::new(INVALID_ID).expect_err("id with a space")
+        );
+        assert_ne!(empty_cause, grammar_cause);
+        telemetry
+            .shutdown_typed()
+            .expect("nothing was buffered to export");
+    }
 }

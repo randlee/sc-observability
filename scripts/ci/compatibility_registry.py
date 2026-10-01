@@ -9,6 +9,22 @@ PLACEHOLDER_BASELINE_SIGNATURE_PREFIXES = ("released public nominal identity",)
 
 BASELINE_COMMIT = "c578912653233c7dc678fefe5af575118dbbaaa1"
 
+RELEASED_TYPED_BUILTIN_IMPLS = frozenset({
+    "sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink",
+    "sc_observability::typed::TypedLogSink for sc_observability::ConsoleSink",
+})
+TRAIT_IMPL_CONTRACT_FIELDS = frozenset({
+    "implementation",
+    "baseline_declaration",
+    "current_declaration",
+    "baseline_source",
+    "current_source",
+    "conversion",
+    "removable_paths",
+    "removal_rationale",
+})
+TRAIT_IMPL_SOURCE_FIELDS = frozenset({"revision", "path", "owner"})
+
 # Deprecated owners each excepted file carried at the pinned v1.4.1 commit.
 # An exception covers only these names; any other deprecated owner in the file
 # is new deprecated surface and must live under `src/compat`.
@@ -44,10 +60,16 @@ def validate_contract_signatures(rows: Iterable[dict]) -> None:
         symbol = row.get("symbol")
         baseline = row["baseline_signature"]
         canonical = row["canonical_signature"]
-        if not isinstance(baseline, str) or not baseline or has_placeholder_baseline_signature(baseline):
+        if (
+            not isinstance(baseline, str)
+            or not baseline.strip()
+            or has_placeholder_baseline_signature(baseline.strip())
+        ):
             raise ValueError(f"compatibility registry has an unsigned or placeholder baseline contract: {symbol}")
         if canonical is not None and (
-            not isinstance(canonical, str) or not canonical or has_placeholder_baseline_signature(canonical)
+            not isinstance(canonical, str)
+            or not canonical.strip()
+            or has_placeholder_baseline_signature(canonical.strip())
         ):
             raise ValueError(f"compatibility registry has an unsigned or placeholder canonical contract: {symbol}")
         if row["treatment"] == "unchanged_alias" and canonical != baseline:
@@ -63,6 +85,42 @@ def validate_trait_slot_contracts(rows: Iterable[dict]) -> None:
         canonical_path = (row.get("canonical_source") or {}).get("path")
         if canonical_path is not None and canonical_path in row["removable_paths"]:
             raise ValueError(f"trait-slot removable_paths contains its canonical source: {symbol}")
+
+
+def validate_trait_impl_contracts(records: object) -> None:
+    """Require the two released built-in TypedLogSink impl identities exactly once."""
+    if not isinstance(records, list):
+        raise ValueError("compatibility trait-impl contracts must be a list")
+    implementations: list[str] = []
+    for record in records:
+        if not isinstance(record, dict) or set(record) != TRAIT_IMPL_CONTRACT_FIELDS:
+            raise ValueError(f"malformed compatibility trait-impl contract: {record!r}")
+        implementation = record["implementation"]
+        if not isinstance(implementation, str) or not implementation.strip():
+            raise ValueError(f"compatibility trait-impl contract has no implementation: {record!r}")
+        implementations.append(implementation)
+        for field in ("baseline_declaration", "current_declaration", "conversion", "removal_rationale"):
+            if not isinstance(record[field], str) or not record[field].strip():
+                raise ValueError(f"compatibility trait-impl contract has blank {field}: {implementation}")
+        for field, revision in (("baseline_source", BASELINE_COMMIT), ("current_source", "selected_head")):
+            source = record[field]
+            if not isinstance(source, Mapping) or set(source) != TRAIT_IMPL_SOURCE_FIELDS:
+                raise ValueError(f"compatibility trait-impl contract has malformed {field}: {implementation}")
+            if source["revision"] != revision or any(
+                not isinstance(source[key], str) or not source[key].strip()
+                for key in ("path", "owner")
+            ):
+                raise ValueError(f"compatibility trait-impl contract has invalid {field}: {implementation}")
+        removable = record["removable_paths"]
+        if not isinstance(removable, list) or removable != ["crates/sc-observability/src/compat.rs"]:
+            raise ValueError(f"compatibility trait-impl contract has invalid removable paths: {implementation}")
+    duplicates = [name for name, count in Counter(implementations).items() if count > 1]
+    if duplicates:
+        raise ValueError(f"duplicate compatibility trait-impl contracts: {', '.join(sorted(duplicates))}")
+    if set(implementations) != RELEASED_TYPED_BUILTIN_IMPLS:
+        missing = sorted(RELEASED_TYPED_BUILTIN_IMPLS - set(implementations))
+        unknown = sorted(set(implementations) - RELEASED_TYPED_BUILTIN_IMPLS)
+        raise ValueError(f"compatibility trait-impl contracts drifted: missing={missing}, unknown={unknown}")
 
 
 def is_compat_source_path(relative_path: str) -> bool:
@@ -141,6 +199,47 @@ def deprecated_owner_names(text: str) -> list[str]:
     return names
 
 
+DEPRECATED_OWNER_EXCEPTION_FIELDS = frozenset({"file", "deprecated_symbols", "reason", "removal_point"})
+
+
+def deprecated_owner_exception_records(
+    registry: dict, baseline: Mapping[str, tuple[str, ...]] = DEPRECATED_OWNER_BASELINE
+) -> dict[str, tuple[str, ...]]:
+    """Return each excepted file's declared deprecated symbols after checking its record."""
+    records = registry.get("deprecated_owner_exceptions", [])
+    if not isinstance(records, list):
+        raise ValueError("deprecated_owner_exceptions must be a list of records")
+    declared: dict[str, tuple[str, ...]] = {}
+    for record in records:
+        if not isinstance(record, dict) or set(record) != DEPRECATED_OWNER_EXCEPTION_FIELDS:
+            raise ValueError(f"malformed deprecated owner exception record: {record!r}")
+        relative = record["file"]
+        if not isinstance(relative, str) or not relative.strip():
+            raise ValueError(f"deprecated owner exception has no file: {record!r}")
+        if relative in declared:
+            raise ValueError(f"duplicate deprecated owner exception: {relative}")
+        if relative not in baseline:
+            raise ValueError(f"deprecated owner exception has no v1.4.1 baseline: {relative}")
+        for field in ("reason", "removal_point"):
+            if not isinstance(record[field], str) or not record[field].strip():
+                raise ValueError(f"deprecated owner exception has a blank {field}: {relative}")
+        symbols = record["deprecated_symbols"]
+        if (
+            not isinstance(symbols, list)
+            or not symbols
+            or any(not isinstance(symbol, str) or not symbol.strip() for symbol in symbols)
+        ):
+            raise ValueError(f"deprecated owner exception must name its deprecated symbols: {relative}")
+        unknown = Counter(symbols) - Counter(baseline[relative])
+        if unknown:
+            raise ValueError(
+                f"deprecated owner exception declares symbols outside the v1.4.1 baseline: {relative}: "
+                f"{', '.join(sorted(unknown.elements()))}"
+            )
+        declared[relative] = tuple(symbols)
+    return declared
+
+
 def validate_compatibility_source_boundary(
     root: Path,
     source_files: Iterable[Path],
@@ -148,10 +247,9 @@ def validate_compatibility_source_boundary(
     baseline: Mapping[str, tuple[str, ...]] = DEPRECATED_OWNER_BASELINE,
 ) -> None:
     """Reject canonical-to-compat imports and deprecated owners beyond the baseline."""
-    deprecated_exceptions = set(registry.get("deprecated_owner_exceptions", []))
+    deprecated_exceptions = deprecated_owner_exception_records(registry, baseline)
     root_reexport_exceptions = set(registry.get("compat_root_reexport_exceptions", []))
-    for relative in sorted(deprecated_exceptions - set(baseline)):
-        raise ValueError(f"deprecated owner exception has no v1.4.1 baseline: {relative}")
+    owning_files = set()
 
     for path in source_files:
         relative = path.relative_to(root).as_posix()
@@ -171,8 +269,17 @@ def validate_compatibility_source_boundary(
             continue
         if relative not in deprecated_exceptions:
             raise ValueError(f"deprecated owner is outside compat without registry exception: {relative}")
-        excess = Counter(deprecated_owner_names(text)) - Counter(baseline[relative])
+        names = Counter(deprecated_owner_names(text))
+        excess = names - Counter(baseline[relative])
         if excess:
             raise ValueError(
                 f"deprecated owner exceeds v1.4.1 baseline: {relative}: {', '.join(sorted(excess.elements()))}"
             )
+        if names != Counter(deprecated_exceptions[relative]):
+            raise ValueError(
+                f"deprecated owner exception symbols differ from source: {relative}: "
+                f"declared {', '.join(deprecated_exceptions[relative])}; source {', '.join(sorted(names.elements()))}"
+            )
+        owning_files.add(relative)
+    for relative in sorted(set(deprecated_exceptions) - owning_files):
+        raise ValueError(f"deprecated owner exception names a file without deprecated owners: {relative}")

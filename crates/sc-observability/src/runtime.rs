@@ -12,14 +12,16 @@ use sc_observability_types::v2::{
 };
 use sc_observability_types::{
     AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, EntityId, EnvPrefix,
-    ErrorContext, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter, LevelState,
-    LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport,
-    MaintenanceWorkerState, OperationDiagnostic, QueryError, QueryHealthState, Remediation,
-    SinkHealth, SinkHealthState, Timestamp, WriterState,
+    ErrorContext, FailureClassification, LevelChange, LevelChangeError, LevelChangeSource,
+    LevelFilter, LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
+    MaintenanceHealthReport, MaintenanceWorkerState, OperationDiagnostic, QueryError,
+    QueryHealthState, Remediation, SinkHealth, SinkHealthState, Timestamp, WriterState,
 };
 use serde::de::{DeserializeOwned, value::StrDeserializer};
 use serde_json::Value;
 
+#[cfg(test)]
+use crate::WriterShutdownTimeout;
 use crate::builder::CanonicalLoggerBuilder;
 use crate::follow::LogFollowSession;
 use crate::health::QueryHealthTracker;
@@ -699,8 +701,8 @@ impl CanonicalLogger<Running> {
             Err(TryEnqueueError::Full) => {
                 let summary = writer.record_queue_full_drop();
                 self.record_last_error(summary);
-                Err(CanonicalEventError::Routing {
-                    context: Box::new(ErrorContext::new(
+                Err(CanonicalEventError::classified_routing(
+                    Box::new(ErrorContext::new(
                         error_codes::LOGGER_QUEUE_FULL,
                         "writer queue is full",
                         Remediation::recoverable(
@@ -711,7 +713,8 @@ impl CanonicalLogger<Running> {
                             ],
                         ),
                     )),
-                })
+                    FailureClassification::QueueFull,
+                ))
             }
             Err(TryEnqueueError::Disconnected) => Err(self.try_log_disconnected_failure()),
         }
@@ -887,9 +890,10 @@ impl CanonicalLogger<Running> {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
             {
-                CanonicalEventError::Routing {
-                    context: Box::new(shutdown_timed_out_error_context(&summary.message)),
-                }
+                CanonicalEventError::classified_routing(
+                    Box::new(shutdown_timed_out_error_context(&summary.message)),
+                    FailureClassification::timeout("shutdown"),
+                )
             }
             Some(summary) => CanonicalEventError::Routing {
                 context: Box::new(writer_degraded_error_context(&format!(
@@ -910,9 +914,10 @@ impl CanonicalLogger<Running> {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
             {
-                CanonicalEventError::Routing {
-                    context: Box::new(shutdown_timed_out_error_context(&summary.message)),
-                }
+                CanonicalEventError::classified_routing(
+                    Box::new(shutdown_timed_out_error_context(&summary.message)),
+                    FailureClassification::timeout("shutdown"),
+                )
             }
             Some(summary) => CanonicalEventError::Routing {
                 context: Box::new(writer_degraded_error_context(&format!(
@@ -1123,6 +1128,82 @@ impl LevelOwner {
     }
 }
 
+#[cfg(test)]
+mod disconnected_failure_tests {
+    use super::*;
+
+    fn logger_with_synthetic_shutdown_timeout() -> CanonicalLogger<Running> {
+        let service_name =
+            ServiceName::new("disconnected-timeout-test").expect("test service name is valid");
+        let mut config = LoggerConfig::default_for(
+            service_name,
+            std::env::temp_dir().join("sc-observability-disconnected-timeout-test"),
+        );
+        config.enable_file_sink = false;
+        config.enable_console_sink = true;
+        config.retained_log_policy.writer_shutdown_timeout =
+            WriterShutdownTimeout::new(Duration::from_millis(20));
+
+        let mut logger = CanonicalLogger::new(config).expect("test logger starts");
+        let writer = logger.runtime.writer.take().expect("logger has a writer");
+        let _ = writer.shutdown();
+
+        let timeout_context = shutdown_timed_out_error_context("synthetic shutdown timeout");
+        let last_writer_error = Some(DiagnosticSummary::from(timeout_context.diagnostic()));
+        *logger
+            .runtime
+            .writer_snapshot
+            .lock()
+            .expect("writer snapshot is available") = Some(WriterHealthSnapshot {
+            queue_depth: 0,
+            queue_capacity: logger.config.queue_capacity as u64,
+            queue_high_water_mark: 0,
+            queue_full_drops_total: 0,
+            writer_state: WriterState::Stopped,
+            last_writer_error,
+            maintenance: None,
+        });
+
+        logger
+    }
+
+    #[test]
+    fn disconnected_failure_preserves_synthetic_shutdown_timeout_classification() {
+        // This exercises defensive state only; it does not claim that a public
+        // running logger can reach a disconnected writer after shutdown consumes it.
+        let logger = logger_with_synthetic_shutdown_timeout();
+
+        let error = logger.log_disconnected_failure();
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SHUTDOWN_TIMED_OUT
+        );
+        assert_eq!(
+            error.failure_classification(),
+            FailureClassification::timeout("shutdown")
+        );
+    }
+
+    #[test]
+    fn try_disconnected_failure_preserves_synthetic_shutdown_timeout_classification() {
+        // This exercises defensive state only; it does not claim that a public
+        // running logger can reach a disconnected writer after shutdown consumes it.
+        let logger = logger_with_synthetic_shutdown_timeout();
+
+        let error = logger.try_log_disconnected_failure();
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SHUTDOWN_TIMED_OUT
+        );
+        assert_eq!(
+            error.failure_classification(),
+            FailureClassification::timeout("shutdown")
+        );
+    }
+}
+
 fn aggregate_logging_health_state(
     sink_statuses: &[SinkHealth],
     writer_state: WriterState,
@@ -1182,7 +1263,7 @@ enum AdmissionMode {
 }
 
 /// Validates the optional state-transition entity identifier with `EntityId`.
-pub(crate) fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
+fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
     let Some(entity_id) = event
         .state_transition
         .as_ref()
@@ -1190,7 +1271,7 @@ pub(crate) fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
     else {
         return Ok(());
     };
-    EntityId::new(entity_id).map(|_| ()).map_err(|_| {
+    EntityId::new(entity_id).map(|_| ()).map_err(|error| {
         EventFailure::invalid_event(
             "log event state transition entity_id is invalid",
             Remediation::recoverable(
@@ -1198,6 +1279,7 @@ pub(crate) fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
                 ["rebuild the state transition before emitting"],
             ),
         )
+        .source(Box::new(error))
     })
 }
 

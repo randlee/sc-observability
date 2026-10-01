@@ -2484,6 +2484,9 @@ backtraces are deliberately not serialized. Native chaining preserves them.
 diagnostic-carrying runtime admission guard; the retained root
 `TelemetryError::Shutdown` remains the unit variant described above.
 `From<v2::ExportError>` wraps the exact error in `v2::TelemetryError::ExportFailure`.
+The `#[from]` on `v2::TelemetryError::Event(v2::EventError)` also generates the
+public `From<v2::EventError> for v2::TelemetryError` implementation; this
+additive compatible-1.x conversion is part of the governed interface.
 Governed-interface note: `v2::TelemetryError::Event(v2::EventError)` is an
 additive variant on the `#[non_exhaustive]` v2 enum, returned only by canonical
 `emit_log` when `StateTransition.entity_id` is not a valid `EntityId`. Its
@@ -2492,6 +2495,12 @@ additive variant on the `#[non_exhaustive]` v2 enum, returned only by canonical
 (`Validation { field: "event" }`), preserving context, source and backtrace. It
 adds no diagnostic code and no counter, and the released root `TelemetryError`
 shape is unchanged; released root emit paths never produce it.
+Admission order is facade-specific. The logger checks event version and service,
+filters by effective level, validates the entity identifier, then applies
+redaction and the event-size limit. `RuntimeTelemetry::emit_log` checks for
+shutdown first, returns successfully when logs or transport are disabled,
+validates the entity identifier, then buffers the event; it does not perform
+the logger's version or service checks.
 For `v2::TelemetryError::ExportFailure`, `.code()` returns the fixed stable
 classification for the variant, while `.diagnostic().code` returns the preserved
 original cause code.
@@ -2540,15 +2549,21 @@ a more precise row below.
 | `IncompleteSpanDropped` | `OTLP_INCOMPLETE_SPAN_DROPPED` | legacy `ShutdownFailure` compatibility | shutdown drops unmatched span state | emit matching ended signals before shutdown | count only | on a new complete sequence |
 | `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
 
-Core `error_codes.rs` owns `SC_LOG_SINK_REGISTRATION_DUPLICATE`,
-`SC_LOG_SINK_REGISTRATION_INVALID`, `SC_LOG_SINK_REGISTRATION_CLOSED`, and
-the D.1-owned settings constants `SC_LOG_SETTINGS_PREFIX_COLLISION`,
-`SC_LOG_SETTINGS_INVALID_ENVIRONMENT`, `SC_LOG_SETTINGS_UNKNOWN_KEY`,
-`SC_LOG_SETTINGS_INVALID_VALUE`, and `SC_LOG_SETTINGS_RESOLUTION`. `LOG-001`
-through `LOG-005` are requirement IDs and are not diagnostic codes. The bridge
-registry owns `SC_LOG_DETACH_TIMEOUT`,
-`SC_LOG_DETACH_NOT_INSTALLED`, `SC_LOG_FOREIGN_LOGGER_INSTALLED`.
-DTO and routing registry values retain their existing meanings.
+The `SC_LOG_` family is used by three separately owned public registries; it
+does not define one universal prefix owner. Core `error_codes.rs` owns
+`SC_LOG_SINK_REGISTRATION_DUPLICATE`, `SC_LOG_SINK_REGISTRATION_INVALID`,
+`SC_LOG_SINK_REGISTRATION_CLOSED`, and the D.1-owned settings constants
+`SC_LOG_SETTINGS_PREFIX_COLLISION`, `SC_LOG_SETTINGS_INVALID_ENVIRONMENT`,
+`SC_LOG_SETTINGS_UNKNOWN_KEY`, `SC_LOG_SETTINGS_INVALID_VALUE`, and
+`SC_LOG_SETTINGS_RESOLUTION`. The `sc-observability-log` registry owns
+`SC_LOG_DETACH_TIMEOUT`, `SC_LOG_DETACH_NOT_INSTALLED`, and
+`SC_LOG_FOREIGN_LOGGER_INSTALLED`; the `sc-observability-types` registry owns
+the `SC_LOG_QUERY_*` codes. `LOG-001` through `LOG-005` are requirement IDs,
+not diagnostic codes. The existing log-registry uniqueness test checks exact
+string disjointness among the core, log, and types `error_codes::ALL` lists;
+it does not claim workspace-wide uniqueness or cover codes outside those
+enumerated registries. DTO and routing registry values retain their existing
+meanings.
 
 ### Neutral signals
 

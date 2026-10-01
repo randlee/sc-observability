@@ -52,14 +52,10 @@ pub(crate) fn admission(value: native::AdmissionOutcome) -> dto::AdmissionDto {
     }
 }
 pub(crate) fn core_admission(value: &native::v2::EventError) -> Failure {
-    let diagnostic = value.diagnostic();
     let kind = match &value {
-        native::v2::EventError::Validation { .. } => value.failure_classification(),
-        native::v2::EventError::Routing { .. } => match diagnostic.code.as_str() {
-            "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => Kind::QueueFull,
-            "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => Kind::timeout("shutdown"),
-            _ => Kind::Unavailable,
-        },
+        native::v2::EventError::Validation { .. } | native::v2::EventError::Routing { .. } => {
+            value.failure_classification()
+        }
         _ => Kind::Internal,
     };
     canonical(value, kind)

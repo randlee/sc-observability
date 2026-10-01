@@ -10,6 +10,7 @@
     reason = "the released projector trait returns the retained root ProjectionError"
 )]
 
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -83,26 +84,78 @@ fn temp_path(name: &str) -> PathBuf {
     ))
 }
 
+/// Removes one test's unique log root on drop, also while an assertion unwinds.
+struct TempRoot(PathBuf);
+
+impl Drop for TempRoot {
+    fn drop(&mut self) {
+        // Never panic here: a second panic during unwinding aborts the test binary.
+        if let Err(error) = std::fs::remove_dir_all(&self.0)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            eprintln!("failed to remove {}: {error}", self.0.display());
+        }
+    }
+}
+
+/// A running runtime and its log root. Dropping it shuts the runtime down
+/// before `root` is dropped, because fields drop after `Drop::drop` in order.
+struct Running<R> {
+    runtime: R,
+    shutdown: fn(&R),
+    root: TempRoot,
+}
+
+impl<R> Deref for Running<R> {
+    type Target = R;
+
+    fn deref(&self) -> &R {
+        &self.runtime
+    }
+}
+
+impl<R> Drop for Running<R> {
+    fn drop(&mut self) {
+        (self.shutdown)(&self.runtime);
+    }
+}
+
 fn registration(id: &'static str) -> ProjectionRegistration<Payload> {
     ProjectionRegistration::new().with_log_projector(Arc::new(EntityProjector(id)))
 }
 
-fn root_runtime(name: &str, id: &'static str) -> Observability {
+fn root_runtime(name: &str, id: &'static str) -> Running<Observability> {
+    let root = TempRoot(temp_path(name));
     let config =
-        ObservabilityConfig::default_for_typed(tool_name(), temp_path(name)).expect("root config");
-    Observability::builder(config)
+        ObservabilityConfig::default_for_typed(tool_name(), root.0.clone()).expect("root config");
+    let runtime = Observability::builder(config)
         .register_projection(registration(id))
         .build_typed()
-        .expect("root runtime")
+        .expect("root runtime");
+    Running {
+        runtime,
+        shutdown: |runtime| {
+            let _ = runtime.shutdown_typed();
+        },
+        root,
+    }
 }
 
-fn v2_runtime(name: &str, id: &'static str) -> sc_observe::v2::Observability {
-    let config = sc_observe::v2::ObservabilityConfig::default_for(tool_name(), temp_path(name))
+fn v2_runtime(name: &str, id: &'static str) -> Running<sc_observe::v2::Observability> {
+    let root = TempRoot(temp_path(name));
+    let config = sc_observe::v2::ObservabilityConfig::default_for(tool_name(), root.0.clone())
         .expect("v2 config");
-    sc_observe::v2::Observability::builder(config)
+    let runtime = sc_observe::v2::Observability::builder(config)
         .register_projection(registration(id).into())
         .build()
-        .expect("v2 runtime")
+        .expect("v2 runtime");
+    Running {
+        runtime,
+        shutdown: |runtime| {
+            let _ = runtime.shutdown();
+        },
+        root,
+    }
 }
 
 #[test]
@@ -140,4 +193,18 @@ fn valid_projected_entity_ids_pass_on_both_facades() {
     v2.emit(observation()).expect("v2 emit");
     assert_eq!(v2.health().projection_failures_total, 0);
     assert!(v2.health().last_error.is_none());
+}
+
+#[test]
+fn log_root_is_removed_when_an_assertion_unwinds() {
+    let payload = std::panic::catch_unwind(|| {
+        let runtime = v2_runtime("unwind", "agent-1");
+        runtime.emit(observation()).expect("v2 emit");
+        runtime.flush().expect("flush");
+        assert!(runtime.root.0.exists(), "the runtime wrote under its root");
+        std::panic::panic_any(runtime.root.0.clone());
+    })
+    .expect_err("the fixture body panics");
+    let root = payload.downcast::<PathBuf>().expect("root path");
+    assert!(!root.exists(), "{} survived unwinding", root.display());
 }

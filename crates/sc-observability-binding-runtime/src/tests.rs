@@ -18,6 +18,9 @@ use std::time::{Duration, Instant};
 const CONTRACT_CASE_DEADLINE: Duration = Duration::from_secs(60);
 const HUNG_CHILD_DEADLINE: Duration = Duration::from_millis(250);
 const CHILD_START_DEADLINE: Duration = Duration::from_secs(10);
+const CHILD_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const HUNG_CHILD_SLEEP: Duration = Duration::from_secs(60);
+const CHILD_OUTPUT_CHUNK_SIZE: usize = 4096;
 
 struct ChildRun {
     status: ExitStatus,
@@ -84,7 +87,7 @@ fn read_child_output(
     ready: &mpsc::Sender<()>,
 ) -> std::io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    let mut chunk = [0; 4096];
+    let mut chunk = [0; CHILD_OUTPUT_CHUNK_SIZE];
     let mut marker = readiness_marker;
     loop {
         let count = reader.read(&mut chunk)?;
@@ -140,10 +143,7 @@ fn run_test_child(
                     timed_out: false,
                 };
             }
-            if ready_receiver
-                .recv_timeout(Duration::from_millis(10))
-                .is_ok()
-            {
+            if ready_receiver.recv_timeout(CHILD_POLL_INTERVAL).is_ok() {
                 break;
             }
             if startup.elapsed() >= CHILD_START_DEADLINE {
@@ -193,7 +193,7 @@ fn run_test_child(
                 timed_out: true,
             };
         }
-        thread::sleep(Duration::from_millis(10));
+        thread::sleep(CHILD_POLL_INTERVAL);
     }
 }
 
@@ -519,7 +519,7 @@ fn contract_matrix_timeout_kills_and_reaps_child() {
         print!("{marker}");
         std::io::Write::flush(&mut std::io::stdout()).expect("flush hung-child readiness marker");
         loop {
-            thread::sleep(Duration::from_secs(60));
+            thread::sleep(HUNG_CHILD_SLEEP);
         }
     }
 
@@ -1024,6 +1024,27 @@ fn core_sink_and_shutdown() {
     crate::spawn::wait_live(1);
     assert!(sink.flushes.load(Ordering::SeqCst) >= 1);
 }
+
+fn core_shutdown_timeout_admission_failure() {
+    let error = native::v2::EventError::classified_routing(
+        Box::new(native::ErrorContext::new(
+            sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+            "writer thread did not stop within 10ms",
+            native::Remediation::recoverable(
+                "wait for the writer thread to recover",
+                ["retry after shutdown"],
+            ),
+        )),
+        native::v2::FailureClassification::timeout("shutdown"),
+    );
+
+    assert_failure(
+        Err::<(), _>(crate::conversion::core_admission(&error)),
+        sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT.as_str(),
+        "timeout",
+        Some("shutdown"),
+    );
+}
 fn admission32(close: bool) {
     let (_root, owner, backend) = core();
     let gate = Gate::new();
@@ -1192,26 +1213,106 @@ fn bridge_canonical_v2() {
     drop(root);
 }
 fn native_diagnostic_fidelity() {
+    // These are transparent cross-crate fixtures. Real producer coverage for
+    // these values lives in the log crate; this table proves both DTO and the
+    // existing runtime conversion project the same native-owned category.
+    for (code, classification, expected_kind) in [
+        (
+            "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED",
+            native::FailureClassification::Unavailable,
+            "unavailable",
+        ),
+        (
+            "SC_OBSERVABILITY_LOG_HELPER_LOST",
+            native::FailureClassification::Internal,
+            "internal",
+        ),
+    ] {
+        let diagnostic = native::OperationDiagnostic {
+            code: native::ErrorCode::new_static(code),
+            message: format!("exact native message for {code}"),
+            remediation: native::Remediation::recoverable("first", ["second"]),
+            at: native::Timestamp::UNIX_EPOCH,
+        };
+        let error = native::v2::FlushError::classified_drain(
+            Box::new(native::ErrorContext::new(
+                diagnostic.code.clone(),
+                diagnostic.message.clone(),
+                diagnostic.remediation.clone(),
+            )),
+            classification,
+        );
+        let canonical = dto::CanonicalFailureDto::try_from(&error).expect("DTO projection");
+        let runtime = crate::conversion::bridge_flush(&error);
+        assert_eq!(
+            serde_json::to_value(&canonical).expect("DTO serialization")["kind"],
+            expected_kind,
+            "canonical DTO kind for {code}"
+        );
+        assert_eq!(
+            serde_json::to_value(&runtime).expect("runtime serialization")["kind"],
+            expected_kind,
+            "runtime conversion kind for {code}"
+        );
+        assert_eq!(runtime.diagnostic().code, diagnostic.code.as_str());
+        assert_eq!(runtime.diagnostic().message, diagnostic.message);
+        assert_eq!(
+            runtime.diagnostic().remediation,
+            diagnostic.remediation.into()
+        );
+    }
+
     let diagnostic = native::OperationDiagnostic {
-        code: native::ErrorCode::new_static("SC_NATIVE_FIXTURE"),
-        message: "exact native message".into(),
-        remediation: native::Remediation::recoverable("first", ["second"]),
+        code: native::error_codes::DIAGNOSTIC_INVALID,
+        message: "exact unclassified drain message".into(),
+        remediation: native::Remediation::recoverable("inspect the export cause", ["retry later"]),
         at: native::Timestamp::UNIX_EPOCH,
     };
-    let error = native::v2::FlushError::classified_drain(
-        Box::new(native::ErrorContext::new(
-            diagnostic.code.clone(),
-            diagnostic.message.clone(),
-            diagnostic.remediation.clone(),
-        )),
-        native::FailureClassification::Internal,
-    );
-    let failure = crate::conversion::bridge_flush(&error);
-    assert!(matches!(failure, Failure::Internal { .. }));
-    assert_eq!(failure.diagnostic().code, diagnostic.code.as_str());
-    assert_eq!(failure.diagnostic().message, diagnostic.message);
+    let error = native::v2::FlushError::Drain {
+        context: Box::new(
+            native::ErrorContext::new(
+                diagnostic.code.clone(),
+                diagnostic.message.clone(),
+                diagnostic.remediation.clone(),
+            )
+            .source(Box::new(native::v2::ExportError::QueueFull {
+                context: Box::new(native::ErrorContext::new(
+                    native::error_codes::otlp::OTLP_QUEUE_FULL,
+                    "export queue is full",
+                    native::Remediation::recoverable("reduce export load", ["retry later"]),
+                )),
+            })),
+        ),
+    };
+    let canonical = dto::CanonicalFailureDto::try_from(&error).expect("DTO projection");
+    let runtime = crate::conversion::bridge_flush(&error);
+
     assert_eq!(
-        failure.diagnostic().remediation,
+        serde_json::to_value(&canonical).expect("DTO serialization")["kind"],
+        "queue_full",
+        "canonical DTO derives kind from the unclassified drain's export cause"
+    );
+    assert_eq!(
+        serde_json::to_value(&runtime).expect("runtime serialization")["kind"],
+        "queue_full",
+        "runtime conversion derives kind from the unclassified drain's export cause"
+    );
+    assert_eq!(runtime.diagnostic().code, diagnostic.code.as_str());
+    assert_eq!(runtime.diagnostic().message, diagnostic.message);
+    assert_eq!(
+        runtime.diagnostic().remediation,
+        diagnostic.remediation.clone().into()
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.code,
+        diagnostic.code.as_str()
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.message,
+        diagnostic.message
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.remediation,
         diagnostic.remediation.into()
     );
 }
@@ -1288,6 +1389,7 @@ fn d15_conversion_fixture() {
 fn d15_coordinator_fixture() {
     core_admission_and_flush_faults();
     core_sink_and_shutdown();
+    core_shutdown_timeout_admission_failure();
 }
 
 fn d15_operation_fixture() {

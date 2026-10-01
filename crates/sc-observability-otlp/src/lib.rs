@@ -48,9 +48,13 @@ use config::{validate_config_typed, validated_transport_bounds};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 use sc_observability_types::v2::{ConfigFailure, EventError as CanonicalEventError, ExportError};
+use sc_observability_types::v2::{
+    MetricRecord as CanonicalMetricRecord, SpanSignal as CanonicalSpanSignal,
+};
 use sc_observability_types::{
-    DiagnosticSummary, ErrorContext, LogEvent, MetricRecord, ObservabilityHealthProvider,
-    Remediation, SinkName, SpanSignal, telemetry_health_provider_sealed,
+    DiagnosticSummary, ErrorContext, LogEvent, MetricKind, MetricRecord,
+    ObservabilityHealthProvider, Remediation, SinkName, SpanSignal,
+    telemetry_health_provider_sealed,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -98,19 +102,28 @@ pub mod v2 {
 #[doc(inline)]
 pub use sdk::SdkFixture;
 
-use contracts::{ExporterLifecycle, LifecycleFuture, LogExporter, MetricExporter, TraceExporter};
+use assembly::V2SpanAssembler;
+use contracts::{
+    ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, LogRecord,
+    MetricExporter, TraceExporter,
+};
 #[cfg(test)]
 use legacy_projection::trace_context;
 #[allow(
     unused_imports,
-    reason = "legacy projection is selected only when the optional legacy backend is enabled"
+    reason = "transport construction failures are mapped only by enabled backends"
 )]
-use legacy_projection::{raw_exporter_set, transport_construction_failure};
+use legacy_projection::transport_construction_failure;
 use lifecycle::{LifecycleHealth, LifecycleState, SignalKind};
 
-// Temporary root-facade specialization. D.18 can remove this alias when the
-// facade composition decision is made; backend adapters use the v2 defaults.
-type ExporterSet = contracts::ExporterSet<LogEvent, CompleteSpan, MetricRecord>;
+/// Metric admitted to the shared canonical buffer.
+enum BufferedMetric {
+    /// Canonical record, exported with its full aggregation.
+    Canonical(Box<ExportRecord<CanonicalMetricRecord>>),
+    /// Released scalar record, kept in its released shape until flush, where
+    /// the released facade has always reported conversion failures.
+    Released(MetricRecord),
+}
 
 /// OTLP-backed telemetry runtime.
 #[expect(
@@ -139,10 +152,10 @@ struct FlushOutcome {
 
 #[derive(Default)]
 struct TelemetryRuntime {
-    span_assembler: SpanAssembler,
-    log_buffer: Vec<LogEvent>,
-    span_buffer: Vec<CompleteSpan>,
-    metric_buffer: Vec<MetricRecord>,
+    span_assembler: V2SpanAssembler,
+    log_buffer: Vec<ExportRecord<LogRecord>>,
+    span_buffer: Vec<ExportRecord<contracts::CompleteSpan>>,
+    metric_buffer: Vec<BufferedMetric>,
     log_status: ExporterRuntime,
     trace_status: ExporterRuntime,
     metric_status: ExporterRuntime,
@@ -181,14 +194,15 @@ impl Default for ExporterRuntime {
     }
 }
 
-/// Merges facade-local assembly state with the lifecycle core's terminal loss ownership.
+/// Merges facade-local assembly state with the lifecycle core's current
+/// per-signal degradation; cumulative loss counts never force a state.
 fn merged_lifecycle_status(
     runtime: &ExporterRuntime,
     lifecycle: Option<&LifecycleHealth>,
     signal: SignalKind,
 ) -> ExporterRuntime {
     let mut status = runtime.clone();
-    if lifecycle.is_some_and(|health| health.dropped_for(signal) > 0) {
+    if lifecycle.is_some_and(|health| health.degraded_for(signal)) {
         status.state = ExporterHealthState::Degraded;
         if status.last_error.is_none() {
             status.last_error = lifecycle.and_then(|health| health.last_error.clone());
@@ -214,20 +228,26 @@ struct DisabledLifecycle {
     shutdown: AtomicBool,
 }
 
-impl LogExporter<LogEvent> for DisabledLogExporter {
-    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
+impl LogExporter for DisabledLogExporter {
+    fn export_logs(&self, _batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl TraceExporter<CompleteSpan> for DisabledTraceExporter {
-    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
+impl TraceExporter for DisabledTraceExporter {
+    fn export_spans(
+        &self,
+        _batch: &[ExportRecord<contracts::CompleteSpan>],
+    ) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl MetricExporter<MetricRecord> for DisabledMetricExporter {
-    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
+impl MetricExporter for DisabledMetricExporter {
+    fn export_metrics(
+        &self,
+        _batch: &[ExportRecord<CanonicalMetricRecord>],
+    ) -> Result<(), ExportError> {
         Ok(())
     }
 }
@@ -340,7 +360,7 @@ fn sdk_exporter_factory(
             });
         }
         sdk::build_exporter_set(connection, bounds)
-            .map(|adapter| raw_exporter_set(adapter.exporters))
+            .map(|adapter| adapter.exporters)
             .map_err(transport_construction_failure)
     }
 
@@ -369,7 +389,6 @@ fn legacy_exporter_factory(
     #[cfg(feature = "legacy-http-json")]
     {
         legacy_http_json::build_exporter_set(connection, bounds)
-            .map(raw_exporter_set)
             .map_err(transport_construction_failure)
     }
 
@@ -456,9 +475,9 @@ impl RuntimeTelemetry {
     #[cfg(test)]
     fn new_with_exporters(
         config: RuntimeTelemetryConfig,
-        log_exporter: Arc<dyn LogExporter<LogEvent>>,
-        trace_exporter: Arc<dyn TraceExporter<CompleteSpan>>,
-        metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
+        log_exporter: Arc<dyn LogExporter>,
+        trace_exporter: Arc<dyn TraceExporter>,
+        metric_exporter: Arc<dyn MetricExporter>,
     ) -> Result<Self, InitFailure> {
         Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
     }
@@ -466,9 +485,9 @@ impl RuntimeTelemetry {
     #[cfg(test)]
     fn new_with_exporters_typed(
         config: RuntimeTelemetryConfig,
-        log_exporter: Arc<dyn LogExporter<LogEvent>>,
-        trace_exporter: Arc<dyn TraceExporter<CompleteSpan>>,
-        metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
+        log_exporter: Arc<dyn LogExporter>,
+        trace_exporter: Arc<dyn TraceExporter>,
+        metric_exporter: Arc<dyn MetricExporter>,
     ) -> Result<Self, InitFailure> {
         Self::new_with_exporter_set_typed(
             config,
@@ -506,6 +525,13 @@ impl RuntimeTelemetry {
 
     /// Buffers one projected log event for later export.
     ///
+    /// # Errors
+    ///
+    /// Returns [`CanonicalTelemetryError::Shutdown`] if telemetry has shut down.
+    /// Returns [`CanonicalTelemetryError::Event`] when enabled telemetry receives
+    /// an invalid state-transition entity identifier. Disabled logs or transport
+    /// return successfully before entity validation.
+    ///
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
@@ -532,30 +558,52 @@ impl RuntimeTelemetry {
         Ok(())
     }
 
-    pub(crate) fn buffer_log(&self, event: &LogEvent) {
+    fn buffer_log(&self, event: &LogEvent) {
+        let record = legacy_projection::log_record(event);
         self.runtime
             .lock()
             .expect("telemetry runtime poisoned")
             .log_buffer
-            .push(event.clone());
+            .push(record);
     }
 
-    /// Buffers one projected span signal for later export.
+    /// Buffers one canonical span signal for later export.
     ///
-    /// An `Ended` signal without a prior `Started` signal is counted in
+    /// Signals pass through the bounded span assembler; a completed span is
+    /// exported with its kind, links, parent, trace flags, status, timing and
+    /// events. An `Ended` signal without a prior `Started` signal is counted in
     /// `malformed_spans_total` and returned as a structured export failure. No
-    /// malformed or incomplete span is ever forwarded to the `OTel` backend.
+    /// malformed or incomplete span is ever forwarded to the exporter backend.
     ///
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
-    pub fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
+    pub fn emit_span(&self, span: &CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError> {
         self.ensure_active()?;
         if self.config.traces.is_none() || !self.config.transport.enabled {
             return Ok(());
         }
+        self.admit_span(span.clone())
+    }
+
+    /// Released root-facade span admission: the root signal is converted to
+    /// the canonical model and enters the same bounded assembler.
+    pub(crate) fn emit_span_released(
+        &self,
+        span: &SpanSignal,
+    ) -> Result<(), CanonicalTelemetryError> {
+        self.ensure_active()?;
+        if self.config.traces.is_none() || !self.config.transport.enabled {
+            return Ok(());
+        }
+        let span =
+            legacy_projection::span_signal(span).map_err(CanonicalTelemetryError::ExportFailure)?;
+        self.admit_span(span)
+    }
+
+    fn admit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError> {
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        if let SpanSignal::Ended(record) = span
+        if let CanonicalSpanSignal::Ended(record) = &span
             && !runtime
                 .span_assembler
                 .has_started(&record.trace().trace_id, &record.trace().span_id)
@@ -581,31 +629,73 @@ impl RuntimeTelemetry {
         }
         if let Some(complete) = runtime
             .span_assembler
-            .push_typed(span.clone())
-            .map_err(export_failure_from_event)?
+            .push(span)
+            .map_err(export_failure_from_canonical_event)?
         {
-            runtime.span_buffer.push(complete);
+            let resource = legacy_projection::resource(complete.record.service());
+            runtime.span_buffer.push(ExportRecord {
+                resource,
+                scope: contracts::InstrumentationScope::default(),
+                record: complete,
+            });
         }
         let loss = runtime.span_assembler.take_loss();
         self.record_span_assembly_loss(&mut runtime, loss);
         Ok(())
     }
 
-    /// Buffers one projected metric record for later export.
+    /// Buffers one canonical metric record for later export.
+    ///
+    /// The record was validated at construction, so gauges, sums and
+    /// histograms, including their bucket distribution and interval, are
+    /// exported unchanged.
     ///
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
-    pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
+    pub fn emit_metric(
+        &self,
+        metric: &CanonicalMetricRecord,
+    ) -> Result<(), CanonicalTelemetryError> {
         self.ensure_active()?;
         if self.config.metrics.is_none() || !self.config.transport.enabled {
+            return Ok(());
+        }
+        let record = ExportRecord {
+            resource: legacy_projection::resource(metric.service()),
+            scope: contracts::InstrumentationScope::default(),
+            record: metric.clone(),
+        };
+        self.runtime
+            .lock()
+            .expect("telemetry runtime poisoned")
+            .metric_buffer
+            .push(BufferedMetric::Canonical(Box::new(record)));
+        Ok(())
+    }
+
+    /// Released root-facade metric admission with the 1.4.1 acceptance rules.
+    ///
+    /// A released scalar histogram is accepted and, as in 1.4.1, never
+    /// transported: it carries no bucket distribution to export and none is
+    /// fabricated. Other released records keep their released shape until
+    /// flush.
+    pub(crate) fn emit_metric_released(
+        &self,
+        metric: &MetricRecord,
+    ) -> Result<(), CanonicalTelemetryError> {
+        self.ensure_active()?;
+        if self.config.metrics.is_none()
+            || !self.config.transport.enabled
+            || metric.kind == MetricKind::Histogram
+        {
             return Ok(());
         }
         self.runtime
             .lock()
             .expect("telemetry runtime poisoned")
             .metric_buffer
-            .push(metric.clone());
+            .push(BufferedMetric::Released(metric.clone()));
         Ok(())
     }
 
@@ -688,14 +778,19 @@ impl RuntimeTelemetry {
         }
 
         if !metric_batch.is_empty() {
-            match self.exporters.metrics.export_metrics(&metric_batch) {
+            let batch_len = metric_batch.len() as u64;
+            let exported = metric_batch
+                .into_iter()
+                .map(|metric| match metric {
+                    BufferedMetric::Canonical(record) => Ok(*record),
+                    BufferedMetric::Released(metric) => legacy_projection::metric_record(&metric),
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .and_then(|batch| self.exporters.metrics.export_metrics(&batch));
+            match exported {
                 Ok(()) => self.record_export_success(ExporterKind::Metrics),
                 Err(err) => {
-                    self.record_export_failure(
-                        ExporterKind::Metrics,
-                        metric_batch.len() as u64,
-                        &err,
-                    );
+                    self.record_export_failure(ExporterKind::Metrics, batch_len, &err);
                     export_failure = Some(err);
                 }
             }
@@ -965,7 +1060,7 @@ mod sealed_emitters {
     reason = "crate-local span emitter trait is intentionally retained for direct telemetry injection"
 )]
 pub(crate) trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_span(&self, span: SpanSignal) -> Result<(), CanonicalTelemetryError>;
+    fn emit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError>;
 }
 
 #[expect(
@@ -973,19 +1068,19 @@ pub(crate) trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
     reason = "crate-local metric emitter trait is intentionally retained for direct telemetry injection"
 )]
 pub(crate) trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_metric(&self, metric: MetricRecord) -> Result<(), CanonicalTelemetryError>;
+    fn emit_metric(&self, metric: CanonicalMetricRecord) -> Result<(), CanonicalTelemetryError>;
 }
 
 impl sealed_emitters::Sealed for RuntimeTelemetry {}
 
 impl SpanEmitter for RuntimeTelemetry {
-    fn emit_span(&self, span: SpanSignal) -> Result<(), CanonicalTelemetryError> {
+    fn emit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError> {
         RuntimeTelemetry::emit_span(self, &span)
     }
 }
 
 impl MetricEmitter for RuntimeTelemetry {
-    fn emit_metric(&self, metric: MetricRecord) -> Result<(), CanonicalTelemetryError> {
+    fn emit_metric(&self, metric: CanonicalMetricRecord) -> Result<(), CanonicalTelemetryError> {
         RuntimeTelemetry::emit_metric(self, &metric)
     }
 }
@@ -1001,14 +1096,15 @@ fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
     };
     sc_observability_types::EntityId::new(entity_id)
         .map(|_| ())
-        .map_err(|_| {
+        .map_err(|error| {
             let failure = EventFailure::invalid_event(
                 "log event state transition entity_id is invalid",
                 Remediation::recoverable(
                     "emit a valid entity_id or omit it",
                     ["rebuild the state transition before emitting"],
                 ),
-            );
+            )
+            .source(Box::new(error));
             CanonicalTelemetryError::Event(CanonicalEventError::Validation {
                 context: failure.into_context(),
             })
@@ -1030,12 +1126,9 @@ pub(crate) fn export_failure(message: impl Into<String>) -> CanonicalTelemetryEr
     })
 }
 
-/// Converts a span-assembly event failure into a telemetry export failure.
-///
-/// Moves the original `Box<ErrorContext>` unchanged via `into_context()`
-/// rather than reconstructing a new one from its diagnostic fields, so the
-/// original timestamp, backtrace, and any attached source survive intact.
-fn export_failure_from_event(err: EventFailure) -> CanonicalTelemetryError {
+/// Converts a canonical span-assembly failure into a telemetry export failure,
+/// moving the original error context unchanged.
+fn export_failure_from_canonical_event(err: CanonicalEventError) -> CanonicalTelemetryError {
     CanonicalTelemetryError::ExportFailure(ExportError::Transport {
         context: err.into_context(),
     })

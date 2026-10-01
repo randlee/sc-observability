@@ -24,7 +24,7 @@ use crate::projectors::{
     AttachedLogProjector, AttachedMetricProjector, AttachedSpanProjector, ProjectorSet,
     TelemetryEmit,
 };
-use crate::{RuntimeTelemetry, constants, error_codes};
+use crate::{CompleteSpan, RuntimeTelemetry, constants, error_codes};
 use sc_observability_types::typed::{
     FlushFailure, InitFailure, ShutdownFailure, TypedLogProjector, TypedMetricProjector,
     TypedSpanProjector, typed_log_projector, typed_metric_projector, typed_span_projector,
@@ -32,8 +32,8 @@ use sc_observability_types::typed::{
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 #[allow(deprecated)]
 use sc_observability_types::{
-    DurationMs, ErrorContext, FlushError, InitError, LogEvent, LogProjector, MetricProjector,
-    MetricRecord, Observable, Observation, ObservationFilter, ProjectionError,
+    DurationMs, ErrorContext, EventError, FlushError, InitError, LogEvent, LogProjector,
+    MetricProjector, MetricRecord, Observable, Observation, ObservationFilter, ProjectionError,
     ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanProjector, SpanSignal,
     TelemetryError,
 };
@@ -214,7 +214,9 @@ impl OtelConfig {
             OtlpProtocol::HttpBinary | OtlpProtocol::Grpc => ExporterBackend::OpenTelemetrySdk,
             OtlpProtocol::HttpJson => ExporterBackend::LegacyHttpJson,
         };
-        let budget = DurationMs::from(u64::from(self.timeout_ms).max(30_000));
+        let budget = DurationMs::from(
+            u64::from(self.timeout_ms).max(constants::RELEASED_OTLP_BUDGET_FLOOR_MS),
+        );
         let retry = LegacyRetryPolicy {
             max_retries: Some(self.max_retries),
             initial_backoff_ms: Some(self.initial_backoff_ms),
@@ -472,13 +474,15 @@ impl Telemetry {
 
     /// Buffers one span signal for export.
     pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError> {
-        self.inner.emit_span(span).map_err(legacy_telemetry_error)
+        self.inner
+            .emit_span_released(span)
+            .map_err(legacy_telemetry_error)
     }
 
     /// Buffers one metric record for export.
     pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError> {
         self.inner
-            .emit_metric(metric)
+            .emit_metric_released(metric)
             .map_err(legacy_telemetry_error)
     }
 
@@ -534,11 +538,11 @@ impl TelemetryEmit for Telemetry {
     }
 
     fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_span(span)
+        self.runtime().emit_span_released(span)
     }
 
     fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_metric(metric)
+        self.runtime().emit_metric_released(metric)
     }
 }
 
@@ -684,6 +688,21 @@ fn legacy_telemetry_error(error: CanonicalTelemetryError) -> TelemetryError {
     }
 }
 
+impl crate::SpanAssembler {
+    /// Pushes one lifecycle signal through the assembler.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility assembler method keeps the published EventError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use SpanAssembler::push_typed(); see migrate-error-api.md."
+    )]
+    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError> {
+        self.push_typed(signal).map_err(Into::into)
+    }
+}
+
 impl crate::telemetry_health_provider_sealed::Sealed for Telemetry {
     fn token(&self) -> crate::telemetry_health_provider_sealed::Token {
         crate::telemetry_health_provider_sealed::workspace_token()
@@ -713,6 +732,11 @@ mod tests {
         }
     }
 
+    // These private value-level guards check selected backend, timeout, and retry/backoff
+    // projection: `released_http_json_uses_the_nested_legacy_retry_policy` and
+    // `released_sdk_and_disabled_transports_discard_legacy_retry_settings`. The external
+    // `released_config_translation` tests cover released-bound validation, not direct
+    // inspection of this private projection or live collector/runtime behavior.
     #[test]
     fn released_http_json_uses_the_nested_legacy_retry_policy() {
         let runtime = released_transport(OtlpProtocol::HttpJson, true).into_runtime();
@@ -754,7 +778,9 @@ mod tests {
             let crate::config::BackendTransportBounds::Legacy(retry) = bounds.backend() else {
                 panic!("enabled released HttpJson has retry bounds");
             };
-            let budget = std::time::Duration::from_millis(timeout.max(30_000));
+            let budget = std::time::Duration::from_millis(
+                timeout.max(constants::RELEASED_OTLP_BUDGET_FLOOR_MS),
+            );
             assert_eq!(
                 bounds.request_timeout().get(),
                 std::time::Duration::from_millis(timeout)

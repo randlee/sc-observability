@@ -23,8 +23,8 @@ use crate::assembly::span_key;
 
 struct SourcePreservingLogExporter;
 
-impl LogExporter<LogEvent> for SourcePreservingLogExporter {
-    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
+impl LogExporter for SourcePreservingLogExporter {
+    fn export_logs(&self, _batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
         Err(ExportError::Transport {
             context: Box::new(
                 ErrorContext::new(
@@ -312,10 +312,14 @@ fn injected_exporter_set_routes_enabled_signals_and_reports_health() {
         .emit_log(&log_event(service_name(), "injected routing"))
         .expect("route log");
     let (started, ended) = complete_span_signals();
-    telemetry.emit_span(&started).expect("route span start");
-    telemetry.emit_span(&ended).expect("route span end");
     telemetry
-        .emit_metric(&metric_record())
+        .emit_span_released(&started)
+        .expect("route span start");
+    telemetry
+        .emit_span_released(&ended)
+        .expect("route span end");
+    telemetry
+        .emit_metric_released(&metric_record())
         .expect("route metric");
     telemetry.flush().expect("flush injected exporters");
 
@@ -800,10 +804,10 @@ fn incomplete_span_drop_accounting_is_paired_for_legacy_and_typed_shutdown() {
     let typed = test_telemetry_typed(telemetry_config());
 
     legacy
-        .emit_span(&SpanSignal::Started(started.clone()))
+        .emit_span_released(&SpanSignal::Started(started.clone()))
         .expect("legacy started");
     typed
-        .emit_span(&SpanSignal::Started(started))
+        .emit_span_released(&SpanSignal::Started(started))
         .expect("typed started");
     legacy.shutdown().expect("legacy shutdown");
     typed.shutdown_typed().expect("typed shutdown");
@@ -833,7 +837,7 @@ fn orphaned_ended_span_returns_export_failure_and_is_counted() {
     .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
 
     assert!(matches!(
-        telemetry.emit_span(&SpanSignal::Ended(ended)),
+        telemetry.emit_span_released(&SpanSignal::Ended(ended)),
         Err(TelemetryError::ExportFailure(_))
     ));
     let health = telemetry.health();
@@ -857,7 +861,7 @@ fn orphaned_span_event_returns_export_failure_from_span_assembler() {
     };
 
     let error = telemetry
-        .emit_span(&SpanSignal::Event(event))
+        .emit_span_released(&SpanSignal::Event(event))
         .expect_err("event without a matching started span is rejected");
     let TelemetryError::ExportFailure(context) = error else {
         panic!("expected an export failure");
@@ -873,7 +877,7 @@ fn orphaned_span_event_returns_export_failure_from_span_assembler() {
 }
 
 #[test]
-fn export_failure_from_event_moves_original_context_without_reconstruction() {
+fn export_failure_from_canonical_event_moves_original_context_without_reconstruction() {
     let context = Box::new(
         ErrorContext::new(
             error_codes::OTLP_EXPORT_TERMINAL,
@@ -886,9 +890,10 @@ fn export_failure_from_event_moves_original_context_without_reconstruction() {
     );
     let original_timestamp = context.diagnostic().timestamp;
     let original_backtrace_ptr = std::ptr::from_ref(context.backtrace());
-    let failure = EventFailure::from_context(context);
+    let failure = CanonicalEventError::Routing { context };
 
-    let TelemetryError::ExportFailure(exported) = export_failure_from_event(failure) else {
+    let TelemetryError::ExportFailure(exported) = export_failure_from_canonical_event(failure)
+    else {
         panic!("expected an export failure");
     };
 
@@ -1042,16 +1047,20 @@ fn legacy_and_typed_flush_record_and_recover_all_exporter_families() {
         .emit_log(&log_event(service_name(), "first"))
         .expect("legacy log");
     let (started, ended) = complete_span_signals();
-    legacy.emit_span(&started).expect("legacy started");
-    legacy.emit_span(&ended).expect("legacy ended");
-    legacy.emit_metric(&metric_record()).expect("legacy metric");
+    legacy.emit_span_released(&started).expect("legacy started");
+    legacy.emit_span_released(&ended).expect("legacy ended");
+    legacy
+        .emit_metric_released(&metric_record())
+        .expect("legacy metric");
     typed
         .emit_log(&log_event(service_name(), "first"))
         .expect("typed log");
     let (started, ended) = complete_span_signals();
-    typed.emit_span(&started).expect("typed started");
-    typed.emit_span(&ended).expect("typed ended");
-    typed.emit_metric(&metric_record()).expect("typed metric");
+    typed.emit_span_released(&started).expect("typed started");
+    typed.emit_span_released(&ended).expect("typed ended");
+    typed
+        .emit_metric_released(&metric_record())
+        .expect("typed metric");
     legacy.flush().expect("legacy fail-open flush");
     typed.flush_typed().expect("typed fail-open flush");
     assert!(
@@ -1083,16 +1092,20 @@ fn legacy_and_typed_flush_record_and_recover_all_exporter_families() {
         .emit_log(&log_event(service_name(), "second"))
         .expect("legacy log");
     let (started, ended) = complete_span_signals();
-    legacy.emit_span(&started).expect("legacy started");
-    legacy.emit_span(&ended).expect("legacy ended");
-    legacy.emit_metric(&metric_record()).expect("legacy metric");
+    legacy.emit_span_released(&started).expect("legacy started");
+    legacy.emit_span_released(&ended).expect("legacy ended");
+    legacy
+        .emit_metric_released(&metric_record())
+        .expect("legacy metric");
     typed
         .emit_log(&log_event(service_name(), "second"))
         .expect("typed log");
     let (started, ended) = complete_span_signals();
-    typed.emit_span(&started).expect("typed started");
-    typed.emit_span(&ended).expect("typed ended");
-    typed.emit_metric(&metric_record()).expect("typed metric");
+    typed.emit_span_released(&started).expect("typed started");
+    typed.emit_span_released(&ended).expect("typed ended");
+    typed
+        .emit_metric_released(&metric_record())
+        .expect("typed metric");
     legacy.flush().expect("legacy recovery flush");
     typed.flush_typed().expect("typed recovery flush");
     assert!(
@@ -1154,11 +1167,11 @@ fn retained_emit_methods_return_shutdown_after_legacy_and_typed_lifecycle() {
         Err(TelemetryError::Shutdown { .. })
     ));
     assert!(matches!(
-        legacy.emit_span(&SpanSignal::Started(started.clone())),
+        legacy.emit_span_released(&SpanSignal::Started(started.clone())),
         Err(TelemetryError::Shutdown { .. })
     ));
     assert!(matches!(
-        legacy.emit_metric(&metric),
+        legacy.emit_metric_released(&metric),
         Err(TelemetryError::Shutdown { .. })
     ));
     assert!(matches!(
@@ -1166,11 +1179,11 @@ fn retained_emit_methods_return_shutdown_after_legacy_and_typed_lifecycle() {
         Err(TelemetryError::Shutdown { .. })
     ));
     assert!(matches!(
-        typed.emit_span(&SpanSignal::Started(started)),
+        typed.emit_span_released(&SpanSignal::Started(started)),
         Err(TelemetryError::Shutdown { .. })
     ));
     assert!(matches!(
-        typed.emit_metric(&metric),
+        typed.emit_metric_released(&metric),
         Err(TelemetryError::Shutdown { .. })
     ));
 }
@@ -1198,10 +1211,10 @@ fn shutdown_flushes_complete_spans_and_counts_incomplete_ones() {
         .clone()
         .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
     telemetry
-        .emit_span(&SpanSignal::Started(started))
+        .emit_span_released(&SpanSignal::Started(started))
         .expect("started");
     telemetry
-        .emit_span(&SpanSignal::Ended(ended))
+        .emit_span_released(&SpanSignal::Ended(ended))
         .expect("ended");
 
     let incomplete_trace = TraceContext {
@@ -1210,7 +1223,7 @@ fn shutdown_flushes_complete_spans_and_counts_incomplete_ones() {
         parent_span_id: None,
     };
     telemetry
-        .emit_span(&SpanSignal::Started(SpanRecord::<SpanStarted>::new(
+        .emit_span_released(&SpanSignal::Started(SpanRecord::<SpanStarted>::new(
             Timestamp::UNIX_EPOCH,
             service_name(),
             ActionName::new("incomplete.run").expect("valid action"),
@@ -1445,7 +1458,9 @@ fn combined_export_failure_and_incomplete_span_preserve_baseline_shutdown_summar
             .emit_log(&log_event(service_name(), "shutdown-export"))
             .expect("emit log");
         let (started, _) = complete_span_signals();
-        telemetry.emit_span(&started).expect("emit incomplete span");
+        telemetry
+            .emit_span_released(&started)
+            .expect("emit incomplete span");
     }
 
     let legacy_error = legacy
@@ -1492,8 +1507,11 @@ mod entity_admission {
         event
     }
 
-    fn active() -> (Telemetry, Arc<RecordingLogExporter<LogEvent>>) {
-        let exporter = Arc::new(RecordingLogExporter::<LogEvent>::default());
+    fn active() -> (
+        Telemetry,
+        Arc<RecordingLogExporter<ExportRecord<LogRecord>>>,
+    ) {
+        let exporter = Arc::new(RecordingLogExporter::<ExportRecord<LogRecord>>::default());
         let telemetry = Telemetry::new_with_exporters(
             telemetry_config(),
             exporter.clone(),
@@ -1504,8 +1522,11 @@ mod entity_admission {
         (telemetry, exporter)
     }
 
-    fn disabled() -> (Telemetry, Arc<RecordingLogExporter<LogEvent>>) {
-        let exporter = Arc::new(RecordingLogExporter::<LogEvent>::default());
+    fn disabled() -> (
+        Telemetry,
+        Arc<RecordingLogExporter<ExportRecord<LogRecord>>>,
+    ) {
+        let exporter = Arc::new(RecordingLogExporter::<ExportRecord<LogRecord>>::default());
         let config = TelemetryConfigBuilder::new(service_name())
             .enable_logs(LogsConfig::default())
             .build_typed()
@@ -1520,7 +1541,7 @@ mod entity_admission {
         (telemetry, exporter)
     }
 
-    fn exported(exporter: &RecordingLogExporter<LogEvent>) -> usize {
+    fn exported(exporter: &RecordingLogExporter<ExportRecord<LogRecord>>) -> usize {
         exporter
             .batches
             .lock()
@@ -1677,6 +1698,66 @@ mod entity_admission {
         v2.flush().expect("flush");
         assert_eq!(exported(&v2_exporter), 0);
     }
+    /// Owns the parity logger and its unique log root. Dropping it shuts the
+    /// logger down before removing that root, also while an assertion unwinds.
+    struct LoggerRoot {
+        logger: Option<sc_observability::v2::Logger>,
+        root: std::path::PathBuf,
+    }
+
+    impl LoggerRoot {
+        fn new(service: ServiceName) -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "sc-otlp-entity-parity-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .expect("time")
+                    .as_nanos()
+            ));
+            let mut guard = Self { logger: None, root };
+            let logger_config =
+                sc_observability::LoggerConfig::default_for(service, guard.root.clone());
+            guard.logger = Some(sc_observability::v2::Logger::new(logger_config).expect("logger"));
+            guard
+        }
+
+        fn logger(&self) -> &sc_observability::v2::Logger {
+            self.logger.as_ref().expect("logger runs until drop")
+        }
+    }
+
+    impl Drop for LoggerRoot {
+        fn drop(&mut self) {
+            if let Some(logger) = self.logger.take() {
+                let _stopped = logger.shutdown();
+            }
+            // Never panic here: a second panic during unwinding aborts the test binary.
+            if let Err(error) = std::fs::remove_dir_all(&self.root)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                eprintln!("failed to remove {}: {error}", self.root.display());
+            }
+        }
+    }
+
+    #[test]
+    fn logger_root_is_removed_when_an_assertion_unwinds() {
+        let payload = std::panic::catch_unwind(|| {
+            let guard = LoggerRoot::new(service_name());
+            guard
+                .logger()
+                .log(event_with_id("worker-1"))
+                .expect("valid id");
+            guard.logger().flush().expect("flush");
+            assert!(guard.root.exists(), "the logger wrote under its root");
+            std::panic::panic_any(guard.root.clone());
+        })
+        .expect_err("the fixture body panics");
+        let root = payload.downcast::<std::path::PathBuf>().expect("root path");
+        assert!(!root.exists(), "{} survived unwinding", root.display());
+    }
+
     #[test]
     fn v2_logger_and_v2_emit_log_accept_and_reject_entity_ids_identically() {
         let long_valid = "a".repeat(512);
@@ -1697,18 +1778,8 @@ mod entity_admission {
             ("a:b".into(), "colon"),
         ];
 
-        let service = service_name();
-        let log_root = std::env::temp_dir().join(format!(
-            "sc-otlp-entity-parity-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .expect("time")
-                .as_nanos()
-        ));
-        let logger_config =
-            sc_observability::LoggerConfig::default_for(service.clone(), log_root.clone());
-        let logger = sc_observability::v2::Logger::new(logger_config).expect("logger");
+        let guard = LoggerRoot::new(service_name());
+        let logger = guard.logger();
         let (telemetry, _exporter) = active();
 
         for (id, label) in cases {
@@ -1721,7 +1792,537 @@ mod entity_admission {
                 assert!(matches!(error, TelemetryError::Event(_)), "{label}");
             }
         }
-        let _stopped = logger.shutdown();
-        let _ = std::fs::remove_dir_all(&log_root);
+    }
+}
+
+mod canonical_ingress {
+    use super::*;
+    use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
+    use sc_observability_types::v2;
+
+    type Traces = RecordingTraceExporter<ExportRecord<contracts::CompleteSpan>>;
+    type Metrics = RecordingMetricExporter<ExportRecord<CanonicalMetricRecord>>;
+
+    fn recording() -> (Telemetry, Arc<Traces>, Arc<Metrics>) {
+        let traces = Arc::new(Traces::default());
+        let metrics = Arc::new(Metrics::default());
+        let telemetry = Telemetry::new_with_exporters_typed(
+            telemetry_config(),
+            Arc::new(RecordingLogExporter::<ExportRecord<LogRecord>>::default()),
+            traces.clone(),
+            metrics.clone(),
+        )
+        .expect("recording telemetry");
+        (telemetry, traces, metrics)
+    }
+
+    fn trace(span_id: &str) -> v2::TraceContext {
+        v2::TraceContext::new(
+            TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
+            SpanId::new(span_id).expect("valid span id"),
+            v2::TraceFlags::new(0x01),
+        )
+    }
+
+    fn started(trace: v2::TraceContext) -> v2::SpanRecord<v2::SpanStarted> {
+        v2::SpanRecord::new(
+            Timestamp::UNIX_EPOCH,
+            service_name(),
+            ActionName::new("agent.run").expect("valid action"),
+            trace,
+            v2::Attributes::new(),
+        )
+    }
+
+    fn event(trace: v2::TraceContext, name: &str) -> v2::SpanSignal {
+        v2::SpanSignal::Event(v2::SpanEvent {
+            timestamp: Timestamp::UNIX_EPOCH,
+            trace,
+            name: ActionName::new(name).expect("valid event"),
+            attributes: v2::Attributes::new(),
+            diagnostic: None,
+        })
+    }
+
+    fn exported_spans(traces: &Traces) -> Vec<ExportRecord<contracts::CompleteSpan>> {
+        traces.batches.lock().expect("batches poisoned").concat()
+    }
+
+    #[test]
+    fn canonical_assembler_uses_the_production_bounds() {
+        let production = (MAX_OTLP_LIVE_SPANS, MAX_OTLP_EVENTS_PER_SPAN);
+        assert_eq!(V2SpanAssembler::new().limits(), production);
+        let (telemetry, _, _) = recording();
+        let runtime = telemetry.runtime.lock().expect("runtime");
+        assert_eq!(runtime.span_assembler.limits(), production);
+        assert_eq!(V2SpanAssembler::with_limits(0, 0).limits(), (1, 1));
+    }
+
+    #[test]
+    fn canonical_span_ingress_evicts_oldest_and_reports_loss_health() {
+        let (telemetry, traces, _) = recording();
+        telemetry.runtime.lock().expect("runtime").span_assembler =
+            V2SpanAssembler::with_limits(1, 1);
+        let first = trace("0123456789abcdef");
+        let second = trace("fedcba9876543210");
+
+        telemetry
+            .emit_span(&v2::SpanSignal::Started(started(first.clone())))
+            .expect("first span");
+        telemetry
+            .emit_span(&event(first.clone(), "first.event"))
+            .expect("first event");
+        telemetry
+            .emit_span(&event(first.clone(), "second.event"))
+            .expect("bounded event is accounted rather than rejected");
+        telemetry
+            .emit_span(&v2::SpanSignal::Started(started(second.clone())))
+            .expect("second span evicts the oldest");
+
+        let health = telemetry.health();
+        assert_eq!(health.dropped_exports_total, 2, "{health:?}");
+        {
+            let runtime = telemetry.runtime.lock().expect("runtime");
+            assert_eq!(runtime.trace_status.state, ExporterHealthState::Degraded);
+            assert_eq!(
+                runtime
+                    .trace_status
+                    .last_error
+                    .as_ref()
+                    .and_then(|summary| summary.code.clone()),
+                Some(error_codes::OTLP_INCOMPLETE_SPAN_DROPPED)
+            );
+        }
+
+        let evicted_end = started(first).end(v2::SpanStatus::Ok, DurationMs::from(1));
+        telemetry
+            .emit_span(&v2::SpanSignal::Ended(evicted_end))
+            .expect_err("an evicted span has no live start");
+        assert_eq!(telemetry.health().malformed_spans_total, 1);
+
+        let ended = started(second.clone()).end(v2::SpanStatus::Ok, DurationMs::from(2));
+        telemetry
+            .emit_span(&v2::SpanSignal::Ended(ended))
+            .expect("surviving span completes");
+        telemetry.flush().expect("flush");
+        let spans = exported_spans(&traces);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].record.record.trace(), &second);
+    }
+
+    #[test]
+    fn canonical_shutdown_counts_incomplete_spans() {
+        let (telemetry, traces, _) = recording();
+        telemetry
+            .emit_span(&v2::SpanSignal::Started(started(trace("0123456789abcdef"))))
+            .expect("started");
+        telemetry.shutdown_typed().expect("shutdown");
+
+        let health = telemetry.health();
+        assert_eq!(health.dropped_exports_total, 1, "{health:?}");
+        assert!(exported_spans(&traces).is_empty());
+    }
+
+    #[test]
+    fn canonical_emit_preserves_every_span_field_and_histogram_bucket() {
+        let (telemetry, traces, metrics) = recording();
+        let trace = trace("0123456789abcdef")
+            .with_parent(SpanId::new("1111111111111111").expect("valid parent"));
+        let link = v2::SpanLink::new(
+            TraceId::new("fedcba9876543210fedcba9876543210").expect("valid linked trace"),
+            SpanId::new("fedcba9876543210").expect("valid linked span"),
+            v2::TraceFlags::new(0x01),
+            v2::Attributes::from([("link.kind".to_owned(), v2::AttributeValue::Bool(true))]),
+        );
+        let started = started(trace.clone())
+            .with_kind(v2::SpanKind::Client)
+            .with_links(vec![link]);
+        let ended = started
+            .clone()
+            .end(v2::SpanStatus::Error, DurationMs::from(7));
+        let span_event = event(trace, "tool.call");
+        telemetry
+            .emit_span(&v2::SpanSignal::Started(started))
+            .expect("started");
+        telemetry.emit_span(&span_event).expect("event");
+        telemetry
+            .emit_span(&v2::SpanSignal::Ended(ended.clone()))
+            .expect("ended");
+
+        let one_second: Timestamp =
+            serde_json::from_str("\"1970-01-01T00:00:01Z\"").expect("valid timestamp");
+        let histogram = v2::MetricRecord::try_new(
+            one_second,
+            service_name(),
+            MetricName::new("tool.duration").expect("valid metric"),
+            v2::MetricValue::Histogram {
+                point: v2::HistogramPoint::try_new(
+                    vec![
+                        v2::FiniteF64::new(1.0).expect("finite"),
+                        v2::FiniteF64::new(10.0).expect("finite"),
+                    ],
+                    vec![1, 2, 3],
+                    6,
+                    v2::FiniteF64::new(80.5).expect("finite"),
+                )
+                .expect("valid histogram"),
+                temporality: v2::AggregationTemporality::Delta,
+                start_time: Timestamp::UNIX_EPOCH,
+            },
+        )
+        .expect("valid histogram metric");
+        telemetry.emit_metric(&histogram).expect("histogram");
+        telemetry.flush().expect("flush");
+
+        let spans = exported_spans(&traces);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].record.record, ended);
+        let v2::SpanSignal::Event(expected_event) = span_event else {
+            unreachable!("fixture is an event");
+        };
+        assert_eq!(spans[0].record.events, vec![expected_event]);
+        let exported_metrics = metrics.batches.lock().expect("batches").concat();
+        assert_eq!(exported_metrics.len(), 1);
+        assert_eq!(exported_metrics[0].record, histogram);
+        assert_eq!(telemetry.health().dropped_exports_total, 0);
+    }
+
+    #[test]
+    fn released_scalar_histogram_is_accepted_without_wire_or_degraded_health() {
+        let (telemetry, _, metrics) = recording();
+        let mut histogram = metric_record();
+        histogram.kind = MetricKind::Histogram;
+        telemetry
+            .emit_metric_released(&histogram)
+            .expect("released histogram is accepted at emit");
+        telemetry.flush().expect("released histogram flush");
+
+        assert!(metrics.batches.lock().expect("batches").is_empty());
+        let health = telemetry.health();
+        assert_eq!(health.dropped_exports_total, 0, "{health:?}");
+        assert!(health.last_error.is_none(), "{health:?}");
+        let runtime = telemetry.runtime.lock().expect("runtime");
+        assert_ne!(runtime.metric_status.state, ExporterHealthState::Degraded);
+    }
+}
+
+#[cfg(all(feature = "otlp-sdk", feature = "legacy-http-json"))]
+mod current_health_recovery {
+    //! Public health follows current backend delivery on both backends: a
+    //! loopback collector rejects scripted requests, then accepts them.
+
+    use std::collections::HashMap;
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpListener, TcpStream};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex, PoisonError};
+    use std::thread::{self, JoinHandle};
+    use std::time::Duration;
+
+    use super::*;
+    use crate::TelemetryHealthState;
+
+    /// Bounds an idle kept-alive connection so collector shutdown cannot stall.
+    const CONNECTION_IO_TIMEOUT: Duration = Duration::from_secs(3);
+
+    /// Answers `400` to the first `n` requests on each scripted path, then `200`.
+    struct Collector {
+        address: SocketAddr,
+        stop: Arc<AtomicBool>,
+        handle: Option<JoinHandle<()>>,
+    }
+
+    impl Collector {
+        fn start(rejections: &[(&'static str, usize)]) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
+            let address = listener.local_addr().expect("collector address");
+            let stop = Arc::new(AtomicBool::new(false));
+            let remaining = Arc::new(Mutex::new(
+                rejections.iter().copied().collect::<HashMap<_, _>>(),
+            ));
+            let handle = {
+                let stop = Arc::clone(&stop);
+                thread::spawn(move || accept_loop(&listener, &stop, &remaining))
+            };
+            Self {
+                address,
+                stop,
+                handle: Some(handle),
+            }
+        }
+
+        fn endpoint(&self) -> String {
+            format!("http://{}", self.address)
+        }
+    }
+
+    impl Drop for Collector {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            // Wakes the blocking accept so it observes the stop flag.
+            let _ = TcpStream::connect(self.address);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn accept_loop(
+        listener: &TcpListener,
+        stop: &AtomicBool,
+        remaining: &Arc<Mutex<HashMap<&'static str, usize>>>,
+    ) {
+        let mut connections = Vec::new();
+        for stream in listener.incoming() {
+            if stop.load(Ordering::SeqCst) {
+                break;
+            }
+            let Ok(stream) = stream else { break };
+            let remaining = Arc::clone(remaining);
+            connections.push(thread::spawn(move || serve(stream, &remaining)));
+        }
+        for connection in connections {
+            let _ = connection.join();
+        }
+    }
+
+    fn serve(mut stream: TcpStream, remaining: &Mutex<HashMap<&'static str, usize>>) {
+        if stream
+            .set_read_timeout(Some(CONNECTION_IO_TIMEOUT))
+            .is_err()
+            || stream
+                .set_write_timeout(Some(CONNECTION_IO_TIMEOUT))
+                .is_err()
+        {
+            return;
+        }
+        while let Some(path) = read_request_path(&mut stream) {
+            let status = remaining
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get_mut(path.as_str())
+                .filter(|left| **left > 0)
+                .map_or(200, |left| {
+                    *left -= 1;
+                    400
+                });
+            let head = format!("HTTP/1.1 {status} Scripted\r\nContent-Length: 0\r\n\r\n");
+            if stream.write_all(head.as_bytes()).is_err() || stream.flush().is_err() {
+                return;
+            }
+        }
+    }
+
+    /// Reads one HTTP/1.1 request and returns its path.
+    fn read_request_path(stream: &mut TcpStream) -> Option<String> {
+        let mut buffer = Vec::new();
+        let mut chunk = [0_u8; 4096];
+        let head_end = loop {
+            if let Some(position) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                break position;
+            }
+            let read = stream.read(&mut chunk).ok()?;
+            if read == 0 {
+                return None;
+            }
+            buffer.extend_from_slice(&chunk[..read]);
+        };
+        let head = String::from_utf8_lossy(&buffer[..head_end]).into_owned();
+        let content_length = head
+            .split("\r\n")
+            .filter_map(|line| line.split_once(':'))
+            .find(|(name, _)| name.trim().eq_ignore_ascii_case("content-length"))
+            .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        let mut body_read = buffer.len() - (head_end + 4);
+        while body_read < content_length {
+            let read = stream.read(&mut chunk).ok()?;
+            if read == 0 {
+                return None;
+            }
+            body_read += read;
+        }
+        head.split_whitespace().nth(1).map(str::to_owned)
+    }
+
+    enum Backend {
+        Sdk(tokio::runtime::Runtime),
+        Legacy,
+    }
+
+    impl Backend {
+        fn all() -> [Self; 2] {
+            [
+                Self::Sdk(
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("caller runtime"),
+                ),
+                Self::Legacy,
+            ]
+        }
+
+        fn telemetry(&self, endpoint: &str) -> Telemetry {
+            let (backend, protocol) = match self {
+                Self::Sdk(_) => (ExporterBackend::OpenTelemetrySdk, OtlpProtocol::HttpBinary),
+                Self::Legacy => (ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson),
+            };
+            let config = TelemetryConfigBuilder::new(service_name())
+                .enable_logs(LogsConfig::default())
+                .enable_traces(TracesConfig::default())
+                .with_transport(OtelConfig {
+                    enabled: true,
+                    backend,
+                    protocol,
+                    endpoint: Some(OtlpEndpoint::new_typed(endpoint).expect("valid endpoint")),
+                    ..OtelConfig::default()
+                })
+                .build_typed()
+                .expect("valid telemetry config");
+            let _entered = match self {
+                Self::Sdk(runtime) => Some(runtime.enter()),
+                Self::Legacy => None,
+            };
+            Telemetry::new_typed(config).expect("backend telemetry")
+        }
+
+        fn flush(&self, telemetry: &Telemetry) -> Result<(), FlushFailure> {
+            match self {
+                Self::Sdk(runtime) => runtime.block_on(telemetry.flush_async_typed()),
+                Self::Legacy => telemetry.flush_typed(),
+            }
+        }
+
+        fn shutdown(&self, telemetry: &Telemetry) {
+            let result = match self {
+                Self::Sdk(runtime) => runtime.block_on(telemetry.shutdown_async_typed()),
+                Self::Legacy => telemetry.shutdown_typed(),
+            };
+            result.expect("shutdown after recovery");
+        }
+
+        fn name(&self) -> &'static str {
+            match self {
+                Self::Sdk(_) => "sdk",
+                Self::Legacy => "legacy",
+            }
+        }
+    }
+
+    fn emit_log_and_span(telemetry: &Telemetry) {
+        telemetry
+            .emit_log(&log_event(service_name(), "recovery"))
+            .expect("admit log");
+        let (started, ended) = complete_span_signals();
+        telemetry
+            .emit_span_released(&started)
+            .expect("admit started");
+        telemetry.emit_span_released(&ended).expect("admit ended");
+    }
+
+    fn states(telemetry: &Telemetry) -> (TelemetryHealthState, Vec<ExporterHealthState>) {
+        let health = telemetry.health();
+        (
+            health.state,
+            health
+                .exporter_statuses
+                .iter()
+                .map(|status| status.state)
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn successful_export_after_failure_restores_current_health_on_both_backends() {
+        for backend in Backend::all() {
+            let collector = Collector::start(&[("/v1/logs", 1)]);
+            let telemetry = backend.telemetry(&collector.endpoint());
+
+            telemetry
+                .emit_log(&log_event(service_name(), "rejected"))
+                .expect("admit log");
+            assert!(backend.flush(&telemetry).is_err(), "{}", backend.name());
+            let failed = telemetry.health();
+            assert_eq!(failed.state, TelemetryHealthState::Degraded, "{failed:?}");
+            assert_eq!(
+                failed.exporter_statuses[0].state,
+                ExporterHealthState::Degraded
+            );
+            assert_eq!(failed.dropped_exports_total, 1, "{failed:?}");
+
+            telemetry
+                .emit_log(&log_event(service_name(), "accepted"))
+                .expect("admit log");
+            backend.flush(&telemetry).expect("second export succeeds");
+            let recovered = telemetry.health();
+            assert_eq!(
+                recovered.state,
+                TelemetryHealthState::Healthy,
+                "{}: {recovered:?}",
+                backend.name()
+            );
+            assert!(
+                recovered
+                    .exporter_statuses
+                    .iter()
+                    .all(|status| status.state == ExporterHealthState::Healthy
+                        && status.last_error.is_none()),
+                "{recovered:?}"
+            );
+            assert_eq!(recovered.dropped_exports_total, 1, "{recovered:?}");
+            assert_eq!(recovered.last_error, failed.last_error, "retained history");
+            backend.shutdown(&telemetry);
+        }
+    }
+
+    #[test]
+    fn recovered_signal_is_healthy_while_another_failing_signal_keeps_aggregate_degraded() {
+        for backend in Backend::all() {
+            let collector = Collector::start(&[("/v1/logs", 1), ("/v1/traces", usize::MAX)]);
+            let telemetry = backend.telemetry(&collector.endpoint());
+
+            emit_log_and_span(&telemetry);
+            assert!(backend.flush(&telemetry).is_err(), "{}", backend.name());
+            assert_eq!(
+                states(&telemetry),
+                (
+                    TelemetryHealthState::Degraded,
+                    vec![
+                        ExporterHealthState::Degraded,
+                        ExporterHealthState::Degraded,
+                        ExporterHealthState::Healthy
+                    ]
+                ),
+                "{}",
+                backend.name()
+            );
+
+            emit_log_and_span(&telemetry);
+            assert!(backend.flush(&telemetry).is_err(), "traces still rejected");
+            let health = telemetry.health();
+            assert_eq!(
+                states(&telemetry),
+                (
+                    TelemetryHealthState::Degraded,
+                    vec![
+                        ExporterHealthState::Healthy,
+                        ExporterHealthState::Degraded,
+                        ExporterHealthState::Healthy
+                    ]
+                ),
+                "{}: {health:?}",
+                backend.name()
+            );
+            assert!(
+                health.exporter_statuses[0].last_error.is_none(),
+                "{health:?}"
+            );
+            assert!(
+                health.exporter_statuses[1].last_error.is_some(),
+                "{health:?}"
+            );
+            assert_eq!(health.dropped_exports_total, 3, "{health:?}");
+        }
     }
 }

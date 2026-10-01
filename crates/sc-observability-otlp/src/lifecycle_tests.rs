@@ -444,10 +444,67 @@ fn consumed_failure_does_not_poison_later_successful_windows() {
     assert_eq!(flushes.load(Ordering::Acquire), 2);
     assert_eq!(shutdowns.load(Ordering::Acquire), 1);
     assert!(
-        core.health().degraded,
-        "health retains historical degradation"
+        !core.health().degraded,
+        "a recovered signal and successful windows are not currently degraded"
     );
     assert_eq!(core.health().dropped_by_signal, [1, 0, 0]);
+}
+
+#[test]
+fn signal_recovery_clears_only_that_signal_and_keeps_cumulative_drops() {
+    let (core, _, _, _) = default_fixture();
+    for signal in [SignalKind::Logs, SignalKind::Traces] {
+        core.admit(signal, (), 1)
+            .unwrap()
+            .complete(Err(runtime_terminated()));
+    }
+    let failing = core.health();
+    assert_eq!(failing.degraded_by_signal, [true, true, false]);
+    assert!(failing.degraded);
+
+    core.admit(SignalKind::Logs, (), 1)
+        .unwrap()
+        .complete(Ok(()));
+    let logs_recovered = core.health();
+    assert!(!logs_recovered.degraded_for(SignalKind::Logs));
+    assert!(logs_recovered.degraded_for(SignalKind::Traces));
+    assert!(
+        logs_recovered.degraded,
+        "a still-failing signal keeps the core degraded"
+    );
+    assert_eq!(logs_recovered.dropped_by_signal, [1, 1, 0]);
+    assert_eq!(logs_recovered.last_error, failing.last_error);
+
+    core.admit(SignalKind::Traces, (), 1)
+        .unwrap()
+        .complete(Ok(()));
+    let recovered = core.health();
+    assert_eq!(recovered.degraded_by_signal, [false; 3]);
+    assert!(!recovered.degraded);
+    assert_eq!(recovered.dropped_by_signal, [1, 1, 0]);
+    assert_eq!(recovered.last_error, failing.last_error);
+}
+
+#[test]
+fn failed_operation_degrades_until_a_later_operation_succeeds() {
+    let (core, _, _, released) = default_fixture();
+    let mut expired = core.flush_async();
+    assert!(poll_once(&mut expired).is_pending());
+    expired.expire_for_test();
+    assert!(matches!(poll_once(&mut expired), Poll::Ready(Err(_))));
+    let timed_out = core.health();
+    assert!(timed_out.degraded);
+    assert_eq!(timed_out.degraded_by_signal, [false; 3]);
+
+    released.store(true, Ordering::Release);
+    assert!(matches!(
+        poll_once(&mut core.flush_async()),
+        Poll::Ready(Ok(()))
+    ));
+    let recovered = core.health();
+    assert!(!recovered.degraded);
+    assert_eq!(recovered.last_error, timed_out.last_error);
+    assert_eq!(recovered.dropped_by_signal, [0; 3]);
 }
 
 #[test]
