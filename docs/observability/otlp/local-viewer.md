@@ -10,9 +10,11 @@ The same source commit is recorded in
 The pin supports macOS Apple Silicon (`darwin_arm64`) only. Setup provenance is
 the `obs-d9-local-viewer-setup` deliverables and
 [`collector-environments.md`](../../plans/phase-d/collector-environments.md).
-Live downloader and viewer qualification wiring belongs to obs-d-9 deliverable
-3 in `otlp-conformance.yml` and is not wired yet. Do not resolve `latest` at
-run time.
+The `desktop-viewer-factory-conformance` job in
+`otlp-conformance.yml` downloads that pinned artifact, starts an isolated
+viewer on dynamically selected loopback ports, and qualifies both public
+factory backends by querying their exported production records. Do not resolve
+`latest` at run time.
 
 ## Installed desktop service
 
@@ -45,8 +47,10 @@ it occupies one of the defaults; select explicit free port overrides instead.
 
 The harness is standard-library Python. The commands below show a local run of
 the pinned `darwin_arm64` artifact: download and verify it, then start an
-isolated instance with a disposable database. Current CI does not invoke these
-commands; obs-d-9 deliverable 3 owns adding that wiring.
+isolated instance with a disposable database. The CI qualification job uses
+the same pinned release and harness lifecycle, but selects free loopback ports
+and invokes `assert-production` after each public-factory backend rather than
+running this synthetic setup command verbatim.
 
 ```sh
 VIEWER_RELEASE=scripts/ci/fixtures/otlp/desktop-viewer/release.json
@@ -70,8 +74,9 @@ removes only the instance database and log created under that state directory.
 The `ci` command runs start, status, probe and cleanup in one process, including
 cleanup after a failed probe. The individual `start`, `status`, `probe`, and
 `stop` commands are available for local diagnosis. The public-api-governance
-job runs hermetic harness unit tests only; that unit CI does not qualify live
-viewer delivery, which remains obs-d-9 deliverable 3.
+job runs hermetic harness unit tests only; live viewer delivery is qualified by
+the separate `desktop-viewer-factory-conformance` job after each backend emits
+through its real public factory.
 The probe uses bounded synthetic data (`service.name=sc-observability-d9`, a
 unique `test.run_id`, and backend `setup-probe`) and has a 120-second query
 deadline. It needs no Grafana credentials.
