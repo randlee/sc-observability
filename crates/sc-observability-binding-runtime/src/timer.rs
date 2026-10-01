@@ -11,6 +11,8 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use std::time::Instant;
 
 // Resource-only singleton prescribed by the binding contract; no logger/policy.
+// MUTEX: serializes lazy TimerService creation/publication; `shared` reports
+// poison as an internal failure.
 static TIMER: OnceLock<Mutex<Option<Arc<TimerService>>>> = OnceLock::new();
 
 pub(crate) struct TimerService {

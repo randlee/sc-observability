@@ -577,9 +577,17 @@ pub(crate) fn bridge(
 #[cfg(test)]
 #[derive(Default)]
 pub(crate) struct TestHooks {
+    // MUTEX: publishes the optional admission gate; callers clone it before
+    // waiting outside the lock.
     pub(crate) admission: Mutex<Option<Arc<crate::tests::Gate>>>,
+    // MUTEX: publishes the optional query gate; callers clone it before
+    // waiting outside the lock.
     pub(crate) query: Mutex<Option<Arc<crate::tests::Gate>>>,
+    // MUTEX: publishes the optional flush gate; callers clone it before
+    // waiting outside the lock.
     pub(crate) flush: Mutex<Option<Arc<crate::tests::Gate>>>,
     pub(crate) crash: AtomicBool,
+    // MUTEX: stores the shutdown source chain for later test inspection; the
+    // shared lock helper recovers poison.
     pub(crate) shutdown_source_chain: Mutex<Option<Vec<String>>>,
 }
