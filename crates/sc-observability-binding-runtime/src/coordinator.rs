@@ -94,16 +94,7 @@ impl Coordinator {
     pub(crate) fn create(
         build: impl FnOnce() -> Result<(Backend, LogHealthDto), Failure>,
     ) -> Result<Arc<Self>, Failure> {
-        let timer = crate::timer::shared().map_err(|error| {
-            let kind = if error.diagnostic().code.as_str()
-                == dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL
-            {
-                conversion::Kind::Internal
-            } else {
-                conversion::Kind::Unavailable
-            };
-            conversion::canonical(&error, kind)
-        })?;
+        let timer = crate::timer::shared()?;
         let dispatcher = Dispatcher::new();
         let gate = Arc::new(StartGate {
             state: Mutex::new(Start::Parked),

@@ -590,7 +590,6 @@ pub struct Running;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Stopped;
 
-/// Lightweight structured logging runtime with built-in query and follow support.
 mod canonical {
     use std::marker::PhantomData;
     use std::sync::atomic::AtomicBool;

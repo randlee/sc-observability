@@ -425,6 +425,7 @@ pub(crate) fn legacy_emit(error: crate::error::EmitError) -> EmitError {
         Core::WriterDegraded { diagnostic } => EmitError::WriterDegraded { diagnostic },
         Core::ShutdownTimedOut { diagnostic } => EmitError::ShutdownTimedOut { diagnostic },
         Core::NotRunning { phase } => EmitError::NotRunning { phase },
+        // A missing attachment is stopped independently of any unrelated global owner.
         Core::NotInstalled => EmitError::NotRunning {
             phase: crate::LifecyclePhase::Stopped,
         },
@@ -447,28 +448,39 @@ pub(crate) fn legacy_init(
 ) -> InitError {
     use sc_observability_types::v2::InitError as Core;
     match error {
-        Core::Configuration { context } => match context.diagnostic().code.as_str() {
-            "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED" => InitError::AlreadyInitialized,
-            "SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED" => InitError::ForeignLoggerInstalled,
-            "SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL" => InitError::UnsupportedLevel {
-                configured,
-                available,
-            },
-            _ => InitError::Logger {
-                diagnostic: operation_diagnostic(context.diagnostic()),
-            },
-        },
-        Core::Runtime { context } => match context.diagnostic().code.as_str() {
-            "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED" => InitError::RuntimeStart {
-                diagnostic: operation_diagnostic(context.diagnostic()),
-            },
-            "SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED" => InitError::IdentityResolution {
-                diagnostic: operation_diagnostic(context.diagnostic()),
-            },
-            _ => InitError::Logger {
-                diagnostic: operation_diagnostic(context.diagnostic()),
-            },
-        },
+        Core::Configuration { context } => {
+            let code = &context.diagnostic().code;
+            if *code == error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED {
+                InitError::AlreadyInitialized
+            } else if *code == error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED {
+                InitError::ForeignLoggerInstalled
+            } else if *code == error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL {
+                InitError::UnsupportedLevel {
+                    configured,
+                    available,
+                }
+            } else {
+                InitError::Logger {
+                    diagnostic: operation_diagnostic(context.diagnostic()),
+                }
+            }
+        }
+        Core::Runtime { context } => {
+            let code = &context.diagnostic().code;
+            if *code == error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED {
+                InitError::RuntimeStart {
+                    diagnostic: operation_diagnostic(context.diagnostic()),
+                }
+            } else if *code == error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED {
+                InitError::IdentityResolution {
+                    diagnostic: operation_diagnostic(context.diagnostic()),
+                }
+            } else {
+                InitError::Logger {
+                    diagnostic: operation_diagnostic(context.diagnostic()),
+                }
+            }
+        }
         _ => InitError::Logger {
             diagnostic: operation_diagnostic(error.diagnostic()),
         },
@@ -594,6 +606,119 @@ mod tests {
     }
 
     #[test]
+    fn detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_DETACHED_ATTACHMENT_CHILD";
+        struct Admit;
+
+        impl crate::BridgeEventPolicy for Admit {
+            fn decide(&self, _: &crate::LogEvent) -> crate::BridgeEventDecision {
+                crate::BridgeEventDecision::Admit
+            }
+        }
+
+        struct RestoreStopped;
+
+        impl Drop for RestoreStopped {
+            fn drop(&mut self) {
+                crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Stopped);
+            }
+        }
+
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("test executable"),
+            )
+            .args([
+                "--exact",
+                "compat::tests::detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD_ENV, "1")
+            .output()
+            .expect("spawn isolated compatibility regression");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                output.status.success(),
+                "isolated compatibility regression failed: {}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+                output.status
+            );
+            assert_eq!(
+                stdout
+                    .lines()
+                    .filter(|line| line.trim() == "running 1 test")
+                    .count(),
+                1,
+                "isolated compatibility regression must execute exactly one test:\n{stdout}"
+            );
+            assert_eq!(
+                stdout
+                    .matches("test result: ok. 1 passed; 0 failed;")
+                    .count(),
+                1,
+                "isolated compatibility regression must report one passing test:\n{stdout}"
+            );
+            return;
+        }
+
+        let root = tempfile::tempdir().expect("temporary log root");
+        let service = crate::ServiceName::new("detached-attachment").expect("service name");
+        let logger = std::sync::Arc::new(
+            sc_observability::v2::Logger::new(crate::LoggerConfig::default_for(
+                service,
+                root.path().to_path_buf(),
+            ))
+            .expect("host logger"),
+        );
+        let mut attachment = crate::attach_logger(
+            std::sync::Arc::clone(&logger),
+            crate::AttachmentOptions::new(
+                crate::BridgeOptions {
+                    default_action: crate::ActionName::new("log.record").expect("action name"),
+                    parse_bracket_action: false,
+                },
+                std::sync::Arc::new(Admit),
+            ),
+        )
+        .expect("attach host logger");
+        let stale = attachment.control();
+        attachment
+            .detach(std::time::Duration::ZERO)
+            .expect("detach attachment before stale admission");
+
+        // Test-only unrelated lifecycle state: no owner is installed here. The
+        // real attachment path above proves `NotInstalled`; this prevents the
+        // released adapter from consulting an unrelated global phase.
+        crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Running);
+        let _restore = RestoreStopped;
+        let core_error = stale
+            .try_log(crate::BridgeEvent {
+                level: crate::EventLevel::Info,
+                target: crate::TargetCategory::new("bridge.compat").expect("target"),
+                action: None,
+                message: Some("stale attachment".to_owned()),
+                outcome: None,
+                fields: serde_json::Map::new(),
+                request_id: None,
+                correlation_id: None,
+                trace: None,
+            })
+            .expect_err("detached attachment");
+        assert!(matches!(core_error, crate::error::EmitError::NotInstalled));
+        assert!(matches!(
+            legacy_emit(core_error),
+            EmitError::NotRunning {
+                phase: crate::LifecyclePhase::Stopped,
+            }
+        ));
+
+        std::sync::Arc::try_unwrap(logger)
+            .unwrap_or_else(|_| panic!("detach releases host logger"))
+            .shutdown();
+    }
+
+    #[test]
     fn legacy_init_preserves_runtime_start_variant_and_diagnostic() {
         let context = sc_observability_types::ErrorContext::new(
             error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED,
@@ -708,7 +833,15 @@ mod tests {
             (
                 "timeout",
                 "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT",
-                FlushError::TimedOut { timeout },
+                legacy_flush(
+                    &sc_observability_types::v2::FlushError::Drain {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT",
+                            diagnostic_remediation.clone(),
+                        )),
+                    },
+                    timeout,
+                ),
                 Remediation::recoverable(
                     "retry the flush later or raise the timeout",
                     [
@@ -752,7 +885,10 @@ mod tests {
 
         for (name, code, error, remediation) in cases {
             match name {
-                "timeout" => assert!(matches!(error, FlushError::TimedOut { .. })),
+                "timeout" => assert!(matches!(
+                    error,
+                    FlushError::TimedOut { timeout: observed } if observed == timeout
+                )),
                 "helper spawn" => assert!(matches!(error, FlushError::HelperSpawn { .. })),
                 "helper lost" => assert!(matches!(error, FlushError::HelperLost { .. })),
                 _ => unreachable!("fixed table row"),
@@ -771,6 +907,11 @@ mod tests {
             }
         }
 
+        if !crate::handle::is_isolated_test_child(
+            "compat::tests::released_control_flush_reads_the_failed_phase_at_the_adapter_boundary",
+        ) {
+            return;
+        }
         crate::handle::set_lifecycle(crate::health::BridgeLifecycle::Failed);
         let _restore = RestoreStopped;
         let error = LogControl::new()

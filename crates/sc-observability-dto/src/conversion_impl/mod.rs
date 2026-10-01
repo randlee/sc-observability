@@ -141,14 +141,16 @@ fn decode<T: DeserializeOwned>(value: Value, field: &str) -> Result<T, Failure> 
     }
     checked(serde_json::from_value(value), field)
 }
-/// Decodes and validates all event fields before native queue admission.
+/// Structurally decodes an event DTO, checking keys, wire size/depth, and provenance.
+/// [`to_core_event`] performs native constructor and event-bound validation.
 pub fn decode_event(value: Value) -> Result<LogEventDto, Failure> {
     check_event_keys(&value)?;
     let dto: LogEventDto = decode(value, "event")?;
     check_input_provenance(&dto.fields, "fields")?;
     Ok(dto)
 }
-/// Decodes and validates the inclusive native query contract.
+/// Structurally decodes a query DTO, checking nested keys, wire size, and depth.
+/// [`to_core_query`] validates native constructors and query bounds.
 pub fn decode_query(value: Value) -> Result<LogQueryDto, Failure> {
     if let Some(fields) = value.get("field_matches").and_then(Value::as_array) {
         for item in fields {

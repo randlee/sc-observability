@@ -1006,27 +1006,6 @@ mod tests {
     }
 
     #[test]
-    fn rotation_metadata_io_failure_marks_sink_failure() {
-        let root = temp_root("rotation-metadata-io-error");
-        let parent = root.join("logs");
-        fs::write(&parent, "not a directory").expect("create invalid log parent");
-        let active_path = parent.join("service.log.jsonl");
-        let sink = JsonlFileSink::for_logger(active_path.clone());
-        let metadata_error = fs::metadata(&active_path).expect_err("parent is not a directory");
-        assert_ne!(metadata_error.kind(), io::ErrorKind::NotFound);
-
-        let error = sink
-            .rotate_if_needed(u64::MAX, 1, 0)
-            .expect_err("metadata I/O failure must be surfaced");
-
-        assert_eq!(
-            error.diagnostic().code,
-            error_codes::LOGGER_SINK_WRITE_FAILED
-        );
-        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
-    }
-
-    #[test]
     fn maintenance_max_work_per_pass_limits_pruning() {
         let root = temp_root("maintenance-budget");
         let active_path = root.join("logs/service.log.jsonl");

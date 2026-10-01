@@ -5,7 +5,9 @@
 //! required by this contract. The approved adapter therefore projects all
 //! signals to OTLP protobuf requests. These primitives deliberately contain
 //! no SDK-specific record construction, so either transport retains the
-//! caller-runtime, admission, and resource-grouping invariants.
+//! caller-runtime, admission, and resource-grouping invariants. The validated
+//! protocol selects the terminal send: `Grpc` uses the tonic clients and
+//! `HttpBinary` posts the same protobuf requests over OTLP/HTTP.
 
 #![cfg_attr(
     not(test),
@@ -19,6 +21,7 @@ use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderValue};
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -26,7 +29,7 @@ use tonic::Request;
 use tonic::metadata::MetadataValue;
 use tonic::transport::{Channel, Endpoint};
 
-use crate::config::{ValidatedBackendConnection, ValidatedTransportBounds};
+use crate::config::{OtlpProtocol, ValidatedBackendConnection, ValidatedTransportBounds};
 use crate::constants::{
     DEFAULT_OTLP_INITIAL_BACKOFF_MS, DEFAULT_OTLP_MAX_BACKOFF_MS, DEFAULT_OTLP_MAX_RETRIES,
 };
@@ -99,9 +102,9 @@ pub(crate) struct SdkAdapterSet {
     pub(crate) lifecycle: LifecycleCore,
 }
 
-/// Builds the lossless gRPC/protobuf SDK transport on the caller's Tokio
-/// runtime. Connection values are already validated; this function never
-/// consults `OTEL_*` defaults and never creates a runtime.
+/// Builds the lossless protobuf SDK transport for the validated protocol on
+/// the caller's Tokio runtime. Connection values are already validated; this
+/// function never consults `OTEL_*` defaults and never creates a runtime.
 pub(crate) fn build_exporter_set(
     connection: &ValidatedBackendConnection,
     bounds: &ValidatedTransportBounds,
@@ -138,15 +141,43 @@ struct SdkBackend {
     terminal: Arc<SdkTerminal>,
 }
 
-/// Terminal gRPC clients. They are intentionally below the D.6 core: by the
-/// time the core invokes their lifecycle methods, every admitted send has
+/// Terminal protocol clients. They are intentionally below the D.6 core: by
+/// the time the core invokes their lifecycle methods, every admitted send has
 /// reached a typed terminal outcome, so there is no recursive flush path.
 pub(super) struct SdkTerminal {
+    transport: SdkTransport,
+    retry_deadline: Duration,
+}
+
+/// The validated OTLP protocol's wire dispatch. Both variants send the same
+/// projected protobuf requests under the same admission, lifecycle, retry
+/// and deadline policy; only the terminal send differs.
+enum SdkTransport {
+    Grpc(Box<GrpcTransport>),
+    HttpProtobuf(HttpProtobufTransport),
+}
+
+struct GrpcTransport {
     logs: Mutex<LogsServiceClient<Channel>>,
     traces: Mutex<TraceServiceClient<Channel>>,
     metrics: Mutex<MetricsServiceClient<Channel>>,
     auth_header: Option<MetadataValue<tonic::metadata::Ascii>>,
-    retry_deadline: Duration,
+}
+
+/// OTLP/HTTP with protobuf bodies.
+///
+/// The pinned official `opentelemetry-otlp` HTTP exporters accept only SDK
+/// data types, and the pinned SDK keeps the pre-aggregated metric and log
+/// record constructors crate-private, so they cannot carry the projected
+/// requests losslessly. This transport therefore posts the same
+/// `opentelemetry-proto` requests the gRPC path sends, encoded with `prost`,
+/// through the pinned `reqwest` client (which owns HTTP and TLS).
+struct HttpProtobufTransport {
+    client: reqwest::Client,
+    logs_url: String,
+    traces_url: String,
+    metrics_url: String,
+    auth_header: Option<HeaderValue>,
 }
 
 impl SdkTerminal {
@@ -159,21 +190,146 @@ impl SdkTerminal {
                 "custom OTLP CA files are not implemented for the SDK transport",
             ));
         }
+        let transport = match bounds.protocol() {
+            OtlpProtocol::Grpc => {
+                SdkTransport::Grpc(Box::new(GrpcTransport::new(connection, bounds)?))
+            }
+            OtlpProtocol::HttpBinary => {
+                SdkTransport::HttpProtobuf(HttpProtobufTransport::new(connection, bounds)?)
+            }
+            OtlpProtocol::HttpJson => {
+                return Err(transport_error(
+                    "the SDK transport supports only the Grpc and HttpBinary OTLP protocols",
+                ));
+            }
+        };
+        Ok(Self {
+            transport,
+            retry_deadline: bounds.lifecycle().shutdown().get(),
+        })
+    }
+
+    async fn export_logs(
+        &self,
+        resource_logs: Vec<proto_logs::ResourceLogs>,
+    ) -> Result<(), ExportError> {
+        let request = ExportLogsServiceRequest { resource_logs };
+        let message = "OTLP log export failed";
+        match &self.transport {
+            SdkTransport::Grpc(grpc) => {
+                // Clone under the guard and release it before any RPC or retry
+                // sleep, so concurrent exports of one signal never serialize.
+                let client = grpc.logs.lock().await.clone();
+                retry_export(
+                    self.retry_deadline,
+                    || {
+                        let request = grpc.request(request.clone());
+                        let mut client = client.clone();
+                        async move { client.export(request).await.map(|_| ()) }
+                    },
+                    message,
+                )
+                .await
+            }
+            SdkTransport::HttpProtobuf(http) => {
+                http.export(self.retry_deadline, &http.logs_url, &request, message)
+                    .await
+            }
+        }
+    }
+
+    async fn export_spans(
+        &self,
+        resource_spans: Vec<proto_trace::ResourceSpans>,
+    ) -> Result<(), ExportError> {
+        let request = ExportTraceServiceRequest { resource_spans };
+        let message = "OTLP trace export failed";
+        match &self.transport {
+            SdkTransport::Grpc(grpc) => {
+                // Clone under the guard and release it before any RPC or retry
+                // sleep, so concurrent exports of one signal never serialize.
+                let client = grpc.traces.lock().await.clone();
+                retry_export(
+                    self.retry_deadline,
+                    || {
+                        let request = grpc.request(request.clone());
+                        let mut client = client.clone();
+                        async move { client.export(request).await.map(|_| ()) }
+                    },
+                    message,
+                )
+                .await
+            }
+            SdkTransport::HttpProtobuf(http) => {
+                http.export(self.retry_deadline, &http.traces_url, &request, message)
+                    .await
+            }
+        }
+    }
+
+    async fn export_metrics(
+        &self,
+        resource_metrics: Vec<proto_metrics::ResourceMetrics>,
+    ) -> Result<(), ExportError> {
+        let request = ExportMetricsServiceRequest { resource_metrics };
+        let message = "OTLP metric export failed";
+        match &self.transport {
+            SdkTransport::Grpc(grpc) => {
+                // Clone under the guard and release it before any RPC or retry
+                // sleep, so concurrent exports of one signal never serialize.
+                let client = grpc.metrics.lock().await.clone();
+                retry_export(
+                    self.retry_deadline,
+                    || {
+                        let request = grpc.request(request.clone());
+                        let mut client = client.clone();
+                        async move { client.export(request).await.map(|_| ()) }
+                    },
+                    message,
+                )
+                .await
+            }
+            SdkTransport::HttpProtobuf(http) => {
+                http.export(self.retry_deadline, &http.metrics_url, &request, message)
+                    .await
+            }
+        }
+    }
+}
+
+impl GrpcTransport {
+    fn new(
+        connection: &ValidatedBackendConnection,
+        bounds: &ValidatedTransportBounds,
+    ) -> Result<Self, ExportError> {
         let endpoint = Endpoint::from_shared(connection.endpoint().as_str().to_owned())
-            .map_err(|_| transport_error("validated OTLP endpoint is not a usable gRPC URI"))?
+            .map_err(|error| {
+                transport_error_from(
+                    "validated OTLP endpoint is not a usable gRPC URI",
+                    Box::new(error),
+                )
+            })?
             .timeout(bounds.request_timeout().get());
         let channel = endpoint.connect_lazy();
         let auth_header = connection
             .auth_header()
-            .map(|header| header.as_str().parse())
+            .map(|header| {
+                header
+                    .as_str()
+                    .parse::<MetadataValue<tonic::metadata::Ascii>>()
+            })
             .transpose()
-            .map_err(|_| transport_error("OTLP authorization header is not valid gRPC metadata"))?;
+            .map_err(|error| {
+                transport_error_from(
+                    "OTLP authorization header is not valid gRPC metadata",
+                    Box::new(error),
+                )
+            })?;
         Ok(Self {
             logs: Mutex::new(LogsServiceClient::new(channel.clone())),
             traces: Mutex::new(TraceServiceClient::new(channel.clone())),
             metrics: Mutex::new(MetricsServiceClient::new(channel)),
             auth_header,
-            retry_deadline: bounds.lifecycle().shutdown().get(),
         })
     }
 
@@ -186,77 +342,184 @@ impl SdkTerminal {
         }
         request
     }
+}
 
-    async fn export_logs(
-        &self,
-        resource_logs: Vec<proto_logs::ResourceLogs>,
-    ) -> Result<(), ExportError> {
-        let client = self.logs.lock().await;
-        retry_export(
-            self.retry_deadline,
-            || {
-                let request = self.request(ExportLogsServiceRequest {
-                    resource_logs: resource_logs.clone(),
-                });
-                let mut client = client.clone();
-                async move { client.export(request).await.map(|_| ()) }
-            },
-            "OTLP log export failed",
-        )
-        .await
+impl HttpProtobufTransport {
+    fn new(
+        connection: &ValidatedBackendConnection,
+        bounds: &ValidatedTransportBounds,
+    ) -> Result<Self, ExportError> {
+        let client = reqwest::Client::builder()
+            .timeout(bounds.request_timeout().get())
+            .build()
+            .map_err(|error| {
+                transport_error_from("OTLP/HTTP client could not be constructed", Box::new(error))
+            })?;
+        let auth_header = connection
+            .auth_header()
+            .map(|header| HeaderValue::from_str(header.as_str()))
+            .transpose()
+            .map_err(|error| {
+                transport_error_from(
+                    "OTLP authorization header is not a valid HTTP header",
+                    Box::new(error),
+                )
+            })?;
+        let endpoint = connection.endpoint().as_str();
+        Ok(Self {
+            client,
+            logs_url: signal_url(endpoint, "logs"),
+            traces_url: signal_url(endpoint, "traces"),
+            metrics_url: signal_url(endpoint, "metrics"),
+            auth_header,
+        })
     }
 
-    async fn export_spans(
+    async fn export<M: prost::Message>(
         &self,
-        resource_spans: Vec<proto_trace::ResourceSpans>,
+        deadline: Duration,
+        url: &str,
+        request: &M,
+        message: &'static str,
     ) -> Result<(), ExportError> {
-        let client = self.traces.lock().await;
+        let body = request.encode_to_vec();
         retry_export(
-            self.retry_deadline,
+            deadline,
             || {
-                let request = self.request(ExportTraceServiceRequest {
-                    resource_spans: resource_spans.clone(),
-                });
-                let mut client = client.clone();
-                async move { client.export(request).await.map(|_| ()) }
+                let mut send = self
+                    .client
+                    .post(url)
+                    .header(CONTENT_TYPE, PROTOBUF_CONTENT_TYPE)
+                    .body(body.clone());
+                if let Some(header) = &self.auth_header {
+                    send = send.header(AUTHORIZATION, header.clone());
+                }
+                async move {
+                    let response = send.send().await.map_err(HttpError::Client)?;
+                    let status = response.status();
+                    if status.is_success() {
+                        Ok(())
+                    } else {
+                        Err(HttpError::Status(status.as_u16()))
+                    }
+                }
             },
-            "OTLP trace export failed",
-        )
-        .await
-    }
-
-    async fn export_metrics(
-        &self,
-        resource_metrics: Vec<proto_metrics::ResourceMetrics>,
-    ) -> Result<(), ExportError> {
-        let client = self.metrics.lock().await;
-        retry_export(
-            self.retry_deadline,
-            || {
-                let request = self.request(ExportMetricsServiceRequest {
-                    resource_metrics: resource_metrics.clone(),
-                });
-                let mut client = client.clone();
-                async move { client.export(request).await.map(|_| ()) }
-            },
-            "OTLP metric export failed",
+            message,
         )
         .await
     }
 }
 
-/// Mirrors the pinned SDK's tonic classification and retry limits. In
-/// particular, `RESOURCE_EXHAUSTED` is terminal without `RetryInfo` (which is not
-/// exposed by the direct tonic dependency); all other decisions match the
-/// pinned OTLP implementation's code classification.
-pub(super) fn retry_action(
-    code: tonic::Code,
-    attempt: u32,
-    elapsed: Duration,
-    deadline: Duration,
-    delay: Duration,
-) -> Option<Duration> {
-    let retryable = matches!(
+const PROTOBUF_CONTENT_TYPE: &str = "application/x-protobuf";
+
+/// OTLP/HTTP signal path: the explicit endpoint with `/v1/{signal}` appended
+/// unless it already ends there (the legacy HTTP backend's rule).
+fn signal_url(endpoint: &str, signal: &str) -> String {
+    let endpoint = endpoint.trim_end_matches('/');
+    let suffix = format!("/v1/{signal}");
+    if endpoint.ends_with(&suffix) {
+        endpoint.to_owned()
+    } else {
+        format!("{endpoint}{suffix}")
+    }
+}
+
+/// One failed OTLP/HTTP attempt, reduced to what retry classification needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum HttpFailure {
+    /// The collector answered with a non-success HTTP status.
+    Status(u16),
+    /// The connection could not be established or the request timed out.
+    ConnectOrTimeout,
+    /// Any other client failure (request construction, body, protocol).
+    Other,
+}
+
+impl std::fmt::Display for HttpFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Status(status) => write!(f, "OTLP/HTTP collector answered status {status}"),
+            Self::ConnectOrTimeout => f.write_str("OTLP/HTTP connect or request timeout failure"),
+            Self::Other => f.write_str("OTLP/HTTP client failure"),
+        }
+    }
+}
+
+impl std::error::Error for HttpFailure {}
+
+/// One failed OTLP/HTTP send, keeping the client's own error as its source.
+#[derive(Debug)]
+pub(super) enum HttpError {
+    /// The collector answered with a non-success HTTP status.
+    Status(u16),
+    /// The HTTP client failed before a status was received.
+    Client(reqwest::Error),
+}
+
+impl HttpError {
+    pub(super) fn failure(&self) -> HttpFailure {
+        match self {
+            Self::Status(status) => HttpFailure::Status(*status),
+            Self::Client(error) if error.is_connect() || error.is_timeout() => {
+                HttpFailure::ConnectOrTimeout
+            }
+            Self::Client(error) => error.status().map_or(HttpFailure::Other, |status| {
+                HttpFailure::Status(status.as_u16())
+            }),
+        }
+    }
+}
+
+impl std::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.failure().fmt(f)
+    }
+}
+
+impl std::error::Error for HttpError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Status(_) => None,
+            Self::Client(error) => Some(error),
+        }
+    }
+}
+
+impl RetryClass for HttpError {
+    fn is_retryable(&self) -> bool {
+        self.failure().is_retryable()
+    }
+}
+
+/// Retry classification shared by the gRPC and HTTP terminal sends.
+pub(super) trait RetryClass {
+    fn is_retryable(&self) -> bool;
+}
+
+impl RetryClass for tonic::Status {
+    fn is_retryable(&self) -> bool {
+        grpc_code_retryable(self.code())
+    }
+}
+
+/// OTLP/HTTP throttling and transient gateway statuses (429, 502, 503, 504)
+/// and connect/timeout failures are retryable; every other failure is terminal.
+impl RetryClass for HttpFailure {
+    fn is_retryable(&self) -> bool {
+        match self {
+            Self::Status(status) => matches!(status, 429 | 502 | 503 | 504),
+            Self::ConnectOrTimeout => true,
+            Self::Other => false,
+        }
+    }
+}
+
+/// Mirrors the pinned SDK's tonic classification. In particular,
+/// `RESOURCE_EXHAUSTED` is terminal without `RetryInfo` (which is not exposed
+/// by the direct tonic dependency); all other decisions match the pinned OTLP
+/// implementation's code classification.
+fn grpc_code_retryable(code: tonic::Code) -> bool {
+    matches!(
         code,
         tonic::Code::Cancelled
             | tonic::Code::Unavailable
@@ -264,7 +527,38 @@ pub(super) fn retry_action(
             | tonic::Code::Aborted
             | tonic::Code::OutOfRange
             | tonic::Code::DataLoss
-    );
+    )
+}
+
+/// Mirrors the pinned SDK's tonic classification and retry limits.
+pub(super) fn retry_action(
+    code: tonic::Code,
+    attempt: u32,
+    elapsed: Duration,
+    deadline: Duration,
+    delay: Duration,
+) -> Option<Duration> {
+    retry_wait(grpc_code_retryable(code), attempt, elapsed, deadline, delay)
+}
+
+/// The OTLP/HTTP counterpart of [`retry_action`], under the same limits.
+pub(super) fn http_retry_action(
+    failure: HttpFailure,
+    attempt: u32,
+    elapsed: Duration,
+    deadline: Duration,
+    delay: Duration,
+) -> Option<Duration> {
+    retry_wait(failure.is_retryable(), attempt, elapsed, deadline, delay)
+}
+
+fn retry_wait(
+    retryable: bool,
+    attempt: u32,
+    elapsed: Duration,
+    deadline: Duration,
+    delay: Duration,
+) -> Option<Duration> {
     if !retryable || attempt >= DEFAULT_OTLP_MAX_RETRIES {
         return None;
     }
@@ -273,14 +567,15 @@ pub(super) fn retry_action(
     (!wait.is_zero() && wait < remaining).then_some(wait)
 }
 
-pub(super) async fn retry_export<F, Fut>(
+pub(super) async fn retry_export<F, Fut, E>(
     deadline: Duration,
     mut operation: F,
     message: &'static str,
 ) -> Result<(), ExportError>
 where
     F: FnMut() -> Fut + Send,
-    Fut: Future<Output = Result<(), tonic::Status>> + Send,
+    Fut: Future<Output = Result<(), E>> + Send,
+    E: RetryClass + std::error::Error + Send + Sync + 'static,
 {
     let started = Instant::now();
     let mut attempt = 0;
@@ -288,8 +583,14 @@ where
     loop {
         match operation().await {
             Ok(()) => return Ok(()),
-            Err(status) => {
-                match retry_action(status.code(), attempt, started.elapsed(), deadline, delay) {
+            Err(failure) => {
+                match retry_wait(
+                    failure.is_retryable(),
+                    attempt,
+                    started.elapsed(),
+                    deadline,
+                    delay,
+                ) {
                     Some(wait) => {
                         sleep(wait).await;
                         attempt += 1;
@@ -297,7 +598,7 @@ where
                             .saturating_mul(2)
                             .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
                     }
-                    None => return Err(transport_error(message)),
+                    None => return Err(transport_error_from(message, Box::new(failure))),
                 }
             }
         }
@@ -315,8 +616,8 @@ impl ExporterLifecycle for SdkTerminal {
 
     fn flush_async(&self) -> LifecycleFuture {
         // D.6 has already waited for every admitted RPC before reaching this
-        // terminal transport. gRPC has no independent batch processor to
-        // flush, so completion here means the terminal client is still usable.
+        // terminal transport. Neither protocol client has an independent batch
+        // processor to flush, so completion here means the client is usable.
         Box::pin(async { Ok(()) })
     }
 
@@ -475,15 +776,29 @@ fn async_lifecycle_required_error() -> ExportError {
 
 fn transport_error(message: &str) -> ExportError {
     ExportError::Transport {
-        context: Box::new(ErrorContext::new(
-            crate::error_codes::OTLP_EXPORT_TERMINAL,
-            message,
-            Remediation::recoverable(
-                "verify the explicit OTLP endpoint and collector availability",
-                [] as [&str; 0],
-            ),
-        )),
+        context: Box::new(transport_context(message)),
     }
+}
+
+/// [`transport_error`] that keeps the underlying failure as the error source.
+fn transport_error_from(
+    message: &str,
+    source: Box<dyn std::error::Error + Send + Sync + 'static>,
+) -> ExportError {
+    ExportError::Transport {
+        context: Box::new(transport_context(message).source(source)),
+    }
+}
+
+fn transport_context(message: &str) -> ErrorContext {
+    ErrorContext::new(
+        crate::error_codes::OTLP_EXPORT_TERMINAL,
+        message,
+        Remediation::recoverable(
+            "verify the explicit OTLP endpoint and collector availability",
+            [] as [&str; 0],
+        ),
+    )
 }
 
 fn telemetry_error_to_export_error(error: TelemetryError) -> ExportError {

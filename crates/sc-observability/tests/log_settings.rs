@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
@@ -43,6 +44,25 @@ fn settings_error_codes_match_documented_stable_names() {
     }
 }
 
+fn assert_invalid_value_with_source_contract(error: &LogSettingsError) {
+    let diagnostic = error.context().diagnostic();
+    assert_eq!(diagnostic.code.as_str(), "SC_LOG_SETTINGS_INVALID_VALUE");
+    assert_eq!(
+        diagnostic.message,
+        "invalid logging environment value for SC_LOG_ROTATION_MAX_BYTES"
+    );
+    assert_eq!(
+        diagnostic.docs.as_deref(),
+        Some("docs/logging/d-1-log-settings.md")
+    );
+    let source = error
+        .context()
+        .source()
+        .and_then(|source| source.downcast_ref::<serde_json::Error>())
+        .expect("invalid JSON settings value retains its serde_json parse error");
+    assert_eq!(source.to_string(), "expected ident at line 1 column 2");
+}
+
 #[test]
 fn settings_errors_include_actionable_recovery_steps_and_docs() {
     let invalid_value = LogSettings::from_env(
@@ -70,16 +90,13 @@ fn settings_errors_include_actionable_recovery_steps_and_docs() {
         default_root: PathBuf::new(),
     })
     .unwrap_err();
+    let invalid_value_with_source = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_ROTATION_MAX_BYTES", "not-json")]),
+        &EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
 
-    let errors = [
-        invalid_value,
-        invalid_environment,
-        unknown_key,
-        prefix_collision,
-        resolution,
-    ];
-    let mut all_steps = Vec::new();
-    for error in errors {
+    let assert_remediation = |name: &str, error: &LogSettingsError, expected: &[&str]| {
         let diagnostic = error.context().diagnostic();
         assert_eq!(
             diagnostic.docs.as_deref(),
@@ -88,16 +105,55 @@ fn settings_errors_include_actionable_recovery_steps_and_docs() {
         let Remediation::Recoverable { steps } = &diagnostic.remediation else {
             panic!("settings errors must be recoverable");
         };
-        assert!(!steps.steps().is_empty(), "{}", error.code());
-        all_steps.extend(steps.steps().iter().cloned());
+        assert!(steps.steps().len() >= 2, "{name}: {}", error.code());
+        let steps = steps.steps().join(" ");
+        for expected in expected {
+            assert!(steps.contains(expected), "{name}: {}", error.code());
+        }
+    };
+    for (name, error, expected) in [
+        (
+            "invalid value",
+            &invalid_value,
+            &[
+                "SC_LOG_ROTATION_MAX_BYTES",
+                "SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS",
+                "lowercase true or false",
+            ][..],
+        ),
+        (
+            "invalid environment",
+            &invalid_environment,
+            &["exact ${prefix}_LOG_ prefix casing"][..],
+        ),
+        (
+            "unknown key",
+            &unknown_key,
+            &[
+                "SC_LOG_ROTATION_MAX_BYTES",
+                "SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS",
+            ][..],
+        ),
+        (
+            "prefix collision",
+            &prefix_collision,
+            &["Application prefixes use exact case"][..],
+        ),
+        ("resolution", &resolution, &["logRoot"][..]),
+        (
+            "invalid value with source",
+            &invalid_value_with_source,
+            &[
+                "SC_LOG_ROTATION_MAX_BYTES",
+                "SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS",
+                "lowercase true or false",
+            ][..],
+        ),
+    ] {
+        assert_remediation(name, error, expected);
     }
 
-    let all_steps = all_steps.join(" ");
-    assert!(all_steps.contains("SC_LOG_ROTATION_MAX_BYTES"));
-    assert!(all_steps.contains("SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS"));
-    assert!(all_steps.contains("${prefix}_LOG_"));
-    assert!(all_steps.contains("lowercase true or false"));
-    assert!(all_steps.contains("docs/logging/d-1-log-settings.md"));
+    assert_invalid_value_with_source_contract(&invalid_value_with_source);
 }
 
 #[test]
@@ -621,6 +677,14 @@ fn permits_empty_root_until_effective_resolution_and_rejects_unknown_case_and_pr
     )
     .expect("an empty root is deferred to the effective-root validator");
     assert_eq!(empty_root.log_root, Some(PathBuf::new()));
+    let error = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: empty_root,
+        application_env: None,
+        default_root: PathBuf::from("/default"),
+    })
+    .expect_err("the effective empty shared root must fail resolution");
+    assert_eq!(error.code(), error_codes::LOG_RESOLUTION);
     let unknown = LogSettings::from_env(
         &snapshot(&[("SC_LOG_UNKNOWN", "x")]),
         &EnvPrefix::new("SC").unwrap(),
@@ -741,4 +805,43 @@ fn shadowed_empty_root_is_ignored_before_effective_root_validation() {
     .expect("the non-empty effective root is the only validated root");
 
     assert_eq!(resolved.log_root.as_ref(), std::path::Path::new("/json"));
+}
+
+#[test]
+fn application_environment_empty_root_resolves_only_when_effective() {
+    let shared = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_ROOT", "")]),
+        &EnvPrefix::new("SC").unwrap(),
+    )
+    .expect("empty shared root parses before resolution");
+    let application = LogSettings::from_application_env(
+        &snapshot(&[("APP_LOG_ROOT", "/application")]),
+        &EnvPrefix::new("APP").unwrap(),
+    )
+    .expect("application root parses");
+    let resolved = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: shared,
+        application_env: Some(application),
+        default_root: PathBuf::from("/default"),
+    })
+    .expect("application root shadows an empty shared root");
+    assert_eq!(
+        resolved.log_root.as_ref(),
+        std::path::Path::new("/application")
+    );
+
+    let application = LogSettings::from_application_env(
+        &snapshot(&[("APP_LOG_ROOT", "")]),
+        &EnvPrefix::new("APP").unwrap(),
+    )
+    .expect("empty application root parses before resolution");
+    let error = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: LogSettings::default(),
+        application_env: Some(application),
+        default_root: PathBuf::from("/default"),
+    })
+    .expect_err("effective empty application root must fail resolution");
+    assert_eq!(error.code(), error_codes::LOG_RESOLUTION);
 }

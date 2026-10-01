@@ -15,6 +15,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from compatibility_registry import validate_trait_impl_contracts
+
 ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / 'target/public-api'
 
@@ -141,6 +143,12 @@ def validate_compatible_policy(policy: dict, root: Path | None = None) -> None:
     return None
 
 
+def validate_compatibility_impl_registry(root: Path) -> None:
+    """Fail API qualification if released trait implementations leave the registry."""
+    registry = json.loads((root / 'docs/compatibility/registry.json').read_text(encoding='utf-8'))
+    validate_trait_impl_contracts(registry.get('trait_impl_contracts'))
+
+
 def compatible_diff_problems(output: str) -> list[str]:
     """Allow additive public-api rows while rejecting removals and signature changes."""
     sections = ('Removed items from the public API', 'Changed items in the public API',
@@ -165,6 +173,7 @@ def main() -> int:
     parser.add_argument('--crate', action='append', dest='crates',
                         help='Qualify only named crates; never a whole-workspace approval')
     args = parser.parse_args()
+    validate_compatibility_impl_registry(ROOT)
     policy = json.loads((ROOT / 'release/public-api-policy.json').read_text(encoding='utf-8'))
     metadata_result = run(['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1'])
     metadata_result.check_returncode()

@@ -527,3 +527,60 @@ fn released_and_canonical_registrations_route_failures_through_both_facades() {
     canonical.emit(observation()).expect("delivered");
     assert_routed_failures(&canonical.health(), 2);
 }
+
+struct ScalarHistogramProjector;
+
+impl sc_observability_types::MetricProjector<AgentEvent> for ScalarHistogramProjector {
+    fn project_metrics(
+        &self,
+        observation: &Observation<AgentEvent>,
+    ) -> Result<Vec<sc_observability_types::MetricRecord>, ProjectionError> {
+        Ok(vec![sc_observability_types::MetricRecord {
+            timestamp: Timestamp::UNIX_EPOCH,
+            service: observation.service.clone(),
+            name: MetricName::new("obs.duration_ms").expect("valid metric"),
+            kind: MetricKind::Histogram,
+            value: 12.0,
+            unit: Some(MetricUnit::new("ms").expect("valid metric unit")),
+            attributes: Map::default(),
+        }])
+    }
+}
+
+/// The released facade routes a released scalar histogram projector natively,
+/// as 1.4.1 did; only an explicit conversion to the canonical family, which
+/// has no scalar histogram, reports the unrepresentable value.
+#[test]
+fn released_scalar_histogram_routes_natively_and_fails_only_canonical_conversion() {
+    let registration =
+        || ProjectionRegistration::new().with_metric_projector(Arc::new(ScalarHistogramProjector));
+    let released_config =
+        ObservabilityConfig::default_for(tool_name(), temp_path("released-histogram"))
+            .expect("config");
+    let released = Observability::builder(released_config)
+        .register_projection(registration())
+        .build()
+        .expect("released runtime");
+    released.emit(observation()).expect("routed");
+    let health = released.health();
+    assert_eq!(health.projection_failures_total, 0);
+    assert!(health.last_error.is_none());
+
+    let canonical_config = sc_observe::v2::ObservabilityConfig::default_for(
+        tool_name(),
+        temp_path("converted-histogram"),
+    )
+    .expect("config");
+    let canonical = sc_observe::v2::Observability::builder(canonical_config)
+        .register_projection(registration().into())
+        .build()
+        .expect("canonical runtime");
+    canonical
+        .emit(observation())
+        .expect_err("the only projector path failed conversion");
+    let health = canonical.health();
+    // The unmatched-route failure then replaces the summary; the conversion
+    // error itself is pinned by the types crate model-conversion tests.
+    assert_eq!(health.projection_failures_total, 1);
+    released.shutdown().expect("released shutdown");
+}

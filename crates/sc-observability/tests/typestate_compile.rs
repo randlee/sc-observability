@@ -152,6 +152,98 @@ fn deprecated_consumer_diagnostics(
         .collect()
 }
 
+fn released_deprecation_since_associations(source: &str) -> Vec<(String, String, String)> {
+    let mut owner = None;
+    let mut in_deprecated_attribute = false;
+    let mut pending_since = None;
+    let mut associations = Vec::new();
+    let deprecated_attribute_prefix = concat!("#[", "deprecated");
+
+    for line in source.lines().map(str::trim) {
+        if line.starts_with("impl ") && line.ends_with(" {") {
+            assert!(
+                !in_deprecated_attribute,
+                "deprecated attribute has no following public method before {line}"
+            );
+            owner = match line {
+                "impl LoggerBuilder {" => Some("LoggerBuilder"),
+                "impl Logger<Running> {" => Some("Logger<Running>"),
+                _ => None,
+            };
+        }
+
+        if line.starts_with(deprecated_attribute_prefix) {
+            assert!(
+                !in_deprecated_attribute,
+                "deprecated attribute has no following public method"
+            );
+            in_deprecated_attribute = true;
+            pending_since = None;
+            continue;
+        }
+
+        if !in_deprecated_attribute {
+            continue;
+        }
+
+        if let Some(value) = line
+            .strip_prefix("since = \"")
+            .and_then(|value| value.strip_suffix("\","))
+        {
+            assert!(
+                pending_since.is_none(),
+                "deprecated attribute has multiple since values"
+            );
+            pending_since = Some(value.to_owned());
+        }
+
+        if let Some(declaration) = line.strip_prefix("pub fn ") {
+            let method = declaration
+                .split_once('(')
+                .map(|(method, _)| method)
+                .expect("deprecated public method has a parameter list");
+            let owner = owner.expect("deprecated public method has a recognized owner");
+            let since = pending_since
+                .take()
+                .expect("deprecated public method has a since value");
+            associations.push((owner.to_owned(), method.to_owned(), since));
+            in_deprecated_attribute = false;
+        }
+    }
+
+    assert!(
+        !in_deprecated_attribute,
+        "deprecated attribute has no following public method"
+    );
+    associations
+}
+
+#[test]
+fn released_deprecation_since_values_match_owner_and_method() {
+    let source = include_str!("../src/compat.rs");
+    let mut actual = released_deprecation_since_associations(source);
+    let mut expected = vec![
+        ("LoggerBuilder", "new", "1.4.0"),
+        ("Logger<Running>", "builder", "1.4.0"),
+        ("Logger<Running>", "new", "1.4.0"),
+        ("Logger<Running>", "log", "1.4.0"),
+        ("Logger<Running>", "try_log", "1.4.0"),
+        ("Logger<Running>", "try_log_with_outcome", "1.4.0"),
+        ("Logger<Running>", "emit", "1.2.0"),
+        ("Logger<Running>", "flush", "1.4.0"),
+    ]
+    .into_iter()
+    .map(|(owner, method, since)| (owner.to_owned(), method.to_owned(), since.to_owned()))
+    .collect::<Vec<_>>();
+
+    actual.sort();
+    expected.sort();
+    assert_eq!(
+        actual, expected,
+        "released deprecation versions must remain associated with their exact owner and method"
+    );
+}
+
 #[test]
 fn logger_typestate_and_released_deprecation_contracts() {
     let cases = trybuild::TestCases::new();

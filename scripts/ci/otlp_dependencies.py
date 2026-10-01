@@ -16,6 +16,15 @@ def validate_transport_dependencies(root: Path) -> set[str]:
     locked = {(p["name"], p["version"]) for p in load("Cargo.lock")["package"]}
     features = manifest["features"]
 
+    # The integration collector needs tonic's generated-service router, but
+    # only while compiling the hermetic test target.  It must never become an
+    # enabled legacy production transport edge.
+    if manifest.get("dev-dependencies", {}).get("tonic") != {
+        "workspace": True,
+        "features": ["router"],
+    }:
+        raise SystemExit("OTLP test collector must use only dev tonic/router")
+
     # Validate the reviewed SDK closure first. A dependency can later become a
     # direct, policy-governed transport (for example tonic for generated OTLP
     # clients); that must not change this invariant's diagnostic or let a
@@ -66,4 +75,6 @@ def validate_transport_dependencies(root: Path) -> set[str]:
         for backend in ("otlp-sdk", "legacy-http-json"):
             if (name in activated(backend)) != (backend in rule["backends"]):
                 raise SystemExit(prefix + f"incorrect binding to {backend}")
+    if "tonic" in activated("legacy-http-json"):
+        raise SystemExit("OTLP test collector tonic must not enter legacy-http-json")
     return set(policy)

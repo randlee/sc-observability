@@ -1,16 +1,17 @@
 //! Canonical observation extension contracts.
 //!
-//! These traits and registrations report the canonical `v2` errors. The
-//! released root traits in `projection` and `process` keep their 1.4.1
-//! signatures; both families share [`ObservationFilter`] and convert into each
-//! other by moving the original error context.
+//! These traits and registrations report the canonical `v2` errors and project
+//! the canonical `v2` span and metric models. The released root traits in
+//! `projection` and `process` keep their 1.4.1 signatures; both families share
+//! [`ObservationFilter`] and convert into each other by moving the original
+//! error context. Model conversion between the families fails explicitly when
+//! a value has no representation on the other side.
 
 use std::sync::Arc;
 
 use crate::errors_v2::{IdentityError, ProjectionError, SubscriberError};
-use crate::{
-    LogEvent, MetricRecord, Observable, Observation, ObservationFilter, ProcessIdentity, SpanSignal,
-};
+use crate::signals_v2::{MetricRecord, SpanSignal};
+use crate::{LogEvent, Observable, Observation, ObservationFilter, ProcessIdentity};
 
 type SubscriberRegistrationParts<T> = (
     Arc<dyn ObservationSubscriber<T>>,

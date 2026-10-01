@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use sc_observability::constants::MAX_LOG_EVENT_BYTES;
 use sc_observability::{
     AdmissionOutcome, EventError, FlushError, InitError, LevelOwner, LevelState, LogError,
     LogEvent, LogFollowSession, LogQuery, LogSnapshot, Logger, LoggerBuilder, LoggerConfig,
@@ -15,6 +16,11 @@ use sc_observability_types::typed::{FlushFailure, InitFailure, LogFailure, TryLo
 use sc_observability_types::{QueryError, ServiceName};
 
 type RootLoggerWithOwner<E> = Result<(Logger<Running>, LevelOwner), E>;
+
+#[test]
+fn released_max_log_event_bytes_remains_one_mebibyte() {
+    assert_eq!(MAX_LOG_EVENT_BYTES, 1024 * 1024);
+}
 
 #[test]
 fn released_root_signatures_remain_available() {

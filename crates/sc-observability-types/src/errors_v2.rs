@@ -128,12 +128,24 @@ context_error!(
 );
 
 impl EventError {
+    /// Creates a routing failure with its native-owned wire classification.
+    #[must_use]
+    pub fn classified_routing(
+        mut context: Box<ErrorContext>,
+        classification: FailureClassification,
+    ) -> Self {
+        context.set_failure_classification(classification);
+        Self::Routing { context }
+    }
+
     /// Returns the native-owned wire failure classification.
     #[must_use]
-    pub const fn failure_classification(&self) -> FailureClassification {
+    pub fn failure_classification(&self) -> FailureClassification {
         match self {
             Self::Validation { .. } => FailureClassification::validation("event"),
-            Self::Routing { .. } => FailureClassification::Unavailable,
+            Self::Routing { context } => context
+                .failure_classification()
+                .unwrap_or(FailureClassification::Unavailable),
         }
     }
 }
@@ -550,7 +562,7 @@ impl TelemetryError {
     }
     /// Returns the native-owned wire failure classification.
     #[must_use]
-    pub const fn failure_classification(&self) -> FailureClassification {
+    pub fn failure_classification(&self) -> FailureClassification {
         match self {
             Self::Shutdown { .. } => FailureClassification::Closed,
             Self::ExportFailure(error) => error.failure_classification(),
@@ -626,6 +638,74 @@ mod tests {
             error.failure_classification(),
             FailureClassification::Unavailable
         );
+    }
+
+    #[test]
+    fn routing_classification_retains_the_explicit_native_value() {
+        let error = EventError::classified_routing(
+            Box::new(context("writer shutdown timed out")),
+            FailureClassification::timeout("shutdown"),
+        );
+
+        assert_eq!(
+            error.failure_classification(),
+            FailureClassification::timeout("shutdown")
+        );
+    }
+
+    #[test]
+    fn routing_classification_preserves_context_and_released_wire_contract() {
+        for classification in [
+            FailureClassification::QueueFull,
+            FailureClassification::timeout("shutdown"),
+        ] {
+            let context = Box::new(
+                ErrorContext::new(
+                    crate::error_codes::DIAGNOSTIC_INVALID,
+                    "routing failure",
+                    crate::Remediation::recoverable("inspect the writer", ["retry the operation"]),
+                )
+                .source(Box::new(std::io::Error::other("retained routing source"))),
+            );
+            let context_pointer = std::ptr::from_ref(context.as_ref());
+            let plain = EventError::Routing {
+                context: context.clone(),
+            };
+            let error = EventError::classified_routing(context, classification);
+
+            assert_eq!(error.failure_classification(), classification);
+            assert_eq!(
+                plain.failure_classification(),
+                FailureClassification::Unavailable
+            );
+            assert!(std::ptr::eq(error.context(), context_pointer));
+            assert_eq!(error.diagnostic(), plain.diagnostic());
+            assert!(std::ptr::eq(
+                std::error::Error::source(error.context()).expect("classified source retained"),
+                std::error::Error::source(plain.context()).expect("plain source retained"),
+            ));
+            assert_eq!(
+                std::error::Error::source(error.context())
+                    .expect("classified source retained")
+                    .to_string(),
+                "retained routing source"
+            );
+            assert_eq!(
+                error, plain,
+                "classification is not released equality state"
+            );
+            let wire = serde_json::to_vec(&error).expect("classified event serializes");
+            assert_eq!(
+                wire,
+                serde_json::to_vec(&plain).expect("plain event serializes")
+            );
+            let decoded: EventError = serde_json::from_slice(&wire).expect("event deserializes");
+            assert_eq!(
+                decoded.failure_classification(),
+                FailureClassification::Unavailable
+            );
+            assert_eq!(decoded.diagnostic(), error.diagnostic());
+        }
     }
 
     #[test]

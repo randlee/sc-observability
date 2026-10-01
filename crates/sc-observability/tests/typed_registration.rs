@@ -1,5 +1,6 @@
 //! Consumer coverage for typed sink registration in the logging builder.
 
+use std::fs;
 use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
@@ -192,6 +193,52 @@ fn typed_registration_reports_duplicate_invalid_and_closed_sinks() {
 }
 
 #[test]
+fn typed_registration_detects_a_sink_already_added_through_raw_registration() {
+    let duplicate = Arc::new(RecordingTypedSink::default());
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
+    builder.register_sink(SinkRegistration::typed(duplicate.clone()));
+
+    let Err(error) = builder.register_typed_sink(duplicate) else {
+        panic!("typed registration must detect the raw duplicate");
+    };
+    assert_diagnostic_info(&error);
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE
+    );
+}
+
+#[test]
+fn raw_registration_accepts_degraded_sinks_and_preserves_filtering() {
+    let degraded = Arc::new(RecordingTypedSink::default());
+    *degraded.state.write().expect("sink health poisoned") = SinkHealthState::DegradedDropping;
+    let filtered = Arc::new(RecordingTypedSink::default());
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
+
+    builder.register_sink(SinkRegistration::typed(degraded.clone()));
+    builder
+        .register_sink(SinkRegistration::typed(filtered.clone()).with_filter(Arc::new(AllowInfo)));
+    let logger = builder
+        .build()
+        .expect("raw registration accepts both sinks");
+
+    logger.log(event()).expect("admit info event");
+    let mut rejected = event();
+    rejected.level = Level::Error;
+    logger.log(rejected).expect("admit error event");
+    logger.flush().expect("wait for registered sinks");
+
+    assert_eq!(
+        degraded.health_snapshot().state,
+        SinkHealthState::DegradedDropping
+    );
+    assert_eq!(degraded.writes.load(Ordering::SeqCst), 2);
+    assert!(degraded.flushes.load(Ordering::SeqCst) >= 1);
+    assert_eq!(filtered.writes.load(Ordering::SeqCst), 1);
+    assert!(filtered.flushes.load(Ordering::SeqCst) >= 1);
+}
+
+#[test]
 fn released_typed_adapter_preserves_failure_diagnostic_and_source() {
     struct FailingReleasedSink;
 
@@ -231,6 +278,69 @@ fn released_typed_adapter_preserves_failure_diagnostic_and_source() {
             .is_some_and(<dyn std::error::Error>::is::<io::Error>)
     );
     assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+}
+
+#[test]
+fn released_built_in_typed_sinks_coerce_register_and_preserve_runtime_failures() {
+    let root = tempfile::tempdir().expect("temporary log root");
+    let file_path = root.path().join("logs/typed.jsonl");
+    let file: Arc<dyn typed::TypedLogSink> = Arc::new(JsonlFileSink::new(
+        file_path.clone(),
+        RotationPolicy::default(),
+        RetentionPolicy::default(),
+    ));
+    let console: Arc<dyn typed::TypedLogSink> = Arc::new(ConsoleSink::stdout());
+
+    // These are real downstream coercions of each released built-in, not a
+    // type-only pin. Exercise every typed method before registering them.
+    file.write(&event()).expect("typed file write");
+    file.flush().expect("typed file flush");
+    assert_eq!(file.health().state, SinkHealthState::Healthy);
+    console.write(&event()).expect("typed console write");
+    console.flush().expect("typed console flush");
+    assert_eq!(console.health().state, SinkHealthState::Healthy);
+
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
+    builder.register_sink(SinkRegistration::new(legacy_sink(file)));
+    builder.register_sink(SinkRegistration::new(legacy_sink(console)));
+    let logger = builder
+        .build()
+        .expect("built-in typed sinks register through legacy_sink");
+    let mut registered_event = event();
+    registered_event.message = Some("registered built-in typed delivery".to_owned());
+    logger
+        .log(registered_event)
+        .expect("registered built-in sinks receive events");
+    logger.flush().expect("registered built-in sinks flush");
+    logger.shutdown();
+    let persisted = fs::read_to_string(&file_path).expect("registered file sink wrote its event");
+    let persisted_events: Vec<LogEvent> = persisted
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("persisted JSONL event"))
+        .collect();
+    assert!(
+        persisted_events.iter().any(|event| {
+            event.message.as_deref() == Some("registered built-in typed delivery")
+        }),
+        "registered event survives the legacy_sink registration and flush"
+    );
+
+    let blocked_parent = root.path().join("blocked-parent");
+    fs::write(&blocked_parent, "not a directory").expect("block file-sink parent");
+    let failing: Arc<dyn typed::TypedLogSink> = Arc::new(JsonlFileSink::new(
+        blocked_parent.join("typed.jsonl"),
+        RotationPolicy::default(),
+        RetentionPolicy::default(),
+    ));
+    let error = failing
+        .write(&event())
+        .expect_err("blocked typed file sink fails");
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::LOGGER_SINK_WRITE_FAILED
+    );
+    assert!(std::error::Error::source(&error).is_some());
+    assert_eq!(failing.health().state, SinkHealthState::DegradedDropping);
 }
 
 /// Canonical sink that fails every write and flush and counts each attempt.

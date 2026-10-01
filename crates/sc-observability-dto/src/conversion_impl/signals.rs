@@ -112,11 +112,7 @@ impl TryFrom<MetricRecordDto> for core::v2::MetricRecord {
         )
         .map_err(model_failure)?;
         Ok(record
-            .with_unit(
-                v.unit
-                    .map(|v| checked(core::MetricUnit::new(v), "unit"))
-                    .transpose()?,
-            )
+            .with_unit(optional_checked(v.unit, "unit", core::MetricUnit::new)?)
             .with_attributes(to_attributes(v.attributes)?))
     }
 }

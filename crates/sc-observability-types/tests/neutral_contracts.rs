@@ -1497,3 +1497,422 @@ mod released_canonical_conversion {
         assert_eq!(identity(&error.0), expected);
     }
 }
+
+mod released_canonical_model_conversion {
+    //! Registration conversion maps span and metric models field by field and
+    //! returns a projection error for a value the other family cannot hold.
+
+    #![allow(
+        deprecated,
+        reason = "the released root traits report the retained root errors"
+    )]
+
+    use std::sync::Arc;
+
+    use sc_observability_types::v2;
+    use sc_observability_types::*;
+    use serde_json::{Map, json};
+
+    const TRACE: &str = "0123456789abcdef0123456789abcdef";
+    const SPAN: &str = "0123456789abcdef";
+    const PARENT: &str = "fedcba9876543210";
+
+    fn service() -> ServiceName {
+        ServiceName::new("model-conversion").expect("valid service")
+    }
+
+    fn observation() -> Observation<String> {
+        Observation::new(service(), "payload".to_string())
+    }
+
+    fn later() -> Timestamp {
+        serde_json::from_str("\"1970-01-01T00:00:05Z\"").expect("valid timestamp")
+    }
+
+    fn released_trace() -> TraceContext {
+        TraceContext {
+            trace_id: TraceId::new(TRACE).expect("trace"),
+            span_id: SpanId::new(SPAN).expect("span"),
+            parent_span_id: Some(SpanId::new(PARENT).expect("parent")),
+        }
+    }
+
+    fn canonical_trace(flags: u8) -> v2::TraceContext {
+        v2::TraceContext::new(
+            TraceId::new(TRACE).expect("trace"),
+            SpanId::new(SPAN).expect("span"),
+            v2::TraceFlags::new(flags),
+        )
+        .with_parent(SpanId::new(PARENT).expect("parent"))
+    }
+
+    fn released_metric(kind: MetricKind, value: f64) -> MetricRecord {
+        MetricRecord {
+            timestamp: later(),
+            service: service(),
+            name: MetricName::new("conversion.value").expect("metric"),
+            kind,
+            value,
+            unit: Some(MetricUnit::new("ms").expect("unit")),
+            attributes: Map::from_iter([("count".to_owned(), json!(3))]),
+        }
+    }
+
+    struct Released(Vec<SpanSignal>, Vec<MetricRecord>);
+
+    impl SpanProjector<String> for Released {
+        fn project_spans(
+            &self,
+            _: &Observation<String>,
+        ) -> Result<Vec<SpanSignal>, ProjectionError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    impl MetricProjector<String> for Released {
+        fn project_metrics(
+            &self,
+            _: &Observation<String>,
+        ) -> Result<Vec<MetricRecord>, ProjectionError> {
+            Ok(self.1.clone())
+        }
+    }
+
+    struct Canonical(Vec<v2::SpanSignal>, Vec<v2::MetricRecord>);
+
+    impl v2::SpanProjector<String> for Canonical {
+        fn project_spans(
+            &self,
+            _: &Observation<String>,
+        ) -> Result<Vec<v2::SpanSignal>, v2::ProjectionError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    impl v2::MetricProjector<String> for Canonical {
+        fn project_metrics(
+            &self,
+            _: &Observation<String>,
+        ) -> Result<Vec<v2::MetricRecord>, v2::ProjectionError> {
+            Ok(self.1.clone())
+        }
+    }
+
+    fn to_canonical(
+        released: Released,
+    ) -> (
+        Arc<dyn v2::SpanProjector<String>>,
+        Arc<dyn v2::MetricProjector<String>>,
+    ) {
+        let released = Arc::new(released);
+        let (_, span, metric, _) = v2::ProjectionRegistration::from(
+            ProjectionRegistration::new()
+                .with_span_projector(released.clone())
+                .with_metric_projector(released),
+        )
+        .into_parts();
+        (span.expect("span"), metric.expect("metric"))
+    }
+
+    fn to_released(
+        canonical: Canonical,
+    ) -> (
+        Arc<dyn SpanProjector<String>>,
+        Arc<dyn MetricProjector<String>>,
+    ) {
+        let canonical = Arc::new(canonical);
+        let (_, span, metric, _) = ProjectionRegistration::from(
+            v2::ProjectionRegistration::new()
+                .with_span_projector(canonical.clone())
+                .with_metric_projector(canonical),
+        )
+        .into_parts();
+        (span.expect("span"), metric.expect("metric"))
+    }
+
+    fn canonical_started(flags: u8) -> v2::SpanRecord<SpanStarted> {
+        v2::SpanRecord::new(
+            Timestamp::UNIX_EPOCH,
+            service(),
+            ActionName::new("conversion.run").expect("action"),
+            canonical_trace(flags),
+            v2::Attributes::from([("count".to_owned(), v2::AttributeValue::Int(3))]),
+        )
+    }
+
+    fn canonical_metric(value: v2::MetricValue) -> v2::MetricRecord {
+        v2::MetricRecord::try_new(
+            later(),
+            service(),
+            MetricName::new("conversion.value").expect("metric"),
+            value,
+        )
+        .expect("valid canonical metric")
+        .with_unit(Some(MetricUnit::new("ms").expect("unit")))
+        .with_attributes(v2::Attributes::from([(
+            "count".to_owned(),
+            v2::AttributeValue::Int(3),
+        )]))
+    }
+
+    fn finite(value: f64) -> v2::FiniteF64 {
+        v2::FiniteF64::new(value).expect("finite")
+    }
+
+    #[test]
+    fn released_models_convert_to_canonical_with_every_field() {
+        let started = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service(),
+            ActionName::new("conversion.run").expect("action"),
+            released_trace(),
+            Map::from_iter([("count".to_owned(), json!(3))]),
+        );
+        let ended = started.clone().end(SpanStatus::Error, DurationMs::from(12));
+        let event = SpanEvent {
+            timestamp: later(),
+            trace: released_trace(),
+            name: ActionName::new("conversion.event").expect("event"),
+            attributes: Map::from_iter([("flag".to_owned(), json!(true))]),
+            diagnostic: None,
+        };
+        let (span, metric) = to_canonical(Released(
+            vec![
+                SpanSignal::Started(started),
+                SpanSignal::Event(event),
+                SpanSignal::Ended(ended),
+            ],
+            vec![
+                released_metric(MetricKind::Counter, 4.0),
+                released_metric(MetricKind::Gauge, -2.5),
+            ],
+        ));
+
+        let expected_started = canonical_started(0);
+        let expected_event = v2::SpanEvent {
+            timestamp: later(),
+            trace: canonical_trace(0),
+            name: ActionName::new("conversion.event").expect("event"),
+            attributes: v2::Attributes::from([("flag".to_owned(), v2::AttributeValue::Bool(true))]),
+            diagnostic: None,
+        };
+        assert_eq!(
+            span.project_spans(&observation())
+                .expect("representable spans"),
+            vec![
+                v2::SpanSignal::Started(expected_started.clone()),
+                v2::SpanSignal::Event(expected_event),
+                v2::SpanSignal::Ended(
+                    expected_started.end(SpanStatus::Error, DurationMs::from(12))
+                ),
+            ]
+        );
+        assert_eq!(
+            metric
+                .project_metrics(&observation())
+                .expect("representable metrics"),
+            vec![
+                canonical_metric(v2::MetricValue::Sum {
+                    value: finite(4.0),
+                    monotonic: true,
+                    temporality: v2::AggregationTemporality::Cumulative,
+                    start_time: later(),
+                }),
+                canonical_metric(v2::MetricValue::Gauge(finite(-2.5))),
+            ]
+        );
+    }
+
+    #[test]
+    fn released_scalar_histogram_and_invalid_values_fail_canonical_conversion() {
+        for (metric, message) in [
+            (
+                released_metric(MetricKind::Histogram, 7.0),
+                "released scalar histogram has no canonical bucket distribution",
+            ),
+            (
+                released_metric(MetricKind::Gauge, f64::NAN),
+                "released metric value is not finite",
+            ),
+            (
+                released_metric(MetricKind::Counter, -1.0),
+                "released metric violates the canonical metric contract",
+            ),
+        ] {
+            let (_, projector) = to_canonical(Released(Vec::new(), vec![metric]));
+            let error = projector
+                .project_metrics(&observation())
+                .expect_err("unrepresentable released metric");
+            assert!(matches!(error, v2::ProjectionError::Projection { .. }));
+            assert_eq!(error.diagnostic().message, message);
+            assert_eq!(
+                error.diagnostic().code,
+                error_codes::VALUE_VALIDATION_FAILED
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_models_convert_to_released_when_representable() {
+        let started = canonical_started(0);
+        let (span, metric) = to_released(Canonical(
+            vec![
+                v2::SpanSignal::Started(started.clone()),
+                v2::SpanSignal::Ended(started.end(SpanStatus::Ok, DurationMs::from(9))),
+            ],
+            vec![canonical_metric(v2::MetricValue::Sum {
+                value: finite(4.0),
+                monotonic: true,
+                temporality: v2::AggregationTemporality::Cumulative,
+                start_time: later(),
+            })],
+        ));
+
+        let spans = span.project_spans(&observation()).expect("representable");
+        let SpanSignal::Ended(ended) = &spans[1] else {
+            panic!("second signal is the ended span");
+        };
+        assert_eq!(ended.trace(), &released_trace());
+        assert_eq!(ended.duration_ms(), Some(DurationMs::from(9)));
+        assert_eq!(ended.attributes().get("count"), Some(&json!(3)));
+        assert_eq!(
+            metric
+                .project_metrics(&observation())
+                .expect("representable"),
+            vec![released_metric(MetricKind::Counter, 4.0)]
+        );
+    }
+
+    #[test]
+    fn canonical_trace_fields_and_histograms_fail_released_conversion() {
+        let link = v2::SpanLink::new(
+            TraceId::new(TRACE).expect("trace"),
+            SpanId::new(PARENT).expect("span"),
+            v2::TraceFlags::new(1),
+            v2::Attributes::new(),
+        );
+        for (signal, message) in [
+            (
+                canonical_started(1),
+                "canonical trace flags have no released representation",
+            ),
+            (
+                canonical_started(0).with_kind(v2::SpanKind::Server),
+                "canonical span kind has no released representation",
+            ),
+            (
+                canonical_started(0).with_links(vec![link]),
+                "canonical span links have no released representation",
+            ),
+        ] {
+            let (span, _) =
+                to_released(Canonical(vec![v2::SpanSignal::Started(signal)], Vec::new()));
+            let error = span
+                .project_spans(&observation())
+                .expect_err("unrepresentable canonical span");
+            assert_eq!(error.0.diagnostic().message, message);
+        }
+
+        let histogram =
+            v2::HistogramPoint::try_new(vec![finite(10.0)], vec![1, 2], 3, finite(42.0))
+                .expect("valid histogram");
+        for (value, message) in [
+            (
+                v2::MetricValue::Histogram {
+                    point: histogram,
+                    temporality: v2::AggregationTemporality::Delta,
+                    start_time: Timestamp::UNIX_EPOCH,
+                },
+                "canonical histogram buckets have no released representation",
+            ),
+            (
+                v2::MetricValue::Sum {
+                    value: finite(4.0),
+                    monotonic: true,
+                    temporality: v2::AggregationTemporality::Delta,
+                    start_time: Timestamp::UNIX_EPOCH,
+                },
+                "canonical sum interval has no released representation",
+            ),
+        ] {
+            let (_, metric) = to_released(Canonical(Vec::new(), vec![canonical_metric(value)]));
+            let error = metric
+                .project_metrics(&observation())
+                .expect_err("unrepresentable canonical metric");
+            assert_eq!(error.0.diagnostic().message, message);
+            assert_eq!(
+                error.0.diagnostic().code,
+                error_codes::VALUE_VALIDATION_FAILED
+            );
+        }
+    }
+
+    #[test]
+    fn nested_released_attributes_convert_recursively_on_every_span_and_metric_path() {
+        let nested = Map::from_iter([(
+            "nested".to_owned(),
+            json!({ "values": [1, u64::MAX, -2, 2.5, "text", null, true, { "deep": [3] }] }),
+        )]);
+        let expected = v2::Attributes::from([(
+            "nested".to_owned(),
+            v2::AttributeValue::Object(v2::Attributes::from([(
+                "values".to_owned(),
+                v2::AttributeValue::Array(vec![
+                    v2::AttributeValue::Int(1),
+                    v2::AttributeValue::UInt(u64::MAX),
+                    v2::AttributeValue::Int(-2),
+                    v2::AttributeValue::Float(v2::FiniteF64::new(2.5).expect("finite")),
+                    v2::AttributeValue::String("text".to_owned()),
+                    v2::AttributeValue::Null,
+                    v2::AttributeValue::Bool(true),
+                    v2::AttributeValue::Object(v2::Attributes::from([(
+                        "deep".to_owned(),
+                        v2::AttributeValue::Array(vec![v2::AttributeValue::Int(3)]),
+                    )])),
+                ]),
+            )])),
+        )]);
+        let started = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service(),
+            ActionName::new("conversion.run").expect("action"),
+            released_trace(),
+            nested.clone(),
+        );
+        let event = SpanEvent {
+            timestamp: Timestamp::UNIX_EPOCH,
+            trace: released_trace(),
+            name: ActionName::new("conversion.event").expect("event"),
+            attributes: nested.clone(),
+            diagnostic: None,
+        };
+        let ended = started.clone().end(SpanStatus::Ok, DurationMs::from(4));
+        let mut metric = released_metric(MetricKind::Gauge, 1.0);
+        metric.attributes = nested;
+        let (spans, metrics) = to_canonical(Released(
+            vec![
+                SpanSignal::Started(started),
+                SpanSignal::Event(event),
+                SpanSignal::Ended(ended),
+            ],
+            vec![metric],
+        ));
+
+        let spans = spans.project_spans(&observation()).expect("spans convert");
+        let [
+            v2::SpanSignal::Started(started),
+            v2::SpanSignal::Event(event),
+            v2::SpanSignal::Ended(ended),
+        ] = spans.as_slice()
+        else {
+            panic!("three converted span signals: {spans:?}");
+        };
+        assert_eq!(started.attributes(), &expected);
+        assert_eq!(event.attributes, expected);
+        assert_eq!(ended.attributes(), &expected);
+        let metrics = metrics
+            .project_metrics(&observation())
+            .expect("metric converts");
+        assert_eq!(metrics[0].attributes(), &expected);
+    }
+}

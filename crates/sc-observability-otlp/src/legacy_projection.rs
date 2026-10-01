@@ -4,76 +4,15 @@
 //! obscure lifecycle ownership and public telemetry behavior.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
-use crate::assembly::CompleteSpan;
-use crate::contracts::{self, LogExporter, MetricExporter, TraceExporter};
-use sc_observability_types::otlp::{
-    OtlpCompleteSpan, OtlpInstrumentationScope, OtlpLogRecord, OtlpRecord, OtlpResource,
-};
+use crate::contracts::{ExportRecord, LogRecord};
+use sc_observability_types::otlp::{OtlpInstrumentationScope, OtlpLogRecord, OtlpResource};
 use sc_observability_types::v2::{ConfigFailure, ExportError};
-use sc_observability_types::{ErrorContext, LogEvent, MetricRecord, Remediation, ServiceName};
+use sc_observability_types::{
+    ErrorContext, LogEvent, MetricRecord, Remediation, ServiceName, SpanSignal,
+};
 
-use super::ExporterSet;
-
-#[allow(
-    dead_code,
-    reason = "the optional legacy backend selects this projection only when enabled"
-)]
-pub(super) fn raw_exporter_set(exporters: contracts::ExporterSet) -> ExporterSet {
-    ExporterSet {
-        logs: Arc::new(RawLogExporter {
-            inner: exporters.logs,
-        }),
-        traces: Arc::new(RawTraceExporter {
-            inner: exporters.traces,
-        }),
-        metrics: Arc::new(RawMetricExporter {
-            inner: exporters.metrics,
-        }),
-        lifecycle: exporters.lifecycle,
-    }
-}
-
-#[allow(dead_code)]
-struct RawLogExporter {
-    inner: Arc<dyn LogExporter>,
-}
-impl LogExporter<LogEvent> for RawLogExporter {
-    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
-        self.inner
-            .export_logs(&batch.iter().map(log_record).collect::<Vec<_>>())
-    }
-}
-#[allow(dead_code)]
-struct RawTraceExporter {
-    inner: Arc<dyn TraceExporter>,
-}
-impl TraceExporter<CompleteSpan> for RawTraceExporter {
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
-        let records = batch
-            .iter()
-            .map(span_record)
-            .collect::<Result<Vec<_>, _>>()?;
-        self.inner.export_spans(&records)
-    }
-}
-#[allow(dead_code)]
-struct RawMetricExporter {
-    inner: Arc<dyn MetricExporter>,
-}
-impl MetricExporter<MetricRecord> for RawMetricExporter {
-    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
-        let records = batch
-            .iter()
-            .map(metric_record)
-            .collect::<Result<Vec<_>, _>>()?;
-        self.inner.export_metrics(&records)
-    }
-}
-
-#[allow(dead_code)]
-fn resource(service: &ServiceName) -> OtlpResource {
+pub(super) fn resource(service: &ServiceName) -> OtlpResource {
     OtlpResource {
         attributes: BTreeMap::from_iter([(
             "service.name".to_owned(),
@@ -82,9 +21,8 @@ fn resource(service: &ServiceName) -> OtlpResource {
         schema_url: None,
     }
 }
-#[allow(dead_code)]
-fn log_record(event: &LogEvent) -> OtlpRecord<OtlpLogRecord> {
-    OtlpRecord {
+pub(super) fn log_record(event: &LogEvent) -> ExportRecord<LogRecord> {
+    ExportRecord {
         resource: resource(&event.service),
         scope: OtlpInstrumentationScope::default(),
         record: OtlpLogRecord {
@@ -94,56 +32,62 @@ fn log_record(event: &LogEvent) -> OtlpRecord<OtlpLogRecord> {
         },
     }
 }
-#[allow(dead_code)]
-fn span_record(span: &CompleteSpan) -> Result<OtlpRecord<OtlpCompleteSpan>, ExportError> {
-    let trace = trace_context(span.record.trace());
-    let mut started = sc_observability_types::v2::SpanRecord::new(
-        span.record.timestamp(),
-        span.record.service().clone(),
-        span.record.name().clone(),
-        trace,
-        attributes(span.record.attributes()),
-    );
-    if let Some(diagnostic) = span.record.diagnostic().cloned() {
-        started = started.with_diagnostic(diagnostic);
-    }
-    let duration = span
-        .record
-        .duration_ms()
-        .ok_or_else(|| transport_error("completed span has no duration"))?;
-    let ended = started.end(
-        match span.record.status() {
-            sc_observability_types::SpanStatus::Ok => sc_observability_types::v2::SpanStatus::Ok,
-            sc_observability_types::SpanStatus::Error => {
-                sc_observability_types::v2::SpanStatus::Error
-            }
-            sc_observability_types::SpanStatus::Unset => {
-                sc_observability_types::v2::SpanStatus::Unset
-            }
-        },
-        duration,
-    );
-    Ok(OtlpRecord {
-        resource: resource(span.record.service()),
-        scope: OtlpInstrumentationScope::default(),
-        record: OtlpCompleteSpan {
-            record: ended,
-            events: span
-                .events
-                .iter()
-                .map(|event| sc_observability_types::v2::SpanEvent {
-                    timestamp: event.timestamp,
-                    trace: trace_context(&event.trace),
-                    name: event.name.clone(),
-                    attributes: attributes(&event.attributes),
-                    diagnostic: event.diagnostic.clone(),
-                })
-                .collect(),
-        },
+/// Converts a released span signal to the canonical model at admission.
+///
+/// Released spans carry no kind, links or trace flags, so the canonical
+/// defaults apply; every released field is preserved.
+pub(super) fn span_signal(
+    signal: &SpanSignal,
+) -> Result<sc_observability_types::v2::SpanSignal, ExportError> {
+    use sc_observability_types::v2::SpanSignal as Canonical;
+    Ok(match signal {
+        SpanSignal::Started(record) => Canonical::Started(started_record(record)),
+        SpanSignal::Event(event) => Canonical::Event(span_event(event)),
+        SpanSignal::Ended(record) => {
+            let duration = record
+                .duration_ms()
+                .ok_or_else(|| transport_error("completed span has no duration"))?;
+            Canonical::Ended(started_record(record).end(span_status(record.status()), duration))
+        }
     })
 }
 
-#[allow(dead_code)]
+fn started_record<S>(
+    record: &sc_observability_types::SpanRecord<S>,
+) -> sc_observability_types::v2::SpanRecord<sc_observability_types::v2::SpanStarted> {
+    let started = sc_observability_types::v2::SpanRecord::new(
+        record.timestamp(),
+        record.service().clone(),
+        record.name().clone(),
+        trace_context(record.trace()),
+        attributes(record.attributes()),
+    );
+    match record.diagnostic().cloned() {
+        Some(diagnostic) => started.with_diagnostic(diagnostic),
+        None => started,
+    }
+}
+
+fn span_status(
+    status: sc_observability_types::SpanStatus,
+) -> sc_observability_types::v2::SpanStatus {
+    match status {
+        sc_observability_types::SpanStatus::Ok => sc_observability_types::v2::SpanStatus::Ok,
+        sc_observability_types::SpanStatus::Error => sc_observability_types::v2::SpanStatus::Error,
+        sc_observability_types::SpanStatus::Unset => sc_observability_types::v2::SpanStatus::Unset,
+    }
+}
+
+fn span_event(event: &sc_observability_types::SpanEvent) -> sc_observability_types::v2::SpanEvent {
+    sc_observability_types::v2::SpanEvent {
+        timestamp: event.timestamp,
+        trace: trace_context(&event.trace),
+        name: event.name.clone(),
+        attributes: attributes(&event.attributes),
+        diagnostic: event.diagnostic.clone(),
+    }
+}
+
 pub(super) fn trace_context(
     trace: &sc_observability_types::TraceContext,
 ) -> sc_observability_types::v2::TraceContext {
@@ -157,10 +101,9 @@ pub(super) fn trace_context(
         None => context,
     }
 }
-#[allow(dead_code)]
-fn metric_record(
+pub(super) fn metric_record(
     metric: &MetricRecord,
-) -> Result<OtlpRecord<sc_observability_types::v2::MetricRecord>, ExportError> {
+) -> Result<ExportRecord<sc_observability_types::v2::MetricRecord>, ExportError> {
     let value = match metric.kind {
         sc_observability_types::MetricKind::Gauge => {
             sc_observability_types::v2::MetricValue::Gauge(
@@ -192,13 +135,12 @@ fn metric_record(
     .map_err(|_| transport_error("metric violates canonical interval contract"))?
     .with_unit(metric.unit.clone())
     .with_attributes(attributes(&metric.attributes));
-    Ok(OtlpRecord {
+    Ok(ExportRecord {
         resource: resource(&metric.service),
         scope: OtlpInstrumentationScope::default(),
         record,
     })
 }
-#[allow(dead_code)]
 fn attributes(
     values: &serde_json::Map<String, serde_json::Value>,
 ) -> sc_observability_types::v2::Attributes {
@@ -207,7 +149,6 @@ fn attributes(
         .map(|(key, value)| (key.clone(), attribute(value)))
         .collect()
 }
-#[allow(dead_code)]
 fn attribute(value: &serde_json::Value) -> sc_observability_types::v2::AttributeValue {
     use sc_observability_types::v2::{AttributeValue, FiniteF64};
     match value {
@@ -228,7 +169,6 @@ fn attribute(value: &serde_json::Value) -> sc_observability_types::v2::Attribute
         serde_json::Value::Object(v) => AttributeValue::Object(attributes(v)),
     }
 }
-#[allow(dead_code)]
 fn transport_error(message: &str) -> ExportError {
     ExportError::TerminalExportFailure {
         context: Box::new(ErrorContext::new(

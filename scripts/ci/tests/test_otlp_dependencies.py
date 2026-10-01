@@ -33,6 +33,14 @@ class TransportPolicyTests(unittest.TestCase):
     def test_reviewed_manifest(self):
         self.assertIn("opentelemetry-otlp", validate_transport_dependencies(self.root))
 
+    def test_test_collector_router_must_remain_dev_only(self):
+        self.replace(
+            MANIFEST,
+            'tonic = { workspace = true, features = ["router"] }',
+            'tonic = { workspace = true }',
+        )
+        self.rejects("test collector must use only dev tonic/router")
+
     def test_nonoptional_transport(self):
         self.replace(MANIFEST, 'reqwest = { workspace = true, optional = true }', 'reqwest.workspace = true')
         self.rejects("reqwest: must be optional")
