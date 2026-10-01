@@ -18,12 +18,13 @@ decides both:
 | Setting | Where | sc-observability |
 | --- | --- | --- |
 | member | `roles.dev-sanity` in `.claude/agents/registry.yaml`; print it with `.claude/skills/atm-beads/scripts/resolve-role dev-sanity` | `obs-sanity` |
-| directive | that member's `[startup.<member>]` prompt in `.atm.toml` | `.claude/agents/dev-sanity-llm.md` |
+| directive | that member's `[startup.<member>]` prompt in `.atm.toml` | `.claude/agents/dev-sanity.md` |
 
 The member name is unique to the team, because Herdr agent names are global
 on the host. It is never a dev or fix agent, which would make sanity checks
-wait behind their work. Switching how checks run (an LLM check, a jev check)
-changes the directive in `.atm.toml`, not this skill.
+wait behind their work. The assignment selects `both` (default), `llm`, or
+`jev`; the same coordinator handles every selection. Both uses LLM for operational verdict/finding children
+and JEV for independent comparison. A single reviewer controls its own run.
 
 ## Tasks
 
@@ -68,17 +69,20 @@ One check is one closed bead at one pinned commit, split per deliverable:
   bead's `owned_paths`, starts the lint command in the background, and
   renders one assignment per deliverable from
   `templates/dev-sanity-assignment.json.j2`.
-- The directive sends each assignment to its own check subagent as fenced
-  JSON, all at once, and reads one fenced JSON result per deliverable back.
+- The directive sends each assignment unchanged to one child of each selected
+  reviewer as fenced JSON, dispatches both reviewer families concurrently
+  in the background before waiting for either, and keeps separate results.
+  Merge and log each reviewer when it finishes while the other continues.
   The subagent owns that contract, in its `## Inputs` and `## Output Format`:
   [`.claude/agents/sc-sanity-llm.md`](../../../agents/sc-sanity-llm.md).
   Every check subagent (`sc-sanity-jev.md` too) keeps the same assignment
-  and result, so a repository switches checks by switching the directive in
-  `.atm.toml`.
+  and result, with identical assignments at one pinned commit and shared lint
+  run once.
 - `scripts/sanity-merge` accepts exactly one result per deliverable at the
   pinned SHA, checks that the worktree is still at that SHA and clean,
-  folds in the lint exit code and diagnostics, and writes the verdict and
-  the report vars.
+  folds in the lint exit code and diagnostics, and writes each reviewer’s
+  verdict and report vars separately, carrying
+  the shared run_id, reviewer identity, tested commit and own UTC timing.
 
 The check leaves nothing in the repository: `sanity-split` writes only the
 lint log and the lint exit file under `--scratch`, the renderer's transient
@@ -99,7 +103,7 @@ in the report by number, done or with its findings, so closure is explicit.
 | cannot run | stays open, with a note | `refused`, `task-refused.md.j2` |
 
 A FAIL never closes the bead. Closing it would release the dev beads that
-depend on the checked sprint. The sanity member creates one child finding bead of
+depend on the checked sprint. Only the operational reviewer’s FAIL creates one child finding bead of
 the checked bead per undone deliverable, never one per lint diagnostic. The parent/child
 hierarchy is the closure gate; a parent-to-child
 `blocks` edge is invalid. Each child is blocking at `clamp(parent priority - 1, P1, P4)`, records
@@ -113,3 +117,20 @@ same sanity check bead ready again.
 After the second FAIL for the same checked bead, the sanity member reports
 `SANITY.ROUND_CAP` to the lead with the undone deliverable numbers. No third
 round is dispatched without the lead's ruling.
+
+## Mandatory Console Report
+
+Follow the canonical [coordinator](../../../agents/dev-sanity.md): append each
+selected reviewer’s PASS/FAIL/CANNOT_RUN independently to the same ignored phase
+JSONL via `sanity-run-history`: strict sc-compose record-template render,
+typed JSON validation, compact serialization, locked append. Failed render or
+validation must append nothing; use no unsupported `--append` option. Then render
+the newest ten **runs**, grouping all reviewer rows sharing
+run_id. Default both produces up to twenty rows. Include the rendered table
+as Markdown in the user-visible completion reply after the operational close.
+The compact columns are `S | PR | R | Find | Result | Done | Iter`; no full task
+IDs. New ledger timestamps are UTC only; local display is derived at rendering.
+Legacy rows are LLM by user attestation; never rewrite historical ledgers.
+CANNOT_RUN has unknown findings and an explicit error, never a fabricated PASS.
+Pre-dispatch refusals have no reviewer result to log. Report ledger/render errors
+as `SANITY.STATUS_TABLE_UNAVAILABLE` without changing either conclusion.

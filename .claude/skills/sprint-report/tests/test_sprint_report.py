@@ -171,6 +171,28 @@ class SprintReportTests(unittest.TestCase):
             path.write_text('\n'.join(json.dumps(run) for run in runs) + '\n')
             self.assertEqual(report.sanity_iterations(path), {'sanity-1': 13, 'sanity-2': 6})
 
+    def test_renamed_sanity_history_merges_with_phase_log_and_filters_other_phases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            historical = root / 'sanity-llm.jsonl'
+            old_rows = [
+                {'task': 'sanity-1', 'phase': 'phase-d', 'iteration': 9},
+                {'task': 'sanity-old', 'sprint': 'd-2', 'iteration': 4},
+                {'task': 'sanity-1', 'phase': 'e', 'iteration': 99},
+                {'task': 'other-phase', 'sprint': 'e-2', 'iteration': 80},
+            ]
+            for row in old_rows:
+                row.update(verdict='PASS', completed_at='2026-09-26T00:00:00Z')
+            historical.write_text('\n'.join(json.dumps(row) for row in old_rows) + '\n')
+            original = historical.read_bytes()
+            self.assertEqual(report.phase_sanity_iterations(root, 'd'), {'sanity-1': 9, 'sanity-old': 4})
+            paired = [dict(task='sanity-1', iteration=10, verdict='PASS', run_id='paired',
+                           reviewer=reviewer, completed_at='2026-09-30T00:00:00Z')
+                      for reviewer in ('sanity-llm', 'sanity-jev')]
+            (root / 'phase-d.jsonl').write_text('\n'.join(json.dumps(row) for row in paired) + '\n')
+            self.assertEqual(report.phase_sanity_iterations(root, 'phase-d'), {'sanity-1': 10, 'sanity-old': 4})
+            self.assertEqual(historical.read_bytes(), original)
+
     def test_qa_table_uses_original_icons(self):
         cases = [
             (None, [], ''),
