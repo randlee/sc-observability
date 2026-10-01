@@ -37,8 +37,17 @@ No converter redesign is required by this Phase D disposition.
 `sc-observability-types` exposes the native error enums as `#[non_exhaustive]`.
 At this revision, all 12 `ExportError` variants have explicit DTO mappings, so
 downstream or integration tests cannot safely construct a future variant to
-exercise the local wildcard-to-`Internal` fallback. The fallback remains in the
-production match arms for variants added in a later revision; executable
-coverage for such a variant must be added with that variant's producer. This
-limitation does not affect decoded unknown wire discriminants, which retain the
-separate `UnknownRemote` result and are covered by the existing contract test.
+exercise the local wildcard fallback. That arm delegates to
+`TelemetryError::failure_classification()` so a later native variant retains
+its classification rather than defaulting to `Internal`; executable coverage
+for such a variant must be added with that variant's producer. This limitation
+does not affect decoded unknown wire discriminants, which retain the separate
+`UnknownRemote` result and are covered by the existing contract test.
+
+Decoded remote failures are subject to the existing diagnostic size bound. An
+oversized diagnostic is rejected as `DIAGNOSTIC_TOO_LARGE` at
+`response.error`, with the registry's remediation, before its wire failure
+classification is applied. This intentionally discards the oversized remote
+code and category rather than retaining unbounded input. In-bound failures
+continue to preserve their wire code and classification; contract tests cover
+both the bounded rejection and native classification mapping.

@@ -458,11 +458,14 @@ fn nested_export_timeout_keeps_lifecycle_category_and_code() {
     assert_eq!(wire.diagnostic().diagnostic.code, code.as_str());
 }
 
-fn envelope_failure(wire: Value) -> (String, String, String) {
+fn envelope_failure(wire: Value) -> (String, String, String, RemediationDto) {
     match decode_canonical_envelope::<AdmissionDto>(wire) {
-        Err(Failure::Validation { diagnostic, field }) => {
-            (diagnostic.code, field, diagnostic.message)
-        }
+        Err(Failure::Validation { diagnostic, field }) => (
+            diagnostic.code,
+            field,
+            diagnostic.message,
+            diagnostic.remediation,
+        ),
         other => panic!("expected validation failure, got {other:?}"),
     }
 }
@@ -583,15 +586,24 @@ fn canonical_envelope_error_arm_follows_binding_contract() {
             e["at"] = json!("not-a-time");
         },
     ] {
-        let (code, field, _) = with(edit);
+        let (code, field, _, remediation) = with(edit);
         assert_eq!(
             (code.as_str(), field.as_str()),
             (too_large, "response.error")
         );
+        assert_eq!(
+            remediation,
+            RemediationDto::Recoverable {
+                steps: vec![
+                    "Reduce remote diagnostic text or remediation steps to the documented bounds"
+                        .into()
+                ]
+            }
+        );
     }
-    let (code, field, _) = with(&|e| e["at"] = json!("not-a-time"));
+    let (code, field, _, _) = with(&|e| e["at"] = json!("not-a-time"));
     assert_eq!((code.as_str(), field.as_str()), (invalid, "response.error"));
-    let (code, field, message) = with(&|e| {
+    let (code, field, message, _) = with(&|e| {
         e["at"] = json!("not-a-time");
         e["details"] = json!({"k": {"kind": "nope"}});
     });
@@ -605,7 +617,7 @@ fn canonical_envelope_error_arm_follows_binding_contract() {
             e.as_object_mut().unwrap().remove("field");
         },
     ] {
-        let (code, field, _) = with(edit);
+        let (code, field, _, _) = with(edit);
         assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
     }
     // Canonical contract mapping, not base parity: these malformed-envelope
@@ -624,14 +636,14 @@ fn canonical_envelope_error_arm_follows_binding_contract() {
             "request exceeds",
         ),
     ] {
-        let (code, field, message) = with(edit);
+        let (code, field, message, _) = with(edit);
         assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
         assert!(message.contains(needle), "{message}");
     }
     for error in [Value::Null, json!("x")] {
         let mut w = wire.clone();
         w["error"] = error;
-        let (code, field, message) = envelope_failure(w);
+        let (code, field, message, _) = envelope_failure(w);
         assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
         assert!(message.contains("expected struct Diagnostic"), "{message}");
     }

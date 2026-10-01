@@ -151,7 +151,7 @@ impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
             }),
             _ => Ok(canonical_failure(
                 Box::new(from_canonical_diagnostic(value.diagnostic())?),
-                core::v2::FailureClassification::Internal,
+                value.failure_classification(),
             )),
         }
     }
