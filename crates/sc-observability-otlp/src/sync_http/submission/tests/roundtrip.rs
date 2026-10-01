@@ -1,6 +1,6 @@
 use super::super::*;
 use super::capture::{CAPTURE_TIMEOUT, capture_server};
-use super::proto_json::assert_special_forms;
+use super::proto_json::{NonFiniteDouble, decode_forms};
 use crate::config::{ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, SyncHttpRetryPolicy};
 use sc_observability_types::{
     SpanId, Timestamp, TraceId,
@@ -126,12 +126,19 @@ fn submission_exporter_round_trips_every_signal_variant() {
         requests[3].1["dictionary"]["linkTable"][0]["traceId"],
         "AAAAAAAAAAAAAAAAAAAAAA=="
     );
-    assert_special_forms(
-        &requests
-            .iter()
-            .map(|request| request.1.clone())
-            .collect::<Vec<_>>(),
+    let decoded = requests
+        .iter()
+        .map(|request| decode_forms(&request.1).expect("decode captured proto JSON"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        decoded[0].non_finite_doubles,
+        vec![
+            NonFiniteDouble::NaN,
+            NonFiniteDouble::PositiveInfinity,
+            NonFiniteDouble::NegativeInfinity,
+        ]
     );
+    assert!(decoded[3].key_indices.contains(&0));
 }
 
 #[test]
