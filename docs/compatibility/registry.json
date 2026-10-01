@@ -11,7 +11,7 @@
     "inherent_or_free_callables": 143,
     "trait_slots": 12,
     "additional_handwritten": {
-      "revision": "f36dab934f2b4775a4e0280db7aac24d6d868560",
+      "revision": "69174764c6914db254fbea3cefc8de7fe8b6243e",
       "method": "docs/migration/source-accounting.md",
       "rule": "additional handwritten = restorations + added wrappers with a declaration in compat, the released errors.rs wrappers, an inline v2 module or a canonical twin; aliases, re-exports and existing pairs add none",
       "crates": {
@@ -146,7 +146,7 @@
           },
           "restorations": {
             "types": 0,
-            "callables": 0
+            "callables": 1
           },
           "added_wrappers": {
             "types": 0,
@@ -154,10 +154,10 @@
           },
           "additional_handwritten": {
             "types": 0,
-            "callables": 0
+            "callables": 1
           },
           "trait_impls": 0,
-          "pending_not_implemented": 1
+          "pending_not_implemented": 0
         },
         "sc-observability-binding-runtime": {
           "aliases": {
@@ -208,9 +208,7 @@
           "pending_not_implemented": 0
         }
       },
-      "pending_not_implemented": [
-        "sc_observability_dto::from_core_health"
-      ],
+      "pending_not_implemented": [],
       "unchanged_alias_rows_served_by_retained_compat_pairs": [
         "sc_observe::ObservabilityConfig::default_for",
         "sc_observe::ObservabilityConfig::service_name",

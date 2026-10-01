@@ -9,10 +9,11 @@ four treatments as defined in
 the declaration that actually serves it in source; it does not count
 registry rows as wrappers.
 
-**Measured revision:** `f36dab934f2b4775a4e0280db7aac24d6d868560`, compared
+**Measured revision:** `69174764c6914db254fbea3cefc8de7fe8b6243e`, compared
 with the released baseline v1.4.1
-`c578912653233c7dc678fefe5af575118dbbaaa1`. This head contains the final
-runtime and removal inventory. The registry records these counts under
+`c578912653233c7dc678fefe5af575118dbbaaa1`. This head contains the released
+DTO Result restoration and the seven compatibility-method removal metadata
+corrections. The registry records these counts under
 `source_audit.additional_handwritten`.
 
 ## Counting rule
@@ -76,10 +77,10 @@ Pairs are `types/callables`.
 | `sc-observe` | 0/4 | 3/6 | 0/6 | 3/14 | 3 | 20 | 0 | 0 |
 | `sc-observability-log` | 0/5 | 6/5 | 0/3 | 1/21 | 1 | 24 | 0 | 0 |
 | `sc-observability-otlp` | 0/3 | 7/17 | 1/0 | 2/16 | 3 | 16 | 0 | 0 |
-| `sc-observability-dto` | 0/0 | 0/0 | 0/0 | 0/0 | 0 | 0 | 0 | 1 |
+| `sc-observability-dto` | 0/0 | 0/0 | 0/1 | 0/0 | 0 | 1 | 0 | 0 |
 | `sc-observability-binding-runtime` | 0/0 | 0/0 | 0/0 | 0/1 | 0 | 1 | 0 | 0 |
 | `sc-observability-log-macros` | 0/0 | 0/0 | 0/0 | 0/0 | 0 | 0 | 0 | 0 |
-| **Total** | 7/50 | 32/28 | 11/11 | 13/92 | 24 | 103 | 2 | 1 |
+| **Total** | 7/50 | 32/28 | 11/12 | 13/92 | 24 | 104 | 2 | 0 |
 
 The `sc-observability-log-macros` crate changes no public API. Every one of the
 215 registry rows (58 types, 143 callables, 12 trait slots and 2 trait
@@ -90,13 +91,27 @@ plus `bridge_backend_v2`), and one restored type,
 
 ## Pending, not implemented
 
-`sc_observability_dto::from_core_health` is recorded as a `restoration`, but
-the released signature
-`fn(LoggingHealthReport, LevelState) -> Result<LogHealthDto, Failure>` is not
-restored at the measured revision. The only public declaration,
-`crates/sc-observability-dto/src/conversion_impl/mod.rs:708`, returns
-`LogHealthDto` directly, so released callers that apply `?` to its result do
-not compile. It is excluded from the counts until its source is published.
+None of the items in this source-accounting inventory remains unimplemented
+at the measured revision. This is a declaration inventory, not a claim that
+all Phase D acceptance findings or independent reviews are complete.
+
+The released `sc_observability_dto::from_core_health` declaration in
+`crates/sc-observability-dto/src/conversion.rs:14` now returns
+`Result<LogHealthDto, Failure>`. Its thin `Ok` wrapper delegates to the
+infallible canonical projection, `from_canonical_core_health`. The renamed
+canonical implementation is not a second added compatibility callable.
+
+### Historical measurement
+
+PR743 (`4c108cf31a6bdb02a25d930e7bd4b4b9a52283a3`) recorded the PR740
+source measurement at `f36dab934f2b4775a4e0280db7aac24d6d868560`: 24 added
+handwritten types, 103 added handwritten callables (11 restored), and one
+pending DTO callable. That measurement remains valid for that revision.
+PR744 (`dc1a634ecca024a46f419b1fdcc949e531700296`) restored the released
+Result-returning wrapper, adding exactly one restored callable. At PR752,
+the resulting totals are 24 types and 104 callables (12 restored), with
+zero pending inventory items. The seven PR752 removal-metadata corrections
+change no source declarations or counts.
 
 ## Registry treatment compared with source
 
@@ -114,9 +129,14 @@ it already had in 1.4.1. By the rule above, they are existing pairs:
 | `sc_observe::ObservabilityBuilder::build` | `crates/sc-observe/src/compat.rs:214` |
 | `sc_observability_otlp::SpanAssembler::push` | `crates/sc-observability-otlp/src/compat.rs:701` |
 
-These rows list no `removable_paths`, although their `compat` bodies are
-removable. The registry keeps their treatment and lists them under
-`source_audit.additional_handwritten`.
+These rows now list their containing `compat` file in `removable_paths`,
+with a rationale limited to the released wrapper method, not deletion of the
+whole file or its typed counterpart. The six observe `canonical_source`
+paths identify the selected-head released declaration in `compat.rs`, not
+the different `v2` signature in `lib.rs`; the OTLP pointer already identified
+its released declaration. PR752 preserves their registry treatment and the
+list under `source_audit.additional_handwritten`. They remain existing pairs
+for source accounting and add no handwritten declarations.
 
 ## Removal points
 
@@ -267,20 +287,20 @@ its declaration at the measured revision:
 | added wrapper | callable | `sc_observability_log::LogControl::query` | `crates/sc-observability-log/src/compat/mod.rs:411` | registry |
 | added wrapper | callable | `sc_observability_log::LogControl::try_log` | `crates/sc-observability-log/src/compat/mod.rs:402` | registry |
 | added wrapper | callable | `sc_observability_log::LogControl::wait_stopped` | `crates/sc-observability-log/src/compat/mod.rs:390` | registry |
-| added wrapper | callable | `sc_observability_log::LogGuard::control` | `crates/sc-observability-log/src/lib.rs:416` | registry |
-| added wrapper | callable | `sc_observability_log::LogGuard::flush` | `crates/sc-observability-log/src/lib.rs:459` | registry |
-| added wrapper | callable | `sc_observability_log::LogGuard::shutdown` | `crates/sc-observability-log/src/lib.rs:475` | registry |
-| added wrapper | callable | `sc_observability_log::init` | `crates/sc-observability-log/src/lib.rs:531` | registry |
-| added wrapper | callable | `sc_observability_log::v2::LogGuard::active_log_path` | `crates/sc-observability-log/src/lib.rs:234` | unregistered |
-| added wrapper | callable | `sc_observability_log::v2::LogGuard::control` | `crates/sc-observability-log/src/lib.rs:203` | unregistered |
-| added wrapper | callable | `sc_observability_log::v2::LogGuard::dropped_events` | `crates/sc-observability-log/src/lib.rs:228` | unregistered |
-| added wrapper | callable | `sc_observability_log::v2::LogGuard::elevate_level` | `crates/sc-observability-log/src/lib.rs:252` | unregistered |
-| added wrapper | callable | `sc_observability_log::v2::LogGuard::flush` | `crates/sc-observability-log/src/lib.rs:212` | unregistered |
-| added wrapper | callable | `sc_observability_log::v2::LogGuard::health` | `crates/sc-observability-log/src/lib.rs:243` | unregistered |
-| added wrapper | callable | `sc_observability_log::v2::LogGuard::reset_level` | `crates/sc-observability-log/src/lib.rs:265` | unregistered |
-| added wrapper | callable | `sc_observability_log::v2::LogGuard::shutdown` | `crates/sc-observability-log/src/lib.rs:221` | unregistered |
-| added wrapper | callable | `sc_observability_log::v2::init` | `crates/sc-observability-log/src/lib.rs:193` | unregistered |
-| added wrapper | type | `sc_observability_log::v2::LogGuard` | `crates/sc-observability-log/src/lib.rs:184` | unregistered |
+| added wrapper | callable | `sc_observability_log::LogGuard::control` | `crates/sc-observability-log/src/lib.rs:417` | registry |
+| added wrapper | callable | `sc_observability_log::LogGuard::flush` | `crates/sc-observability-log/src/lib.rs:460` | registry |
+| added wrapper | callable | `sc_observability_log::LogGuard::shutdown` | `crates/sc-observability-log/src/lib.rs:476` | registry |
+| added wrapper | callable | `sc_observability_log::init` | `crates/sc-observability-log/src/lib.rs:532` | registry |
+| added wrapper | callable | `sc_observability_log::v2::LogGuard::active_log_path` | `crates/sc-observability-log/src/lib.rs:235` | unregistered |
+| added wrapper | callable | `sc_observability_log::v2::LogGuard::control` | `crates/sc-observability-log/src/lib.rs:204` | unregistered |
+| added wrapper | callable | `sc_observability_log::v2::LogGuard::dropped_events` | `crates/sc-observability-log/src/lib.rs:229` | unregistered |
+| added wrapper | callable | `sc_observability_log::v2::LogGuard::elevate_level` | `crates/sc-observability-log/src/lib.rs:253` | unregistered |
+| added wrapper | callable | `sc_observability_log::v2::LogGuard::flush` | `crates/sc-observability-log/src/lib.rs:213` | unregistered |
+| added wrapper | callable | `sc_observability_log::v2::LogGuard::health` | `crates/sc-observability-log/src/lib.rs:244` | unregistered |
+| added wrapper | callable | `sc_observability_log::v2::LogGuard::reset_level` | `crates/sc-observability-log/src/lib.rs:266` | unregistered |
+| added wrapper | callable | `sc_observability_log::v2::LogGuard::shutdown` | `crates/sc-observability-log/src/lib.rs:222` | unregistered |
+| added wrapper | callable | `sc_observability_log::v2::init` | `crates/sc-observability-log/src/lib.rs:194` | unregistered |
+| added wrapper | type | `sc_observability_log::v2::LogGuard` | `crates/sc-observability-log/src/lib.rs:185` | unregistered |
 | restoration | callable | `sc_observability_log::FlushError::remediation` | `crates/sc-observability-log/src/compat/mod.rs:230` | registry |
 | restoration | callable | `sc_observability_log::InitError::remediation` | `crates/sc-observability-log/src/compat/mod.rs:192` | registry |
 | restoration | callable | `sc_observability_log::ShutdownError::remediation` | `crates/sc-observability-log/src/compat/mod.rs:268` | registry |
@@ -313,7 +333,7 @@ its declaration at the measured revision:
 
 | Category | Kind | Item | Declaration | Row |
 | --- | --- | --- | --- | --- |
-| pending restoration | callable | `sc_observability_dto::from_core_health` | `crates/sc-observability-dto/src/conversion_impl/mod.rs:708` | registry |
+| restoration | callable | `sc_observability_dto::from_core_health` | `crates/sc-observability-dto/src/conversion.rs:14` | registry |
 
 ### `sc-observability-binding-runtime`
 
