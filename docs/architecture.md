@@ -1553,7 +1553,10 @@ was reworded accordingly to describe the remaining validation.
   themselves. The Python surface returns tagged results for expected
   failures and raises only for programmer errors (ADR-014). Customer-specific mapping
   stays in the consumer. New surface is added through new `#[non_exhaustive]`
-  types; no released exhaustive enum gains a variant.
+  types; no released exhaustive enum gains a variant. Existing producer-record
+  conversions use `TryFrom` with `SignalValidationError`: a null attribute is
+  rejected at its exact path rather than dropped or coerced. Unsigned values
+  are preserved by conversion and checked for OTLP range at envelope validation.
 - **Signals**: Logs, completed spans, metrics and profiles are all
   first-class submission signals. Profiles use the versioned development
   protocol `profiles.v1development`. Full payload support covers every

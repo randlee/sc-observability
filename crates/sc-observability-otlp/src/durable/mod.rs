@@ -39,10 +39,10 @@ fn unavailable() -> TelemetryClientError {
 impl TelemetryClient for DurableTelemetryClient {
     fn open(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
         if let Ok(otel) = adapter::otel_config_from(&config)
-            && let Ok((worker, _bounds)) =
+            && let Ok((worker, bounds)) =
                 crate::sync_http::submission::SyncHttpConfig::from_otel(&otel)
         {
-            drop(crate::sync_http::submission::exporter_for(worker));
+            drop(crate::sync_http::submission::exporter_for(worker, bounds));
         }
         Err(unavailable())
     }

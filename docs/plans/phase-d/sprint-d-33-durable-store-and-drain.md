@@ -89,7 +89,7 @@ exporting through the d-29 `SubmissionExporter` seam.
    `duplicate = true`. Enforce reject-newer schema and envelope versions.
    Implement the d-29 flush result rules. Implement
    `durable::adapter::otel_config_from`; `open` builds the production
-   exporter with `exporter_for(SyncHttpConfig::from_otel(..))` and calls the
+   exporter with `exporter_for(worker, bounds)` from the destructured `SyncHttpConfig::from_otel(..)` result and calls the
    crate-private `open_with_exporter(config, Arc<dyn SubmissionExporter>)`.
    [PHD-005, PHD-007, PHB-010]
 2. Implement the drain worker and multi-process ownership: drain lease with

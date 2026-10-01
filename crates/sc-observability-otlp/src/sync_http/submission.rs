@@ -1,5 +1,6 @@
 //! Submission exporter contract staged for D34.
 pub(crate) use super::implementation::SyncHttpConfig;
+use crate::config::ValidatedTransportBounds;
 use crate::contracts::submission::{SubmissionExportFailure, SubmissionExporter};
 use sc_observability_types::{
     ErrorContext, Remediation,
@@ -15,9 +16,17 @@ pub(crate) struct SyncHttpSubmissionExporter {
         reason = "staged by d-29; wired by d-33/d-34 under durable-store"
     )]
     config: SyncHttpConfig,
+    #[expect(
+        dead_code,
+        reason = "staged by d-29; wired by d-33/d-34 under durable-store"
+    )]
+    bounds: ValidatedTransportBounds,
 }
-pub(crate) fn exporter_for(config: SyncHttpConfig) -> Arc<dyn SubmissionExporter> {
-    Arc::new(SyncHttpSubmissionExporter { config })
+pub(crate) fn exporter_for(
+    config: SyncHttpConfig,
+    bounds: ValidatedTransportBounds,
+) -> Arc<dyn SubmissionExporter> {
+    Arc::new(SyncHttpSubmissionExporter { config, bounds })
 }
 impl SubmissionExporter for SyncHttpSubmissionExporter {
     fn export(

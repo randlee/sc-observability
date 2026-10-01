@@ -1141,9 +1141,9 @@ d-33 and d-34 may change only the items listed in their docs.
 | `src/contracts/submission.rs` (new) | `pub(crate) trait SubmissionExporter: Send + Sync { fn export(&self, signal: Signal, envelopes: &[SubmissionEnvelope]) -> Result<(), SubmissionExportFailure>; }` and `pub(crate) enum SubmissionExportFailure { Retryable(ExportError), Terminal(ExportError) }` | The only call the d-33 drain makes. `Retryable` leaves the row for retry; `Terminal` marks it failed. d-33 tests through a `ScriptedExporter`; d-34 implements the production exporter. |
 | `src/contracts/credits.rs` | `impl AdmissionCredits { pub(crate) fn wait_for_release(&self, timeout: Duration) -> bool; }` | Signature only; the stub returns `false` (no release observed). d-33 implements it (the budget's `Condvar`, `CreditLease::drop` notification and their tests). |
 | `src/sync_http/mod.rs` | module list | One line: `#[cfg(feature = "durable-store")] pub(crate) mod submission;`. |
-| `src/sync_http/submission.rs` (new, staged) | `pub(crate) struct SyncHttpSubmissionExporter`, `pub(crate) fn exporter_for(config: SyncHttpConfig) -> Arc<dyn SubmissionExporter>` | `exporter_for` wraps the existing sync-http exporter. The staged `export` returns `SubmissionExportFailure::Terminal` with `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, so nothing reports false success before d-34 lands. d-34 implements it. |
+| `src/sync_http/submission.rs` (new, staged) | `pub(crate) struct SyncHttpSubmissionExporter`, `pub(crate) fn exporter_for(config: SyncHttpConfig, bounds: ValidatedTransportBounds) -> Arc<dyn SubmissionExporter>` | `exporter_for` stages both the validated worker config and transport bounds; D34 wraps the existing sync-http exporter without changing this signature. The staged `export` returns `SubmissionExportFailure::Terminal` with `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, so nothing reports false success before d-34 lands. d-34 implements it. |
 | `src/durable/adapter.rs` (staged) | `pub(crate) fn otel_config_from(config: &TelemetryClientConfig) -> Result<OtelConfig, TelemetryConfigError>;` | Signature only; the stub body returns `TelemetryConfigError::InvalidField { field: "otlp" }`. d-33 implements it and then calls the existing `SyncHttpConfig::from_otel(&OtelConfig)`. Mapping: `backend` → `ExporterBackend`, `endpoint`, `auth_header`, `request_timeout` → `timeout_ms`, `sync_http_retry` → `SyncHttpRetryPolicy` field for field. |
-| `src/durable/mod.rs` (staged) | `DurableTelemetryClient::open` | Evaluates `adapter::otel_config_from` and, on success, `exporter_for(SyncHttpConfig::from_otel(..))`, discards both and returns `AdmissionError::StoreUnavailable`, so neither staged function is dead code under `durable-store`. d-33 implements it. |
+| `src/durable/mod.rs` (staged) | `DurableTelemetryClient::open` | Evaluates `adapter::otel_config_from` and, on success, `exporter_for(worker, bounds)` from the destructured `SyncHttpConfig::from_otel(..)` result, discards both and returns `AdmissionError::StoreUnavailable`, so neither staged function is dead code under `durable-store`. d-33 implements it. |
 | `src/constants.rs` | wave-5 entries | `DRAIN_BATCH_SIZE`, the lease renewal divisor, the store `busy_timeout` (5000 ms) and `PROFILES_EXPORT_PATH = "/v1development/profiles"` (ADR-005). |
 | `src/error_codes.rs` | wave-5 entries | `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, added to the crate's enumerable registry. |
 
@@ -1157,6 +1157,7 @@ The related imports of `OtelConfig`, `prepared_backend_connection`, and
 Finally `config/mod.rs` reexports `validated_transport_bounds` under that gate,
 leaving `validate_config_typed` test-only (lead `01M3VY7JWH90RDXYDQV8GNYT0J`).
 These are the only three gate adjustments; validation bodies are unchanged.
+Lead `01M3VYZAQDEPX67M2180KKGH45` freezes `exporter_for(config, bounds)` now so D33 and D34 can implement in parallel without changing their shared call signature. The staged wrapper retains both and always returns terminal UNWIRED.
 
 ### Dependency set
 
@@ -1448,3 +1449,11 @@ change. d-32 re-runs the D18 gate against the signed record.
   `Cargo.lock` or `policy/otlp-transport.toml`. Everything they use is in
   "Dependency set". A missing dependency is a contract defect, routed to the
   lead.
+
+### Compiler diagnostic fixture amendment (2026-10-01)
+
+Lead approval 01M3VZ3XAV749YN0HVRA0T9XE5 permits only the four-line
+rustc help/note insertion in
+`crates/sc-observability-log/tests/ui/fixture_attachment_no_owner_authority.stderr`.
+The new `TelemetryClient::shutdown` trait adds a compiler suggestion; all four
+E0599 errors and their rejected authority operations remain unchanged.

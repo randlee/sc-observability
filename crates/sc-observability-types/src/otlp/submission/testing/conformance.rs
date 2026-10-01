@@ -19,7 +19,7 @@ fn log(key: &str) -> SubmissionEnvelope {
     let mut input = SubmissionInput::new();
     input.record_key = Some(key.parse().expect("valid fixture key"));
     input.logs.push(LogInput::new());
-    SubmissionEnvelope::from_input(input, &mut SystemIds).expect("valid log fixture")
+    SubmissionEnvelope::from_input(input, &mut SystemIds::new()).expect("valid log fixture")
 }
 
 fn duplicate_record_key_returns_original_receipt<H: ConformanceHarness>(harness: &mut H) {
@@ -94,7 +94,7 @@ fn terminal_precedes_deadline<H: ConformanceHarness>(harness: &mut H) {
     span.duration_nanos = Some(1);
     input.spans.push(span);
     client
-        .emit(SubmissionEnvelope::from_input(input, &mut SystemIds).unwrap())
+        .emit(SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap())
         .unwrap();
     match client.flush(DEADLINE).unwrap_err() {
         TelemetryClientError::Delivery(DeliveryError::TerminalFailure { report, .. }) => {

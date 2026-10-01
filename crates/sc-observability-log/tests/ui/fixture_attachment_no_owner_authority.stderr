@@ -30,6 +30,10 @@ error[E0599]: no method named `shutdown` found for struct `FixtureLogAttachment`
    |
    | pub struct FixtureLogAttachment {
    | ------------------------------- method `shutdown` not found for this struct
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `shutdown`, perhaps you need to implement it:
+           candidate #1: `TelemetryClient`
 
 error[E0599]: no method named `elevate_level` found for struct `FixtureLogControl` in the current scope
   --> tests/ui/fixture_attachment_no_owner_authority.rs:18:21

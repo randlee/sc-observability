@@ -24,8 +24,16 @@ pub trait IdSource {
     fn now(&mut self) -> Timestamp;
 }
 /// Process-local collision-resistant identifiers and the real UTC clock.
+#[non_exhaustive]
 #[derive(Debug, Default)]
 pub struct SystemIds;
+impl SystemIds {
+    /// Creates an identifier source backed by the process random seed and UTC clock.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self
+    }
+}
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 static ID_HASH: LazyLock<RandomState> = LazyLock::new(RandomState::new);
 fn random_part() -> u64 {
