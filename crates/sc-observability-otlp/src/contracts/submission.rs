@@ -3,9 +3,9 @@ use sc_observability_types::{
     otlp::submission::{Signal, SubmissionEnvelope},
     v2::ExportError,
 };
-#[expect(
-    dead_code,
-    reason = "staged by d-29; wired by d-33/d-34 under durable-store"
+#[cfg_attr(
+    not(feature = "durable-store"),
+    expect(dead_code, reason = "used by durable-store")
 )]
 pub(crate) trait SubmissionExporter: Send + Sync {
     fn export(

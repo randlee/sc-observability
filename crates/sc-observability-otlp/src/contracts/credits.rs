@@ -10,7 +10,7 @@
     )
 )]
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use sc_observability_types::{ErrorContext, Remediation, error_codes, v2::ExportError};
 
@@ -20,44 +20,68 @@ use crate::config::ValidatedTransportBounds;
 struct Budget {
     records: usize,
     bytes: usize,
+    releases: u64,
+    #[cfg(test)]
+    wait_started: Option<Arc<std::sync::Barrier>>,
+}
+
+#[derive(Debug)]
+struct SharedBudget {
+    state: Mutex<Budget>,
+    released: Condvar,
 }
 
 /// Shared dual budget; reservations either debit both limits or neither.
 #[derive(Debug, Clone)]
-pub(crate) struct AdmissionCredits(Arc<Mutex<Budget>>);
+pub(crate) struct AdmissionCredits(Arc<SharedBudget>);
 
 /// Non-cloneable ownership of one admitted record and its serialized bytes.
 #[derive(Debug)]
 #[must_use = "retain the lease until the admitted record reaches a terminal outcome"]
 pub(crate) struct CreditLease {
-    budget: Arc<Mutex<Budget>>,
+    budget: Arc<SharedBudget>,
     bytes: usize,
 }
 
 impl AdmissionCredits {
-    #[expect(
-        dead_code,
-        reason = "staged by d-29; wired by d-33/d-34 under durable-store"
-    )]
-    #[allow(
-        clippy::unused_self,
-        reason = "D33 wires this staged instance method to credit release notifications"
-    )]
-    pub(crate) fn wait_for_release(&self, _timeout: std::time::Duration) -> bool {
-        false
+    /// Waits for a release notification; the mutex makes checking and sleeping atomic.
+    pub(crate) fn wait_for_release(&self, timeout: std::time::Duration) -> bool {
+        let budget = self
+            .0
+            .state
+            .lock()
+            .expect("credit accounting lock poisoned");
+        let generation = budget.releases;
+        #[cfg(test)]
+        if let Some(barrier) = &budget.wait_started {
+            barrier.wait();
+        }
+        let (budget, _) = self
+            .0
+            .released
+            .wait_timeout_while(budget, timeout, |b| b.releases == generation)
+            .expect("credit accounting lock poisoned");
+        budget.releases != generation
     }
 
     pub(crate) fn new(bounds: &ValidatedTransportBounds) -> Self {
-        Self(Arc::new(Mutex::new(Budget {
-            records: bounds.queue_capacity().get(),
-            bytes: bounds.queue_byte_capacity().get(),
-        })))
+        Self(Arc::new(SharedBudget {
+            state: Mutex::new(Budget {
+                records: bounds.queue_capacity().get(),
+                bytes: bounds.queue_byte_capacity().get(),
+                releases: 0,
+                #[cfg(test)]
+                wait_started: None,
+            }),
+            released: Condvar::new(),
+        }))
     }
 
     /// Reserves one record and its bytes, returning canonical `QueueFull` on saturation.
     pub(crate) fn reserve(&self, serialized_bytes: usize) -> Result<CreditLease, ExportError> {
         let mut budget = self
             .0
+            .state
             .lock()
             .expect("credit accounting cannot panic while locked");
         if budget.records == 0 || serialized_bytes > budget.bytes {
@@ -87,11 +111,14 @@ impl Drop for CreditLease {
     fn drop(&mut self) {
         let mut budget = self
             .budget
+            .state
             .lock()
             .expect("credit accounting cannot panic while locked");
         // Every lease debited these exact amounts from this same budget once.
         budget.records += 1;
         budget.bytes += self.bytes;
+        budget.releases = budget.releases.wrapping_add(1);
+        self.budget.released.notify_all();
     }
 }
 
@@ -165,5 +192,25 @@ mod tests {
         let _lease = credits
             .reserve(10)
             .expect("cross-thread terminal release restored budget");
+    }
+    #[test]
+    fn wait_for_release_zero_timeout_returns_false() {
+        assert!(!credits(1, 10).wait_for_release(std::time::Duration::ZERO));
+    }
+
+    #[test]
+    fn wait_for_release_wakes_on_lease_drop() {
+        let credits = credits(1, 10);
+        let lease = credits.reserve(10).unwrap();
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        credits.0.state.lock().unwrap().wait_started = Some(barrier.clone());
+        let dropper = std::thread::spawn(move || {
+            barrier.wait();
+            drop(lease);
+        });
+        assert!(credits.wait_for_release(std::time::Duration::from_secs(2)));
+        dropper.join().unwrap();
+        credits.0.state.lock().unwrap().wait_started = None;
+        assert!(credits.reserve(10).is_ok());
     }
 }
