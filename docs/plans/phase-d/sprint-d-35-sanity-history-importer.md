@@ -2,12 +2,12 @@
 
 ## Plan metadata
 
-- Wave: 5.3 (wave-5 consumer)
+- Wave: 5.3 (wave-5 integration)
 - Stack / layer: `phase-d-wave5` stack, layer 6 (d-29 → d-33 → d-34 → d-30 → d-31 → d-35 → d-32; wave-5 ruling R12)
 - Assignee / model: cobs2 / terra
 - Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
-- Closure: `boundary` (consumer)
-- Target boundary: `scripts/sanity-telemetry/` (Python consumer of `sc_observability.telemetry`; not a crate)
+- Closure: `integration`
+- Target boundary: importer-composition
 - Branch: `sprint/d-35-sanity-history-importer`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-35-sanity-history-importer`
 - PR target: `sprint/d-31-sc-otel-cli` (stack order only; no code dependency on d-31)
@@ -15,10 +15,16 @@
 - Requirements: PHB-010, PHB-013, PHD-005, PHD-006, PHD-007, PHD-008, PHD-009, PHD-011
 - ADRs: ADR-009, ADR-014, ADR-021
 - Owned paths:
-  - `scripts/sanity-telemetry/**`
-  - `.github/workflows/sanity-telemetry.yml`
-  - `.sc/telemetry.yaml`
-  - `.gitignore`
+  - scripts/sanity-telemetry/**
+  - .github/workflows/sanity-telemetry.yml
+  - .sc/telemetry.yaml
+  - .gitignore
+
+Boundary note: importer-composition is the installed sc-observability Python
+wheel (`sc_observability.telemetry`, d-30) composed with
+`scripts/sanity-telemetry`. d-35 is the integration owner of the PHD-011
+criteria. d-29 lists PHD-011 only for the requirement text it keeps
+consistent (its D7); d-32 does not claim it.
 
 Ownership notes: `.sc/telemetry.yaml` gains only the core `store:` keys; the
 #788 keys stay unchanged. `.gitignore` gains one line,

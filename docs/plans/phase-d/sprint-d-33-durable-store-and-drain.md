@@ -7,20 +7,20 @@
 - Assignee / model: aobs / astra
 - Difficulty: `hard` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `boundary` (implementer)
-- Target boundary: `BOUNDARY-ScObservabilityOtlp`
-- Branch: `sprint/d-33-durable-store-and-export` (branch name kept from the pre-split plan; export encoding moved to d-34)
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-33-durable-store-and-export`
+- Target boundary: BOUNDARY-ScObservabilityOtlp
+- Branch: `sprint/d-33-durable-store-and-drain`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-33-durable-store-and-drain`
 - PR target: `sprint/d-29-telemetry-submission-contract`
 - Blocked by: `obs-d-29-sanity`
 - Requirements: PHB-010, PHB-011, PHD-002, PHD-003, PHD-004, PHD-005, PHD-006, PHD-007, PHD-008, PHD-009, PHD-010, PHD-013
 - ADRs: ADR-004, ADR-005, ADR-009, ADR-012, ADR-017, ADR-018, ADR-019, ADR-020, ADR-021
 - Owned paths:
-  - `crates/sc-observability-otlp/src/durable/**`
-  - `crates/sc-observability-otlp/src/contracts/credits.rs`
-  - `crates/sc-observability-otlp/src/contracts/submission.rs`
-  - `crates/sc-observability-otlp/src/lifecycle.rs`
-  - `crates/sc-observability-otlp/tests/fixtures/telemetry_yaml/**`
-  - `.github/workflows/telemetry-platforms.yml`
+  - crates/sc-observability-otlp/src/durable/**
+  - crates/sc-observability-otlp/src/contracts/credits.rs
+  - crates/sc-observability-otlp/src/contracts/submission.rs
+  - crates/sc-observability-otlp/src/lifecycle.rs
+  - crates/sc-observability-otlp/tests/fixtures/telemetry_yaml/**
+  - .github/workflows/telemetry-platforms.yml
 
 Ownership notes: `src/durable/schema.sql` is d-29's contract DDL and stays
 read-only. In `src/lifecycle.rs` and `src/contracts/submission.rs` d-33
@@ -270,7 +270,7 @@ All `durable::` tests below run with
   `TelemetryConfigError::UnsupportedCombination`, naming the backend. No row
   produces a silently omitted signal.
 - [ ] boundary:ADR-021 (D6): `telemetry-platforms.yml` is dispatched on the
-  d-33 head SHA (`gh workflow run telemetry-platforms.yml --ref sprint/d-33-durable-store-and-export -f source_commit=<head>`),
+  d-33 head SHA (`gh workflow run telemetry-platforms.yml --ref sprint/d-33-durable-store-and-drain -f source_commit=<head>`),
   all six cells pass, and the run URL is recorded in the PR body.
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp: no `todo!` or `unimplemented!`
   remains in `durable/`, and the boundary and dependency validators pass.

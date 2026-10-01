@@ -7,8 +7,8 @@
 - Assignee / model: aobs / astra
 - Difficulty: `hard` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `contract`
-- Target boundary: `BOUNDARY-ScObservabilityTypes` (wave-5 contract: the neutral signal types and the submission contract in `sc_observability_types::otlp`)
-- vertical_rationale: "contract artifacts only: schema.sql is contract DDL d-33 implements; the load_telemetry_file signature is the config entry point d-30 and d-31 call and d-33 implements; the staged crate-private seams in sc-observability-otlp (SubmissionExporter, ProfileExporter, SignalKind::Profiles, wait_for_release, otel_config_from, exporter_for) are where d-33 and d-34 meet; the codes and constants are the ADR-005 registries all four consume (wave-5 rulings R14, R20)". Criteria for this otlp work are rooted at `boundary:BOUNDARY-ScObservabilityOtlp`.
+- Target boundary: BOUNDARY-ScObservabilityTypes
+- vertical_rationale: "contract artifacts only: schema.sql is contract DDL d-33 implements; the load_telemetry_file signature is the config entry point d-30 and d-31 call and d-33 implements; the staged crate-private seams in sc-observability-otlp (SubmissionExporter, ProfileExporter, SignalKind::Profiles, wait_for_release, otel_config_from, exporter_for) are where d-33 and d-34 meet; the codes and constants are the ADR-005 registries all four consume (wave-5 rulings R14, R20)". The target boundary covers the neutral signal types and the submission contract in `sc_observability_types::otlp`; criteria for the otlp work are rooted at `boundary:BOUNDARY-ScObservabilityOtlp`.
 - Branch: `sprint/d-29-telemetry-submission-contract`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-29-telemetry-submission-contract`
 - PR target: `integrate/phase-d` (base of the `phase-d-wave5` stack)
@@ -16,44 +16,44 @@
 - Requirements: PHB-010, PHD-001, PHD-002, PHD-003, PHD-004, PHD-005, PHD-006, PHD-007, PHD-008, PHD-009, PHD-010, PHD-011, PHD-012, PHD-013
 - ADRs: ADR-002, ADR-004, ADR-005, ADR-009, ADR-012, ADR-017, ADR-018, ADR-019, ADR-020, ADR-021
 - Owned paths:
-  - `Cargo.toml`
-  - `Cargo.lock`
-  - `policy/otlp-transport.toml`
-  - `policy/deny-durable-store.toml`
-  - `boundaries/sc-observability-types/types.toml`
-  - `boundaries/sc-observability-otlp/otlp.toml`
-  - `boundaries/sc-observability-py/python.toml`
-  - `boundaries/sc-otel-cli/**`
-  - `crates/sc-observability-types/Cargo.toml`
-  - `crates/sc-observability-types/src/error_codes.rs`
-  - `crates/sc-observability-types/src/constants.rs`
-  - `crates/sc-observability-types/src/otlp/**`
-  - `crates/sc-observability-types/tests/otlp_signals_contract.rs`
-  - `crates/sc-observability-types/tests/otlp_submission_contract.rs`
-  - `crates/sc-observability-types/tests/fixtures/otlp_submission/**`
-  - `crates/sc-observability-otlp/Cargo.toml`
-  - `crates/sc-observability-otlp/src/lib.rs`
-  - `crates/sc-observability-otlp/src/constants.rs`
-  - `crates/sc-observability-otlp/src/error_codes.rs`
-  - `crates/sc-observability-otlp/src/contracts.rs`
-  - `crates/sc-observability-otlp/src/contracts/profiles.rs`
-  - `crates/sc-observability-otlp/src/contracts/submission.rs`
-  - `crates/sc-observability-otlp/src/contracts/credits.rs`
-  - `crates/sc-observability-otlp/src/lifecycle.rs`
-  - `crates/sc-observability-otlp/src/sync_http/mod.rs`
-  - `crates/sc-observability-otlp/src/sync_http/submission.rs`
-  - `crates/sc-observability-otlp/src/durable/mod.rs`
-  - `crates/sc-observability-otlp/src/durable/adapter.rs`
-  - `crates/sc-observability-otlp/src/durable/config_file.rs`
-  - `crates/sc-observability-otlp/src/durable/schema.sql`
-  - `crates/sc-observability-otlp/tests/contract_schema.rs`
-  - `crates/sc-observability-otlp/tests/contract_manifest.rs`
-  - `crates/sc-otel-cli/Cargo.toml`
-  - `crates/sc-otel-cli/src/main.rs`
-  - `bindings/python/sc-observability-py/Cargo.toml`
-  - `docs/architecture.md`
-  - `docs/requirements.md`
-  - `docs/api-approvals/phase-d-wave5-telemetry-submission.json`
+  - Cargo.toml
+  - Cargo.lock
+  - policy/otlp-transport.toml
+  - policy/deny-durable-store.toml
+  - boundaries/sc-observability-types/types.toml
+  - boundaries/sc-observability-otlp/otlp.toml
+  - boundaries/sc-observability-py/python.toml
+  - boundaries/sc-otel-cli/**
+  - crates/sc-observability-types/Cargo.toml
+  - crates/sc-observability-types/src/error_codes.rs
+  - crates/sc-observability-types/src/constants.rs
+  - crates/sc-observability-types/src/otlp/**
+  - crates/sc-observability-types/tests/otlp_signals_contract.rs
+  - crates/sc-observability-types/tests/otlp_submission_contract.rs
+  - crates/sc-observability-types/tests/fixtures/otlp_submission/**
+  - crates/sc-observability-otlp/Cargo.toml
+  - crates/sc-observability-otlp/src/lib.rs
+  - crates/sc-observability-otlp/src/constants.rs
+  - crates/sc-observability-otlp/src/error_codes.rs
+  - crates/sc-observability-otlp/src/contracts.rs
+  - crates/sc-observability-otlp/src/contracts/profiles.rs
+  - crates/sc-observability-otlp/src/contracts/submission.rs
+  - crates/sc-observability-otlp/src/contracts/credits.rs
+  - crates/sc-observability-otlp/src/lifecycle.rs
+  - crates/sc-observability-otlp/src/sync_http/mod.rs
+  - crates/sc-observability-otlp/src/sync_http/submission.rs
+  - crates/sc-observability-otlp/src/durable/mod.rs
+  - crates/sc-observability-otlp/src/durable/adapter.rs
+  - crates/sc-observability-otlp/src/durable/config_file.rs
+  - crates/sc-observability-otlp/src/durable/schema.sql
+  - crates/sc-observability-otlp/tests/contract_schema.rs
+  - crates/sc-observability-otlp/tests/contract_manifest.rs
+  - crates/sc-otel-cli/Cargo.toml
+  - crates/sc-otel-cli/src/main.rs
+  - bindings/python/sc-observability-py/Cargo.toml
+  - docs/architecture.md
+  - docs/requirements.md
+  - docs/api-approvals/phase-d-wave5-telemetry-submission.json
 
 Ownership notes:
 

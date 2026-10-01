@@ -7,7 +7,7 @@
 - Assignee / model: cobs / terra
 - Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `boundary` (consumer)
-- Target boundary: `BOUNDARY-ScObservabilityPy`
+- Target boundary: BOUNDARY-ScObservabilityPy
 - Branch: `sprint/d-30-python-telemetry-bindings`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-30-python-telemetry-bindings`
 - PR target: `sprint/d-34-otlp-submission-encoders` (stack order only; no code dependency on d-33 or d-34)
@@ -15,15 +15,15 @@
 - Requirements: PHB-010, PHB-011, PHB-013, PHB-014, PHD-002, PHD-003, PHD-005, PHD-006, PHD-007, PHD-008, PHD-009, PHD-010, PHD-013
 - ADRs: ADR-002, ADR-009, ADR-011, ADR-012, ADR-014, ADR-015, ADR-016, ADR-020, ADR-021
 - Owned paths:
-  - `bindings/python/sc-observability-py/src/lib.rs`
-  - `bindings/python/sc-observability-py/src/telemetry/**`
-  - `bindings/python/sc-observability-py/pyproject.toml`
-  - `bindings/python/sc-observability-py/python/sc_observability/__init__.py`
-  - `bindings/python/sc-observability-py/python/sc_observability/__init__.pyi`
-  - `bindings/python/sc-observability-py/python/sc_observability/telemetry.py`
-  - `bindings/python/sc-observability-py/python/sc_observability/telemetry.pyi`
-  - `bindings/python/sc-observability-py/tests_telemetry/**`
-  - `bindings/python/sc-observability-py/tests/typing/test_telemetry_typing.py`
+  - bindings/python/sc-observability-py/src/lib.rs
+  - bindings/python/sc-observability-py/src/telemetry/**
+  - bindings/python/sc-observability-py/pyproject.toml
+  - bindings/python/sc-observability-py/python/sc_observability/__init__.py
+  - bindings/python/sc-observability-py/python/sc_observability/__init__.pyi
+  - bindings/python/sc-observability-py/python/sc_observability/telemetry.py
+  - bindings/python/sc-observability-py/python/sc_observability/telemetry.pyi
+  - bindings/python/sc-observability-py/tests_telemetry/**
+  - bindings/python/sc-observability-py/tests/typing/test_telemetry_typing.py
 
 Ownership notes: `src/lib.rs` changes by two lines only (see Design).
 `tests_telemetry/` is new and sits outside `tests/`, so

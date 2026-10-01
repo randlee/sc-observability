@@ -109,12 +109,12 @@ criteria, owned paths and validation live only in the sprint docs:
 | Sprint | Doc |
 | --- | --- |
 | d-29 | [sprint-d-29-telemetry-submission-contract.md](sprint-d-29-telemetry-submission-contract.md) |
-| d-33 | [sprint-d-33-durable-store-and-export.md](sprint-d-33-durable-store-and-export.md) |
+| d-33 | [sprint-d-33-durable-store-and-drain.md](sprint-d-33-durable-store-and-drain.md) |
 | d-34 | [sprint-d-34-otlp-submission-encoders.md](sprint-d-34-otlp-submission-encoders.md) |
 | d-30 | [sprint-d-30-python-telemetry-bindings.md](sprint-d-30-python-telemetry-bindings.md) |
 | d-31 | [sprint-d-31-sc-otel-cli.md](sprint-d-31-sc-otel-cli.md) |
 | d-35 | [sprint-d-35-sanity-history-importer.md](sprint-d-35-sanity-history-importer.md) |
-| d-32 | [sprint-d-32-sanity-telemetry-e2e.md](sprint-d-32-sanity-telemetry-e2e.md) |
+| d-32 | [sprint-d-32-telemetry-e2e-proof.md](sprint-d-32-telemetry-e2e-proof.md) |
 
 This section holds the design rationale, the wave-5 boundary map, the wave
 table and the wave-5 lead rulings (R1–R20, P1–P6). Governing records are
@@ -205,13 +205,13 @@ One track. Wave 5 is its own gh stack, `phase-d-wave5`, on `integrate/phase-d` (
 
 | Wave | Sprint | Closure | Target boundary | Owned paths (summary; sprint doc is authoritative) |
 | --- | --- | --- | --- | --- |
-| 5.1 | d-29 | contract | `BOUNDARY-ScObservabilityTypes` (wave-5 contract in `sc_observability_types::otlp`) | `crates/sc-observability-types/src/otlp/**`, the types and otlp `src/error_codes.rs` and `src/constants.rs`, the types `Cargo.toml`, its `otlp_*` tests and fixtures, `crates/sc-otel-cli/Cargo.toml`, the staged `crates/sc-otel-cli/src/main.rs`, `Cargo.toml`, `Cargo.lock`, `policy/otlp-transport.toml`, `policy/deny-durable-store.toml`, the wave-5 `boundaries/**` rows, the otlp `Cargo.toml` and `src/lib.rs`, the staged `durable/` files and `schema.sql`, the crate-private seam files (`lifecycle.rs`, `contracts.rs`, `contracts/profiles.rs`, `contracts/submission.rs`, `contracts/credits.rs`, `sync_http/mod.rs`, `sync_http/submission.rs`), `tests/contract_*.rs`, `bindings/python/sc-observability-py/Cargo.toml`, ADR-021/PHD text, the new API approval record |
-| 5.2 | d-33 | boundary (implementer) | `BOUNDARY-ScObservabilityOtlp` | `crates/sc-observability-otlp/src/durable/**` (not `schema.sql`), `src/contracts/credits.rs`, `src/contracts/submission.rs`, `src/lifecycle.rs`, `tests/fixtures/telemetry_yaml/**`, `.github/workflows/telemetry-platforms.yml` |
-| 5.2 | d-34 | boundary (implementer) | `BOUNDARY-ScObservabilityOtlp` | `crates/sc-observability-otlp/src/sync_http/**`, `src/contracts/profiles.rs` |
-| 5.2 | d-30 | boundary (consumer) | `BOUNDARY-ScObservabilityPy` | `bindings/python/sc-observability-py/**` (not `Cargo.toml` or `python/sc_observability/generated/**`; telemetry tests in `tests_telemetry/**`) |
-| 5.2 | d-31 | boundary (consumer) | `BOUNDARY-ScOtelCli` | `crates/sc-otel-cli/src/**`, `crates/sc-otel-cli/tests/**` |
-| 5.3 | d-35 | boundary (consumer) | `scripts/sanity-telemetry` (PHD-011) | `scripts/sanity-telemetry/**`, `.github/workflows/sanity-telemetry.yml`, `.sc/telemetry.yaml`, `.gitignore` |
-| 5.3 | d-32 | integration | wave-5 composition | `tests/telemetry-e2e/**`, `.github/workflows/telemetry-e2e.yml`, `docs/telemetry-submission.md` |
+| 5.1 | d-29 | contract | BOUNDARY-ScObservabilityTypes | `crates/sc-observability-types/src/otlp/**`, the types and otlp `src/error_codes.rs` and `src/constants.rs`, the types `Cargo.toml`, its `otlp_*` tests and fixtures, `crates/sc-otel-cli/Cargo.toml`, the staged `crates/sc-otel-cli/src/main.rs`, `Cargo.toml`, `Cargo.lock`, `policy/otlp-transport.toml`, `policy/deny-durable-store.toml`, the wave-5 `boundaries/**` rows, the otlp `Cargo.toml` and `src/lib.rs`, the staged `durable/` files and `schema.sql`, the crate-private seam files (`lifecycle.rs`, `contracts.rs`, `contracts/profiles.rs`, `contracts/submission.rs`, `contracts/credits.rs`, `sync_http/mod.rs`, `sync_http/submission.rs`), `tests/contract_*.rs`, `bindings/python/sc-observability-py/Cargo.toml`, ADR-021/PHD text, the new API approval record |
+| 5.2 | d-33 | boundary (implementer) | BOUNDARY-ScObservabilityOtlp | `crates/sc-observability-otlp/src/durable/**` (not `schema.sql`), `src/contracts/credits.rs`, `src/contracts/submission.rs`, `src/lifecycle.rs`, `tests/fixtures/telemetry_yaml/**`, `.github/workflows/telemetry-platforms.yml` |
+| 5.2 | d-34 | boundary (implementer) | BOUNDARY-ScObservabilityOtlp | `crates/sc-observability-otlp/src/sync_http/**`, `src/contracts/profiles.rs` |
+| 5.2 | d-30 | boundary (consumer) | BOUNDARY-ScObservabilityPy | `bindings/python/sc-observability-py/**` (not `Cargo.toml` or `python/sc_observability/generated/**`; telemetry tests in `tests_telemetry/**`) |
+| 5.2 | d-31 | boundary (consumer) | BOUNDARY-ScOtelCli | `crates/sc-otel-cli/src/**`, `crates/sc-otel-cli/tests/**` |
+| 5.3 | d-35 | integration | importer-composition | `scripts/sanity-telemetry/**`, `.github/workflows/sanity-telemetry.yml`, `.sc/telemetry.yaml`, `.gitignore` |
+| 5.3 | d-32 | integration | wave5-composition | `tests/telemetry-e2e/**`, `.github/workflows/telemetry-e2e.yml`, `docs/telemetry-submission.md` |
 
 - Tracks: 1. Waves: 3 (5.1: d-29; 5.2: d-33, d-34, d-30, d-31; 5.3: d-35,
   d-32). Critical path: 3 (d-29 → d-30 → d-35, or d-29 → any 5.2 sprint →

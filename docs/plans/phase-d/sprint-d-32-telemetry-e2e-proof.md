@@ -7,17 +7,21 @@
 - Assignee / model: cobs / terra
 - Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `integration`
-- Target boundary: wave-5 composition (installed Python wheel + installed `sc-otel` + `DurableTelemetryClient` + sync-http submission encoders + pinned viewer)
-- Branch: `sprint/d-32-sanity-telemetry-e2e`
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-32-sanity-telemetry-e2e`
+- Target boundary: wave5-composition
+- Branch: `sprint/d-32-telemetry-e2e-proof`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-32-telemetry-e2e-proof`
 - PR target: `sprint/d-35-sanity-history-importer` (stack order only; no code dependency on d-35)
 - Blocked by: `obs-d-30-sanity`, `obs-d-31-sanity`, `obs-d-33-sanity`, `obs-d-34-sanity`
 - Requirements: PHB-010, PHB-013, PHD-001, PHD-002, PHD-003, PHD-005, PHD-006, PHD-007, PHD-008, PHD-009, PHD-010, PHD-012, PHD-013
 - ADRs: ADR-009, ADR-014, ADR-017, ADR-018, ADR-019, ADR-020, ADR-021
 - Owned paths:
-  - `tests/telemetry-e2e/**`
-  - `.github/workflows/telemetry-e2e.yml`
-  - `docs/telemetry-submission.md`
+  - tests/telemetry-e2e/**
+  - .github/workflows/telemetry-e2e.yml
+  - docs/telemetry-submission.md
+
+Boundary note: wave5-composition is the installed Python wheel, the installed
+`sc-otel`, `DurableTelemetryClient`, the sync-http submission encoders and the
+pinned viewer, composed end to end.
 
 ## Relations
 
@@ -172,7 +176,7 @@ reported to the lead. The lists change only by plan amendment.
   `exit=<code>` line.
 - [ ] boundary:ADR-018, req:PHD-003, req:PHD-012 (D6), D9 gate re-run:
   `otlp-conformance.yml` is dispatched on the d-32 head SHA
-  (`gh workflow run otlp-conformance.yml --ref sprint/d-32-sanity-telemetry-e2e`),
+  (`gh workflow run otlp-conformance.yml --ref sprint/d-32-telemetry-e2e-proof`),
   its jobs (hermetic collector matrix for both backends and
   `desktop-viewer-factory-conformance`) pass, and the run URL is recorded in
   the PR body. The `telemetry-e2e` job passes on the d-32 PR.

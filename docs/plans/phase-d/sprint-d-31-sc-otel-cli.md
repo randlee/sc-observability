@@ -7,7 +7,7 @@
 - Assignee / model: cobs / terra
 - Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `boundary` (consumer)
-- Target boundary: `BOUNDARY-ScOtelCli`
+- Target boundary: BOUNDARY-ScOtelCli
 - Branch: `sprint/d-31-sc-otel-cli`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-31-sc-otel-cli`
 - PR target: `sprint/d-30-python-telemetry-bindings` (stack order only; no code dependency on d-30)
@@ -15,8 +15,8 @@
 - Requirements: PHB-010, PHD-002, PHD-003, PHD-005, PHD-006, PHD-007, PHD-008, PHD-010, PHD-013
 - ADRs: ADR-002, ADR-005, ADR-009, ADR-012, ADR-014, ADR-018, ADR-019, ADR-020, ADR-021
 - Owned paths:
-  - `crates/sc-otel-cli/src/**`
-  - `crates/sc-otel-cli/tests/**`
+  - crates/sc-otel-cli/src/**
+  - crates/sc-otel-cli/tests/**
 
 Ownership notes: `crates/sc-otel-cli/src/main.rs` is staged by d-29 and owned
 by d-31 from wave 5.2. Not owned: `crates/sc-otel-cli/Cargo.toml` and

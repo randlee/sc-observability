@@ -7,16 +7,16 @@
 - Assignee / model: cobs2 / terra
 - Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `boundary` (implementer)
-- Target boundary: `BOUNDARY-ScObservabilityOtlp`
+- Target boundary: BOUNDARY-ScObservabilityOtlp
 - Branch: `sprint/d-34-otlp-submission-encoders`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-34-otlp-submission-encoders`
-- PR target: `sprint/d-33-durable-store-and-export` (stack order only; no code dependency on d-33)
+- PR target: `sprint/d-33-durable-store-and-drain` (stack order only; no code dependency on d-33)
 - Blocked by: `obs-d-29-sanity`
 - Requirements: PHB-010, PHD-002, PHD-003, PHD-004, PHD-005, PHD-006, PHD-008, PHD-013
 - ADRs: ADR-004, ADR-005, ADR-012, ADR-017, ADR-018, ADR-019, ADR-020, ADR-021
 - Owned paths:
-  - `crates/sc-observability-otlp/src/sync_http/**`
-  - `crates/sc-observability-otlp/src/contracts/profiles.rs`
+  - crates/sc-observability-otlp/src/sync_http/**
+  - crates/sc-observability-otlp/src/contracts/profiles.rs
 
 Ownership notes: in `src/contracts/profiles.rs` d-34 changes only the d-29
 staging attribute on `ProfileExporter` (see "Crate-private items d-34 may
