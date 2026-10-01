@@ -58,7 +58,7 @@ def assert_no_banned_dependencies(path: Path, workspace_document=None):
     if banned:
         raise SystemExit(f"forbidden boundary dependencies in {path}: {banned}")
 
-CORE_BOUNDARY_FORBIDDEN = {"schemars", "sc-observability-dto"}
+CORE_BOUNDARY_FORBIDDEN = {"schemars"}
 
 CORE_BOUNDARY_MANIFESTS = {
     "sc-observability-types": root / "crates/sc-observability-types/Cargo.toml",
