@@ -67,6 +67,38 @@ pub(super) fn scope(value: &InstrumentationScope) -> Map<String, Value> {
     encoded
 }
 
+/// Returns the group for a resource/scope pair, creating each layer once.
+///
+/// Signal encoders supply their record wrapper and encoder only; this keeps
+/// the grouping semantics identical for logs, traces, metrics, and profiles.
+pub(super) fn resource_scope_group<'a, G, S>(
+    groups: &'a mut Vec<G>,
+    resource: &Resource,
+    scope: &InstrumentationScope,
+    resource_of: impl Fn(&G) -> &Resource,
+    scopes_of: impl Fn(&mut G) -> &mut Vec<S>,
+    scope_of: impl Fn(&S) -> &InstrumentationScope,
+    new_resource_group: impl FnOnce(Resource) -> G,
+    new_scope_group: impl FnOnce(InstrumentationScope) -> S,
+) -> &'a mut S {
+    let resource_index = groups
+        .iter()
+        .position(|group| resource_of(group) == resource)
+        .unwrap_or_else(|| {
+            groups.push(new_resource_group(resource.clone()));
+            groups.len() - 1
+        });
+    let scopes = scopes_of(&mut groups[resource_index]);
+    let scope_index = scopes
+        .iter()
+        .position(|group| scope_of(group) == scope)
+        .unwrap_or_else(|| {
+            scopes.push(new_scope_group(scope.clone()));
+            scopes.len() - 1
+        });
+    &mut scopes[scope_index]
+}
+
 pub(super) fn timestamp(value: &Timestamp) -> Value {
     Value::String(value.into_inner().unix_timestamp_nanos().to_string())
 }

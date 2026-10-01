@@ -264,10 +264,10 @@ impl Worker {
         let worker_stop = Arc::clone(&stop);
         let flush_timeout = config.lifecycle_flush_timeout;
         let shutdown_timeout = config.lifecycle_shutdown_timeout;
-        let export_result_timeout = config
-            .retry
-            .sequence_timeout
-            .saturating_add(config.lifecycle_shutdown_timeout);
+        let export_result_timeout = export_result_timeout(
+            config.retry.sequence_timeout,
+            config.lifecycle_shutdown_timeout,
+        );
         let handshake_timeout = config
             .request_timeout
             .min(config.lifecycle_shutdown_timeout);
@@ -436,6 +436,16 @@ impl Worker {
         self.submit_control(ControlCommand::Shutdown { result: Some(tx) })?;
         wait_for_control_result(&rx, self.inner.lifecycle_shutdown_timeout)
     }
+}
+
+/// Bounds a synchronous submission by the worker's complete retry budget plus
+/// its finite dispatch margin. The lifecycle shutdown deadline alone is not a
+/// submission deadline: it may be intentionally shorter than a retry sequence.
+pub(super) fn export_result_timeout(
+    retry_sequence_timeout: Duration,
+    lifecycle_shutdown_timeout: Duration,
+) -> Duration {
+    retry_sequence_timeout.saturating_add(lifecycle_shutdown_timeout)
 }
 
 impl ExporterLifecycle for Worker {

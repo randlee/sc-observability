@@ -63,34 +63,22 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
 }
 
 fn append(groups: &mut Vec<ResourceMetrics>, record: &ResourceRecord<MetricStream>) {
-    let resource_group = if let Some(group) = groups
-        .iter_mut()
-        .find(|group| group.resource == record.resource)
-    {
-        group
-    } else {
-        groups.push(ResourceMetrics {
-            resource: record.resource.clone(),
+    let scope_group = resource::resource_scope_group(
+        groups,
+        &record.resource,
+        &record.scope,
+        |group| &group.resource,
+        |group| &mut group.scopes,
+        |group| &group.scope,
+        |resource| ResourceMetrics {
+            resource,
             scopes: Vec::new(),
-        });
-        groups.last_mut().expect("pushed resource group")
-    };
-    let scope_group = if let Some(group) = resource_group
-        .scopes
-        .iter_mut()
-        .find(|group| group.scope == record.scope)
-    {
-        group
-    } else {
-        resource_group.scopes.push(ScopeMetrics {
-            scope: record.scope.clone(),
+        },
+        |scope| ScopeMetrics {
+            scope,
             records: Vec::new(),
-        });
-        resource_group
-            .scopes
-            .last_mut()
-            .expect("pushed scope group")
-    };
+        },
+    );
     scope_group.records.push(metric(&record.record));
 }
 

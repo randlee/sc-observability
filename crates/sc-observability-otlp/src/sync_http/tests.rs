@@ -109,6 +109,18 @@ fn control_reply_timeout_and_disconnect_have_distinct_typed_errors() {
     ));
 }
 
+#[test]
+fn submission_wait_budget_includes_retry_sequence_when_shutdown_is_shorter() {
+    let retry_sequence = Duration::from_millis(50);
+    let shutdown_margin = Duration::from_millis(1);
+
+    assert_eq!(
+        super::implementation::export_result_timeout(retry_sequence, shutdown_margin),
+        Duration::from_millis(51),
+        "a short lifecycle shutdown deadline must not cut off an in-flight retry sequence"
+    );
+}
+
 struct StartupFixture {
     initialize: mpsc::Sender<()>,
     receive: mpsc::Sender<()>,

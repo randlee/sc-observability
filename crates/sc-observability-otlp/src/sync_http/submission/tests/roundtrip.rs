@@ -2,9 +2,13 @@ use super::super::*;
 use super::capture::{CAPTURE_TIMEOUT, capture_server};
 use super::proto_json::{NonFiniteDouble, decode_forms};
 use crate::config::{ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, SyncHttpRetryPolicy};
+use crate::constants::MAX_OTLP_ENCODED_REQUEST_BYTES;
 use sc_observability_types::{
     SpanId, Timestamp, TraceId,
-    otlp::submission::{IdSource, Signal, SubmissionEnvelope},
+    otlp::{
+        signals::AnyValue,
+        submission::{IdSource, Signal, SubmissionEnvelope},
+    },
 };
 use std::net::TcpListener;
 
@@ -227,5 +231,52 @@ fn profiles_with_distinct_dictionaries_are_submitted_separately() {
     assert_ne!(
         first.1["dictionary"]["stringTable"][0], second.1["dictionary"]["stringTable"][0],
         "each request retains the dictionary that owns its profile indices"
+    );
+}
+
+#[test]
+fn oversized_multi_envelope_submission_splits_at_encoded_request_limit() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind capture listener");
+    let exporter = submission_exporter(
+        format!("http://{}", listener.local_addr().expect("address")),
+        None,
+    );
+    let mut first = fixture("logs");
+    let mut second = fixture("logs");
+    let first_body = "a".repeat(MAX_OTLP_ENCODED_REQUEST_BYTES / 2);
+    let second_body = "b".repeat(MAX_OTLP_ENCODED_REQUEST_BYTES / 2);
+    first.logs[0].record.body = Some(AnyValue::String(first_body.clone()));
+    second.logs[0].record.body = Some(AnyValue::String(second_body.clone()));
+
+    let (captured, server) = capture_server(listener, &[200, 200]);
+    exporter
+        .export(Signal::Logs, &[first, second])
+        .expect("oversized batch is split and delivered");
+    let requests = (0..2)
+        .map(|_| {
+            captured
+                .recv_timeout(CAPTURE_TIMEOUT)
+                .expect("split request")
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(server.join().expect("capture server exits"), 2);
+    assert!(
+        requests
+            .iter()
+            .all(|(_, request)| request.to_string().len() <= MAX_OTLP_ENCODED_REQUEST_BYTES),
+        "every split request respects the encoded-byte limit"
+    );
+    assert_eq!(
+        requests
+            .iter()
+            .map(
+                |(_, request)| request["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]["body"]
+                    ["stringValue"]
+                    .as_str()
+            )
+            .collect::<Vec<_>>(),
+        [Some(first_body.as_str()), Some(second_body.as_str())],
+        "the split retains each original envelope exactly once"
     );
 }
