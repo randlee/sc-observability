@@ -133,7 +133,7 @@ pub(crate) fn bridge_health(value: bridge::BridgeHealthReport) -> dto::LogHealth
         level_revision: level_state.level_revision.clone(),
     };
     dto::LogHealthDto {
-        schema_version: 1,
+        schema_version: dto::constants::WIRE_SCHEMA_VERSION,
         logging,
         bridge: Some(bridge),
         level_state,
