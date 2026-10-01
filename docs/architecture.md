@@ -1202,8 +1202,8 @@ in [the CI policy](ci-policy.md).
   traits. The official SDK adapter requires a caller Tokio runtime; the synchronous HTTP
   adapter owns a bounded plain-thread worker and uses the same lifecycle core.
   Backend/protocol combinations are validated at construction. Enabled
-  transports never fall back to no-op. Imported code/docs are governed by the
-  immutable Phase D provenance manifest and OTLP-023/024.
+  transports never fall back to no-op. Imported code/docs are governed by
+  OTLP-023/024.
   The dependency allowlist admits only the explicitly feature-gated
   `opentelemetry*` SDK family and reviewed transport dependencies; no unrelated
   dependency may be added under the OTLP feature.

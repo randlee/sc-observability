@@ -84,7 +84,7 @@ applicable retained workflows on the candidate ref before publishing and
 verifies successful completion: B.2 for the current six-package release train,
 and B.P2 only when its candidate/baseline authority matches the release plan.
 B.2 runs
-`test_log_staging.py` and `test_legacy_otlp_provenance.py`; B.P2 runs
+`test_log_staging.py`; B.P2 runs
 `test_validate_runtime_level_qualification_metadata.py`,
 `test_validate_runtime_level_platform_evidence.py`,
 `validate_runtime_level_qualification_metadata.py` and the `rustfmt --check`
@@ -121,6 +121,6 @@ Retired 2026-09-26: `validate_log_import.py`, `_log_metadata_adaptations.py`,
 `post-import-adaptations.json`, `release-adaptations-b-2.json` and Phase C
 `manifest-metadata-adaptations.json`. References in historical sprint plans,
 approvals and architecture records describe the acceptance gates at that time;
-they do not require restoring these retired gates. OTLP-023 is now enforced by
-D8 adapter tests using the retained Phase D `legacy-otlp-provenance.json` as
-source authority.
+they do not require restoring these retired gates. The Phase D OTLP
+transplant provenance manifest and its validator were retired with the
+`sync-http` rename; OTLP-023 no longer requires them.

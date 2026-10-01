@@ -358,7 +358,7 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - concurrent or repeated async shutdown callers share one completion; calls
     made after terminal completion are idempotent and return `Ok(())`, so only
     the first/in-flight caller set observes a terminal failure
-  - the synchronous legacy backend retains final-result
+  - the synchronous HTTP backend retains final-result
     `flush_typed()`/`shutdown_typed()` compatibility on plain threads; it
     returns `BlockingBackendInAsyncContext` before buffer/state mutation when
     called from an entered Tokio runtime
@@ -370,11 +370,11 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
     false success, and accounts admitted-but-incomplete records as dropped
   - incomplete spans are dropped only at shutdown/final flush
 - OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
-- OTLP-023 Restored legacy exporter code, tests, dashboards, and operational
-  recipes shall be traceable to an immutable source commit and Git blob in an
-  in-repository provenance manifest. Import validation shall verify destination
-  dispositions/hashes and reject scratch paths, ATM dependencies/labels, and
-  stale source-repository names from shipped output.
+- OTLP-023 The synchronous HTTP/JSON backend (feature `sync-http`) is a
+  first-class supported backend for callers without an async runtime. Its code,
+  tests, dashboards, and operational recipes shall be maintained in this
+  repository and shall not ship scratch paths, ATM dependencies/labels, or
+  stale source-repository names.
 - OTLP-024 The supported Grafana/LogQL operational recipes shall be translated
   to the current neutral resource/attribute schema, tested against the same
   hermetic collector corpus as both exporters, and stored under
@@ -601,5 +601,5 @@ ADR-020 records the user's current compatible 1.x release decision. PHB-003/004/
 
 - PHD-001 The shared canonical diagnostic error implementation shall provide typed cause variants preserving diagnostic code, remediation, structured context and available source data. In the current 1.x release, incompatible new identities use opt-in canonical namespaces and existing released identities/variants remain functional through boundary adapters. Root replacement is reserved for a separately authorized 2.0 release.
 - PHD-002 Current 1.x integration shall retain released wrappers, typed/legacy adapters and classification surfaces where needed for compatibility. Deprecated interfaces shall have functioning replacements, executable migration fixtures and named future removal points. Compare every released package against frozen 1.4.1; no breaking-change approval may turn a 1.x incompatibility into PASS. Removal and a new major baseline require separate 2.0 authorization.
-- PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a caller-owned runtime and a bounded plain-thread legacy HTTP/JSON backend. They shall share crate-private contracts, ordered admission/lifecycle barriers, deadlines and health/drop accounting. Backend/protocol/runtime combinations shall be validated at construction, and enabled transports shall never silently fall back to no-op.
+- PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a caller-owned runtime and a bounded plain-thread synchronous HTTP/JSON backend (feature `sync-http`) for callers without an async runtime. They shall share crate-private contracts, ordered admission/lifecycle barriers, deadlines and health/drop accounting. Backend/protocol/runtime combinations shall be validated at construction, and enabled transports shall never silently fall back to no-op.
 - PHD-004 Preserve the accepted Phase D canonical OTLP config/default/validation behavior: queue bounds limit record count and aggregate bytes, explicit validated config is not overridden by ambient OTEL_* values, and both backends satisfy OTLP-021. D22 specifies compatibility with released config literals/defaults; D26 supplies minimal adapters without changing backend contracts. Incompatible new configuration owners use the canonical namespace while the released root configuration retains its behavior.

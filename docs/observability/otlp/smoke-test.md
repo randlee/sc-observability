@@ -9,8 +9,7 @@ allowed_delta: neutral-current-schema
 -->
 
 This is the current, repository-local smoke path. It supersedes only the
-historical plan's external operational instructions; the pinned source above
-remains the provenance record for that disposition.
+historical plan's external operational instructions.
 
 Run the canonical ingress corpus through both supported production backends:
 
