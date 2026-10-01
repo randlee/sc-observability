@@ -694,7 +694,7 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts; Phase D wave 5 (ADR-021): the `otlp::signals` neutral signal types and the `otlp::submission` contracts (envelope, receipts, status, error codes, config and precedence, the `TelemetryClient` trait), with `InMemoryTelemetryClient`, `DoubleScript` and the conformance suite behind the `test-double` feature (optional `uuid`) |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
@@ -1347,7 +1347,7 @@ was reworded accordingly to describe the remaining validation.
 
 - **Status**: Accepted (lead decision 2026-10-01) for Phase D wave 5
   (d-29 contract, d-33 store/export, d-30 Python, d-31 CLI, d-32 integration).
-  The plan is `docs/plans/telemetry-python-cli.md`; normative signatures are in
+  The plan is the "Wave 5" section of `docs/plans/phase-d/plan-phase-d.md`; normative signatures are in
   `docs/plans/phase-d/sprint-d-29-telemetry-submission-contract.md`.
 - **Context**: Customer records must be mapped to telemetry. Python lacks a
   complete OTLP submission surface. Reimplementing transport or durability in
@@ -1422,10 +1422,15 @@ was reworded accordingly to describe the remaining validation.
   `otlp-telemetry`, which release wheels enable. The `.sc/telemetry.yaml`
   parser is `serde-saphyr =1.3.0`, used only by
   `sc-observability-otlp` under `durable-store`; `sc-observability-types`
-  gains no YAML dependency. The license and advisory audit is cargo-deny with
+  gains no YAML dependency. `SubmissionId` and the drain lease holder ID
+  (`<pid>:<uuid>`) use `uuid =1.26.1` (v7), optional in both crates. The
+  `sc-otel` CLI parses arguments with `clap =4.6.7`. The full pin set is in
+  the d-29 sprint doc. The license and advisory audit is cargo-deny with
   `policy/deny-durable-store.toml`. The platform matrix is linux
   x86_64/aarch64, macOS x86_64/arm64, windows x86_64/arm64 and abi3-py310
-  wheels on each.
+  wheels on each. It is proven by the dispatched `telemetry-platforms.yml`
+  run (d-29, re-run by d-32) and the dispatched `b4a-python-distributions.yml`
+  run (d-30).
 - **Configuration**: One precedence contract applies per field: explicit
   value > telemetry.yaml > environment (`OTEL_EXPORTER_OTLP_ENDPOINT`,
   `OTEL_SERVICE_NAME`, `SC_OTEL_AUTH_HEADER`) > default. Credentials come

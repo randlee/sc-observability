@@ -3,7 +3,7 @@
 ## Plan metadata
 
 - Wave: 5.3 (wave-5 integration)
-- Layer: 5 of the wave-5 stack (d-29 → d-33 → d-30 → d-31 → d-32)
+- Stack / layer: `phase-d-wave5` stack, layer 5 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
 - Assignee / model: cobs / terra (difficulty: normal)
 - Closure: `integration`
 - Target boundary: wave-5 composition (installed Python wheel + installed `sc-otel` + `DurableTelemetryClient` + pinned viewer)
@@ -17,6 +17,7 @@
   - importer (PHD-011): `scripts/sanity-telemetry/**`
   - e2e proof (PHD-012/013): `tests/telemetry-e2e/**`, `.github/workflows/telemetry-e2e.yml`
   - shared consumer config: `.sc/telemetry.yaml`
+  - `.gitignore` (one added line: `.sc/telemetry-state/`)
   - user docs: `docs/telemetry-submission.md`
   - `docs/plans/phase-d/sprint-d-32-sanity-telemetry-e2e.md`
 
@@ -55,7 +56,8 @@ Importer (root `scripts/sanity-telemetry/`):
    `pr.url` from `github.pr_url_template`. [PHD-011]
 2. Add the modes `import` (historical, read to EOF) and `follow` (tail with a
    poll interval). Source progress is persisted in the checkpoint file
-   `.sc/telemetry-state/checkpoints.json`, and is written only after `emit`
+   `.sc/telemetry-state/checkpoints.json` (the directory is git-ignored by
+   the one `.gitignore` line d-32 adds), and is written only after `emit`
    returns a receipt. Handle partial final lines (not consumed until a
    newline arrives), rotation or replacement (inode or first-line fingerprint
    change → restart from 0, with record keys preventing duplicates),
@@ -82,11 +84,21 @@ End-to-end proof (root `tests/telemetry-e2e/`, CI job `telemetry-e2e`):
 7. Add Python/CLI equivalence, offline recovery, restart, partial-delivery
    and shared-store tests. [PHD-007, PHD-008, PHD-010, PHD-012]
 8. Add `.github/workflows/telemetry-e2e.yml` (`macos-14`, because the viewer
-   pin is darwin_arm64 only), running deliverables 4–7 and the importer tests
-   on each PR to `integrate/phase-d` that touches wave-5 paths. [PHD-012]
-9. Run the D18 and D9 gates over wave 5: the public-API semver/compat checks
-   and the `otlp-conformance.yml` jobs, checked against the approval record
-   the user signed at d-29 closeout. [PHD-002, PHD-013]
+   pin is darwin_arm64 only), running deliverables 4–7 and the importer tests.
+   Triggers: `pull_request` to `sprint/*` and `integrate/*` with a path filter
+   on the wave-5 paths (`crates/sc-observability-types/src/otlp/**`,
+   `crates/sc-observability-otlp/**`, `crates/sc-otel-cli/**`,
+   `bindings/python/sc-observability-py/**`, `scripts/sanity-telemetry/**`,
+   `tests/telemetry-e2e/**`, `.sc/telemetry.yaml`, `Cargo.toml`,
+   `Cargo.lock` and the workflow itself), plus `workflow_dispatch`. So it
+   runs on the d-32 PR, whose base is `sprint/d-31-sc-otel-cli`. [PHD-012]
+9. Run the D18 and D9 gates over wave 5. D18: `just public-api` and
+   `validate_error_migration.py`, run locally on the d-32 head with captured
+   logs (the `ci.yml` public-API steps are `continue-on-error` for
+   non-develop bases, so CI is not the evidence). D9: `otlp-conformance.yml`
+   dispatched on the d-32 head SHA (its path filter does not match d-32's
+   owned paths, so the PR alone would not run it). Also re-dispatch
+   `telemetry-platforms.yml` on the d-32 head. [PHD-002, PHD-013]
 10. Add the user docs `docs/telemetry-submission.md`: Python and CLI usage,
     config precedence, exit codes, the at-least-once note and the capability
     matrix link. [PHD-009, PHD-010]
@@ -112,6 +124,9 @@ End-to-end proof (root `tests/telemetry-e2e/`, CI job `telemetry-e2e`):
 - `kind: sanity`. Two sources: `.sc/sanity-log/sanity-llm.jsonl` (legacy
   rows) and `.sc/sanity-log/phase-d.jsonl` (current rows written by
   `sanity-run-history` via `sanity-run-record.json.j2` v1.0.0).
+  `.sc/sanity-log/phase-d-supplemental.jsonl` (rows with `branch`, `note`,
+  `finding_beads` and no `completed_at`) is not a `sources[]` entry in the
+  #788 `telemetry.yaml` and is excluded; the importer never reads it.
   - Current row: `run_id`, `reviewer` (`sanity-llm`|`sanity-jev`), `commit`
     (a 40- or 64-hex SHA), `task`, `sprint`, `phase`, `started_at`,
     `completed_at` (UTC `Z`), `duration`, `duration_seconds`, `pr_number`,
@@ -146,13 +161,22 @@ End-to-end proof (root `tests/telemetry-e2e/`, CI job `telemetry-e2e`):
 | `task`, `sprint`, `iteration`, `tested` | `review.task`, `review.sprint`, `review.iteration`, `qa.tested` | omitted |
 | `phase` | attribute `phase` | source `phase:` default |
 | `pr_number` | attributes `vcs.pr.number` and `pr.url` (template) | both omitted |
-| `run_id` | `record_key` part, trace ID derived as sha256(`run_id`)[0:16] so the LLM and JEV spans of one run share a trace | legacy rows: no shared trace |
+| `run_id` | `record_key` part, trace ID derived as sha256(`run_id`)[0:16] so the LLM and JEV spans of one run share a trace (see the pairing note) | legacy rows: no shared trace |
 | `error.code` / `error.message` | attributes `review.error.code`, `review.error.message`; span status `Error` | omitted |
 | `completed_local`, `snapshot_local` | not imported (local time is display only) | n/a |
 | correction rows | log with attribute `qa.correction = true` and `qa.corrects` | n/a |
 
 The record key is
 `<kind>:<source path>:<run_id or sha256(canonical row JSON)>:<reviewer>`.
+
+Pairing note: both reviewers of one sanity run write the same `run_id`. On
+`feat/qa-sanity-telemetry-config`, `sanity-split` creates one
+`run_id = str(uuid.uuid4())` per run in the split manifest
+(`.claude/skills/atm-bd-orchestration/scripts/sanity-split:376`),
+`sanity-merge` copies the manifest `run_id` into each reviewer's report
+(`sanity-merge:224`), `sanity-run-record.json.j2` v1.0.0 writes it as a field,
+and `sanity-run-history` groups one run by `run_id` (`sanity-run-history:121`;
+fixture pair in `scripts/tests/test_sanity_run_history.py:73-74`).
 
 Local display: `scripts/sanity-telemetry/display.py::format_local(ts, tz)` is
 unit tested. The viewer is never used to prove local time.
@@ -190,7 +214,11 @@ Importer (PHD-011):
   - `checkpoint_written_only_after_receipt`: an injected admission failure
     leaves the checkpoint unchanged.
 - [ ] req:PHD-011 (D1, D3): `scripts/sanity-telemetry/tests/test_import_viewer.py`
-  (CI `telemetry-e2e`) imports a bounded sample through the installed wheel
+  (CI `telemetry-e2e`) imports the checked-in sample
+  `scripts/sanity-telemetry/tests/fixtures/viewer_sample/` (rows copied from
+  the real current-sanity, legacy-sanity, qa and finding-counts formats,
+  including one LLM/JEV pair sharing a `run_id`; `.sc/` logs are untracked,
+  so CI never reads them) through the installed wheel
   into the pinned viewer. It asserts by `searchLogs`:
   - team/phase filtered result sets equal the expected row IDs;
   - an LLM vs JEV paired run returns two spans with one trace ID via
@@ -203,18 +231,22 @@ Importer (PHD-011):
 End-to-end (PHD-012/013):
 
 - [ ] req:PHD-012 (D4, D5): `tests/telemetry-e2e/test_viewer_readback.py`
-  submits through the installed wheel and the installed `sc-otel`. For each
+  submits through the installed wheel (from a plain Python script that never
+  creates an event loop or runtime) and the installed `sc-otel`. For each
   viewer-readback signal and form it asserts exact values, UTC timestamps,
-  resource attributes and log/span correlation in the stored records.
+  resource attributes and log/span correlation in the stored records. This
+  is also the proof that neither front end needs a caller-owned runtime.
 - [ ] req:PHD-013 (D6): `tests/telemetry-e2e/test_collector_capture.py`
   submits ExponentialHistogram, Summary, exemplars and a profile with a
   dictionary through both installed front ends. It asserts the captured
   OTLP/JSON field values, with profiles at `/v1development/profiles`. The
   report labels these "collector capture", never "viewer verified".
 - [ ] req:PHD-010 (D7): `tests/telemetry-e2e/test_equivalence.py`: for every
-  d-29 golden fixture, Python `build_envelope` and `sc-otel validate` produce
-  byte-identical canonical JSON, and Python `emit` and `sc-otel emit` produce
-  identical captured OTLP payloads apart from generated IDs.
+  d-29 golden fixture, Python `build_envelope(json.load(input.json))` and
+  `sc-otel validate --stdin < input.json` produce byte-identical canonical
+  JSON, and Python `emit(input)` and `sc-otel emit --stdin` produce identical
+  captured OTLP payloads apart from generated IDs. Both front ends take the
+  one d-29 `SubmissionInput` shape.
 - [ ] req:PHD-007, req:PHD-008 (D7): `tests/telemetry-e2e/test_recovery.py`
   covers:
   - `offline_then_recover`: the collector is down at emit (exit 6), and a
@@ -224,29 +256,48 @@ End-to-end (PHD-012/013):
   - `partial_signal_delivery`: the profiles endpoint returns 503 while logs
     deliver, and status shows per-signal state.
   - `viewer_restart_no_loss`
-- [ ] req:PHD-002, req:PHD-013 (D9), D18 gate re-run: `just public-api`
-  (including `python3 scripts/ci/validate_public_api_semver.py` against the
-  1.4.1 baseline) and `python3 scripts/ci/validate_error_migration.py` pass
-  with the wave-5 surface, and every reported wave-5 public item is listed
-  in the signed `docs/api-approvals/phase-d-wave5-telemetry-submission.json`.
-- [ ] req:PHD-012 (D9), D9 gate re-run: the `otlp-conformance.yml` jobs
-  (hermetic collector matrix and `desktop-viewer-factory-conformance`) pass on
-  the d-32 PR head, and the `telemetry-e2e` job passes in CI.
-- [ ] req:PHD-013 (D9): the scoped cargo-deny audit from d-29 passes again on
-  the integrated graph.
+- [ ] req:PHD-002, req:PHD-013 (D9), D18 gate re-run: on the d-32 head,
+  `just public-api` (including `python3 scripts/ci/validate_public_api_semver.py`
+  against the 1.4.1 baseline) and `python3 scripts/ci/validate_error_migration.py`
+  pass, and `approval_for` passes for every changed crate: the docs step
+  (`python3 scripts/ci/validate_public_api.py docs`) reports "all affected
+  crates explicitly approved" against the signed
+  `docs/api-approvals/phase-d-wave5-telemetry-submission.json`. Logs:
+  `target/telemetry-e2e/evidence/public-api.log` and
+  `target/telemetry-e2e/evidence/error-migration.log`, each ending with an
+  `exit=<code>` line.
+- [ ] req:PHD-012 (D9), D9 gate re-run: `otlp-conformance.yml` is dispatched
+  on the d-32 head SHA
+  (`gh workflow run otlp-conformance.yml --ref sprint/d-32-sanity-telemetry-e2e`),
+  its jobs (hermetic collector matrix and `desktop-viewer-factory-conformance`)
+  pass, and the run URL is recorded in the PR body. The `telemetry-e2e` job
+  passes on the d-32 PR.
+- [ ] req:PHD-013 (D9): the two scoped cargo-deny audits from d-29 pass again
+  on the integrated graph. Log: `target/telemetry-e2e/evidence/cargo-deny.log`,
+  ending with an `exit=<code>` line per audit.
+- [ ] boundary:ADR-021 (D9): `telemetry-platforms.yml` is dispatched on the
+  d-32 head SHA, all six cells pass, and the run URL is recorded in the PR
+  body.
 
-Manual UI inspection is not acceptable proof for any criterion. Every
-criterion above runs in CI (`telemetry-e2e`, `otlp-conformance` and `ci`).
+Manual UI inspection is not acceptable proof for any criterion. Where each
+criterion runs: the importer and e2e criteria in the `telemetry-e2e` PR job;
+the D9 conformance and platform criteria in the dispatched runs named above;
+the D18 gate and cargo-deny in Required validation, with the captured logs as
+evidence.
 
 ## Required validation
 
 ```sh
+E=target/telemetry-e2e/evidence; mkdir -p "$E"
 just validate
-just public-api
-python3 scripts/ci/validate_error_migration.py
+{ just public-api; echo "exit=$?"; } > "$E/public-api.log" 2>&1
+{ python3 scripts/ci/validate_error_migration.py; echo "exit=$?"; } > "$E/error-migration.log" 2>&1
 python3 -m pytest scripts/sanity-telemetry/tests tests/telemetry-e2e
-cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories
+{ cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories; echo "exit=$?"; \
+  cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features check --config policy/deny-durable-store.toml licenses bans advisories; echo "exit=$?"; } > "$E/cargo-deny.log" 2>&1
 ```
 
-CI jobs that must be green on the PR head: `ci`, `otlp-conformance`
-(all jobs) and `telemetry-e2e`.
+Evidence that must exist at the PR head: the `ci` and `telemetry-e2e` PR
+jobs green; the dispatched `otlp-conformance.yml` and
+`telemetry-platforms.yml` run URLs, all green; and the three logs above, with
+every `exit=` line `exit=0`.

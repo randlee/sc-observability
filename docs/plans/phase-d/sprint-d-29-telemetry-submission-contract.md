@@ -3,13 +3,14 @@
 ## Plan metadata
 
 - Wave: 5.1 (wave-5 contract)
-- Layer: 1 of the wave-5 stack (d-29 → d-33 → d-30 → d-31 → d-32)
+- Stack / layer: `phase-d-wave5` stack, layer 1 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
 - Assignee / model: aobs / astra (difficulty: hard)
 - Closure: `contract`
 - Target boundary: `BOUNDARY-ScObservabilityTypes` (wave-5 contract: the neutral signal types and the submission contract in `sc_observability_types::otlp`)
+- vertical_rationale: "thin file-config loader is the contract's config entry point consumed by d-30 and d-31; schema.sql is contract DDL; the staged crate-private seams in sc-observability-otlp are the contract d-33 implements against (wave-5 ruling R14)". Criteria for this otlp work are rooted at `boundary:BOUNDARY-ScObservabilityOtlp`.
 - Branch: `sprint/d-29-telemetry-submission-contract`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-29-telemetry-submission-contract`
-- PR target: `integrate/phase-d`
+- PR target: `integrate/phase-d` (base of the `phase-d-wave5` stack)
 - Blocked by: `obs-d-26-sanity`, `obs-d-28-sanity`
 - Requirements: PHD-002, PHD-003, PHD-004, PHD-005, PHD-006, PHD-007, PHD-008, PHD-009, PHD-010, PHD-013
 - ADRs: ADR-018, ADR-019, ADR-020, ADR-021
@@ -22,19 +23,27 @@
   - `boundaries/sc-observability-otlp/otlp.toml`
   - `boundaries/sc-observability-py/python.toml`
   - `boundaries/sc-otel-cli/**`
-  - `crates/sc-observability-types/Cargo.toml` (feature `test-double` only)
+  - `crates/sc-observability-types/Cargo.toml` (feature `test-double` and the optional `uuid` line only)
   - `crates/sc-observability-types/src/otlp/**`
   - `crates/sc-observability-types/tests/otlp_signals_contract.rs`
   - `crates/sc-observability-types/tests/otlp_submission_contract.rs`
   - `crates/sc-observability-types/tests/fixtures/otlp_submission/**`
   - `crates/sc-observability-otlp/Cargo.toml`
   - `crates/sc-observability-otlp/src/lib.rs` (one registration hunk only; see the d-18 note)
+  - `crates/sc-observability-otlp/src/contracts.rs` (one `pub(crate) mod profiles;` line only; see the d-18 note)
+  - `crates/sc-observability-otlp/src/contracts/profiles.rs` (new)
+  - `crates/sc-observability-otlp/src/contracts/credits.rs` (`wait_for_release` and its test only)
+  - `crates/sc-observability-otlp/src/lifecycle.rs` (`SignalKind::Profiles` hunk only)
   - `crates/sc-observability-otlp/src/durable/mod.rs` (staged stub; handed off to d-33)
+  - `crates/sc-observability-otlp/src/durable/adapter.rs` (staged signature; handed off to d-33)
   - `crates/sc-observability-otlp/src/durable/schema.sql`
   - `crates/sc-observability-otlp/src/durable/config_file.rs` (`.sc/telemetry.yaml` loader)
+  - `crates/sc-observability-otlp/tests/contract_schema.rs`
+  - `crates/sc-observability-otlp/tests/contract_manifest.rs`
   - `crates/sc-otel-cli/Cargo.toml`
   - `crates/sc-otel-cli/src/main.rs` (staged stub; handed off to d-31)
   - `bindings/python/sc-observability-py/Cargo.toml`
+  - `.github/workflows/telemetry-platforms.yml` (new)
   - `docs/architecture.md` (ADR-021, §6 rows, binding edges)
   - `docs/requirements.md` (PHD-005–013)
   - `docs/api-approvals/phase-d-wave5-telemetry-submission.json` (new file; see Closeout gate)
@@ -48,45 +57,53 @@
 - `must_follow` d-28: consumes the 1.x release/compat baseline that the
   additive public surface is checked against.
 - d-33, d-30 and d-31 `must_follow` d-29. They consume the `TelemetryClient`
-  trait, the envelope/receipt/error types, `schema.sql`, the test double and
-  the golden fixtures.
-- Shared-file note: `crates/sc-observability-otlp/src/lib.rs` is also in the
-  in-flight d-18 fence. d-29 adds only
-  `#[cfg(feature = "durable-store")] pub mod durable;`. If d-18 is unmerged,
-  d-29 merges forward d-18's pushed head before every round. No DAG edge is
-  added. The same rule covers the new approval file under
-  `docs/api-approvals/**`, which is also in the d-18 fence: d-29 only adds a
-  file there (lead ruling P2, 2026-10-01).
+  trait, the envelope/receipt/error types, `schema.sql`, the staged
+  crate-private seams, the dependency set, the test double and the golden
+  fixtures.
+- Shared-file note: `crates/sc-observability-otlp/src/lib.rs`,
+  `crates/sc-observability-otlp/src/contracts.rs` and `docs/api-approvals/**`
+  are also in the in-flight d-18 fence. d-29 adds only
+  `#[cfg(feature = "durable-store")] pub mod durable;` to `lib.rs`, only
+  `pub(crate) mod profiles;` to `contracts.rs`, and only one new file under
+  `docs/api-approvals/`. If d-18 is unmerged, d-29 merges forward d-18's
+  pushed head before every round. No DAG edge is added (lead ruling P2,
+  wave-5 ruling R14). `lifecycle.rs` and `contracts/credits.rs` are outside
+  the d-18 fence.
 
 ## Goal
 
 Fix every wave-5 interface before any implementation, so that d-33, d-30 and
 d-31 run in parallel without renegotiating. The signal types and envelope
 canonicalization are fully implemented here, because they are the contract
-both front ends must share. The store, drain and export are not implemented.
+both front ends must share. The crate-private seams d-33 builds on are staged
+here. The store, drain and export are not implemented.
 
 ## Deliverables
 
 1. Pin the protocol: workspace `opentelemetry-proto = "=0.33.0"` (already
-   pinned), which vendors upstream **opentelemetry-proto v1.10.0**. Enable its
-   `profiles` feature only where an encoder needs it; d-29 adds no prost
-   dependency to the sync-http path. Commit the field inventory below as the
-   doc comment of `crates/sc-observability-types/src/otlp/signals/mod.rs`.
+   pinned), which vendors upstream **opentelemetry-proto v1.10.0**. d-29 adds
+   no feature to it and no prost dependency to the sync-http path; d-33
+   encodes OTLP/JSON by hand. Commit the field inventory below as the doc
+   comment of `crates/sc-observability-types/src/otlp/signals/mod.rs`.
    [PHD-013]
 2. Add the neutral signal types in `crates/sc-observability-types/src/otlp/signals/`,
-   declared from `src/otlp/mod.rs`, with validating constructors, serde and
-   `From` conversions from `LogEvent`, `SpanRecord<SpanEnded>`, v2
-   `MetricRecord`, `OtlpResource` and `OtlpInstrumentationScope`. Add no
-   variant or field to any existing type. [PHD-005, PHD-006, PHD-013]
+   declared from `src/otlp/mod.rs`, with validating constructors, serde that
+   deserializes through those constructors, and `From` conversions from
+   `LogEvent`, `SpanRecord<SpanEnded>`, v2 `MetricRecord`, `OtlpResource` and
+   `OtlpInstrumentationScope`. Add no variant or field to any existing type.
+   [PHD-005, PHD-006, PHD-013]
 3. Add module `sc_observability_types::otlp::submission` (declared from
    `src/otlp/mod.rs`, not `src/lib.rs`; no new crate, lead ruling P1) with the
-   submission contract: `SubmissionInput`, `SubmissionEnvelope`,
-   `from_input` canonicalization, receipts, status, the error enums and their
-   codes, `TelemetryClientConfig` and its precedence resolver, and the
-   `TelemetryClient` trait. [PHD-005, PHD-007, PHD-008, PHD-010]
-4. Add the `InMemoryTelemetryClient` test double and the public conformance
-   suite `testing::conformance::run_all::<C: TelemetryClient>` behind the
-   new `sc-observability-types` feature `test-double`, at the manifest's
+   submission contract: `SubmissionInput` with the full `LogInput`/`SpanInput`
+   field lists and the plain-JSON value form, `SubmissionEnvelope`,
+   `from_input` canonicalization, receipts, status, the flush result rules,
+   the error enums and their codes, `TelemetryClientConfig` with its per-field
+   source table and precedence resolver, and the `TelemetryClient` trait.
+   [PHD-005, PHD-007, PHD-008, PHD-010]
+4. Add the `InMemoryTelemetryClient` test double with the `DoubleScript`
+   scripted-outcome type, and the public conformance suite
+   `testing::conformance::run_all` with its `ConformanceHarness` trait, behind
+   the new `sc-observability-types` feature `test-double`, at the manifest's
    `allowed_test_double_paths`
    (`crates/sc-observability-types/src/otlp/submission/testing/**`). Add the
    golden fixture set at
@@ -97,41 +114,47 @@ both front ends must share. The store, drain and export are not implemented.
    `DurableTelemetryClient`. Its methods return
    `AdmissionError::StoreUnavailable`, never `todo!()`. Implement
    `durable/config_file.rs` in full: `load_telemetry_file`, which parses
-   `.sc/telemetry.yaml` with `serde-saphyr` into `TelemetryFileConfig`.
+   `.sc/telemetry.yaml` with `serde-saphyr` into `TelemetryFileConfig`. Add
+   `crates/sc-observability-otlp/tests/contract_schema.rs`, which loads
+   `schema.sql` into an empty in-memory SQLite database.
    [PHD-007, PHD-008, PHD-010]
-6. Update manifests and allowlists: the `sc-otel-cli` workspace member, the
-   `rusqlite =0.40.2` and `serde-saphyr =1.3.0` pins, the `durable-store`
-   feature, the `sc-observability-types` `test-double` feature, the
-   `otlp-telemetry` Python feature (with `test-hooks` extended by
-   `sc-observability-types/test-double` for the d-30 double wheel), the
-   `sc-otel-cli` skeleton with `publish = false` (dependencies
-   `sc-observability-types` and `sc-observability-otlp` with `durable-store`;
-   feature `test-double = ["sc-observability-types/test-double"]`), the new `sc-otel-cli`
-   manifest and the edited types/otlp/python manifests, and the `policy/otlp-transport.toml` row, all per
-   the boundary map in `docs/plans/telemetry-python-cli.md`. Run the
-   dependency and license audit (cargo-deny with
-   `policy/deny-durable-store.toml`) over the `durable-store` graph. [PHD-003, PHD-007, PHD-009, PHD-010]
-7. Commit the normative text: ADR-021 Accepted (capability matrix, storage,
-   layering, ownership, platform matrix, limits), PHD-005–013 amendments, the
-   §6 crate row for `sc-otel-cli`, and the feature-gated
-   `sc-observability-py → sc-observability-otlp` binding edge.
+6. Commit the complete wave-5 dependency set in the section "Dependency set"
+   below: every workspace pin, per-crate normal, dev and feature-gated
+   dependency, the `sc-otel-cli` workspace member and skeleton manifest, the
+   matching `policy/otlp-transport.toml` rows, and the boundary allowlist
+   rows. Add `crates/sc-observability-otlp/tests/contract_manifest.rs`, which
+   checks the `durable-store` binding. Run the dependency and license audit
+   (cargo-deny with `policy/deny-durable-store.toml`) over the
+   `durable-store` and `sc-otel-cli` graphs. [PHD-003, PHD-007, PHD-009, PHD-010]
+7. Keep ADR-021, PHD-005–013 and the §6 rows consistent with any contract
+   change made in this sprint. The normative text itself lands with the plan
+   (wave-5 ruling R1); d-29 edits it only when a contract detail changes.
    [PHD-002, PHD-003, PHD-013]
 8. Add contract tests: `crates/sc-observability-types/tests/otlp_signals_contract.rs`
    and `crates/sc-observability-types/tests/otlp_submission_contract.rs`
-   (golden fixtures, precedence, error codes, test-double conformance).
-   [PHD-005, PHD-006, PHD-013]
+   (golden fixtures, precedence, error codes, flush rules, scripted double,
+   test-double conformance). [PHD-005, PHD-006, PHD-013]
 9. Prepare `docs/api-approvals/phase-d-wave5-telemetry-submission.json`
-   listing every wave-5 public addition (the `otlp::signals` and
-   `otlp::submission` items, `sc-observability-otlp::durable`, the
-   `durable-store`, `test-double` and `otlp-telemetry` features). The user
-   signs it at d-29 closeout. [PHD-002]
+   with, per changed crate, the `api_sha256` that `validate_public_api.py diff`
+   reports and a `feature_api_sha256` map for the wave-5 features. This
+   freezes the wave-5 public surface (wave-5 ruling R17). The user signs it at
+   d-29 closeout. [PHD-002]
+10. Stage the crate-private seams in `sc-observability-otlp` that d-33 builds
+    on (wave-5 ruling R14), as specified in "Crate-private seams" below:
+    `SignalKind::Profiles`, the `ProfileExporter` trait, the
+    `AdmissionCredits::wait_for_release` hook and the
+    `durable::adapter::otel_config_from` signature. [PHD-004, PHD-013]
+11. Add `.github/workflows/telemetry-platforms.yml` (`workflow_dispatch`
+    only), which checks the `durable-store` graph and builds `sc-otel` on all
+    six platform targets. [PHD-003, PHD-013]
 
 ## This Sprint Does Not Close
 
 - The store, drain, lease, export and per-variant OTLP encoding. d-33 owns
   them.
 - Python bindings and the wheel feature in `pyproject.toml`. d-30 owns them.
-- CLI argument parsing, output and exit-code behavior. d-31 owns them.
+- CLI argument parsing, output and the exit-code mapping implementation.
+  d-31 owns them.
 - Installed front-end submission, viewer readback, the sanity importer, and
   the D18/D9 re-run. d-32 owns them.
 
@@ -181,11 +204,21 @@ as `u32`.
 ### Neutral signal types (`sc_observability_types::otlp::signals`)
 
 All new types are `#[non_exhaustive]` and constructed through `try_new` or
-builders. Released exhaustive types are not extended.
+builders. Released exhaustive types are not extended. Every type with a
+validation rule deserializes through its validating constructor:
+`#[serde(try_from = "<Type>Raw")]`, where `<Type>Raw` is a private
+field-for-field mirror. So no deserialized value bypasses validation. This
+covers `TraceState`, `StringIndex`, `KeyValues`, `NumberPoint`,
+`HistogramDataPoint`, `ExponentialHistogramDataPoint`, `SummaryDataPoint`,
+`ValueAtQuantile` and `MetricData` (which owns the temporality and
+monotonicity rules). Cross-table profile references are checked by
+`ProfilesDictionary::validate_references`, which `from_input` calls.
 
 ```rust
+/// Canonical (envelope) form is the adjacently tagged form below. Input
+/// deserialization also accepts the plain-JSON form; see "Input value forms".
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum AnyValue {
     String(String),
@@ -202,11 +235,13 @@ pub enum AnyValue {
     Array(Vec<AnyValue>),
     KvList(KeyValues),
 }
+impl<'de> Deserialize<'de> for AnyValue { /* manual: tagged or plain form */ }
 
-/// Ordered; duplicate keys rejected by `try_from_iter`.
+/// Ordered; duplicate keys rejected (by `try_from_iter` and by deserialization).
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct KeyValues(Vec<(AttributeKey, AnyValue)>);
+impl<'de> Deserialize<'de> for KeyValues { /* manual: canonical list or plain map */ }
 
 /// `key` or `key_strindex`. `Index` is valid only inside a profiles payload.
 #[non_exhaustive]
@@ -216,13 +251,19 @@ pub enum AttributeKey { Name(String), Index(StringIndex) }
 
 /// Index into `ProfilesDictionary.string_table` (proto `int32`, never negative).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "i32")]
 pub struct StringIndex(i32);
 
 /// Any IEEE-754 double. Neutral and OTLP/JSON encode finite values as JSON
 /// numbers and non-finite values as the proto-JSON strings "NaN", "Infinity"
-/// and "-Infinity". Equality is bitwise, so NaN round trips compare equal.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// and "-Infinity". Serialize, Deserialize and PartialEq are manual impls:
+/// derives cannot produce the string forms, and equality is bitwise
+/// (`f64::to_bits`), so NaN round trips compare equal.
+#[derive(Debug, Clone, Copy)]
 pub struct OtlpDouble(f64);
+impl Serialize for OtlpDouble { /* number, or "NaN"/"Infinity"/"-Infinity" */ }
+impl<'de> Deserialize<'de> for OtlpDouble { /* number or one of the three strings */ }
+impl PartialEq for OtlpDouble { /* self.0.to_bits() == other.0.to_bits() */ }
 
 #[non_exhaustive]
 pub struct Resource {
@@ -361,7 +402,7 @@ impl ProfilesDictionary {
 }
 ```
 
-Point validation (all in `try_new`):
+Point validation (all in `try_new`, and therefore in deserialization):
 
 - Histogram: increasing finite bounds, `bucket_counts.len() == bounds.len() + 1`,
   and the bucket sum equals `count`.
@@ -397,6 +438,26 @@ Outside a profiles payload they fail envelope validation with
 d-33 encodes it as base64 `bytesValue` in OTLP/JSON. Profile IDs, trace IDs
 and span IDs use the existing hex newtypes.
 
+### Input value forms
+
+`AnyValue` and `KeyValues` deserialize from two forms. Both conversions run in
+Rust inside `from_json`; no front end converts values itself.
+
+- **Canonical form** (what `to_canonical_json` writes): `KeyValues` is a JSON
+  array of `[key, value]` pairs, and `AnyValue` is `{"kind": ..., "data": ...}`.
+  Profile `AttributeKey::Index` keys are expressible only in this form.
+- **Plain form** (for callers): `KeyValues` is a JSON object
+  `{"name": value, ...}`. Duplicate names are rejected with
+  `SubmissionError::Validation { path }`, and entries are ordered by name.
+  A plain value maps as follows: string → `String`, bool → `Bool`, an integer
+  within `i64` → `Int`, a larger integer within `u64` → `UInt` (then the uint
+  policy applies), any number with a fraction or exponent → `Double`, array →
+  `Array`, object → `KvList`. `null` is rejected with `Validation { path }`.
+  Bytes, non-finite doubles, `uint` values within `i64` and string indexes
+  need the tagged form: an object with exactly the keys `kind` and `data`,
+  where `kind` is one of the `AnyValue` tags, is always read as a tagged
+  value. To send such an object as a literal kvlist, use the canonical form.
+
 ### Submission contract (`sc_observability_types::otlp::submission`)
 
 ```rust
@@ -410,21 +471,92 @@ impl EnvelopeVersion { pub const CURRENT: Self = Self(1); }
 /// Caller-stable idempotency key (1..=256 bytes UTF-8); duplicate admission returns
 /// the original receipt with `duplicate = true`.
 #[non_exhaustive] pub struct RecordKey(String);
-/// UUIDv7 text assigned at admission.
+/// UUIDv7 text assigned at admission by the client (`uuid` crate, feature `v7`;
+/// see "Dependency set").
 #[non_exhaustive] pub struct SubmissionId(String);
 
-/// Front-end input: IDs optional, span `end_time` XOR `duration_nanos`.
+/// The one input shape for every front end (Python `build_envelope`/`emit`,
+/// `sc-otel validate`/`emit`) and every golden `input.json`.
+/// Unknown keys are rejected (`deny_unknown_fields`).
 #[non_exhaustive]
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubmissionInput {
-    pub version: EnvelopeVersion,
+    pub version: EnvelopeVersion,               // required
     pub record_key: Option<RecordKey>,
+    pub resource: Option<signals::Resource>,    // envelope default
+    pub scope: Option<signals::InstrumentationScope>, // envelope default
+    #[serde(default)] pub logs: Vec<LogInput>,
+    #[serde(default)] pub spans: Vec<SpanInput>,
+    #[serde(default)] pub metrics: Vec<MetricInput>,
+    pub profiles: Option<ProfilesInput>,
+}
+
+/// Defaults in brackets. Plain or canonical value forms are accepted.
+#[non_exhaustive]
+#[derive(Debug, Clone, Deserialize)]
+pub struct LogInput {
+    pub time: Option<Timestamp>,
+    pub observed_time: Option<Timestamp>,        // [IdSource::now()]
+    pub severity_number: Option<SeverityNumber>, // [Unspecified = 0]
+    pub severity_text: Option<String>,
+    pub event_name: Option<String>,
+    pub body: Option<signals::AnyValue>,
+    #[serde(default)] pub attributes: signals::KeyValues,
+    #[serde(default)] pub dropped_attributes_count: u32,
+    #[serde(default)] pub flags: u32,
+    pub trace_id: Option<TraceId>,
+    pub span_id: Option<SpanId>,
+    /// Input-only. A log and a span with the same value in one submission share
+    /// the span's trace_id/span_id (generated when absent). Not stored.
+    pub correlation_id: Option<String>,
+    pub resource: Option<signals::Resource>,     // [envelope resource]
+    pub scope: Option<signals::InstrumentationScope>, // [envelope scope]
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Deserialize)]
+pub struct SpanInput {
+    pub trace_id: Option<TraceId>,               // [generated]
+    pub span_id: Option<SpanId>,                 // [generated]
+    pub trace_state: Option<String>,             // validated into TraceState
+    pub parent_span_id: Option<SpanId>,
+    #[serde(default)] pub flags: u32,
+    pub name: String,
+    pub kind: Option<signals::SpanKindPoint>,    // [Unspecified]
+    pub start_time: Timestamp,                   // required: an actual start time
+    /// Exactly one of end_time / duration_nanos is required. Both present and
+    /// agreeing is accepted; both present and disagreeing -> TimingConflict;
+    /// neither -> Validation { path: "spans[i].end_time" }.
+    pub end_time: Option<Timestamp>,
+    pub duration_nanos: Option<u64>,
+    #[serde(default)] pub attributes: signals::KeyValues,
+    #[serde(default)] pub dropped_attributes_count: u32,
+    #[serde(default)] pub events: Vec<signals::SpanEventPoint>,
+    #[serde(default)] pub dropped_events_count: u32,
+    #[serde(default)] pub links: Vec<signals::SpanLinkPoint>,
+    #[serde(default)] pub dropped_links_count: u32,
+    pub status: Option<signals::SpanStatusPoint>, // [Unset]
+    pub correlation_id: Option<String>,
     pub resource: Option<signals::Resource>,
     pub scope: Option<signals::InstrumentationScope>,
-    pub logs: Vec<LogInput>,
-    pub spans: Vec<SpanInput>,
-    pub metrics: Vec<signals::MetricStream>,
-    pub profiles: Option<ProfilesInput>,
+}
+
+/// A `MetricStream` plus optional per-record resource/scope overrides.
+#[non_exhaustive]
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetricInput {
+    #[serde(flatten)] pub stream: signals::MetricStream,
+    pub resource: Option<signals::Resource>,
+    pub scope: Option<signals::InstrumentationScope>,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProfilesInput {
+    pub dictionary: signals::ProfilesDictionary,
+    pub profiles: Vec<signals::Profile>,
+    pub resource: Option<signals::Resource>,
+    pub scope: Option<signals::InstrumentationScope>,
 }
 
 /// Canonical, validated, durable form.
@@ -444,18 +576,32 @@ pub struct ProfilesSubmission {
     pub profiles: Vec<signals::ResourceRecord<signals::Profile>>,
 }
 
-pub trait IdSource { fn trace_id(&mut self) -> TraceId; fn span_id(&mut self) -> SpanId; }
+/// Generated values. Golden fixtures use a deterministic source whose values
+/// appear as `$GENERATED_TRACE_ID`, `$GENERATED_SPAN_ID` and `$GENERATED_NOW`
+/// placeholders (placeholder equality, not literal equality).
+pub trait IdSource {
+    fn trace_id(&mut self) -> TraceId;
+    fn span_id(&mut self) -> SpanId;
+    fn now(&mut self) -> Timestamp;
+}
 
 impl SubmissionEnvelope {
     /// Single shared validation/correlation path used by Python and the CLI.
     /// - Rejects version > CURRENT (UnsupportedVersion).
-    /// - A paired log+span without IDs receives one generated trace/span ID;
-    ///   supplied inconsistent IDs -> CorrelationConflict.
-    /// - end_time and duration_nanos both present and disagreeing -> TimingConflict.
-    /// - A log without actual start time never becomes a span.
+    /// - Logs and spans sharing a correlation_id share the span's IDs; supplied
+    ///   inconsistent IDs -> CorrelationConflict.
+    /// - Span timing per SpanInput -> TimingConflict / Validation.
+    /// - A log without an actual start time never becomes a span.
+    /// - UInt > i64::MAX -> ValueOutOfRange; StringIndex outside profiles ->
+    ///   Validation; ProfilesDictionary::validate_references failure ->
+    ///   DictionaryReference.
     /// - At least one signal present, else EmptySubmission.
     pub fn from_input(input: SubmissionInput, ids: &mut dyn IdSource)
         -> Result<Self, SubmissionError>;
+    /// serde_json syntax/EOF errors -> InvalidJson. serde_json data errors,
+    /// including every SignalValidationError raised by a `try_from`
+    /// deserializer, -> Validation { path: "<line>:<column>" } with the
+    /// validation message in the context. Then from_input.
     pub fn from_json(json: &str, ids: &mut dyn IdSource) -> Result<Self, SubmissionError>;
     /// Deterministic canonical JSON (sorted keys, UTC RFC 3339 nanos) - the golden-fixture form.
     pub fn to_canonical_json(&self) -> String;
@@ -503,31 +649,43 @@ pub struct StoreStatus {
     pub submissions: Vec<DeliveryStatus>, // only for StatusQuery::Submissions
 }
 #[non_exhaustive] pub enum StatusQuery { Summary, Submissions(Vec<SubmissionId>), RecordKeys(Vec<RecordKey>) }
+/// Counts cover only the rows in the call's scope (see "Flush and shutdown results").
 #[non_exhaustive]
-pub struct FlushReport { pub delivered: SignalCounts, pub still_pending: SignalCounts, pub failed: SignalCounts }
+pub struct FlushReport { pub delivered: SignalCounts, pub still_pending: SignalCounts,
+    pub failed: SignalCounts, pub evicted: SignalCounts }
 ```
 
 Supporting types, all `#[non_exhaustive]`:
 
 ```rust
-pub enum ExporterBackendId { SyncHttp, OpenTelemetrySdk }       // mirrors otlp's ExporterBackend
+/// Mirrors otlp's `ExporterBackend`; the durable client maps it in
+/// `durable::adapter`.
+pub enum ExporterBackendId { SyncHttp, OpenTelemetrySdk }
 pub enum Representation { Log, Span, Gauge, Sum, Histogram, ExponentialHistogram, Summary, Exemplar, Profile }
 pub struct SignalSet(/* bitset of Signal */);
 pub struct SignalCounts { pub logs: u64, pub traces: u64, pub metrics: u64, pub profiles: u64 }
 pub struct LeaseInfo { pub holder: String, pub expires_at: Timestamp }
 pub struct Secret(String);                                       // redacted Debug/Display
-pub struct ConfigOverrides { pub service_name: Option<String>, pub endpoint: Option<String>,
-    pub auth_header: Option<Secret>, pub store_path: Option<PathBuf>, pub max_store_bytes: Option<u64>,
-    pub disk_bound_policy: Option<DiskBoundPolicy>, pub flush_deadline: Option<Duration> }
-pub struct SyncHttpRetryPolicyDto { pub max_retries: Option<u32>, pub initial_backoff_ms: Option<u64>,
-    pub max_backoff_ms: Option<u64>, pub retry_sequence_timeout_ms: Option<u64> } // maps onto otlp SyncHttpRetryPolicy
-/// Input forms: as LogPoint/SpanPoint but trace/span IDs optional, observed_time
-/// optional (defaults to admission time), span end_time XOR duration_nanos, and an
-/// optional per-record resource/scope overriding the envelope default.
-pub struct LogInput { /* ... */ }
-pub struct SpanInput { /* ... */ }
-pub struct ProfilesInput { pub dictionary: signals::ProfilesDictionary,
-    pub profiles: Vec<signals::Profile> }
+/// One `Option` per `TelemetryClientConfig` field (caller args / CLI flags).
+pub struct ConfigOverrides {
+    pub service_name: Option<String>, pub endpoint: Option<String>,
+    pub backend: Option<ExporterBackendId>, pub request_timeout: Option<Duration>,
+    pub auth_header: Option<Secret>, pub store_path: Option<PathBuf>,
+    pub max_store_bytes: Option<u64>, pub disk_bound_policy: Option<DiskBoundPolicy>,
+    pub delivered_retention: Option<Duration>, pub record_key_retention: Option<Duration>,
+    pub emit_flush_deadline: Option<Duration>, pub flush_deadline: Option<Duration>,
+    pub lease_duration: Option<Duration>, pub sync_http_retry: Option<SyncHttpRetryPolicyDto>,
+}
+/// Field-for-field mirror of otlp's `SyncHttpRetryPolicy` (integrate/phase-d):
+/// every field, same names, `DurationMs` carried as milliseconds.
+pub struct SyncHttpRetryPolicyDto {
+    pub max_retries: Option<u32>,
+    pub initial_backoff_ms: Option<u64>,
+    pub max_backoff_ms: Option<u64>,
+    pub retry_sequence_timeout_ms: Option<u64>,
+    pub retry_after_cap_ms: Option<u64>,
+    pub retry_jitter_percent: Option<u8>,
+}
 ```
 
 ### Errors and codes
@@ -576,8 +734,11 @@ pub enum TelemetryClientError {
     Delivery(DeliveryError),
     Config(TelemetryConfigError),
 }
-impl TelemetryClientError { pub fn code(&self) -> &ErrorCode; pub fn exit_code(&self) -> u8; }
+impl TelemetryClientError { pub fn code(&self) -> &ErrorCode; }
 ```
+
+The types crate carries no CLI exit policy. The exit-code mapping is the
+table in "CLI contract", implemented by d-31 in `sc-otel-cli`.
 
 ### Configuration and precedence
 
@@ -586,15 +747,17 @@ impl TelemetryClientError { pub fn code(&self) -> &ErrorCode; pub fn exit_code(&
 pub struct TelemetryClientConfig {
     pub service_name: String,
     pub endpoint: String,                  // OTLP/HTTP base, e.g. http://localhost:4318
+    pub backend: ExporterBackendId,        // default SyncHttp
+    pub request_timeout: Duration,         // per-export timeout -> OtelConfig.timeout_ms
     pub auth_header: Option<Secret>,       // never from checked-in YAML; never Debug-printed
     pub store_path: PathBuf,
-    pub max_store_bytes: u64,              // default 256 MiB
-    pub disk_bound_policy: DiskBoundPolicy, // default RejectNew
-    pub delivered_retention: Duration,     // default 24 h
-    pub record_key_retention: Duration,    // default 30 days
-    pub emit_flush_deadline: Duration,     // default 5 s (CLI emit)
-    pub flush_deadline: Duration,          // default 30 s
-    pub lease_duration: Duration,          // default 30 s, renewed every 10 s
+    pub max_store_bytes: u64,
+    pub disk_bound_policy: DiskBoundPolicy,
+    pub delivered_retention: Duration,
+    pub record_key_retention: Duration,
+    pub emit_flush_deadline: Duration,     // CLI emit
+    pub flush_deadline: Duration,
+    pub lease_duration: Duration,          // renewed every lease_duration / 3
     pub sync_http_retry: Option<SyncHttpRetryPolicyDto>,
 }
 #[non_exhaustive] pub enum DiskBoundPolicy { RejectNew, EvictOldest }
@@ -605,11 +768,8 @@ pub struct ConfigSources<'a> {
     pub file: Option<&'a TelemetryFileConfig>, // parsed telemetry.yaml
     pub env: &'a dyn Fn(&str) -> Option<String>,
 }
-/// Precedence per field: explicit > telemetry.yaml > environment > built-in default.
-/// Environment is read only for OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_SERVICE_NAME and
-/// SC_OTEL_AUTH_HEADER (auth only from env or explicit). A field required with no
-/// default (store_path) yields MissingField. Relative YAML paths resolve against
-/// the YAML file's directory.
+/// Precedence per field: explicit > telemetry.yaml > environment > built-in
+/// default, restricted to the sources listed for that field below.
 pub fn resolve_config(sources: ConfigSources<'_>) -> Result<TelemetryClientConfig, TelemetryConfigError>;
 
 /// Core keys of telemetry.yaml; serde `Deserialize`, unknown keys ignored.
@@ -626,6 +786,25 @@ pub struct TelemetryFileConfig {
 pub fn load_telemetry_file(path: &Path) -> Result<TelemetryFileConfig, TelemetryConfigError>;
 ```
 
+Sources per field ("—" means that source cannot set the field):
+
+| Field | Explicit (`ConfigOverrides`) | telemetry.yaml key | Environment | Default |
+| --- | --- | --- | --- | --- |
+| `service_name` | yes | `service` | `OTEL_SERVICE_NAME` | `unknown_service` |
+| `endpoint` | yes | `otlp.endpoint` | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` |
+| `backend` | yes | — | — | `SyncHttp` |
+| `request_timeout` | yes | `otlp.timeout_ms` | — | 10 s |
+| `auth_header` | yes | — (never from YAML) | `SC_OTEL_AUTH_HEADER` | none |
+| `store_path` | yes | `store.path` (relative to the YAML file's directory) | — | none: `MissingField` |
+| `max_store_bytes` | yes | `store.max_bytes` | — | 256 MiB |
+| `disk_bound_policy` | yes | `store.disk_bound_policy` (`reject_new`\|`evict_oldest`) | — | `RejectNew` |
+| `delivered_retention` | yes | `store.delivered_retention_hours` | — | 24 h |
+| `record_key_retention` | yes | — | — | 30 days |
+| `emit_flush_deadline` | yes | — | — | 5 s |
+| `flush_deadline` | yes | — | — | 30 s |
+| `lease_duration` | yes | — | — | 30 s |
+| `sync_http_retry` | yes | — | — | none (otlp's documented retry defaults) |
+
 `sc-observability-types` has no YAML dependency. The YAML parser is
 `serde-saphyr =1.3.0` (MIT OR Apache-2.0, MSRV 1.89), used only by
 `load_telemetry_file` under `durable-store`. `serde_yaml` is deprecated
@@ -635,10 +814,9 @@ repository's existing PyYAML (`yaml.safe_load`). Both the CLI `--config` flag
 and Python `Telemetry(config=...)` go through `load_telemetry_file`, so the
 Rust side needs its own parser (lead ruling P4).
 
-The keys read from telemetry.yaml are `service`, `otlp.endpoint`,
-`otlp.timeout_ms`, `store.path`, `store.max_bytes`, `store.disk_bound_policy`
-and `store.delivered_retention_hours`. Every other key (`team`, `github.*`,
-`sources[]`) belongs to the consumer and is ignored by the core without error.
+The keys read from telemetry.yaml are exactly the ones in the table. Every
+other key (`team`, `github.*`, `sources[]`) belongs to the consumer and is
+ignored by the core without error.
 
 ### TelemetryClient
 
@@ -647,42 +825,133 @@ pub trait TelemetryClient: Send + Sync {
     fn open(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> where Self: Sized;
     /// Validates (already canonical), durably commits, then returns the receipt.
     fn emit(&self, envelope: SubmissionEnvelope) -> Result<AdmissionReceipt, TelemetryClientError>;
-    /// Delivers rows admitted before the call, up to `deadline`.
+    /// Store-wide flush up to `deadline`; scope and result rules below.
     fn flush(&self, deadline: Duration) -> Result<FlushReport, TelemetryClientError>;
+    /// Flush only the rows of one submission (used by `sc-otel emit`).
+    fn flush_submission(&self, id: &SubmissionId, deadline: Duration)
+        -> Result<FlushReport, TelemetryClientError>;
     /// Flush, stop the drain worker, release the lease. Idempotent.
     fn shutdown(&self, deadline: Duration) -> Result<FlushReport, TelemetryClientError>;
     fn status(&self, query: StatusQuery) -> Result<StoreStatus, TelemetryClientError>;
 }
 ```
 
-`InMemoryTelemetryClient` (`sc-observability-types` feature `test-double`) implements this trait with
-the same receipt, duplicate-key and status semantics. It records envelopes
-and has scripted delivery outcomes (`deliver_all`, `fail_next(Signal, ErrorCode)`).
-It is the only double. `testing::conformance::run_all` holds the trait-level
-cases. The double passes them in `tests/otlp_submission_contract.rs`, and d-33 runs the same
-function against `DurableTelemetryClient`.
+**Flush and shutdown results.** One rule applies to `flush`,
+`flush_submission` and `shutdown`:
+
+- Scope. For `flush` and `shutdown`, the scope is every delivery row that was
+  not terminal (`delivered`, `failed` or `evicted`) when the call started.
+  Older terminal rows are outside the scope, so one historical failure never
+  fails a later flush. For `flush_submission(id)`, the scope is every delivery
+  row of that submission, whatever its state at the start.
+- Result. `Err(Delivery(TerminalFailure { report }))` if any row in scope is
+  `failed` or `evicted` when the call returns. Otherwise
+  `Err(Delivery(DeadlineExceeded { report }))` if any row in scope is not
+  terminal at the deadline. Otherwise `Ok(report)`. TerminalFailure takes
+  precedence over DeadlineExceeded (CLI exit 7 over 6).
+- `report` counts only rows in scope.
+- `shutdown` stops the worker and releases the lease even when it returns
+  `Err`. A second `shutdown` returns `Ok` with an empty report.
+
+**Test double.** `InMemoryTelemetryClient` (`sc-observability-types` feature
+`test-double`) implements this trait with the same receipt, duplicate-key,
+status and flush-result semantics. It records envelopes. Its delivery and
+admission outcomes are scripted:
+
+```rust
+/// Also the JSON schema of the file named by SC_OTEL_TEST_DOUBLE (d-31) and of
+/// the Python test-hooks script argument (d-30). deny_unknown_fields.
+#[non_exhaustive]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DoubleScript {
+    /// Consumed in order by `emit`; when exhausted, emit admits.
+    #[serde(default)] pub admissions: Vec<ScriptedAdmission>,
+    /// Consumed in order per signal by delivery; when exhausted, rows deliver.
+    #[serde(default)] pub deliveries: Vec<ScriptedDelivery>,
+    /// Every flush, flush_submission and shutdown call sleeps this long before
+    /// it evaluates results (GIL-release proof).
+    #[serde(default)] pub flush_delay_ms: u64,
+}
+#[non_exhaustive]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum ScriptedAdmission { Admit, Reject { kind: AdmissionErrorKind } }
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum AdmissionErrorKind { StoreUnavailable, DiskBoundExceeded, Persistence, SchemaTooNew, Closed }
+#[non_exhaustive]
+pub struct ScriptedDelivery { pub signal: Signal, pub outcome: DeliveryOutcome }
+/// Deliver -> delivered; Fail -> failed (code SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE);
+/// Stall -> stays pending, so the call reaches its deadline.
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryOutcome { Deliver, Fail, Stall }
+
+impl DoubleScript { pub fn from_json(json: &str) -> Result<Self, TelemetryConfigError>; }
+impl InMemoryTelemetryClient {
+    pub fn with_script(config: TelemetryClientConfig, script: DoubleScript) -> Self;
+    pub fn push_script(&self, script: DoubleScript);
+    pub fn deliver_all(&self);                         // clears scripted deliveries
+    pub fn fail_next(&self, signal: Signal, code: ErrorCode);
+    pub fn envelopes(&self) -> Vec<SubmissionEnvelope>;
+}
+```
+
+`open(config)` is `with_script(config, DoubleScript::default())`. It is the
+only double.
+
+**Conformance suite.** `testing::conformance::run_all` holds the trait-level
+cases. It drives any client through a harness:
+
+```rust
+pub trait ConformanceHarness {
+    type Client: TelemetryClient;
+    /// A fresh client over an empty store (or a fresh double).
+    fn open(&mut self) -> Self::Client;
+    /// What the backend does with the next delivery attempt for `signal`.
+    /// The double scripts it; d-33 configures its loopback capture
+    /// (Deliver = 200, Fail = 400, Stall = no response before the deadline).
+    fn set_outcome(&mut self, signal: Signal, outcome: DeliveryOutcome);
+}
+pub fn run_all<H: ConformanceHarness>(harness: &mut H);
+```
+
+The double passes `run_all` in `tests/otlp_submission_contract.rs`, and d-33
+runs the same function against `DurableTelemetryClient`. Cases:
+`duplicate_record_key_returns_original_receipt`, `status_reports_scripted_failure`,
+`flush_ok_when_all_delivered`, `flush_deadline_when_pending`,
+`flush_terminal_when_failed_during_call`, `flush_ignores_historical_failure`,
+`terminal_precedes_deadline`, `flush_submission_scoped_to_id`,
+`flush_submission_reports_prior_failure_of_same_submission` and
+`shutdown_idempotent`.
 
 **Python GIL release.** These calls release the GIL: `emit` (durable commit),
-`flush`, `shutdown`, `status` and `open` (store open and migration check).
+`flush`, `flush_submission`, `shutdown`, `status` and `open` (store open and
+migration check).
 
 ### CLI contract (`sc-otel`)
 
-Subcommands: `emit` (stdin JSON or `--log/--span/--metric/--profile` flags,
-then a bounded flush), `validate` (prints the canonical envelope, no store),
-`flush`, and `status`. Global flags: `--config <telemetry.yaml>`,
-`--store <path>`, `--endpoint <url>` and `--output json|text`
-(default `json`).
+Global flags: `--config <telemetry.yaml>`, `--store <path>`,
+`--endpoint <url>` and `--output json|text` (default `json`). Each becomes the
+matching `ConfigOverrides` field (`--config` is passed to
+`load_telemetry_file`).
+
+| Subcommand | Flags | Behavior |
+| --- | --- | --- |
+| `emit` | `--stdin` (read one `SubmissionInput` JSON document from stdin); or one or more of `--log <json\|@file>`, `--span <json\|@file>`, `--metric <json\|@file>`, `--profile <json\|@file>`; plus `--record-key <key>`, `--no-flush` | Flag fragments are a `LogInput`, `SpanInput`, `MetricInput` or `ProfilesInput` object (`@file` reads it from a file). They are assembled into one `SubmissionInput` (`version` = CURRENT, fragments appended to `logs`/`spans`/`metrics`, one `--profile` at most) and go through `SubmissionEnvelope::from_json`, exactly like `--stdin`. `--stdin` and fragment flags are mutually exclusive. After admission, `flush_submission(receipt.submission_id, emit_flush_deadline)` runs unless `--no-flush`. |
+| `validate` | `--stdin`, or the same fragment flags | Prints the canonical envelope; opens no store. |
+| `flush` | `--timeout <seconds>` (default `flush_deadline`) | Store-wide `flush`. |
+| `status` | `--submission <id>` (repeatable), `--record-key <key>` (repeatable) | `status` with `Summary`, `Submissions` or `RecordKeys`. |
 
 | Exit | Meaning | Source |
 | --- | --- | --- |
 | 0 | Success. For `emit`: admitted, and delivered within `emit_flush_deadline`, or admitted with `--no-flush`. | - |
 | 1 | Unexpected internal error | panic guard |
-| 2 | Usage error (bad flags) | argument parser |
+| 2 | Usage error (bad flags) | argument parser (clap) |
 | 3 | Invalid input | `SubmissionError::*` |
 | 4 | Configuration error or unsupported combination | `TelemetryConfigError::*` |
 | 5 | Admission failure (nothing admitted) | `AdmissionError::*` |
 | 6 | Admitted but delivery not completed (pending remains) | `DeliveryError::DeadlineExceeded` |
-| 7 | Admitted but a signal failed terminally | `DeliveryError::TerminalFailure` |
+| 7 | Admitted but a signal failed terminally (takes precedence over 6) | `DeliveryError::TerminalFailure` |
 
 JSON output schema (`sc-otel.result/v1`), one object on stdout:
 
@@ -694,7 +963,7 @@ JSON output schema (`sc-otel.result/v1`), one object on stdout:
   "state": "admitted_pending",
   "receipt": {"submission_id": "0192...", "record_key": "sanity:run-1:sanity-llm",
               "admitted_at": "2026-10-01T12:00:00.000000000Z", "signals": ["logs","traces"], "duplicate": false},
-  "flush": {"delivered": {"logs": 1}, "still_pending": {"traces": 1}, "failed": {}},
+  "flush": {"delivered": {"logs": 1}, "still_pending": {"traces": 1}, "failed": {}, "evicted": {}},
   "status": null,
   "envelope": null,
   "error": {"code": "SC_OBSERVABILITY_DELIVERY_DEADLINE", "message": "..."}
@@ -750,36 +1019,165 @@ Versioning policy:
 - Connections use `journal_mode=WAL`, `synchronous=FULL` and
   `busy_timeout=5000`.
 
+### Crate-private seams (staged for d-33)
+
+d-29 stages these items in `sc-observability-otlp`, so that d-33 routes the
+drain through the existing sync-http bounded admission and adds profiles
+without editing unowned files or building a second queue (ADR-021). Each
+item that is unused until d-33 carries
+`#[expect(dead_code, reason = "staged by d-29; wired by d-33 under durable-store")]`.
+d-33 may change only the items listed in its doc.
+
+| File | Item | d-29 change |
+| --- | --- | --- |
+| `src/lifecycle.rs` | `pub(crate) enum SignalKind` | Add `Profiles` (index 3). `LifecycleHealth.dropped_by_signal`/`degraded_by_signal` and the `CoreState` per-signal arrays grow from 3 to 4. `dropped_total()` keeps its meaning. Existing `lifecycle_tests.rs` pass unchanged. |
+| `src/contracts.rs` | module list | One line: `pub(crate) mod profiles;` (additive; d-18 fence, P2). `ExporterSet` is unchanged: it has nine construction sites, some inside the d-18 fence. |
+| `src/contracts/profiles.rs` (new) | `pub(crate) trait ProfileExporter<T>: Send + Sync { fn export_profiles(&self, batch: &[T]) -> Result<(), ExportError>; }` | Same shape as `LogExporter`/`TraceExporter`/`MetricExporter`. d-33 implements it for the sync-http exporter and holds it beside the `ExporterSet` in `DurableTelemetryClient`. |
+| `src/contracts/credits.rs` | `impl AdmissionCredits { pub(crate) fn wait_for_release(&self, timeout: Duration) -> bool; }` | Implemented in full: the budget gains a `Condvar`, `CreditLease::drop` notifies, and the call returns `true` when a release happened before `timeout`. Unit test `wait_for_release_wakes_on_lease_drop` (a second thread drops a lease after a barrier; no sleeps) and `wait_for_release_zero_timeout_returns_false`. |
+| `src/durable/adapter.rs` (staged) | `pub(crate) fn otel_config_from(config: &TelemetryClientConfig) -> Result<OtelConfig, TelemetryConfigError>;` | Signature only; the stub body returns `TelemetryConfigError::InvalidField { field: "otlp" }`. d-33 implements it and then calls the existing `SyncHttpConfig::from_otel(&OtelConfig)`. Mapping: `backend` → `ExporterBackend`, `endpoint`, `auth_header`, `request_timeout` → `timeout_ms`, `sync_http_retry` → `SyncHttpRetryPolicy` field for field. |
+
+### Dependency set
+
+These are the only dependencies wave 5 adds. Pins and licenses were checked
+against crates.io on 2026-10-01. Wave-5.2 sprints add none (see Handoffs).
+
+Workspace `Cargo.toml`:
+
+| Change | Entry | License / MSRV | Used by |
+| --- | --- | --- | --- |
+| member | `crates/sc-otel-cli` | — | — |
+| new pin | `uuid = { version = "=1.26.1", default-features = false, features = ["std", "v7"] }` | Apache-2.0 OR MIT / 1.85. `v7` enables `rng`, which uses `getrandom` 0.4 and resolves to the existing `=0.4.3` | types (`test-double`), otlp (`durable-store`) |
+| new pin | `rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }` | MIT; builds `libsqlite3-sys 0.38.2` (SQLite: public domain) | otlp (`durable-store`) |
+| new pin | `serde-saphyr = { version = "=1.3.0", default-features = false, features = ["deserialize"] }` | MIT OR Apache-2.0 / 1.89 | otlp (`durable-store`) |
+| new pin | `clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }` | MIT OR Apache-2.0 / 1.85 | sc-otel-cli |
+| reused | `serde_json = "1"` (lock 1.0.151), `tempfile = "3"` (lock 3.27.0), `getrandom = "=0.4.3"` | unchanged | — |
+
+All MSRVs are at or below the workspace `rust-version` 1.94.1.
+
+Per crate:
+
+| Crate | Section | Entry |
+| --- | --- | --- |
+| `sc-observability-types` | `[dependencies]` | `uuid = { workspace = true, optional = true }` |
+| | `[features]` | `test-double = ["dep:uuid"]` |
+| `sc-observability-otlp` | `[dependencies]` | `rusqlite`, `serde-saphyr`, `uuid`, each `{ workspace = true, optional = true }` |
+| | `[features]` | `durable-store = ["sync-http", "dep:rusqlite", "dep:serde-saphyr", "dep:uuid"]` |
+| | `[dev-dependencies]` | `sc-observability-types = { workspace = true, features = ["test-double"] }`, `tempfile.workspace = true` (existing dev rows unchanged) |
+| `sc-observability-py` | `[dependencies]` | `sc-observability-otlp = { workspace = true, optional = true }` |
+| | `[features]` | `otlp-telemetry = ["dep:sc-observability-otlp", "sc-observability-otlp/durable-store"]`; `test-hooks` = existing entry + `"sc-observability-types/test-double"` |
+| `sc-otel-cli` (new) | `[package]` | workspace-inherited fields, `publish = false`; `[[bin]] name = "sc-otel"` |
+| | `[dependencies]` | `sc-observability-types.workspace = true`, `sc-observability-otlp = { workspace = true, features = ["durable-store"] }`, `clap.workspace = true`, `serde_json.workspace = true` |
+| | `[features]` | `test-double = ["sc-observability-types/test-double"]` |
+| | `[dev-dependencies]` | `tempfile.workspace = true` |
+
+Hand-rolled, with no dependency:
+
+- Base64 for `bytesValue`: a private RFC 4648 encoder in d-33's sync-http
+  encoder.
+- Lease holder ID: `<pid>:<uuid v7>` (`std::process::id()` plus `uuid`), no
+  hostname.
+- OTLP/JSON decoding in d-33's round-trip tests: a d-33-owned proto-JSON
+  reader over `serde_json::Value` at
+  `crates/sc-observability-otlp/tests/support/proto_json.rs`. The
+  `opentelemetry-proto =0.33.0` `with-serde` decoders accept `"NaN"`,
+  `"Infinity"` and `"-Infinity"` only for `ValueAtQuantile.quantile` and
+  `.value`; every other double (`asDouble`, histogram `sum`/`min`/`max`,
+  `explicitBounds`, `doubleValue`, exemplars) rejects them, and the
+  `AnyValue` decoder ignores `stringValueStrindex`. So no
+  `opentelemetry-proto` dev-dependency is added.
+- Loopback HTTP capture: a d-33-owned `std::net::TcpListener` HTTP/1.1
+  server at `crates/sc-observability-otlp/tests/support/capture.rs`.
+
+`policy/otlp-transport.toml` additions:
+
+```toml
+[transport.rusqlite]
+version = "=0.40.2"
+backends = ["durable-store"]
+features = ["bundled"]
+default_features = false
+
+[transport.serde-saphyr]
+version = "=1.3.0"
+backends = ["durable-store"]
+features = ["deserialize"]
+default_features = false
+
+[transport.uuid]
+version = "=1.26.1"
+backends = ["durable-store"]
+features = ["std", "v7"]
+default_features = false
+
+[dev_dependencies]
+# existing rows unchanged, plus:
+sc-observability-types = { features = ["test-double"], default_features = true }
+tempfile = { features = [], default_features = true }
+```
+
+`scripts/ci/otlp_dependencies.py` checks backend binding only for
+`otlp-sdk` and `sync-http`, and the repository validators hard-code their
+crate lists, so they do not see `sc-otel-cli`. d-29 does not edit those
+scripts (wave-5 ruling R16). Instead, the `durable-store` binding is checked
+by the named test `durable_store_binding` in
+`crates/sc-observability-otlp/tests/contract_manifest.rs`. It runs
+`cargo metadata --locked --format-version 1` (via the `CARGO` environment
+variable) and asserts, with `serde_json`, that `rusqlite`, `serde-saphyr` and
+`uuid` are optional dependencies of `sc-observability-otlp` enabled only
+through `durable-store`, and that `durable-store` includes `sync-http`. The
+`sc-otel-cli` edges are checked by the cargo-tree criteria below.
+
+Boundary allowlists: `types.toml` `allowed_dependents` += `sc-otel-cli`,
+`allowed_dependencies` += `uuid` (optional, `test-double`),
+`allowed_test_double_paths` += `crates/sc-observability-types/src/otlp/submission/testing/**`;
+`otlp.toml` `allowed_dependents` += `sc-observability-py`, `sc-otel-cli`;
+`python.toml` `allowed_dependencies` += `sc-observability-otlp`; new
+`boundaries/sc-otel-cli/cli.toml` with `allowed_dependencies` =
+[`sc-observability-types`, `sc-observability-otlp`, `clap`, `serde_json`],
+`forbidden_edges` = [`sc-observe`, `pyo3`, `agent-team-mail-*`] and
+`allowed_dependents` = [].
+
 ### Platform matrix and dependency audit
 
-`rusqlite =0.40.2` (`bundled`, default features off; it builds
-`libsqlite3-sys 0.38.2` from source), behind `durable-store`. The audit
-config `policy/deny-durable-store.toml` exists because the repository has no
-cargo-deny config, and this is the first bundled C dependency in a released
-crate. It allows the licenses in the `durable-store` graph (SQLite is public
-domain; rusqlite and libsqlite3-sys are MIT), denies yanked crates and
-advisories, and bans duplicate `libsqlite3-sys`. The same graph includes
-`serde-saphyr =1.3.0` (MIT OR Apache-2.0), the `.sc/telemetry.yaml` parser
-(lead ruling P4). Its consumers are this
+The audit config `policy/deny-durable-store.toml` exists because the
+repository has no cargo-deny config, and `rusqlite` with `bundled` is the
+first bundled C dependency in a released crate. It allows the licenses in
+the `durable-store` and `sc-otel-cli` graphs, denies yanked crates and
+advisories, and bans duplicate `libsqlite3-sys`. Its consumers are this
 sprint's audit criterion and the d-32 re-run. It is retired once a
-workspace-wide cargo-deny config covers the same graph.
+workspace-wide cargo-deny config covers the same graphs.
 
 Platforms: linux x86_64 and aarch64, macOS x86_64 and arm64, windows x86_64
-and arm64 (the d-10 wheel target). The CLI builds with `cargo build`; the
-abi3-py310 wheels build with the `otlp-telemetry` feature. d-29 proves the
-contract by compiling (`cargo check --features durable-store`) on the CI
-matrix. d-30 proves the wheel matrix.
+and arm64 (the d-10 wheel target). `.github/workflows/telemetry-platforms.yml`
+is `workflow_dispatch` only, with input `source_commit`. Its matrix:
+
+| Target | Runner |
+| --- | --- |
+| `x86_64-unknown-linux-gnu` | `ubuntu-24.04` |
+| `aarch64-unknown-linux-gnu` | `ubuntu-24.04-arm` |
+| `aarch64-apple-darwin` | `macos-14` |
+| `x86_64-apple-darwin` | `macos-14` (cross target) |
+| `x86_64-pc-windows-msvc` | `windows-2022` |
+| `aarch64-pc-windows-msvc` | `windows-11-arm` |
+
+Each cell runs, on toolchain 1.94.1,
+`cargo check -p sc-observability-otlp --features durable-store --locked --target <t>`
+and `cargo build -p sc-otel-cli --locked --target <t>`. The abi3 wheel matrix
+is proven by d-30 through `b4a-python-distributions.yml`.
 
 ## Acceptance criteria
 
 - [ ] boundary:BOUNDARY-ScObservabilityTypes (D1, D2):
   `cargo test -p sc-observability-types --test otlp_signals_contract --locked`
   runs nonzero cases for: every `AnyValue` variant's serde round trip,
-  including bytes, `uint` and `StringIndex`; `OtlpDouble` round trips of NaN,
-  `Infinity` and `-Infinity` through serde JSON (asserting the proto-JSON
-  strings) in `AnyValue`, `NumberValue`, histogram `sum`/`min`/`max`, summary
-  values and exemplars; NaN rejected in `explicit_bounds`; each of the five metric point forms with
-  temporality and monotonicity validation; exemplars;
+  including bytes, `uint` and `StringIndex`, in both the canonical and the
+  plain input form; duplicate plain-map keys and `null` rejected;
+  `OtlpDouble` round trips of NaN, `Infinity` and `-Infinity` through serde
+  JSON (asserting the proto-JSON strings and bitwise equality) in `AnyValue`,
+  `NumberValue`, histogram `sum`/`min`/`max`, summary values and exemplars;
+  NaN rejected in `explicit_bounds`; each of the five metric point forms with
+  temporality and monotonicity validation, including rejection through
+  deserialization (not only `try_new`); exemplars;
   `ProfilesDictionary::validate_references` accepting a valid set and rejecting
   an out-of-range index, including an out-of-range `StringIndex` and
   `AttributeKey::Index`; `TraceState` grammar; and `From` conversions from
@@ -787,43 +1185,86 @@ matrix. d-30 proves the wheel matrix.
   `OtlpInstrumentationScope`.
 - [ ] boundary:BOUNDARY-ScObservabilityTypes (D3, D4):
   `cargo test -p sc-observability-types --features test-double --locked --test otlp_submission_contract`
-  passes every golden fixture. Each `input.json` canonicalizes to its
-  `expected.envelope.json`, or fails with the code in `expected.error.json`.
-  Fixtures include `uint_over_i64_max`, `correlation_conflict`,
-  `timing_conflict`, `unsupported_version`, `strindex_outside_profiles`,
-  `non_finite_doubles`, `paired_log_span_generated_ids`
-  (placeholder `$GENERATED_TRACE_ID` equality) and one fixture per signal and
-  point form.
+  passes every golden fixture. Each `input.json` is a `SubmissionInput`
+  document; it canonicalizes to its `expected.envelope.json`, or fails with
+  the code in `expected.error.json`. Fixtures that also have `flags.args`
+  describe the equivalent `sc-otel` fragment flags. Fixtures include
+  `uint_over_i64_max`, `correlation_conflict`, `timing_conflict`,
+  `unsupported_version`, `strindex_outside_profiles`, `non_finite_doubles`,
+  `plain_attribute_map`, `paired_log_span_generated_ids` (placeholder
+  equality for `$GENERATED_TRACE_ID`, `$GENERATED_SPAN_ID` and
+  `$GENERATED_NOW`), one fixture per signal and point form, and the error
+  fixtures `histogram_bucket_count_mismatch`, `summary_quantile_out_of_range`,
+  `monotonic_sum_negative`, `delta_empty_interval` and
+  `exponential_scale_out_of_range` (each `SC_OBSERVABILITY_SUBMIT_VALIDATION`)
+  and `profile_index_out_of_range` (`SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE`).
 - [ ] boundary:BOUNDARY-ScObservabilityTypes (D3): the precedence tests
-  show, per field, explicit > YAML > env > default; auth only from explicit
-  input or env; `store_path` missing gives `MissingField`; and the error-code
-  registry is unique.
-- [ ] boundary:BOUNDARY-ScObservabilityTypes (D5):
+  cover every row of the per-field source table: each source that can set a
+  field wins over the lower ones, and a source marked "—" is ignored for that
+  field. Auth comes only from explicit input or env; `store_path` missing
+  gives `MissingField`; `SyncHttpRetryPolicyDto` carries all six fields; and
+  the error-code registry is unique.
+- [ ] boundary:BOUNDARY-ScObservabilityTypes (D4): `run_all` passes against
+  the double, covering every named conformance case, including each flush
+  result rule and the TerminalFailure-over-DeadlineExceeded precedence. The
+  scripted-double cases also pass: `scripted_admission_rejection_each_kind`,
+  `scripted_stall_yields_deadline`, `scripted_fail_yields_terminal`,
+  `flush_delay_applies_to_flush_and_shutdown` (elapsed ≥ the scripted delay),
+  `double_script_json_round_trip` and `double_script_unknown_field_rejected`.
+- [ ] boundary:BOUNDARY-ScObservabilityOtlp (D5):
   `cargo test -p sc-observability-otlp --features durable-store --locked --lib durable::config_file`
   loads the committed `.sc/telemetry.yaml`. Its unit tests show that unknown
   consumer keys (`team`, `github.*`, `sources[]`) are ignored, that a relative
-  `store.path` resolves against the file's directory, and that malformed YAML
-  returns `TelemetryConfigError`.
-- [ ] boundary:BOUNDARY-ScObservabilityTypes (D4): the test-double
-  conformance cases cover duplicate record key → original receipt with
-  `duplicate = true`, a `fail_next` scripted outcome reported in `status`, and
-  idempotent `shutdown`.
-- [ ] boundary:BOUNDARY-ScObservabilityTypes (D5, D6):
+  `store.path` resolves against the file's directory, that `otlp.timeout_ms`
+  reaches `request_timeout`, and that malformed YAML returns
+  `TelemetryConfigError`.
+- [ ] boundary:BOUNDARY-ScObservabilityOtlp (D5):
+  `cargo test -p sc-observability-otlp --features durable-store --locked --test contract_schema`
+  loads `schema.sql` into an empty in-memory SQLite database and asserts
+  `user_version = 1` and the table and index set.
+- [ ] boundary:BOUNDARY-ScObservabilityOtlp (D10): with `durable-store` and
+  with default features, `cargo test -p sc-observability-otlp --locked --lib`
+  passes the existing lifecycle tests and the two `wait_for_release` tests.
+  `SignalKind::Profiles`, `ProfileExporter` and `otel_config_from` exist with
+  the signatures in "Crate-private seams", and the `contracts.rs` diff
+  against the d-29 base is exactly one added line.
+- [ ] boundary:BOUNDARY-ScObservabilityOtlp (D5, D6, D10):
   `cargo check --workspace --all-features --locked`,
-  `cargo check -p sc-observability-otlp --features durable-store --locked`,
-  `cargo check -p sc-observability-py --features otlp-telemetry --locked` and
-  `cargo check -p sc-otel-cli --locked` pass. The `durable/` and CLI stubs
-  contain no `todo!` or `unimplemented!`. `schema.sql` loads into an empty
-  SQLite database in the contract test.
-- [ ] boundary:BOUNDARY-ScObservabilityTypes (D6):
-  the scoped cargo-deny audit in Required validation passes for the
-  `durable-store` graph. `bash scripts/ci/validate_repo_boundaries.sh`
-  and `bash scripts/ci/validate_dependency_bans.sh` pass with the new and
-  edited manifests. `cargo tree -p sc-otel-cli -e normal` contains no
-  `sc-observe`, `pyo3` or `tokio` runtime feature `rt-multi-thread`.
-- [ ] boundary:ADR-021 (D7): ADR-021 is Accepted, and PHD-005, PHD-010 and
-  ADR-021 Signals name profiles. `bash scripts/ci/validate_docs_consistency.sh`
-  passes.
+  `cargo check -p sc-observability-otlp --features durable-store --tests --locked`,
+  `cargo check -p sc-observability-py --features otlp-telemetry --locked`,
+  `cargo check -p sc-observability-py --features test-hooks,otlp-telemetry --tests --locked` and
+  `cargo check -p sc-otel-cli --all-features --tests --locked` pass with the
+  committed dependency set. The `durable/` and CLI stubs contain no `todo!`
+  or `unimplemented!`.
+- [ ] boundary:BOUNDARY-ScObservabilityOtlp (D6):
+  `cargo test -p sc-observability-otlp --locked --test contract_manifest durable_store_binding`
+  passes. The two scoped cargo-deny audits in Required validation pass.
+  `bash scripts/ci/validate_repo_boundaries.sh` and
+  `bash scripts/ci/validate_dependency_bans.sh` pass with the new
+  `policy/otlp-transport.toml` rows (these scripts do not check
+  `sc-otel-cli`; the next criterion does).
+- [ ] boundary:BOUNDARY-ScOtelCli (D6): `cargo tree -p sc-otel-cli -e normal --depth 1 --prefix none --format '{p}'`
+  lists exactly `sc-otel-cli`, `sc-observability-types`,
+  `sc-observability-otlp`, `clap` and `serde_json` (versions aside), and
+  `cargo tree -p sc-otel-cli -e normal,build --all-features --prefix none --format '{p}'`
+  contains no `sc-observe`, `pyo3` or `agent-team-mail`. Neither
+  `sc-otel-cli` nor `sc-observability-py` declares `tokio` directly, so no
+  front end needs a caller-owned runtime (the runtime-free behavior itself is
+  proven by d-31 and d-32).
+- [ ] boundary:ADR-021 (D11): `telemetry-platforms.yml` is dispatched on the
+  d-29 head SHA (`gh workflow run telemetry-platforms.yml --ref sprint/d-29-telemetry-submission-contract -f source_commit=<head>`),
+  all six cells pass, and the run URL is recorded in the PR body.
+- [ ] boundary:ADR-021 (D9): the approval file records, for each crate whose
+  surface changes (`sc-observability-types`, `sc-observability-otlp`) and
+  for `sc-observability-py`, the `api_sha256` from
+  `python3 scripts/ci/validate_public_api.py diff --crate <crate>`
+  (`target/public-api/public-api-diff.json`) at the d-29 head, plus
+  `feature_api_sha256` entries computed as
+  `cargo public-api --manifest-path <manifest> -sss --features <f> | shasum -a 256`
+  for `test-double` (types), `durable-store` (otlp) and `otlp-telemetry`
+  (py).
+- [ ] boundary:ADR-021 (D7): `bash scripts/ci/validate_docs_consistency.sh`
+  passes, and ADR-021, PHD-005–013 and the §6 rows match this doc.
 
 ## Required validation
 
@@ -831,13 +1272,23 @@ matrix. d-30 proves the wheel matrix.
 cargo fmt --check --all
 cargo clippy --all-targets --all-features -- -D warnings
 cargo check --workspace --all-features --locked
+cargo check -p sc-observability-otlp --features durable-store --tests --locked
+cargo check -p sc-observability-py --features test-hooks,otlp-telemetry --tests --locked
+cargo check -p sc-otel-cli --all-features --tests --locked
 cargo test -p sc-observability-types --test otlp_signals_contract --locked
 cargo test -p sc-observability-types --features test-double --locked --test otlp_submission_contract
-cargo test -p sc-observability-otlp --features durable-store --locked --lib durable::config_file
+cargo test -p sc-observability-otlp --locked --lib
+cargo test -p sc-observability-otlp --features durable-store --locked --lib
+cargo test -p sc-observability-otlp --features durable-store --locked --test contract_schema
+cargo test -p sc-observability-otlp --locked --test contract_manifest durable_store_binding
+cargo tree -p sc-otel-cli -e normal --depth 1 --prefix none --format '{p}'
+cargo tree -p sc-otel-cli -e normal,build --all-features --prefix none --format '{p}'
 cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories
+cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features check --config policy/deny-durable-store.toml licenses bans advisories
 bash scripts/ci/validate_repo_boundaries.sh
 bash scripts/ci/validate_dependency_bans.sh
 bash scripts/ci/validate_docs_consistency.sh
+python3 scripts/ci/validate_public_api.py diff --crate sc-observability-types --crate sc-observability-otlp --crate sc-observability-py
 ```
 
 ## Closeout gate
@@ -845,15 +1296,21 @@ bash scripts/ci/validate_docs_consistency.sh
 The user signs `docs/api-approvals/phase-d-wave5-telemetry-submission.json`
 (D9) before d-29 closes (lead ruling P6). This is a d-29 closeout gate, not a
 plan blocker: d-33, d-30 and d-31 may start from the sanity-passed contract
-while the signature is pending. d-32 re-runs the D18 gate against the signed
-record.
+while the signature is pending. The recorded hashes freeze the wave-5 public
+surface: d-33, d-30 and d-31 each prove their crate's hashes still match
+(wave-5 ruling R17), and any public addition returns to d-29 as a contract
+change. d-32 re-runs the D18 gate against the signed record.
 
 ## Handoffs
 
-- To d-33 (wave 5.2): `crates/sc-observability-otlp/src/durable/mod.rs`,
-  staged by d-29 and owned by d-33 from wave 5.2. `schema.sql` stays
-  read-only; a change to it is a contract change routed to the lead.
+- To d-33 (wave 5.2): `crates/sc-observability-otlp/src/durable/mod.rs` and
+  `durable/adapter.rs`, staged by d-29 and owned by d-33 from wave 5.2, plus
+  the attribute lines on the staged seams listed in the d-33 doc.
+  `schema.sql` and `config_file.rs` stay read-only; a change to either is a
+  contract change routed to the lead.
 - To d-31 (wave 5.2): `crates/sc-otel-cli/src/main.rs`, staged by d-29 and
   owned by d-31. `crates/sc-otel-cli/Cargo.toml` stays d-29's.
-- Wave-5.2 sprints add no dependency and do not edit `Cargo.lock`. A needed
-  dependency is a contract defect, routed to the lead.
+- Wave-5.2 sprints add no dependency and do not edit any `Cargo.toml`,
+  `Cargo.lock` or `policy/otlp-transport.toml`. Everything they use is in
+  "Dependency set". A missing dependency is a contract defect, routed to the
+  lead.
