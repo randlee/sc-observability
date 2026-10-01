@@ -106,9 +106,23 @@ plan-QA report is posted to it.
 
 Treat `review_mode: plan` as docs-only plan review.
 
-## Review Scope Expansion (Rounds 1–2)
+## Fix verification takes precedence
 
-When `review_mode` is NOT `round_limit` and NOT `plan`, this is a round 1 or round 2 full-sweep review.
+A review of an assigned fix is not a sprint review, regardless of its round
+number or inherited `review_mode`. Dispatch only the agent necessary to
+confirm the assigned finding, normally the agent that filed it. That agent
+verifies the original acceptance criterion at the pinned commit and reports
+fixed, open, or regressed for the same finding ID. It files no new findings.
+Do not automatically add req-qa, arch-qa, rust-qa-agent, or a screening agent.
+The selected verifier may run the focused checks necessary to confirm the fix;
+ordinary required CI remains a separate merge requirement. On verified PASS,
+reconcile closure of the original finding, not only the QA task.
+
+## Review Scope Expansion (Sprint Rounds 1–2)
+
+The full-sweep rules below apply only to a sprint review, never to fix
+verification. Sprint rounds 1–2 remain sprint reviews; a fix does not become
+a sprint review because it has a new PR or round number.
 Before dispatching reviewers, expand `review_targets` to the full sprint diff:
 
 ```bash
@@ -147,8 +161,8 @@ TODO-specific rule:
 2. Validate that the task is XML rendered from the QA template. Reject any
    non-XML assignment from the lead immediately.
 3. Read the task payload and determine the reviewer set.
-4. If `review_mode` is neither `round_limit` nor `plan`, expand
-   `review_targets` to the full sprint diff.
+4. For sprint reviews only, expand `review_targets` to the full sprint diff.
+   For a fix, keep the original finding and its necessary verification scope.
 5. During implementation sprint-end QA or integration-branch review, run the
    TODO scan from `.claude/skills/todo-triage/SKILL.md` and treat discovered
    TODOs as QA findings rather than backlog markers.
@@ -242,31 +256,20 @@ For implementation QA-1 in this Rust repo:
 - run `flaky-test-qa` when tests changed, CI shows intermittent behavior, or
   `rust-qa-agent` surfaces unstable execution symptoms
 
-For QA-2 and later (fix-verification) rechecks of implementation work:
-- always run `req-qa`
-- always run `arch-qa`
-- always run `rust-qa-agent` (objective execution-fact gates: fmt, clippy,
-  tests, lint, RULE-003, pytests — not a subjective findings pass)
-- run `ruthless-boundary-qa` only when assigned carry-forward `RBQA-*`
-  findings require verification; scope-lock it to those ids
-- run `rust-best-practices-agent` only when assigned carry-forward `RBP-*`
-  findings require verification; scope-lock it to those ids
-- run `rust-service-hardening-agent` only when assigned carry-forward `RSH-*`
-  findings require verification; scope-lock it to those ids
-- a subjective reviewer that raised no QA-1 findings is not re-run
-- run `flaky-test-qa` when tests changed, CI shows intermittent behavior, or
-  `rust-qa-agent` surfaces unstable execution symptoms
-- verdict = each dispatched finding's fixed/regressed/open status plus
-  `rust-qa-agent`'s gate results, nothing else; anything req-qa/arch-qa
-  notices outside the dispatched findings goes in a debt-notes section of
-  the report and does not affect the verdict
+For a fix-verification review (independent of sprint round numbering):
+- dispatch only the reviewer necessary to confirm the original finding,
+  normally its filing agent; there is no mandatory multi-agent reviewer set
+- lock the assignment to the original finding ID and acceptance criterion
+- run only checks necessary to confirm that fix; do not expand to a sprint sweep
+- report fixed/open/regressed for the existing finding, and file no new findings
+- when fixed, reconcile the original finding's verified closure with its owner
 
 Subjective-review fix-round rule:
 - `ruthless-boundary-qa`, `rust-best-practices-agent`, and
   `rust-service-hardening-agent` (plus `ceremony-qa` in plan QA) run
   open-ended only on the first round — sprint QA-1, plan QA-1, and
   phase-ending review; never rerun them open-ended during fix verification
-- in QA-2 and later, sprint or plan, dispatch one of these reviewers only for
+- in fix verification, dispatch one of these reviewers only for
   explicitly assigned carry-forward findings it owns (its own QA-1 ids), with
   `findings_scope_locked: true`
 - every carried finding remains part of the merge gate until its owning
