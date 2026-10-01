@@ -1,7 +1,7 @@
 //! Checked semantic conversion; no runtime or transport dependency.
 use crate::constants::{
     MAX_CONTAINER_DEPTH, MAX_DIAGNOSTIC_FIELD_BYTES, MAX_QUERY_LIMIT, MAX_REMEDIATION_STEPS,
-    MAX_TIMEOUT_MS, MAX_WIRE_PAYLOAD_BYTES,
+    MAX_TIMEOUT_MS, MAX_WIRE_PAYLOAD_BYTES, WIRE_SCHEMA_VERSION,
 };
 use crate::error_codes;
 use crate::{
@@ -91,7 +91,7 @@ fn checked<T, E: std::fmt::Display + 'static>(
     })
 }
 fn version(version: u32) -> Result<(), Failure> {
-    if version == 1 {
+    if version == WIRE_SCHEMA_VERSION {
         Ok(())
     } else {
         Err(Failure::UnsupportedVersion {
@@ -635,7 +635,7 @@ pub fn from_core_event(v: core::LogEvent) -> Result<StoredEventDto, Failure> {
 /// Converts a stored snapshot without imposing the input request-size limit.
 pub fn from_core_snapshot(v: core::LogSnapshot) -> Result<LogSnapshotDto, Failure> {
     Ok(LogSnapshotDto {
-        schema_version: 1,
+        schema_version: WIRE_SCHEMA_VERSION,
         events: v
             .events
             .into_iter()
@@ -710,7 +710,7 @@ pub fn from_canonical_core_health(
     level: core::LevelState,
 ) -> LogHealthDto {
     LogHealthDto {
-        schema_version: 1,
+        schema_version: WIRE_SCHEMA_VERSION,
         logging: from_logging_health(value),
         bridge: None,
         level_state: level.into(),
@@ -811,7 +811,7 @@ fn decode_envelope_shell<T: DeserializeOwned, D, P>(
                 .ok_or_else(|| invalid_input("response", "missing value"))?
                 .clone();
             Ok(WireEnvelope::Ok {
-                schema_version: 1,
+                schema_version: WIRE_SCHEMA_VERSION,
                 value: checked(serde_json::from_value(value), "response")?,
             })
         }
@@ -837,7 +837,7 @@ fn decode_envelope_shell<T: DeserializeOwned, D, P>(
             };
             validate_failure(&error)?;
             Ok(WireEnvelope::Error {
-                schema_version: 1,
+                schema_version: WIRE_SCHEMA_VERSION,
                 error,
             })
         }

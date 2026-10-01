@@ -1,5 +1,7 @@
 //! Shared wire-policy limits used by checked conversion and schema generation.
 
+/// Current checked DTO wire schema version.
+pub const WIRE_SCHEMA_VERSION: u32 = 1;
 /// Maximum UTF-8 bytes in a diagnostic field, bounding retained error metadata.
 pub const MAX_DIAGNOSTIC_FIELD_BYTES: usize = 4_096;
 /// Maximum serialized wire payload bytes, bounding decoding and transfer work.
