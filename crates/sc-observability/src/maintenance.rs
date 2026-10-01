@@ -282,6 +282,11 @@ impl WriterRuntime {
             .as_ref()
             .is_some_and(|tracker| tracker.pass_active())
     }
+
+    #[cfg(test)]
+    pub(crate) fn test_pass_signal(&self) -> Option<&Arc<TestPassDelaySignal>> {
+        self.test_pass_signal.as_ref()
+    }
 }
 
 fn enqueue_nonblocking(
@@ -843,6 +848,7 @@ pub(crate) struct TestPassDelaySignal {
     released: AtomicBool,
     wait_timed_out: AtomicBool,
     shutdown_timeout_recorded: AtomicBool,
+    level_stopping: AtomicBool,
     gate: Mutex<()>,
     changed: Condvar,
 }
@@ -944,6 +950,16 @@ impl TestPassDelaySignal {
 
     pub(crate) fn shutdown_timeout_recorded(&self) -> bool {
         self.shutdown_timeout_recorded.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn record_level_stopping(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
+        self.level_stopping.store(true, Ordering::SeqCst);
+        self.changed.notify_all();
+    }
+
+    pub(crate) fn level_stopping(&self) -> bool {
+        self.level_stopping.load(Ordering::SeqCst)
     }
 
     pub(crate) fn wait_for_state(

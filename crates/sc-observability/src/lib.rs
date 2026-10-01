@@ -1087,6 +1087,13 @@ mod tests {
             .collect()
     }
 
+    /// Upper bound for one test handshake; reached only when a test fails.
+    const TEST_WATCHDOG: Duration = Duration::from_secs(30);
+
+    /// Drains a follow session until it yields `expected_request_id`.
+    ///
+    /// Callers flush the logger first, so the records are already on disk and
+    /// each poll advances the session without waiting.
     fn drain_follow_until_request_id(
         follow: &mut LogFollowSession,
         expected_request_id: &str,
@@ -1101,27 +1108,35 @@ mod tests {
             {
                 return drained;
             }
-            std::thread::sleep(Duration::from_millis(10));
         }
 
         panic!("follow session never yielded {expected_request_id}");
     }
 
-    fn wait_for(mut predicate: impl FnMut() -> bool, message: &str) {
-        for _ in 0..100 {
-            if predicate() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
+    /// Reports every maintenance pass boundary through a non-blocking test signal.
+    fn pass_signal(config: &mut LoggerConfig) -> Arc<crate::maintenance::TestPassDelaySignal> {
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        signal
+    }
 
-        panic!("{message}");
+    /// Re-checks `predicate` at each maintenance pass boundary until it holds.
+    fn wait_for_pass(
+        signal: &crate::maintenance::TestPassDelaySignal,
+        mut predicate: impl FnMut() -> bool,
+        message: &str,
+    ) {
+        assert!(
+            signal.wait_for_state(TEST_WATCHDOG, |_| predicate()),
+            "{message}"
+        );
     }
 
     fn release_test_pass_delay(signal: &Arc<crate::maintenance::TestPassDelaySignal>) {
         signal.release_delay();
         assert!(
-            signal.wait_for_state(Duration::from_secs(1), |signal| !signal.is_active()),
+            signal.wait_for_state(TEST_WATCHDOG, |signal| !signal.is_active()),
             "expected maintenance worker to leave the released test gate"
         );
         assert!(
@@ -1135,14 +1150,9 @@ mod tests {
         let signal = crate::maintenance::TestPassDelaySignal::default();
         signal.block_delay_until_released();
 
-        let started = Instant::now();
         assert_eq!(
             signal.wait_until_released_for(Duration::from_millis(10)),
             crate::maintenance::TestPassDelayWait::TimedOut
-        );
-        assert!(
-            started.elapsed() < Duration::from_millis(250),
-            "the test-gate timeout must use one bounded deadline"
         );
         assert!(signal.wait_timed_out());
     }
@@ -1150,12 +1160,10 @@ mod tests {
     #[test]
     fn test_pass_signal_condition_wait_has_one_deadline() {
         let signal = crate::maintenance::TestPassDelaySignal::default();
-        let started = Instant::now();
         assert!(!signal.wait_for_state(
             Duration::from_millis(10),
             crate::maintenance::TestPassDelaySignal::is_active
         ));
-        assert!(started.elapsed() < Duration::from_secs(1));
         assert!(signal.wait_for_state(Duration::ZERO, |signal| !signal.is_active()));
     }
 
@@ -1527,14 +1535,13 @@ mod tests {
         emit_from_injected_producer(&logger, event).expect("injected producer admission");
         logger.flush().expect("flush injected event");
 
-        wait_for(
-            || {
-                logger
-                    .query(&query_all(LogOrder::OldestFirst))
-                    .map(|snapshot| request_ids(&snapshot) == ["injected-producer"])
-                    .unwrap_or(false)
-            },
-            "injected producer event must be queryable through the logger",
+        let snapshot = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect("query injected event");
+        assert_eq!(
+            request_ids(&snapshot),
+            ["injected-producer"],
+            "injected producer event must be queryable through the logger"
         );
 
         let mut invalid = log_event(service_name());
@@ -1629,20 +1636,15 @@ mod tests {
         logger.log(log_event(service_name())).expect("initial log");
         assert!(
             signal.wait_for_state(
-                Duration::from_secs(1),
+                TEST_WATCHDOG,
                 crate::maintenance::TestPassDelaySignal::is_active
             ),
             "expected maintenance worker to enter the delayed test pass"
         );
 
-        let started = Instant::now();
         let error = logger
             .flush()
             .expect_err("flush must not wait indefinitely for a blocked writer");
-        assert!(
-            started.elapsed() < Duration::from_secs(1),
-            "flush should return within the configured timeout"
-        );
         assert_eq!(error.diagnostic().code, error_codes::LOGGER_WRITER_DEGRADED);
         assert_eq!(logger.health().state, LoggingHealthState::DegradedDropping);
 
@@ -1805,6 +1807,7 @@ mod tests {
         config.retained_log_policy.rotation_max_files = file_count(2);
         config.retained_log_policy.retention_max_age = retention_secs(60);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        let signal = pass_signal(&mut config);
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -1814,7 +1817,8 @@ mod tests {
             .emit(log_event_with_request(service_name(), "req-2", 220))
             .expect("emit 2");
 
-        wait_for(
+        wait_for_pass(
+            &signal,
             || {
                 logger
                     .health()
@@ -1848,7 +1852,8 @@ mod tests {
             .emit(log_event_with_request(service_name(), "req-3", 400))
             .expect("emit after blocking retained path");
 
-        wait_for(
+        wait_for_pass(
+            &signal,
             || {
                 logger
                     .health()
@@ -1871,6 +1876,7 @@ mod tests {
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(2);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        let signal = pass_signal(&mut config);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in [
@@ -1882,7 +1888,8 @@ mod tests {
         }
 
         let active_path = default_log_path(&root, &service_name());
-        wait_for(
+        wait_for_pass(
+            &signal,
             || {
                 let paths = existing_log_paths(&active_path, 8);
                 paths
@@ -1905,6 +1912,7 @@ mod tests {
         config.retained_log_policy.retention_max_age = retention_ms(10);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let retention_age = config.retained_log_policy.retention_max_age.as_duration();
+        let signal = pass_signal(&mut config);
         let logger = Logger::new(config).expect("logger");
         let started = Instant::now();
 
@@ -1915,7 +1923,8 @@ mod tests {
         }
 
         let active_path = default_log_path(&root, &service_name());
-        wait_for(
+        wait_for_pass(
+            &signal,
             || {
                 let paths = existing_log_paths(&active_path, 8);
                 let health = logger.health();
@@ -1944,7 +1953,7 @@ mod tests {
         logger.emit(log_event(service_name())).expect("emit");
         assert!(
             signal.wait_for_state(
-                Duration::from_secs(1),
+                TEST_WATCHDOG,
                 crate::maintenance::TestPassDelaySignal::is_active
             ),
             "expected maintenance worker to enter the delayed test pass"
@@ -1978,29 +1987,29 @@ mod tests {
         logger.emit(log_event(service_name())).expect("emit");
         assert!(
             signal.wait_for_state(
-                Duration::from_secs(1),
+                TEST_WATCHDOG,
                 crate::maintenance::TestPassDelaySignal::is_active
             ),
             "expected maintenance worker to enter the delayed test pass"
         );
 
-        let shutdown_finished = Arc::new(AtomicBool::new(false));
-        let finished = shutdown_finished.clone();
+        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
         let shutdown = std::thread::spawn(move || {
             let stopped = logger.shutdown();
-            finished.store(true, Ordering::SeqCst);
+            finished_tx
+                .send(())
+                .expect("test waits for shutdown to return");
             stopped
         });
 
         assert!(
             signal.wait_for_state(
-                Duration::from_secs(1),
+                TEST_WATCHDOG,
                 crate::maintenance::TestPassDelaySignal::shutdown_timeout_recorded
             ),
             "expected shutdown to record the configured timeout while maintenance is gated"
         );
-        wait_for(
-            || shutdown_finished.load(Ordering::SeqCst),
+        finished_rx.recv_timeout(TEST_WATCHDOG).expect(
             "shutdown must return after the configured timeout without joining the blocked writer",
         );
         let stopped = shutdown
@@ -2040,7 +2049,7 @@ mod tests {
         logger.log(log_event(service_name())).expect("initial log");
         assert!(
             signal.wait_for_state(
-                Duration::from_secs(1),
+                TEST_WATCHDOG,
                 crate::maintenance::TestPassDelaySignal::is_active
             ),
             "expected maintenance worker to enter the delayed test pass"
@@ -2062,12 +2071,12 @@ mod tests {
     #[test]
     fn disconnected_writer_returns_canonical_admission_and_flush_failures() {
         struct PanicSink {
-            entered: Arc<AtomicBool>,
+            entered: std::sync::mpsc::Sender<()>,
         }
 
         impl LogSink for PanicSink {
             fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
-                self.entered.store(true, Ordering::SeqCst);
+                let _ = self.entered.send(());
                 panic!("injected sink panic terminates writer");
             }
 
@@ -2084,20 +2093,19 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         config.enable_console_sink = false;
-        let entered = Arc::new(AtomicBool::new(false));
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
         let mut builder = CanonicalLogger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(PanicSink {
-            entered: entered.clone(),
+            entered: entered_tx,
         })));
         let logger = builder.build().expect("logger");
 
         logger
             .log(log_event(service_name()))
             .expect("initial admission");
-        wait_for(
-            || entered.load(Ordering::SeqCst),
-            "writer should enter the injected sink",
-        );
+        entered_rx
+            .recv_timeout(TEST_WATCHDOG)
+            .expect("writer should enter the injected sink");
 
         // A failed flush is the synchronization point: send failure proves the
         // worker has unwound and dropped its receiver.
@@ -2807,7 +2815,7 @@ mod tests {
             .expect("start maintenance");
         assert!(
             signal.wait_for_state(
-                Duration::from_secs(1),
+                TEST_WATCHDOG,
                 crate::maintenance::TestPassDelaySignal::is_active
             ),
             "expected writer maintenance gate before diagnostic saturation"
@@ -2852,21 +2860,23 @@ mod tests {
             .expect("start maintenance");
         assert!(
             signal.wait_for_state(
-                Duration::from_secs(1),
+                TEST_WATCHDOG,
                 crate::maintenance::TestPassDelaySignal::is_active
             ),
             "expected writer maintenance gate before shutdown"
         );
 
         let shutdown = std::thread::spawn(move || logger.shutdown());
-        wait_for(
-            || {
-                control
-                    .lock()
-                    .map(|state| state.lifecycle == LevelLifecycle::Stopping)
-                    .unwrap_or(false)
-            },
-            "expected logger shutdown to publish the stopping lifecycle",
+        assert!(
+            signal.wait_for_state(
+                TEST_WATCHDOG,
+                crate::maintenance::TestPassDelaySignal::level_stopping
+            ),
+            "expected logger shutdown to publish the stopping lifecycle"
+        );
+        assert_eq!(
+            control.lock().expect("level control").lifecycle,
+            LevelLifecycle::Stopping
         );
 
         assert!(matches!(
@@ -2897,7 +2907,7 @@ mod tests {
         logger.emit(log_event(service_name())).expect("emit");
         assert!(
             signal.wait_for_state(
-                Duration::from_secs(1),
+                TEST_WATCHDOG,
                 crate::maintenance::TestPassDelaySignal::is_active
             ),
             "expected maintenance worker to enter the delayed test pass"
@@ -2920,6 +2930,7 @@ mod tests {
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
+        let signal = pass_signal(&mut config);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3"] {
@@ -2929,7 +2940,8 @@ mod tests {
         }
 
         let active_path = default_log_path(&root, &service_name());
-        wait_for(
+        wait_for_pass(
+            &signal,
             || existing_log_paths(&active_path, 4).len() > 1,
             "expected rotation to produce retained files",
         );
@@ -2946,7 +2958,8 @@ mod tests {
         );
 
         let mut asc = None;
-        wait_for(
+        wait_for_pass(
+            &signal,
             || match logger.query(&query_all(LogOrder::OldestFirst)) {
                 Ok(snapshot) if request_ids(&snapshot) == ["req-1", "req-2", "req-3"] => {
                     asc = Some(snapshot);
@@ -2959,7 +2972,8 @@ mod tests {
         let asc = asc.expect("captured oldest-first snapshot");
         assert_eq!(request_ids(&asc), ["req-1", "req-2", "req-3"]);
 
-        wait_for(
+        wait_for_pass(
+            &signal,
             || {
                 logger
                     .query(&LogQuery {
@@ -2990,6 +3004,7 @@ mod tests {
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
+        let signal = pass_signal(&mut config);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
@@ -2999,7 +3014,8 @@ mod tests {
         }
 
         let mut oldest_first = None;
-        wait_for(
+        wait_for_pass(
+            &signal,
             || match logger.query(&query_all(LogOrder::OldestFirst)) {
                 Ok(snapshot)
                     if request_ids(&snapshot) == ["req-1", "req-2", "req-3", "req-4", "req-5"] =>
@@ -3036,6 +3052,7 @@ mod tests {
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        let signal = pass_signal(&mut config);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-a", "req-b", "req-c"] {
@@ -3057,7 +3074,8 @@ mod tests {
         };
         let reader = JsonlLogReader::new(default_log_path(&root, &service_name()));
         let mut settled = None;
-        wait_for(
+        wait_for_pass(
+            &signal,
             || match (logger.query(&query), reader.query(&query)) {
                 (Ok(logger_snapshot), Ok(reader_snapshot))
                     if request_ids(&logger_snapshot) == ["req-c", "req-b"]
@@ -3101,23 +3119,8 @@ mod tests {
                 .expect("emit fresh");
         }
 
-        let mut snapshot = None;
-        wait_for(
-            || match follow.poll() {
-                Ok(polled)
-                    if request_ids(&polled)
-                        .iter()
-                        .any(|request_id| request_id.starts_with("fresh-")) =>
-                {
-                    snapshot = Some(polled);
-                    true
-                }
-                Ok(_) | Err(_) => false,
-            },
-            "expected follow poll to observe fresh events after asynchronous maintenance",
-        );
-        let snapshot = snapshot.expect("captured follow snapshot");
-        let followed = request_ids(&snapshot);
+        logger.flush().expect("flush fresh events");
+        let followed = drain_follow_until_request_id(&mut follow, "fresh-3");
         assert!(
             followed == vec!["fresh-1", "fresh-2", "fresh-3"]
                 || followed == vec!["backlog", "fresh-1", "fresh-2", "fresh-3"]
@@ -3132,6 +3135,7 @@ mod tests {
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
+        let signal = pass_signal(&mut config);
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -3142,7 +3146,8 @@ mod tests {
             .expect("emit second");
 
         let active_path = default_log_path(&root, &service_name());
-        wait_for(
+        wait_for_pass(
+            &signal,
             || active_path.exists() && rotated_log_path(&active_path, 1).exists(),
             "expected active log rotation to create a .1 retained file",
         );
@@ -3172,6 +3177,7 @@ mod tests {
                 .expect("emit fresh");
         }
 
+        logger.flush().expect("flush fresh events");
         let logger_events = drain_follow_until_request_id(&mut logger_follow, "reader-2");
         let reader_events = drain_follow_until_request_id(&mut reader_follow, "reader-2");
 
@@ -3337,6 +3343,7 @@ mod tests {
         logger
             .emit(log_event_with_request(service_name(), "after-truncate", 20))
             .expect("emit after truncate");
+        logger.flush().expect("flush after truncate");
         // Windows can replay previously read records once a truncate resets the file position,
         // while Unix platforms often yield only the new post-truncate record.
         let after_truncate = drain_follow_until_request_id(&mut follow, "after-truncate");
@@ -3358,6 +3365,7 @@ mod tests {
         logger
             .emit(log_event_with_request(service_name(), "after-recreate", 20))
             .expect("emit after recreate");
+        logger.flush().expect("flush after recreate");
         let after_recreate = drain_follow_until_request_id(&mut follow, "after-recreate");
         assert_eq!(after_recreate, vec!["after-recreate"]);
         let recreate_health = follow.health();

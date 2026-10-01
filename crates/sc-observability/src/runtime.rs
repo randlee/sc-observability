@@ -813,6 +813,15 @@ impl CanonicalLogger<Running> {
     pub fn shutdown(mut self) -> CanonicalLogger<Stopped> {
         self.shutdown.store(true, Ordering::SeqCst);
         self.mark_level_stopping();
+        #[cfg(test)]
+        if let Some(signal) = self
+            .runtime
+            .writer
+            .as_ref()
+            .and_then(WriterRuntime::test_pass_signal)
+        {
+            signal.record_level_stopping();
+        }
         // The owner only has a weak reference to this admission path. Drop the
         // logger's strong reference before joining so it cannot retain sender.
         self.diagnostic_admitter.take();
