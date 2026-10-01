@@ -32,6 +32,9 @@ number of rows, display all available rows without padding or duplication.
    - **Log B — per-round events** (`phase-<p>.jsonl`): columns
      `completed_local`, `task`, `sprint`, `tested`, `iteration`, `verdict`,
      `blk`, `imp`, `min`, `fnd`, `duration`, `pr_number`.
+   The JSONL `snapshot_at` and `completed_at` timestamps are UTC. Convert
+   those timestamps to the user's local timezone for the `snapshot_local`
+   and `completed_local` display columns (`HH:MM`); do not rewrite the logs.
 
 3. For display only, shorten `task` and `trigger_task` to the substring
    starting at the final `qa-pr<number>` or `sanity-pr<number>` component,
