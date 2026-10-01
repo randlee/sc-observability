@@ -47,21 +47,21 @@ fn settings_error_codes_match_documented_stable_names() {
 fn settings_errors_include_actionable_recovery_steps_and_docs() {
     let invalid_value = LogSettings::from_env(
         &snapshot(&[("SC_LOG_FILE", "yes")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
     let invalid_environment = LogSettings::from_env(
         &snapshot(&[("sc_log_level", "Info")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
     let unknown_key = LogSettings::from_env(
         &snapshot(&[("SC_LOG_UNKNOWN", "x")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
     let prefix_collision =
-        LogSettings::from_application_env(&snapshot(&[]), EnvPrefix::new("SC").unwrap())
+        LogSettings::from_application_env(&snapshot(&[]), &EnvPrefix::new("SC").unwrap())
             .unwrap_err();
     let resolution = LogSettings::resolve(LogSettingsInputs {
         file: None,
@@ -365,7 +365,7 @@ fn parses_every_environment_inventory_row_atomically() {
             ("SC_LOG_WRITER_SHUTDOWN_TIMEOUT_MS", "2000"),
             ("SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS", "7"),
         ]),
-        EnvPrefix::new("SC").expect("valid prefix"),
+        &EnvPrefix::new("SC").expect("valid prefix"),
     )
     .expect("inventory parses");
     assert_eq!(settings.level, Some(LevelFilter::Debug));
@@ -394,12 +394,12 @@ fn precedence_root_exception_and_conversion_preserve_defaults() {
     .expect("json settings");
     let shared = LogSettings::from_env(
         &snapshot(&[("SC_LOG_LEVEL", "Info"), ("SC_LOG_ROOT", "/shared")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .unwrap();
     let application = LogSettings::from_env(
         &snapshot(&[("APP_LOG_LEVEL", "Error"), ("APP_LOG_ROOT", "/app")]),
-        EnvPrefix::new("APP").unwrap(),
+        &EnvPrefix::new("APP").unwrap(),
     )
     .unwrap();
     let resolved = LogSettings::resolve(LogSettingsInputs {
@@ -439,7 +439,7 @@ fn every_inventory_row_obeys_all_four_resolution_layers() {
             ("SC_LOG_WRITER_SHUTDOWN_TIMEOUT_MS", "200"),
             ("SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS", "2"),
         ]),
-        EnvPrefix::new("SC").expect("valid prefix"),
+        &EnvPrefix::new("SC").expect("valid prefix"),
     )
     .expect("shared environment inventory rows");
     let application = LogSettings::from_env(
@@ -455,7 +455,7 @@ fn every_inventory_row_obeys_all_four_resolution_layers() {
             ("APP_LOG_WRITER_SHUTDOWN_TIMEOUT_MS", "300"),
             ("APP_LOG_MAINTENANCE_MAX_WORK_PER_PASS", "3"),
         ]),
-        EnvPrefix::new("APP").expect("valid prefix"),
+        &EnvPrefix::new("APP").expect("valid prefix"),
     )
     .expect("application environment inventory rows");
 
@@ -484,13 +484,13 @@ fn every_inventory_row_resolves_from_each_layer_in_isolation() {
             .map(|value| serde_json::from_str(value).expect("valid JSON settings"));
         let shared_env = LogSettings::from_env(
             &snapshot(case.shared_env),
-            EnvPrefix::new("SC").expect("valid shared prefix"),
+            &EnvPrefix::new("SC").expect("valid shared prefix"),
         )
         .expect("valid shared settings");
         let application_env = (!case.application_env.is_empty()).then(|| {
             LogSettings::from_env(
                 &snapshot(case.application_env),
-                EnvPrefix::new("APP").expect("valid application prefix"),
+                &EnvPrefix::new("APP").expect("valid application prefix"),
             )
             .expect("valid application settings")
         });
@@ -514,7 +514,7 @@ fn a_higher_environment_policy_replaces_json_policy_atomically() {
     .expect("JSON policy");
     let shared = LogSettings::from_env(
         &snapshot(&[("SC_LOG_ROTATION_MAX_FILES", "9")]),
-        EnvPrefix::new("SC").expect("valid prefix"),
+        &EnvPrefix::new("SC").expect("valid prefix"),
     )
     .expect("shared policy override");
     let resolved = LogSettings::resolve(LogSettingsInputs {
@@ -546,7 +546,7 @@ fn settings_reject_invalid_values_duplicates_and_unknown_json_fields() {
     for (key, value) in invalid_rows {
         let error = LogSettings::from_env(
             &snapshot(&[(key, value)]),
-            EnvPrefix::new("SC").expect("valid prefix"),
+            &EnvPrefix::new("SC").expect("valid prefix"),
         )
         .expect_err("invalid inventory value must fail");
         assert_eq!(error.code(), error_codes::LOG_INVALID_VALUE, "{key}");
@@ -554,7 +554,7 @@ fn settings_reject_invalid_values_duplicates_and_unknown_json_fields() {
 
     let duplicate = LogSettings::from_env(
         &snapshot(&[("SC_LOG_LEVEL", "Info"), ("sc_log_level", "Debug")]),
-        EnvPrefix::new("SC").expect("valid prefix"),
+        &EnvPrefix::new("SC").expect("valid prefix"),
     )
     .expect_err("case-folded duplicate must fail");
     assert_eq!(duplicate.code(), error_codes::LOG_INVALID_ENVIRONMENT);
@@ -569,7 +569,7 @@ fn rejects_non_utf8_value_in_selected_namespace() {
         OsString::from("SC_LOG_LEVEL"),
         OsString::from_vec(b"\xFF".to_vec()),
     )]);
-    let error = LogSettings::from_env(&snapshot, EnvPrefix::new("SC").unwrap()).unwrap_err();
+    let error = LogSettings::from_env(&snapshot, &EnvPrefix::new("SC").unwrap()).unwrap_err();
     assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
 }
 
@@ -617,30 +617,30 @@ fn settings_conversion_preserves_every_non_inventory_default() {
 fn permits_empty_root_until_effective_resolution_and_rejects_unknown_case_and_prefix_collision() {
     let empty_root = LogSettings::from_env(
         &snapshot(&[("SC_LOG_ROOT", "")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .expect("an empty root is deferred to the effective-root validator");
     assert_eq!(empty_root.log_root, Some(PathBuf::new()));
     let unknown = LogSettings::from_env(
         &snapshot(&[("SC_LOG_UNKNOWN", "x")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
     assert_eq!(unknown.code(), error_codes::LOG_UNKNOWN_KEY);
     let empty_unknown = LogSettings::from_env(
         &snapshot(&[("SC_LOG_UNKNOWN", "")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
     assert_eq!(empty_unknown.code(), error_codes::LOG_UNKNOWN_KEY);
     let case = LogSettings::from_env(
         &snapshot(&[("sc_log_level", "Info")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
     assert_eq!(case.code(), error_codes::LOG_INVALID_ENVIRONMENT);
     let collision =
-        LogSettings::from_application_env(&snapshot(&[]), EnvPrefix::new("SC").unwrap())
+        LogSettings::from_application_env(&snapshot(&[]), &EnvPrefix::new("SC").unwrap())
             .unwrap_err();
     assert!(matches!(
         collision,
@@ -665,19 +665,37 @@ fn rejects_non_utf8_key_in_selected_namespace() {
         OsString::from("ignored"),
     )]);
 
-    let error = LogSettings::from_env(&snapshot, EnvPrefix::new("SC").unwrap()).unwrap_err();
+    let error = LogSettings::from_env(&snapshot, &EnvPrefix::new("SC").unwrap()).unwrap_err();
     assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
+}
+
+#[cfg(unix)]
+#[test]
+fn ignores_non_utf8_key_outside_selected_namespace() {
+    let snapshot = EnvSnapshot::from_pairs([
+        (
+            OsString::from_vec(b"UNRELATED_\xFF".to_vec()),
+            OsString::from("ignored"),
+        ),
+        (OsString::from("SC_LOG_LEVEL"), OsString::from("Info")),
+    ]);
+
+    let settings = LogSettings::from_env(&snapshot, &EnvPrefix::new("SC").unwrap())
+        .expect("unrelated non-UTF-8 key must be ignored");
+    assert_eq!(settings.level, Some(LevelFilter::Info));
 }
 
 #[cfg(windows)]
 #[test]
 fn rejects_non_utf8_key_in_selected_namespace() {
     let snapshot = EnvSnapshot::from_pairs([(
-        OsString::from_wide(&[0x0053, 0x0043, 0x005F, 0xD800]),
+        OsString::from_wide(&[
+            0x0053, 0x0043, 0x005F, 0x004C, 0x004F, 0x0047, 0x005F, 0xD800,
+        ]),
         OsString::from("ignored"),
     )]);
 
-    let error = LogSettings::from_env(&snapshot, EnvPrefix::new("SC").unwrap()).unwrap_err();
+    let error = LogSettings::from_env(&snapshot, &EnvPrefix::new("SC").unwrap()).unwrap_err();
     assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
 }
 
@@ -709,7 +727,7 @@ fn empty_json_root_is_never_overridden_and_json_null_is_unset() {
 fn shadowed_empty_root_is_ignored_before_effective_root_validation() {
     let shared_env = LogSettings::from_env(
         &snapshot(&[("SC_LOG_ROOT", "")]),
-        EnvPrefix::new("SC").unwrap(),
+        &EnvPrefix::new("SC").unwrap(),
     )
     .expect("an empty shadowed root parses for precedence resolution");
     let file: LogSettings = serde_json::from_str(r#"{"logRoot":"/json"}"#).unwrap();

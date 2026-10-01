@@ -171,6 +171,78 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
                     proc.terminate()
                     proc.wait(timeout=5)
 
+    def test_stop_process_lookup_removes_all_owned_state_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state"
+            state.mkdir()
+            database = state / "viewer.duckdb"
+            database.write_text("owned")
+            Path(str(database) + ".wal").write_text("owned wal")
+            (state / "viewer.log").write_text("owned")
+            (state / "viewer.pid").write_text("123\n")
+            (state / "viewer.json").write_text("{}")
+            metadata = {"pid": 123, "database": str(database)}
+            with mock.patch.object(harness, "_owned", return_value=(123, metadata)), \
+                    mock.patch.object(harness, "_owned_database", return_value=database), \
+                    mock.patch.object(harness, "_command_args") as command_args, \
+                    mock.patch.object(harness.os, "kill", side_effect=ProcessLookupError):
+                harness.stop(argparse.Namespace(state_dir=str(state), timeout=5,
+                                                remove_state=True))
+            command_args.assert_not_called()
+            self.assertFalse(state.exists())
+
+    def test_stop_process_lookup_preserves_state_without_remove_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state"
+            state.mkdir()
+            database = state / "viewer.duckdb"
+            database.write_text("owned")
+            wal = Path(str(database) + ".wal")
+            wal.write_text("owned wal")
+            log = state / "viewer.log"
+            log.write_text("owned")
+            (state / "viewer.pid").write_text("123\n")
+            (state / "viewer.json").write_text("{}")
+            metadata = {"pid": 123, "database": str(database)}
+            with mock.patch.object(harness, "_owned", return_value=(123, metadata)), \
+                    mock.patch.object(harness, "_command_args") as command_args, \
+                    mock.patch.object(harness.os, "kill", side_effect=ProcessLookupError):
+                harness.stop(argparse.Namespace(state_dir=str(state), timeout=5,
+                                                remove_state=False))
+            command_args.assert_not_called()
+            self.assertFalse((state / "viewer.pid").exists())
+            self.assertFalse((state / "viewer.json").exists())
+            self.assertTrue(database.exists())
+            self.assertTrue(wal.exists())
+            self.assertTrue(log.exists())
+            self.assertTrue(state.is_dir())
+
+    def test_stop_permission_error_preserves_all_owned_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state"
+            state.mkdir()
+            database = state / "viewer.duckdb"
+            database.write_text("owned")
+            wal = Path(str(database) + ".wal")
+            wal.write_text("owned wal")
+            log = state / "viewer.log"
+            log.write_text("owned")
+            (state / "viewer.pid").write_text("123\n")
+            (state / "viewer.json").write_text("{}")
+            metadata = {"pid": 123, "database": str(database)}
+            with mock.patch.object(harness, "_owned", return_value=(123, metadata)), \
+                    mock.patch.object(harness, "_owned_database", return_value=database), \
+                    mock.patch.object(harness.os, "kill", side_effect=PermissionError):
+                with self.assertRaises(PermissionError):
+                    harness.stop(argparse.Namespace(state_dir=str(state), timeout=5,
+                                                    remove_state=True))
+            self.assertTrue((state / "viewer.pid").exists())
+            self.assertTrue((state / "viewer.json").exists())
+            self.assertTrue(database.exists())
+            self.assertTrue(wal.exists())
+            self.assertTrue(log.exists())
+            self.assertTrue(state.is_dir())
+
     def test_stop_refuses_database_recorded_outside_state_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

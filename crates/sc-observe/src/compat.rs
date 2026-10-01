@@ -18,7 +18,7 @@ use sc_observability_types::{
 };
 use sc_observability_types::{ServiceName, ToolName};
 
-use crate::{Observability, ObservabilityBuilder, ObservabilityConfig};
+use crate::{Observability, ObservabilityBuilder, ObservabilityConfig, RunningFlushError};
 
 #[allow(
     deprecated,
@@ -34,6 +34,17 @@ fn legacy_init_error(error: InitError) -> LegacyInitError {
 )]
 fn legacy_flush_error(error: FlushError) -> LegacyFlushError {
     LegacyFlushError(error.into_context())
+}
+
+#[allow(
+    deprecated,
+    reason = "root methods retain the released compatibility error wrappers"
+)]
+fn legacy_running_flush_error(error: RunningFlushError) -> LegacyFlushError {
+    match error {
+        RunningFlushError::Canonical(error) => legacy_flush_error(error),
+        RunningFlushError::Released(failure) => LegacyFlushError(failure.into_context()),
+    }
 }
 
 #[allow(
@@ -109,15 +120,15 @@ impl Observability {
         note = "Use Observability::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(config: ObservabilityConfig) -> Result<Self, LegacyInitError> {
-        Self::new_v2(config).map_err(legacy_init_error)
+        Self::new_released(config).map_err(legacy_init_error)
     }
 
     /// Flushes the shared runtime with the released root failure contract.
     ///
     /// # Panics
     ///
-    /// Panics if the attached logger encounters a poisoned internal mutex while
-    /// flushing its registered sinks.
+    /// Panics if the runtime's internal logger-state mutex is poisoned, including
+    /// while waiting for an in-progress shutdown to finish.
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
@@ -127,15 +138,16 @@ impl Observability {
         note = "Use Observability::flush_typed(); see migrate-error-api.md."
     )]
     pub fn flush(&self) -> Result<(), LegacyFlushError> {
-        self.flush_v2().map_err(legacy_flush_error)
+        self.flush_running().map_err(legacy_running_flush_error)
     }
 
     /// Shuts down the shared runtime with the released root failure contract.
     ///
     /// # Panics
     ///
-    /// Panics if the attached logger encounters a poisoned internal mutex while
-    /// flushing sinks or updating query/follow health during shutdown.
+    /// Panics if the runtime's internal logger-state mutex is poisoned. It also
+    /// resumes panics from logger shutdown, including panics from poisoned
+    /// writer-snapshot or query-health mutexes.
     #[allow(
         deprecated,
         reason = "root methods retain the released compatibility error wrappers"
@@ -150,12 +162,13 @@ impl Observability {
 
     /// Constructs the existing runtime with the released typed failure contract.
     pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure> {
-        Self::new_v2(config).map_err(InitFailure::from)
+        Self::new_released(config).map_err(InitFailure::from)
     }
 
     /// Flushes the existing runtime with the released typed failure contract.
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
-        self.flush_v2().map_err(FlushFailure::from)
+        self.flush_running()
+            .map_err(RunningFlushError::into_released)
     }
 
     /// Shuts down the existing runtime with the released typed failure contract.
@@ -175,12 +188,12 @@ impl ObservabilityBuilder {
         note = "Use ObservabilityBuilder::build_typed(); see migrate-error-api.md."
     )]
     pub fn build(self) -> Result<Observability, LegacyInitError> {
-        self.build_v2().map_err(legacy_init_error)
+        self.build_released().map_err(legacy_init_error)
     }
 
     /// Finalizes the existing builder with the released typed failure contract.
     pub fn build_typed(self) -> Result<Observability, InitFailure> {
-        self.build_v2().map_err(InitFailure::from)
+        self.build_released().map_err(InitFailure::from)
     }
 }
 
@@ -236,5 +249,31 @@ mod tests {
             context: context("root shutdown native source"),
         });
         assert_legacy_root_error(&shutdown, "root shutdown native source");
+    }
+    #[test]
+    fn legacy_running_flush_error_preserves_context_and_source_identity() {
+        // The proof begins at the facade input; it does not claim end-to-end
+        // sink-source identity.
+        fn identity(context: &ErrorContext) -> (*const (), *const ()) {
+            let source = std::error::Error::source(context).expect("context keeps its source");
+            (
+                std::ptr::from_ref(context).cast::<()>(),
+                std::ptr::from_ref(source).cast::<()>(),
+            )
+        }
+
+        let boxed = context("root flush arm native source");
+        let before = identity(&boxed);
+        let legacy = legacy_running_flush_error(RunningFlushError::Released(
+            FlushFailure::from_context(boxed),
+        ));
+        assert_eq!(identity(&legacy.0), before);
+
+        let boxed = context("root canonical arm native source");
+        let before = identity(&boxed);
+        let legacy = legacy_running_flush_error(RunningFlushError::Canonical(FlushError::Drain {
+            context: boxed,
+        }));
+        assert_eq!(identity(&legacy.0), before);
     }
 }

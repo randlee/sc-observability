@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use sc_observability_types::typed::InitFailure;
 use sc_observability_types::{ErrorContext, Remediation, v2::InitError as CanonicalInitError};
 
-use crate::typed::{TypedLogSink, legacy_sink};
+use crate::sink::LogSink;
 use crate::{
     CanonicalLogger, ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, LoggerConfig,
     LoggerRuntime, QueueCapacity, Running, SinkHealthState, SinkRegistration, default_log_path,
@@ -15,13 +15,15 @@ use crate::{
 };
 
 impl SinkRegistration {
-    /// Registers a typed sink through the retained open [`crate::LogSink`] boundary.
+    /// Registers a canonical sink exactly as provided.
     ///
-    /// The D13 adapter keeps the typed sink's structured diagnostic and source
-    /// intact while this registration retains any sink-local filter metadata.
+    /// The registration stores the input [`Arc`] directly, with no adapter, so
+    /// the canonical sink's structured diagnostic and source reach the runtime
+    /// unchanged. Released [`crate::LogSink`] values register through
+    /// [`SinkRegistration::new`] instead.
     #[must_use]
-    pub fn typed(sink: Arc<dyn TypedLogSink>) -> Self {
-        Self::new(legacy_sink(sink))
+    pub fn typed(sink: Arc<dyn LogSink>) -> Self {
+        Self { sink, filter: None }
     }
 }
 
@@ -34,7 +36,6 @@ pub struct CanonicalLoggerBuilder {
     config: LoggerConfig,
     file_sink: Option<Arc<JsonlFileSink>>,
     sinks: Vec<SinkRegistration>,
-    typed_sinks: Vec<Arc<dyn TypedLogSink>>,
 }
 
 /// Canonical initialization failure returned when sink registration is rejected.
@@ -59,25 +60,36 @@ impl CanonicalLoggerBuilder {
     /// let _logger = builder.build();
     /// ```
     pub fn new(config: LoggerConfig) -> Result<Self, CanonicalInitError> {
+        if QueueCapacity::new(config.queue_capacity).is_none() {
+            return Err(CanonicalInitError::Configuration {
+                context: InitFailure::logger_initialization(
+                    "logger queue capacity must be greater than zero",
+                    Remediation::recoverable(
+                        "set LoggerConfig.queue_capacity to a positive value before constructing the logger",
+                        ["increase queue_capacity to at least 1"],
+                    ),
+                )
+                .into_context(),
+            });
+        }
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let mut sinks = Vec::new();
         let mut file_sink = None;
 
         if config.enable_file_sink {
             let sink = Arc::new(JsonlFileSink::for_logger(active_log_path));
-            sinks.push(SinkRegistration::new(sink.clone()));
+            sinks.push(SinkRegistration::typed(sink.clone()));
             file_sink = Some(sink);
         }
 
         if config.enable_console_sink {
-            sinks.push(SinkRegistration::new(Arc::new(ConsoleSink::stdout())));
+            sinks.push(SinkRegistration::typed(Arc::new(ConsoleSink::stdout())));
         }
 
         Ok(Self {
             config,
             file_sink,
             sinks,
-            typed_sinks: Vec::new(),
         })
     }
 
@@ -87,15 +99,23 @@ impl CanonicalLoggerBuilder {
     }
 
     /// Registers one additional sink before the logger runtime is built.
+    ///
+    /// This is the released infallible registration path: the registration is
+    /// stored as provided, including its filter, without the duplicate or
+    /// health validation that [`Self::register_typed_sink`] performs.
     pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self {
         self.sinks.push(registration);
         self
     }
 
-    /// Registers a typed sink before the logger runtime is built.
+    /// Registers a canonical sink before the logger runtime is built.
     ///
-    /// This is equivalent to registering [`SinkRegistration::typed`] and
-    /// returns the builder so callers can continue fluent configuration.
+    /// The canonical owner of this registration is [`crate::v2::LoggerBuilder`]
+    /// and the sink trait is [`crate::v2::LogSink`]. This is equivalent to
+    /// registering [`SinkRegistration::typed`] after validating the exact
+    /// stored [`Arc`] against every sink already registered, including
+    /// built-ins and raw [`Self::register_sink`] registrations, and returns the
+    /// builder so callers can continue fluent configuration.
     ///
     /// # Errors
     ///
@@ -103,12 +123,12 @@ impl CanonicalLoggerBuilder {
     /// when the sink is duplicated, degraded, or unavailable.
     pub fn register_typed_sink(
         &mut self,
-        sink: Arc<dyn TypedLogSink>,
+        sink: Arc<dyn LogSink>,
     ) -> Result<&mut Self, SinkRegistrationError> {
         if self
-            .typed_sinks
+            .sinks
             .iter()
-            .any(|registered| Arc::ptr_eq(registered, &sink))
+            .any(|registered| Arc::ptr_eq(&registered.sink, &sink))
         {
             return Err(CanonicalInitError::Configuration {
                 context: Box::new(ErrorContext::new(
@@ -150,7 +170,6 @@ impl CanonicalLoggerBuilder {
             }
         }
 
-        self.typed_sinks.push(sink.clone());
         Ok(self.register_sink(SinkRegistration::typed(sink)))
     }
 
@@ -188,7 +207,6 @@ impl CanonicalLoggerBuilder {
             config,
             file_sink,
             sinks,
-            typed_sinks: _,
         } = self;
         if sinks.is_empty() {
             return Err(CanonicalInitError::Configuration {
@@ -238,6 +256,7 @@ impl CanonicalLoggerBuilder {
             context: failure.into_context(),
         })?;
         let diagnostic_admitter = runtime.diagnostic_admitter();
+        // MUTEX: the logger and LevelOwner share one control allocation for serialized level changes.
         let control = Arc::new(Mutex::new(LevelControl::new(&config, &diagnostic_admitter)));
         Ok((
             CanonicalLogger {

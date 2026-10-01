@@ -3542,18 +3542,23 @@
       "type": "object"
     },
     "InputSpanSignalDto": {
-      "description": "Native-compatible external state tag; never accepts an unknown state as success.",
+      "description": "Lifecycle signal with an adjacent, snake-case `kind` tag and `data` payload.",
       "oneOf": [
         {
           "additionalProperties": false,
           "description": "Active span; no duration.",
           "properties": {
-            "Started": {
+            "data": {
               "$ref": "#/$defs/InputSpanRecordDto"
+            },
+            "kind": {
+              "const": "started",
+              "type": "string"
             }
           },
           "required": [
-            "Started"
+            "kind",
+            "data"
           ],
           "type": "object"
         },
@@ -3561,12 +3566,17 @@
           "additionalProperties": false,
           "description": "Point event.",
           "properties": {
-            "Event": {
+            "data": {
               "$ref": "#/$defs/InputSpanEventDto"
+            },
+            "kind": {
+              "const": "event",
+              "type": "string"
             }
           },
           "required": [
-            "Event"
+            "kind",
+            "data"
           ],
           "type": "object"
         },
@@ -3574,12 +3584,17 @@
           "additionalProperties": false,
           "description": "Completed span with required duration.",
           "properties": {
-            "Ended": {
+            "data": {
               "$ref": "#/$defs/InputSpanRecordDto"
+            },
+            "kind": {
+              "const": "ended",
+              "type": "string"
             }
           },
           "required": [
-            "Ended"
+            "kind",
+            "data"
           ],
           "type": "object"
         }
@@ -8087,18 +8102,23 @@
       "type": "object"
     },
     "OutputSpanSignalDto": {
-      "description": "Native-compatible external state tag; never accepts an unknown state as success.",
+      "description": "Lifecycle signal with an adjacent, snake-case `kind` tag and `data` payload.",
       "oneOf": [
         {
           "additionalProperties": false,
           "description": "Active span; no duration.",
           "properties": {
-            "Started": {
+            "data": {
               "$ref": "#/$defs/OutputSpanRecordDto"
+            },
+            "kind": {
+              "const": "started",
+              "type": "string"
             }
           },
           "required": [
-            "Started"
+            "kind",
+            "data"
           ],
           "type": "object"
         },
@@ -8106,12 +8126,17 @@
           "additionalProperties": false,
           "description": "Point event.",
           "properties": {
-            "Event": {
+            "data": {
               "$ref": "#/$defs/OutputSpanEventDto"
+            },
+            "kind": {
+              "const": "event",
+              "type": "string"
             }
           },
           "required": [
-            "Event"
+            "kind",
+            "data"
           ],
           "type": "object"
         },
@@ -8119,12 +8144,17 @@
           "additionalProperties": false,
           "description": "Completed span with required duration.",
           "properties": {
-            "Ended": {
+            "data": {
               "$ref": "#/$defs/OutputSpanRecordDto"
+            },
+            "kind": {
+              "const": "ended",
+              "type": "string"
             }
           },
           "required": [
-            "Ended"
+            "kind",
+            "data"
           ],
           "type": "object"
         }

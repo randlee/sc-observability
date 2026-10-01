@@ -19,16 +19,23 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::config::{self, ExporterBackend, LegacyRetryPolicy, TelemetryConfig as RuntimeConfig};
-use crate::projectors::{ProjectorSet, TelemetryEmit};
+use crate::config::{ExporterBackend, LegacyRetryPolicy, TelemetryConfig as RuntimeConfig};
+use crate::projectors::{
+    AttachedLogProjector, AttachedMetricProjector, AttachedSpanProjector, ProjectorSet,
+    TelemetryEmit,
+};
 use crate::{RuntimeTelemetry, constants, error_codes};
-use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+use sc_observability_types::typed::{
+    FlushFailure, InitFailure, ShutdownFailure, TypedLogProjector, TypedMetricProjector,
+    TypedSpanProjector, typed_log_projector, typed_metric_projector, typed_span_projector,
+};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 #[allow(deprecated)]
 use sc_observability_types::{
     DurationMs, ErrorContext, FlushError, InitError, LogEvent, LogProjector, MetricProjector,
-    MetricRecord, Observable, ObservationFilter, ProjectionRegistration, Remediation, ServiceName,
-    ShutdownError, SpanProjector, SpanSignal, TelemetryError,
+    MetricRecord, Observable, Observation, ObservationFilter, ProjectionError,
+    ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanProjector, SpanSignal,
+    TelemetryError,
 };
 
 /// The released 1.4.1 OTLP protocol set.
@@ -207,10 +214,12 @@ impl OtelConfig {
             OtlpProtocol::HttpBinary | OtlpProtocol::Grpc => ExporterBackend::OpenTelemetrySdk,
             OtlpProtocol::HttpJson => ExporterBackend::LegacyHttpJson,
         };
+        let budget = DurationMs::from(u64::from(self.timeout_ms).max(30_000));
         let retry = LegacyRetryPolicy {
             max_retries: Some(self.max_retries),
             initial_backoff_ms: Some(self.initial_backoff_ms),
             max_backoff_ms: Some(self.max_backoff_ms),
+            retry_sequence_timeout_ms: Some(budget),
             ..LegacyRetryPolicy::default()
         };
         let legacy_retry =
@@ -225,8 +234,13 @@ impl OtelConfig {
             protocol: self.protocol.into(),
             auth_header: self.auth_header.map(|header| header.0),
             ca_file: self.ca_file,
-            insecure_skip_verify: self.insecure_skip_verify,
+            // The released flag was accepted but inert in 1.4.1.  Compatibility
+            // construction must retain that behavior; canonical construction
+            // continues to reject an explicit insecure TLS configuration.
+            insecure_skip_verify: false,
             timeout_ms: Some(self.timeout_ms),
+            lifecycle_flush_timeout_ms: Some(budget),
+            lifecycle_shutdown_timeout_ms: Some(budget),
             debug_local_export: self.debug_local_export,
             legacy_retry,
             ..crate::config::OtelConfig::default()
@@ -341,14 +355,27 @@ impl TelemetryConfigBuilder {
             traces: self.traces,
             metrics: self.metrics,
         };
-        validate_released_transport(&config.transport)?;
-        config::validate_config_typed(&config.clone().into_runtime())?;
+        validate_released_config(&config)?;
         Ok(config)
     }
 }
 
-/// Validates released transport fields before backend-specific projection.
-fn validate_released_transport(transport: &OtelConfig) -> Result<(), InitFailure> {
+/// Validates the published 1.4.1 configuration in its original failure order.
+///
+/// This intentionally precedes backend projection: released callers must see
+/// their released diagnostic rather than a canonical transport diagnostic.
+fn validate_released_config(config: &TelemetryConfig) -> Result<(), InitFailure> {
+    let transport = &config.transport;
+    if transport.enabled && transport.endpoint.is_none() {
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
+            error_codes::TELEMETRY_INVALID_CONFIG,
+            "enabled telemetry requires an endpoint",
+            Remediation::recoverable(
+                "set OtelConfig.endpoint before constructing Telemetry",
+                ["disable telemetry for local-only runs if OTLP is not required"],
+            ),
+        ))));
+    }
     if u64::from(transport.timeout_ms) == 0 {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
@@ -364,6 +391,35 @@ fn validate_released_transport(transport: &OtelConfig) -> Result<(), InitFailure
             error_codes::TELEMETRY_INVALID_CONFIG,
             "initial_backoff_ms must not exceed max_backoff_ms",
             Remediation::recoverable("fix the backoff configuration", ["use documented defaults"]),
+        ))));
+    }
+    if transport.enabled
+        && config.logs.is_none()
+        && config.traces.is_none()
+        && config.metrics.is_none()
+    {
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
+            error_codes::TELEMETRY_INVALID_CONFIG,
+            "at least one telemetry signal must be enabled",
+            Remediation::recoverable(
+                "enable logs, traces, or metrics before constructing Telemetry",
+                ["disable the OTLP layer entirely if telemetry is not needed"],
+            ),
+        ))));
+    }
+    if config.logs.is_some_and(|value| value.batch_size == 0)
+        || config.traces.is_some_and(|value| value.batch_size == 0)
+        || config
+            .metrics
+            .is_some_and(|value| value.batch_size == 0 || u64::from(value.export_interval_ms) == 0)
+    {
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
+            error_codes::TELEMETRY_INVALID_CONFIG,
+            "telemetry batch sizing and export intervals must be positive",
+            Remediation::recoverable(
+                "set batch sizes and export intervals above zero",
+                ["use documented defaults"],
+            ),
         ))));
     }
     Ok(())
@@ -391,16 +447,27 @@ impl Telemetry {
 
     /// Creates telemetry with the released typed initialization error.
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
-        RuntimeTelemetry::new_typed(config.into_runtime()).map(|inner| Self { inner })
+        validate_released_config(&config)?;
+        let config = config.into_runtime();
+        let bounds = crate::config::validated_released_telemetry_bounds(&config)?;
+        RuntimeTelemetry::new_prepared(config, &bounds).map(|inner| Self { inner })
     }
 
     pub(crate) fn runtime(&self) -> &RuntimeTelemetry {
         &self.inner
     }
 
+    /// Wraps an injected runtime so tests can exercise the released facade.
+    #[cfg(test)]
+    pub(crate) fn from_runtime(inner: RuntimeTelemetry) -> Self {
+        Self { inner }
+    }
+
     /// Buffers one log event for export.
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError> {
-        self.inner.emit_log(event).map_err(legacy_telemetry_error)
+        self.inner
+            .emit_log_released(event)
+            .map_err(legacy_telemetry_error)
     }
 
     /// Buffers one span signal for export.
@@ -463,7 +530,7 @@ impl Telemetry {
 
 impl TelemetryEmit for Telemetry {
     fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_log(event)
+        self.runtime().emit_log_released(event)
     }
 
     fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
@@ -500,19 +567,25 @@ where
 
     /// Attaches a log projector whose output is also forwarded into telemetry.
     pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
-        self.inner = self.inner.with_log_projector(projector);
+        self.inner = self
+            .inner
+            .with_log_projector(typed_log_projector(projector));
         self
     }
 
     /// Attaches a span projector whose output is also forwarded into telemetry.
     pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
-        self.inner = self.inner.with_span_projector(projector);
+        self.inner = self
+            .inner
+            .with_span_projector(typed_span_projector(projector));
         self
     }
 
     /// Attaches a metric projector whose output is also forwarded into telemetry.
     pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
-        self.inner = self.inner.with_metric_projector(projector);
+        self.inner = self
+            .inner
+            .with_metric_projector(typed_metric_projector(projector));
         self
     }
 
@@ -524,7 +597,75 @@ where
 
     /// Converts the wrapped helper into ordinary observation registration.
     pub fn into_registration(self) -> ProjectionRegistration<T> {
-        self.inner.into_registration()
+        let (log, span, metric, filter) = self.inner.into_attached();
+        let mut registration = ProjectionRegistration::new();
+        if let Some(projector) = log {
+            registration = registration.with_log_projector(projector);
+        }
+        if let Some(projector) = span {
+            registration = registration.with_span_projector(projector);
+        }
+        if let Some(projector) = metric {
+            registration = registration.with_metric_projector(projector);
+        }
+        if let Some(filter) = filter {
+            registration = registration.with_filter(filter);
+        }
+        registration
+    }
+}
+
+// The released projector traits report the retained root error; the context is
+// moved from the typed failure unchanged.
+
+#[allow(
+    deprecated,
+    reason = "the released projector trait returns the retained root ProjectionError"
+)]
+impl<T, R> LogProjector<T> for AttachedLogProjector<T, R>
+where
+    T: Observable,
+    R: TelemetryEmit,
+{
+    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
+        TypedLogProjector::project_logs(self, observation)
+            .map_err(|failure| ProjectionError(failure.into_context()))
+    }
+}
+
+#[allow(
+    deprecated,
+    reason = "the released projector trait returns the retained root ProjectionError"
+)]
+impl<T, R> SpanProjector<T> for AttachedSpanProjector<T, R>
+where
+    T: Observable,
+    R: TelemetryEmit,
+{
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
+        TypedSpanProjector::project_spans(self, observation)
+            .map_err(|failure| ProjectionError(failure.into_context()))
+    }
+}
+
+#[allow(
+    deprecated,
+    reason = "the released projector trait returns the retained root ProjectionError"
+)]
+impl<T, R> MetricProjector<T> for AttachedMetricProjector<T, R>
+where
+    T: Observable,
+    R: TelemetryEmit,
+{
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionError> {
+        TypedMetricProjector::project_metrics(self, observation)
+            .map_err(|failure| ProjectionError(failure.into_context()))
     }
 }
 
@@ -534,6 +675,9 @@ fn legacy_telemetry_error(error: CanonicalTelemetryError) -> TelemetryError {
     match error {
         CanonicalTelemetryError::Shutdown { .. } => TelemetryError::Shutdown,
         CanonicalTelemetryError::ExportFailure(error) => {
+            TelemetryError::ExportFailure(error.into_context())
+        }
+        CanonicalTelemetryError::Event(error) => {
             TelemetryError::ExportFailure(error.into_context())
         }
         _ => TelemetryError::ExportFailure(error.into_context()),
@@ -581,9 +725,47 @@ mod tests {
                 max_retries: Some(7),
                 initial_backoff_ms: Some(DurationMs::from(125)),
                 max_backoff_ms: Some(DurationMs::from(875)),
+                retry_sequence_timeout_ms: Some(DurationMs::from(30_000)),
                 ..LegacyRetryPolicy::default()
             })
         );
+    }
+
+    #[test]
+    fn released_projection_retains_zero_and_large_timeout_with_inert_tls() {
+        for timeout in [750_u64, 60_001] {
+            let mut transport = released_transport(OtlpProtocol::HttpJson, true);
+            transport.endpoint = Some(OtlpEndpoint::new_typed("https://localhost:4318").unwrap());
+            transport.timeout_ms = timeout.into();
+            transport.initial_backoff_ms = 0_u64.into();
+            transport.max_backoff_ms = 0_u64.into();
+            transport.insecure_skip_verify = true;
+            let runtime = TelemetryConfig {
+                service_name: ServiceName::new("released-projection").unwrap(),
+                resource: crate::ResourceAttributes::default(),
+                transport,
+                logs: Some(crate::LogsConfig::default()),
+                traces: None,
+                metrics: None,
+            }
+            .into_runtime();
+            assert!(!runtime.transport.insecure_skip_verify);
+            let bounds = crate::config::validated_released_telemetry_bounds(&runtime).unwrap();
+            let crate::config::BackendTransportBounds::Legacy(retry) = bounds.backend() else {
+                panic!("enabled released HttpJson has retry bounds");
+            };
+            let budget = std::time::Duration::from_millis(timeout.max(30_000));
+            assert_eq!(
+                bounds.request_timeout().get(),
+                std::time::Duration::from_millis(timeout)
+            );
+            assert_eq!(bounds.lifecycle().flush().get(), budget);
+            assert_eq!(bounds.lifecycle().shutdown().get(), budget);
+            assert_eq!(retry.sequence_timeout().get(), budget);
+            assert_eq!(retry.initial_backoff().get(), std::time::Duration::ZERO);
+            assert_eq!(retry.max_backoff().get(), std::time::Duration::ZERO);
+            assert!(crate::config::validated_telemetry_bounds(&runtime).is_err());
+        }
     }
 
     #[test]
@@ -620,6 +802,12 @@ mod tests {
             (OtlpProtocol::HttpJson, false),
         ] {
             let mut transport = released_transport(protocol, enabled);
+            if enabled {
+                transport.endpoint = Some(
+                    OtlpEndpoint::new_typed("http://127.0.0.1:4318")
+                        .expect("valid released endpoint"),
+                );
+            }
             transport.initial_backoff_ms = DurationMs::from(300);
             transport.max_backoff_ms = DurationMs::from(200);
 
@@ -639,6 +827,58 @@ mod tests {
                 error.diagnostic().message,
                 "initial_backoff_ms must not exceed max_backoff_ms"
             );
+        }
+    }
+
+    #[test]
+    fn released_constructor_validates_literals_before_runtime_projection() {
+        for (protocol, enabled, timeout_ms, initial_backoff_ms, max_backoff_ms, message) in [
+            (
+                OtlpProtocol::HttpBinary,
+                true,
+                750_u64,
+                300_u64,
+                200_u64,
+                "initial_backoff_ms must not exceed max_backoff_ms",
+            ),
+            (
+                OtlpProtocol::HttpJson,
+                false,
+                0_u64,
+                125_u64,
+                875_u64,
+                "timeout_ms must be greater than zero",
+            ),
+        ] {
+            let mut transport = released_transport(protocol, enabled);
+            if enabled {
+                transport.endpoint = Some(
+                    OtlpEndpoint::new_typed("http://127.0.0.1:4318")
+                        .expect("valid released endpoint"),
+                );
+            }
+            transport.timeout_ms = DurationMs::from(timeout_ms);
+            transport.initial_backoff_ms = DurationMs::from(initial_backoff_ms);
+            transport.max_backoff_ms = DurationMs::from(max_backoff_ms);
+
+            let result = Telemetry::new_typed(TelemetryConfig {
+                service_name: ServiceName::new("released-constructor-validation")
+                    .expect("valid service name"),
+                resource: crate::ResourceAttributes::default(),
+                transport,
+                logs: Some(crate::LogsConfig::default()),
+                traces: None,
+                metrics: None,
+            });
+            let Err(error) = result else {
+                panic!("released constructor must validate literal configuration");
+            };
+
+            assert_eq!(
+                error.diagnostic().code,
+                error_codes::TELEMETRY_INVALID_CONFIG
+            );
+            assert_eq!(error.diagnostic().message, message);
         }
     }
 

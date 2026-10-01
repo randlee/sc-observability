@@ -16,6 +16,7 @@ from release_manifest import workspace_members
 from compatibility_registry import (
     validate_compatibility_source_boundary,
     validate_contract_signatures,
+    validate_trait_slot_contracts,
 )
 
 def is_release_manifest(path: Path, workspace_toml: Path):
@@ -164,9 +165,9 @@ if {row["status"] for row in symbols} - {"restored_root", "canonical_routed", "p
     raise SystemExit("compatibility registry has an unknown disposition")
 allowed_treatments = {"unchanged_alias", "existing_pair", "new_adapter", "restoration"}
 all_contract_rows = symbols + registry.get("method_contracts", []) + registry.get("trait_slot_contracts", [])
-if len(registry.get("method_contracts", [])) != 141:
-    raise SystemExit("compatibility registry must contain all 141 audited inherent/free callables")
-if len({row.get("symbol") for row in registry["method_contracts"]}) != 141:
+if len(registry.get("method_contracts", [])) != 143:
+    raise SystemExit("compatibility registry must contain all 143 audited inherent/free callables")
+if len({row.get("symbol") for row in registry["method_contracts"]}) != 143:
     raise SystemExit("compatibility callable records must have unique symbols")
 if len(registry.get("trait_slot_contracts", [])) != 12:
     raise SystemExit("compatibility registry must contain all 12 audited trait slots")
@@ -178,6 +179,7 @@ if {row["treatment"] for row in all_contract_rows} - allowed_treatments:
     raise SystemExit("compatibility registry has an unknown four-way treatment")
 try:
     validate_contract_signatures(all_contract_rows)
+    validate_trait_slot_contracts(registry["trait_slot_contracts"])
 except ValueError as error:
     raise SystemExit(error) from error
 if any(row["canonical_signature"] is None and row["treatment"] != "restoration" for row in all_contract_rows):

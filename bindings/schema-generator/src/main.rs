@@ -157,9 +157,9 @@ fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
             .as_str()
             .ok_or_else(|| format!("missing definition reference for {entrypoint}"))?
             .to_owned();
-        let generated_name = reference.strip_prefix("#/$defs/").ok_or_else(|| {
-            format!("entrypoint {entrypoint}: non-local reference {reference:?}")
-        })?;
+        let generated_name = reference
+            .strip_prefix("#/$defs/")
+            .ok_or_else(|| format!("entrypoint {entrypoint}: non-local reference {reference:?}"))?;
         if generated_name == public_name {
             continue;
         }
@@ -434,8 +434,7 @@ mod tests {
     #[test]
     fn duplicate_schema_error_includes_the_duplicate_name() {
         let mut defs = SchemaMap::new();
-        insert_definition(&mut defs, "InputExample".into(), json!({"type":"object"}))
-            .unwrap();
+        insert_definition(&mut defs, "InputExample".into(), json!({"type":"object"})).unwrap();
         let error = insert_definition(&mut defs, "InputExample".into(), json!({"type":"string"}))
             .expect_err("duplicate schema names should fail")
             .to_string();

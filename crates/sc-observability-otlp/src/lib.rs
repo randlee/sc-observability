@@ -40,14 +40,14 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use config::{
-    BackendTransportBounds, TelemetryConfig as RuntimeTelemetryConfig, ValidatedTransportBounds,
-    validated_telemetry_bounds,
+    BackendTransportBounds, TelemetryConfig as RuntimeTelemetryConfig, ValidatedBackendConnection,
+    ValidatedTransportBounds, prepared_backend_connection, validated_telemetry_bounds,
 };
 #[cfg(test)]
 use config::{validate_config_typed, validated_transport_bounds};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
-use sc_observability_types::v2::{ConfigFailure, ExportError};
+use sc_observability_types::v2::{ConfigFailure, EventError as CanonicalEventError, ExportError};
 use sc_observability_types::{
     DiagnosticSummary, ErrorContext, LogEvent, MetricRecord, ObservabilityHealthProvider,
     Remediation, SinkName, SpanSignal, telemetry_health_provider_sealed,
@@ -264,7 +264,15 @@ impl ExporterLifecycle for DisabledLifecycle {
 /// exporter shape. Protocol, feature, and caller-runtime availability are
 /// deliberately checked here, after the configuration's normative ordered
 /// validation, so an unavailable backend cannot mask a malformed config.
+#[cfg(test)]
 fn exporter_factory(
+    config: &RuntimeTelemetryConfig,
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
+    exporter_factory_prepared(config, bounds)
+}
+
+fn exporter_factory_prepared(
     config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
 ) -> Result<ExporterSet, ConfigFailure> {
@@ -277,8 +285,14 @@ fn exporter_factory(
                 shutdown: AtomicBool::new(false),
             }),
         }),
-        BackendTransportBounds::Sdk => sdk_exporter_factory(config, bounds),
-        BackendTransportBounds::Legacy(_) => legacy_exporter_factory(config, bounds),
+        BackendTransportBounds::Sdk => {
+            let connection = prepared_backend_connection(&config.transport, bounds)?;
+            sdk_exporter_factory(config, bounds, &connection)
+        }
+        BackendTransportBounds::Legacy(_) => {
+            let connection = prepared_backend_connection(&config.transport, bounds)?;
+            legacy_exporter_factory(config, bounds, &connection)
+        }
     }
 }
 
@@ -286,6 +300,7 @@ fn exporter_factory(
 fn sdk_exporter_factory(
     config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
+    connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
     if !matches!(
         bounds.protocol(),
@@ -324,8 +339,7 @@ fn sdk_exporter_factory(
                 ),
             });
         }
-        let connection = config::validated_backend_connection(&config.transport)?;
-        sdk::build_exporter_set(&connection, bounds)
+        sdk::build_exporter_set(connection, bounds)
             .map(|adapter| raw_exporter_set(adapter.exporters))
             .map_err(transport_construction_failure)
     }
@@ -342,6 +356,7 @@ fn sdk_exporter_factory(
 fn legacy_exporter_factory(
     config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
+    connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
     if bounds.protocol() != config::OtlpProtocol::HttpJson {
         return Err(unsupported_protocol(
@@ -353,7 +368,7 @@ fn legacy_exporter_factory(
 
     #[cfg(feature = "legacy-http-json")]
     {
-        legacy_http_json::build_exporter_set(&config.transport)
+        legacy_http_json::build_exporter_set(connection, bounds)
             .map(raw_exporter_set)
             .map_err(transport_construction_failure)
     }
@@ -424,7 +439,16 @@ impl RuntimeTelemetry {
     /// Creates a telemetry runtime with neutral initialization failures.
     pub fn new_typed(config: RuntimeTelemetryConfig) -> Result<Self, InitFailure> {
         let bounds = validated_telemetry_bounds(&config)?;
-        let exporters = exporter_factory(&config, &bounds)
+        Self::new_prepared(config, &bounds)
+    }
+
+    /// Construct from checked bounds; released conversion has already performed
+    /// its ordered validation and canonical construction uses its strict validator.
+    fn new_prepared(
+        config: RuntimeTelemetryConfig,
+        bounds: &ValidatedTransportBounds,
+    ) -> Result<Self, InitFailure> {
+        let exporters = exporter_factory_prepared(&config, bounds)
             .map_err(|error| InitFailure::from_context(error.into_context()))?;
         Ok(Self::new_with_validated_exporter_set(config, exporters))
     }
@@ -490,12 +514,30 @@ impl RuntimeTelemetry {
         if self.config.logs.is_none() || !self.config.transport.enabled {
             return Ok(());
         }
+        validate_entity_id(event)?;
+        self.buffer_log(event);
+        Ok(())
+    }
+
+    /// Released root-facade log admission: exact 1.4.1 acceptance, no entity check.
+    pub(crate) fn emit_log_released(
+        &self,
+        event: &LogEvent,
+    ) -> Result<(), CanonicalTelemetryError> {
+        self.ensure_active()?;
+        if self.config.logs.is_none() || !self.config.transport.enabled {
+            return Ok(());
+        }
+        self.buffer_log(event);
+        Ok(())
+    }
+
+    pub(crate) fn buffer_log(&self, event: &LogEvent) {
         self.runtime
             .lock()
             .expect("telemetry runtime poisoned")
             .log_buffer
             .push(event.clone());
-        Ok(())
     }
 
     /// Buffers one projected span signal for later export.
@@ -946,6 +988,31 @@ impl MetricEmitter for RuntimeTelemetry {
     fn emit_metric(&self, metric: MetricRecord) -> Result<(), CanonicalTelemetryError> {
         RuntimeTelemetry::emit_metric(self, &metric)
     }
+}
+
+/// Canonical admission check for the state-transition `entity_id`.
+fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
+    let Some(entity_id) = event
+        .state_transition
+        .as_ref()
+        .and_then(|transition| transition.entity_id.as_deref())
+    else {
+        return Ok(());
+    };
+    sc_observability_types::EntityId::new(entity_id)
+        .map(|_| ())
+        .map_err(|_| {
+            let failure = EventFailure::invalid_event(
+                "log event state transition entity_id is invalid",
+                Remediation::recoverable(
+                    "emit a valid entity_id or omit it",
+                    ["rebuild the state transition before emitting"],
+                ),
+            );
+            CanonicalTelemetryError::Event(CanonicalEventError::Validation {
+                context: failure.into_context(),
+            })
+        })
 }
 
 /// Builds a telemetry export failure with the crate-local error code.

@@ -24,11 +24,17 @@ pub use types::{
     OtlpEndpoint, OtlpProtocol, ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder,
     TracesConfig,
 };
-pub(crate) use validation::validate_config_typed;
 pub(crate) use validation::{
-    BackendTransportBounds, RetryPolicy, ValidatedBackendConnection, ValidatedTransportBounds,
-    validated_backend_connection, validated_telemetry_bounds, validated_transport_bounds,
+    BackendTransportBounds, ValidatedBackendConnection, ValidatedTransportBounds,
+    prepared_backend_connection, validated_released_telemetry_bounds, validated_telemetry_bounds,
 };
+#[cfg(test)]
+pub(crate) use validation::{validate_config_typed, validated_transport_bounds};
+
+#[cfg(feature = "legacy-http-json")]
+pub(crate) use validation::RetryPolicy;
+#[cfg(any(feature = "sdk-test-support", all(test, feature = "otlp-sdk")))]
+pub(crate) use validation::validated_backend_connection;
 
 #[cfg(test)]
 use crate::error_codes;

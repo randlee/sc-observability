@@ -11,6 +11,7 @@
 
 use std::borrow::Cow;
 
+use sc_observability_types::typed::IdentityFailure;
 use sc_observability_types::v2::IdentityError as CanonicalIdentityError;
 use sc_observability_types::{
     ActionName, ErrorContext, Level, LogEvent, Observation, ProcessIdentity, ProcessIdentityPolicy,
@@ -191,7 +192,13 @@ pub(crate) fn resolve_identity(
                                 ],
                             ),
                         )
-                        .source(Box::new(source)),
+                        // The released root error's context moves unchanged into the
+                        // canonical error kept as the source.
+                        .source(Box::new(
+                            CanonicalIdentityError::Process {
+                                context: IdentityFailure::from(source).into_context(),
+                            },
+                        )),
                     ),
                 })
         }
@@ -406,10 +413,8 @@ pub(crate) fn assemble_event(
 mod tests {
     use std::sync::Arc;
 
-    use sc_observability_types::v2::IdentityError;
-    use sc_observability_types::{
-        ErrorCode, ErrorContext, ProcessIdentityResolver, Remediation, constants,
-    };
+    use sc_observability_types::v2::{IdentityError, ProcessIdentityResolver};
+    use sc_observability_types::{ErrorCode, ErrorContext, Remediation, constants};
 
     use super::*;
 
@@ -761,12 +766,12 @@ mod tests {
 
     #[test]
     fn identity_resolver_ok_and_err() {
-        let ok = ProcessIdentityPolicy::Resolver(Arc::new(OkResolver));
+        let ok = ProcessIdentityPolicy::v2_resolver(Arc::new(OkResolver));
         assert_eq!(
             resolve_identity(&ok).unwrap().hostname.as_deref(),
             Some("resolved")
         );
-        let failing = ProcessIdentityPolicy::Resolver(Arc::new(FailingResolver));
+        let failing = ProcessIdentityPolicy::v2_resolver(Arc::new(FailingResolver));
         let error = resolve_identity(&failing).unwrap_err();
         assert_eq!(
             error.diagnostic().code,

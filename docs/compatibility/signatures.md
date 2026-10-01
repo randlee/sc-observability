@@ -3,7 +3,7 @@
 `registry.json` is the one machine-readable continuation of the D18 recovery
 audit. It is pinned to `v1.4.1` / `c578912653233c7dc678fefe5af575118dbbaaa1`
 and contains an individual record for each of the 58 affected nominal public
-contracts, 141 affected inherent/free callables, and 12 public trait slots.
+contracts, 143 affected inherent/free callables, and 12 public trait slots.
 It is not an estimate of forwarding bodies or a replacement API ledger.
 
 ## Row contract
@@ -28,7 +28,7 @@ direction, and future owner make that gap explicit.
 ## Audited callable coverage
 
 The registry has one record for every member below. The count is the pinned
-source audit: 139 inherent methods plus the two affected free functions. Exact
+source audit: 139 inherent methods plus the four affected free functions. Exact
 declarations and source references are in `method_contracts`, not summarized
 or inferred by this table.
 
@@ -42,6 +42,7 @@ or inferred by this table.
 | observe | config, facade, builder | configuration, registration, lifecycle | 18 |
 | OTLP | telemetry, config builder, endpoint/header, assembler, projectors | transport, projection, and lifecycle | 34 |
 | free | `sc_observability_log::init`, `sc_observability_dto::from_core_health` | one function each | 2 |
+| free | `sc_observability::typed::{legacy_sink, typed_sink}` | the released typed sink adapters, restored as `#[must_use]` compat functions over `TypedLogSink` | 2 |
 
 ## Trait-slot coverage
 
@@ -50,7 +51,23 @@ The 12 `trait_slot_contracts` are separate from the inherent/free count:
 `LogSink::{write,flush,health}`, `TypedLogSink::{write,flush,health}`, and
 `LogFilter::accepts`. Their rows preserve public implementability and
 `Send + Sync` obligations; error-bearing slots identify their v2 canonical
-counterpart without turning the canonical trait implementation into compat.
+counterpart, `v2::LogSink`, without turning the canonical trait
+implementation into compat. The released `LogSink` and `TypedLogSink`
+declarations live in `compat.rs`, which is their removable path.
+
+The released `ProcessIdentityResolver` and subscriber/projector traits are
+restored in place with their root errors and stay for all of 1.x, so their
+rows list no removable path. Their signatures are printed with qualified
+errors (`crate::IdentityError` against `crate::v2::IdentityError`); the
+canonical traits and registrations live in
+`crates/sc-observability-types/src/observation_v2.rs` under `types::v2`.
+Released and v2 registrations convert with `From`, and
+`ProcessIdentityPolicy::v2_resolver` accepts a v2 resolver; the private
+adapters behind both move the error context without wrapping it. The root
+`ObservabilityBuilder::register_subscriber` and `register_projection` convert
+their released registration this way. A trait-slot `new_adapter` row whose
+qualified signatures are equal, or whose `removable_paths` contains its
+canonical source path, fails validation.
 
 ## Compatibility decisions frozen by D22
 

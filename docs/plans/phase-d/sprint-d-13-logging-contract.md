@@ -94,9 +94,12 @@ The shared namespace is `EnvPrefix::new("SC")`; an application such as BTIT
 uses `EnvPrefix::new("BTIT")` and maps to `BTIT_LOG_*`. Prefixes follow the
 existing `EnvPrefix` contract (no caller-supplied trailing underscore).
 Resolution is normally `defaults < JSON < SC_ environment < application
-environment`. To preserve LOG-009, an explicitly non-empty JSON `logRoot`
-wins over `SC_LOG_ROOT`; the environment root is consulted only when JSON root
-is absent/empty, an explicit JSON root also wins over the application root. Application root wins over SC_LOG_ROOT only when JSON root is absent. Empty explicit roots are invalid rather than silently overridden.
+environment`. For `logRoot`, the first present value wins in this order: JSON,
+application environment, shared `SC_` environment, then `default_root`. An
+empty root parses as an empty path; precedence is applied before validating
+the selected root, so a shadowed empty root is ignored and an empty selected
+root fails with `SC_LOG_SETTINGS_RESOLUTION`. A present empty JSON `logRoot`
+is selected rather than falling through.
 
 
 
@@ -109,7 +112,7 @@ Defaults are the values passed to or produced by `LoggerConfig::default_for`.
 | Rust field | JSON key | `SC_` environment key | Unit / representation | Default | Validation |
 | --- | --- | --- | --- | --- | --- |
 | `level` | `level` | `SC_LOG_LEVEL` | existing `LevelFilter` serde token | `info` | delegates exact accepted spelling/case to `LevelFilter`; no free string retained |
-| `log_root` | `logRoot` | `SC_LOG_ROOT` | non-empty OS path | `default_root` argument | present empty value is invalid |
+| `log_root` | `logRoot` | `SC_LOG_ROOT` | OS path; empty values are retained during parsing | `default_root` argument | the selected root must be non-empty (`SC_LOG_SETTINGS_RESOLUTION`) |
 | `enable_file_sink` | `enableFileSink` | `SC_LOG_FILE` | JSON boolean / env `true` or `false` | `true` | no numeric/truthy aliases |
 | `enable_console_sink` | `enableConsoleSink` | `SC_LOG_CONSOLE` | JSON boolean / env `true` or `false` | `false` | no numeric/truthy aliases |
 | `retained_log_policy.rotation_max_bytes` | `retainedLogPolicy.rotation_max_bytes` | `SC_LOG_ROTATION_MAX_BYTES` | canonical `ByteCount` serde / bytes | canonical policy default | existing strong-type validation |
@@ -134,11 +137,14 @@ Queue capacity, redaction, and process identity retain current
 `LoggerConfig::default_for` values and are not D.1 configuration fields.
 
 JSON absent and JSON `null` both mean “no override” for each optional field.
-An absent environment variable also means no override; a present empty value
-is invalid. Unknown JSON keys fail because of `deny_unknown_fields`. During an
-environment scan, any key beginning with the exact selected `${prefix}_LOG_`
-namespace but not listed above is an unknown-key error; unrelated environment
-keys are ignored. Duplicate/case-variant environment keys are rejected.
+An absent environment variable means no override. Present empty values for
+recognized `${prefix}_LOG_*` settings other than `LOG_ROOT` are invalid; a
+root environment value is parsed as a path and rejected only when selected
+during resolution. Unknown JSON keys fail because of `deny_unknown_fields`.
+During an environment scan, any key beginning with the exact selected
+`${prefix}_LOG_` namespace but not listed above is an unknown-key error;
+unrelated environment keys are ignored. Duplicate/case-variant environment
+keys are rejected.
 
 D.13's private fixture tests only `resolve`'s documented precedence and
 defaults. Parsing the `SC_LOG_*` inventory through `from_env` and converting a
@@ -258,7 +264,7 @@ Settings and sink behavior contracts belong to sc-observability; shared neutral 
 
 TypedLogSink and LogSink remain open because downstream custom sinks are required; their final write/flush errors are canonical LogSinkError; the snippets specify the final bound contract, not wave-1 imports. TypedLogSink is a documented alias/forwarding surface to the canonical open sink contract, not a new duplicate classifier. The old adapter remains only as transitional compatibility until D.18. Both registration entry points preserve sink metadata and are implemented in D.3 builder.rs. obs-d-13's `log_contracts.rs` fixture supplies the error-parameterized private contract/test double without changing D.3-owned builder.rs.
 
-ResolvedLogSettings holds a validated LogRoot wrapper with private PathBuf and AsRef<Path>; source LogSettings retains optional PathBuf for serde compatibility and validates at resolution. LOG-009 is explicit-config precedence: a nonempty JSON logRoot outranks both environment namespaces; other fields use defaults < JSON < SC_ < application. Empty roots reject.
+ResolvedLogSettings holds a validated LogRoot wrapper with private PathBuf and AsRef<Path>; source LogSettings retains optional PathBuf for serde compatibility and validates at resolution. LOG-009 is explicit-config precedence: for `logRoot`, the first present value wins in order JSON, application environment, shared `SC_` environment, then `default_root`; other fields use defaults < JSON < SC_ < application. Empty roots parse as-is. A shadowed empty root is ignored, while an empty selected root (including a present empty JSON root) is rejected by `LogRoot::new` with `SC_LOG_SETTINGS_RESOLUTION`.
 
 Detach takes &mut self: Timeout retains the attachment for retry/inspection after admission closes. Successful detach transitions it to detached and releases its logger references. Drop remains a bounded best-effort operation; proof requires explicit successful detach. LogControl remains a read/admission capability with no level/shutdown methods. Its stale-slot NotInstalled runtime check is retained because cloned handles outlive detach; a lifetime phantom cannot encode process-global concurrent revocation. Compile-fail contract examples prove that attachment/control cannot invoke owner-only operations.
 

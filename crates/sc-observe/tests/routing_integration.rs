@@ -10,7 +10,6 @@ use sc_observability_types::typed::{
     ClassifiedError, ProjectionFailureKind, SubscriberFailureKind, typed_log_projector,
     typed_metric_projector, typed_span_projector, typed_subscriber,
 };
-use sc_observability_types::v2::{ProjectionError, SubscriberError};
 use sc_observability_types::{
     ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, MetricKind, MetricName,
     MetricUnit, Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity,
@@ -18,6 +17,7 @@ use sc_observability_types::{
     SpanRecord, SpanSignal, SpanStarted, SubscriberRegistration, TargetCategory, Timestamp,
     TraceContext, TraceId,
 };
+use sc_observability_types::{ProjectionError, SubscriberError};
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
 
@@ -35,7 +35,7 @@ impl ObservationSubscriber<AgentEvent> for RecordingSubscriber {
     fn observe(
         &self,
         _observation: &Observation<AgentEvent>,
-    ) -> Result<(), sc_observability_types::v2::SubscriberError> {
+    ) -> Result<(), sc_observability_types::SubscriberError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(())
     }
@@ -50,7 +50,7 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
     fn project_logs(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<LogEvent>, sc_observability_types::v2::ProjectionError> {
+    ) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(vec![LogEvent {
             version: SchemaVersion::new(
@@ -91,7 +91,7 @@ impl SpanProjector<AgentEvent> for RecordingSpanProjector {
     fn project_spans(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<SpanSignal>, sc_observability_types::v2::ProjectionError> {
+    ) -> Result<Vec<SpanSignal>, sc_observability_types::ProjectionError> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(vec![SpanSignal::Started(SpanRecord::<SpanStarted>::new(
             Timestamp::UNIX_EPOCH,
@@ -113,14 +113,13 @@ struct FailingSubscriber {
 
 impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
     fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
-        Err(SubscriberError::Subscriber {
-            context: self
-                .context
+        Err(SubscriberError(
+            self.context
                 .lock()
                 .expect("subscriber context poisoned")
                 .take()
                 .expect("subscriber fixture invoked once"),
-        })
+        ))
     }
 }
 
@@ -133,14 +132,13 @@ impl sc_observability_types::LogProjector<AgentEvent> for FailingLogProjector {
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<LogEvent>, ProjectionError> {
-        Err(ProjectionError::Projection {
-            context: self
-                .context
+        Err(ProjectionError(
+            self.context
                 .lock()
                 .expect("log projector context poisoned")
                 .take()
                 .expect("log projector fixture invoked once"),
-        })
+        ))
     }
 }
 
@@ -153,14 +151,13 @@ impl SpanProjector<AgentEvent> for FailingSpanProjector {
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        Err(ProjectionError::Projection {
-            context: self
-                .context
+        Err(ProjectionError(
+            self.context
                 .lock()
                 .expect("span projector context poisoned")
                 .take()
                 .expect("span projector fixture invoked once"),
-        })
+        ))
     }
 }
 
@@ -173,14 +170,13 @@ impl sc_observability_types::MetricProjector<AgentEvent> for FailingMetricProjec
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<sc_observability_types::MetricRecord>, ProjectionError> {
-        Err(ProjectionError::Projection {
-            context: self
-                .context
+        Err(ProjectionError(
+            self.context
                 .lock()
                 .expect("metric projector context poisoned")
                 .take()
                 .expect("metric projector fixture invoked once"),
-        })
+        ))
     }
 }
 
@@ -188,10 +184,8 @@ impl sc_observability_types::MetricProjector<AgentEvent> for RecordingMetricProj
     fn project_metrics(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<
-        Vec<sc_observability_types::MetricRecord>,
-        sc_observability_types::v2::ProjectionError,
-    > {
+    ) -> Result<Vec<sc_observability_types::MetricRecord>, sc_observability_types::ProjectionError>
+    {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(vec![sc_observability_types::MetricRecord {
             timestamp: Timestamp::UNIX_EPOCH,
@@ -446,4 +440,90 @@ fn typed_routing_adapters_preserve_canonical_variants_codes_and_sources() {
         metric_source_ptr,
         "metric projector source",
     );
+}
+
+impl sc_observability_types::v2::ObservationSubscriber<AgentEvent> for FailingSubscriber {
+    fn observe(
+        &self,
+        _observation: &Observation<AgentEvent>,
+    ) -> Result<(), sc_observability_types::v2::SubscriberError> {
+        Err(sc_observability_types::v2::SubscriberError::Subscriber {
+            context: self
+                .context
+                .lock()
+                .expect("subscriber context poisoned")
+                .take()
+                .expect("subscriber fixture invoked once"),
+        })
+    }
+}
+
+fn failing_subscriber(cause: &'static str) -> Arc<FailingSubscriber> {
+    Arc::new(FailingSubscriber {
+        context: Mutex::new(Some(routing_failure_context(cause))),
+    })
+}
+
+fn failing_log_projection(cause: &'static str) -> ProjectionRegistration<AgentEvent> {
+    ProjectionRegistration::new().with_log_projector(Arc::new(FailingLogProjector {
+        context: Mutex::new(Some(routing_failure_context(cause))),
+    }))
+}
+
+fn delivering_subscriber() -> SubscriberRegistration<AgentEvent> {
+    SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+        id: "delivered",
+        calls: Arc::new(Mutex::new(Vec::new())),
+    }))
+}
+
+fn assert_routed_failures(
+    health: &sc_observe::ObservabilityHealthReport,
+    subscriber_failures: u64,
+) {
+    assert_eq!(health.subscriber_failures_total, subscriber_failures);
+    assert_eq!(health.projection_failures_total, 1);
+    let last_error = health.last_error.as_ref().expect("routed failure summary");
+    assert_eq!(
+        last_error.code.as_ref().map(ErrorCode::as_str),
+        Some("SC_OBSERVE_OBSERVATION_ROUTING_FAILURE")
+    );
+    assert_eq!(last_error.message, "routing fixture failed");
+}
+
+/// Released root-error implementations route through both facades with their
+/// own diagnostics, and a canonical registration routes through the v2 facade.
+#[test]
+fn released_and_canonical_registrations_route_failures_through_both_facades() {
+    let released_config =
+        ObservabilityConfig::default_for(tool_name(), temp_path("released-trait-failures"))
+            .expect("config");
+    let released = Observability::builder(released_config)
+        .register_subscriber(SubscriberRegistration::new(failing_subscriber("released")))
+        .register_subscriber(delivering_subscriber())
+        .register_projection(failing_log_projection("released projector"))
+        .build()
+        .expect("released runtime");
+    released.emit(observation()).expect("delivered");
+    assert_routed_failures(&released.health(), 1);
+
+    let canonical_config = sc_observe::v2::ObservabilityConfig::default_for(
+        tool_name(),
+        temp_path("canonical-trait-failures"),
+    )
+    .expect("config");
+    let canonical_subscriber: Arc<
+        dyn sc_observability_types::v2::ObservationSubscriber<AgentEvent>,
+    > = failing_subscriber("canonical");
+    let canonical = sc_observe::v2::Observability::builder(canonical_config)
+        .register_subscriber(SubscriberRegistration::new(failing_subscriber("converted")).into())
+        .register_subscriber(sc_observability_types::v2::SubscriberRegistration::new(
+            canonical_subscriber,
+        ))
+        .register_subscriber(delivering_subscriber().into())
+        .register_projection(failing_log_projection("converted projector").into())
+        .build()
+        .expect("canonical runtime");
+    canonical.emit(observation()).expect("delivered");
+    assert_routed_failures(&canonical.health(), 2);
 }

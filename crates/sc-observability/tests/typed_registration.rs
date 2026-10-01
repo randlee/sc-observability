@@ -4,10 +4,11 @@ use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
-use sc_observability::typed::{TypedLogSink, legacy_sink};
-use sc_observability::v2::LoggerBuilder;
+use sc_observability::typed::{self, legacy_sink};
+use sc_observability::v2::{LogSink as CanonicalLogSink, LoggerBuilder};
 use sc_observability::*;
 use sc_observability_types::DiagnosticInfo;
+use sc_observability_types::typed::LogSinkFailure;
 use sc_observability_types::v2::LogSinkError;
 use serde_json::Map;
 
@@ -39,7 +40,7 @@ impl RecordingTypedSink {
     }
 }
 
-impl TypedLogSink for RecordingTypedSink {
+impl CanonicalLogSink for RecordingTypedSink {
     fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
         self.writes.fetch_add(1, Ordering::SeqCst);
         Ok(())
@@ -191,21 +192,19 @@ fn typed_registration_reports_duplicate_invalid_and_closed_sinks() {
 }
 
 #[test]
-fn typed_registration_adapter_preserves_failure_diagnostic_and_source() {
-    struct FailingTypedSink;
+fn released_typed_adapter_preserves_failure_diagnostic_and_source() {
+    struct FailingReleasedSink;
 
-    impl TypedLogSink for FailingTypedSink {
-        fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
-            Err(LogSinkError::Write {
-                context: Box::new(
-                    ErrorContext::new(
-                        ErrorCode::new_static("TYPED_REGISTRATION_WRITE"),
-                        "typed sink write failed",
-                        Remediation::recoverable("repair the typed sink", ["retry registration"]),
-                    )
-                    .source(Box::new(io::Error::other("typed source"))),
-                ),
-            })
+    impl typed::TypedLogSink for FailingReleasedSink {
+        fn write(&self, _: &LogEvent) -> Result<(), LogSinkFailure> {
+            Err(LogSinkFailure::from_context(Box::new(
+                ErrorContext::new(
+                    ErrorCode::new_static("TYPED_REGISTRATION_WRITE"),
+                    "typed sink write failed",
+                    Remediation::recoverable("repair the typed sink", ["retry registration"]),
+                )
+                .source(Box::new(io::Error::other("typed source"))),
+            )))
         }
 
         fn health(&self) -> SinkHealth {
@@ -217,7 +216,7 @@ fn typed_registration_adapter_preserves_failure_diagnostic_and_source() {
         }
     }
 
-    let sink = legacy_sink(Arc::new(FailingTypedSink));
+    let sink = legacy_sink(Arc::new(FailingReleasedSink));
     let error = sink.write(&event()).expect_err("typed sink should fail");
 
     assert_eq!(error.diagnostic().code.as_str(), "TYPED_REGISTRATION_WRITE");
@@ -232,4 +231,168 @@ fn typed_registration_adapter_preserves_failure_diagnostic_and_source() {
             .is_some_and(<dyn std::error::Error>::is::<io::Error>)
     );
     assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+}
+
+/// Canonical sink that fails every write and flush and counts each attempt.
+struct CanonicalFailingSink {
+    writes: AtomicUsize,
+    flushes: AtomicUsize,
+}
+
+impl CanonicalLogSink for CanonicalFailingSink {
+    fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        Err(LogSinkError::Write {
+            context: Box::new(
+                ErrorContext::new(
+                    ErrorCode::new_static("CANONICAL_RUNTIME_WRITE"),
+                    "canonical runtime write failed",
+                    Remediation::recoverable("repair the sink", ["retry the write"]),
+                )
+                .source(Box::new(io::Error::other("canonical write source"))),
+            ),
+        })
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        self.flushes.fetch_add(1, Ordering::SeqCst);
+        Err(LogSinkError::Flush {
+            context: Box::new(ErrorContext::new(
+                ErrorCode::new_static("CANONICAL_RUNTIME_FLUSH"),
+                "canonical runtime flush failed",
+                Remediation::recoverable("repair the sink", ["retry the flush"]),
+            )),
+        })
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("canonical-failing").expect("static sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+/// Released-root sink that fails every write and flush and counts each attempt.
+struct ReleasedFailingSink {
+    writes: AtomicUsize,
+    flushes: AtomicUsize,
+}
+
+#[expect(
+    deprecated,
+    reason = "the released root LogSink and its error wrapper are the contract under test"
+)]
+impl sc_observability::LogSink for ReleasedFailingSink {
+    fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        Err(sc_observability_types::LogSinkError(Box::new(
+            ErrorContext::new(
+                ErrorCode::new_static("RELEASED_RUNTIME_WRITE"),
+                "released runtime write failed",
+                Remediation::recoverable("repair the sink", ["retry the write"]),
+            )
+            .source(Box::new(io::Error::other("released write source"))),
+        )))
+    }
+
+    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+        self.flushes.fetch_add(1, Ordering::SeqCst);
+        Err(sc_observability_types::LogSinkError(Box::new(
+            ErrorContext::new(
+                ErrorCode::new_static("RELEASED_RUNTIME_FLUSH"),
+                "released runtime flush failed",
+                Remediation::recoverable("repair the sink", ["retry the flush"]),
+            ),
+        )))
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("released-failing").expect("static sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+#[test]
+fn runtime_reports_canonical_sink_failures_with_fail_open_accounting() {
+    let failing = Arc::new(CanonicalFailingSink {
+        writes: AtomicUsize::new(0),
+        flushes: AtomicUsize::new(0),
+    });
+    let healthy = Arc::new(RecordingTypedSink::default());
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
+    builder
+        .register_typed_sink(failing.clone())
+        .expect("register failing canonical sink")
+        .register_typed_sink(healthy.clone())
+        .expect("register healthy canonical sink");
+    let logger = builder.build().expect("build logger");
+
+    logger.log(event()).expect("admission stays fail-open");
+    let flush = logger.flush().expect_err("flush reports the sink failure");
+    assert_eq!(
+        flush.diagnostic().code,
+        error_codes::LOGGER_FLUSH_FAILED,
+        "explicit flush reports the stable flush failure"
+    );
+
+    let health = logger.health();
+    assert_eq!(
+        health.dropped_events_total, 1,
+        "one failed write is dropped"
+    );
+    assert_eq!(
+        health
+            .last_error
+            .as_ref()
+            .and_then(|summary| summary.code.as_ref()),
+        Some(&error_codes::LOGGER_FLUSH_FAILED),
+        "the failed flush is recorded in logger health"
+    );
+    assert_eq!(failing.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(failing.flushes.load(Ordering::SeqCst), 1);
+    // The other sink is not starved by the failing sink.
+    assert_eq!(healthy.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(healthy.flushes.load(Ordering::SeqCst), 1);
+
+    logger.shutdown();
+    // Shutdown performs exactly one additional final flush per sink.
+    assert_eq!(failing.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(failing.flushes.load(Ordering::SeqCst), 2);
+    assert_eq!(healthy.flushes.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn runtime_reports_released_sink_failures_with_fail_open_accounting() {
+    let failing = Arc::new(ReleasedFailingSink {
+        writes: AtomicUsize::new(0),
+        flushes: AtomicUsize::new(0),
+    });
+    let mut builder = LoggerBuilder::new(config()).expect("valid builder");
+    builder.register_sink(SinkRegistration::new(failing.clone()));
+    let logger = builder.build().expect("build logger");
+
+    logger.log(event()).expect("admission stays fail-open");
+    let flush = logger.flush().expect_err("flush reports the sink failure");
+    assert_eq!(
+        flush.diagnostic().code,
+        error_codes::LOGGER_FLUSH_FAILED,
+        "explicit flush reports the stable flush failure"
+    );
+
+    let health = logger.health();
+    assert_eq!(
+        health.dropped_events_total, 1,
+        "one failed write is dropped"
+    );
+    assert_eq!(failing.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(failing.flushes.load(Ordering::SeqCst), 1);
+
+    logger.shutdown();
+    assert_eq!(failing.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(failing.flushes.load(Ordering::SeqCst), 2);
 }

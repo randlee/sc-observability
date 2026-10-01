@@ -652,7 +652,8 @@ Ownership and usage:
 - `EntityId`
   - owner: `sc-observability-types`
   - underlying type: validated `String`
-  - used by: `StateTransition.entity_id`
+  - used by: canonical admission validation of `StateTransition.entity_id`; the
+    field itself stays `Option<String>` exactly as released in 1.4.1
   - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
 
 These newtypes should expose:
@@ -868,7 +869,8 @@ Design direction:
 pub struct StateTransition {
     /// Stable category describing what changed, such as `task` or `subagent`.
     pub entity_kind: TargetCategory,
-    pub entity_id: Option<EntityId>,
+    /// Optional caller-owned identifier for the entity that changed.
+    pub entity_id: Option<String>,
     /// Previous stable state label.
     pub from_state: StateName,
     /// New stable state label.
@@ -883,7 +885,13 @@ pub struct StateTransition {
 Meaning:
 
 - `entity_kind`: what changed, such as `task`, `subagent`, `test_run`
-- `entity_id`: which specific entity changed
+- `entity_id`: which specific entity changed. The field type is the released
+  `Option<String>`, so one `LogEvent`/query graph serves every facade.
+  Canonical (v2) entry points validate it as an `EntityId` at admission, after
+  the version, service and level checks, and reject an invalid value as
+  `EventError::Validation` (`v2::TelemetryError::Event` for OTLP `emit_log`).
+  Released root facades keep exact 1.4.1 acceptance with no entity check, and
+  stored or queried events always decode leniently.
 - `from_state` and `to_state`: the edge itself
 - `reason`: why the change happened
 - `trigger`: what action or event caused it
@@ -2476,6 +2484,14 @@ backtraces are deliberately not serialized. Native chaining preserves them.
 diagnostic-carrying runtime admission guard; the retained root
 `TelemetryError::Shutdown` remains the unit variant described above.
 `From<v2::ExportError>` wraps the exact error in `v2::TelemetryError::ExportFailure`.
+Governed-interface note: `v2::TelemetryError::Event(v2::EventError)` is an
+additive variant on the `#[non_exhaustive]` v2 enum, returned only by canonical
+`emit_log` when `StateTransition.entity_id` is not a valid `EntityId`. Its
+`context()`, `into_context()`, `diagnostic()`, `code()` and
+`failure_classification()` delegate to the inner `EventError`
+(`Validation { field: "event" }`), preserving context, source and backtrace. It
+adds no diagnostic code and no counter, and the released root `TelemetryError`
+shape is unchanged; released root emit paths never produce it.
 For `v2::TelemetryError::ExportFailure`, `.code()` returns the fixed stable
 classification for the variant, while `.diagnostic().code` returns the preserved
 original cause code.

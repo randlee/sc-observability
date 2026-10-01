@@ -341,4 +341,22 @@ mod tests {
         assert!(matches!(drain, Failure::Io { .. }));
         assert_eq!(drain.diagnostic().message, "drain failed");
     }
+
+    #[test]
+    fn export_caused_drain_uses_the_canonical_failure_projection() {
+        let error = sc_observability_log::v2::ShutdownError::Drain {
+            context: Box::new((*context("drain failed")).source(Box::new(
+                sc_observability_types::v2::ExportError::QueueFull {
+                    context: context("queue full"),
+                },
+            ))),
+        };
+        let expected = sc_observability_dto::failure_from_classification(
+            error.diagnostic(),
+            error.failure_classification(),
+        );
+
+        assert!(matches!(&expected, Failure::QueueFull { .. }));
+        assert_eq!(shutdown_failure(error), expected);
+    }
 }

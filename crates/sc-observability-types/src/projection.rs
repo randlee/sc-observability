@@ -1,7 +1,17 @@
+#![allow(
+    deprecated,
+    reason = "subscriber and projector registrations retain their published legacy trait signatures"
+)]
+
 use std::sync::Arc;
 
-use crate::v2::{ProjectionError, SubscriberError};
-use crate::{LogEvent, MetricRecord, Observable, Observation, SpanSignal};
+use crate::errors_v2::{
+    ProjectionError as CanonicalProjectionError, SubscriberError as CanonicalSubscriberError,
+};
+use crate::observation_v2 as canonical;
+use crate::{
+    LogEvent, MetricRecord, Observable, Observation, ProjectionError, SpanSignal, SubscriberError,
+};
 
 type SubscriberRegistrationParts<T> = (
     Arc<dyn ObservationSubscriber<T>>,
@@ -210,5 +220,168 @@ where
 {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// Conversions between the released root family and the canonical `v2` family.
+// Each adapter moves the original boxed context between the two error shapes,
+// so code, message, remediation, source and backtrace are never rebuilt.
+
+struct ReleasedSubscriber<T: Observable>(Arc<dyn ObservationSubscriber<T>>);
+
+impl<T: Observable> canonical::ObservationSubscriber<T> for ReleasedSubscriber<T> {
+    fn observe(&self, observation: &Observation<T>) -> Result<(), CanonicalSubscriberError> {
+        self.0
+            .observe(observation)
+            .map_err(|error| CanonicalSubscriberError::Subscriber { context: error.0 })
+    }
+}
+
+struct CanonicalSubscriber<T: Observable>(Arc<dyn canonical::ObservationSubscriber<T>>);
+
+impl<T: Observable> ObservationSubscriber<T> for CanonicalSubscriber<T> {
+    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError> {
+        self.0
+            .observe(observation)
+            .map_err(|error| SubscriberError(error.into_context()))
+    }
+}
+
+struct ReleasedLogProjector<T: Observable>(Arc<dyn LogProjector<T>>);
+
+impl<T: Observable> canonical::LogProjector<T> for ReleasedLogProjector<T> {
+    fn project_logs(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<LogEvent>, CanonicalProjectionError> {
+        self.0
+            .project_logs(observation)
+            .map_err(|error| CanonicalProjectionError::Projection { context: error.0 })
+    }
+}
+
+struct CanonicalLogProjector<T: Observable>(Arc<dyn canonical::LogProjector<T>>);
+
+impl<T: Observable> LogProjector<T> for CanonicalLogProjector<T> {
+    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
+        self.0
+            .project_logs(observation)
+            .map_err(|error| ProjectionError(error.into_context()))
+    }
+}
+
+struct ReleasedSpanProjector<T: Observable>(Arc<dyn SpanProjector<T>>);
+
+impl<T: Observable> canonical::SpanProjector<T> for ReleasedSpanProjector<T> {
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, CanonicalProjectionError> {
+        self.0
+            .project_spans(observation)
+            .map_err(|error| CanonicalProjectionError::Projection { context: error.0 })
+    }
+}
+
+struct CanonicalSpanProjector<T: Observable>(Arc<dyn canonical::SpanProjector<T>>);
+
+impl<T: Observable> SpanProjector<T> for CanonicalSpanProjector<T> {
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
+        self.0
+            .project_spans(observation)
+            .map_err(|error| ProjectionError(error.into_context()))
+    }
+}
+
+struct ReleasedMetricProjector<T: Observable>(Arc<dyn MetricProjector<T>>);
+
+impl<T: Observable> canonical::MetricProjector<T> for ReleasedMetricProjector<T> {
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, CanonicalProjectionError> {
+        self.0
+            .project_metrics(observation)
+            .map_err(|error| CanonicalProjectionError::Projection { context: error.0 })
+    }
+}
+
+struct CanonicalMetricProjector<T: Observable>(Arc<dyn canonical::MetricProjector<T>>);
+
+impl<T: Observable> MetricProjector<T> for CanonicalMetricProjector<T> {
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionError> {
+        self.0
+            .project_metrics(observation)
+            .map_err(|error| ProjectionError(error.into_context()))
+    }
+}
+
+impl<T: Observable> From<SubscriberRegistration<T>> for canonical::SubscriberRegistration<T> {
+    fn from(registration: SubscriberRegistration<T>) -> Self {
+        let (subscriber, filter) = registration.into_parts();
+        let converted = Self::new(Arc::new(ReleasedSubscriber(subscriber)));
+        match filter {
+            Some(filter) => converted.with_filter(filter),
+            None => converted,
+        }
+    }
+}
+
+impl<T: Observable> From<canonical::SubscriberRegistration<T>> for SubscriberRegistration<T> {
+    fn from(registration: canonical::SubscriberRegistration<T>) -> Self {
+        let (subscriber, filter) = registration.into_parts();
+        let converted = Self::new(Arc::new(CanonicalSubscriber(subscriber)));
+        match filter {
+            Some(filter) => converted.with_filter(filter),
+            None => converted,
+        }
+    }
+}
+
+impl<T: Observable> From<ProjectionRegistration<T>> for canonical::ProjectionRegistration<T> {
+    fn from(registration: ProjectionRegistration<T>) -> Self {
+        let (log, span, metric, filter) = registration.into_parts();
+        let mut converted = Self::new();
+        if let Some(projector) = log {
+            converted = converted.with_log_projector(Arc::new(ReleasedLogProjector(projector)));
+        }
+        if let Some(projector) = span {
+            converted = converted.with_span_projector(Arc::new(ReleasedSpanProjector(projector)));
+        }
+        if let Some(projector) = metric {
+            converted =
+                converted.with_metric_projector(Arc::new(ReleasedMetricProjector(projector)));
+        }
+        if let Some(filter) = filter {
+            converted = converted.with_filter(filter);
+        }
+        converted
+    }
+}
+
+impl<T: Observable> From<canonical::ProjectionRegistration<T>> for ProjectionRegistration<T> {
+    fn from(registration: canonical::ProjectionRegistration<T>) -> Self {
+        let (log, span, metric, filter) = registration.into_parts();
+        let mut converted = Self::new();
+        if let Some(projector) = log {
+            converted = converted.with_log_projector(Arc::new(CanonicalLogProjector(projector)));
+        }
+        if let Some(projector) = span {
+            converted = converted.with_span_projector(Arc::new(CanonicalSpanProjector(projector)));
+        }
+        if let Some(projector) = metric {
+            converted =
+                converted.with_metric_projector(Arc::new(CanonicalMetricProjector(projector)));
+        }
+        if let Some(filter) = filter {
+            converted = converted.with_filter(filter);
+        }
+        converted
     }
 }

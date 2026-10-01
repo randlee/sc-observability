@@ -110,7 +110,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use serde_json::json;
 
-    use crate::{EntityId, SpanId, TraceId};
+    use crate::{SpanId, TraceId};
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     struct FixturePayload {
@@ -195,7 +195,7 @@ mod tests {
             diagnostic: Some(diagnostic()),
             state_transition: Some(StateTransition {
                 entity_kind: TargetCategory::new("subagent").expect("valid target category"),
-                entity_id: Some(EntityId::new("agent-1").expect("valid entity id")),
+                entity_id: Some(String::from("agent-1")),
                 from_state: crate::StateName::new("started").expect("valid state"),
                 to_state: crate::StateName::new("running").expect("valid state"),
                 reason: Some("hook received".to_string()),

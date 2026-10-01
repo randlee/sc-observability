@@ -1,4 +1,5 @@
 """Focused fixture coverage for compatibility registry signature validation."""
+import os
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,7 @@ from compatibility_registry import (  # noqa: E402
     is_compat_source_path,
     validate_compatibility_source_boundary,
     validate_contract_signatures,
+    validate_trait_slot_contracts,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -79,6 +81,36 @@ class ContractSignatureTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "placeholder baseline contract"):
             validate_contract_signatures([self.row(
                 baseline_signature="released public nominal identity `IdentityError`")])
+
+
+class TraitSlotContractTests(unittest.TestCase):
+    PATH = "crates/sc-observability-types/src/observation_v2.rs"
+
+    def row(self, **overrides):
+        row = {"symbol": "sc_observability_types::ProcessIdentityResolver::resolve", "treatment": "new_adapter",
+               "baseline_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>",
+               "canonical_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError>",
+               "canonical_source": {"path": self.PATH}, "removable_paths": []}
+        row.update(overrides)
+        return row
+
+    def test_qualified_signature_change_is_accepted(self):
+        validate_trait_slot_contracts([self.row()])
+
+    def test_new_adapter_with_equal_signatures_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "new_adapter baseline and canonical signatures are equal"):
+            validate_trait_slot_contracts([self.row(canonical_signature=self.row()["baseline_signature"])])
+
+    def test_equal_signatures_are_accepted_for_unchanged_alias(self):
+        validate_trait_slot_contracts([self.row(
+            treatment="unchanged_alias", canonical_signature=self.row()["baseline_signature"])])
+
+    def test_removable_canonical_source_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "removable_paths contains its canonical source"):
+            validate_trait_slot_contracts([self.row(removable_paths=[self.PATH])])
+
+    def test_removable_path_is_matched_exactly(self):
+        validate_trait_slot_contracts([self.row(removable_paths=[self.PATH + ".bak", "src/observation_v2.rs"])])
 
 
 class CompatibilitySourcePathTests(unittest.TestCase):
@@ -192,6 +224,13 @@ class CompatibilitySourceBoundaryTests(unittest.TestCase):
             self.validate(relative, contents,
                           {"deprecated_owner_exceptions": [relative]}, {relative: ("new",)})
 
+    def test_new_same_line_owner_before_baseline_named_item_is_rejected(self):
+        relative = "crates/example/src/lib.rs"
+        contents = "#[deprecated] pub fn brand_new() {}\npub fn max_age_days() {}\n"
+        with self.assertRaisesRegex(ValueError, "exceeds v1.4.1 baseline: .*: brand_new"):
+            self.validate(
+                relative, contents, {"deprecated_owner_exceptions": [relative]}, {relative: ("max_age_days",)})
+
     def test_exception_without_baseline_is_rejected(self):
         relative = "crates/example/src/runtime.rs"
         with self.assertRaisesRegex(ValueError, "exception has no v1.4.1 baseline"):
@@ -228,12 +267,22 @@ class DeprecatedOwnerNameTests(unittest.TestCase):
             "pub struct Config {\n    #[deprecated]\n    pub max_age_days: u32,\n}\n")
         self.assertEqual(deprecated_owner_names(contents), ["IdentityError", "max_age_days"])
 
+    def test_same_line_owner_mid_file_is_taken_from_the_attribute_line(self):
+        contents = "#[deprecated] pub fn brand_new() {}\npub fn max_age_days() {}\n"
+        self.assertEqual(deprecated_owner_names(contents), ["brand_new"])
+
+    def test_same_line_owner_at_end_of_file_is_taken_from_the_attribute_line(self):
+        contents = "pub fn current() {}\n#[deprecated(note = \"use v2\")] pub struct Legacy;"
+        self.assertEqual(deprecated_owner_names(contents), ["Legacy"])
+
     def test_recorded_baseline_matches_pinned_release_source(self):
         for relative, names in DEPRECATED_OWNER_BASELINE.items():
-            source = baseline_source(relative)
-            if source is None:
-                self.skipTest(f"pinned commit {BASELINE_COMMIT} is not in this clone")
             with self.subTest(relative=relative):
+                source = baseline_source(relative)
+                if source is None:
+                    if os.environ.get("CI"):
+                        self.fail(f"pinned commit {BASELINE_COMMIT} is not in this CI clone: {relative}")
+                    self.skipTest(f"pinned commit {BASELINE_COMMIT} is not in this local clone")
                 self.assertEqual(deprecated_owner_names(source), list(names))
 
 

@@ -29,6 +29,7 @@ mod query;
 mod redact;
 mod runtime;
 mod settings;
+mod sink;
 mod sinks;
 pub mod typed;
 
@@ -41,7 +42,7 @@ use std::time::Duration;
 #[doc(inline)]
 pub use builder::SinkRegistrationError;
 #[doc(inline)]
-pub use compat::{LogError, TryLogError};
+pub use compat::{LogError, LogSink, TryLogError};
 #[doc(inline)]
 pub use follow::LogFollowSession;
 #[doc(inline)]
@@ -77,6 +78,12 @@ pub use sinks::RetainedSinkFaultInjector;
 #[doc(inline)]
 pub use sinks::{ConsoleSink, JsonlFileSink};
 
+/// Re-export site for the released typed sink items owned by the removable
+/// compatibility module, so `typed` can publish them at their released paths.
+mod released_sink_adapters {
+    pub use crate::compat::{TypedLogSink, legacy_sink, typed_sink};
+}
+
 /// Retained 1.x construction facade over the canonical builder.
 #[expect(
     missing_debug_implementations,
@@ -107,6 +114,8 @@ pub mod v2 {
     pub use crate::builder::CanonicalLoggerBuilder as LoggerBuilder;
     #[doc(inline)]
     pub use crate::canonical::Logger;
+    #[doc(inline)]
+    pub use crate::sink::LogSink;
     #[doc(inline)]
     pub use crate::{ConsoleSink, JsonlFileSink, LoggerConfig, RetainedLogPolicy};
     #[doc(inline)]
@@ -454,28 +463,6 @@ pub trait LogFilter: Send + Sync {
     fn accepts(&self, event: &LogEvent) -> bool;
 }
 
-/// One concrete event sink used by the logger runtime.
-///
-/// This trait is intentionally open for downstream implementations. Adding
-/// required methods or tightening object-safety guarantees is therefore a
-/// semver-significant public API change.
-#[expect(
-    deprecated,
-    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
-)]
-pub trait LogSink: Send + Sync {
-    /// Writes one event to the sink.
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
-
-    /// Flushes any buffered sink state.
-    fn flush(&self) -> Result<(), LogSinkError> {
-        Ok(())
-    }
-
-    /// Returns the current sink health snapshot.
-    fn health(&self) -> SinkHealth;
-}
-
 /// Construction-time sink registration pairing one sink with an optional filter.
 #[derive(Clone)]
 #[expect(
@@ -483,18 +470,13 @@ pub trait LogSink: Send + Sync {
     reason = "registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract"
 )]
 pub struct SinkRegistration {
-    /// Concrete sink implementation.
-    pub(crate) sink: Arc<dyn LogSink>,
+    /// Canonical sink implementation stored exactly as registered.
+    pub(crate) sink: Arc<dyn crate::sink::LogSink>,
     /// Optional sink-local filter.
     pub(crate) filter: Option<Arc<dyn LogFilter>>,
 }
 
 impl SinkRegistration {
-    /// Wraps a sink for logger registration.
-    pub fn new(sink: Arc<dyn LogSink>) -> Self {
-        Self { sink, filter: None }
-    }
-
     /// Adds a sink-local filter to the registration.
     pub fn with_filter(mut self, filter: Arc<dyn LogFilter>) -> Self {
         self.filter = Some(filter);
@@ -629,6 +611,7 @@ mod canonical {
         pub(crate) shutdown: Arc<AtomicBool>,
         pub(crate) runtime: LoggerRuntime,
         pub(crate) diagnostic_admitter: Option<DiagnosticAdmitter>,
+        // MUTEX: logger admission and LevelOwner changes share serialized state; each use keeps its explicit poison policy.
         pub(crate) level_control: Arc<Mutex<LevelControl>>,
         pub(crate) state: PhantomData<State>,
     }
@@ -1006,7 +989,7 @@ mod tests {
         )]);
         let error = LogSettings::from_env(
             &snapshot,
-            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+            &sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
         )
         .expect_err("invalid JSON must fail");
 
@@ -1028,7 +1011,7 @@ mod tests {
 
         let settings = LogSettings::from_env(
             &snapshot,
-            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+            &sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
         )
         .expect("level string must deserialize");
 
@@ -1044,7 +1027,7 @@ mod tests {
 
         let error = LogSettings::from_env(
             &snapshot,
-            sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
+            &sc_observability_types::EnvPrefix::new("SC").expect("valid prefix"),
         )
         .expect_err("invalid level must fail");
 
@@ -2166,10 +2149,7 @@ mod tests {
         }
 
         impl crate::typed::TypedLogSink for TypedRecordingSink {
-            fn write(
-                &self,
-                _event: &LogEvent,
-            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkFailure> {
                 self.writes.fetch_add(1, Ordering::SeqCst);
                 Ok(())
             }
@@ -2219,35 +2199,28 @@ mod tests {
         }
 
         impl crate::typed::TypedLogSink for TypedFailingSink {
-            fn write(
-                &self,
-                _event: &LogEvent,
-            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkFailure> {
                 self.writes.fetch_add(1, Ordering::SeqCst);
-                Err(sc_observability_types::v2::LogSinkError::Write {
-                    context: Box::new(
-                        ErrorContext::new(
-                            ErrorCode::new_static("CUSTOM_TYPED_WRITE"),
-                            "typed write failed",
-                            Remediation::recoverable("retry", ["retry"]),
-                        )
-                        .source(Box::new(std::io::Error::other("typed write source"))),
-                    ),
-                })
+                Err(LogSinkFailure::from_context(Box::new(
+                    ErrorContext::new(
+                        ErrorCode::new_static("CUSTOM_TYPED_WRITE"),
+                        "typed write failed",
+                        Remediation::recoverable("retry", ["retry"]),
+                    )
+                    .source(Box::new(std::io::Error::other("typed write source"))),
+                )))
             }
 
-            fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            fn flush(&self) -> Result<(), LogSinkFailure> {
                 self.flushes.fetch_add(1, Ordering::SeqCst);
-                Err(sc_observability_types::v2::LogSinkError::Flush {
-                    context: Box::new(
-                        ErrorContext::new(
-                            ErrorCode::new_static("CUSTOM_TYPED_FLUSH"),
-                            "typed flush failed",
-                            Remediation::recoverable("retry", ["retry"]),
-                        )
-                        .source(Box::new(std::io::Error::other("typed flush source"))),
-                    ),
-                })
+                Err(LogSinkFailure::from_context(Box::new(
+                    ErrorContext::new(
+                        ErrorCode::new_static("CUSTOM_TYPED_FLUSH"),
+                        "typed flush failed",
+                        Remediation::recoverable("retry", ["retry"]),
+                    )
+                    .source(Box::new(std::io::Error::other("typed flush source"))),
+                )))
             }
 
             fn health(&self) -> SinkHealth {
@@ -2328,10 +2301,15 @@ mod tests {
         let write = crate::typed::TypedLogSink::write(typed.as_ref(), &log_event(service_name()))
             .expect_err("write fails");
         assert_eq!(write.diagnostic().code.as_str(), "CUSTOM_LEGACY_WRITE");
+        // The released typed failure wraps the preserved context, whose own
+        // source is the original sink error.
+        let context = std::error::Error::source(&write).expect("typed failure context source");
         assert_eq!(
-            std::error::Error::source(&write)
-                .expect("source")
-                .to_string(),
+            context.to_string(),
+            "legacy write failed; caused by: legacy write source"
+        );
+        assert_eq!(
+            context.source().expect("original sink source").to_string(),
             "legacy write source"
         );
         let flush = crate::typed::TypedLogSink::flush(typed.as_ref()).expect_err("flush fails");
@@ -3337,6 +3315,278 @@ mod tests {
                 .expect("recreate health summary")
                 .message
                 .contains("identity changed")
+        );
+    }
+
+    /// Canonical sink that counts every call and optionally fails.
+    #[derive(Default)]
+    struct CanonicalCountingSink {
+        writes: AtomicU64,
+        flushes: AtomicU64,
+    }
+
+    impl crate::sink::LogSink for CanonicalCountingSink {
+        fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            self.writes.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            self.flushes.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: sink_name("canonical-counting"),
+                state: SinkHealthState::Healthy,
+                last_error: None,
+            }
+        }
+    }
+
+    struct AcceptAll;
+
+    impl LogFilter for AcceptAll {
+        fn accepts(&self, _event: &LogEvent) -> bool {
+            true
+        }
+    }
+
+    fn thin_ptr<T: ?Sized>(value: &Arc<T>) -> *const () {
+        Arc::as_ptr(value).cast::<()>()
+    }
+
+    #[test]
+    fn typed_registration_stores_the_identical_arc_and_filter_without_an_adapter() {
+        let sink = Arc::new(CanonicalCountingSink::default());
+        let canonical: Arc<dyn crate::sink::LogSink> = sink.clone();
+        let filter: Arc<dyn LogFilter> = Arc::new(AcceptAll);
+
+        let registration = SinkRegistration::typed(canonical.clone()).with_filter(filter.clone());
+
+        // The private storage type is the canonical trait object, so this
+        // binding compiles only while the registration stores it directly.
+        let stored: &Arc<dyn crate::sink::LogSink> = &registration.sink;
+        assert!(Arc::ptr_eq(stored, &canonical));
+        assert_eq!(thin_ptr(stored), thin_ptr(&sink));
+        // `sink`, `canonical`, and the registration own the same allocation;
+        // an adapter would have left only two strong owners of the input.
+        assert_eq!(Arc::strong_count(&sink), 3);
+        assert!(Arc::ptr_eq(
+            registration.filter.as_ref().expect("filter stored"),
+            &filter
+        ));
+
+        let cloned = registration.clone();
+        assert!(Arc::ptr_eq(&cloned.sink, &canonical));
+    }
+
+    #[test]
+    fn released_registration_adapts_once_and_does_not_store_the_input_arc() {
+        let released = Arc::new(RecordingEventSink::default());
+        let registration = SinkRegistration::new(released.clone());
+
+        assert_ne!(thin_ptr(&registration.sink), thin_ptr(&released));
+        assert!(registration.filter.is_none());
+        registration
+            .sink
+            .write(&log_event(service_name()))
+            .expect("adapted write");
+        registration.sink.flush().expect("adapted default flush");
+        assert_eq!(
+            released.events.lock().expect("events mutex poisoned").len(),
+            1,
+            "one dispatch reaches the released sink exactly once"
+        );
+        assert_eq!(registration.sink.health().state, SinkHealthState::Healthy);
+    }
+
+    #[test]
+    fn console_sink_direct_canonical_and_released_wrapper_preserve_write_behavior() {
+        let event = log_event(service_name());
+        let direct_writes = Arc::new(AtomicU64::new(0));
+        let direct = ConsoleSink::from_writer(Box::new(FailingConsoleWriter {
+            writes: direct_writes.clone(),
+        }));
+        let error = crate::sink::LogSink::write(&direct, &event).expect_err("canonical failure");
+        assert!(matches!(
+            error,
+            sc_observability_types::v2::LogSinkError::Write { .. }
+        ));
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        // The canonical error forwards straight to the underlying io source.
+        assert!(
+            std::error::Error::source(&error)
+                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
+        );
+        assert_eq!(direct_writes.load(Ordering::SeqCst), 1);
+        crate::sink::LogSink::flush(&direct).expect("canonical default flush");
+        let direct_health = crate::sink::LogSink::health(&direct);
+        assert_eq!(direct_health.state, SinkHealthState::DegradedDropping);
+
+        let wrapper_writes = Arc::new(AtomicU64::new(0));
+        let wrapper = ConsoleSink::from_writer(Box::new(FailingConsoleWriter {
+            writes: wrapper_writes.clone(),
+        }));
+        let released = LogSink::write(&wrapper, &event).expect_err("released failure");
+        assert_eq!(
+            released.diagnostic().code,
+            error.diagnostic().code,
+            "both paths report the same diagnostic"
+        );
+        assert_eq!(released.diagnostic().message, error.diagnostic().message);
+        assert_eq!(
+            released.diagnostic().remediation,
+            error.diagnostic().remediation,
+            "remediation is preserved across the released wrapper"
+        );
+        // The released wrapper keeps the nested legacy source shape.
+        let context = std::error::Error::source(&released).expect("legacy context source");
+        assert!(
+            context
+                .source()
+                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
+        );
+        assert_eq!(wrapper_writes.load(Ordering::SeqCst), 1);
+        LogSink::flush(&wrapper).expect("released default flush");
+        let direct_summary = direct_health.last_error.expect("canonical failure health");
+        let wrapper_summary = LogSink::health(&wrapper)
+            .last_error
+            .expect("released failure health");
+        assert_eq!(direct_summary.code, wrapper_summary.code);
+        assert_eq!(direct_summary.message, wrapper_summary.message);
+
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        let healthy = ConsoleSink::from_writer(Box::new(SharedBuffer {
+            lines: lines.clone(),
+        }));
+        crate::sink::LogSink::write(&healthy, &event).expect("canonical success");
+        LogSink::write(&healthy, &event).expect("released success");
+        let lines = lines.lock().expect("lines poisoned");
+        assert_eq!(lines.len(), 2, "each dispatch writes exactly one line");
+        assert_eq!(lines[0], lines[1], "both paths render identical bytes");
+    }
+
+    #[test]
+    fn file_sink_direct_canonical_and_released_wrapper_preserve_bytes_and_io_source() {
+        let event = log_event(service_name());
+        let root = temp_path("file-direct-vs-wrapper");
+        let direct_path = root.join("direct.jsonl");
+        let wrapper_path = root.join("wrapper.jsonl");
+        let direct = JsonlFileSink::for_logger(direct_path.clone());
+        let wrapper = JsonlFileSink::for_logger(wrapper_path.clone());
+
+        crate::sink::LogSink::write(&direct, &event).expect("canonical write");
+        crate::sink::LogSink::flush(&direct).expect("canonical default flush");
+        LogSink::write(&wrapper, &event).expect("released write");
+        LogSink::flush(&wrapper).expect("released default flush");
+
+        let direct_bytes = fs::read(&direct_path).expect("direct bytes");
+        assert_eq!(
+            direct_bytes,
+            fs::read(&wrapper_path).expect("wrapper bytes")
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&direct_bytes).lines().count(),
+            1,
+            "exactly one record is written per dispatch"
+        );
+        assert_eq!(
+            crate::sink::LogSink::health(&direct).state,
+            SinkHealthState::Healthy
+        );
+        assert_eq!(LogSink::health(&wrapper).state, SinkHealthState::Healthy);
+
+        // A regular file where the parent directory is expected forces an io
+        // failure that must keep its source through both paths.
+        let blocker = root.join("blocker");
+        fs::write(&blocker, "not a directory").expect("create blocker");
+        let failing = JsonlFileSink::for_logger(blocker.join("active.jsonl"));
+        let canonical = crate::sink::LogSink::write(&failing, &event).expect_err("canonical io");
+        assert_eq!(
+            canonical.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert!(
+            std::error::Error::source(&canonical)
+                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
+        );
+        let released = LogSink::write(&failing, &event).expect_err("released io");
+        assert_eq!(released.diagnostic().code, canonical.diagnostic().code);
+        let context = std::error::Error::source(&released).expect("legacy context source");
+        assert!(
+            context
+                .source()
+                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
+        );
+        assert_eq!(
+            LogSink::health(&failing).state,
+            SinkHealthState::DegradedDropping
+        );
+    }
+
+    #[cfg(feature = "fault-injection")]
+    #[test]
+    fn fault_sink_direct_canonical_and_released_wrapper_preserve_faults_and_single_dispatch() {
+        let event = log_event(service_name());
+        let injector = RetainedSinkFaultInjector::new();
+
+        let inner = Arc::new(CanonicalCountingSink::default());
+        let direct = injector.fault_sink(inner.clone());
+        crate::sink::LogSink::write(&direct, &event).expect("healthy canonical write");
+        crate::sink::LogSink::flush(&direct).expect("healthy canonical flush");
+        assert_eq!(inner.writes.load(Ordering::SeqCst), 1);
+        assert_eq!(inner.flushes.load(Ordering::SeqCst), 1);
+
+        let released_inner = Arc::new(RecordingFlushSink::default());
+        let released = injector.wrap(released_inner.clone());
+        LogSink::write(released.as_ref(), &event).expect("healthy released write");
+        LogSink::flush(released.as_ref()).expect("healthy released flush");
+        assert_eq!(
+            released_inner.flush_calls.load(Ordering::SeqCst),
+            1,
+            "the released wrapper flushes the wrapped sink exactly once"
+        );
+
+        injector.force_unavailable();
+        let write = crate::sink::LogSink::write(&direct, &event).expect_err("forced write fault");
+        let flush = crate::sink::LogSink::flush(&direct).expect_err("forced flush fault");
+        assert!(matches!(
+            write,
+            sc_observability_types::v2::LogSinkError::Write { .. }
+        ));
+        assert!(matches!(
+            flush,
+            sc_observability_types::v2::LogSinkError::Flush { .. }
+        ));
+        assert_eq!(
+            inner.writes.load(Ordering::SeqCst),
+            1,
+            "a forced fault never reaches the wrapped sink"
+        );
+        assert_eq!(inner.flushes.load(Ordering::SeqCst), 1);
+        let health = crate::sink::LogSink::health(&direct);
+        assert_eq!(health.state, SinkHealthState::Unavailable);
+
+        let released_write =
+            LogSink::write(released.as_ref(), &event).expect_err("released forced write fault");
+        assert_eq!(released_write.diagnostic().code, write.diagnostic().code);
+        assert_eq!(
+            released_write.diagnostic().message,
+            write.diagnostic().message
+        );
+        assert_eq!(
+            LogSink::health(released.as_ref()).state,
+            SinkHealthState::Unavailable
+        );
+        injector.clear();
+        assert_eq!(
+            crate::sink::LogSink::health(&direct).state,
+            SinkHealthState::Healthy
         );
     }
 }

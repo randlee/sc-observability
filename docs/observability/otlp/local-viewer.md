@@ -7,12 +7,12 @@ macOS Apple Silicon archive at
 SHA-256 `e4a0051f827e6a40f52b097f490d7832af85bae577f4b33a69a986112c7618a4`.
 The same source commit is recorded in
 [`release.json`](../../../scripts/ci/fixtures/otlp/desktop-viewer/release.json).
-The pin supports macOS Apple Silicon (`darwin_arm64`) only. CI wiring belongs
-to obs-d-9 deliverable 3 in `otlp-conformance.yml`; that job owns future
-invocation of the downloader and harness, and is not wired yet. Do not resolve
-`latest` at run time.
-
-Documentation constraints: OTLP-023 and DOC-003.
+The pin supports macOS Apple Silicon (`darwin_arm64`) only. Setup provenance is
+the `obs-d9-local-viewer-setup` deliverables and
+[`collector-environments.md`](../../plans/phase-d/collector-environments.md).
+Live downloader and viewer qualification wiring belongs to obs-d-9 deliverable
+3 in `otlp-conformance.yml` and is not wired yet. Do not resolve `latest` at
+run time.
 
 ## Installed desktop service
 
@@ -63,12 +63,15 @@ python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py ci \
 
 The downloader verifies the archive digest and extracted executable digest. The
 process helper refuses occupied ports and never kills an unrecognized PID.
-Its readiness deadline is 30 seconds. Stop verifies the recorded database path
-is still present in the process command before sending TERM; `--remove-state`
+Its readiness deadline is 30 seconds. Stop sends TERM only when the pid file
+agrees with recorded metadata and the live process executable and `--db`
+argument exactly equal that metadata; otherwise it refuses. `--remove-state`
 removes only the instance database and log created under that state directory.
 The `ci` command runs start, status, probe and cleanup in one process, including
 cleanup after a failed probe. The individual `start`, `status`, `probe`, and
-`stop` commands are available for local diagnosis.
+`stop` commands are available for local diagnosis. The public-api-governance
+job runs hermetic harness unit tests only; that unit CI does not qualify live
+viewer delivery, which remains obs-d-9 deliverable 3.
 The probe uses bounded synthetic data (`service.name=sc-observability-d9`, a
 unique `test.run_id`, and backend `setup-probe`) and has a 120-second query
 deadline. It needs no Grafana credentials.

@@ -360,9 +360,15 @@ pub struct SpanEventDto {
     /// Optional diagnostic.
     pub diagnostic: Option<StoredDiagnosticDto>,
 }
-/// Native-compatible external state tag; never accepts an unknown state as success.
+/// Lifecycle signal with an adjacent, snake-case `kind` tag and `data` payload.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum SpanSignalDto {
     /// Active span; no duration.
     Started(SpanRecordDto),

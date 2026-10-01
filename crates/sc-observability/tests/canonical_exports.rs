@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use sc_observability::v2::{InitError, Logger, LoggerBuilder, LoggerConfig};
+use sc_observability::v2::{InitError, LogSink, LogSinkError, Logger, LoggerBuilder, LoggerConfig};
+use sc_observability::{LogEvent, SinkHealth};
 use sc_observability_types::ServiceName;
 
 fn requires_send_sync<T: Send + Sync>() {}
@@ -15,4 +16,26 @@ fn canonical_core_exports_have_real_public_signatures() {
     let _: for<'a> fn(&'a Logger) -> &'a ServiceName = Logger::service_name;
 
     requires_send_sync::<Logger>();
+}
+
+#[test]
+fn canonical_sink_trait_is_exported_open_and_object_safe() {
+    struct Sink;
+
+    impl LogSink for Sink {
+        fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+            Ok(())
+        }
+
+        fn health(&self) -> SinkHealth {
+            unreachable!("signature proof only")
+        }
+    }
+
+    let _: for<'a> fn(&'a Sink, &'a LogEvent) -> Result<(), LogSinkError> =
+        <Sink as LogSink>::write;
+    let _: fn(&Sink) -> Result<(), LogSinkError> = <Sink as LogSink>::flush;
+    let _: fn(&Sink) -> SinkHealth = <Sink as LogSink>::health;
+    let _: Option<std::sync::Arc<dyn LogSink>> = None;
+    requires_send_sync::<std::sync::Arc<dyn LogSink>>();
 }

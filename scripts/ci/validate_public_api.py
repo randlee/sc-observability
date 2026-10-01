@@ -135,7 +135,7 @@ def validate_compatible_policy(policy: dict, root: Path | None = None) -> None:
             settings.get('baseline_version') != '1.4.1'
             for settings in policy['crates'].values()):
         raise ValueError('every published crate requires the actual frozen 1.4.1 baseline')
-    entries = manifest.get('breaks', [])
+    entries = manifest.get('breaks')
     if not isinstance(entries, list) or entries:
         raise ValueError('compatible 1.x release cannot accept enumerated breaking API exceptions')
     return None
