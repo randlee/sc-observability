@@ -55,12 +55,12 @@ impl OtlpConfigField {
             Self::LifecycleShutdownTimeout => "lifecycle_shutdown_timeout_ms",
             Self::QueueCapacity => "queue_capacity",
             Self::QueueByteCapacity => "queue_byte_capacity",
-            Self::MaxRetries => "legacy_retry.max_retries",
-            Self::InitialBackoff => "legacy_retry.initial_backoff_ms",
-            Self::MaxBackoff => "legacy_retry.max_backoff_ms",
-            Self::RetrySequenceTimeout => "legacy_retry.retry_sequence_timeout_ms",
-            Self::RetryAfterCap => "legacy_retry.retry_after_cap_ms",
-            Self::RetryJitterPercent => "legacy_retry.retry_jitter_percent",
+            Self::MaxRetries => "sync_http_retry.max_retries",
+            Self::InitialBackoff => "sync_http_retry.initial_backoff_ms",
+            Self::MaxBackoff => "sync_http_retry.max_backoff_ms",
+            Self::RetrySequenceTimeout => "sync_http_retry.retry_sequence_timeout_ms",
+            Self::RetryAfterCap => "sync_http_retry.retry_after_cap_ms",
+            Self::RetryJitterPercent => "sync_http_retry.retry_jitter_percent",
             Self::InsecureSkipVerify => "insecure_skip_verify",
         }
     }
@@ -455,7 +455,7 @@ fn validated_transport_bounds_with_delays(
     config: &OtelConfig,
     immediate: bool,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
-    let legacy_retry_field = first_legacy_retry_field(config);
+    let sync_http_retry_field = first_sync_http_retry_field(config);
     let timeout = resolve_duration(
         OtlpConfigField::Timeout,
         config.timeout_ms,
@@ -493,9 +493,9 @@ fn validated_transport_bounds_with_delays(
     if flush.value < timeout.value {
         return Err(invalid_bound(&timeout, &flush));
     }
-    let legacy_retry = if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
+    let sync_http_retry = if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
         Some(resolve_retry(
-            config.legacy_retry.as_ref(),
+            config.sync_http_retry.as_ref(),
             &timeout,
             immediate,
         )?)
@@ -508,7 +508,7 @@ fn validated_transport_bounds_with_delays(
     let backend = if config.enabled {
         match config.backend {
             ExporterBackend::OpenTelemetrySdk => {
-                if let Some(field) = legacy_retry_field {
+                if let Some(field) = sync_http_retry_field {
                     return Err(not_applicable(
                         field,
                         OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk),
@@ -517,11 +517,11 @@ fn validated_transport_bounds_with_delays(
                 BackendTransportBounds::Sdk
             }
             ExporterBackend::SyncHttp => BackendTransportBounds::SyncHttp(
-                legacy_retry.expect("synchronous HTTP backend resolves its retry policy"),
+                sync_http_retry.expect("synchronous HTTP backend resolves its retry policy"),
             ),
         }
     } else {
-        if let Some(field) = legacy_retry_field {
+        if let Some(field) = sync_http_retry_field {
             return Err(not_applicable(field, OtlpConfigTarget::Disabled));
         }
         BackendTransportBounds::Disabled
@@ -612,8 +612,8 @@ pub(crate) fn prepared_backend_connection(
 /// Returns the first sync-http-only retry setting supplied by the caller.
 ///
 /// The order is part of the deterministic validation contract.
-fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
-    let retry = config.legacy_retry.as_ref();
+fn first_sync_http_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
+    let retry = config.sync_http_retry.as_ref();
     if retry.is_some_and(|value| value.max_retries.is_some()) {
         return Some(OtlpConfigField::MaxRetries);
     }
@@ -636,7 +636,7 @@ fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
     // An explicitly supplied but empty compatibility block is still
     // inapplicable outside the synchronous HTTP backend; retain the original field.
     config
-        .legacy_retry
+        .sync_http_retry
         .as_ref()
         .map(|_| OtlpConfigField::MaxRetries)
 }

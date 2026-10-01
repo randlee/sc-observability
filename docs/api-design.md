@@ -2698,7 +2698,7 @@ construction failures without retaining secret values.
 
 D.21 owns transport field/default/validation implementation; D.12 owns the
 canonical error definitions and registry. The 2.0 wire surface uses direct shared transport
-fields plus a grouped `legacy_retry` object:
+fields plus a grouped `sync_http_retry` object:
 
 | Field | Applicability | Default when absent |
 | --- | --- | --- |
@@ -2706,12 +2706,12 @@ fields plus a grouped `legacy_retry` object:
 | `lifecycle_flush_timeout_ms` | both backends | `30_000` |
 | `lifecycle_shutdown_timeout_ms` | both backends | `30_000` |
 | `queue_capacity` | both backends; bounded admission queue | `1_024` |
-| `legacy_retry.max_retries` | sync-http only, optional on wire | `3` |
-| `legacy_retry.initial_backoff_ms` | sync-http only, optional on wire | `250` |
-| `legacy_retry.max_backoff_ms` | sync-http only, optional on wire | `5_000` |
-| `legacy_retry.retry_sequence_timeout_ms` | sync-http only, optional on wire | `30_000` |
-| `legacy_retry.retry_after_cap_ms` | sync-http only, optional on wire | `5_000` |
-| `legacy_retry.retry_jitter_percent` | sync-http only, optional on wire | `20` |
+| `sync_http_retry.max_retries` | sync-http only, optional on wire | `3` |
+| `sync_http_retry.initial_backoff_ms` | sync-http only, optional on wire | `250` |
+| `sync_http_retry.max_backoff_ms` | sync-http only, optional on wire | `5_000` |
+| `sync_http_retry.retry_sequence_timeout_ms` | sync-http only, optional on wire | `30_000` |
+| `sync_http_retry.retry_after_cap_ms` | sync-http only, optional on wire | `5_000` |
+| `sync_http_retry.retry_jitter_percent` | sync-http only, optional on wire | `20` |
 
 `queue_capacity` counts admitted records, not batches, and is validated as `1..=65_536`. A separate checked `queue_byte_capacity` defaults to 16 MiB, has a hard 64 MiB maximum, and bounds the serialized payload bytes held by all queued/in-flight batches. Admission reserves both record and byte credits atomically; either exhausted budget returns QueueFull. Records larger than 1 MiB are rejected before enqueue; batches split at 512 records or 1 MiB. The queue cannot retain 65,536 one-MiB batches. A 413 is terminal for that split batch,
 which is counted once as failed/dropped rather than retried as a larger batch.

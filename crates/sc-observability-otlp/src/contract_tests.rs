@@ -40,28 +40,28 @@ fn contract_tests_validation_order() {
 fn contract_tests_every_sync_http_duration_precedes_later_validation_bullets() {
     let cases = [
         (
-            "legacy_retry.initial_backoff_ms",
+            "sync_http_retry.initial_backoff_ms",
             SyncHttpRetryPolicy {
                 initial_backoff_ms: Some(0_u64.into()),
                 ..SyncHttpRetryPolicy::default()
             },
         ),
         (
-            "legacy_retry.max_backoff_ms",
+            "sync_http_retry.max_backoff_ms",
             SyncHttpRetryPolicy {
                 max_backoff_ms: Some(0_u64.into()),
                 ..SyncHttpRetryPolicy::default()
             },
         ),
         (
-            "legacy_retry.retry_sequence_timeout_ms",
+            "sync_http_retry.retry_sequence_timeout_ms",
             SyncHttpRetryPolicy {
                 retry_sequence_timeout_ms: Some(0_u64.into()),
                 ..SyncHttpRetryPolicy::default()
             },
         ),
         (
-            "legacy_retry.retry_after_cap_ms",
+            "sync_http_retry.retry_after_cap_ms",
             SyncHttpRetryPolicy {
                 retry_after_cap_ms: Some(0_u64.into()),
                 ..SyncHttpRetryPolicy::default()
@@ -69,12 +69,12 @@ fn contract_tests_every_sync_http_duration_precedes_later_validation_bullets() {
         ),
     ];
 
-    for (field, legacy_retry) in cases {
+    for (field, sync_http_retry) in cases {
         for (later_failure, config) in [
             (
                 "capacity",
                 OtelConfig {
-                    legacy_retry: Some(legacy_retry.clone()),
+                    sync_http_retry: Some(sync_http_retry.clone()),
                     queue_capacity: Some(0),
                     ..sync_http_config()
                 },
@@ -82,7 +82,7 @@ fn contract_tests_every_sync_http_duration_precedes_later_validation_bullets() {
             (
                 "protocol availability",
                 OtelConfig {
-                    legacy_retry: Some(legacy_retry.clone()),
+                    sync_http_retry: Some(sync_http_retry.clone()),
                     protocol: OtlpProtocol::Grpc,
                     ..sync_http_config()
                 },
@@ -90,7 +90,7 @@ fn contract_tests_every_sync_http_duration_precedes_later_validation_bullets() {
             (
                 "insecure transport",
                 OtelConfig {
-                    legacy_retry: Some(legacy_retry),
+                    sync_http_retry: Some(sync_http_retry),
                     insecure_skip_verify: true,
                     ..sync_http_config()
                 },
@@ -114,7 +114,7 @@ fn contract_tests_every_sync_http_duration_precedes_later_validation_bullets() {
 #[test]
 fn contract_tests_sync_http_retry_duration_precedes_capacity() {
     let error = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             initial_backoff_ms: Some(0_u64.into()),
             ..SyncHttpRetryPolicy::default()
         }),
@@ -126,7 +126,7 @@ fn contract_tests_sync_http_retry_duration_precedes_capacity() {
     assert!(matches!(error, ConfigFailure::ZeroDuration { .. }));
     assert_eq!(
         error.diagnostic().details["field"].as_str(),
-        Some("legacy_retry.initial_backoff_ms")
+        Some("sync_http_retry.initial_backoff_ms")
     );
 }
 
@@ -208,7 +208,7 @@ fn contract_tests_stable_failure_codes() {
     let not_applicable = validated_transport_bounds(&OtelConfig {
         enabled: true,
         backend: ExporterBackend::OpenTelemetrySdk,
-        legacy_retry: Some(SyncHttpRetryPolicy::default()),
+        sync_http_retry: Some(SyncHttpRetryPolicy::default()),
         ..OtelConfig::default()
     })
     .expect_err("SDK must not silently accept sync-http fields");
@@ -246,23 +246,23 @@ fn assert_sdk_not_applicable_field(config: &OtelConfig, expected_field: &str) {
 fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_sync_http_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES),
                 ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
-        "legacy_retry.max_retries",
+        "sync_http_retry.max_retries",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES + 1),
                 ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
-        "legacy_retry.max_retries",
+        "sync_http_retry.max_retries",
     );
 }
 
@@ -270,23 +270,23 @@ fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_sync_http_field(
 fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_sync_http_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 initial_backoff_ms: Some(constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into()),
                 ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
-        "legacy_retry.initial_backoff_ms",
+        "sync_http_retry.initial_backoff_ms",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 initial_backoff_ms: Some((constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS + 1).into()),
                 ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
-        "legacy_retry.initial_backoff_ms",
+        "sync_http_retry.initial_backoff_ms",
     );
 }
 
@@ -294,30 +294,30 @@ fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_sync_http_fi
 fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_sync_http_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 max_backoff_ms: Some(constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into()),
                 ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
-        "legacy_retry.max_backoff_ms",
+        "sync_http_retry.max_backoff_ms",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 max_backoff_ms: Some((constants::DEFAULT_OTLP_MAX_BACKOFF_MS + 1).into()),
                 ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
-        "legacy_retry.max_backoff_ms",
+        "sync_http_retry.max_backoff_ms",
     );
 }
 
 #[test]
 fn contract_tests_disabled_rejects_explicit_default_retained_field() {
     let error = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES),
             ..SyncHttpRetryPolicy::default()
         }),
@@ -330,7 +330,7 @@ fn contract_tests_disabled_rejects_explicit_default_retained_field() {
     ));
     assert_eq!(
         error.diagnostic().details["field"].as_str(),
-        Some("legacy_retry.max_retries")
+        Some("sync_http_retry.max_retries")
     );
     assert_eq!(
         error.diagnostic().details["target"].as_str(),
@@ -342,13 +342,13 @@ fn contract_tests_disabled_rejects_explicit_default_retained_field() {
 fn contract_tests_sdk_reports_retry_jitter_as_the_first_supplied_sync_http_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 retry_jitter_percent: Some(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
                 ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
-        "legacy_retry.retry_jitter_percent",
+        "sync_http_retry.retry_jitter_percent",
     );
 }
 
@@ -356,7 +356,7 @@ fn contract_tests_sdk_reports_retry_jitter_as_the_first_supplied_sync_http_field
 fn contract_tests_sdk_reports_retry_sequence_timeout_before_later_wire_fields() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 retry_sequence_timeout_ms: Some(
                     constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS.into(),
                 ),
@@ -366,7 +366,7 @@ fn contract_tests_sdk_reports_retry_sequence_timeout_before_later_wire_fields() 
             }),
             ..sdk_config()
         },
-        "legacy_retry.retry_sequence_timeout_ms",
+        "sync_http_retry.retry_sequence_timeout_ms",
     );
 }
 
@@ -457,7 +457,7 @@ fn contract_tests_bound_messages_use_named_constants() {
     );
 
     let jitter = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             retry_jitter_percent: Some(constants::MAX_OTLP_RETRY_JITTER_PERCENT + 1),
             ..SyncHttpRetryPolicy::default()
         }),
@@ -476,7 +476,7 @@ fn contract_tests_bound_messages_use_named_constants() {
 #[test]
 fn contract_tests_remaining_validation_variants_and_bullet_order() {
     let jitter = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             retry_jitter_percent: Some(101),
             ..SyncHttpRetryPolicy::default()
         }),
@@ -509,7 +509,7 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
 
     let shutdown_before_retry_bound = validated_transport_bounds(&OtelConfig {
         lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
-        legacy_retry: Some(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             retry_sequence_timeout_ms: Some(1_u64.into()),
             ..SyncHttpRetryPolicy::default()
         }),
@@ -526,7 +526,7 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
     );
 
     let retry_after_cap = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             retry_sequence_timeout_ms: Some(3_000_u64.into()),
             retry_after_cap_ms: Some(3_001_u64.into()),
             ..SyncHttpRetryPolicy::default()
@@ -540,7 +540,7 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
     ));
     assert_eq!(
         retry_after_cap.diagnostic().details["field"].as_str(),
-        Some("legacy_retry.retry_after_cap_ms")
+        Some("sync_http_retry.retry_after_cap_ms")
     );
 }
 
@@ -803,7 +803,7 @@ fn released_checked_delays_preserve_zero_without_weakening_canonical_validation(
             timeout_ms: Some(timeout.into()),
             lifecycle_flush_timeout_ms: Some(budget.into()),
             lifecycle_shutdown_timeout_ms: Some(budget.into()),
-            legacy_retry: Some(SyncHttpRetryPolicy {
+            sync_http_retry: Some(SyncHttpRetryPolicy {
                 initial_backoff_ms: Some(0_u64.into()),
                 max_backoff_ms: Some(0_u64.into()),
                 retry_sequence_timeout_ms: Some(budget.into()),

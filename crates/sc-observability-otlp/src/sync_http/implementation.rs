@@ -934,7 +934,7 @@ impl OtlpHttpExporter {
             crate::config::OtlpEndpoint::new_typed(endpoint.clone())
                 .expect("loopback test endpoint is valid"),
         );
-        config.legacy_retry = Some(retry);
+        config.sync_http_retry = Some(retry);
         let (mut worker_config, bounds) = SyncHttpConfig::from_otel(&config)?;
         worker_config.jitter_seed = jitter_seed;
         worker_config.retry_delay_observer = retry_delay_observer;

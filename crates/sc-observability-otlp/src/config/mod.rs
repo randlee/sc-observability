@@ -253,7 +253,7 @@ mod tests {
             TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
                 .with_transport(OtelConfig {
                     backend: ExporterBackend::SyncHttp,
-                    legacy_retry: Some(SyncHttpRetryPolicy {
+                    sync_http_retry: Some(SyncHttpRetryPolicy {
                         initial_backoff_ms: Some(2_000_u64.into()),
                         max_backoff_ms: Some(1_000_u64.into()),
                         ..SyncHttpRetryPolicy::default()
@@ -358,7 +358,7 @@ mod tests {
             resource: ResourceAttributes::default(),
             transport: OtelConfig {
                 backend: ExporterBackend::SyncHttp,
-                legacy_retry: Some(SyncHttpRetryPolicy {
+                sync_http_retry: Some(SyncHttpRetryPolicy {
                     initial_backoff_ms: Some(2000_u64.into()),
                     max_backoff_ms: Some(1000_u64.into()),
                     ..SyncHttpRetryPolicy::default()
@@ -373,7 +373,7 @@ mod tests {
         let failure = validate_config_typed(&config).expect_err("backoff inversion");
         assert_eq!(
             failure.diagnostic().details["field"].as_str(),
-            Some("legacy_retry.initial_backoff_ms")
+            Some("sync_http_retry.initial_backoff_ms")
         );
     }
 

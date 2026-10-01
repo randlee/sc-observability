@@ -204,7 +204,7 @@ pub struct OtelConfig {
     /// Whether local debug export output is enabled.
     pub debug_local_export: bool,
     /// Sync-http-only retry settings. `None` means no sync-http-only field was supplied.
-    pub legacy_retry: Option<SyncHttpRetryPolicy>,
+    pub sync_http_retry: Option<SyncHttpRetryPolicy>,
 }
 
 impl Default for OtelConfig {
@@ -223,7 +223,7 @@ impl Default for OtelConfig {
             queue_capacity: None,
             queue_byte_capacity: None,
             debug_local_export: false,
-            legacy_retry: None,
+            sync_http_retry: None,
         }
     }
 }

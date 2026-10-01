@@ -1645,7 +1645,7 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
         endpoint: Some(
             crate::config::OtlpEndpoint::new_typed(format!("http://{address}")).unwrap(),
         ),
-        legacy_retry: Some(retry_policy(1, 0, 0, 30_000, 20, 0)),
+        sync_http_retry: Some(retry_policy(1, 0, 0, 30_000, 20, 0)),
         ..crate::config::OtelConfig::default()
     };
     assert!(crate::config::validated_transport_bounds(&transport).is_err());

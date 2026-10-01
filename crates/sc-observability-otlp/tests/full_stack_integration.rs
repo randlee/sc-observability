@@ -2364,7 +2364,9 @@ fn public_sync_http_factory_reports_stalled_collector_timeout() {
     transport.endpoint =
         Some(V2OtlpEndpoint::new_typed(format!("http://{address}")).expect("endpoint"));
     transport.timeout_ms = Some(500_u64.into());
-    let retry = transport.legacy_retry.get_or_insert_with(Default::default);
+    let retry = transport
+        .sync_http_retry
+        .get_or_insert_with(Default::default);
     retry.max_retries = Some(10);
     retry.initial_backoff_ms = Some(1_u64.into());
     retry.max_backoff_ms = Some(1_u64.into());
