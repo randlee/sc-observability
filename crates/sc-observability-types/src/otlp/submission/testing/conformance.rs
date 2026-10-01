@@ -149,9 +149,9 @@ fn shutdown_idempotent<H: ConformanceHarness>(harness: &mut H) {
 }
 /// Runs all ten lifecycle cases against isolated clients.
 ///
-/// Each flush and shutdown passes a zero deadline. A conforming client makes
-/// one export attempt for every row in scope before it evaluates the deadline,
-/// so scripted `Deliver` and `Fail` outcomes are reported deterministically and
+/// Each flush and shutdown passes a zero deadline. The harness must open
+/// clients whose scripted `Deliver` and `Fail` outcomes are settled before the
+/// deadline is evaluated, so those rows are reported deterministically and
 /// only scripted `Stall` rows are reported as pending.
 /// # Panics
 /// Panics if the client violates a lifecycle contract; intended for tests.
