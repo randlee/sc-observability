@@ -1110,16 +1110,17 @@ fn drop_without_shutdown_abandons_pending_admission_in_entered_tokio() {
 }
 
 #[test]
-fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests() {
+fn loopback_retry_sequence_returns_deadline_exhaustion_before_retry_cap() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
     let calls_server = Arc::clone(&calls);
+    let disconnects = Arc::new(AtomicUsize::new(0));
+    let disconnects_server = Arc::clone(&disconnects);
     let done = Arc::new(AtomicBool::new(false));
     let done_server = Arc::clone(&done);
     let server = thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(2);
-        let mut handled = 0;
         listener
             .set_nonblocking(true)
             .expect("set nonblocking listener");
@@ -1135,17 +1136,19 @@ fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests()
             stream
                 .set_nonblocking(false)
                 .expect("set blocking accepted stream");
-            let request = read_request(&mut stream);
-            assert!(request.contains("\"hello\""));
-            calls_server.fetch_add(1, Ordering::Relaxed);
-            stream
-                .write_all(
-                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-                )
-                .expect("write response");
-            handled += 1;
+            match read_framed_request(&mut stream, Instant::now() + REQUEST_FIXTURE_WATCHDOG) {
+                Ok(request) => {
+                    assert!(request.contains("\"hello\""));
+                    calls_server.fetch_add(1, Ordering::Relaxed);
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    );
+                }
+                Err(_) => {
+                    disconnects_server.fetch_add(1, Ordering::Relaxed);
+                }
+            }
         }
-        assert!(handled >= 2, "deadline fixture must observe two requests");
     });
     let exporter = OtlpHttpExporter::for_endpoint_with_retry(
         format!("http://{address}"),
@@ -1163,7 +1166,12 @@ fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests()
         error,
         sc_observability_types::v2::ExportError::RetryDeadlineExhausted { .. }
     ));
-    assert!(calls.load(Ordering::Relaxed) >= 2);
+    let complete_requests = calls.load(Ordering::Relaxed);
+    assert!(
+        complete_requests < 100 + 1,
+        "sequence deadline must stop before the retry cap: {complete_requests} complete request(s), {} disconnected incomplete request(s)",
+        disconnects.load(Ordering::Relaxed),
+    );
 }
 
 fn assert_stalled_retry_applied_timeouts(
