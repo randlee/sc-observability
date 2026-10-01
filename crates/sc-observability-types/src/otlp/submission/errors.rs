@@ -3,14 +3,108 @@ use super::{EnvelopeVersion, ExporterBackendId, FlushReport, Representation, Sig
 use crate::{ErrorCode, ErrorContext, Remediation};
 use std::path::PathBuf;
 
+/// Builds the diagnostic for `code` with that code's specific remediation.
 pub(crate) fn context(code: ErrorCode, message: impl Into<String>) -> Box<ErrorContext> {
-    Box::new(ErrorContext::new(
-        code,
-        message,
-        Remediation::not_recoverable(
-            "Inspect the typed failure and correct its cause before retrying.",
-        ),
-    ))
+    let remediation = remediation(&code);
+    Box::new(ErrorContext::new(code, message, remediation))
+}
+
+/// Builds the diagnostic for `code`, retaining `source` as the error cause chain.
+pub(crate) fn context_with_source(
+    code: ErrorCode,
+    message: impl Into<String>,
+    source: impl std::error::Error + Send + Sync + 'static,
+) -> Box<ErrorContext> {
+    let remediation = remediation(&code);
+    Box::new(ErrorContext::new(code, message, remediation).source(Box::new(source)))
+}
+
+/// Concrete caller guidance for each submission, admission, delivery and
+/// configuration code; retryable conditions are recoverable.
+fn remediation(code: &ErrorCode) -> Remediation {
+    use crate::error_codes as c;
+    let fixed = |justification: &str| Remediation::not_recoverable(justification);
+    if *code == c::SC_OBSERVABILITY_SUBMIT_INVALID_JSON {
+        fixed(
+            "The document is not JSON; fix the syntax at the reported line and column and resubmit.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION {
+        fixed(
+            "This library reads only the current envelope version; resubmit with that version or upgrade the reader.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_SUBMIT_EMPTY {
+        fixed(
+            "A submission must carry at least one log, span, metric or profile; add a record and resubmit.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_SUBMIT_VALIDATION {
+        fixed("The named field violates the signal data model; correct it and resubmit.")
+    } else if *code == c::SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE {
+        fixed("OTLP stores integers as int64; send the value as a double or string, or reduce it.")
+    } else if *code == c::SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT {
+        fixed(
+            "Records sharing a correlation_id must agree on trace_id and span_id; remove or align the explicit identifiers.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT {
+        fixed(
+            "Supply either end_time or duration_nanos, or make start_time plus duration_nanos equal end_time.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE {
+        fixed(
+            "Every profiles index must address an existing dictionary entry; add the entry or correct the index.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE {
+        Remediation::recoverable(
+            "Check that the store path exists, is writable and is not locked by another process.",
+            ["Retry the emit after the store is reachable."],
+        )
+    } else if *code == c::SC_OBSERVABILITY_ADMIT_DISK_BOUND {
+        Remediation::recoverable(
+            "Flush to deliver pending rows and free store capacity.",
+            [
+                "Retry the emit.",
+                "Raise max_store_bytes or select the evict_oldest disk-bound policy if loss of old rows is acceptable.",
+            ],
+        )
+    } else if *code == c::SC_OBSERVABILITY_ADMIT_PERSISTENCE {
+        Remediation::recoverable(
+            "Check free disk space and store file permissions.",
+            ["Retry the emit; nothing was committed."],
+        )
+    } else if *code == c::SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW {
+        fixed(
+            "The store was written by a newer release; upgrade this client or point it at a different store path.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_ADMIT_CLOSED {
+        Remediation::recoverable(
+            "Open a new client; a shut-down client admits nothing.",
+            ["Emit again through the new client."],
+        )
+    } else if *code == c::SC_OBSERVABILITY_DELIVERY_DEADLINE {
+        Remediation::recoverable(
+            "Rows remain durably pending; flush again later or with a longer deadline.",
+            ["Check that the collector endpoint is reachable."],
+        )
+    } else if *code == c::SC_OBSERVABILITY_DELIVERY_FAILED {
+        fixed(
+            "The collector rejected the rows terminally; inspect status for the per-signal error code and correct the payload or collector configuration.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE {
+        fixed(
+            "Fix the named configuration file so it exists, is readable and is valid YAML with known keys.",
+        )
+    } else if *code == c::SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING {
+        fixed("Supply the named field explicitly or in the configuration file.")
+    } else if *code == c::SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID {
+        fixed("Set the named configuration field to a value inside the documented bounds.")
+    } else if *code == c::SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED {
+        fixed("Select a backend that supports this signal representation, or omit the signal.")
+    } else if *code == c::SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE {
+        fixed(
+            "The test script requested this failure; change the script to exercise another outcome.",
+        )
+    } else {
+        fixed("Correct the cause named by the diagnostic code before retrying.")
+    }
 }
 
 /// Typed `SubmissionError` retaining diagnostic context.
@@ -312,6 +406,58 @@ impl SubmissionError {
                 crate::error_codes::SC_OBSERVABILITY_SUBMIT_VALIDATION,
                 message,
             ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{context, remediation};
+    use crate::{ErrorCode, Remediation, error_codes};
+
+    #[test]
+    fn every_submission_code_has_specific_remediation() {
+        let fallback = remediation(&ErrorCode::new_static("UNREGISTERED"));
+        let mut seen = Vec::new();
+        let submission_prefixes = [
+            "SUBMIT_",
+            "ADMIT_",
+            "DELIVERY_",
+            "TELEMETRY_",
+            "TEST_DOUBLE_",
+        ];
+        for code in error_codes::ALL.iter().filter(|c| {
+            c.as_str()
+                .strip_prefix("SC_OBSERVABILITY_")
+                .is_some_and(|rest| submission_prefixes.iter().any(|p| rest.starts_with(p)))
+        }) {
+            let advice = remediation(code);
+            assert_ne!(advice, fallback, "{code} uses the generic remediation");
+            assert!(
+                !seen.contains(&advice),
+                "{code} repeats another remediation"
+            );
+            seen.push(advice);
+        }
+        assert_eq!(seen.len(), 20, "submission codes missing from the registry");
+    }
+
+    #[test]
+    fn retryable_codes_are_recoverable() {
+        for code in [
+            error_codes::SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE,
+            error_codes::SC_OBSERVABILITY_ADMIT_DISK_BOUND,
+            error_codes::SC_OBSERVABILITY_ADMIT_PERSISTENCE,
+            error_codes::SC_OBSERVABILITY_ADMIT_CLOSED,
+            error_codes::SC_OBSERVABILITY_DELIVERY_DEADLINE,
+        ] {
+            assert!(
+                matches!(
+                    context(code.clone(), "m").diagnostic().remediation,
+                    Remediation::Recoverable { .. }
+                ),
+                "{code}"
+            );
         }
     }
 }

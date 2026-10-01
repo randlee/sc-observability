@@ -5,6 +5,7 @@ mod config;
 mod envelope;
 pub mod error_codes;
 mod errors;
+mod structure;
 #[doc(inline)]
 pub use canonical::{IdSource, SystemIds};
 #[doc(inline)]

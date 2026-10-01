@@ -7,7 +7,7 @@ use super::{
     AdmissionError, AdmissionReceipt, DeliveryState, DeliveryStatus, FlushReport, Signal,
     StatusQuery, StoreStatus, SubmissionEnvelope, SubmissionId, TelemetryClient,
     TelemetryClientConfig, TelemetryClientError, TelemetryConfigError, error_codes,
-    errors::context,
+    errors::{context, context_with_source},
 };
 use crate::{ErrorCode, Timestamp};
 use sc_lint_attributes::sc_lint;
@@ -40,11 +40,16 @@ impl DoubleScript {
     /// # Errors
     /// Rejects invalid or unknown script fields.
     pub fn from_json(json: &str) -> Result<Self, TelemetryConfigError> {
-        serde_json::from_str(json).map_err(|_| TelemetryConfigError::InvalidField {
+        serde_json::from_str(json).map_err(|error| TelemetryConfigError::InvalidField {
             field: "test_double_script",
-            context: context(
+            context: context_with_source(
                 error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID,
-                "invalid test double script",
+                format!(
+                    "invalid test double script at line {} column {}",
+                    error.line(),
+                    error.column()
+                ),
+                error,
             ),
         })
     }
@@ -137,10 +142,17 @@ struct State {
     closed: bool,
 }
 /// Cloneable scripted implementation of the shared client contract.
+///
+/// A poisoned state lock means the store is unavailable: client operations
+/// return `AdmissionError::StoreUnavailable`, the setup helpers leave the
+/// script unchanged and `envelopes` returns no envelopes. Nothing panics.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct InMemoryTelemetryClient {
     config: TelemetryClientConfig,
+    /// Shared and mutex-guarded because every `TelemetryClient` method takes
+    /// `&self` while admitting and delivering, and clones (such as a test
+    /// harness handle) must observe the same store.
     state: Arc<Mutex<State>>,
 }
 fn admission(kind: AdmissionErrorKind) -> TelemetryClientError {
@@ -195,22 +207,21 @@ impl InMemoryTelemetryClient {
             })),
         }
     }
-    /// Appends outcomes and replaces the per-call delay.
+    /// Appends outcomes and replaces the per-call delay; no effect once the
+    /// store is unavailable.
     pub fn push_script(&self, script: DoubleScript) {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.admissions.extend(script.admissions);
-        state.deliveries.extend(script.deliveries);
-        state.flush_delay = Duration::from_millis(script.flush_delay_ms);
+        if let Ok(mut state) = self.lock() {
+            state.admissions.extend(script.admissions);
+            state.deliveries.extend(script.deliveries);
+            state.flush_delay = Duration::from_millis(script.flush_delay_ms);
+        }
     }
-    /// Delivers every nonterminal row and removes pending export scripts.
+    /// Delivers every nonterminal row and removes pending export scripts; no
+    /// effect once the store is unavailable.
     pub fn deliver_all(&self) {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Ok(mut state) = self.lock() else {
+            return;
+        };
         state.deliveries.clear();
         state.failures.clear();
         for entry in &mut state.entries {
@@ -224,29 +235,32 @@ impl InMemoryTelemetryClient {
             }
         }
     }
-    /// Makes the next attempt for a signal fail with a caller-selected code.
+    /// Makes the next attempt for a signal fail with a caller-selected code;
+    /// no effect once the store is unavailable.
     pub fn fail_next(&self, signal: Signal, code: ErrorCode) {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .failures
-            .push_back((signal, code));
+        if let Ok(mut state) = self.lock() {
+            state.failures.push_back((signal, code));
+        }
     }
-    /// Returns admitted envelopes in admission order.
+    /// Returns admitted envelopes in admission order; empty once the store is
+    /// unavailable.
     #[must_use]
     pub fn envelopes(&self) -> Vec<SubmissionEnvelope> {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .entries
-            .iter()
-            .map(|e| e.envelope.clone())
-            .collect()
+        self.lock()
+            .map(|state| state.entries.iter().map(|e| e.envelope.clone()).collect())
+            .unwrap_or_default()
     }
+    /// The only access path to the state, applying the poison policy above.
     fn lock(&self) -> Result<MutexGuard<'_, State>, TelemetryClientError> {
-        self.state
-            .lock()
-            .map_err(|_| admission(AdmissionErrorKind::StoreUnavailable))
+        self.state.lock().map_err(|_| {
+            AdmissionError::StoreUnavailable {
+                context: context(
+                    error_codes::SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE,
+                    "test double state lock is poisoned by a panicking caller",
+                ),
+            }
+            .into()
+        })
     }
     fn complete(
         &self,
@@ -443,5 +457,68 @@ impl TelemetryClient for InMemoryTelemetryClient {
             }
         }
         Ok(status)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AdmissionError, DoubleScript, InMemoryTelemetryClient, Signal, StatusQuery,
+        SubmissionEnvelope, TelemetryClient, TelemetryClientError,
+    };
+    use crate::otlp::submission::{
+        ConfigOverrides, ConfigSources, LogInput, SubmissionInput, SystemIds, resolve_config,
+    };
+    use std::time::Duration;
+
+    fn client() -> InMemoryTelemetryClient {
+        let overrides = ConfigOverrides {
+            store_path: Some("unused.db".into()),
+            ..ConfigOverrides::default()
+        };
+        let config = resolve_config(ConfigSources::new(&overrides, None, &|_| None)).unwrap();
+        InMemoryTelemetryClient::with_script(config, DoubleScript::default())
+    }
+    fn envelope() -> SubmissionEnvelope {
+        let mut input = SubmissionInput::new();
+        input.logs.push(LogInput::new());
+        SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap()
+    }
+    fn unavailable(result: &Result<impl std::fmt::Debug, TelemetryClientError>) {
+        assert!(
+            matches!(
+                result,
+                Err(TelemetryClientError::Admission(
+                    AdmissionError::StoreUnavailable { .. }
+                ))
+            ),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn poisoned_state_is_one_store_unavailable_policy() {
+        let client = client();
+        client.emit(envelope()).unwrap();
+        let poisoner = client.clone();
+        let panicked = std::thread::spawn(move || {
+            let _guard = poisoner.state.lock();
+            panic!("poison the double state");
+        })
+        .join();
+        assert!(panicked.is_err());
+        assert!(client.state.is_poisoned());
+
+        unavailable(&client.emit(envelope()));
+        unavailable(&client.flush(Duration::ZERO));
+        unavailable(&client.shutdown(Duration::ZERO));
+        unavailable(&client.status(StatusQuery::Summary));
+        client.push_script(DoubleScript::default());
+        client.deliver_all();
+        client.fail_next(
+            Signal::Logs,
+            crate::error_codes::SC_OBSERVABILITY_DELIVERY_FAILED,
+        );
+        assert!(client.envelopes().is_empty());
     }
 }

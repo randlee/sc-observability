@@ -297,154 +297,230 @@ impl<'de> Deserialize<'de> for InputValue {
         d.deserialize_any(InputVisitor)
     }
 }
-fn invalid(message: &str) -> SignalValidationError {
-    SignalValidationError::invalid("value", message)
+/// RFC 6901 JSON pointer into one deserialized value, rendered in URI-fragment
+/// form (`#`, `#/attrs/0/data`) so the root is never an empty path.
+struct Pointer(String);
+impl Pointer {
+    fn root() -> Self {
+        Self(String::from("#"))
+    }
+    /// Runs `f` with `segment` appended, escaping `~` and `/` per RFC 6901.
+    fn with<T>(&mut self, segment: impl fmt::Display, f: impl FnOnce(&mut Self) -> T) -> T {
+        let len = self.0.len();
+        self.0.push('/');
+        self.0
+            .push_str(&segment.to_string().replace('~', "~0").replace('/', "~1"));
+        let result = f(self);
+        self.0.truncate(len);
+        result
+    }
+    fn invalid(&self, message: impl Into<String>) -> SignalValidationError {
+        SignalValidationError::invalid(self.0.clone(), message)
+    }
+}
+fn key_values(
+    input: InputValue,
+    at: &mut Pointer,
+    depth: usize,
+) -> Result<KeyValues, SignalValidationError> {
+    let mut seen = HashSet::new();
+    let mut values = Vec::new();
+    match input {
+        InputValue::Object(mut entries) => {
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            for (key, value) in entries {
+                let value = at.with(&key, |at| {
+                    let key = AttributeKey::Name(key.clone());
+                    if seen.contains(&key) {
+                        return Err(at.invalid("duplicate attribute key"));
+                    }
+                    any_value(value, at, depth).map(|value| (key, value))
+                })?;
+                seen.insert(value.0.clone());
+                values.push(value);
+            }
+        }
+        InputValue::Array(entries) => {
+            for (i, entry) in entries.into_iter().enumerate() {
+                let pair = at.with(i, |at| {
+                    let InputValue::Array(mut pair) = entry else {
+                        return Err(at.invalid("expected a [key, value] attribute pair"));
+                    };
+                    if pair.len() != 2 {
+                        return Err(at.invalid("attribute pair must have two elements"));
+                    }
+                    let value = at.with(1, |at| match pair.pop() {
+                        Some(value) => any_value(value, at, depth),
+                        None => Err(at.invalid("missing attribute value")),
+                    })?;
+                    let key = at.with(0, |at| {
+                        let index = |i: Result<i32, _>| {
+                            i.map_err(|_| at.invalid("string index exceeds int32"))
+                                .and_then(|i| {
+                                    StringIndex::try_new(i)
+                                        .map_err(|_| at.invalid("string index must be nonnegative"))
+                                })
+                                .map(AttributeKey::Index)
+                        };
+                        let key = match pair.pop() {
+                            Some(InputValue::String(k)) => AttributeKey::Name(k),
+                            Some(InputValue::Int(i)) => index(i32::try_from(i))?,
+                            Some(InputValue::UInt(i)) => index(i32::try_from(i))?,
+                            _ => return Err(at.invalid("attribute key must be a string or index")),
+                        };
+                        if seen.contains(&key) {
+                            return Err(at.invalid("duplicate attribute key"));
+                        }
+                        Ok(key)
+                    })?;
+                    Ok((key, value))
+                })?;
+                seen.insert(pair.0.clone());
+                values.push(pair);
+            }
+        }
+        _ => return Err(at.invalid("expected an attributes object or pair list")),
+    }
+    Ok(KeyValues(values))
+}
+fn any_value(
+    input: InputValue,
+    at: &mut Pointer,
+    depth: usize,
+) -> Result<AnyValue, SignalValidationError> {
+    if depth > constants::ANY_VALUE_MAX_DEPTH {
+        return Err(at.invalid(format!(
+            "value nesting exceeds {} levels",
+            constants::ANY_VALUE_MAX_DEPTH
+        )));
+    }
+    Ok(match input {
+        InputValue::Null => return Err(at.invalid("null is not a telemetry value")),
+        InputValue::Bool(v) => AnyValue::Bool(v),
+        InputValue::Int(v) => AnyValue::Int(v),
+        InputValue::UInt(v) => i64::try_from(v).map_or(AnyValue::UInt(v), AnyValue::Int),
+        InputValue::Double(v) => AnyValue::Double(v.into()),
+        InputValue::String(v) => AnyValue::String(v),
+        InputValue::Array(v) => AnyValue::Array(array(v, at, depth)?),
+        InputValue::Object(mut entries) => {
+            let tag = if entries.len() == 2 && entries.iter().any(|(k, _)| k == "data") {
+                entries.iter().find_map(|(k, v)| match (k.as_str(), v) {
+                    ("kind", InputValue::String(s)) => Some(s.clone()),
+                    _ => None,
+                })
+            } else {
+                None
+            };
+            if let Some(tag) = tag.filter(|s| {
+                matches!(
+                    s.as_str(),
+                    "string"
+                        | "bool"
+                        | "int"
+                        | "uint"
+                        | "double"
+                        | "bytes"
+                        | "string_index"
+                        | "array"
+                        | "kv_list"
+                )
+            }) {
+                let position = entries
+                    .iter()
+                    .position(|(k, _)| k == "data")
+                    .ok_or_else(|| at.invalid("missing tagged data"))?;
+                let data = entries.swap_remove(position).1;
+                at.with("data", |at| tagged(&tag, data, at, depth))?
+            } else {
+                AnyValue::KvList(key_values(InputValue::Object(entries), at, depth + 1)?)
+            }
+        }
+    })
+}
+fn array(
+    values: Vec<InputValue>,
+    at: &mut Pointer,
+    depth: usize,
+) -> Result<Vec<AnyValue>, SignalValidationError> {
+    values
+        .into_iter()
+        .enumerate()
+        .map(|(i, v)| at.with(i, |at| any_value(v, at, depth + 1)))
+        .collect()
+}
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "explicit double tag requests floating point representation"
+)]
+fn tagged(
+    tag: &str,
+    data: InputValue,
+    at: &mut Pointer,
+    depth: usize,
+) -> Result<AnyValue, SignalValidationError> {
+    let index = |i: Result<i32, _>, at: &Pointer| {
+        i.map_err(|_| at.invalid("string index exceeds int32"))
+            .and_then(|i| {
+                StringIndex::try_new(i).map_err(|_| at.invalid("string index must be nonnegative"))
+            })
+            .map(AnyValue::StringIndex)
+    };
+    match (tag, data) {
+        ("string", InputValue::String(v)) => Ok(AnyValue::String(v)),
+        ("bool", InputValue::Bool(v)) => Ok(AnyValue::Bool(v)),
+        ("int", InputValue::Int(v)) => Ok(AnyValue::Int(v)),
+        ("int", InputValue::UInt(v)) => Ok(AnyValue::Int(
+            i64::try_from(v).map_err(|_| at.invalid("int overflow"))?,
+        )),
+        ("uint", InputValue::UInt(v)) => Ok(AnyValue::UInt(v)),
+        ("uint", InputValue::Int(v)) => Ok(AnyValue::UInt(
+            u64::try_from(v).map_err(|_| at.invalid("negative uint"))?,
+        )),
+        ("double", InputValue::Double(v)) => Ok(AnyValue::Double(v.into())),
+        ("double", InputValue::Int(v)) => Ok(AnyValue::Double((v as f64).into())),
+        ("double", InputValue::UInt(v)) => Ok(AnyValue::Double((v as f64).into())),
+        ("double", InputValue::String(v)) => Ok(AnyValue::Double(
+            match v.as_str() {
+                "NaN" => f64::NAN,
+                "Infinity" => f64::INFINITY,
+                "-Infinity" => f64::NEG_INFINITY,
+                _ => return Err(at.invalid("invalid double spelling")),
+            }
+            .into(),
+        )),
+        ("bytes", InputValue::String(v)) => {
+            if !v.len().is_multiple_of(2) || !v.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err(at.invalid("bytes must be hex pairs"));
+            }
+            let bytes = v
+                .as_bytes()
+                .chunks_exact(2)
+                .map(|pair| {
+                    std::str::from_utf8(pair)
+                        .ok()
+                        .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+                        .ok_or_else(|| at.invalid("invalid byte"))
+                })
+                .collect::<Result<_, _>>()?;
+            Ok(AnyValue::Bytes(bytes))
+        }
+        ("string_index", InputValue::Int(v)) => index(i32::try_from(v), at),
+        ("string_index", InputValue::UInt(v)) => index(i32::try_from(v), at),
+        ("array", InputValue::Array(v)) => Ok(AnyValue::Array(array(v, at, depth)?)),
+        ("kv_list", v) => Ok(AnyValue::KvList(key_values(v, at, depth + 1)?)),
+        _ => Err(at.invalid(format!("data does not match kind {tag}"))),
+    }
 }
 impl TryFrom<InputValue> for KeyValues {
     type Error = SignalValidationError;
     fn try_from(input: InputValue) -> Result<Self, Self::Error> {
-        let pairs = match input {
-            InputValue::Object(mut entries) => {
-                entries.sort_by(|a, b| a.0.cmp(&b.0));
-                entries
-                    .into_iter()
-                    .map(|(k, v)| Ok((AttributeKey::Name(k), AnyValue::try_from(v)?)))
-                    .collect::<Result<Vec<_>, Self::Error>>()?
-            }
-            InputValue::Array(entries) => entries
-                .into_iter()
-                .map(|entry| {
-                    let InputValue::Array(mut pair) = entry else {
-                        return Err(invalid("expected attribute pair"));
-                    };
-                    if pair.len() != 2 {
-                        return Err(invalid("attribute pair must have two elements"));
-                    }
-                    let value =
-                        AnyValue::try_from(pair.pop().ok_or_else(|| invalid("missing value"))?)?;
-                    let key = match pair.pop() {
-                        Some(InputValue::String(k)) => AttributeKey::Name(k),
-                        Some(InputValue::Int(i)) => AttributeKey::Index(StringIndex::try_new(
-                            i32::try_from(i).map_err(|_| invalid("index overflow"))?,
-                        )?),
-                        Some(InputValue::UInt(i)) => AttributeKey::Index(StringIndex::try_new(
-                            i32::try_from(i).map_err(|_| invalid("index overflow"))?,
-                        )?),
-                        _ => return Err(invalid("invalid attribute key")),
-                    };
-                    Ok((key, value))
-                })
-                .collect::<Result<Vec<_>, Self::Error>>()?,
-            _ => return Err(invalid("expected attributes object or pair list")),
-        };
-        Self::try_from_iter(pairs)
+        key_values(input, &mut Pointer::root(), 1)
     }
 }
 impl TryFrom<InputValue> for AnyValue {
     type Error = SignalValidationError;
     fn try_from(input: InputValue) -> Result<Self, Self::Error> {
-        Ok(match input {
-            InputValue::Null => return Err(invalid("null is not a telemetry value")),
-            InputValue::Bool(v) => Self::Bool(v),
-            InputValue::Int(v) => Self::Int(v),
-            InputValue::UInt(v) => i64::try_from(v).map_or(Self::UInt(v), Self::Int),
-            InputValue::Double(v) => Self::Double(v.into()),
-            InputValue::String(v) => Self::String(v),
-            InputValue::Array(v) => Self::Array(
-                v.into_iter()
-                    .map(Self::try_from)
-                    .collect::<Result<_, _>>()?,
-            ),
-            InputValue::Object(mut entries) => {
-                let tag = if entries.len() == 2 && entries.iter().any(|(k, _)| k == "data") {
-                    entries.iter().find_map(|(k, v)| match (k.as_str(), v) {
-                        ("kind", InputValue::String(s)) => Some(s.clone()),
-                        _ => None,
-                    })
-                } else {
-                    None
-                };
-                if let Some(tag) = tag.filter(|s| {
-                    matches!(
-                        s.as_str(),
-                        "string"
-                            | "bool"
-                            | "int"
-                            | "uint"
-                            | "double"
-                            | "bytes"
-                            | "string_index"
-                            | "array"
-                            | "kv_list"
-                    )
-                }) {
-                    let position = entries
-                        .iter()
-                        .position(|(k, _)| k == "data")
-                        .ok_or_else(|| invalid("missing tagged data"))?;
-                    Self::tagged(&tag, entries.swap_remove(position).1)?
-                } else {
-                    Self::KvList(KeyValues::try_from(InputValue::Object(entries))?)
-                }
-            }
-        })
-    }
-}
-impl AnyValue {
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "explicit double tag requests floating point representation"
-    )]
-    fn tagged(tag: &str, data: InputValue) -> Result<Self, SignalValidationError> {
-        match (tag, data) {
-            ("string", InputValue::String(v)) => Ok(Self::String(v)),
-            ("bool", InputValue::Bool(v)) => Ok(Self::Bool(v)),
-            ("int", InputValue::Int(v)) => Ok(Self::Int(v)),
-            ("int", InputValue::UInt(v)) => Ok(Self::Int(
-                i64::try_from(v).map_err(|_| invalid("int overflow"))?,
-            )),
-            ("uint", InputValue::UInt(v)) => Ok(Self::UInt(v)),
-            ("uint", InputValue::Int(v)) => Ok(Self::UInt(
-                u64::try_from(v).map_err(|_| invalid("negative uint"))?,
-            )),
-            ("double", InputValue::Double(v)) => Ok(Self::Double(v.into())),
-            ("double", InputValue::Int(v)) => Ok(Self::Double((v as f64).into())),
-            ("double", InputValue::UInt(v)) => Ok(Self::Double((v as f64).into())),
-            ("double", InputValue::String(v)) => Ok(Self::Double(
-                match v.as_str() {
-                    "NaN" => f64::NAN,
-                    "Infinity" => f64::INFINITY,
-                    "-Infinity" => f64::NEG_INFINITY,
-                    _ => return Err(invalid("invalid double spelling")),
-                }
-                .into(),
-            )),
-            ("bytes", InputValue::String(v)) => {
-                if !v.len().is_multiple_of(2) || !v.bytes().all(|b| b.is_ascii_hexdigit()) {
-                    return Err(invalid("bytes must be hex pairs"));
-                }
-                let bytes = (0..v.len())
-                    .step_by(2)
-                    .map(|i| {
-                        u8::from_str_radix(&v[i..i + 2], 16).map_err(|_| invalid("invalid byte"))
-                    })
-                    .collect::<Result<_, _>>()?;
-                Ok(Self::Bytes(bytes))
-            }
-            ("string_index", InputValue::Int(v)) => Ok(Self::StringIndex(StringIndex::try_new(
-                i32::try_from(v).map_err(|_| invalid("index overflow"))?,
-            )?)),
-            ("string_index", InputValue::UInt(v)) => Ok(Self::StringIndex(StringIndex::try_new(
-                i32::try_from(v).map_err(|_| invalid("index overflow"))?,
-            )?)),
-            ("array", InputValue::Array(v)) => Ok(Self::Array(
-                v.into_iter()
-                    .map(Self::try_from)
-                    .collect::<Result<_, _>>()?,
-            )),
-            ("kv_list", v) => Ok(Self::KvList(KeyValues::try_from(v)?)),
-            _ => Err(invalid("tag does not match value")),
-        }
+        any_value(input, &mut Pointer::root(), 1)
     }
 }
 impl<'de> Deserialize<'de> for AnyValue {
@@ -468,6 +544,7 @@ impl TraceState {
     /// # Errors
     /// Rejects invalid key/value grammar, duplicate keys, or excessive size.
     pub fn try_new(value: impl Into<String>) -> Result<Self, SignalValidationError> {
+        let invalid = |message: &str| SignalValidationError::invalid("trace_state", message);
         let value = value.into();
         if value.len() > constants::TRACE_STATE_MAX_BYTES {
             return Err(invalid("tracestate exceeds byte limit"));
@@ -487,9 +564,12 @@ impl TraceState {
                 || val.is_empty()
                 || val.len() > constants::TRACE_STATE_MEMBER_MAX_BYTES
                 || val.ends_with(' ')
-                || !val
-                    .bytes()
-                    .all(|b| (0x20..=0x7e).contains(&b) && b != b',' && b != b'=')
+                || !val.bytes().all(|b| {
+                    (constants::TRACE_STATE_VALUE_BYTE_MIN..=constants::TRACE_STATE_VALUE_BYTE_MAX)
+                        .contains(&b)
+                        && b != b','
+                        && b != b'='
+                })
             {
                 return Err(invalid("invalid tracestate member"));
             }
@@ -527,5 +607,66 @@ impl TryFrom<String> for TraceState {
     type Error = SignalValidationError;
     fn try_from(v: String) -> Result<Self, Self::Error> {
         Self::try_new(v)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AnyValue, KeyValues, SignalValidationError, TraceState};
+    use crate::constants;
+
+    #[test]
+    fn nested_value_errors_report_json_pointer_paths() {
+        let cases = [
+            (r#"{"outer":{"inner":[1,null]}}"#, "#/outer/inner/1"),
+            (r#"{"a/b":{"c~d":null}}"#, "#/a~1b/c~0d"),
+            (r#"[["k",1],[2]]"#, "#/1"),
+            (r#"[["k",1],[-1,true]]"#, "#/1/0"),
+            (r#"[["k",1],["k",2]]"#, "#/1/0"),
+            (r#"{"x":{"kind":"bytes","data":"zz"}}"#, "#/x/data"),
+            (
+                r#"{"x":{"kind":"array","data":[true,{"kind":"int","data":"1"}]}}"#,
+                "#/x/data/1/data",
+            ),
+        ];
+        for (json, pointer) in cases {
+            let error = serde_json::from_str::<KeyValues>(json).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("invalid signal field {pointer}:")),
+                "{json}: {error}"
+            );
+        }
+        let error = serde_json::from_str::<AnyValue>("null").unwrap_err();
+        assert!(
+            error.to_string().contains("invalid signal field #:"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn deserialization_bounds_value_depth() {
+        let ok =
+            (1..constants::ANY_VALUE_MAX_DEPTH).fold(String::from("1"), |v, _| format!("[{v}]"));
+        assert!(serde_json::from_str::<AnyValue>(&ok).is_ok());
+        let deep = format!("[{ok}]");
+        let error = serde_json::from_str::<AnyValue>(&deep).unwrap_err();
+        assert!(error.to_string().contains("nesting exceeds"), "{error}");
+    }
+
+    #[test]
+    fn tracestate_errors_name_the_field() {
+        match TraceState::try_new("Bad=1") {
+            Err(SignalValidationError::Validation { path, .. }) => assert_eq!(path, "trace_state"),
+            other => panic!("expected tracestate rejection, got {other:?}"),
+        }
+        let control = format!(
+            "k=a{}b",
+            char::from(constants::TRACE_STATE_VALUE_BYTE_MIN - 1)
+        );
+        assert!(TraceState::try_new(control).is_err());
+        let tilde = format!("k=a{}", char::from(constants::TRACE_STATE_VALUE_BYTE_MAX));
+        assert!(TraceState::try_new(tilde).is_ok());
     }
 }

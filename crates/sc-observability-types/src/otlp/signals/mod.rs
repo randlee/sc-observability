@@ -46,16 +46,20 @@ pub use values::{
     AnyValue, AttributeKey, KeyValues, OtlpDouble, SignalValidationError, StringIndex, TraceState,
 };
 
+mod metric_points;
 mod metrics;
 mod records;
+#[doc(inline)]
+pub use metric_points::{
+    Exemplar, ExponentialBuckets, ExponentialHistogramDataPoint, HistogramDataPoint, MetricStream,
+    NumberPoint, SummaryDataPoint, ValueAtQuantile,
+};
 #[doc(inline)]
 pub use metrics::{AggregationTemporality, DataPointFlags, MetricData, NumberValue};
 #[doc(inline)]
 pub use records::{
-    EntityRef, Exemplar, ExponentialBuckets, ExponentialHistogramDataPoint, HistogramDataPoint,
-    InstrumentationScope, LogPoint, MetricStream, NumberPoint, Resource, ResourceRecord,
-    SeverityNumber, SpanEventPoint, SpanKindPoint, SpanLinkPoint, SpanPoint, SpanStatusPoint,
-    StatusCode, SummaryDataPoint, ValueAtQuantile,
+    EntityRef, InstrumentationScope, LogPoint, Resource, ResourceRecord, SeverityNumber,
+    SpanEventPoint, SpanKindPoint, SpanLinkPoint, SpanPoint, SpanStatusPoint, StatusCode,
 };
 
 mod profiles;

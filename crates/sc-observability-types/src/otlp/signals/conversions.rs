@@ -6,7 +6,7 @@ use super::{
     SpanStatusPoint, StatusCode,
 };
 use crate::{
-    Level, LogEvent, SpanStatus,
+    LogEvent, SpanStatus,
     otlp::{OtlpInstrumentationScope, OtlpResource},
     v2,
 };
@@ -112,18 +112,12 @@ impl TryFrom<LogEvent> for LogPoint {
         for (key, v) in &value.fields {
             attrs.push((key.clone().into(), json_value(v, &format!("fields.{key}"))?));
         }
-        let severity = match value.level {
-            Level::Trace => 1,
-            Level::Debug => 5,
-            Level::Info => 9,
-            Level::Warn => 13,
-            Level::Error => 17,
-        };
+        let (severity, severity_text) = SeverityNumber::from_level(value.level);
         Ok(Self::new(
             Some(value.timestamp),
             value.timestamp,
-            SeverityNumber::try_new(severity)?,
-            Some(format!("{:?}", value.level)),
+            severity,
+            Some(severity_text.to_owned()),
             Some(value.action.as_str().to_owned()),
             value.message.map(AnyValue::String),
             KeyValues::try_from_iter(attrs)?,

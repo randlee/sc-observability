@@ -1,13 +1,16 @@
 //! Shared input validation, correlation and deterministic serialization.
 use super::{
     EnvelopeVersion, ProfilesSubmission, Signal, SignalSet, SubmissionEnvelope, SubmissionError,
-    SubmissionInput, error_codes, errors::context,
+    SubmissionInput, error_codes,
+    errors::{context, context_with_source},
+    structure::{Path, Rules, check_len},
 };
 use crate::otlp::signals::{self, ResourceRecord, SignalValidationError};
-use crate::{SpanId, Timestamp, TraceId};
+use crate::{SpanId, Timestamp, TraceId, constants};
 use std::{
     collections::{BTreeMap, hash_map::RandomState},
     hash::{BuildHasher, Hasher},
+    num::{NonZeroU64, NonZeroU128},
     sync::{
         LazyLock,
         atomic::{AtomicU64, Ordering},
@@ -36,31 +39,36 @@ impl SystemIds {
 }
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 static ID_HASH: LazyLock<RandomState> = LazyLock::new(RandomState::new);
-fn random_part() -> u64 {
+fn random_part() -> NonZeroU64 {
     let mut h = ID_HASH.build_hasher();
     h.write_u64(ID_COUNTER.fetch_add(1, Ordering::Relaxed));
     h.write_u32(std::process::id());
-    h.finish().max(1)
+    NonZeroU64::new(h.finish()).unwrap_or(NonZeroU64::MIN)
 }
 impl IdSource for SystemIds {
     fn trace_id(&mut self) -> TraceId {
-        TraceId::new(format!("{:016x}{:016x}", random_part(), random_part()))
-            .expect("formatted nonzero hexadecimal trace identifier")
+        let high = u128::from(random_part().get()) << u64::BITS;
+        TraceId::from_nonzero(NonZeroU128::from(random_part()) | high)
     }
     fn span_id(&mut self) -> SpanId {
-        SpanId::new(format!("{:016x}", random_part()))
-            .expect("formatted nonzero hexadecimal span identifier")
+        SpanId::from_nonzero(random_part())
     }
     fn now(&mut self) -> Timestamp {
         Timestamp::now_utc()
     }
 }
+/// Wraps a signal failure, keeping its path and its own diagnostic as source.
 fn signal_error(error: SignalValidationError) -> SubmissionError {
-    let SignalValidationError::Validation {
+    let SignalValidationError::Validation { path, .. } = &error;
+    let path = path.clone();
+    SubmissionError::Validation {
+        context: context_with_source(
+            error_codes::SC_OBSERVABILITY_SUBMIT_VALIDATION,
+            format!("signal field {path} failed validation"),
+            error,
+        ),
         path,
-        context: source,
-    } = error;
-    SubmissionError::validation(path, source.to_string())
+    }
 }
 fn conflict() -> SubmissionError {
     SubmissionError::CorrelationConflict {
@@ -116,21 +124,19 @@ fn canonical_span(
     let duration_end = span
         .duration_nanos
         .map(|n| {
-            let duration = time::Duration::seconds(
-                i64::try_from(n / 1_000_000_000).expect("u64 nanoseconds fit i64 seconds"),
-            ) + time::Duration::nanoseconds(
-                i64::try_from(n % 1_000_000_000).expect("subsecond nanoseconds fit i64"),
-            );
+            let overflow = || {
+                SubmissionError::validation(
+                    format!("spans[{i}].duration_nanos"),
+                    format!("start_time plus {n} ns overflows the timestamp range"),
+                )
+            };
+            let duration = time::Duration::try_from(std::time::Duration::from_nanos(n))
+                .map_err(|_| overflow())?;
             span.start_time
                 .into_inner()
                 .checked_add(duration)
                 .map(Timestamp::from)
-                .ok_or_else(|| {
-                    SubmissionError::validation(
-                        format!("spans[{i}].duration_nanos"),
-                        "timestamp overflow",
-                    )
-                })
+                .ok_or_else(overflow)
         })
         .transpose()?;
     let end = match (span.end_time, duration_end) {
@@ -171,15 +177,31 @@ fn canonical_span(
         record,
     ))
 }
+/// The single envelope version rule shared by canonicalization and revalidation.
 fn check_version(version: EnvelopeVersion) -> Result<(), SubmissionError> {
     if version != EnvelopeVersion::CURRENT {
         return Err(SubmissionError::UnsupportedVersion {
             found: version,
             context: context(
                 error_codes::SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION,
-                "unsupported envelope version",
+                format!(
+                    "envelope version {} is unsupported; expected {}",
+                    version.get(),
+                    EnvelopeVersion::CURRENT.get()
+                ),
             ),
         });
+    }
+    Ok(())
+}
+/// Rejects oversized families before any canonicalization work.
+fn check_input_counts(input: &SubmissionInput) -> Result<(), SubmissionError> {
+    let limit = constants::SUBMISSION_MAX_RECORDS_PER_SIGNAL;
+    check_len(&Path::root("logs"), input.logs.len(), limit)?;
+    check_len(&Path::root("spans"), input.spans.len(), limit)?;
+    check_len(&Path::root("metrics"), input.metrics.len(), limit)?;
+    if let Some(profiles) = &input.profiles {
+        check_len(&Path::root("profiles"), profiles.profiles.len(), limit)?;
     }
     Ok(())
 }
@@ -192,6 +214,7 @@ impl SubmissionEnvelope {
         ids: &mut dyn IdSource,
     ) -> Result<Self, SubmissionError> {
         check_version(input.version)?;
+        check_input_counts(&input)?;
         let resource = input.resource.unwrap_or_default();
         let scope = input.scope.unwrap_or_default();
         let mut correlations = BTreeMap::<String, Correlation>::new();
@@ -284,40 +307,59 @@ impl SubmissionEnvelope {
             metrics,
             profiles,
         };
-        envelope.validate()?;
+        // The version was checked on entry; only the content rules remain.
+        envelope.validate_contents()?;
         Ok(envelope)
     }
     /// Parses caller JSON and uses the shared canonicalization path.
     /// # Errors
-    /// Syntax/EOF errors return `InvalidJson`; data and model errors return Validation with line/column.
+    /// Oversized input returns Validation; syntax/EOF errors return `InvalidJson`;
+    /// data and model errors return Validation with line/column.
     pub fn from_json(json: &str, ids: &mut dyn IdSource) -> Result<Self, SubmissionError> {
+        if json.len() > constants::SUBMISSION_MAX_INPUT_BYTES {
+            return Err(SubmissionError::validation(
+                "input",
+                format!(
+                    "{} bytes exceed the submission limit of {}",
+                    json.len(),
+                    constants::SUBMISSION_MAX_INPUT_BYTES
+                ),
+            ));
+        }
         let input = serde_json::from_str(json).map_err(|e| {
+            let at = format!("{}:{}", e.line(), e.column());
             if e.is_syntax() || e.is_eof() {
                 SubmissionError::InvalidJson {
-                    context: context(
+                    context: context_with_source(
                         error_codes::SC_OBSERVABILITY_SUBMIT_INVALID_JSON,
-                        e.to_string(),
+                        format!("malformed JSON at line:column {at}"),
+                        e,
                     ),
                 }
             } else {
-                SubmissionError::validation(format!("{}:{}", e.line(), e.column()), e.to_string())
+                let message = e.to_string();
+                SubmissionError::Validation {
+                    path: at,
+                    context: context_with_source(
+                        error_codes::SC_OBSERVABILITY_SUBMIT_VALIDATION,
+                        message,
+                        e,
+                    ),
+                }
             }
         })?;
         Self::from_input(input, ids)
     }
     /// Revalidates a canonical envelope before admission, including mutated public fields.
     /// # Errors
-    /// Rejects unsupported/empty data, out-of-range values, misplaced indices and invalid records.
+    /// Rejects unsupported/empty data, out-of-range values, misplaced indices,
+    /// oversized collections and invalid records.
     pub fn validate(&self) -> Result<(), SubmissionError> {
-        if self.version != EnvelopeVersion::CURRENT {
-            return Err(SubmissionError::UnsupportedVersion {
-                found: self.version,
-                context: context(
-                    error_codes::SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION,
-                    "unsupported envelope version",
-                ),
-            });
-        }
+        check_version(self.version)?;
+        self.validate_contents()
+    }
+    /// Every rule except the version, which callers check first.
+    fn validate_contents(&self) -> Result<(), SubmissionError> {
         if self.signals().iter().next().is_none() {
             return Err(SubmissionError::EmptySubmission {
                 context: context(
@@ -326,19 +368,10 @@ impl SubmissionEnvelope {
                 ),
             });
         }
-        // Every AnyValue/AttributeKey is visited through the typed neutral serde
-        // shape, including metric exemplars and resource/scope metadata.
-        for (family, records) in [
-            ("logs", serde_json::to_value(&self.logs)),
-            ("spans", serde_json::to_value(&self.spans)),
-            ("metrics", serde_json::to_value(&self.metrics)),
-        ] {
-            validate_tree(
-                &records.map_err(|e| SubmissionError::validation(family, e.to_string()))?,
-                family,
-                false,
-            )?;
-        }
+        let rules = Rules { profiles: false };
+        rules.records(&self.logs, &Path::root("logs"), Rules::log)?;
+        rules.records(&self.spans, &Path::root("spans"), Rules::span)?;
+        rules.records(&self.metrics, &Path::root("metrics"), Rules::metric)?;
         for span in &self.spans {
             span.record.validate().map_err(signal_error)?;
         }
@@ -346,39 +379,41 @@ impl SubmissionEnvelope {
             metric.record.validate().map_err(signal_error)?;
         }
         if let Some(profiles) = &self.profiles {
-            validate_tree(
-                &serde_json::to_value(profiles)
-                    .map_err(|e| SubmissionError::validation("profiles", e.to_string()))?,
-                "profiles",
-                true,
-            )?;
+            Rules { profiles: true }.profiles(profiles, &Path::root("profiles"))?;
             profiles
                 .dictionary
                 .validate_references(&profiles.profiles)
-                .map_err(|e| {
-                    let SignalValidationError::Validation {
-                        path,
-                        context: source,
-                    } = e;
+                .map_err(|error| {
+                    let SignalValidationError::Validation { path, .. } = &error;
+                    let path = path.clone();
                     SubmissionError::DictionaryReference {
-                        path,
-                        context: context(
+                        context: context_with_source(
                             error_codes::SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE,
-                            source.to_string(),
+                            format!("profiles {path} does not address a dictionary entry"),
+                            error,
                         ),
+                        path,
                     }
                 })?;
         }
         Ok(())
     }
     /// Serializes canonical ordered keys with UTC timestamps.
-    /// # Panics
-    /// Panics if a neutral record violates its total JSON serialization invariant.
+    ///
+    /// Neutral serialization is total, the policy `validate` shares: every map
+    /// key is a string, timestamps render for any year, non-finite doubles use
+    /// their proto-JSON spellings and every custom serializer is infallible.
+    /// Should a future type break that invariant, the result is the JSON
+    /// `null`, which deserialization and `from_json` reject with a typed error;
+    /// this method never panics.
     #[must_use]
     pub fn to_canonical_json(&self) -> String {
-        let value =
-            serde_json::to_value(self).expect("neutral values have total JSON serialization");
-        serde_json::to_string(&value).expect("a JSON value is serializable")
+        // `Value` objects sort their keys, which makes the output canonical.
+        let null = || String::from("null");
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|value| serde_json::to_string(&value).ok())
+            .unwrap_or_else(null)
     }
     /// Returns the families that contain records.
     #[must_use]
@@ -400,50 +435,133 @@ impl SubmissionEnvelope {
         )
     }
 }
-fn validate_tree(
-    value: &serde_json::Value,
-    path: &str,
-    profiles: bool,
-) -> Result<(), SubmissionError> {
-    use serde_json::Value;
-    match value {
-        Value::Object(map) => {
-            if map.get("kind").and_then(Value::as_str) == Some("uint")
-                && map
-                    .get("data")
-                    .and_then(Value::as_u64)
-                    .is_some_and(|v| v > i64::MAX as u64)
-            {
-                return Err(SubmissionError::ValueOutOfRange {
-                    path: path.into(),
-                    context: context(
-                        error_codes::SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE,
-                        "unsigned value exceeds OTLP int64",
-                    ),
-                });
-            }
-            if !profiles && map.get("kind").and_then(Value::as_str) == Some("string_index") {
-                return Err(SubmissionError::validation(
-                    path,
-                    "dictionary indices are profiles-only",
-                ));
-            }
-            for (key, v) in map {
-                validate_tree(v, &format!("{path}.{key}"), profiles)?;
-            }
+
+#[cfg(test)]
+mod tests {
+    use super::{IdSource, SystemIds};
+    use crate::otlp::submission::{
+        LogInput, SpanInput, SubmissionEnvelope, SubmissionError, SubmissionInput,
+    };
+    use crate::{SpanId, Timestamp, TraceId, constants, error_codes};
+
+    #[test]
+    fn system_ids_are_always_valid_without_panicking() {
+        let mut ids = SystemIds::new();
+        for _ in 0..256 {
+            let trace = ids.trace_id();
+            assert_eq!(TraceId::new(trace.as_str()).as_ref(), Ok(&trace));
+            let span = ids.span_id();
+            assert_eq!(SpanId::new(span.as_str()).as_ref(), Ok(&span));
         }
-        Value::Array(values) => {
-            if !profiles && values.len() == 2 && values[0].is_number() && values[1].is_object() {
-                return Err(SubmissionError::validation(
-                    path,
-                    "indexed attribute keys are profiles-only",
-                ));
-            }
-            for (i, v) in values.iter().enumerate() {
-                validate_tree(v, &format!("{path}[{i}]"), profiles)?;
-            }
-        }
-        _ => {}
     }
-    Ok(())
+
+    #[test]
+    fn duration_overflow_is_a_typed_error() {
+        let latest = time::Date::from_calendar_date(9999, time::Month::December, 31)
+            .map(|date| date.midnight().assume_utc())
+            .map(Timestamp::from)
+            .unwrap();
+        let mut span = SpanInput::new("late".into(), latest);
+        span.duration_nanos = Some(u64::MAX);
+        let mut input = SubmissionInput::new();
+        input.spans.push(span);
+        match SubmissionEnvelope::from_input(input, &mut SystemIds::new()) {
+            Err(SubmissionError::Validation { path, .. }) => {
+                assert_eq!(path, "spans[0].duration_nanos");
+            }
+            other => panic!("expected duration overflow, got {other:?}"),
+        }
+        let mut span = SpanInput::new("long".into(), Timestamp::UNIX_EPOCH);
+        span.duration_nanos = Some(u64::MAX);
+        let mut input = SubmissionInput::new();
+        input.spans.push(span);
+        let envelope = SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap();
+        assert_eq!(
+            envelope.spans[0]
+                .record
+                .end_time
+                .into_inner()
+                .unix_timestamp_nanos(),
+            i128::from(u64::MAX)
+        );
+    }
+
+    #[test]
+    fn canonical_json_is_total_for_extreme_values() {
+        let json = r#"{"version":1,"logs":[{"time":"9999-12-31T23:59:59.999999999Z","body":{"kind":"double","data":"NaN"},"attributes":{"inf":{"kind":"double","data":"-Infinity"},"bytes":{"kind":"bytes","data":"00ff"}}}]}"#;
+        let envelope = SubmissionEnvelope::from_json(json, &mut SystemIds::new()).unwrap();
+        let canonical = envelope.to_canonical_json();
+        assert_eq!(
+            serde_json::from_str::<SubmissionEnvelope>(&canonical).unwrap(),
+            envelope
+        );
+    }
+
+    #[test]
+    fn oversized_input_is_rejected_before_parsing() {
+        let json = " ".repeat(constants::SUBMISSION_MAX_INPUT_BYTES + 1);
+        match SubmissionEnvelope::from_json(&json, &mut SystemIds::new()) {
+            Err(SubmissionError::Validation { path, .. }) => assert_eq!(path, "input"),
+            other => panic!("expected input limit, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn record_count_limit_applies_to_input_and_envelope() {
+        let mut input = SubmissionInput::new();
+        input.logs = vec![LogInput::new(); constants::SUBMISSION_MAX_RECORDS_PER_SIGNAL + 1];
+        match SubmissionEnvelope::from_input(input, &mut SystemIds::new()) {
+            Err(SubmissionError::Validation { path, .. }) => assert_eq!(path, "logs"),
+            other => panic!("expected record limit, got {other:?}"),
+        }
+        let mut input = SubmissionInput::new();
+        input.logs.push(LogInput::new());
+        let mut envelope = SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap();
+        let record = envelope.logs[0].clone();
+        envelope.logs = vec![record; constants::SUBMISSION_MAX_RECORDS_PER_SIGNAL + 1];
+        assert!(matches!(
+            envelope.validate(),
+            Err(SubmissionError::Validation { ref path, .. }) if path == "logs"
+        ));
+    }
+
+    #[test]
+    fn deserialization_path_enforces_depth_limit() {
+        let mut body = String::from("1");
+        for _ in 0..=constants::ANY_VALUE_MAX_DEPTH {
+            body = format!(r#"{{"kind":"array","data":[{body}]}}"#);
+        }
+        let json = format!(r#"{{"version":1,"logs":[{{"body":{body}}}]}}"#);
+        let error = SubmissionEnvelope::from_json(&json, &mut SystemIds::new()).unwrap_err();
+        assert_eq!(
+            error.code(),
+            &error_codes::SC_OBSERVABILITY_SUBMIT_VALIDATION
+        );
+        assert!(error.to_string().contains("nesting exceeds"), "{error}");
+    }
+
+    #[test]
+    fn version_is_checked_once_and_first() {
+        let json = r#"{"version":2,"spans":[{"name":"x","start_time":"1970-01-01T00:00:00Z","end_time":"1970-01-01T00:00:01Z","duration_nanos":2}]}"#;
+        match SubmissionEnvelope::from_json(json, &mut SystemIds::new()) {
+            Err(SubmissionError::UnsupportedVersion { found, .. }) => assert_eq!(found.get(), 2),
+            other => panic!("expected unsupported version, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn signal_failures_keep_their_source_diagnostic() {
+        let mut span = SpanInput::new("x".into(), Timestamp::UNIX_EPOCH);
+        span.duration_nanos = Some(1);
+        span.trace_state = Some("Invalid Key=v".into());
+        let mut input = SubmissionInput::new();
+        input.spans.push(span);
+        let error = SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap_err();
+        let SubmissionError::Validation { path, context } = &error else {
+            panic!("expected validation, got {error:?}");
+        };
+        assert_eq!(path, "trace_state");
+        let source = std::error::Error::source(context.as_ref()).expect("signal error source");
+        assert!(source.to_string().contains("invalid tracestate member"));
+    }
 }

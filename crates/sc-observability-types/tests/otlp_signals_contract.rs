@@ -401,7 +401,20 @@ fn log_conversion_rejects_null_at_exact_path() {
     source.fields.insert("key".into(), serde_json::Value::Null);
     null_path(LogPoint::try_from(source.clone()), "fields.key");
     source.fields.insert("key".into(), serde_json::json!(true));
-    round_trip(&LogPoint::try_from(source).unwrap());
+    round_trip(&LogPoint::try_from(source.clone()).unwrap());
+    // OTLP short names, matching the text the OTLP exporters emit.
+    for (level, number, text) in [
+        (Level::Trace, 1, "TRACE"),
+        (Level::Debug, 5, "DEBUG"),
+        (Level::Info, 9, "INFO"),
+        (Level::Warn, 13, "WARN"),
+        (Level::Error, 17, "ERROR"),
+    ] {
+        source.level = level;
+        let point = LogPoint::try_from(source.clone()).unwrap();
+        assert_eq!(point.severity_number.get(), number);
+        assert_eq!(point.severity_text.as_deref(), Some(text));
+    }
 }
 
 #[test]

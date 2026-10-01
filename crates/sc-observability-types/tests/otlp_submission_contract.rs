@@ -250,6 +250,81 @@ mod double_tests {
         client.shutdown(Duration::from_millis(20)).unwrap();
         assert!(start.elapsed() >= Duration::from_millis(5));
     }
+    fn scripted(outcome: &str) -> (InMemoryTelemetryClient, SubmissionId) {
+        let script = DoubleScript::from_json(&format!(
+            r#"{{"deliveries":[{{"signal":"logs","outcome":"{outcome}"}}]}}"#
+        ))
+        .unwrap();
+        let client = InMemoryTelemetryClient::with_script(config(), script);
+        let receipt = client.emit(envelope()).unwrap();
+        (client, receipt.submission_id)
+    }
+    fn row(client: &InMemoryTelemetryClient, id: &SubmissionId) -> DeliveryState {
+        let status = client
+            .status(StatusQuery::Submissions(vec![id.clone()]))
+            .unwrap();
+        status.submissions[0].signals[0].1.clone()
+    }
+    #[test]
+    fn scripted_stall_yields_deadline() {
+        let (client, id) = scripted("stall");
+        match client.flush(Duration::ZERO).unwrap_err() {
+            TelemetryClientError::Delivery(DeliveryError::DeadlineExceeded { report, context }) => {
+                assert_eq!(report.still_pending.logs, 1);
+                assert_eq!(report.failed.total() + report.delivered.total(), 0);
+                assert_eq!(
+                    context.diagnostic().code.as_str(),
+                    "SC_OBSERVABILITY_DELIVERY_DEADLINE"
+                );
+            }
+            error => panic!("expected deadline: {error}"),
+        }
+        assert_eq!(row(&client, &id), DeliveryState::Pending);
+        assert_eq!(client.status(StatusQuery::Summary).unwrap().pending.logs, 1);
+        // The stall consumed its script entry; the next attempt delivers.
+        assert_eq!(client.flush(Duration::ZERO).unwrap().delivered.logs, 1);
+    }
+    #[test]
+    fn scripted_fail_yields_terminal() {
+        let (client, id) = scripted("fail");
+        match client.flush(Duration::ZERO).unwrap_err() {
+            TelemetryClientError::Delivery(DeliveryError::TerminalFailure { report, context }) => {
+                assert_eq!(report.failed.logs, 1);
+                assert_eq!(report.still_pending.total() + report.delivered.total(), 0);
+                assert_eq!(
+                    context.diagnostic().code.as_str(),
+                    "SC_OBSERVABILITY_DELIVERY_FAILED"
+                );
+            }
+            error => panic!("expected terminal: {error}"),
+        }
+        assert!(matches!(
+            row(&client, &id),
+            DeliveryState::Failed { attempts: 1, ref error }
+                if error.as_str() == "SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE"
+        ));
+        assert_eq!(client.status(StatusQuery::Summary).unwrap().failed.logs, 1);
+        // A terminal row leaves later store-wide flushes out of scope.
+        assert_eq!(
+            client.flush(Duration::ZERO).unwrap(),
+            FlushReport::default()
+        );
+    }
+    #[test]
+    fn double_script_errors_report_line_and_column() {
+        match DoubleScript::from_json("{\n  \"unexpected\": true}") {
+            Err(TelemetryConfigError::InvalidField { field, context }) => {
+                assert_eq!(field, "test_double_script");
+                assert!(
+                    context.diagnostic().message.contains("line 2 column"),
+                    "{}",
+                    context.diagnostic().message
+                );
+                assert!(std::error::Error::source(context.as_ref()).is_some());
+            }
+            other => panic!("expected invalid script, got {other:?}"),
+        }
+    }
     #[test]
     fn shutdown_releases_client_even_on_delivery_failure() {
         let script =
@@ -344,7 +419,7 @@ fn configuration_precedence_covers_every_field() {
     explicit.emit_flush_deadline = Some(Duration::from_secs(10));
     explicit.flush_deadline = Some(Duration::from_secs(11));
     explicit.lease_duration = Some(Duration::from_secs(12));
-    let retry: SyncHttpRetryPolicyDto = serde_json::from_str(r#"{"max_retries":1,"initial_backoff_ms":2,"max_backoff_ms":3,"retry_sequence_timeout_ms":4,"retry_after_cap_ms":5,"retry_jitter_percent":6}"#).unwrap();
+    let retry: SyncHttpRetryPolicyDto = serde_json::from_str(r#"{"max_retries":1,"initial_backoff_ms":2,"max_backoff_ms":3,"retry_sequence_timeout_ms":60000,"retry_after_cap_ms":5,"retry_jitter_percent":6}"#).unwrap();
     explicit.sync_http_retry = Some(retry.clone());
     let config = resolve_config(ConfigSources::new(&explicit, Some(&file), &env)).unwrap();
     assert_eq!(config.service_name, "explicit");

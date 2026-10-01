@@ -5,7 +5,10 @@ use crate::otlp::submission::{
     SystemIds, TelemetryClient, TelemetryClientError,
 };
 use std::time::Duration;
-const DEADLINE: Duration = Duration::from_millis(10);
+/// Every case flushes with a zero deadline, so no outcome depends on wall-clock
+/// time: rows the script delivers or fails become terminal on the call's
+/// single export attempt, and only scripted `Stall` rows remain pending.
+const DEADLINE: Duration = Duration::ZERO;
 /// Supplies isolated client state and controllable export outcomes.
 pub trait ConformanceHarness {
     /// Client under test.
@@ -145,6 +148,11 @@ fn shutdown_idempotent<H: ConformanceHarness>(harness: &mut H) {
     assert!(client.emit(log("closed")).is_err());
 }
 /// Runs all ten lifecycle cases against isolated clients.
+///
+/// Each flush and shutdown passes a zero deadline. A conforming client makes
+/// one export attempt for every row in scope before it evaluates the deadline,
+/// so scripted `Deliver` and `Fail` outcomes are reported deterministically and
+/// only scripted `Stall` rows are reported as pending.
 /// # Panics
 /// Panics if the client violates a lifecycle contract; intended for tests.
 pub fn run_all<H: ConformanceHarness>(harness: &mut H) {

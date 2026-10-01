@@ -4,7 +4,7 @@
     reason = "approved client errors retain an inline four-signal FlushReport"
 )]
 use super::{SubmissionEnvelope, SubmissionError, TelemetryClientConfig, TelemetryClientError};
-use crate::{ErrorCode, Timestamp};
+use crate::{ErrorCode, Timestamp, constants};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr, time::Duration};
 
@@ -34,10 +34,14 @@ pub struct RecordKey(String);
 impl FromStr for RecordKey {
     type Err = SubmissionError;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        if value.is_empty() || value.len() > crate::constants::TELEMETRY_RECORD_KEY_MAX_BYTES {
+        if value.is_empty() || value.len() > constants::TELEMETRY_RECORD_KEY_MAX_BYTES {
             Err(SubmissionError::validation(
                 "record_key",
-                "key must contain 1..=256 UTF-8 bytes",
+                format!(
+                    "key must contain 1..={} UTF-8 bytes, found {}",
+                    constants::TELEMETRY_RECORD_KEY_MAX_BYTES,
+                    value.len()
+                ),
             ))
         } else {
             Ok(Self(value.into()))
@@ -64,16 +68,16 @@ impl FromStr for SubmissionId {
     type Err = SubmissionError;
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let b = value.as_bytes();
-        if b.len() != 36
+        if b.len() != constants::UUID_TEXT_LEN
             || !b.iter().enumerate().all(|(i, c)| {
-                if [8, 13, 18, 23].contains(&i) {
+                if constants::UUID_HYPHEN_OFFSETS.contains(&i) {
                     *c == b'-'
                 } else {
                     c.is_ascii_hexdigit()
                 }
             })
-            || b[14] != b'7'
-            || !b"89abAB".contains(&b[19])
+            || b[constants::UUID_VERSION_OFFSET] != constants::UUID_VERSION_7
+            || !constants::UUID_RFC9562_VARIANTS.contains(&b[constants::UUID_VARIANT_OFFSET])
         {
             return Err(SubmissionError::validation(
                 "submission_id",
