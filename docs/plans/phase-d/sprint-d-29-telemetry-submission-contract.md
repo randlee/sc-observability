@@ -1257,7 +1257,7 @@ Boundary allowlists: `types.toml` `allowed_dependents` += `sc-otel-cli`,
 `python.toml` `allowed_dependencies` += `sc-observability-otlp`; new
 `boundaries/sc-otel-cli/cli.toml` with `allowed_dependencies` =
 [`sc-observability-types`, `sc-observability-otlp`],
-`forbidden_edges` = [`sc-observe`, `pyo3`, `agent-team-mail-*`] and
+`forbidden_edges` = `[{ from = "sc-otel-cli", to = "sc-observe" }]` and
 `allowed_dependents` = [].
 
 Boundary `allowed_dependencies` are first-party only; external pins are enforced by policy rows, the manifest test and cargo-tree checks (lead `01M3VYV0BND025EZH744N0SD9D`).
@@ -1457,3 +1457,12 @@ rustc help/note insertion in
 `crates/sc-observability-log/tests/ui/fixture_attachment_no_owner_authority.stderr`.
 The new `TelemetryClient::shutdown` trait adds a compiler suggestion; all four
 E0599 errors and their rejected authority operations remain unchanged.
+
+### CI boundary schema amendment (2026-10-01)
+
+Lead ruling `01M3WFKN13MNAX7JZKY6KZD6WQ` corrects the CLI boundary
+`forbidden_edges` to workspace-package `{ from, to }` objects, as required
+by CI-pinned sc-lint `ba2d9bf622c1604e3f017c728040906b90e71bce`.
+The edge prohibits `sc-otel-cli` from depending on `sc-observe`. External
+`pyo3` and `agent-team-mail-*` exclusions remain in dependency policy and
+cargo-deny checks, rather than the first-party boundary table.

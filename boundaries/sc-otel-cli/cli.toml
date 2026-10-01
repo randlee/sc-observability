@@ -14,7 +14,7 @@ roots = []
 [dependencies]
 allowed_dependents = []
 allowed_dependencies = ["sc-observability-types", "sc-observability-otlp"]
-forbidden_edges = ["sc-observe", "pyo3", "agent-team-mail-*"]
+forbidden_edges = [{ from = "sc-otel-cli", to = "sc-observe" }]
 [references]
 scope = "outside_owner_crate"
 forbidden = []
