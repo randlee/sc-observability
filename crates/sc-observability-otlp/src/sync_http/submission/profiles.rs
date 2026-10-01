@@ -105,7 +105,22 @@ fn wire_dictionary(value: &sc_observability_types::otlp::signals::ProfilesDictio
 }
 
 fn wire_profile(value: &Profile) -> Value {
-    camelize(serde_json::to_value(value).expect("neutral profile serializes deterministically"))
+    let mut encoded = camelize(
+        serde_json::to_value(value).expect("neutral profile serializes deterministically"),
+    )
+    .as_object()
+    .expect("profile serializes as an object")
+    .clone();
+    encoded.remove("time");
+    encoded.insert("timeUnixNano".to_owned(), resource::timestamp(&value.time));
+    if let Some(duration) = encoded.remove("durationNanos") {
+        encoded.insert("durationNano".to_owned(), string_number(duration));
+    }
+    encoded.insert(
+        "profileId".to_owned(),
+        Value::String(values::base64(&value.profile_id)),
+    );
+    Value::Object(encoded)
 }
 
 fn camelize(value: Value) -> Value {
@@ -121,7 +136,14 @@ fn camelize(value: Value) -> Value {
                     } else {
                         camelize(value)
                     };
-                    (key, value)
+                    (
+                        key.clone(),
+                        if string_numeric_field(&key) {
+                            string_numbers(value)
+                        } else {
+                            value
+                        },
+                    )
                 })
                 .collect(),
         ),
@@ -161,6 +183,37 @@ fn bytes(value: Value) -> Value {
     Value::String(values::base64(&bytes))
 }
 
+fn string_numeric_field(key: &str) -> bool {
+    matches!(
+        key,
+        "memoryStart"
+            | "memoryLimit"
+            | "fileOffset"
+            | "address"
+            | "timestampsUnixNano"
+            | "period"
+            | "values"
+            | "line"
+            | "column"
+            | "startLine"
+    )
+}
+
+fn string_numbers(value: Value) -> Value {
+    match value {
+        Value::Number(value) => Value::String(value.to_string()),
+        Value::Array(values) => Value::Array(values.into_iter().map(string_numbers).collect()),
+        value => value,
+    }
+}
+
+fn string_number(value: Value) -> Value {
+    match value {
+        Value::Number(value) => Value::String(value.to_string()),
+        value => value,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +226,9 @@ mod tests {
         .expect("canonical profile fixture parses");
         let value = request(&[envelope]);
         assert!(value["dictionary"].is_object());
-        assert!(value["resourceProfiles"][0]["scopeProfiles"][0]["profiles"][0].is_object());
+        let profile = &value["resourceProfiles"][0]["scopeProfiles"][0]["profiles"][0];
+        assert_eq!(profile["timeUnixNano"], "0");
+        assert_eq!(profile["durationNano"], "10");
+        assert!(profile["profileId"].is_string());
     }
 }
