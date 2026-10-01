@@ -60,3 +60,23 @@ pub(crate) use sc_observability_types::error_codes::otlp::OTLP_RUNTIME_TERMINATE
 /// Submission export is not wired until D34.
 pub const SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED");
+
+/// Internal durable-store diagnostic; no new public API.
+#[cfg(feature = "durable-store")]
+pub(crate) const DURABLE_OVERSIZE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DURABLE_RECORD_TOO_LARGE");
+
+/// Internal durable-store diagnostic; no new public API.
+#[cfg(feature = "durable-store")]
+pub(crate) const DURABLE_CORRUPT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DURABLE_CORRUPT_ENVELOPE");
+
+/// Internal durable-store diagnostic; no new public API.
+#[cfg(feature = "durable-store")]
+pub(crate) const DURABLE_QUERY: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DURABLE_UNSUPPORTED_QUERY");
+
+/// Internal durable-store diagnostic; no new public API.
+#[cfg(feature = "durable-store")]
+pub(crate) const DURABLE_LOCK_TIMEOUT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DURABLE_LOCK_TIMEOUT");

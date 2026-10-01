@@ -1,7 +1,6 @@
 //! Maps durable configuration into the existing validated transport contract.
 use crate::config::{
     AuthHeader, ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, SyncHttpRetryPolicy,
-    validated_transport_bounds,
 };
 use sc_observability_types::otlp::submission::{
     ExporterBackendId, Representation, Signal, TelemetryClientConfig, TelemetryConfigError,
@@ -17,10 +16,20 @@ pub(super) fn invalid(field: &'static str) -> TelemetryConfigError {
         ),
     }
 }
+pub(super) fn invalid_reason(field: &'static str, reason: &str) -> TelemetryConfigError {
+    TelemetryConfigError::InvalidField {
+        field,
+        context: super::context(
+            error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID,
+            &format!("invalid {field}: {reason}"),
+        ),
+    }
+}
 pub(crate) fn otel_config_from(
     config: &TelemetryClientConfig,
 ) -> Result<OtelConfig, TelemetryConfigError> {
     config.validate()?;
+    // No record exists at open: Logs/Log represent rejection of the entire backend.
     if config.backend != ExporterBackendId::SyncHttp {
         return Err(TelemetryConfigError::UnsupportedCombination {
             backend: config.backend,
@@ -33,11 +42,13 @@ pub(crate) fn otel_config_from(
         });
     }
     let millis = u64::try_from(config.request_timeout.as_millis())
-        .map_err(|_| invalid("request_timeout"))?;
+        .map_err(|_| invalid_reason("request_timeout", "milliseconds exceed u64"))?;
     let mut otel = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
     otel.enabled = true;
-    otel.endpoint =
-        Some(OtlpEndpoint::new_typed(config.endpoint.clone()).map_err(|_| invalid("endpoint"))?);
+    otel.endpoint = Some(
+        OtlpEndpoint::new_typed(config.endpoint.clone())
+            .map_err(|error| invalid_reason("endpoint", error.code().as_str()))?,
+    );
     otel.auth_header = config
         .auth_header
         .as_ref()
@@ -55,7 +66,6 @@ pub(crate) fn otel_config_from(
             retry_after_cap_ms: r.retry_after_cap_ms.map(Into::into),
             retry_jitter_percent: r.retry_jitter_percent,
         });
-    validated_transport_bounds(&otel).map_err(|_| invalid("otlp"))?;
     Ok(otel)
 }
 
@@ -100,7 +110,10 @@ mod tests {
         bad.sync_http_retry.as_mut().unwrap().retry_jitter_percent = Some(101);
         assert!(matches!(
             otel_config_from(&bad),
-            Err(TelemetryConfigError::InvalidField { .. })
+            Err(TelemetryConfigError::InvalidField {
+                field: "sync_http_retry.retry_jitter_percent",
+                ..
+            })
         ));
     }
 }

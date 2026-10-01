@@ -50,29 +50,30 @@ pub const DEFAULT_METRIC_BATCH_SIZE: usize = 256;
 pub const DEFAULT_METRIC_EXPORT_INTERVAL_MS: u64 = 5_000;
 
 /// Maximum envelopes claimed by one durable drain batch.
-#[cfg_attr(
-    not(feature = "durable-store"),
-    expect(dead_code, reason = "used by durable-store")
-)]
+#[cfg(all(test, feature = "durable-store"))]
 pub(crate) const DRAIN_BATCH_SIZE: usize = 64;
 /// Renew a drain lease after one third of its duration.
-#[cfg_attr(
-    not(feature = "durable-store"),
-    expect(dead_code, reason = "used by durable-store")
-)]
+#[cfg(feature = "durable-store")]
 pub(crate) const LEASE_RENEWAL_DIVISOR: u32 = 3;
 /// `SQLite` busy timeout in milliseconds.
-#[cfg_attr(
-    not(feature = "durable-store"),
-    expect(dead_code, reason = "used by durable-store")
-)]
+#[cfg(feature = "durable-store")]
 pub(crate) const STORE_BUSY_TIMEOUT_MS: u64 = 5_000;
 /// Pinned profiles export route.
-#[cfg_attr(
-    not(feature = "durable-store"),
-    expect(
-        dead_code,
-        reason = "staged by d-29; wired by d-33/d-34 under durable-store"
-    )
-)]
+#[cfg(any(feature = "durable-store", all(test, feature = "sync-http")))]
 pub(crate) const PROFILES_EXPORT_PATH: &str = "/v1development/profiles";
+
+/// Idle durable workers wake on admission; the timer covers other processes.
+#[cfg(feature = "durable-store")]
+pub(crate) const DRAIN_POLL_INTERVAL_MS: u64 = 250;
+/// Maximum delay after consecutive storage/worker errors.
+#[cfg(feature = "durable-store")]
+pub(crate) const DRAIN_ERROR_BACKOFF_MAX_MS: u64 = 5_000;
+/// Frozen durable store DDL version, checked against PRAGMA `user_version`.
+#[cfg(feature = "durable-store")]
+pub(crate) const STORE_SCHEMA_VERSION: u32 = 1;
+/// Bound configuration reads before YAML parsing (1 MiB).
+#[cfg(feature = "durable-store")]
+pub(crate) const TELEMETRY_CONFIG_MAX_BYTES: u64 = 1024 * 1024;
+/// `SQLite` integer form of the durable batch record limit.
+#[cfg(feature = "durable-store")]
+pub(crate) const DRAIN_BATCH_SIZE_SQL: i64 = 64;

@@ -248,7 +248,7 @@ All `durable::` tests below run with
   - `retryable_then_delivered` and `terminal_marks_failed`
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D3): `durable::tests::backpressure`
   covers backend saturation. `backend_queue_full_pauses_no_eviction`: with
-  credits exhausted, store rows stay pending and are never evicted, and they
+  credits exhausted, selected store rows stay claimed and are never evicted, and they
   drain after release. It also covers `disk_bound_reject_new`,
   `disk_bound_evict_oldest_counted` and `retention_purges_delivered_only`.
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D3): with `durable-store` and

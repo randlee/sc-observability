@@ -3,10 +3,6 @@ use sc_observability_types::{
     otlp::submission::{Signal, SubmissionEnvelope},
     v2::ExportError,
 };
-#[cfg_attr(
-    not(feature = "durable-store"),
-    expect(dead_code, reason = "used by durable-store")
-)]
 pub(crate) trait SubmissionExporter: Send + Sync {
     fn export(
         &self,
@@ -15,10 +11,6 @@ pub(crate) trait SubmissionExporter: Send + Sync {
     ) -> Result<(), SubmissionExportFailure>;
 }
 #[derive(Debug)]
-#[cfg_attr(
-    not(feature = "durable-store"),
-    expect(dead_code, reason = "used by durable-store")
-)]
 pub(crate) enum SubmissionExportFailure {
     Retryable(ExportError),
     Terminal(ExportError),

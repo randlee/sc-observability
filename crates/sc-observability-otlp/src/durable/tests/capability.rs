@@ -27,20 +27,25 @@ fn every_matrix_row_delivers_and_sdk_is_rejected() {
             1,
             "{name}"
         );
+        let rejected = tempfile::tempdir().unwrap();
+        let mut unsupported = config(rejected.path());
+        unsupported.backend = ExporterBackendId::OpenTelemetrySdk;
+        assert!(
+            matches!(
+                DurableTelemetryClient::open(unsupported),
+                Err(TelemetryClientError::Config(
+                    TelemetryConfigError::UnsupportedCombination {
+                        backend: ExporterBackendId::OpenTelemetrySdk,
+                        signal: Signal::Logs,
+                        representation: Representation::Log,
+                        ..
+                    }
+                ))
+            ),
+            "{name}: open rejects the backend with representative Logs/Log fields before any record exists"
+        );
+        assert!(!rejected.path().join("telemetry.db").exists());
     }
-    let dir = tempfile::tempdir().unwrap();
-    let mut config = config(dir.path());
-    config.backend = ExporterBackendId::OpenTelemetrySdk;
-    assert!(matches!(
-        DurableTelemetryClient::open(config),
-        Err(TelemetryClientError::Config(
-            TelemetryConfigError::UnsupportedCombination {
-                backend: ExporterBackendId::OpenTelemetrySdk,
-                ..
-            }
-        ))
-    ));
-    assert!(!dir.path().join("telemetry.db").exists());
 }
 
 #[test]

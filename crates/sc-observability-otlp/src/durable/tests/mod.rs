@@ -12,6 +12,8 @@ mod backpressure;
 mod capability;
 pub(super) mod conformance;
 mod drain;
+mod regressions;
+mod schema;
 const DEADLINE: Duration = Duration::from_secs(3);
 
 #[derive(Default)]
@@ -19,8 +21,10 @@ struct ScriptedExporter {
     outcomes: Mutex<HashMap<Signal, VecDeque<DeliveryOutcome>>>,
     released: Mutex<bool>,
     gate: Condvar,
+    stalled: Mutex<bool>,
+    entered: Condvar,
     deliveries: PathBuf,
-    conformance_shared: std::sync::Weak<Shared>,
+    conformance_shared: Mutex<std::sync::Weak<Shared>>,
 }
 impl ScriptedExporter {
     fn new(path: &Path) -> Self {
@@ -36,6 +40,16 @@ impl ScriptedExporter {
             .entry(signal)
             .or_default()
             .push_back(outcome);
+    }
+    fn await_stall(&self) {
+        let (stalled, timeout) = self
+            .entered
+            .wait_timeout_while(self.stalled.lock().unwrap(), DEADLINE, |value| !*value)
+            .unwrap();
+        assert!(
+            *stalled && !timeout.timed_out(),
+            "exporter did not enter blocked export"
+        );
     }
     fn release(&self) {
         *self.released.lock().unwrap() = true;
@@ -66,14 +80,22 @@ impl SubmissionExporter for ScriptedExporter {
         match outcome {
             DeliveryOutcome::Fail => return Err(SubmissionExportFailure::Terminal(export_error())),
             DeliveryOutcome::Stall => {
-                if let Some(shared) = self.conformance_shared.upgrade() {
+                *self.stalled.lock().unwrap() = true;
+                self.entered.notify_all();
+                if let Some(shared) = self.conformance_shared.lock().unwrap().upgrade() {
                     shared.stalled_signals.lock().unwrap().insert(signal);
                     shared.notify();
                 }
-                let _guard = self
+                let (released, timeout) = self
                     .gate
-                    .wait_while(self.released.lock().unwrap(), |released| !*released)
+                    .wait_timeout_while(self.released.lock().unwrap(), DEADLINE, |released| {
+                        !*released
+                    })
                     .unwrap();
+                assert!(
+                    *released && !timeout.timed_out(),
+                    "scripted {signal:?} export was not released"
+                );
             }
             _ => {}
         }
@@ -83,7 +105,7 @@ impl SubmissionExporter for ScriptedExporter {
             .open(&self.deliveries)
             .unwrap();
         for envelope in envelopes {
-            let line = serde_json::json!({"signal": store::signal_name(signal), "key": envelope.record_key}).to_string() + "\n";
+            let line = serde_json::json!({"signal": store::signal_name(signal).unwrap(), "key": envelope.record_key}).to_string() + "\n";
             file.write_all(line.as_bytes()).unwrap();
         }
         file.sync_all().unwrap();
@@ -109,13 +131,6 @@ fn fixture(name: &str) -> SubmissionEnvelope {
         .join(name)
         .join("expected.envelope.json");
     serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
-}
-fn wait_until(mut predicate: impl FnMut() -> bool) {
-    let start = Instant::now();
-    while !predicate() {
-        assert!(start.elapsed() < DEADLINE, "condition did not become true");
-        std::thread::sleep(Duration::from_millis(1));
-    }
 }
 #[test]
 fn duplicate_record_key() {

@@ -2,6 +2,7 @@
 
 pub(crate) mod credits;
 pub(crate) mod profiles;
+#[cfg(any(feature = "durable-store", all(test, feature = "sync-http")))]
 pub(crate) mod submission;
 
 use std::future::Future;

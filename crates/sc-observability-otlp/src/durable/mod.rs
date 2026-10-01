@@ -11,12 +11,16 @@
 )]
 mod adapter;
 mod config_file;
+mod database;
 mod query;
+mod row;
 mod store;
 #[cfg(test)]
 mod tests;
 mod worker;
-use crate::contracts::{credits::AdmissionCredits, submission::SubmissionExporter};
+use crate::contracts::credits::AdmissionCredits;
+#[cfg(test)]
+use crate::contracts::submission::SubmissionExporter;
 pub use config_file::load_telemetry_file;
 use sc_lint_attributes::sc_lint;
 use sc_observability_types::otlp::submission::{
@@ -26,13 +30,17 @@ use sc_observability_types::otlp::submission::{
 use sc_observability_types::{ErrorCode, ErrorContext, Remediation};
 use std::{
     sync::{
-        Arc, Condvar, Mutex,
+        Arc, Condvar, Mutex, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };
 
 /// Durable client. Dropping a handle stops its workers; explicit shutdown also flushes.
+/// Operation deadlines bound coordination and `SQLite` busy waits; filesystem calls
+/// are subject to the operating system and cannot be forcibly interrupted here.
+/// Unsupported backends are rejected by `open` before any submission exists;
+/// the frozen capability error uses Logs/Log as representative fields.
 #[derive(Debug)]
 pub struct DurableTelemetryClient {
     owner: Owner,
@@ -50,14 +58,23 @@ impl Drop for Owner {
 // A mutex serializes short SQLite transactions. Export and waits never hold it.
 #[derive(Debug)]
 struct Shared {
-    db: Mutex<rusqlite::Connection>,
+    db: database::Database,
     config: TelemetryClientConfig,
-    holder: String,
+    holder: row::LeaseHolder,
     closed: AtomicBool,
     stop: AtomicBool,
     credits: AdmissionCredits,
     wake: Mutex<u64>,
     changed: Condvar,
+    // Last background failure is retained and emitted as a code-only diagnostic.
+    last_error: Mutex<Option<ErrorCode>>,
+    // Handles are owned by the client; completion count and wake share one mutex
+    // so shutdown cannot miss the last worker notification.
+    workers: Mutex<Vec<std::thread::JoinHandle<()>>>,
+    live_workers: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    waiting_for_credits:
+        Mutex<std::collections::HashSet<sc_observability_types::otlp::submission::Signal>>,
     #[cfg(test)]
     drain_on_flush_only: AtomicBool,
     #[cfg(test)]
@@ -67,44 +84,106 @@ struct Shared {
         Mutex<std::collections::HashSet<sc_observability_types::otlp::submission::Signal>>,
 }
 impl Shared {
+    fn record_error(&self, error: &TelemetryClientError) {
+        use std::io::Write;
+        let code = error.code().clone();
+        let mut last = self
+            .last_error
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if last.as_ref() != Some(&code) {
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "durable telemetry worker error: {code}"
+            );
+        }
+        *last = Some(code);
+        drop(last);
+        self.notify();
+    }
     fn notify(&self) {
-        let mut generation = self.wake.lock().expect("notification lock poisoned");
+        let mut generation = self.wake.lock().unwrap_or_else(PoisonError::into_inner);
         *generation = generation.wrapping_add(1);
         self.changed.notify_all();
     }
     fn generation(&self) -> u64 {
-        *self.wake.lock().expect("notification lock poisoned")
+        *self.wake.lock().unwrap_or_else(PoisonError::into_inner)
     }
     fn wait(&self, duration: Duration) {
-        self.wait_since(self.generation(), duration);
+        // Heartbeat/error pacing ignores admission notifications, but stops promptly.
+        let wake = self.wake.lock().unwrap_or_else(PoisonError::into_inner);
+        let _guard = self
+            .changed
+            .wait_timeout_while(wake, duration, |_| !self.stop.load(Ordering::Acquire))
+            .unwrap_or_else(PoisonError::into_inner);
     }
     fn wait_since(&self, before: u64, duration: Duration) {
-        let generation = self.wake.lock().expect("notification lock poisoned");
+        let generation = self.wake.lock().unwrap_or_else(PoisonError::into_inner);
         let _guard = self
             .changed
             .wait_timeout_while(generation, duration, |g| {
                 *g == before && !self.stop.load(Ordering::Acquire)
             })
-            .expect("notification lock poisoned");
+            .unwrap_or_else(PoisonError::into_inner);
     }
-    fn poll_interval(&self) -> Duration {
-        (self.config.lease_duration / crate::constants::LEASE_RENEWAL_DIVISOR).min(
-            Duration::from_millis(
-                crate::constants::STORE_BUSY_TIMEOUT_MS / crate::constants::DRAIN_BATCH_SIZE as u64,
-            ),
-        )
+    fn poll_interval() -> Duration {
+        Duration::from_millis(crate::constants::DRAIN_POLL_INTERVAL_MS)
     }
 }
 fn context(code: ErrorCode, message: &str) -> Box<ErrorContext> {
+    let (action, step) = match code.as_str() {
+        "SC_OBSERVABILITY_ADMIT_CLOSED" => (
+            "open a new client",
+            "reuse the same store to resume retained deliveries",
+        ),
+        "SC_OBSERVABILITY_DURABLE_RECORD_TOO_LARGE" => (
+            "split the submission",
+            "keep each canonical envelope within the drain byte budget",
+        ),
+        "SC_OBSERVABILITY_DURABLE_CORRUPT_ENVELOPE" => (
+            "inspect the failed submission",
+            "restore it from the original source; later valid submissions continue draining",
+        ),
+        "SC_OBSERVABILITY_DURABLE_UNSUPPORTED_QUERY" => (
+            "use a supported status query",
+            "select Summary or Submissions with typed submission identifiers",
+        ),
+        "SC_OBSERVABILITY_DURABLE_LOCK_TIMEOUT" => (
+            "retry after the active store transaction completes",
+            "use a deadline appropriate for concurrent store access",
+        ),
+        "SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED" => (
+            "select the sync_http backend",
+            "the durable client rejects unsupported backends before opening the store",
+        ),
+        "SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE" => (
+            "correct the telemetry file",
+            "check its path, permissions, UTF-8 YAML syntax and size limit",
+        ),
+        "SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID" => (
+            "correct the named configuration field",
+            "use a value within the documented field bounds",
+        ),
+        "SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW" => (
+            "use a client supporting this store version",
+            "retain the database; do not downgrade or delete pending records",
+        ),
+        "SC_OBSERVABILITY_ADMIT_DISK_BOUND" => (
+            "drain retained submissions or increase max_store_bytes",
+            "retry admission after sufficient payload capacity becomes available",
+        ),
+        _ => (
+            "check store accessibility and the reported database failure",
+            "retain the store for recovery; do not delete pending records",
+        ),
+    };
     Box::new(ErrorContext::new(
         code,
         message,
-        Remediation::recoverable(
-            "inspect the typed failure and correct the store or configuration before retrying",
-            ["retain the store for recovery; do not delete pending records"],
-        ),
+        Remediation::recoverable(action, [step]),
     ))
 }
+
 fn persistence(error: impl std::fmt::Display) -> TelemetryClientError {
     AdmissionError::Persistence {
         context: context(
@@ -124,29 +203,45 @@ fn closed() -> TelemetryClientError {
     .into()
 }
 impl DurableTelemetryClient {
+    #[cfg(test)]
     pub(crate) fn open_with_exporter(
         config: TelemetryClientConfig,
         exporter: Arc<dyn SubmissionExporter>,
     ) -> Result<Self, TelemetryClientError> {
-        let client = Self::prepare(config)?;
+        let otel = adapter::otel_config_from(&config)?;
+        let bounds = crate::config::validated_transport_bounds(&otel)
+            .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
+        let client = Self::prepare_validated(config, &bounds)?;
         worker::start(&client.owner.shared, exporter)?;
         Ok(client)
     }
+    #[cfg(test)]
     fn prepare(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
         let otel = adapter::otel_config_from(&config)?;
         let bounds = crate::config::validated_transport_bounds(&otel)
-            .map_err(|_| adapter::invalid("otlp"))?;
+            .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
+        Self::prepare_validated(config, &bounds)
+    }
+    fn prepare_validated(
+        config: TelemetryClientConfig,
+        bounds: &crate::config::ValidatedTransportBounds,
+    ) -> Result<Self, TelemetryClientError> {
         let shared = Arc::new(Shared {
-            db: Mutex::new(store::open(&config.store_path)?),
+            db: database::Database::new(store::open(&config.store_path)?)?,
             config,
-            holder: format!("{}:{}", std::process::id(), uuid::Uuid::now_v7()),
+            holder: row::LeaseHolder(format!("{}:{}", std::process::id(), uuid::Uuid::now_v7())),
             closed: AtomicBool::new(false),
             stop: AtomicBool::new(false),
-            credits: AdmissionCredits::new(&bounds),
+            credits: AdmissionCredits::new(bounds),
             wake: Mutex::new(0),
             changed: Condvar::new(),
+            last_error: Mutex::new(None),
+            workers: Mutex::new(Vec::new()),
+            live_workers: std::sync::atomic::AtomicUsize::new(0),
             #[cfg(test)]
-            drain_on_flush_only: AtomicBool::new(false),
+            waiting_for_credits: Mutex::new(std::collections::HashSet::new()),
+            #[cfg(test)]
+            drain_on_flush_only: AtomicBool::new(tests::conformance::enabled()),
             #[cfg(test)]
             active_flushes: std::sync::atomic::AtomicUsize::new(0),
             #[cfg(test)]
@@ -165,6 +260,9 @@ impl DurableTelemetryClient {
         let start = Instant::now();
         // A WAL reader must not queue behind an admission waiting for a write lock.
         let reader = store::reader(&shared.config.store_path)?;
+        reader
+            .busy_timeout(timeout.saturating_sub(start.elapsed()))
+            .map_err(persistence)?;
         let scope = query::snapshot(&reader, id)?;
         #[cfg(test)]
         let _flush_activity = FlushActivity::new(shared);
@@ -180,6 +278,9 @@ impl DurableTelemetryClient {
         };
         loop {
             let generation = shared.generation();
+            reader
+                .busy_timeout(timeout.saturating_sub(start.elapsed()))
+                .map_err(persistence)?;
             let report = query::report(&reader, &scope)?;
             if report.still_pending.total() == 0 || start.elapsed() >= timeout {
                 return report.into_result();
@@ -188,7 +289,7 @@ impl DurableTelemetryClient {
                 generation,
                 timeout
                     .saturating_sub(start.elapsed())
-                    .min(shared.poll_interval()),
+                    .min(Shared::poll_interval()),
             );
         }
     }
@@ -198,16 +299,18 @@ impl TelemetryClient for DurableTelemetryClient {
     fn open(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
         let otel = adapter::otel_config_from(&config)?;
         let (worker, bounds) = crate::sync_http::submission::SyncHttpConfig::from_otel(&otel)
-            .map_err(|_| adapter::invalid("otlp"))?;
-        Self::open_with_exporter(
-            config,
+            .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
+        let client = Self::prepare_validated(config, &bounds)?;
+        worker::start(
+            &client.owner.shared,
             crate::sync_http::submission::exporter_for(worker, bounds),
-        )
+        )?;
+        Ok(client)
     }
     fn emit(&self, envelope: SubmissionEnvelope) -> Result<AdmissionReceipt, TelemetryClientError> {
         let shared = &self.owner.shared;
         let receipt = {
-            let mut db = shared.db.lock().map_err(persistence)?;
+            let mut db = shared.db.lock()?;
             if shared.closed.load(Ordering::Acquire) {
                 return Err(closed());
             }
@@ -217,6 +320,9 @@ impl TelemetryClient for DurableTelemetryClient {
         Ok(receipt)
     }
     fn flush(&self, deadline: Duration) -> Result<FlushReport, TelemetryClientError> {
+        if self.owner.shared.closed.load(Ordering::Acquire) {
+            return Err(closed());
+        }
         self.flush_scope(None, deadline)
     }
     fn flush_submission(
@@ -224,27 +330,33 @@ impl TelemetryClient for DurableTelemetryClient {
         id: &SubmissionId,
         deadline: Duration,
     ) -> Result<FlushReport, TelemetryClientError> {
+        if self.owner.shared.closed.load(Ordering::Acquire) {
+            return Err(closed());
+        }
         self.flush_scope(Some(id), deadline)
     }
     fn shutdown(&self, deadline: Duration) -> Result<FlushReport, TelemetryClientError> {
         let shared = &self.owner.shared;
-        if shared.closed.swap(true, Ordering::AcqRel) {
+        let start = Instant::now();
+        if shared.closed.load(Ordering::Acquire) {
             return Ok(FlushReport::default());
         }
-        let result = self.flush_scope(None, deadline);
+        {
+            let _db = shared.db.lock_for(deadline)?;
+            if shared.closed.swap(true, Ordering::AcqRel) {
+                return Ok(FlushReport::default());
+            }
+        }
+        let result = self.flush_scope(None, deadline.saturating_sub(start.elapsed()));
         shared.stop.store(true, Ordering::Release);
         shared.notify();
-        // No thread join here: a slow exporter must not extend the caller's deadline.
-        worker::release(shared);
+        worker::join(shared, deadline.saturating_sub(start.elapsed()));
         result
     }
+
     fn status(&self, query: StatusQuery) -> Result<StoreStatus, TelemetryClientError> {
         let shared = &self.owner.shared;
-        query::status(
-            &*shared.db.lock().map_err(persistence)?,
-            &shared.config,
-            query,
-        )
+        query::status(&*shared.db.lock()?, &shared.config, query)
     }
 }
 

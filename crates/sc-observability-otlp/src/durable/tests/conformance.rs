@@ -2,18 +2,24 @@
 use super::*;
 use sc_observability_types::otlp::submission::testing::conformance::ConformanceHarness;
 
+thread_local! { static ENABLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+pub(in crate::durable) fn enabled() -> bool {
+    ENABLED.get()
+}
+
 pub(in crate::durable) fn await_scripted_outcomes(
     shared: &Shared,
     reader: &rusqlite::Connection,
     scope: &query::Scope,
 ) {
+    let start = Instant::now();
     loop {
         let generation = shared.generation();
         let non_stalled: query::Scope = {
             let stalled = shared.stalled_signals.lock().unwrap();
             scope
                 .iter()
-                .filter(|(_, signal)| !stalled.contains(&store::parse_signal(signal).unwrap()))
+                .filter(|(_, signal)| !stalled.contains(signal))
                 .cloned()
                 .collect()
         };
@@ -26,10 +32,16 @@ pub(in crate::durable) fn await_scripted_outcomes(
             return;
         }
         let wake = shared.wake.lock().unwrap();
-        let _guard = shared
+        let (_guard, result) = shared
             .changed
-            .wait_while(wake, |value| *value == generation)
+            .wait_timeout_while(wake, DEADLINE.saturating_sub(start.elapsed()), |value| {
+                *value == generation
+            })
             .unwrap();
+        assert!(
+            !result.timed_out(),
+            "conformance drain timed out: scope={scope:?}; non-stalled={non_stalled:?}"
+        );
     }
 }
 
@@ -76,7 +88,14 @@ impl<const ZERO_DEADLINE: bool> Drop for Harness<ZERO_DEADLINE> {
             exporter.release();
         }
         for exporter in &self.exporters {
-            wait_until(|| Arc::strong_count(exporter) == 1);
+            if let Some(shared) = exporter
+                .conformance_shared
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .upgrade()
+            {
+                worker::join(&shared, DEADLINE);
+            }
         }
     }
 }
@@ -84,16 +103,13 @@ impl<const ZERO_DEADLINE: bool> ConformanceHarness for Harness<ZERO_DEADLINE> {
     type Client = Client<ZERO_DEADLINE>;
     fn open(&mut self) -> Self::Client {
         let dir = tempfile::tempdir().unwrap();
-        let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
-        let mut exporter = ScriptedExporter::new(dir.path());
-        exporter.conformance_shared = Arc::downgrade(&client.owner.shared);
-        let exporter = Arc::new(exporter);
-        client
-            .owner
-            .shared
-            .drain_on_flush_only
-            .store(true, Ordering::Release);
-        worker::start(&client.owner.shared, exporter.clone()).unwrap();
+        let exporter = Arc::new(ScriptedExporter::new(dir.path()));
+        ENABLED.set(true);
+        let opened =
+            DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone());
+        ENABLED.set(false);
+        let client = opened.unwrap();
+        *exporter.conformance_shared.lock().unwrap() = Arc::downgrade(&client.owner.shared);
         self.dirs.push(dir);
         self.exporters.push(exporter);
         Client(client)

@@ -49,15 +49,15 @@ pub(crate) enum SignalKind {
     /// Metric records.
     Metrics,
     /// Profile samples.
-    #[expect(
-        dead_code,
-        reason = "staged by d-29; wired by d-33/d-34 under durable-store"
+    #[cfg_attr(
+        not(feature = "durable-store"),
+        expect(dead_code, reason = "durable profiles accounting")
     )]
     Profiles,
 }
 
 impl SignalKind {
-    const fn index(self) -> usize {
+    pub(crate) const fn index(self) -> usize {
         match self {
             Self::Logs => 0,
             Self::Traces => 1,

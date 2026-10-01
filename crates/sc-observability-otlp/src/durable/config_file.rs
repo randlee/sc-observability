@@ -2,20 +2,51 @@
 use sc_observability_types::otlp::submission::{
     TelemetryConfigError, TelemetryFileConfig, error_codes,
 };
-use std::path::Path;
+use std::{io::Read, path::Path};
 /// Loads core telemetry settings and records the directory for relative store paths.
 /// # Errors
 /// Returns `ConfigFile` for an unreadable file or invalid YAML, without logging its contents.
 pub fn load_telemetry_file(path: &Path) -> Result<TelemetryFileConfig, TelemetryConfigError> {
-    let failure = || TelemetryConfigError::ConfigFile {
+    let failure = |cause: &str| TelemetryConfigError::ConfigFile {
         path: path.to_path_buf(),
         context: super::context(
             error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE,
-            "cannot load telemetry YAML; check the file path, permissions and syntax",
+            &format!("cannot load telemetry YAML: {cause}"),
         ),
     };
-    let yaml = std::fs::read_to_string(path).map_err(|_| failure())?;
-    let mut config: TelemetryFileConfig = serde_saphyr::from_str(&yaml).map_err(|_| failure())?;
+    // Reject special files before opening: a FIFO must not block startup.
+    if !std::fs::metadata(path)
+        .map_err(|error| failure(&format!("filesystem {:?}", error.kind())))?
+        .is_file()
+    {
+        return Err(failure("path is not a regular file"));
+    }
+    let mut yaml = String::new();
+    std::fs::File::open(path)
+        .map_err(|error| failure(&format!("filesystem {:?}", error.kind())))?
+        .take(crate::constants::TELEMETRY_CONFIG_MAX_BYTES + 1)
+        .read_to_string(&mut yaml)
+        .map_err(|error| failure(&format!("read {:?}", error.kind())))?;
+    if u64::try_from(yaml.len()).unwrap_or(u64::MAX) > crate::constants::TELEMETRY_CONFIG_MAX_BYTES
+    {
+        return Err(failure(
+            "file exceeds the telemetry configuration size limit",
+        ));
+    }
+    let mut config: TelemetryFileConfig =
+        serde_saphyr::from_str(&yaml).map_err(|error: serde_saphyr::Error| {
+            let reason = error.location().map_or_else(
+                || "invalid YAML configuration".to_owned(),
+                |location| {
+                    format!(
+                        "invalid YAML at line {}, column {}",
+                        location.line(),
+                        location.column()
+                    )
+                },
+            );
+            failure(&reason)
+        })?;
     config.base_dir = path
         .parent()
         .unwrap_or_else(|| Path::new("."))

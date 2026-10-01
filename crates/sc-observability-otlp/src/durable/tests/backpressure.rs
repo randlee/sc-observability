@@ -94,6 +94,44 @@ fn backend_queue_full_pauses_no_eviction() {
             .flush_submission(&receipt.submission_id, Duration::from_millis(20))
             .is_err()
     );
+    let start = Instant::now();
+    loop {
+        let generation = client.owner.shared.generation();
+        if client
+            .owner
+            .shared
+            .waiting_for_credits
+            .lock()
+            .unwrap()
+            .contains(&Signal::Logs)
+        {
+            break;
+        }
+        assert!(
+            start.elapsed() < DEADLINE,
+            "log worker did not reach credit wait"
+        );
+        client
+            .owner
+            .shared
+            .wait_since(generation, DEADLINE.saturating_sub(start.elapsed()));
+    }
+    let state: String = client
+        .owner
+        .shared
+        .db
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT state FROM signal_deliveries WHERE submission_id=?1 AND signal='logs'",
+            [receipt.submission_id.to_string()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        state, "claimed",
+        "credit exhaustion preserves the actual claim"
+    );
     let status = client.status(StatusQuery::Summary).unwrap();
     assert_eq!(status.pending.logs, 1);
     assert_eq!(status.evicted_by_disk_bound, 0);

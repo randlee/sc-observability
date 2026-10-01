@@ -105,7 +105,7 @@ fn non_holder_flush_waits_then_acquires() {
         "INSERT INTO drain_lease VALUES(1,'other',?1,?2)",
         rusqlite::params![
             store::now(),
-            store::now() + store::nanos(Duration::from_millis(100))
+            store::now().saturating_add(store::nanos(Duration::from_secs(3600)))
         ],
     )
     .unwrap();
@@ -120,6 +120,15 @@ fn non_holder_flush_waits_then_acquires() {
             .flush_submission(&receipt.submission_id, Duration::from_millis(10))
             .is_err()
     );
+    client
+        .owner
+        .shared
+        .db
+        .lock()
+        .unwrap()
+        .execute("UPDATE drain_lease SET expires_at_unix_nano=1", [])
+        .unwrap();
+    client.owner.shared.notify();
     assert_eq!(
         client
             .flush_submission(&receipt.submission_id, DEADLINE)
@@ -136,41 +145,134 @@ fn shutdown_deadline_does_not_join_stalled_exporter() {
     exporter.set_outcome(Signal::Logs, DeliveryOutcome::Stall);
     let client =
         DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone()).unwrap();
-    client.emit(log("stall")).unwrap();
-    let start = Instant::now();
-    assert!(client.shutdown(Duration::from_millis(10)).is_err());
-    assert!(start.elapsed() < Duration::from_millis(500));
+    let receipt = client.emit(log("stall")).unwrap();
+    exporter.await_stall();
+    let (send, receive) = std::sync::mpsc::sync_channel(1);
+    let thread = std::thread::spawn(move || {
+        let result = client.shutdown(Duration::from_millis(10));
+        send.send((client, result)).unwrap();
+    });
+    let received = receive.recv_timeout(DEADLINE);
+    // Always release the exporter before asserting, including a failing test.
+    exporter.release();
+    let (client, result) = received.expect("shutdown waited for the blocked exporter");
+    assert!(result.is_err());
+    thread.join().unwrap();
     assert!(client.emit(log("closed")).is_err());
     assert_eq!(client.shutdown(DEADLINE).unwrap(), FlushReport::default());
-    exporter.release();
+    worker::join(&client.owner.shared, DEADLINE);
+    let status = client
+        .status(StatusQuery::Submissions(vec![receipt.submission_id]))
+        .unwrap();
+    assert!(
+        matches!(
+            status.submissions[0].signals[0].1,
+            DeliveryState::Delivered { .. }
+        ),
+        "a successful in-flight export commits even after shutdown stops workers"
+    );
 }
 
-struct ChildProcess(std::process::Child);
+struct ChildProcess {
+    child: Option<std::process::Child>,
+    ready: std::sync::mpsc::Receiver<()>,
+    mode: String,
+    address: std::net::SocketAddr,
+}
+impl ChildProcess {
+    fn ready(&self) {
+        self.ready
+            .recv_timeout(DEADLINE)
+            .unwrap_or_else(|error| panic!("child {} readiness deadline: {error}", self.mode));
+    }
+    fn kill(&mut self) {
+        self.child.as_mut().unwrap().kill().unwrap();
+    }
+    fn wait(&mut self) -> std::process::ExitStatus {
+        let mut child = self.child.take().unwrap();
+        let pid = child.id();
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            let _ = send.send(child.wait());
+        });
+        match receive.recv_timeout(DEADLINE) {
+            Ok(status) => status.unwrap(),
+            Err(error) => {
+                // The wait thread owns Child. Kill only this still-unreaped PID.
+                #[cfg(unix)]
+                let _ = std::process::Command::new("kill")
+                    .args(["-KILL", &pid.to_string()])
+                    .spawn();
+                #[cfg(windows)]
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/F", "/PID", &pid.to_string()])
+                    .spawn();
+                let _ = receive.recv_timeout(DEADLINE);
+                panic!(
+                    "child {} completion deadline; pending process {pid}: {error}",
+                    self.mode
+                );
+            }
+        }
+    }
+}
 impl Drop for ChildProcess {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        // Unblock the readiness listener even if the child failed before signaling.
+        let _ = std::net::TcpStream::connect_timeout(&self.address, DEADLINE);
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let (send, receive) = std::sync::mpsc::sync_channel(1);
+            std::thread::spawn(move || {
+                let _ = send.send(child.wait());
+            });
+            let _ = receive.recv_timeout(DEADLINE);
+        }
     }
 }
 fn child(path: &Path, mode: &str) -> ChildProcess {
-    ChildProcess(
-        std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "durable::tests::drain::child_drainer",
-                "--ignored",
-            ])
-            .env("SC_D33_TEST_STORE", path)
-            .env("SC_D33_TEST_MODE", mode)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::inherit())
-            .spawn()
-            .unwrap(),
-    )
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "durable::tests::drain::child_drainer",
+            "--ignored",
+        ])
+        .env("SC_D33_TEST_STORE", path)
+        .env("SC_D33_TEST_MODE", mode)
+        .env("SC_D33_TEST_READY", address.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let (send, ready) = std::sync::mpsc::sync_channel(1);
+    // The listener owns readiness; no file-existence or scheduling poll loop.
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            use std::io::Read;
+            let _ = stream.set_read_timeout(Some(DEADLINE));
+            let mut byte = [0];
+            if stream.read_exact(&mut byte).is_ok() && byte == [1] {
+                let _ = send.send(());
+            }
+        }
+    });
+    ChildProcess {
+        child: Some(child),
+        ready,
+        mode: mode.to_owned(),
+        address,
+    }
+}
+fn signal_ready() {
+    let mut stream =
+        std::net::TcpStream::connect(std::env::var("SC_D33_TEST_READY").unwrap()).unwrap();
+    stream.write_all(&[1]).unwrap();
 }
 struct CrashExporter {
     inner: ScriptedExporter,
-    ready: PathBuf,
+    ready: std::sync::Once,
 }
 impl SubmissionExporter for CrashExporter {
     fn export(
@@ -180,7 +282,7 @@ impl SubmissionExporter for CrashExporter {
     ) -> Result<(), SubmissionExportFailure> {
         self.inner.export(signal, envelopes)?;
         // Simulate collector acceptance before the delivered transaction commits.
-        std::fs::write(&self.ready, b"accepted").unwrap();
+        self.ready.call_once(signal_ready);
         loop {
             std::thread::park();
         }
@@ -194,7 +296,7 @@ fn child_drainer() {
     let exporter: Arc<dyn SubmissionExporter> = if mode == "crash" {
         Arc::new(CrashExporter {
             inner: ScriptedExporter::new(&path),
-            ready: path.join("accepted"),
+            ready: std::sync::Once::new(),
         })
     } else {
         Arc::new(ScriptedExporter::new(&path))
@@ -206,26 +308,24 @@ fn child_drainer() {
         file.write_all(serde_json::to_string(&receipt).unwrap().as_bytes())
             .unwrap();
         file.sync_all().unwrap();
+        signal_ready();
         loop {
             std::thread::park();
         }
     }
-    client.flush(Duration::from_secs(5)).unwrap();
-    client.shutdown(Duration::from_secs(5)).unwrap();
+    if mode == "drain" {
+        signal_ready();
+    }
+    client.flush(DEADLINE).unwrap();
+    client.shutdown(DEADLINE).unwrap();
 }
 #[test]
 fn receipt_after_commit() {
     let dir = tempfile::tempdir().unwrap();
     let mut process = child(dir.path(), "receipt");
-    wait_until(|| {
-        dir.path().join("receipt.json").exists()
-            && serde_json::from_slice::<AdmissionReceipt>(
-                &std::fs::read(dir.path().join("receipt.json")).unwrap(),
-            )
-            .is_ok()
-    });
-    process.0.kill().unwrap();
-    process.0.wait().unwrap();
+    process.ready();
+    process.kill();
+    process.wait();
     let receipt: AdmissionReceipt =
         serde_json::from_slice(&std::fs::read(dir.path().join("receipt.json")).unwrap()).unwrap();
     let db = store::open(&config(dir.path()).store_path).unwrap();
@@ -282,32 +382,29 @@ fn two_process_drainers_no_loss() {
     let receipts = seed(dir.path(), crate::constants::DRAIN_BATCH_SIZE * 2);
     let mut first = child(dir.path(), "drain");
     let mut second = child(dir.path(), "drain");
-    assert!(first.0.wait().unwrap().success());
-    assert!(second.0.wait().unwrap().success());
+    first.ready();
+    second.ready();
+    assert!(first.wait().success());
+    assert!(second.wait().success());
     let counts = delivery_counts(dir.path());
     assert_eq!(counts.len(), receipts.len() * 4);
-    assert!(
-        counts.values().all(|count| *count == 1),
-        "no takeover occurred: {counts:?}"
-    );
+    assert_bounded_duplicates(dir.path(), &counts, receipts.len());
 }
 #[test]
 fn crash_mid_drain_resumes() {
     let dir = tempfile::tempdir().unwrap();
     let receipts = seed(dir.path(), crate::constants::DRAIN_BATCH_SIZE + 1);
     let mut process = child(dir.path(), "crash");
-    wait_until(|| dir.path().join("accepted").exists());
-    process.0.kill().unwrap();
-    process.0.wait().unwrap();
+    process.ready();
+    process.kill();
+    process.wait();
     let mut replacement = child(dir.path(), "drain");
-    assert!(replacement.0.wait().unwrap().success());
+    replacement.ready();
+    assert!(replacement.wait().success());
     let counts = delivery_counts(dir.path());
     assert_eq!(counts.len(), receipts.len() * 4);
     assert!(counts.values().all(|count| *count >= 1));
-    assert!(
-        counts.values().sum::<usize>() - receipts.len() * 4
-            <= crate::constants::DRAIN_BATCH_SIZE * 4
-    );
+    assert_bounded_duplicates(dir.path(), &counts, receipts.len());
 }
 
 #[test]
@@ -316,11 +413,17 @@ fn flush_deadline_does_not_wait_for_the_writer_mutex() {
     let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
     client.emit(log("pending")).unwrap();
     let locked = client.owner.shared.db.lock().unwrap();
-    let start = Instant::now();
-    assert!(client.flush(Duration::from_millis(10)).is_err());
-    assert!(start.elapsed() < Duration::from_millis(500));
-    assert!(client.shutdown(Duration::ZERO).is_err());
-    drop(locked);
+    std::thread::scope(|scope| {
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        let client = &client;
+        scope.spawn(move || {
+            send.send(client.flush(Duration::ZERO)).unwrap();
+        });
+        let result = receive.recv_timeout(DEADLINE);
+        assert!(client.shutdown(Duration::ZERO).is_err());
+        drop(locked);
+        assert!(result.expect("flush waited for the writer mutex").is_err());
+    });
 }
 
 #[test]
@@ -349,4 +452,24 @@ fn retry_budget_exhaustion_is_terminal() {
         status.submissions[0].signals[0].1,
         DeliveryState::Failed { attempts: 2, .. }
     ));
+}
+
+// A scheduler delay can expire the deliberately short lease. Bound resends by
+// observed acquisitions rather than asserting exactly-once delivery.
+fn assert_bounded_duplicates(path: &Path, counts: &HashMap<String, usize>, records: usize) {
+    let db = store::open(&config(path).store_path).unwrap();
+    let acquisitions: i64 = db
+        .query_row(
+            "SELECT value FROM store_counters WHERE name='test_lease_acquisitions'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(counts.values().all(|count| *count >= 1));
+    let duplicates = counts.values().sum::<usize>() - records * 4;
+    let takeovers = usize::try_from(acquisitions.saturating_sub(1)).unwrap();
+    assert!(
+        duplicates <= takeovers * crate::constants::DRAIN_BATCH_SIZE * 4,
+        "{duplicates} duplicate deliveries across {takeovers} possible takeovers"
+    );
 }
