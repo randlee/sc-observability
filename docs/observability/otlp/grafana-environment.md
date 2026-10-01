@@ -6,8 +6,9 @@ This is a setup harness, not evidence that the user account is usable. As of
 2026-09-30 UTC (config-agent report `01M3R4MK55FYNBJKV12BM6A7AZ`), the OTLP
 receiver, per-signal query URLs, tenant identifiers, credential references, and
 enabled Loki/Tempo/metrics stores were **not available**. `config-agent@hermes`
-owns account configuration with the user. No credential, stack URL, tenant, or
-token is stored in this repository.
+owns account configuration with the user. No credential, tenant, or token is
+stored in this repository; the nonsecret Grafana UI URL is recorded below as a
+reference.
 
 Config-agent's 2026-09-30 nonsecret readiness report identifies **Grafana
 Cloud** as the legacy target and expects HTTPS OTLP/HTTP ingestion plus Loki,
