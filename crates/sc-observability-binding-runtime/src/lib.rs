@@ -13,6 +13,10 @@ mod sync;
 #[cfg(test)]
 mod tests;
 mod timer;
+pub use constants::{
+    CALLBACK_REGISTRATION_CAPACITY, OPERATION_OBSERVER_CAPACITY, TAURI_DEFAULT_QUERY_TIMEOUT_MS,
+    TAURI_MAX_QUERY_TARGETS, TAURI_REDACTED_VALUE,
+};
 use coordinator::Coordinator;
 pub use operation::{CompletionSubscription, Operation, OperationState};
 use sc_observability_dto::{

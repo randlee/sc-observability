@@ -1,7 +1,7 @@
 //! Saved completion is independent of observer and callback ownership.
 use crate::{
     callback::{Dispatcher, Job, ObserverPermit},
-    constants::MAX_OBSERVATION_TIMEOUT,
+    constants::{MAX_OBSERVATION_TIMEOUT, OPERATION_OBSERVER_CAPACITY},
     error,
     sync::{Signal, lock},
     timer::TimerService,
@@ -126,7 +126,7 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
         self.inner
             .count
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
-                (n < 64).then_some(n + 1)
+                (n < OPERATION_OBSERVER_CAPACITY).then_some(n + 1)
             })
             .map_err(|_| error::waiters_full())?;
         Ok(ObserverPermit(self.inner.count.clone()))

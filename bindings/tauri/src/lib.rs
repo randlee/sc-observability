@@ -2,7 +2,10 @@
 //!
 //! The adapter owns neither logger configuration nor lifecycle. A host keeps
 //! its `CoreLoggerOwner`/`LogGuard` and passes only the shared backend here.
-use sc_observability_binding_runtime::HostLoggingBackend;
+use sc_observability_binding_runtime::{
+    HostLoggingBackend, TAURI_DEFAULT_QUERY_TIMEOUT_MS, TAURI_MAX_QUERY_TARGETS,
+    TAURI_REDACTED_VALUE,
+};
 use sc_observability_dto::{
     AdmissionDto, Failure, HealthRequest, LogEventDto, LogHealthDto, LogSnapshotDto, QueryRequest,
     TryLogRequest, WireEnvelope,
@@ -19,9 +22,6 @@ use std::{
 };
 
 const SCHEMA_VERSION: u32 = 1;
-const MAX_QUERY_TARGETS: usize = 64;
-const DEFAULT_QUERY_TIMEOUT_MS: u32 = 2_000;
-const REDACTED: &str = "[REDACTED]";
 
 /// Host-selected policy applied before any backend call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ impl AdapterPolicy {
                 "window and target allowlists must not be empty",
             ));
         }
-        if self.allowed_targets.len() > MAX_QUERY_TARGETS {
+        if self.allowed_targets.len() > TAURI_MAX_QUERY_TARGETS {
             return Err(invalid(
                 "policy.allowed_targets",
                 "target allowlist exceeds the query fan-out bound",
@@ -114,7 +114,7 @@ impl From<AdapterPolicy> for AdapterSettings {
     fn from(policy: AdapterPolicy) -> Self {
         Self {
             policy,
-            query_timeout_ms: DEFAULT_QUERY_TIMEOUT_MS,
+            query_timeout_ms: TAURI_DEFAULT_QUERY_TIMEOUT_MS,
         }
     }
 }
@@ -392,7 +392,7 @@ fn redact_value(value: &mut sc_observability_dto::ValueDto, keys: &BTreeSet<Stri
                     .any(|configured| normalize_field_key(configured) == normalize_field_key(key))
             {
                 *child = sc_observability_dto::ValueDto::String {
-                    value: REDACTED.to_owned(),
+                    value: TAURI_REDACTED_VALUE.to_owned(),
                 };
             } else {
                 redact_value(child, keys);
@@ -952,7 +952,7 @@ mod tests {
     fn query_target_count_is_bounded() {
         let policy = AdapterPolicy {
             allowed_window_labels: ["main".into()].into(),
-            allowed_targets: (0..=MAX_QUERY_TARGETS)
+            allowed_targets: (0..=TAURI_MAX_QUERY_TARGETS)
                 .map(|index| format!("app.{index}"))
                 .collect(),
             max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
@@ -1074,7 +1074,7 @@ mod tests {
                 value: [(
                     "password".to_owned(),
                     sc_observability_dto::ValueDto::String {
-                        value: REDACTED.to_owned(),
+                        value: TAURI_REDACTED_VALUE.to_owned(),
                     }
                 )]
                 .into_iter()

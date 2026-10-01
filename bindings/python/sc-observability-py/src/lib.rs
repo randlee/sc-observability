@@ -14,7 +14,9 @@ pub use sc_observability_binding_runtime::{
     BridgeControlBackend, CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation,
     OperationState,
 };
-use sc_observability_binding_runtime::{ProducerOrigin, create_core_backend};
+use sc_observability_binding_runtime::{
+    OPERATION_OBSERVER_CAPACITY, ProducerOrigin, create_core_backend,
+};
 #[cfg(feature = "test-hooks")]
 use sc_observability_binding_runtime::{TestWriterGate, create_test_blocking_core_backend};
 use sc_observability_dto::{
@@ -326,7 +328,7 @@ impl NativeObserverIdentity {
         use std::sync::atomic::Ordering;
         self.count
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                if count < 64 { Some(count + 1) } else { None }
+                (count < OPERATION_OBSERVER_CAPACITY).then_some(count + 1)
             })
             .ok()?;
         Some(NativeObserverPermit {
