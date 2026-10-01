@@ -88,6 +88,7 @@ fn canonical_failure(
 ///
 /// The legacy and canonical representations intentionally remain distinct so
 /// their JSON shapes stay lossless and backwards compatible.
+/// Returns `validate_diagnostic`'s validation failure when the diagnostic is invalid or oversized.
 pub fn failure_from_diagnostic(
     diagnostic: Diagnostic,
     classification: core::v2::FailureClassification,
@@ -244,6 +245,32 @@ mod export_projection_tests {
             assert_eq!(legacy_wire.get("cause"), None);
             assert_eq!(canonical_wire["cause"], "canonical-only cause");
         }
+    }
+
+    #[test]
+    fn failure_from_diagnostic_rejects_oversized_diagnostic() {
+        let mut oversized = diagnostic();
+        oversized.message = "x".repeat(MAX_DIAGNOSTIC_FIELD_BYTES + 1);
+
+        let failure = failure_from_diagnostic(oversized, core::v2::FailureClassification::Internal);
+
+        let Failure::Validation { diagnostic, field } = failure else {
+            panic!("oversized diagnostic should return a validation failure");
+        };
+        assert_eq!(
+            diagnostic.code,
+            error_codes::SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE
+        );
+        assert_eq!(field, "response.error");
+        assert_eq!(
+            diagnostic.remediation,
+            RemediationDto::Recoverable {
+                steps: vec![
+                    "Reduce remote diagnostic text or remediation steps to the documented bounds"
+                        .into()
+                ]
+            }
+        );
     }
 
     #[test]
