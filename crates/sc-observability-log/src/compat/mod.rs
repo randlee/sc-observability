@@ -855,8 +855,48 @@ mod tests {
                 }
                 _ => unreachable!("fixed table row"),
             }
+            let expected_display = match name {
+                "configuration logger" => {
+                    "sc-observability logger construction failed: SC_OBSERVABILITY_LOGGER_QUEUE_CAPACITY_INVALID fixture"
+                }
+                "runtime logger" => {
+                    "sc-observability logger construction failed: SC_OBSERVABILITY_LOGGER_RUNTIME_UNAVAILABLE fixture"
+                }
+                "runtime start" => {
+                    "could not start bridge lifecycle coordination: SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED fixture"
+                }
+                "identity resolution" => {
+                    "process identity resolution failed: SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED fixture"
+                }
+                "unknown runtime" => {
+                    "sc-observability logger construction failed: SC_OBSERVABILITY_LOG_NOT_RUNNING fixture"
+                }
+                _ => unreachable!("fixed table row"),
+            };
+            assert_eq!(error.to_string(), expected_display, "{name}");
             assert_root_contract!(error, code, remediation);
         }
+    }
+
+    #[test]
+    fn unknown_runtime_code_remains_released_logger() {
+        let remediation = Remediation::recoverable("repair logger configuration", ["retry"]);
+        let error = legacy_init(
+            sc_observability_types::v2::InitError::Runtime {
+                context: Box::new(context(
+                    "SC_OBSERVABILITY_LOG_NOT_RUNNING",
+                    remediation.clone(),
+                )),
+            },
+            LevelFilter::Info,
+            LevelFilter::Trace,
+        );
+        assert!(matches!(error, InitError::Logger { .. }));
+        assert_eq!(
+            error.to_string(),
+            "sc-observability logger construction failed: SC_OBSERVABILITY_LOG_NOT_RUNNING fixture"
+        );
+        assert_root_contract!(error, "SC_OBSERVABILITY_LOG_NOT_RUNNING", remediation);
     }
 
     #[test]
@@ -1016,6 +1056,17 @@ mod tests {
                 "helper lost" => assert!(matches!(error, FlushError::HelperLost { .. })),
                 _ => unreachable!("fixed table row"),
             }
+            let expected_display = match name {
+                "timeout" => "flush did not complete within 7ms",
+                "helper spawn" => {
+                    "could not start the flush helper thread: SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED fixture"
+                }
+                "helper lost" => {
+                    "the flush helper thread ended without a result: SC_OBSERVABILITY_LOG_HELPER_LOST fixture"
+                }
+                _ => unreachable!("fixed table row"),
+            };
+            assert_eq!(error.to_string(), expected_display, "{name}");
             assert_root_contract!(error, code, remediation);
         }
     }
@@ -1078,12 +1129,20 @@ mod tests {
                 }
                 _ => unreachable!("fixed table row"),
             }
+            let expected_display = match name {
+                "in progress" => "a previous flush is still running; no new flush was started",
+                "generic logger" => {
+                    "sc-observability flush failed: SC_OBSERVABILITY_LOGGER_FLUSH_FAILED fixture"
+                }
+                _ => unreachable!("fixed table row"),
+            };
+            assert_eq!(error.to_string(), expected_display, "{name}");
             assert_root_contract!(error, code, remediation);
         }
     }
 
     #[test]
-    fn released_control_flush_preserves_non_running_phase_at_the_adapter_boundary() {
+    fn synthetic_released_control_flush_preserves_non_running_phase_at_the_adapter_boundary() {
         struct RestoreStopped;
 
         impl Drop for RestoreStopped {
@@ -1093,10 +1152,11 @@ mod tests {
         }
 
         if !crate::handle::is_isolated_test_child(
-            "compat::tests::released_control_flush_preserves_non_running_phase_at_the_adapter_boundary",
+            "compat::tests::synthetic_released_control_flush_preserves_non_running_phase_at_the_adapter_boundary",
         ) {
             return;
         }
+        // Synthetic adapter probe; real producer coverage remains in handle.rs and shutdown_timeout.rs.
         let _restore = RestoreStopped;
         for (lifecycle, phase, message) in [
             (
@@ -1211,6 +1271,20 @@ mod tests {
                 }
                 _ => unreachable!("fixed table row"),
             }
+            let expected_display = match name {
+                "timeout" => "shutdown did not complete within 7ms",
+                "helper spawn" => {
+                    "could not start the shutdown helper thread: SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED fixture"
+                }
+                "final flush" => {
+                    "final flush failed; the logger was still shut down: SC_OBSERVABILITY_LOGGER_FLUSH_FAILED fixture"
+                }
+                "helper lost" => {
+                    "the shutdown helper thread ended without a result: SC_OBSERVABILITY_LOG_HELPER_LOST fixture"
+                }
+                _ => unreachable!("fixed table row"),
+            };
+            assert_eq!(error.to_string(), expected_display, "{name}");
             assert_root_contract!(error, code, remediation);
         }
     }
@@ -1250,8 +1324,32 @@ mod tests {
                 )),
                 _ => unreachable!("fixed table row"),
             }
+            let expected_display = match name {
+                "queue full" => "writer queue is full: SC_OBSERVABILITY_LOGGER_QUEUE_FULL fixture",
+                "not running" => "logger is not running: Failed",
+                _ => unreachable!("fixed table row"),
+            };
+            assert_eq!(error.to_string(), expected_display, "{name}");
             assert_root_contract!(error, code, remediation);
         }
+    }
+
+    fn assert_remaining_emit_display(name: &str, error: &EmitError) {
+        let expected_display = match name {
+            "invalid field" => "invalid field \"reserved.key\": field key uses a reserved prefix",
+            "invalid event" => "invalid event: SC_OBSERVABILITY_LOGGER_EVENT_INVALID fixture",
+            "writer degraded" => {
+                "writer is degraded: SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED fixture"
+            }
+            "shutdown timed out" => {
+                "logger shutdown timed out: SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT fixture"
+            }
+            "not installed" => "logger is not running: Stopped",
+            "reentrant" => "reentrant emission",
+            "panicked" => "logger callback panicked",
+            _ => unreachable!("fixed table row"),
+        };
+        assert_eq!(error.to_string(), expected_display, "{name}");
     }
 
     #[test]
@@ -1341,6 +1439,7 @@ mod tests {
                 "panicked" => assert!(matches!(error, EmitError::Panicked)),
                 _ => unreachable!("fixed table row"),
             }
+            assert_remaining_emit_display(name, &error);
             assert_root_contract!(error, code, remediation);
         }
     }
