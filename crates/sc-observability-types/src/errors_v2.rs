@@ -243,10 +243,25 @@ impl ProjectionError {
 context_error!(SubscriberError, Subscriber => crate::error_codes::DIAGNOSTIC_INVALID);
 
 impl SubscriberError {
+    /// Creates a subscriber failure with its native-owned wire classification.
+    #[must_use]
+    pub fn classified_subscriber(
+        mut context: Box<ErrorContext>,
+        classification: FailureClassification,
+    ) -> Self {
+        context.set_failure_classification(classification);
+        Self::Subscriber { context }
+    }
+
     /// Returns the native-owned wire failure classification.
     #[must_use]
     pub const fn failure_classification(&self) -> FailureClassification {
-        FailureClassification::Unavailable
+        match self {
+            Self::Subscriber { context } => match context.failure_classification() {
+                Some(classification) => classification,
+                None => FailureClassification::Unavailable,
+            },
+        }
     }
 }
 
@@ -700,6 +715,69 @@ mod tests {
                 serde_json::to_vec(&plain).expect("plain event serializes")
             );
             let decoded: EventError = serde_json::from_slice(&wire).expect("event deserializes");
+            assert_eq!(
+                decoded.failure_classification(),
+                FailureClassification::Unavailable
+            );
+            assert_eq!(decoded.diagnostic(), error.diagnostic());
+        }
+    }
+
+    #[test]
+    fn subscriber_classification_preserves_context_and_released_wire_contract() {
+        const fn subscriber_classification(error: &SubscriberError) -> FailureClassification {
+            error.failure_classification()
+        }
+
+        for classification in [
+            FailureClassification::Closed,
+            FailureClassification::QueueFull,
+        ] {
+            let context = Box::new(
+                ErrorContext::new(
+                    crate::error_codes::DIAGNOSTIC_INVALID,
+                    "subscriber registration failed",
+                    crate::Remediation::recoverable("retry registration", ["wait for capacity"]),
+                )
+                .source(Box::new(std::io::Error::other(
+                    "retained subscriber source",
+                ))),
+            );
+            let context_pointer = std::ptr::from_ref(context.as_ref());
+            let plain = SubscriberError::Subscriber {
+                context: context.clone(),
+            };
+            let error = SubscriberError::classified_subscriber(context, classification);
+
+            assert_eq!(subscriber_classification(&error), classification);
+            assert_eq!(
+                plain.failure_classification(),
+                FailureClassification::Unavailable
+            );
+            assert!(std::ptr::eq(error.context(), context_pointer));
+            assert_eq!(error.diagnostic(), plain.diagnostic());
+            assert!(std::ptr::eq(
+                std::error::Error::source(error.context()).expect("classified source retained"),
+                std::error::Error::source(plain.context()).expect("plain source retained"),
+            ));
+            assert_eq!(
+                std::error::Error::source(error.context())
+                    .expect("classified source retained")
+                    .to_string(),
+                "retained subscriber source"
+            );
+            assert_eq!(
+                error, plain,
+                "classification is not released equality state"
+            );
+            assert_eq!(error.clone().failure_classification(), classification);
+            let wire = serde_json::to_vec(&error).expect("classified subscriber serializes");
+            assert_eq!(
+                wire,
+                serde_json::to_vec(&plain).expect("plain subscriber serializes")
+            );
+            let decoded: SubscriberError =
+                serde_json::from_slice(&wire).expect("subscriber deserializes");
             assert_eq!(
                 decoded.failure_classification(),
                 FailureClassification::Unavailable

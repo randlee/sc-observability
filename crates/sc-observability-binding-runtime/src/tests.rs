@@ -1327,17 +1327,15 @@ fn d15_callback_fixture() {
         (
             crate::error::subscriber_closed("callback registration is closed"),
             dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
-            crate::conversion::Kind::Closed,
             "closed",
         ),
         (
             crate::error::subscriber_waiters_full("callback registration capacity is occupied"),
             dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-            crate::conversion::Kind::QueueFull,
             "queue_full",
         ),
     ];
-    for (error, code, kind, wire_kind) in cases {
+    for (error, code, wire_kind) in cases {
         assert_canonical_context(&error, code, 0);
         let registry = dto::error_codes::REGISTRY
             .iter()
@@ -1347,13 +1345,27 @@ fn d15_callback_fixture() {
             error.diagnostic().remediation,
             native::Remediation::recoverable(registry.remediation, std::iter::empty::<String>()),
         );
-        assert_failure(
-            Err::<(), _>(crate::conversion::canonical(&error, kind)),
-            code,
-            wire_kind,
-            None,
+        let dto_projection = dto::CanonicalFailureDto::try_from(&error)
+            .expect("native subscriber error projects into the canonical DTO");
+        let runtime_projection =
+            crate::conversion::canonical(&error, error.failure_classification());
+        assert_eq!(
+            serde_json::to_value(&runtime_projection).expect("runtime projection serializes"),
+            serde_json::to_value(dto_projection).expect("DTO projection serializes"),
+            "runtime conversion delegates the subscriber's native classification to the DTO helper"
         );
+        assert_failure(Err::<(), _>(runtime_projection), code, wire_kind, None);
     }
+
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> = pending(&backend);
+    stop(&owner);
+    assert_failure(
+        operation.subscribe(Box::new(|_| panic!("closed callback was retained"))),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+        "closed",
+        None,
+    );
     callback_bounds();
 }
 

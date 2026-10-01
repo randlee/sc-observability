@@ -52,13 +52,7 @@ pub(crate) fn admission(value: native::AdmissionOutcome) -> dto::AdmissionDto {
     }
 }
 pub(crate) fn core_admission(value: &native::v2::EventError) -> Failure {
-    let kind = match &value {
-        native::v2::EventError::Validation { .. } | native::v2::EventError::Routing { .. } => {
-            value.failure_classification()
-        }
-        _ => Kind::Internal,
-    };
-    canonical(value, kind)
+    canonical(value, value.failure_classification())
 }
 pub(crate) fn core_flush(error: native::v2::FlushError) -> (native::v2::FlushError, Kind) {
     let kind = error.failure_classification();

@@ -214,7 +214,9 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
                     }
                 }),
             )
-            .map_err(|(error, kind)| crate::conversion::canonical(&error, kind))?;
+            .map_err(|error| {
+                crate::conversion::canonical(&error, error.failure_classification())
+            })?;
         let id = self.inner.next.fetch_add(1, Ordering::SeqCst);
         {
             let mut observers = lock(&self.inner.observers);
