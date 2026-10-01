@@ -1,7 +1,11 @@
 import unittest
 from pathlib import Path
 
-from scripts.ci.boundary_policy import validate_first_party_dependencies
+from scripts.ci.boundary_policy import (
+    is_first_party_dependency,
+    validate_allowed_dependents,
+    validate_first_party_dependencies,
+)
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -14,7 +18,9 @@ CORE_MANIFESTS = {
     "sc-observability-log": "crates/sc-observability-log/Cargo.toml",
     "sc-observability-log-macros": "crates/sc-observability-log-macros/Cargo.toml",
     "sc-observability-log-consumer-check": "crates/sc-observability-log-consumer-check/Cargo.toml",
+    "sc-otel-cli": "crates/sc-otel-cli/Cargo.toml",
 }
+SC_OTEL_CLI_EDGES = {"sc-observability-types", "sc-observability-otlp"}
 
 
 class BoundaryPolicyTests(unittest.TestCase):
@@ -42,4 +48,39 @@ class BoundaryPolicyTests(unittest.TestCase):
                 ROOT,
                 "sc-observability-types",
                 {"sc-observability"},
+            )
+
+    def test_sc_otel_cli_is_first_party(self):
+        self.assertTrue(is_first_party_dependency("sc-otel-cli"))
+
+    def test_sc_otel_cli_forbidden_sc_observe_edge_is_rejected(self):
+        # cli.toml forbidden_edges: { from = "sc-otel-cli", to = "sc-observe" }.
+        with self.assertRaisesRegex(ValueError, r"forbidden edge.*sc-observe"):
+            validate_first_party_dependencies(
+                ROOT,
+                "sc-otel-cli",
+                SC_OTEL_CLI_EDGES | {"sc-observe"},
+            )
+
+    def test_sc_otel_cli_has_no_allowed_dependents(self):
+        # cli.toml allowed_dependents = [].
+        with self.assertRaisesRegex(
+            ValueError, "sc-observe is not an allowed dependent of sc-otel-cli"
+        ):
+            validate_allowed_dependents(
+                ROOT,
+                "sc-observe",
+                {"sc-observability", "sc-observability-types", "sc-otel-cli"},
+            )
+
+    def test_otlp_rejects_dependent_outside_allowed_dependents(self):
+        # otlp.toml allowed_dependents = ["sc-observability-py", "sc-otel-cli"].
+        with self.assertRaisesRegex(
+            ValueError,
+            "sc-observability is not an allowed dependent of sc-observability-otlp",
+        ):
+            validate_allowed_dependents(
+                ROOT,
+                "sc-observability",
+                {"sc-observability-types", "sc-observability-otlp"},
             )

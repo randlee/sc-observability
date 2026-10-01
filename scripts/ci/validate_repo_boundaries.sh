@@ -78,6 +78,7 @@ for package, manifest_path in {
     "sc-observability-log": root / "crates/sc-observability-log/Cargo.toml",
     "sc-observability-log-macros": root / "crates/sc-observability-log-macros/Cargo.toml",
     "sc-observability-log-consumer-check": root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+    "sc-otel-cli": root / "crates/sc-otel-cli/Cargo.toml",
 }.items():
     try:
         validate_first_party_dependencies(root, package, dependency_names(manifest_path))
@@ -142,6 +143,7 @@ shared_crate_roots = [
     root / "crates/sc-observability-log",
     root / "crates/sc-observability-log-macros",
     root / "crates/sc-observability-log-consumer-check",
+    root / "crates/sc-otel-cli",
 ]
 
 source_files = []

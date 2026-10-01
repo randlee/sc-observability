@@ -96,8 +96,22 @@ fn canonicalization_reports_precise_failure_classes() {
 }
 #[test]
 fn config_uses_only_allowed_sources_and_redacts_secrets() {
-    let mut file:TelemetryFileConfig=serde_json::from_str(r#"{"service":"file-service","otlp":{"endpoint":"http://file:4318","timeout_ms":20},"store":{"path":"store.db","max_bytes":1234,"disk_bound_policy":"evict_oldest","delivered_retention_hours":2},"auth_header":"ignored","backend":"open_telemetry_sdk"}"#).unwrap();
-    file.base_dir = "/tmp/config".into();
+    let mut file: TelemetryFileConfig = serde_json::from_value(serde_json::json!({
+        "service": "file-service",
+        "otlp": { "endpoint": "http://file:4318", "timeout_ms": 20 },
+        "store": {
+            "path": "store.db",
+            "max_bytes": 1234,
+            "disk_bound_policy": "evict_oldest",
+            "delivered_retention_hours": 2
+        },
+        "auth_header": "ignored",
+        "backend": "open_telemetry_sdk"
+    }))
+    .unwrap();
+    // Platform temp dir keeps the expected path native on every OS; nothing is written.
+    let base_dir = std::env::temp_dir().join("sc-otel-config");
+    file.base_dir = base_dir.clone();
     let env = |key: &str| match key {
         "OTEL_SERVICE_NAME" => Some("env-service".into()),
         "OTEL_EXPORTER_OTLP_ENDPOINT" => Some("http://env:4318".into()),
@@ -108,10 +122,7 @@ fn config_uses_only_allowed_sources_and_redacts_secrets() {
     let config = resolve_config(ConfigSources::new(&overrides, Some(&file), &env)).unwrap();
     assert_eq!(config.service_name, "file-service");
     assert_eq!(config.endpoint, "http://file:4318");
-    assert_eq!(
-        config.store_path,
-        std::path::PathBuf::from("/tmp/config/store.db")
-    );
+    assert_eq!(config.store_path, base_dir.join("store.db"));
     assert_eq!(config.request_timeout, std::time::Duration::from_millis(20));
     assert_eq!(config.max_store_bytes, 1234);
     assert_eq!(config.backend, ExporterBackendId::SyncHttp);
