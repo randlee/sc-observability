@@ -28,10 +28,10 @@ const REQUEST_FIXTURE_WATCHDOG: Duration = Duration::from_secs(2);
 const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 4_000;
 const STALLED_RETRY_REQUEST_TIMEOUT_MS: u64 = 4_000;
 const STALLED_RETRY_BACKOFF_MS: u64 = 2_500;
-const STALLED_RETRY_SERVER_WATCHDOG: Duration = Duration::from_secs(8);
+const STALLED_RETRY_SERVER_WATCHDOG: Duration = Duration::from_secs(20);
 const STALLED_RETRY_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
-const STALLED_RETRY_STEP_WATCHDOG: Duration = Duration::from_secs(4);
-const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(3);
+const STALLED_RETRY_STEP_WATCHDOG: Duration = Duration::from_secs(10);
+const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(10);
 const STALLED_RETRY_CLEANUP_WATCHDOG: Duration = Duration::from_secs(2);
 
 struct StartupFixture {
@@ -1266,6 +1266,32 @@ fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests()
     assert!(calls.load(Ordering::Relaxed) >= 2);
 }
 
+fn assert_stalled_retry_applied_timeouts(
+    first: Result<(u32, Duration, Duration), mpsc::RecvTimeoutError>,
+    second: Result<(u32, Duration, Duration), mpsc::TryRecvError>,
+) {
+    let configured_timeout = Duration::from_millis(STALLED_RETRY_REQUEST_TIMEOUT_MS);
+    let first = first.expect("first request timeout is observed");
+    assert_eq!(first.0, 0, "first request is attempt zero");
+    assert_eq!(
+        first.1,
+        configured_timeout.min(first.2),
+        "first request applies the minimum of configured and remaining timeout"
+    );
+
+    let second = second.expect("second request timeout is observed");
+    assert_eq!(second.0, 1, "stalled request is retry attempt one");
+    assert!(
+        second.2 < configured_timeout,
+        "retry has less sequence time remaining than the configured request timeout"
+    );
+    assert_eq!(
+        second.1,
+        configured_timeout.min(second.2),
+        "second request applies its same-attempt remaining timeout"
+    );
+}
+
 #[test]
 fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
@@ -1308,7 +1334,8 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
         }
     });
     let (delay_tx, delay_rx) = mpsc::channel();
-    let exporter = OtlpHttpExporter::for_endpoint_with_retry_timeout(
+    let (request_timeout_tx, request_timeout_rx) = mpsc::channel();
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry_timeout_observing_request_timeout(
         format!("http://{address}"),
         retry_policy(
             1,
@@ -1321,6 +1348,7 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
         STALLED_RETRY_REQUEST_TIMEOUT_MS,
         1,
         Some(delay_tx),
+        Some(request_timeout_tx),
     )
     .expect("construct exporter with equal request and sequence bounds");
     let (result_tx, result_rx) = mpsc::channel();
@@ -1329,18 +1357,15 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
         let _ = result_tx.send(result);
     });
 
-    assert_eq!(
-        delay_rx
-            .recv_timeout(STALLED_RETRY_STEP_WATCHDOG)
-            .expect("first retry enters the configured backoff"),
-        Duration::from_millis(STALLED_RETRY_BACKOFF_MS)
-    );
-    stalled_rx
-        .recv_timeout(STALLED_RETRY_STEP_WATCHDOG)
-        .expect("second request reaches the stalled collector");
+    let first_timeout = request_timeout_rx.recv_timeout(STALLED_RETRY_STEP_WATCHDOG);
+    let delay = delay_rx.recv_timeout(STALLED_RETRY_STEP_WATCHDOG);
+    let stalled_request = stalled_rx.recv_timeout(STALLED_RETRY_STEP_WATCHDOG);
+    // The server cannot observe this request until the actual timeout argument
+    // has been evaluated and sent through the exporter-local observer.
+    let second_timeout = request_timeout_rx.try_recv();
 
-    // This is a hang watchdog with room for the remaining sequence budget;
-    // the selected timeout is checked deterministically above.
+    // This watchdog only detects a hung export. The timeout policy assertion
+    // below observes the value passed at the real request application site.
     let timely_result = result_rx.recv_timeout(STALLED_RETRY_EXPORT_WATCHDOG);
     let _ = release_tx.send(());
     server
@@ -1358,9 +1383,15 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
     };
     export_thread.join().expect("join export worker");
 
+    assert_stalled_retry_applied_timeouts(first_timeout, second_timeout);
+    assert_eq!(
+        delay.expect("first retry enters the configured backoff"),
+        Duration::from_millis(STALLED_RETRY_BACKOFF_MS)
+    );
+    stalled_request.expect("second request reaches the stalled collector");
     assert!(
         completed_before_watchdog,
-        "stalled attempt must use the remaining sequence deadline, not the full request timeout"
+        "stalled export must complete before the hang watchdog"
     );
     assert!(matches!(
         result,

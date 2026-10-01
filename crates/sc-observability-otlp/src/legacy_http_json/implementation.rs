@@ -46,6 +46,17 @@ use crate::lifecycle::{LifecycleCore, LifecycleState, SignalKind};
 use sc_observability_types::v2::{ExportError, MetricRecord, TelemetryError};
 use sc_observability_types::{ErrorContext, LogEvent, Remediation, error_codes};
 
+macro_rules! observed_request_timeout {
+    ($config:expr, $attempt:expr, $timeout:expr, $remaining:expr) => {{
+        let timeout = $timeout;
+        #[cfg(test)]
+        if let Some(observer) = &$config.request_timeout_observer {
+            let _ = observer.send(($attempt, timeout, $remaining));
+        }
+        timeout
+    }};
+}
+
 // Preserve the existing sibling-test paths while sharing the payload module
 // with transport submission; no public or crate-private exporter API changes.
 pub(super) use super::payload::{build_logs_payload, log_record};
@@ -122,6 +133,8 @@ pub(crate) struct LegacyHttpJsonConfig {
     #[cfg(test)]
     retry_delay_observer: Option<Sender<Duration>>,
     #[cfg(test)]
+    request_timeout_observer: Option<Sender<(u32, Duration, Duration)>>,
+    #[cfg(test)]
     startup_hooks: Option<Arc<StartupTestHooks>>,
 }
 
@@ -171,6 +184,8 @@ impl LegacyHttpJsonConfig {
             jitter_seed: seed_from_os(),
             #[cfg(test)]
             retry_delay_observer: None,
+            #[cfg(test)]
+            request_timeout_observer: None,
             #[cfg(test)]
             startup_hooks: None,
         })
@@ -575,7 +590,12 @@ fn send_with_retries(
             .post(endpoint)
             .header(CONTENT_TYPE, "application/json")
             .body(body.to_owned())
-            .timeout(request_timeout)
+            .timeout(observed_request_timeout!(
+                config,
+                attempt,
+                request_timeout,
+                remaining
+            ))
             .send();
         match response {
             Ok(response) if response.status().is_success() => return Ok(()),
@@ -886,6 +906,25 @@ impl OtlpHttpExporter {
         jitter_seed: u64,
         retry_delay_observer: Option<Sender<Duration>>,
     ) -> Result<Self, ExportError> {
+        Self::for_endpoint_with_retry_timeout_observing_request_timeout(
+            endpoint,
+            retry,
+            request_timeout_ms,
+            jitter_seed,
+            retry_delay_observer,
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn for_endpoint_with_retry_timeout_observing_request_timeout(
+        endpoint: String,
+        retry: crate::config::LegacyRetryPolicy,
+        request_timeout_ms: u64,
+        jitter_seed: u64,
+        retry_delay_observer: Option<Sender<Duration>>,
+        request_timeout_observer: Option<Sender<(u32, Duration, Duration)>>,
+    ) -> Result<Self, ExportError> {
         let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
         config.enabled = true;
         config.timeout_ms = Some(request_timeout_ms.into());
@@ -897,6 +936,7 @@ impl OtlpHttpExporter {
         let (mut worker_config, bounds) = LegacyHttpJsonConfig::from_otel(&config)?;
         worker_config.jitter_seed = jitter_seed;
         worker_config.retry_delay_observer = retry_delay_observer;
+        worker_config.request_timeout_observer = request_timeout_observer;
         Ok(Self {
             backend: LegacyBackend::new(worker_config, &bounds)?,
             endpoint,
