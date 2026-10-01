@@ -94,6 +94,7 @@ name = "sc-observability-schema"
 version = "0.1.0"
 dependencies = [
  "sc-observability-dto",
+ "sc-observability-types",
  "schemars",
  "serde",
  "serde_json",

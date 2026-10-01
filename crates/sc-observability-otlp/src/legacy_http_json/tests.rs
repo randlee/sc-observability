@@ -5,8 +5,8 @@ use crate::config::LegacyRetryPolicy;
 use crate::contracts::{ExporterLifecycle, LogExporter};
 use crate::lifecycle::LifecycleState;
 use sc_observability_types::{
-    ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName,
-    TargetCategory, Timestamp,
+    ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, Remediation, SchemaVersion,
+    ServiceName, TargetCategory, Timestamp,
 };
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -33,6 +33,61 @@ const STALLED_RETRY_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const STALLED_RETRY_STEP_WATCHDOG: Duration = Duration::from_secs(10);
 const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(10);
 const STALLED_RETRY_CLEANUP_WATCHDOG: Duration = Duration::from_secs(2);
+
+#[test]
+fn legacy_error_remediations_preserve_diagnostics_and_match_failure_semantics() {
+    let cases = [
+        (
+            super::implementation::worker_terminated_error(),
+            sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED,
+            "legacy HTTP worker terminated",
+            Remediation::recoverable(
+                "restart the legacy HTTP exporter",
+                ["resubmit any batch that was not acknowledged"],
+            ),
+        ),
+        (
+            super::implementation::queue_full_error(),
+            sc_observability_types::error_codes::otlp::OTLP_QUEUE_FULL,
+            "legacy HTTP worker admission is full",
+            Remediation::recoverable(
+                "wait for legacy HTTP worker capacity",
+                ["retry the export after capacity is available"],
+            ),
+        ),
+        (
+            super::implementation::shutdown_cancelled_error(),
+            sc_observability_types::error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
+            "legacy retry was cancelled by shutdown",
+            Remediation::not_recoverable(
+                "the legacy HTTP exporter is shutting down and cannot retry this batch",
+            ),
+        ),
+        (
+            super::implementation::retry_deadline_error(),
+            sc_observability_types::error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED,
+            "legacy retry sequence exceeded its deadline",
+            Remediation::recoverable(
+                "restore collector availability before retrying the export",
+                ["increase the retry sequence deadline only when the delivery budget permits"],
+            ),
+        ),
+        (
+            super::implementation::non_retryable_status_error(400),
+            sc_observability_types::error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL,
+            "legacy collector returned terminal HTTP status 400",
+            Remediation::not_recoverable(
+                "correct the collector request, credentials, or endpoint before submitting a new batch",
+            ),
+        ),
+    ];
+
+    for (error, code, message, remediation) in cases {
+        assert_eq!(error.diagnostic().code, code);
+        assert_eq!(error.diagnostic().message, message);
+        assert_eq!(error.diagnostic().remediation, remediation);
+    }
+}
 
 struct StartupFixture {
     initialize: mpsc::Sender<()>,
