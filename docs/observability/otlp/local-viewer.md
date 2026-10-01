@@ -130,8 +130,12 @@ artifact passed a local isolated `ci`-subcommand lifecycle with run ID
 `d9-ci-query-final`, that all three empty protobuf requests returned HTTP 200,
 and that the gRPC listener was reachable. The isolated PID, database, and run
 directory were reported removed by the harness. Raw command output was not
-retained, so these results are owner-attested and not independently verifiable
-from this checkout.
+retained, so these owner-run results are attested only. The retained,
+reproducible verification is the CI job `desktop-viewer-factory-conformance`
+(macOS arm64) in `.github/workflows/otlp-conformance.yml`. It starts the pinned
+desktop viewer, runs both public factory tests (SDK and sync-http), and asserts
+the production logs, spans and metrics with `viewer_harness.py assert-production`.
+A passing run on macOS arm64 is run 36813560097.
 
 The managed launchd agent was reloaded by its owner to apply the requested
 five-minute post-login delay. During that intentional delay, a probe attempt
