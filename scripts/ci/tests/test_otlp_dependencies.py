@@ -12,6 +12,7 @@ from scripts.ci.otlp_dependencies import validate_composition_harness, validate_
 
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = "crates/sc-observability-otlp/Cargo.toml"
+CORE_BOUNDARY_MANIFEST = "boundaries/sc-observability/observability.toml"
 HARNESS = "tests/sc-observability-composition/Cargo.toml"
 SHELL_GATES = ("scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh")
 # validate_dependency_bans.sh runs this module; its child run skips the shell
@@ -229,13 +230,24 @@ class ShellGateIntegrationTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(cls.root)], check=True, timeout=60)
         (cls.root / ".git/objects/info/alternates").write_text(objects + "\n")
         cls.manifest = (cls.root / MANIFEST).read_text()
+        cls.core_boundary_manifest = (cls.root / CORE_BOUNDARY_MANIFEST).read_text()
 
     def setUp(self):
         self.addCleanup((self.root / MANIFEST).write_text, self.manifest)
+        self.addCleanup(
+            (self.root / CORE_BOUNDARY_MANIFEST).write_text,
+            self.core_boundary_manifest,
+        )
 
     def replace_manifest(self, before, after):
         self.assertIn(before, self.manifest)
         (self.root / MANIFEST).write_text(self.manifest.replace(before, after))
+
+    def replace_core_boundary_manifest(self, before, after):
+        self.assertIn(before, self.core_boundary_manifest)
+        (self.root / CORE_BOUNDARY_MANIFEST).write_text(
+            self.core_boundary_manifest.replace(before, after)
+        )
 
     def run_gate(self, script):
         env = {
@@ -282,6 +294,16 @@ class ShellGateIntegrationTests(unittest.TestCase):
     def test_collector_server_feature_fails_both_gates(self):
         self.replace_manifest('features = ["router"] }', 'features = ["router", "server"] }')
         self.rejects("OTLP dev-dependency tonic: effective features differ from policy")
+
+    def test_core_dependency_policy_is_loaded_from_its_boundary_manifest(self):
+        self.replace_core_boundary_manifest(
+            'allowed_dependencies = ["sc-observability-types"]',
+            "allowed_dependencies = []",
+        )
+        self.rejects(
+            "sc-observability first-party dependency drift: expected [], "
+            "found ['sc-observability-types']"
+        )
 
 
 if __name__ == "__main__":

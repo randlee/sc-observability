@@ -12,6 +12,7 @@ import sys
 import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
 sys.path.insert(0, str(Path('scripts/ci').resolve()))
+from boundary_policy import is_first_party_dependency, validate_first_party_dependencies
 from release_manifest import workspace_members
 from compatibility_registry import (
     validate_compatibility_source_boundary,
@@ -43,6 +44,19 @@ def section_deps(path: Path, section: str):
     data = load_toml(path)
     return set(data.get(section, {}).keys())
 
+def dependency_names(path: Path):
+    document = load_toml(path)
+    names = set()
+    for table in [document, *document.get("target", {}).values()]:
+        for section in ("dependencies", "build-dependencies", "dev-dependencies"):
+            for alias, declaration in table.get(section, {}).items():
+                specification = declaration if isinstance(declaration, dict) else {}
+                if specification.get("workspace"):
+                    specification = workspace["workspace"]["dependencies"].get(alias, {})
+                    specification = specification if isinstance(specification, dict) else {}
+                names.add(specification.get("package", alias))
+    return names
+
 workspace = load_toml(root / "Cargo.toml")
 artifacts = load_toml(root / "release/publish-artifacts.toml")
 required_manifests = {crate["cargo_toml"] for crate in artifacts["crates"]}
@@ -55,6 +69,21 @@ missing = sorted(path for path in required_manifests
 if missing:
     raise SystemExit(f"missing workspace members or standalone manifests: {missing}")
 
+for package, manifest_path in {
+    "sc-observability-types": root / "crates/sc-observability-types/Cargo.toml",
+    "sc-observability": root / "crates/sc-observability/Cargo.toml",
+    "sc-observe": root / "crates/sc-observe/Cargo.toml",
+    "sc-observability-otlp": root / "crates/sc-observability-otlp/Cargo.toml",
+    "sc-observability-dto": root / "crates/sc-observability-dto/Cargo.toml",
+    "sc-observability-log": root / "crates/sc-observability-log/Cargo.toml",
+    "sc-observability-log-macros": root / "crates/sc-observability-log-macros/Cargo.toml",
+    "sc-observability-log-consumer-check": root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+}.items():
+    try:
+        validate_first_party_dependencies(root, package, dependency_names(manifest_path))
+    except ValueError as error:
+        raise SystemExit(error) from error
+
 obs_deps = package_deps(root / "crates/sc-observability/Cargo.toml")
 observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
 observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
@@ -64,14 +93,18 @@ if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
 if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-required_otlp = {"serde_json", "thiserror", "sc-observability-types"}
+required_otlp = {"serde_json", "thiserror"}
 # ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
 sys.path.insert(0, str(root / "scripts/ci"))
 from otlp_dependencies import validate_composition_harness, validate_transport_dependencies
 transport_names = validate_transport_dependencies(root)
 validate_composition_harness(root)
-allowed_otlp = required_otlp | {"sc-observability"} | transport_names
-if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
+otlp_external_runtime_deps = {
+    dependency for dependency in otlp_runtime_deps
+    if not is_first_party_dependency(dependency)
+}
+allowed_otlp = required_otlp | transport_names
+if not required_otlp.issubset(otlp_external_runtime_deps) or not otlp_external_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependencies drifted from allowed baseline"
     )
@@ -270,3 +303,4 @@ PY
 
 python3 scripts/ci/validate_binding_runtime_dependencies.py
 PYTHONPATH=scripts/ci python3 -m unittest scripts/ci/test_binding_runtime_dependencies.py
+python3 -m unittest scripts.ci.tests.test_boundary_policy
