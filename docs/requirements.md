@@ -591,9 +591,9 @@ BTIT integration tests; current Phase D work also has no publication authority.
   CI runtime/action versions already adopted elsewhere in this repository.
   Phase C shall treat a `../sc-publish` revision with current, compatible
   action-runtime pins as a named execution prerequisite for the sprint that
-  installs the shared package, verified by an added workflow action-runtime
-  validation gate — not recorded as an accepted regression closed out by a
-  follow-up ticket.
+  installs the shared package, verified when adopting the reviewed upstream
+  revision — not recorded as an accepted regression closed out by a follow-up
+  ticket.
 
 ## 12. Phase D — Compatible 1.x Adoption
 
