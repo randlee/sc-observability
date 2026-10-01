@@ -40,6 +40,9 @@ fn telemetry_exit_code(error: &TelemetryClientError) -> u8 {
         TelemetryClientError::Delivery(DeliveryError::TerminalFailure { .. }) => {
             constants::EXIT_DELIVERY_FAILED
         }
+        // `TelemetryClientError` is non-exhaustive. A future shared variant has no
+        // CLI contract yet, so it must remain an internal failure until this table
+        // is explicitly extended rather than being misreported as another class.
         _ => constants::EXIT_INTERNAL,
     }
 }
