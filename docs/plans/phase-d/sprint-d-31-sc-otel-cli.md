@@ -3,7 +3,7 @@
 ## Plan metadata
 
 - Wave: 5.2 (wave-5 layer)
-- Stack / layer: `phase-d-wave5` stack, layer 4 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
+- Stack / layer: `phase-d-wave5` stack, layer 5 (d-29 → d-33 → d-34 → d-30 → d-31 → d-35 → d-32; wave-5 ruling R12)
 - Assignee / model: cobs / terra
 - Difficulty: `normal` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `boundary` (consumer)
@@ -12,26 +12,32 @@
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-31-sc-otel-cli`
 - PR target: `sprint/d-30-python-telemetry-bindings` (stack order only; no code dependency on d-30)
 - Blocked by: `obs-d-29-sanity`
-- Requirements: PHD-005, PHD-006, PHD-007, PHD-008, PHD-010, PHD-013
-- ADRs: ADR-018, ADR-019, ADR-021
+- Requirements: PHB-010, PHD-002, PHD-003, PHD-005, PHD-006, PHD-007, PHD-008, PHD-010, PHD-013
+- ADRs: ADR-002, ADR-005, ADR-009, ADR-012, ADR-014, ADR-018, ADR-019, ADR-020, ADR-021
 - Owned paths:
   - `crates/sc-otel-cli/src/**`
   - `crates/sc-otel-cli/tests/**`
-  - `docs/plans/phase-d/sprint-d-31-sc-otel-cli.md`
-- Not owned: `crates/sc-otel-cli/Cargo.toml` and `boundaries/sc-otel-cli/**`
-  (d-29).
+
+Ownership notes: `crates/sc-otel-cli/src/main.rs` is staged by d-29 and owned
+by d-31 from wave 5.2. Not owned: `crates/sc-otel-cli/Cargo.toml` and
+`boundaries/sc-otel-cli/**` (d-29).
 
 ## Relations
 
 - `must_follow` d-29: consumes the `sc-otel-cli` skeleton and manifest
   (dependencies `clap` and `serde_json` included; none is added here), the
   `TelemetryClient` trait with `flush_submission` and the flush result rules,
-  `SubmissionEnvelope::from_json`, `resolve_config`, `load_telemetry_file`
-  (for `--config`), the CLI contract (subcommand and flag table, exit-code
+  `SubmissionEnvelope::from_json`, `SystemIds`, the cross-crate
+  constructors, `resolve_config`, the `load_telemetry_file` signature (for
+  `--config`; d-33 implements its body, and d-31 tests only that `--config`
+  reaches it), the CLI contract (subcommand and flag table, exit-code
   table), the `sc-otel.result/v1` schema, `InMemoryTelemetryClient`,
   `DoubleScript` and the golden fixtures.
 - Sibling note (prose only; the bead relation is `must_follow` d-29): d-31,
-  d-33 and d-30 can run in parallel, because their owned paths are disjoint.
+  d-33, d-34 and d-30 can run in parallel, because their owned paths are
+  disjoint. The CLI's edges follow the linear order (ADR-002): it depends on
+  `sc-observability-types` and `sc-observability-otlp` only, and reads no ATM
+  environment variable or path (ADR-009).
 
 ## Goal
 
@@ -48,7 +54,8 @@ Ship the `sc-otel` binary as a thin consumer of the d-29 contract.
    `SubmissionEnvelope::from_json` as stdin. Default `emit` admits, then calls
    `flush_submission(receipt.submission_id, emit_flush_deadline)`;
    `--no-flush` only admits. [PHD-005, PHD-006, PHD-010]
-3. Implement the exit-code mapping in `crates/sc-otel-cli/src/exit.rs`
+3. Implement the exit-code mapping in `crates/sc-otel-cli/src/exit.rs`, with the
+   exit-code numbers in `crates/sc-otel-cli/src/constants.rs` (ADR-005)
    (`fn exit_code(&TelemetryClientError) -> u8`, per the d-29 table; the types
    crate carries no exit policy) and print the `sc-otel.result/v1` object on
    stdout (`--output json`, the default) or a one-line summary
@@ -86,6 +93,7 @@ are not restated here. This section covers only what d-31 writes.
 | `src/client.rs` | `open_client(config) -> Result<Box<dyn TelemetryClient>, TelemetryClientError>`. In release builds it opens `DurableTelemetryClient::open`. In `cfg(feature = "test-double")` builds it opens `InMemoryTelemetryClient::with_script` with the script read from `SC_OTEL_TEST_DOUBLE`, or `DoubleScript::default()` if the variable is unset. |
 | `src/run.rs` | `run(cli) -> Outcome` per subcommand (table below). |
 | `src/output.rs` | `ResultObject`, a serde struct with the schema fields and `schema = "sc-otel.result/v1"`. It writes JSON (`--output json`) or one text line, `<state> exit=<n>[ submission=<id>][ error=<code>]`. Only contract fields are printed, never the config, so `auth_header` (a `Secret`) cannot reach output. |
+| `src/constants.rs` | `EXIT_OK` … `EXIT_DELIVERY_FAILED` (0–7) and the `sc-otel.result/v1` schema string (ADR-005: the crate's one constants module). |
 | `src/exit.rs` | The exit-code mapping below. |
 
 ### clap command tree
@@ -151,17 +159,24 @@ CLI does no aggregation.
 ### Exit-code mapping (`src/exit.rs`)
 
 ```rust
+// src/constants.rs
 pub(crate) const EXIT_OK: u8 = 0;
 pub(crate) const EXIT_INTERNAL: u8 = 1;
 pub(crate) const EXIT_USAGE: u8 = 2;
+pub(crate) const EXIT_INVALID_INPUT: u8 = 3;
+pub(crate) const EXIT_CONFIG: u8 = 4;
+pub(crate) const EXIT_ADMISSION: u8 = 5;
+pub(crate) const EXIT_DELIVERY_PENDING: u8 = 6;
+pub(crate) const EXIT_DELIVERY_FAILED: u8 = 7;
 
+// src/exit.rs
 pub(crate) fn exit_code(error: &TelemetryClientError) -> u8 {
     match error {
-        TelemetryClientError::Submission(_) => 3,
-        TelemetryClientError::Config(_) => 4,
-        TelemetryClientError::Admission(_) => 5,
-        TelemetryClientError::Delivery(DeliveryError::DeadlineExceeded { .. }) => 6,
-        TelemetryClientError::Delivery(DeliveryError::TerminalFailure { .. }) => 7,
+        TelemetryClientError::Submission(_) => EXIT_INVALID_INPUT,
+        TelemetryClientError::Config(_) => EXIT_CONFIG,
+        TelemetryClientError::Admission(_) => EXIT_ADMISSION,
+        TelemetryClientError::Delivery(DeliveryError::DeadlineExceeded { .. }) => EXIT_DELIVERY_PENDING,
+        TelemetryClientError::Delivery(DeliveryError::TerminalFailure { .. }) => EXIT_DELIVERY_FAILED,
         // #[non_exhaustive]: an unmapped future variant is an internal error.
         _ => EXIT_INTERNAL,
     }
@@ -199,7 +214,9 @@ a unit test with one case per arm.
 - [ ] boundary:BOUNDARY-ScOtelCli (D1, D2): `tests/flags.rs` covers every
   flag in the d-29 CLI table, including `--stdin` with fragment flags
   rejected (exit 2), `--record-key`, repeated `--submission`, `@file`
-  fragments and a second `--profile` rejected.
+  fragments and a second `--profile` rejected. `--config <missing path>`
+  exits 4 with `SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE`, which holds for both
+  the d-29 staged loader and the d-33 implementation.
 - [ ] boundary:BOUNDARY-ScOtelCli: `cargo tree -p sc-otel-cli -e normal --depth 1 --prefix none --format '{p}'`
   lists exactly `sc-otel-cli`, `sc-observability-types`,
   `sc-observability-otlp`, `clap` and `serde_json`, and

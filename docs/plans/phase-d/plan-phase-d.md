@@ -6,7 +6,7 @@ Generated projection of `obs-phase-d`; beads are authoritative.
 
 ## Phase D — logging, OTLP, and Python distribution
 
-The plan has twenty dev sprints in waves 1–4 plus five wave-5 sprints (obs-d-29, obs-d-33, obs-d-30, obs-d-31, obs-d-32; see "Wave 5"), twenty-five in all. obs-d-12 is the types root; obs-d-21 consumes it as the OTLP contract stage. Types-only consumers release after obs-d-12-sanity, while obs-d-5–8 release after obs-d-21-sanity. obs-d-11 remains folded into obs-d-10. Beads are authoritative; documents project them. Concrete artifact gates determine execution; layer/pr_target records merge order only. One append-only phase stack targets integrate/phase-d for waves 1–4; wave 5 is its own stack on integrate/phase-d (wave-5 ruling R12).
+The plan has twenty dev sprints in waves 1–4 plus seven wave-5 sprints (obs-d-29, obs-d-33, obs-d-34, obs-d-30, obs-d-31, obs-d-35, obs-d-32; see "Wave 5"), twenty-seven in all. `sprints.jsonl` holds 34 graph entries: 27 before wave 5 (the twenty sprints plus d-22–d-28) and the seven wave-5 sprints. obs-d-12 is the types root; obs-d-21 consumes it as the OTLP contract stage. Types-only consumers release after obs-d-12-sanity, while obs-d-5–8 release after obs-d-21-sanity. obs-d-11 remains folded into obs-d-10. Beads are authoritative; documents project them. Concrete artifact gates determine execution; layer/pr_target records merge order only. One append-only phase stack targets integrate/phase-d for waves 1–4; wave 5 is its own stack on integrate/phase-d (wave-5 ruling R12).
 
 ## Sprint and wave table
 
@@ -33,10 +33,12 @@ The plan has twenty dev sprints in waves 1–4 plus five wave-5 sprints (obs-d-2
 | 3 | obs-d-18 | cobs/terra | must_follow | 19 | phase integration |
 | 4 | obs-d-9 | cobs/terra | must_follow | 20 | OTLP dual-path qualification |
 | 5.1 | obs-d-29 | aobs/astra | must_follow | wave-5 stack 1 | wave-5 telemetry submission contract (`sc_observability_types::otlp`) |
-| 5.2 | obs-d-33 | aobs/astra | must_follow | wave-5 stack 2 | sc-observability-otlp durable store and export |
-| 5.2 | obs-d-30 | cobs/terra | must_follow | wave-5 stack 3 | sc-observability-py telemetry bindings |
-| 5.2 | obs-d-31 | cobs/terra | must_follow | wave-5 stack 4 | sc-otel-cli |
-| 5.3 | obs-d-32 | cobs/terra | must_follow | wave-5 stack 5 | wave-5 composition (sanity telemetry e2e) |
+| 5.2 | obs-d-33 | aobs/astra | must_follow | wave-5 stack 2 | sc-observability-otlp durable store and drain |
+| 5.2 | obs-d-34 | cobs2/terra | must_follow | wave-5 stack 3 | sc-observability-otlp submission encoders |
+| 5.2 | obs-d-30 | cobs/terra | must_follow | wave-5 stack 4 | sc-observability-py telemetry bindings |
+| 5.2 | obs-d-31 | cobs/terra | must_follow | wave-5 stack 5 | sc-otel-cli |
+| 5.3 | obs-d-35 | cobs2/terra | must_follow | wave-5 stack 6 | sanity-history importer (`scripts/sanity-telemetry`) |
+| 5.3 | obs-d-32 | cobs/terra | must_follow | wave-5 stack 7 | wave-5 composition (telemetry e2e proof) |
 
 ## Boundary map and execution graph
 
@@ -64,6 +66,8 @@ Every sprint closes with `cargo check --workspace --all-features --locked` and `
 
 20 dev sprints and four numbered waves; numbered wave 1 has two dependency stages. Measured critical path is five dev sprints: obs-d-12 → obs-d-21 → obs-d-7 → obs-d-18 → obs-d-9 (sanity/plan-QA gates excluded). Do not label it four merely because both contracts are in wave 1. The scoped split releases seven direct types-contract consumers independently of OTLP work: obs-d-4/14/15/16/17/19/20; obs-d-17 also retains its logging-contract gate. obs-d-1/2/3 keep their existing logging-contract gates. Wave 2 has fourteen beads; maximum dependency-independent width remains fifteen with root obs-d-10 alongside released implementations. The useful gain is earlier release of types-only work, not a claimed shorter OTLP critical path.
 
+Including wave 5, measured over all 34 `sprints.jsonl` entries (sanity gates excluded), the critical path is five (for example d-22 → d-26 → d-29 → d-30 → d-35) and the maximum dependency-independent width is 22. Wave 5 alone has seven sprints in three waves, critical path three and width four; its wave table is in "Wave 5" and is not repeated here.
+
 ## Wave table
 
 | Wave | Bead | Assignee/model | Relation | Layer | Target boundary |
@@ -89,28 +93,32 @@ Every sprint closes with `cargo check --workspace --all-features --locked` and `
 | 3 | obs-d-18 | cobs/terra | must_follow | 19 | phase integration |
 | 4 | obs-d-9 | cobs/terra | must_follow | 20 | OTLP dual-path qualification |
 | 5.1 | obs-d-29 | aobs/astra | must_follow | wave-5 stack 1 | wave-5 telemetry submission contract (`sc_observability_types::otlp`) |
-| 5.2 | obs-d-33 | aobs/astra | must_follow | wave-5 stack 2 | sc-observability-otlp durable store and export |
-| 5.2 | obs-d-30 | cobs/terra | must_follow | wave-5 stack 3 | sc-observability-py telemetry bindings |
-| 5.2 | obs-d-31 | cobs/terra | must_follow | wave-5 stack 4 | sc-otel-cli |
-| 5.3 | obs-d-32 | cobs/terra | must_follow | wave-5 stack 5 | wave-5 composition (sanity telemetry e2e) |
+| 5.2 | obs-d-33 | aobs/astra | must_follow | wave-5 stack 2 | sc-observability-otlp durable store and drain |
+| 5.2 | obs-d-34 | cobs2/terra | must_follow | wave-5 stack 3 | sc-observability-otlp submission encoders |
+| 5.2 | obs-d-30 | cobs/terra | must_follow | wave-5 stack 4 | sc-observability-py telemetry bindings |
+| 5.2 | obs-d-31 | cobs/terra | must_follow | wave-5 stack 5 | sc-otel-cli |
+| 5.3 | obs-d-35 | cobs2/terra | must_follow | wave-5 stack 6 | sanity-history importer (`scripts/sanity-telemetry`) |
+| 5.3 | obs-d-32 | cobs/terra | must_follow | wave-5 stack 7 | wave-5 composition (telemetry e2e proof) |
 
 ## Wave 5: customer telemetry submission (Python and CLI)
 
 Wave 5 runs on `integrate/phase-d` as its own stack (ruling R12). Its
-sprints are d-29, d-33, d-30, d-31 and d-32. Deliverables, acceptance
+sprints are d-29, d-33, d-34, d-30, d-31, d-35 and d-32. Deliverables, acceptance
 criteria, owned paths and validation live only in the sprint docs:
 
 | Sprint | Doc |
 | --- | --- |
 | d-29 | [sprint-d-29-telemetry-submission-contract.md](sprint-d-29-telemetry-submission-contract.md) |
 | d-33 | [sprint-d-33-durable-store-and-export.md](sprint-d-33-durable-store-and-export.md) |
+| d-34 | [sprint-d-34-otlp-submission-encoders.md](sprint-d-34-otlp-submission-encoders.md) |
 | d-30 | [sprint-d-30-python-telemetry-bindings.md](sprint-d-30-python-telemetry-bindings.md) |
 | d-31 | [sprint-d-31-sc-otel-cli.md](sprint-d-31-sc-otel-cli.md) |
+| d-35 | [sprint-d-35-sanity-history-importer.md](sprint-d-35-sanity-history-importer.md) |
 | d-32 | [sprint-d-32-sanity-telemetry-e2e.md](sprint-d-32-sanity-telemetry-e2e.md) |
 
 This section holds the design rationale, the wave-5 boundary map, the wave
-table and the wave-5 lead rulings (R1–R17, P1–P6). Governing records are
-ADR-021 and PHD-005–013. Wave 5 adds five dev sprints to the twenty of
+table and the wave-5 lead rulings (R1–R20, P1–P6). Governing records are
+ADR-021 and PHD-005–013. Wave 5 adds seven dev sprints to the twenty of
 waves 1–4.
 
 ### Outcome
@@ -127,7 +135,7 @@ The sequence is fixed by the user. First, PR #788 (`feat/qa-sanity-telemetry-con
 which adds `.sc/telemetry.yaml`) and the wave-5 plan land in `develop`. Then `develop`
 merges into `integrate/phase-d`. Then wave 5 runs on `integrate/phase-d`.
 `.sc/telemetry.yaml` is therefore present on `integrate/phase-d` before
-d-29 dispatches. Its schema is specified in the d-32 doc.
+d-29 dispatches. Its schema is specified in the d-35 doc.
 
 What wave 5 consumes from the `integrate/phase-d` tree:
 
@@ -176,7 +184,7 @@ What wave 5 consumes from the `integrate/phase-d` tree:
   errors.
 - **Out of scope.** Dashboards, remote configuration, a general mapping DSL,
   a profiler, and Grafana testing. Customer field mapping lives in the
-  consumer (d-32 importer), not in the transport.
+  consumer (d-35 importer), not in the transport.
 - **Events and baggage.** Stats are metrics. Events are log records with
   `event_name`, or span events. Baggage is context, not a signal; it is not
   copied into attributes.
@@ -186,34 +194,40 @@ What wave 5 consumes from the `integrate/phase-d` tree:
 | Crate / manifest | Contract delta | `allowed_dependencies` / `allowed_dependents` edits |
 | --- | --- | --- |
 | `sc-observability-types` (`boundaries/sc-observability-types/types.toml`) | New module `otlp::signals`: `AnyValue` (with bytes and `StringIndex`), `AttributeKey`, `KeyValues`, `OtlpDouble` (NaN/±Inf), `Resource`, `InstrumentationScope`, `ResourceRecord<T>`, `TraceState`, `LogPoint`, `SpanPoint`, `MetricStream`/`MetricData` and the five point forms, `Exemplar`, profile dictionary and `Profile`; `From` conversions from existing types. New module `otlp::submission`: `SubmissionInput`, `SubmissionEnvelope` (with `version`), `RecordKey`, `SubmissionId`, `AdmissionReceipt`, `DeliveryStatus`, `StoreStatus`, `FlushReport`, the error enums and their codes, `TelemetryClientConfig`, `TelemetryFileConfig` and the precedence resolver, the `TelemetryClient` trait, the capability matrix types, and `InMemoryTelemetryClient` plus the conformance suite (new feature `test-double`). Both modules are declared in `src/otlp/mod.rs`, not `src/lib.rs`. One new optional dependency: `uuid` under `test-double` (d-29 "Dependency set"). | `allowed_dependents` += `sc-otel-cli`; `allowed_dependencies` += `uuid` (optional); `allowed_test_double_paths` += `crates/sc-observability-types/src/otlp/submission/testing/**` |
-| `sc-observability-otlp` (`boundaries/sc-observability-otlp/otlp.toml`) | New feature `durable-store` = [`sync-http`, `dep:rusqlite`, `dep:serde-saphyr`, `dep:uuid`]. New public module `durable` (`DurableTelemetryClient`, which implements `TelemetryClient`, and `load_telemetry_file`). The store schema DDL, the drain worker, and sync-http encoders for the new point forms and `/v1development/profiles`. Crate-private seams staged by d-29 (ruling R14). Dev-dependencies += `sc-observability-types[test-double]`, `tempfile`. | `allowed_dependents` += `sc-observability-py`, `sc-otel-cli`; `policy/otlp-transport.toml` += separate `[transport.rusqlite]` (`=0.40.2`, `["bundled"]`), `[transport.serde-saphyr]` (`=1.3.0`, `["deserialize"]`) and `[transport.uuid]` (`=1.26.1`, `["std", "v7"]`) rows, each default features off and backend `durable-store`; `[dev_dependencies]` += the two dev rows |
+| `sc-observability-otlp` (`boundaries/sc-observability-otlp/otlp.toml`) | New feature `durable-store` = [`sync-http`, `dep:rusqlite`, `dep:serde-saphyr`, `dep:uuid`]. New public module `durable` (`DurableTelemetryClient`, which implements `TelemetryClient`, and `load_telemetry_file`). The store schema DDL (d-29), the store and drain worker (d-33), and sync-http encoders for the new point forms and `/v1development/profiles` (d-34). Crate-private seams staged by d-29, including the `SubmissionExporter` seam where d-33 and d-34 meet (rulings R14, R20). Dev-dependencies += `sc-observability-types[test-double]`, `tempfile`. | `allowed_dependents` += `sc-observability-py`, `sc-otel-cli`; `policy/otlp-transport.toml` += separate `[transport.rusqlite]` (`=0.40.2`, `["bundled"]`), `[transport.serde-saphyr]` (`=1.3.0`, `["deserialize"]`) and `[transport.uuid]` (`=1.26.1`, `["std", "v7"]`) rows, each default features off and backend `durable-store`; `[dev_dependencies]` += the two dev rows |
 | `sc-observability-py` (`boundaries/sc-observability-py/python.toml`) | New `otlp-telemetry` Cargo feature = [`dep:sc-observability-otlp`, `sc-observability-otlp/durable-store`]; `test-hooks` += `sc-observability-types/test-double`. New Python `sc_observability.telemetry` module. Release wheels enable the feature through `[tool.maturin] features`. | `allowed_dependencies` += `sc-observability-otlp` |
 | `sc-otel-cli` (new; `boundaries/sc-otel-cli/cli.toml`) | Binary `sc-otel`: `emit`, `validate`, `flush`, `status`. Exit-code table and JSON output schema `sc-otel.result/v1`. Workspace member with `publish = false`; feature `test-double`. | `allowed_dependencies` = [`sc-observability-types`, `sc-observability-otlp`, `clap`, `serde_json`]; `forbidden_edges` = [`sc-observe`, `pyo3`, `agent-team-mail-*`]; `allowed_dependents` = [] |
-| `scripts/sanity-telemetry/` (not a crate) | Python importer that consumes the installed `sc_observability.telemetry` API. | none (Python package dependency only) |
+| `scripts/sanity-telemetry/` (not a crate) | Python importer (d-35) that consumes the installed `sc_observability.telemetry` API. | none (Python package dependency only) |
 
 ### Wave-5 wave table
 
-One track. Wave 5 is its own gh stack, `phase-d-wave5`, on `integrate/phase-d` (ruling R12), ordered d-29 → d-33 → d-30 → d-31 → d-32 as layers 1–5.
+One track. Wave 5 is its own gh stack, `phase-d-wave5`, on `integrate/phase-d` (ruling R12), ordered d-29 → d-33 → d-34 → d-30 → d-31 → d-35 → d-32 as layers 1–7. Each layer's `pr_target` is the branch of the layer below; d-29 targets `integrate/phase-d`.
 
 | Wave | Sprint | Closure | Target boundary | Owned paths (summary; sprint doc is authoritative) |
 | --- | --- | --- | --- | --- |
-| 5.1 | d-29 | contract | `BOUNDARY-ScObservabilityTypes` (wave-5 contract in `sc_observability_types::otlp`) | `crates/sc-observability-types/src/otlp/**`, `crates/sc-observability-types/Cargo.toml` (feature only), its `otlp_*` tests and fixtures, `crates/sc-otel-cli/Cargo.toml`, stubbed `crates/sc-otel-cli/src/main.rs`, `Cargo.toml`, `Cargo.lock`, `policy/otlp-transport.toml`, `boundaries/**` wave-5 rows, `crates/sc-observability-otlp/Cargo.toml`, `crates/sc-observability-otlp/src/lib.rs` (one registration hunk), the staged `durable/` stubs, `schema.sql` and `config_file.rs`, the crate-private seam hunks (`lifecycle.rs`, one `contracts.rs` line, `contracts/profiles.rs`, `contracts/credits.rs`), `tests/contract_*.rs`, `bindings/python/sc-observability-py/Cargo.toml`, `.github/workflows/telemetry-platforms.yml`, ADR-021/PHD text, the new API approval record |
-| 5.2 | d-33 | boundary (implementer) | `BOUNDARY-ScObservabilityOtlp` | `crates/sc-observability-otlp/src/durable/**` except `schema.sql`, `crates/sc-observability-otlp/src/sync_http/**`, `crates/sc-observability-otlp/tests/durable_*.rs`, `crates/sc-observability-otlp/tests/submission_*.rs`, `crates/sc-observability-otlp/tests/support/**`, the staging attributes on the d-29 seams |
-| 5.2 | d-30 | boundary (consumer) | `BOUNDARY-ScObservabilityPy` | `bindings/python/sc-observability-py/**` except `Cargo.toml` and `python/sc_observability/generated/**` (telemetry tests in `tests_telemetry/**`) |
+| 5.1 | d-29 | contract | `BOUNDARY-ScObservabilityTypes` (wave-5 contract in `sc_observability_types::otlp`) | `crates/sc-observability-types/src/otlp/**`, the types and otlp `src/error_codes.rs` and `src/constants.rs`, the types `Cargo.toml`, its `otlp_*` tests and fixtures, `crates/sc-otel-cli/Cargo.toml`, the staged `crates/sc-otel-cli/src/main.rs`, `Cargo.toml`, `Cargo.lock`, `policy/otlp-transport.toml`, `policy/deny-durable-store.toml`, the wave-5 `boundaries/**` rows, the otlp `Cargo.toml` and `src/lib.rs`, the staged `durable/` files and `schema.sql`, the crate-private seam files (`lifecycle.rs`, `contracts.rs`, `contracts/profiles.rs`, `contracts/submission.rs`, `contracts/credits.rs`, `sync_http/mod.rs`, `sync_http/submission.rs`), `tests/contract_*.rs`, `bindings/python/sc-observability-py/Cargo.toml`, ADR-021/PHD text, the new API approval record |
+| 5.2 | d-33 | boundary (implementer) | `BOUNDARY-ScObservabilityOtlp` | `crates/sc-observability-otlp/src/durable/**` (not `schema.sql`), `src/contracts/credits.rs`, `src/contracts/submission.rs`, `src/lifecycle.rs`, `tests/fixtures/telemetry_yaml/**`, `.github/workflows/telemetry-platforms.yml` |
+| 5.2 | d-34 | boundary (implementer) | `BOUNDARY-ScObservabilityOtlp` | `crates/sc-observability-otlp/src/sync_http/**`, `src/contracts/profiles.rs` |
+| 5.2 | d-30 | boundary (consumer) | `BOUNDARY-ScObservabilityPy` | `bindings/python/sc-observability-py/**` (not `Cargo.toml` or `python/sc_observability/generated/**`; telemetry tests in `tests_telemetry/**`) |
 | 5.2 | d-31 | boundary (consumer) | `BOUNDARY-ScOtelCli` | `crates/sc-otel-cli/src/**`, `crates/sc-otel-cli/tests/**` |
-| 5.3 | d-32 | integration | wave-5 composition | `scripts/sanity-telemetry/**`, `tests/telemetry-e2e/**`, `.github/workflows/telemetry-e2e.yml`, `.sc/telemetry.yaml`, the `.gitignore` line for `.sc/telemetry-state/`, `docs/telemetry-submission.md` |
+| 5.3 | d-35 | boundary (consumer) | `scripts/sanity-telemetry` (PHD-011) | `scripts/sanity-telemetry/**`, `.github/workflows/sanity-telemetry.yml`, `.sc/telemetry.yaml`, `.gitignore` |
+| 5.3 | d-32 | integration | wave-5 composition | `tests/telemetry-e2e/**`, `.github/workflows/telemetry-e2e.yml`, `docs/telemetry-submission.md` |
 
-- Tracks: 1. Waves: 3. Critical path: 3 (d-29 → d-33 → d-32, or through
-  d-30 or d-31). Width: 3 (d-33 ∥ d-30 ∥ d-31). Sprint count: 5.
-- Edges: d-29 ← {d-26, d-28}; {d-33, d-30, d-31} ← d-29;
-  d-32 ← {d-30, d-31, d-33}. Every wave-5 bead's relation is `must_follow`
-  (its edge to its parent). The wave-5.2 sprints can run in parallel with
-  each other, because their owned paths are disjoint; that sibling
-  relationship is prose only, not a bead relation.
+- Tracks: 1. Waves: 3 (5.1: d-29; 5.2: d-33, d-34, d-30, d-31; 5.3: d-35,
+  d-32). Critical path: 3 (d-29 → d-30 → d-35, or d-29 → any 5.2 sprint →
+  d-32). Width: 4 (for example d-33 ∥ d-34 ∥ d-31 ∥ d-35, or the four
+  wave-5.2 sprints). Sprint count: 7.
+- Edges: d-29 ← {d-26, d-28}; {d-33, d-34, d-30, d-31} ← d-29; d-35 ← d-30;
+  d-32 ← {d-30, d-31, d-33, d-34}. d-35 is not in d-32's edges: d-32
+  consumes no importer output. Every wave-5 bead's relation is `must_follow`
+  (its edge to its parent). Sprints in the same wave can run in parallel,
+  because their owned paths are disjoint; that sibling relationship is prose
+  only, not a bead relation.
 - Difficulty (`docs/plans/phase-d/difficulty.csv`): d-29 hard, d-33 hard,
-  d-30 normal, d-31 normal, d-32 normal. Recommended agents: d-29 aobs/astra
-  (contract breadth), d-33 aobs/astra (store, lease and every encoder),
-  d-30, d-31 and d-32 cobs/terra.
+  d-34 normal, d-30 normal, d-31 normal, d-35 normal, d-32 normal.
+  Assignees: d-29 aobs/astra (contract breadth), d-33 aobs/astra (store,
+  lease and backpressure), d-34 cobs2/terra, d-30 cobs/terra, d-31
+  cobs/terra, d-35 cobs2/terra, d-32 cobs/terra.
 
 ### Lead rulings (2026-10-01)
 
@@ -229,7 +243,8 @@ These are lead decisions dated 2026-10-01 and are binding on the sprint docs.
   against the d-29 test double and golden fixtures (wave 5.2). d-32 is
   integration (wave 5.3). sprints.jsonl: d-29 keeps `["d-26","d-28"]`;
   d-30, d-31 and d-33 depend on `["d-29"]`; d-32 depends on
-  `["d-30","d-31","d-33"]`.
+  `["d-30","d-31","d-33"]`. Amended by R19: d-34 and d-35 are added and
+  d-32 depends on `["d-30","d-31","d-33","d-34"]`.
 - **R3 Contract placement.** Superseded by P1 below: shared submission
   contracts live in `sc_observability_types::otlp::submission`. Store, drain
   and export live in `sc-observability-otlp` behind the `durable-store`
@@ -254,10 +269,11 @@ These are lead decisions dated 2026-10-01 and are binding on the sprint docs.
   (D18) gate and the D9/viewer conformance gate over the wave-5 additions.
 - **R10 Proof.** Cross-front-end equivalence is in d-32. d-30 and d-31 assert
   against the d-29 golden fixtures. Per-variant encoding round trips with
-  loopback capture are in d-33. Viewer proof is automated readback; manual UI
+  loopback capture are in d-34 (R19). Viewer proof is automated readback; manual UI
   inspection is never proof.
 - **R11 Importer.** It has its own path `scripts/sanity-telemetry/**`,
   separate PHD-011 deliverables, a field mapping table and a checkpoint path.
+  It is its own sprint, d-35 (R19).
   Direct CLI emission is a named d-31 acceptance criterion.
 
 #### Lead rulings on the provisional choices (2026-10-01)
@@ -284,17 +300,17 @@ provisional choices.
   `rejected_by_disk_bound` and is shown in `StoreStatus`. `EvictOldest` is
   opt-in and also counted.
 - **P4 YAML parser.** `feat/qa-sanity-telemetry-config` adds
-  `.sc/telemetry.yaml` but no parser for it. The d-32 importer is Python and
+  `.sc/telemetry.yaml` but no parser for it. The d-35 importer is Python and
   uses the repository's existing PyYAML. The Rust config loader
   (`load_telemetry_file`, used by the CLI `--config` flag and Python
-  `Telemetry(config=...)`) uses `serde-saphyr =1.3.0` under `durable-store`,
+  `Telemetry.open(config=...)`; signature in d-29, body in d-33 per R20) uses `serde-saphyr =1.3.0` under `durable-store`,
   recorded in the d-29 dependency audit. `sc-observability-types` gets no
   YAML dependency.
 - **P5 Full payload support.** Every pinned v1.10.0 field is supported,
   including `string_value_strindex` and `key_strindex` (the profile
   dictionary forms) and non-finite doubles in the proto-JSON
   `"NaN"`/`"Infinity"`/`"-Infinity"` encoding, with round-trip tests in d-29
-  and d-33. `tracez.proto` is excluded as out of scope: it is zPages, not an
+  and d-34 (R19). `tracez.proto` is excluded as out of scope: it is zPages, not an
   OTLP payload.
 - **P6 Public API approval record.** d-29 prepares
   `docs/api-approvals/phase-d-wave5-telemetry-submission.json`, and the user
@@ -309,7 +325,7 @@ sprint docs.
 - **R12 One stack per wave.** Wave 5 is its own gh stack, `phase-d-wave5`,
   on `integrate/phase-d`. This amends, for phase D, the planning.md rule
   that a phase is one append-only stack: phase D uses one stack per wave.
-  Wave-5 layers are numbered 1–5 within the `phase-d-wave5` stack and do not
+  Wave-5 layers are numbered 1–7 (R19) within the `phase-d-wave5` stack and do not
   continue the waves 1–4 layer sequence. d-29 targets `integrate/phase-d`;
   each later layer targets the branch of the layer below. Beads carry
   `metadata.stack = "phase-d-wave5"`, so "two beads claim the same stack and
@@ -326,7 +342,9 @@ sprint docs.
   `durable::adapter::otel_config_from` signature. The one-line `contracts.rs`
   hunk (`pub(crate) mod profiles;`) is additive under the P2 merge-forward
   rule. `ExporterSet` is unchanged. The d-33 doc lists every crate-private
-  item d-33 may change.
+  item d-33 may change. Extended by R20 (`SubmissionExporter`, the two-line
+  `contracts.rs` hunk, `sync_http/submission.rs`; `wait_for_release` becomes
+  a signature only).
 - **R15 Dependency set.** d-29 commits every wave-5 dependency: exact pins
   `uuid =1.26.1` (`std`, `v7`), `rusqlite =0.40.2` (`bundled`),
   `serde-saphyr =1.3.0` (`deserialize`) and `clap =4.6.7` (`std`, `derive`,
@@ -335,21 +353,61 @@ sprint docs.
   the lease holder randomness; the holder ID is `<pid>:<uuid>`, with no
   hostname. `serde-saphyr` has its own transport row. `opentelemetry-proto
   =0.33.0` serde rejects proto-JSON non-finite strings outside
-  `ValueAtQuantile`, so d-33 decodes with its own proto-JSON reader. d-29
+  `ValueAtQuantile`, so d-34 decodes with its own proto-JSON reader (R19). d-29
   carries `cargo check --locked` criteria for every wave-5 graph.
 - **R16 No validator edits.** The validator scripts are not edited. The
   claim that they check the new manifests is removed. The `sc-otel-cli`
   edges are enforced by explicit `cargo tree` criteria in d-29 and d-31, and
   the `durable-store` binding by the named d-29 test `durable_store_binding`.
 - **R17 Platform, CI and public-surface proof.** Accepted as written by the
-  reviewer: d-29 adds the `workflow_dispatch` workflow
-  `telemetry-platforms.yml` (six targets) and d-30 dispatches
+  reviewer: d-33 adds the `workflow_dispatch` workflow
+  `telemetry-platforms.yml` (six targets; moved from d-29 by R20) and d-30 dispatches
   `b4a-python-distributions.yml`, each with a recorded run URL; d-32's
   `telemetry-e2e` triggers on `sprint/*` and `integrate/*`, D9 runs by
   dispatch on the d-32 head, and the D18 gate and cargo-deny run in Required
   validation with captured logs. The wave-5 public surface is frozen at d-29:
   the approval record holds per-crate `api_sha256` and `feature_api_sha256`
-  values, and d-33, d-30 and d-31 each prove their crates still match.
+  values, and d-33, d-34, d-30 and d-31 each prove their crates still match.
+
+#### Lead rulings, round 3 (2026-10-01)
+
+These are lead decisions on the quality-mgr plan review. They are binding on
+the sprint docs.
+
+- **R18 Python results, no ADR-014 amendment.** ADR-014 stands. The Python
+  telemetry surface returns tagged results for expected failures and never
+  raises for them: `TelemetryResult[T] = Ok[T] | TelemetryErr`, where
+  `TelemetryErr.error` is a `TelemetryFailure` (`kind`, `variant`, `code`,
+  `message`, `path`, `report`). The d-29 error enums map one-to-one to
+  tagged variants. `Telemetry.open(...)` returns a result; `__exit__` keeps
+  the shutdown result in `last_shutdown` and never raises (PHB-013,
+  PHD-009). Only programmer errors (`TypeError`, `ValueError`) raise. d-30
+  has no `TelemetryError` exception, and the d-35 importer and d-32 tests
+  branch on results.
+- **R19 Splits.** d-33 is the durable store, drain, lease and backpressure
+  (hard, aobs/astra). New d-34 is the OTLP/JSON encoders, `ProfileExporter`,
+  per-variant round trips with loopback capture and the proto-JSON reader
+  (normal, cobs2/terra), on paths disjoint from d-33's, `must_follow` d-29.
+  d-32 is the installed-front-end e2e proof, viewer readback, gate re-runs
+  and docs (normal, cobs/terra), `must_follow` d-30, d-31, d-33 and d-34.
+  New d-35 is the sanity-history importer at `scripts/sanity-telemetry/**`
+  (PHD-011; normal, cobs2/terra), `must_follow` d-30, tested against the
+  d-29 double through the d-30 `test-hooks` wheel. d-35 is not in d-32's
+  edges, because d-32 consumes no importer output. Stack order: d-29, d-33,
+  d-34, d-30, d-31, d-35, d-32, as layers 1–7.
+- **R20 d-29 vertical slice.** d-29 delivers contract artifacts only, each
+  consumed by a named wave-5.2 sprint (d-29 Goal). The non-contract work
+  moves to d-33: the `wait_for_release` body (d-29 keeps the signature), the
+  `load_telemetry_file` body and its fixture-YAML tests (d-29 keeps the
+  signature), and `telemetry-platforms.yml`. d-29 stages the crate-private
+  `SubmissionExporter` trait and `SubmissionExportFailure`
+  (`contracts/submission.rs`) and an unwired `SyncHttpSubmissionExporter`
+  whose `export` returns `Terminal` with
+  `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, so d-33 and d-34 run in
+  parallel and nothing reports false success. d-29 commits every wave-5
+  error code and constant in the crates' ADR-005 registries
+  (`src/error_codes.rs`, `src/constants.rs`). Owned paths are plain globs,
+  with qualifiers in prose, and no sprint doc lists its own doc as owned.
 
 References: [signals](https://opentelemetry.io/docs/concepts/signals/),
 [metric data model](https://opentelemetry.io/docs/specs/otel/metrics/data-model/),

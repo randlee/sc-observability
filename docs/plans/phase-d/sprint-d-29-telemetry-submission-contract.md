@@ -3,18 +3,18 @@
 ## Plan metadata
 
 - Wave: 5.1 (wave-5 contract)
-- Stack / layer: `phase-d-wave5` stack, layer 1 (d-29 → d-33 → d-30 → d-31 → d-32; wave-5 ruling R12)
+- Stack / layer: `phase-d-wave5` stack, layer 1 (d-29 → d-33 → d-34 → d-30 → d-31 → d-35 → d-32; wave-5 ruling R12)
 - Assignee / model: aobs / astra
 - Difficulty: `hard` (`docs/plans/phase-d/difficulty.csv`)
 - Closure: `contract`
 - Target boundary: `BOUNDARY-ScObservabilityTypes` (wave-5 contract: the neutral signal types and the submission contract in `sc_observability_types::otlp`)
-- vertical_rationale: "thin file-config loader is the contract's config entry point consumed by d-30 and d-31; schema.sql is contract DDL; the staged crate-private seams in sc-observability-otlp are the contract d-33 implements against (wave-5 ruling R14)". Criteria for this otlp work are rooted at `boundary:BOUNDARY-ScObservabilityOtlp`.
+- vertical_rationale: "contract artifacts only: schema.sql is contract DDL d-33 implements; the load_telemetry_file signature is the config entry point d-30 and d-31 call and d-33 implements; the staged crate-private seams in sc-observability-otlp (SubmissionExporter, ProfileExporter, SignalKind::Profiles, wait_for_release, otel_config_from, exporter_for) are where d-33 and d-34 meet; the codes and constants are the ADR-005 registries all four consume (wave-5 rulings R14, R20)". Criteria for this otlp work are rooted at `boundary:BOUNDARY-ScObservabilityOtlp`.
 - Branch: `sprint/d-29-telemetry-submission-contract`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-29-telemetry-submission-contract`
 - PR target: `integrate/phase-d` (base of the `phase-d-wave5` stack)
 - Blocked by: `obs-d-26-sanity`, `obs-d-28-sanity`
-- Requirements: PHD-002, PHD-003, PHD-004, PHD-005, PHD-006, PHD-007, PHD-008, PHD-009, PHD-010, PHD-013
-- ADRs: ADR-018, ADR-019, ADR-020, ADR-021
+- Requirements: PHB-010, PHD-001, PHD-002, PHD-003, PHD-004, PHD-005, PHD-006, PHD-007, PHD-008, PHD-009, PHD-010, PHD-011, PHD-012, PHD-013
+- ADRs: ADR-002, ADR-004, ADR-005, ADR-009, ADR-012, ADR-017, ADR-018, ADR-019, ADR-020, ADR-021
 - Owned paths:
   - `Cargo.toml`
   - `Cargo.lock`
@@ -24,31 +24,57 @@
   - `boundaries/sc-observability-otlp/otlp.toml`
   - `boundaries/sc-observability-py/python.toml`
   - `boundaries/sc-otel-cli/**`
-  - `crates/sc-observability-types/Cargo.toml` (feature `test-double` and the optional `uuid` line only)
+  - `crates/sc-observability-types/Cargo.toml`
+  - `crates/sc-observability-types/src/error_codes.rs`
+  - `crates/sc-observability-types/src/constants.rs`
   - `crates/sc-observability-types/src/otlp/**`
   - `crates/sc-observability-types/tests/otlp_signals_contract.rs`
   - `crates/sc-observability-types/tests/otlp_submission_contract.rs`
   - `crates/sc-observability-types/tests/fixtures/otlp_submission/**`
   - `crates/sc-observability-otlp/Cargo.toml`
-  - `crates/sc-observability-otlp/src/lib.rs` (one registration hunk only; see the d-18 note)
-  - `crates/sc-observability-otlp/src/contracts.rs` (one `pub(crate) mod profiles;` line only; see the d-18 note)
-  - `crates/sc-observability-otlp/src/contracts/profiles.rs` (new)
-  - `crates/sc-observability-otlp/src/contracts/credits.rs` (`wait_for_release` and its test only)
-  - `crates/sc-observability-otlp/src/lifecycle.rs` (`SignalKind::Profiles` hunk only)
-  - `crates/sc-observability-otlp/src/durable/mod.rs` (staged stub; handed off to d-33)
-  - `crates/sc-observability-otlp/src/durable/adapter.rs` (staged signature; handed off to d-33)
+  - `crates/sc-observability-otlp/src/lib.rs`
+  - `crates/sc-observability-otlp/src/constants.rs`
+  - `crates/sc-observability-otlp/src/error_codes.rs`
+  - `crates/sc-observability-otlp/src/contracts.rs`
+  - `crates/sc-observability-otlp/src/contracts/profiles.rs`
+  - `crates/sc-observability-otlp/src/contracts/submission.rs`
+  - `crates/sc-observability-otlp/src/contracts/credits.rs`
+  - `crates/sc-observability-otlp/src/lifecycle.rs`
+  - `crates/sc-observability-otlp/src/sync_http/mod.rs`
+  - `crates/sc-observability-otlp/src/sync_http/submission.rs`
+  - `crates/sc-observability-otlp/src/durable/mod.rs`
+  - `crates/sc-observability-otlp/src/durable/adapter.rs`
+  - `crates/sc-observability-otlp/src/durable/config_file.rs`
   - `crates/sc-observability-otlp/src/durable/schema.sql`
-  - `crates/sc-observability-otlp/src/durable/config_file.rs` (`.sc/telemetry.yaml` loader)
   - `crates/sc-observability-otlp/tests/contract_schema.rs`
   - `crates/sc-observability-otlp/tests/contract_manifest.rs`
   - `crates/sc-otel-cli/Cargo.toml`
-  - `crates/sc-otel-cli/src/main.rs` (staged stub; handed off to d-31)
+  - `crates/sc-otel-cli/src/main.rs`
   - `bindings/python/sc-observability-py/Cargo.toml`
-  - `.github/workflows/telemetry-platforms.yml` (new)
-  - `docs/architecture.md` (ADR-021, §6 rows, binding edges)
-  - `docs/requirements.md` (PHD-005–013)
-  - `docs/api-approvals/phase-d-wave5-telemetry-submission.json` (new file; see Closeout gate)
-  - `docs/plans/phase-d/sprint-d-29-telemetry-submission-contract.md`
+  - `docs/architecture.md`
+  - `docs/requirements.md`
+  - `docs/api-approvals/phase-d-wave5-telemetry-submission.json`
+
+Ownership notes:
+
+- `crates/sc-observability-types/Cargo.toml`: the `test-double` feature and
+  the optional `uuid` line only.
+- The four registry and constants files (`src/error_codes.rs` and
+  `src/constants.rs` in types and otlp): additive wave-5 entries only
+  (ADR-005).
+- `crates/sc-observability-otlp/src/lib.rs`: one registration hunk.
+  `src/contracts.rs`: two module lines. `src/sync_http/mod.rs`: one module
+  line. See the shared-file note under Relations.
+- `src/contracts/credits.rs`: the staged `wait_for_release` signature only.
+  `src/lifecycle.rs`: the `SignalKind::Profiles` hunk only.
+- Staged and handed off at d-29 sanity: `src/durable/mod.rs`,
+  `durable/adapter.rs`, `durable/config_file.rs` and
+  `src/contracts/submission.rs`'s attribute to d-33;
+  `src/sync_http/submission.rs` to d-34; `crates/sc-otel-cli/src/main.rs` to
+  d-31. `src/durable/schema.sql` stays d-29's contract DDL.
+- `docs/architecture.md`: ADR-021, the §6 rows and the binding edges.
+  `docs/requirements.md`: PHD-005–013. `docs/api-approvals/`: one new file
+  (see Closeout gate).
 
 ## Relations
 
@@ -57,15 +83,18 @@
   `TelemetryClientConfig` resolves into.
 - `must_follow` d-28: consumes the 1.x release/compat baseline that the
   additive public surface is checked against.
-- d-33, d-30 and d-31 `must_follow` d-29. They consume the `TelemetryClient`
-  trait, the envelope/receipt/error types, `schema.sql`, the staged
+- d-33, d-34, d-30 and d-31 `must_follow` d-29. They consume the
+  `TelemetryClient` trait, the envelope/receipt/error types, the codes and
+  constants, `schema.sql`, the `load_telemetry_file` signature, the staged
   crate-private seams, the dependency set, the test double and the golden
-  fixtures.
+  fixtures. d-35 and d-32 reach d-29 through d-30 and the d-30/d-31/d-33/d-34
+  edges.
 - Shared-file note: `crates/sc-observability-otlp/src/lib.rs`,
   `crates/sc-observability-otlp/src/contracts.rs` and `docs/api-approvals/**`
   are also in the in-flight d-18 fence. d-29 adds only
   `#[cfg(feature = "durable-store")] pub mod durable;` to `lib.rs`, only
-  `pub(crate) mod profiles;` to `contracts.rs`, and only one new file under
+  `pub(crate) mod profiles;` and `pub(crate) mod submission;` to
+  `contracts.rs`, and only one new file under
   `docs/api-approvals/`. If d-18 is unmerged, d-29 merges forward d-18's
   pushed head before every round. No DAG edge is added (lead ruling P2,
   wave-5 ruling R14). `lifecycle.rs` and `contracts/credits.rs` are outside
@@ -73,17 +102,35 @@
 
 ## Goal
 
-Fix every wave-5 interface before any implementation, so that d-33, d-30 and
-d-31 run in parallel without renegotiating. The signal types and envelope
-canonicalization are fully implemented here, because they are the contract
-both front ends must share. The crate-private seams d-33 builds on are staged
-here. The store, drain and export are not implemented.
+Fix every wave-5 interface before any implementation, so that d-33, d-34,
+d-30 and d-31 run in parallel without renegotiating.
+
+d-29 delivers contract artifacts only, each consumed by a named wave-5.2
+sprint:
+
+- The signal types and envelope canonicalization, fully implemented, because
+  the canonical JSON is what both front ends submit (d-30, d-31), what the
+  store holds (d-33) and what the encoders read back (d-34).
+- `schema.sql` and its versioning policy: the DDL d-33 implements.
+- The `load_telemetry_file` signature and `TelemetryFileConfig`: the config
+  entry point d-30 and d-31 call. d-33 implements the body.
+- The error codes and defaults in the ADR-005 registries, which all four
+  sprints use without adding entries.
+- The test double, `DoubleScript` and the conformance suite: d-30, d-31 and
+  d-35 test against the double, and d-33 runs the suite.
+- The staged crate-private seams in `sc-observability-otlp`: the d-33 drain
+  and the d-34 exporter meet at `SubmissionExporter`, so neither waits for
+  the other.
+
+No runtime behaviour is implemented here: the store, drain,
+`wait_for_release`, the loader body and the platform workflow are d-33's,
+and the OTLP/JSON export is d-34's (wave-5 ruling R20).
 
 ## Deliverables
 
 1. Pin the protocol: workspace `opentelemetry-proto = "=0.33.0"` (already
    pinned), which vendors upstream **opentelemetry-proto v1.10.0**. d-29 adds
-   no feature to it and no prost dependency to the sync-http path; d-33
+   no feature to it and no prost dependency to the sync-http path; d-34
    encodes OTLP/JSON by hand. Commit the field inventory below as the doc
    comment of `crates/sc-observability-types/src/otlp/signals/mod.rs`.
    [PHD-013]
@@ -100,7 +147,12 @@ here. The store, drain and export are not implemented.
    `from_input` canonicalization, receipts, status, the flush result rules,
    the error enums and their codes, `TelemetryClientConfig` with its per-field
    source table and precedence resolver, and the `TelemetryClient` trait.
-   [PHD-005, PHD-007, PHD-008, PHD-010]
+   The error enums are additive typed errors carrying `ErrorContext`
+   (ADR-012). Their codes go in `crates/sc-observability-types/src/error_codes.rs`
+   and are re-exported from `otlp::submission::error_codes`; the defaults in
+   the per-field source table are named constants in
+   `crates/sc-observability-types/src/constants.rs` (ADR-005).
+   [PHB-010, PHD-001, PHD-005, PHD-007, PHD-008, PHD-010]
 4. Add the `InMemoryTelemetryClient` test double with the `DoubleScript`
    scripted-outcome type, and the public conformance suite
    `testing::conformance::run_all` with its `ConformanceHarness` trait, behind
@@ -113,9 +165,12 @@ here. The store, drain and export are not implemented.
 5. Commit `crates/sc-observability-otlp/src/durable/schema.sql` and the
    versioning policy, plus the staged `durable/mod.rs` stub declaring
    `DurableTelemetryClient`. Its methods return
-   `AdmissionError::StoreUnavailable`, never `todo!()`. Implement
-   `durable/config_file.rs` in full: `load_telemetry_file`, which parses
-   `.sc/telemetry.yaml` with `serde-saphyr` into `TelemetryFileConfig`. Add
+   `AdmissionError::StoreUnavailable`, never `todo!()`. Stage
+   `durable/config_file.rs` with the `load_telemetry_file` signature and
+   `TelemetryFileConfig`: the stub returns
+   `TelemetryConfigError::ConfigFile { path }` for every path, so no caller
+   gets a partial config. d-33 implements the body and its fixture tests
+   (wave-5 ruling R20). Add
    `crates/sc-observability-otlp/tests/contract_schema.rs`, which loads
    `schema.sql` into an empty in-memory SQLite database.
    [PHD-007, PHD-008, PHD-010]
@@ -130,7 +185,8 @@ here. The store, drain and export are not implemented.
 7. Keep ADR-021, PHD-005–013 and the §6 rows consistent with any contract
    change made in this sprint. The normative text itself lands with the plan
    (wave-5 ruling R1); d-29 edits it only when a contract detail changes.
-   [PHD-002, PHD-003, PHD-013]
+   This covers the importer and e2e requirements PHD-011 and PHD-012 in
+   `docs/requirements.md`. [PHD-002, PHD-003, PHD-011, PHD-012, PHD-013]
 8. Add contract tests: `crates/sc-observability-types/tests/otlp_signals_contract.rs`
    and `crates/sc-observability-types/tests/otlp_submission_contract.rs`
    (golden fixtures, precedence, error codes, flush rules, scripted double,
@@ -140,24 +196,30 @@ here. The store, drain and export are not implemented.
    reports and a `feature_api_sha256` map for the wave-5 features. This
    freezes the wave-5 public surface (wave-5 ruling R17). The user signs it at
    d-29 closeout. [PHD-002]
-10. Stage the crate-private seams in `sc-observability-otlp` that d-33 builds
-    on (wave-5 ruling R14), as specified in "Crate-private seams" below:
-    `SignalKind::Profiles`, the `ProfileExporter` trait, the
-    `AdmissionCredits::wait_for_release` hook and the
-    `durable::adapter::otel_config_from` signature. [PHD-004, PHD-013]
-11. Add `.github/workflows/telemetry-platforms.yml` (`workflow_dispatch`
-    only), which checks the `durable-store` graph and builds `sc-otel` on all
-    six platform targets. [PHD-003, PHD-013]
+10. Stage the crate-private seams in `sc-observability-otlp` that d-33 and
+    d-34 build on (wave-5 rulings R14, R20), as specified in "Crate-private
+    seams" below: `SignalKind::Profiles`, the `ProfileExporter` trait, the
+    `SubmissionExporter` trait and `SubmissionExportFailure`, the
+    `AdmissionCredits::wait_for_release` signature, the
+    `durable::adapter::otel_config_from` signature, the staged
+    `SyncHttpSubmissionExporter` and `exporter_for`, and the wave-5 otlp
+    constants and the `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED` code
+    in otlp `src/constants.rs` and `src/error_codes.rs` (ADR-005). The
+    crate-private items stay out of the public surface (ADR-004: OTel types
+    stay in `sc-observability-otlp`). [PHB-010, PHD-004, PHD-013]
 
 ## This Sprint Does Not Close
 
-- The store, drain, lease, export and per-variant OTLP encoding. d-33 owns
-  them.
+- The store, drain, lease, backpressure (`wait_for_release` body), the
+  `load_telemetry_file` body and the platform workflow. d-33 owns them.
+- OTLP/JSON encoding, `ProfileExporter` and per-variant round trips. d-34
+  owns them.
 - Python bindings and the wheel feature in `pyproject.toml`. d-30 owns them.
 - CLI argument parsing, output and the exit-code mapping implementation.
   d-31 owns them.
-- Installed front-end submission, viewer readback, the sanity importer, and
-  the D18/D9 re-run. d-32 owns them.
+- The sanity-history importer. d-35 owns it.
+- Installed front-end submission, viewer readback and the D18/D9 re-run.
+  d-32 owns them.
 
 ## Design
 
@@ -194,7 +256,7 @@ Profiles are `opentelemetry.proto.profiles.v1development`, exported to
 | `profiles.Sample`, `ValueType`, `Mapping`, `Stack`, `Location`, `Line`, `Function`, `Link`, `KeyValueAndUnit` | all fields | same-named neutral structs |
 | any `double` field | NaN / ±Inf | `OtlpDouble` carries every IEEE-754 value, including NaN and ±Inf; see the non-finite policy |
 | `tracez.proto` | all | excluded — out of scope (lead ruling P5, 2026-10-01): zPages, not an OTLP payload |
-| `collector.*.Export*ServiceRequest/Response` | all | not neutral: built and parsed by the d-33 sync-http encoder |
+| `collector.*.Export*ServiceRequest/Response` | all | not neutral: built and parsed by the d-34 sync-http encoder |
 
 Enumerations: `SeverityNumber` 0–24, `SpanKind` including `Unspecified`, and
 `StatusCode::{Unset, Ok, Error}`. `AggregationTemporality::Unspecified` is
@@ -436,7 +498,7 @@ Outside a profiles payload they fail envelope validation with
 `string_table`.
 
 **bytes.** `AnyValue::Bytes` serializes as lowercase hex in the neutral JSON.
-d-33 encodes it as base64 `bytesValue` in OTLP/JSON. Profile IDs, trace IDs
+d-34 encodes it as base64 `bytesValue` in OTLP/JSON. Profile IDs, trace IDs
 and span IDs use the existing hex newtypes.
 
 ### Input value forms
@@ -717,8 +779,12 @@ impl Serialize for AdmissionReceipt, FlushReport, StoreStatus, DeliveryStatus,
 ### Errors and codes
 
 Every variant carries `context: Box<ErrorContext>`, matching the d-12
-pattern. The codes are new `ErrorCode::new_static` constants in
-`sc_observability_types::otlp::submission::error_codes`, plus an enumerable registry.
+pattern. The codes are new `ErrorCode::new_static` constants in the crate's
+registry module `crates/sc-observability-types/src/error_codes.rs`, plus an
+enumerable registry, re-exported as
+`sc_observability_types::otlp::submission::error_codes` (ADR-005). Defaults
+and limits named in this doc are constants in
+`crates/sc-observability-types/src/constants.rs`.
 
 ```rust
 #[non_exhaustive]
@@ -809,6 +875,7 @@ pub struct TelemetryFileConfig {
 }
 
 // crates/sc-observability-otlp/src/durable/config_file.rs (feature durable-store)
+// d-29 stages the signature (stub returns ConfigFile { path }); d-33 implements it.
 pub fn load_telemetry_file(path: &Path) -> Result<TelemetryFileConfig, TelemetryConfigError>;
 ```
 
@@ -835,9 +902,9 @@ Sources per field ("—" means that source cannot set the field):
 `serde-saphyr =1.3.0` (MIT OR Apache-2.0, MSRV 1.89), used only by
 `load_telemetry_file` under `durable-store`. `serde_yaml` is deprecated
 upstream. On `feat/qa-sanity-telemetry-config`, nothing parses
-`.sc/telemetry.yaml` yet; the d-32 Python importer reads `sources[]` with the
+`.sc/telemetry.yaml` yet; the d-35 Python importer reads `sources[]` with the
 repository's existing PyYAML (`yaml.safe_load`). Both the CLI `--config` flag
-and Python `Telemetry(config=...)` go through `load_telemetry_file`, so the
+and Python `Telemetry.open(config=...)` go through `load_telemetry_file`, so the
 Rust side needs its own parser (lead ruling P4).
 
 The keys read from telemetry.yaml are exactly the ones in the table. Every
@@ -934,8 +1001,8 @@ pub trait ConformanceHarness {
     /// A fresh client over an empty store (or a fresh double).
     fn open(&mut self) -> Self::Client;
     /// What the backend does with the next delivery attempt for `signal`.
-    /// The double scripts it; d-33 configures its loopback capture
-    /// (Deliver = 200, Fail = 400, Stall = no response before the deadline).
+    /// The double scripts it; d-33 configures its `ScriptedExporter`
+    /// (Deliver = Ok, Fail = Terminal, Stall = blocks past the deadline).
     fn set_outcome(&mut self, signal: Signal, outcome: DeliveryOutcome);
 }
 pub fn run_all<H: ConformanceHarness>(harness: &mut H);
@@ -1048,22 +1115,30 @@ Versioning policy:
 - Connections use `journal_mode=WAL`, `synchronous=FULL` and
   `busy_timeout=5000`.
 
-### Crate-private seams (staged for d-33)
+### Crate-private seams (staged for d-33 and d-34)
 
 d-29 stages these items in `sc-observability-otlp`, so that d-33 routes the
-drain through the existing sync-http bounded admission and adds profiles
-without editing unowned files or building a second queue (ADR-021). Each
-item that is unused until d-33 carries
-`#[expect(dead_code, reason = "staged by d-29; wired by d-33 under durable-store")]`.
-d-33 may change only the items listed in its doc.
+drain through the existing sync-http bounded admission, d-34 adds the
+OTLP/JSON export and profiles, and neither edits an unowned file or builds a
+second queue (ADR-021). The drain and the exporter meet only at
+`SubmissionExporter`, so d-33 and d-34 run in parallel. Each item that is
+unused until d-33 or d-34 wires it carries
+`#[expect(dead_code, reason = "staged by d-29; wired by d-33/d-34 under durable-store")]`.
+d-33 and d-34 may change only the items listed in their docs.
 
 | File | Item | d-29 change |
 | --- | --- | --- |
 | `src/lifecycle.rs` | `pub(crate) enum SignalKind` | Add `Profiles` (index 3). `LifecycleHealth.dropped_by_signal`/`degraded_by_signal` and the `CoreState` per-signal arrays grow from 3 to 4. `dropped_total()` keeps its meaning. Existing `lifecycle_tests.rs` pass unchanged. |
-| `src/contracts.rs` | module list | One line: `pub(crate) mod profiles;` (additive; d-18 fence, P2). `ExporterSet` is unchanged: it has nine construction sites, some inside the d-18 fence. |
-| `src/contracts/profiles.rs` (new) | `pub(crate) trait ProfileExporter<T>: Send + Sync { fn export_profiles(&self, batch: &[T]) -> Result<(), ExportError>; }` | Same shape as `LogExporter`/`TraceExporter`/`MetricExporter`. d-33 implements it for the sync-http exporter and holds it beside the `ExporterSet` in `DurableTelemetryClient`. |
-| `src/contracts/credits.rs` | `impl AdmissionCredits { pub(crate) fn wait_for_release(&self, timeout: Duration) -> bool; }` | Implemented in full: the budget gains a `Condvar`, `CreditLease::drop` notifies, and the call returns `true` when a release happened before `timeout`. Unit test `wait_for_release_wakes_on_lease_drop` (a second thread drops a lease after a barrier; no sleeps) and `wait_for_release_zero_timeout_returns_false`. |
+| `src/contracts.rs` | module list | Two lines: `pub(crate) mod profiles;` and `pub(crate) mod submission;` (additive; d-18 fence, P2). `ExporterSet` is unchanged: it has nine construction sites, some inside the d-18 fence. |
+| `src/contracts/profiles.rs` (new) | `pub(crate) trait ProfileExporter<T>: Send + Sync { fn export_profiles(&self, batch: &[T]) -> Result<(), ExportError>; }` | Same shape as `LogExporter`/`TraceExporter`/`MetricExporter`. d-34 implements it for the sync-http exporter, and `SyncHttpSubmissionExporter::export` dispatches profiles through it. |
+| `src/contracts/submission.rs` (new) | `pub(crate) trait SubmissionExporter: Send + Sync { fn export(&self, signal: Signal, envelopes: &[SubmissionEnvelope]) -> Result<(), SubmissionExportFailure>; }` and `pub(crate) enum SubmissionExportFailure { Retryable(ExportError), Terminal(ExportError) }` | The only call the d-33 drain makes. `Retryable` leaves the row for retry; `Terminal` marks it failed. d-33 tests through a `ScriptedExporter`; d-34 implements the production exporter. |
+| `src/contracts/credits.rs` | `impl AdmissionCredits { pub(crate) fn wait_for_release(&self, timeout: Duration) -> bool; }` | Signature only; the stub returns `false` (no release observed). d-33 implements it (the budget's `Condvar`, `CreditLease::drop` notification and their tests). |
+| `src/sync_http/mod.rs` | module list | One line: `#[cfg(feature = "durable-store")] pub(crate) mod submission;`. |
+| `src/sync_http/submission.rs` (new, staged) | `pub(crate) struct SyncHttpSubmissionExporter`, `pub(crate) fn exporter_for(config: SyncHttpConfig) -> Arc<dyn SubmissionExporter>` | `exporter_for` wraps the existing sync-http exporter. The staged `export` returns `SubmissionExportFailure::Terminal` with `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, so nothing reports false success before d-34 lands. d-34 implements it. |
 | `src/durable/adapter.rs` (staged) | `pub(crate) fn otel_config_from(config: &TelemetryClientConfig) -> Result<OtelConfig, TelemetryConfigError>;` | Signature only; the stub body returns `TelemetryConfigError::InvalidField { field: "otlp" }`. d-33 implements it and then calls the existing `SyncHttpConfig::from_otel(&OtelConfig)`. Mapping: `backend` → `ExporterBackend`, `endpoint`, `auth_header`, `request_timeout` → `timeout_ms`, `sync_http_retry` → `SyncHttpRetryPolicy` field for field. |
+| `src/durable/mod.rs` (staged) | `DurableTelemetryClient::open` | Evaluates `adapter::otel_config_from` and, on success, `exporter_for(SyncHttpConfig::from_otel(..))`, discards both and returns `AdmissionError::StoreUnavailable`, so neither staged function is dead code under `durable-store`. d-33 implements it. |
+| `src/constants.rs` | wave-5 entries | `DRAIN_BATCH_SIZE`, the lease renewal divisor, the store `busy_timeout` (5000 ms) and `PROFILES_EXPORT_PATH = "/v1development/profiles"` (ADR-005). |
+| `src/error_codes.rs` | wave-5 entries | `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, added to the crate's enumerable registry. |
 
 ### Dependency set
 
@@ -1101,21 +1176,21 @@ Per crate:
 
 Hand-rolled, with no dependency:
 
-- Base64 for `bytesValue`: a private RFC 4648 encoder in d-33's sync-http
+- Base64 for `bytesValue`: a private RFC 4648 encoder in d-34's sync-http
   encoder.
 - Lease holder ID: `<pid>:<uuid v7>` (`std::process::id()` plus `uuid`), no
   hostname.
-- OTLP/JSON decoding in d-33's round-trip tests: a d-33-owned proto-JSON
+- OTLP/JSON decoding in d-34's round-trip tests: a d-34-owned proto-JSON
   reader over `serde_json::Value` at
-  `crates/sc-observability-otlp/tests/support/proto_json.rs`. The
+  `crates/sc-observability-otlp/src/sync_http/submission/tests/proto_json.rs`. The
   `opentelemetry-proto =0.33.0` `with-serde` decoders accept `"NaN"`,
   `"Infinity"` and `"-Infinity"` only for `ValueAtQuantile.quantile` and
   `.value`; every other double (`asDouble`, histogram `sum`/`min`/`max`,
   `explicitBounds`, `doubleValue`, exemplars) rejects them, and the
   `AnyValue` decoder ignores `stringValueStrindex`. So no
   `opentelemetry-proto` dev-dependency is added.
-- Loopback HTTP capture: a d-33-owned `std::net::TcpListener` HTTP/1.1
-  server at `crates/sc-observability-otlp/tests/support/capture.rs`.
+- Loopback HTTP capture: a d-34-owned `std::net::TcpListener` HTTP/1.1
+  server at `crates/sc-observability-otlp/src/sync_http/submission/tests/capture.rs`.
 
 `policy/otlp-transport.toml` additions:
 
@@ -1177,8 +1252,8 @@ sprint's audit criterion and the d-32 re-run. It is retired once a
 workspace-wide cargo-deny config covers the same graphs.
 
 Platforms: linux x86_64 and aarch64, macOS x86_64 and arm64, windows x86_64
-and arm64 (the d-10 wheel target). `.github/workflows/telemetry-platforms.yml`
-is `workflow_dispatch` only, with input `source_commit`. Its matrix:
+and arm64 (the d-10 wheel target). `.github/workflows/telemetry-platforms.yml`,
+added by d-33 (wave-5 ruling R20), is `workflow_dispatch` only, with input `source_commit`. Its matrix:
 
 | Target | Runner |
 | --- | --- |
@@ -1240,23 +1315,32 @@ is proven by d-30 through `b4a-python-distributions.yml`.
   `scripted_stall_yields_deadline`, `scripted_fail_yields_terminal`,
   `flush_delay_applies_to_flush_and_shutdown` (elapsed ≥ the scripted delay),
   `double_script_json_round_trip` and `double_script_unknown_field_rejected`.
-- [ ] boundary:BOUNDARY-ScObservabilityOtlp (D5):
-  `cargo test -p sc-observability-otlp --features durable-store --locked --lib durable::config_file`
-  loads the committed `.sc/telemetry.yaml`. Its unit tests show that unknown
-  consumer keys (`team`, `github.*`, `sources[]`) are ignored, that a relative
-  `store.path` resolves against the file's directory, that `otlp.timeout_ms`
-  reaches `request_timeout`, and that malformed YAML returns
-  `TelemetryConfigError`.
+- [ ] boundary:BOUNDARY-ScObservabilityOtlp (D5): `load_telemetry_file` and
+  `TelemetryFileConfig` have the signatures in "Configuration and precedence", and the
+  staged body returns `TelemetryConfigError::ConfigFile { path }` without
+  reading the file. `durable/config_file.rs` has no YAML parsing and no test
+  (d-33 adds both, with fixture YAML).
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D5):
   `cargo test -p sc-observability-otlp --features durable-store --locked --test contract_schema`
   loads `schema.sql` into an empty in-memory SQLite database and asserts
   `user_version = 1` and the table and index set.
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D10): with `durable-store` and
   with default features, `cargo test -p sc-observability-otlp --locked --lib`
-  passes the existing lifecycle tests and the two `wait_for_release` tests.
-  `SignalKind::Profiles`, `ProfileExporter` and `otel_config_from` exist with
-  the signatures in "Crate-private seams", and the `contracts.rs` diff
-  against the d-29 base is exactly one added line.
+  passes the existing lifecycle tests. `SignalKind::Profiles`,
+  `ProfileExporter`, `SubmissionExporter`, `SubmissionExportFailure`,
+  `wait_for_release`, `SyncHttpSubmissionExporter`, `exporter_for` and
+  `otel_config_from` exist with the signatures in "Crate-private seams". The
+  diff against the d-29 base is exactly two added lines in `contracts.rs` and
+  one in `sync_http/mod.rs`. The staged `export` returns
+  `SubmissionExportFailure::Terminal` with
+  `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`.
+- [ ] boundary:ADR-005 (D3, D10): every new error code is defined in
+  `crates/sc-observability-types/src/error_codes.rs` or
+  `crates/sc-observability-otlp/src/error_codes.rs` and is listed in that
+  crate's registry; every new default and limit is defined in the matching
+  `src/constants.rs`.
+  `rg -n 'ErrorCode::new_static' crates/sc-observability-types/src/otlp crates/sc-observability-otlp/src/durable crates/sc-observability-otlp/src/sync_http crates/sc-observability-otlp/src/contracts`
+  finds nothing.
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D5, D6, D10):
   `cargo check --workspace --all-features --locked`,
   `cargo check -p sc-observability-otlp --features durable-store --tests --locked`,
@@ -1280,9 +1364,6 @@ is proven by d-30 through `b4a-python-distributions.yml`.
   `sc-otel-cli` nor `sc-observability-py` declares `tokio` directly, so no
   front end needs a caller-owned runtime (the runtime-free behavior itself is
   proven by d-31 and d-32).
-- [ ] boundary:ADR-021 (D11): `telemetry-platforms.yml` is dispatched on the
-  d-29 head SHA (`gh workflow run telemetry-platforms.yml --ref sprint/d-29-telemetry-submission-contract -f source_commit=<head>`),
-  all six cells pass, and the run URL is recorded in the PR body.
 - [ ] boundary:ADR-021 (D9): the approval file records, for each crate whose
   surface changes (`sc-observability-types`, `sc-observability-otlp`) and
   for `sc-observability-py`, the `api_sha256` from
@@ -1324,19 +1405,23 @@ python3 scripts/ci/validate_public_api.py diff --crate sc-observability-types --
 
 The user signs `docs/api-approvals/phase-d-wave5-telemetry-submission.json`
 (D9) before d-29 closes (lead ruling P6). This is a d-29 closeout gate, not a
-plan blocker: d-33, d-30 and d-31 may start from the sanity-passed contract
+plan blocker: d-33, d-34, d-30 and d-31 may start from the sanity-passed contract
 while the signature is pending. The recorded hashes freeze the wave-5 public
-surface: d-33, d-30 and d-31 each prove their crate's hashes still match
+surface: d-33, d-34, d-30 and d-31 each prove their crate's hashes still match
 (wave-5 ruling R17), and any public addition returns to d-29 as a contract
 change. d-32 re-runs the D18 gate against the signed record.
 
 ## Handoffs
 
-- To d-33 (wave 5.2): `crates/sc-observability-otlp/src/durable/mod.rs` and
-  `durable/adapter.rs`, staged by d-29 and owned by d-33 from wave 5.2, plus
-  the attribute lines on the staged seams listed in the d-33 doc.
-  `schema.sql` and `config_file.rs` stay read-only; a change to either is a
-  contract change routed to the lead.
+- To d-33 (wave 5.2): `crates/sc-observability-otlp/src/durable/mod.rs`,
+  `durable/adapter.rs` and `durable/config_file.rs`, staged by d-29 and owned
+  by d-33 from wave 5.2; the `wait_for_release` body in
+  `src/contracts/credits.rs`; and the staging attributes on
+  `SubmissionExporter` and `SignalKind::Profiles`. `schema.sql` stays
+  read-only; a change to it is a contract change routed to the lead.
+- To d-34 (wave 5.2): `crates/sc-observability-otlp/src/sync_http/submission.rs`
+  (and new files under `src/sync_http/submission/`), and the staging
+  attribute on `ProfileExporter`.
 - To d-31 (wave 5.2): `crates/sc-otel-cli/src/main.rs`, staged by d-29 and
   owned by d-31. `crates/sc-otel-cli/Cargo.toml` stays d-29's.
 - Wave-5.2 sprints add no dependency and do not edit any `Cargo.toml`,

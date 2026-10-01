@@ -1346,7 +1346,8 @@ was reworded accordingly to describe the remaining validation.
 ### ADR-021: Shared Customer Telemetry Submission and Durable Admission
 
 - **Status**: Accepted (lead decision 2026-10-01) for Phase D wave 5
-  (d-29 contract, d-33 store/export, d-30 Python, d-31 CLI, d-32 integration).
+  (d-29 contract, d-33 store and drain, d-34 OTLP/JSON encoders, d-30
+  Python, d-31 CLI, d-35 sanity importer, d-32 integration).
   The plan is the "Wave 5" section of `docs/plans/phase-d/plan-phase-d.md`; normative signatures are in
   `docs/plans/phase-d/sprint-d-29-telemetry-submission-contract.md`.
 - **Context**: Customer records must be mapped to telemetry. Python lacks a
@@ -1363,7 +1364,8 @@ was reworded accordingly to describe the remaining validation.
   `durable-store` feature (`DurableTelemetryClient`). Python
   (`otlp-telemetry` feature) and the `sc-otel` CLI (`sc-otel-cli`) depend on
   `sc-observability-types` and `sc-observability-otlp` and never encode OTLP
-  themselves. Customer-specific mapping
+  themselves. The Python surface returns tagged results for expected
+  failures and raises only for programmer errors (ADR-014). Customer-specific mapping
   stays in the consumer. New surface is added through new `#[non_exhaustive]`
   types; no released exhaustive enum gains a variant.
 - **Signals**: Logs, completed spans, metrics and profiles are all
@@ -1429,14 +1431,14 @@ was reworded accordingly to describe the remaining validation.
   `policy/deny-durable-store.toml`. The platform matrix is linux
   x86_64/aarch64, macOS x86_64/arm64, windows x86_64/arm64 and abi3-py310
   wheels on each. It is proven by the dispatched `telemetry-platforms.yml`
-  run (d-29, re-run by d-32) and the dispatched `b4a-python-distributions.yml`
+  run (d-33, re-run by d-32) and the dispatched `b4a-python-distributions.yml`
   run (d-30).
 - **Configuration**: One precedence contract applies per field: explicit
   value > telemetry.yaml > environment (`OTEL_EXPORTER_OTLP_ENDPOINT`,
   `OTEL_SERVICE_NAME`, `SC_OTEL_AUTH_HEADER`) > default. Credentials come
   only from explicit input or the environment. PR URL templates and source
   mapping are consumer configuration, which the core ignores.
-- **Verification**: d-33 proves each per-variant encoding by loopback
+- **Verification**: d-34 proves each per-variant encoding by loopback
   capture. d-30 and d-31 assert against the d-29 golden fixtures. d-32 proves
   stored-record readback from the installed front ends in the pinned
   `otel-desktop-viewer` v0.5.0, for logs, spans, gauge, sum and explicit
