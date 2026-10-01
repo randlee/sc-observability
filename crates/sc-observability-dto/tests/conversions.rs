@@ -48,6 +48,44 @@ fn decimal_domains_are_canonical() {
 }
 
 #[test]
+fn decimal_dto_failures_use_registered_boundary_diagnostics() {
+    let cases = [
+        (
+            DecimalDto::new("01").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL,
+            "Use a canonical base-10 integer with no leading zeros or negative zero",
+        ),
+        (
+            DecimalDto::new("-9223372036854775809").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW,
+            "Use a value within the signed 64-bit integer range",
+        ),
+        (
+            DecimalDto::new("18446744073709551616").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW,
+            "Use a value within the unsigned 64-bit integer range",
+        ),
+        (
+            DecimalDto::new("-1").unwrap().as_u64().unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED,
+            "Use a non-negative canonical integer for this counter",
+        ),
+    ];
+
+    for (error, code, remediation) in cases {
+        assert_eq!(error.code(), code);
+        let diagnostic = boundary_diagnostic(error.code(), error.to_string());
+        assert_eq!(diagnostic.code, code);
+        assert_eq!(
+            diagnostic.remediation,
+            RemediationDto::Recoverable {
+                steps: vec![remediation.into()],
+            }
+        );
+    }
+}
+
+#[test]
 fn json_number_projection_is_total_in_every_workspace_number_domain() {
     let value = json!({
         "signed": -1,
@@ -304,7 +342,7 @@ fn paths_keep_absence_and_non_unicode() {
 #[test]
 fn registry_has_unique_literals_and_exact_remediation() {
     let mut codes = std::collections::BTreeSet::new();
-    assert_eq!(error_codes::REGISTRY.len(), 18);
+    assert_eq!(error_codes::REGISTRY.len(), 22);
     assert!(
         error_codes::REGISTRY
             .iter()
@@ -425,7 +463,7 @@ fn all_stored_event_fields_and_trusted_output_survive() {
 }
 
 #[test]
-fn complete_health_projection_and_unsigned_wire_counters() {
+fn complete_health_projection_and_unsigned_wire_counters() -> Result<(), Failure> {
     let summary = core::DiagnosticSummary {
         code: None,
         message: "summary".into(),
@@ -460,14 +498,16 @@ fn complete_health_projection_and_unsigned_wire_counters() {
         }),
         last_error: Some(summary),
     };
-    let dto = from_core_health(
-        native,
-        core::LevelState {
-            configured_level: core::LevelFilter::Info,
-            effective_level: core::LevelFilter::Debug,
-            revision: u64::MAX,
-        },
-    );
+    let level = core::LevelState {
+        configured_level: core::LevelFilter::Info,
+        effective_level: core::LevelFilter::Debug,
+        revision: u64::MAX,
+    };
+    let released: fn(core::LoggingHealthReport, core::LevelState) -> Result<LogHealthDto, Failure> =
+        from_core_health;
+    let canonical = from_canonical_core_health(native.clone(), level);
+    let dto = released(native, level)?;
+    assert_eq!(dto, canonical);
     let mut value = serde_json::to_value(&dto).unwrap();
     assert_eq!(value["logging"].as_object().unwrap().len(), 14);
     assert_eq!(
@@ -486,6 +526,7 @@ fn complete_health_projection_and_unsigned_wire_counters() {
     );
     value["level_state"]["level_revision"] = json!("-1");
     assert!(serde_json::from_value::<LogHealthDto>(value).is_err());
+    Ok(())
 }
 
 #[test]

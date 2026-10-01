@@ -2037,3 +2037,335 @@ fn admitted_sdk_export_failure_reaches_public_health_once() {
         );
     });
 }
+
+/// Bounds the entire public-factory scenario, including exporter construction and cleanup.
+/// The parent owns and reaps the child even when a regression strands a worker thread.
+#[cfg(any(feature = "legacy-http-json", feature = "otlp-sdk"))]
+fn public_factory_scenario_child(name: &str) -> bool {
+    const CHILD_CASE: &str = "SC_OTLP_PUBLIC_FACTORY_CASE";
+    const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(30);
+    if std::env::var(CHILD_CASE).as_deref() == Ok(name) {
+        return true;
+    }
+    let mut child = std::process::Command::new(std::env::current_exe().expect("test executable"))
+        .args(["--exact", name, "--nocapture"])
+        .env(CHILD_CASE, name)
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn isolated public factory scenario");
+    let deadline = std::time::Instant::now() + WATCHDOG;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut output = String::new();
+                std::io::Read::read_to_string(
+                    &mut child.stdout.take().expect("captured child output"),
+                    &mut output,
+                )
+                .expect("read completed child output");
+                assert!(
+                    status.success(),
+                    "public factory scenario {name}: {status}\n{output}"
+                );
+                assert!(
+                    output.contains("test result: ok. 1 passed; 0 failed;"),
+                    "exactly one scenario must execute, not a zero-test success: {output}"
+                );
+                return false;
+            }
+            Ok(None) if std::time::Instant::now() < deadline => {
+                // Watchdog polling only; no functional assertion depends on this delay.
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("public factory scenario {name} exceeded watchdog: {result:?}");
+            }
+        }
+    }
+}
+
+#[cfg(any(feature = "legacy-http-json", feature = "otlp-sdk"))]
+fn public_flush_export_cause(
+    failure: &sc_observability_types::typed::FlushFailure,
+) -> &sc_observability_types::v2::ExportError {
+    use sc_observability_types::typed::{ClassifiedError, FlushFailureKind};
+    assert_eq!(failure.kind(), FlushFailureKind::TelemetryFlush);
+    let context = std::error::Error::source(failure).expect("flush context");
+    context
+        .source()
+        .and_then(|cause| cause.downcast_ref())
+        .expect("native typed exporter cause")
+}
+
+#[cfg(feature = "legacy-http-json")]
+#[test]
+fn public_legacy_factory_recovers_after_collector_unavailability() {
+    if !public_factory_scenario_child(
+        "public_legacy_factory_recovers_after_collector_unavailability",
+    ) {
+        return;
+    }
+    let reservation = TcpListener::bind("127.0.0.1:0").expect("reserve collector endpoint");
+    let address = reservation.local_addr().expect("endpoint");
+    drop(reservation);
+    let mut config = enabled_legacy_http_json_retry_config(address, 0);
+    config.transport.timeout_ms = 500_u64.into();
+    let telemetry = Telemetry::new_typed(config).expect("public legacy factory");
+    telemetry
+        .emit_log(&log_event(service_name(), "unavailable legacy"))
+        .expect("admission does not require an available collector");
+    let failure = telemetry
+        .flush_typed()
+        .expect_err("connection refusal reaches the flush barrier");
+    assert!(matches!(
+        public_flush_export_cause(&failure),
+        sc_observability_types::v2::ExportError::RetryAttemptsExhausted { .. }
+    ));
+    let failed = telemetry.health();
+    assert_eq!(failed.state, TelemetryHealthState::Degraded);
+    assert_eq!(failed.dropped_exports_total, 1);
+    assert!(failed.last_error.is_some());
+
+    let listener = TcpListener::bind(address).expect("recover the same endpoint");
+    let collector = std::thread::spawn(move || {
+        let mut stream = accept_legacy_export(&listener).expect("accept recovery export");
+        let request = read_http_request(&mut stream);
+        let log = decoded_legacy_log(&request);
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("acknowledge delivered recovery payload");
+        log
+    });
+    telemetry
+        .emit_log(&log_event(service_name(), "recovered legacy"))
+        .expect("admit subsequent export");
+    telemetry.flush_typed().expect("same factory recovers");
+    let log = collector.join().expect("collector joined");
+    assert_eq!(log["body"]["stringValue"], "recovered legacy");
+    assert_eq!(log["severityNumber"], 9);
+    let recovered = telemetry.health();
+    assert_eq!(recovered.state, TelemetryHealthState::Healthy);
+    assert_eq!(
+        recovered.dropped_exports_total, 1,
+        "recovery preserves the actual loss count"
+    );
+    telemetry.shutdown_typed().expect("shutdown after recovery");
+}
+
+#[cfg(feature = "otlp-sdk")]
+#[test]
+fn public_sdk_factory_recovers_after_collector_unavailability() {
+    if !public_factory_scenario_child("public_sdk_factory_recovers_after_collector_unavailability")
+    {
+        return;
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("caller runtime");
+    runtime.block_on(async {
+        let reservation = TcpListener::bind("127.0.0.1:0").expect("reserve collector endpoint");
+        let address = reservation.local_addr().expect("endpoint");
+        drop(reservation);
+        let mut config = enabled_sdk_grpc_config(address);
+        config.transport.timeout_ms = Some(2_000_u64.into());
+        let telemetry = V2Telemetry::new_typed(config).expect("public SDK factory");
+        telemetry.emit_log(&log_event(service_name(), "unavailable SDK")).expect("admission");
+        let failure = telemetry.flush_async_typed().await.expect_err("unavailable gRPC collector fails export");
+        assert!(matches!(public_flush_export_cause(&failure), sc_observability_types::v2::ExportError::Transport { .. }));
+        assert_eq!(telemetry.health().state, TelemetryHealthState::Degraded);
+        assert_eq!(telemetry.health().dropped_exports_total, 1);
+        assert!(telemetry.health().last_error.is_some());
+
+        let listener = tokio::net::TcpListener::bind(address).await.expect("recover same endpoint");
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+        let collector = tokio::spawn(async move {
+            tonic::transport::Server::builder().serve_with_incoming(
+                LogsServiceServer::new(CapturingLogsService { sender }),
+                tonic::codegen::tokio_stream::wrappers::TcpListenerStream::new(listener),
+            ).await.expect("serve recovered collector");
+        });
+        telemetry.emit_log(&log_event(service_name(), "recovered SDK")).expect("admission after recovery");
+        telemetry.flush_async_typed().await.expect("same factory delivers after recovery");
+        let request = tokio::time::timeout(std::time::Duration::from_secs(5), receiver.recv())
+            .await.expect("recovery payload watchdog").expect("recovery payload");
+        let log = &request.resource_logs[0].scope_logs[0].log_records[0];
+        assert_eq!(log.severity_number, 9);
+        assert!(matches!(log.body.as_ref().and_then(|body| body.value.as_ref()),
+            Some(opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(value)) if value == "recovered SDK"));
+        assert_eq!(telemetry.health().state, TelemetryHealthState::Healthy);
+        assert_eq!(telemetry.health().dropped_exports_total, 1);
+        telemetry.shutdown_async_typed().await.expect("shutdown recovered SDK");
+        collector.abort();
+        let _ = collector.await;
+    });
+}
+
+#[cfg(any(feature = "legacy-http-json", feature = "otlp-sdk"))]
+fn invalid_event() -> LogEvent {
+    let mut event = log_event(service_name(), "invalid entity must never reach collector");
+    event
+        .state_transition
+        .as_mut()
+        .expect("transition fixture")
+        .entity_id = Some(String::new());
+    event
+}
+
+#[cfg(feature = "legacy-http-json")]
+#[test]
+fn public_legacy_factory_rejects_invalid_model_before_collector_contact() {
+    if !public_factory_scenario_child(
+        "public_legacy_factory_rejects_invalid_model_before_collector_contact",
+    ) {
+        return;
+    }
+    let listener = TcpListener::bind("127.0.0.1:0").expect("collector contact witness");
+    listener.set_nonblocking(true).expect("nonblocking witness");
+    let mut transport = V2OtelConfig::default();
+    transport.enabled = true;
+    transport.backend = sc_observability_otlp::v2::ExporterBackend::LegacyHttpJson;
+    transport.protocol = sc_observability_otlp::v2::OtlpProtocol::HttpJson;
+    transport.endpoint = Some(
+        V2OtlpEndpoint::new_typed(format!("http://{}", listener.local_addr().unwrap())).unwrap(),
+    );
+    let config = V2TelemetryConfigBuilder::new(service_name())
+        .enable_logs(LogsConfig::default())
+        .with_transport(transport)
+        .build_typed()
+        .expect("canonical legacy config");
+    let telemetry = V2Telemetry::new_typed(config).expect("canonical public legacy factory");
+    let error = telemetry
+        .emit_log(&invalid_event())
+        .expect_err("invalid canonical model");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::TelemetryError::Event(
+            sc_observability_types::v2::EventError::Validation { .. }
+        )
+    ));
+    telemetry.flush_typed().expect("nothing was admitted");
+    telemetry.shutdown_typed().expect("empty shutdown");
+    assert_eq!(
+        telemetry.health().dropped_exports_total,
+        0,
+        "rejected before exporter admission"
+    );
+    assert_eq!(
+        listener.accept().expect_err("no collector contact").kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+}
+
+#[cfg(feature = "otlp-sdk")]
+#[test]
+fn public_sdk_factory_rejects_invalid_model_before_collector_contact() {
+    if !public_factory_scenario_child(
+        "public_sdk_factory_rejects_invalid_model_before_collector_contact",
+    ) {
+        return;
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("caller runtime");
+    runtime.block_on(async {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("collector contact witness");
+        listener.set_nonblocking(true).expect("nonblocking witness");
+        let telemetry =
+            V2Telemetry::new_typed(enabled_sdk_grpc_config(listener.local_addr().unwrap()))
+                .expect("public SDK factory");
+        let error = telemetry
+            .emit_log(&invalid_event())
+            .expect_err("invalid canonical model");
+        assert!(matches!(
+            error,
+            sc_observability_types::v2::TelemetryError::Event(
+                sc_observability_types::v2::EventError::Validation { .. }
+            )
+        ));
+        telemetry
+            .flush_async_typed()
+            .await
+            .expect("nothing was admitted");
+        telemetry
+            .shutdown_async_typed()
+            .await
+            .expect("empty shutdown");
+        assert_eq!(telemetry.health().dropped_exports_total, 0);
+        assert_eq!(
+            listener.accept().expect_err("no collector contact").kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    });
+}
+
+#[cfg(feature = "legacy-http-json")]
+#[test]
+fn public_legacy_factory_reports_stalled_collector_timeout() {
+    if !public_factory_scenario_child("public_legacy_factory_reports_stalled_collector_timeout") {
+        return;
+    }
+    let listener = TcpListener::bind("127.0.0.1:0").expect("stalled collector");
+    let address = listener.local_addr().expect("collector address");
+    let (observed_tx, observed_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let collector = std::thread::spawn(move || {
+        let mut stream = accept_legacy_export(&listener).expect("accept public factory request");
+        let request = read_http_request(&mut stream);
+        assert_eq!(
+            decoded_legacy_log(&request)["body"]["stringValue"],
+            "stalled collector"
+        );
+        observed_tx.send(()).expect("request observed");
+        let _ = release_rx.recv_timeout(Duration::from_secs(10));
+        drop(stream);
+    });
+    let mut transport = V2OtelConfig::default();
+    transport.enabled = true;
+    transport.backend = sc_observability_otlp::v2::ExporterBackend::LegacyHttpJson;
+    transport.protocol = sc_observability_otlp::v2::OtlpProtocol::HttpJson;
+    transport.endpoint =
+        Some(V2OtlpEndpoint::new_typed(format!("http://{address}")).expect("endpoint"));
+    transport.timeout_ms = Some(500_u64.into());
+    let retry = transport.legacy_retry.get_or_insert_with(Default::default);
+    retry.max_retries = Some(10);
+    retry.initial_backoff_ms = Some(1_u64.into());
+    retry.max_backoff_ms = Some(1_u64.into());
+    retry.retry_after_cap_ms = Some(100_u64.into());
+    retry.retry_jitter_percent = Some(0);
+    retry.retry_sequence_timeout_ms = Some(500_u64.into());
+    let config = V2TelemetryConfigBuilder::new(service_name())
+        .enable_logs(LogsConfig::default())
+        .with_transport(transport)
+        .build_typed()
+        .expect("stalled collector config");
+    let telemetry = V2Telemetry::new_typed(config).expect("public legacy factory");
+    telemetry
+        .emit_log(&log_event(service_name(), "stalled collector"))
+        .expect("admit stalled export");
+    let operation = std::thread::spawn(move || {
+        let result = telemetry.flush_typed();
+        (telemetry, result)
+    });
+    observed_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("actual request reached stalled collector");
+    let (telemetry, result) = operation
+        .join()
+        .expect("flush operation exits under child watchdog");
+    let _ = release_tx.send(());
+    collector.join().expect("collector reaped");
+    let error = result.expect_err("request exhausted retry deadline");
+    let context = std::error::Error::source(&error).expect("flush context");
+    let cause = context.source().expect("native exporter error");
+    assert!(matches!(
+        cause.downcast_ref::<sc_observability_types::v2::ExportError>(),
+        Some(sc_observability_types::v2::ExportError::RetryDeadlineExhausted { .. })
+    ));
+    assert_eq!(telemetry.health().state, TelemetryHealthState::Degraded);
+    assert_eq!(telemetry.health().dropped_exports_total, 1);
+    telemetry.shutdown_typed().expect("shutdown after timeout");
+}

@@ -15,6 +15,7 @@ from validate_public_api import (  # noqa: E402
     cli, compatible_diff_problems, main, validate_api_package_roster,
     validate_compatible_policy,
 )
+from compatibility_registry import BASELINE_COMMIT  # noqa: E402
 from validate_version_literals import (  # noqa: E402
     validate_cargo_lock, validate_inventory_candidate, validate_package_lock,
 )
@@ -31,6 +32,37 @@ class CompatiblePolicyTests(unittest.TestCase):
             'nine workspace API packages.'
         ),
     }
+
+    @staticmethod
+    def write_trait_impl_registry(root, records=None):
+        identities = (
+            ('sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink',
+             'JsonlFileSink'),
+            ('sc_observability::typed::TypedLogSink for sc_observability::ConsoleSink',
+             'ConsoleSink'),
+        )
+        if records is None:
+            records = [{
+                'implementation': implementation,
+                'baseline_declaration': f'impl crate::typed::TypedLogSink for {owner}',
+                'current_declaration': f'impl TypedLogSink for {owner}',
+                'baseline_source': {
+                    'revision': BASELINE_COMMIT,
+                    'path': 'crates/sc-observability/src/sinks.rs',
+                    'owner': owner,
+                },
+                'current_source': {
+                    'revision': 'selected_head',
+                    'path': 'crates/sc-observability/src/compat.rs',
+                    'owner': owner,
+                },
+                'conversion': 'fixture adapter delegates to the canonical sink',
+                'removable_paths': ['crates/sc-observability/src/compat.rs'],
+                'removal_rationale': 'fixture compatibility implementation is retired with compat.rs',
+            } for implementation, owner in identities]
+        path = root / 'docs/compatibility/registry.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({'trait_impl_contracts': records}))
 
     def policy(self):
         return {
@@ -58,6 +90,7 @@ class CompatiblePolicyTests(unittest.TestCase):
         (root / 'release/publish-artifacts.toml').write_text(
             ''.join(f'[[crates]]\npackage = "{package}"\n' for package in published_packages)
         )
+        cls.write_trait_impl_registry(root)
 
     def test_package_roster_requires_exact_candidate_and_deferred_coverage(self):
         valid_inventory = {
@@ -353,6 +386,38 @@ class CompatiblePolicyTests(unittest.TestCase):
                     self.assertEqual(mocked_run.call_count, 1)
                     self.assertIn('compatible 1.x release cannot accept enumerated breaking API exceptions',
                                   stderr.getvalue())
+
+    def test_cli_rejects_missing_duplicate_and_malformed_trait_impl_registry_before_api_tools(self):
+        invalid_contracts = (
+            ('missing', lambda records: records[:1],
+             "compatibility trait-impl contracts drifted: missing=['sc_observability::typed::TypedLogSink for sc_observability::ConsoleSink'], unknown=[]"),
+            ('duplicate', lambda records: [records[0], records[0], records[1]],
+             'duplicate compatibility trait-impl contracts: sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink'),
+            ('malformed', lambda records: [{**records[0], 'conversion': ''}, records[1]],
+             'compatibility trait-impl contract has blank conversion: sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink'),
+        )
+
+        for name, invalidate, expected_error in invalid_contracts:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / 'release').mkdir()
+                self.write_package_roster(root)
+                (root / 'release/public-api-policy.json').write_text(
+                    json.dumps(self.policy()))
+                valid_registry = json.loads(
+                    (root / 'docs/compatibility/registry.json').read_text())
+                self.write_trait_impl_registry(
+                    root, invalidate(valid_registry['trait_impl_contracts']))
+                stderr = io.StringIO()
+                with patch('validate_public_api.ROOT', root), \
+                        patch('validate_public_api.CACHE', root / 'cache'), \
+                        patch('validate_public_api.run') as mocked_run, \
+                        patch('sys.argv', ['validate_public_api.py', 'semver']), \
+                        contextlib.redirect_stdout(io.StringIO()), \
+                        contextlib.redirect_stderr(stderr):
+                    self.assertEqual(cli(), 3)
+                mocked_run.assert_not_called()
+                self.assertIn(expected_error, stderr.getvalue())
 
     def test_missing_or_wrong_package_baseline_fails(self):
         with tempfile.TemporaryDirectory() as temporary:

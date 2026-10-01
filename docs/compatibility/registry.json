@@ -9,7 +9,218 @@
     "inventory": "D18 recovery inventory",
     "nominal_contracts": 58,
     "inherent_or_free_callables": 143,
-    "trait_slots": 12
+    "trait_slots": 12,
+    "additional_handwritten": {
+      "revision": "f36dab934f2b4775a4e0280db7aac24d6d868560",
+      "method": "docs/migration/source-accounting.md",
+      "rule": "additional handwritten = restorations + added wrappers with a declaration in compat, the released errors.rs wrappers, an inline v2 module or a canonical twin; aliases, re-exports and existing pairs add none",
+      "crates": {
+        "sc-observability-types": {
+          "aliases": {
+            "types": 3,
+            "callables": 20
+          },
+          "existing_pairs": {
+            "types": 8,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 10,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 5,
+            "callables": 5
+          },
+          "additional_handwritten": {
+            "types": 15,
+            "callables": 5
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability": {
+          "aliases": {
+            "types": 4,
+            "callables": 18
+          },
+          "existing_pairs": {
+            "types": 8,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 2
+          },
+          "added_wrappers": {
+            "types": 2,
+            "callables": 35
+          },
+          "additional_handwritten": {
+            "types": 2,
+            "callables": 37
+          },
+          "trait_impls": 2,
+          "pending_not_implemented": 0
+        },
+        "sc-observe": {
+          "aliases": {
+            "types": 0,
+            "callables": 4
+          },
+          "existing_pairs": {
+            "types": 3,
+            "callables": 6
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 6
+          },
+          "added_wrappers": {
+            "types": 3,
+            "callables": 14
+          },
+          "additional_handwritten": {
+            "types": 3,
+            "callables": 20
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability-log": {
+          "aliases": {
+            "types": 0,
+            "callables": 5
+          },
+          "existing_pairs": {
+            "types": 6,
+            "callables": 5
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 3
+          },
+          "added_wrappers": {
+            "types": 1,
+            "callables": 21
+          },
+          "additional_handwritten": {
+            "types": 1,
+            "callables": 24
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability-otlp": {
+          "aliases": {
+            "types": 0,
+            "callables": 3
+          },
+          "existing_pairs": {
+            "types": 7,
+            "callables": 17
+          },
+          "restorations": {
+            "types": 1,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 2,
+            "callables": 16
+          },
+          "additional_handwritten": {
+            "types": 3,
+            "callables": 16
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability-dto": {
+          "aliases": {
+            "types": 0,
+            "callables": 0
+          },
+          "existing_pairs": {
+            "types": 0,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 0,
+            "callables": 0
+          },
+          "additional_handwritten": {
+            "types": 0,
+            "callables": 0
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 1
+        },
+        "sc-observability-binding-runtime": {
+          "aliases": {
+            "types": 0,
+            "callables": 0
+          },
+          "existing_pairs": {
+            "types": 0,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 0,
+            "callables": 1
+          },
+          "additional_handwritten": {
+            "types": 0,
+            "callables": 1
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        },
+        "sc-observability-log-macros": {
+          "aliases": {
+            "types": 0,
+            "callables": 0
+          },
+          "existing_pairs": {
+            "types": 0,
+            "callables": 0
+          },
+          "restorations": {
+            "types": 0,
+            "callables": 0
+          },
+          "added_wrappers": {
+            "types": 0,
+            "callables": 0
+          },
+          "additional_handwritten": {
+            "types": 0,
+            "callables": 0
+          },
+          "trait_impls": 0,
+          "pending_not_implemented": 0
+        }
+      },
+      "pending_not_implemented": [
+        "sc_observability_dto::from_core_health"
+      ],
+      "unchanged_alias_rows_served_by_retained_compat_pairs": [
+        "sc_observe::ObservabilityConfig::default_for",
+        "sc_observe::ObservabilityConfig::service_name",
+        "sc_observe::Observability::new",
+        "sc_observe::Observability::flush",
+        "sc_observe::Observability::shutdown",
+        "sc_observe::ObservabilityBuilder::build",
+        "sc_observability_otlp::SpanAssembler::push"
+      ]
+    }
   },
   "deprecated_owner_exceptions": [
     {
@@ -75,7 +286,8 @@
         "symbol": "v2::IdentityError"
       },
       "removable_paths": [
-        "crates/sc-observability-types/src/lib.rs"
+        "crates/sc-observability-types/src/lib.rs",
+        "crates/sc-observability-types/src/errors.rs"
       ],
       "removal_rationale": "crates/sc-observability-types/src/lib.rs is the retained root export site; remove the temporary re-export when the release policy retires this legacy surface."
     },
@@ -1620,7 +1832,7 @@
         "trait: preserve Telemetry implementability, the exact public trait bounds, and each associated method result type",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released Telemetry facade in compat.rs wraps RuntimeTelemetry and maps canonical telemetry errors at that boundary; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade is in compat.rs. The selected RuntimeTelemetry implementation also retains released-only admission in crates/sc-observability-otlp/src/runtime.rs (BufferedMetric::Released and RuntimeTelemetry::{emit_log_released, emit_span_released, emit_metric_released}) and the Released metric arm in RuntimeTelemetry::flush_typed. Released-only immediate-retry admission also remains in crates/sc-observability-otlp/src/config/validation.rs: validated_released_telemetry_bounds selects the immediate=true route through validated_telemetry_bounds_with_delays, validated_transport_bounds_with_delays and resolve_retry, which produces RetryDelay::Immediate; the shared validators and their canonical positive-delay path remain in place. Released model conversion is in legacy_projection.rs::{log_record, span_signal, metric_record} and span_signal helpers. The TelemetryProjectors release adapters are separately identified on that owner row; these are scoped declarations and branches, not whole-file deletion candidates.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -1632,7 +1844,17 @@
         "symbol": "Telemetry with v2::TelemetryError"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::{new_typed, emit_log, emit_span, emit_metric, flush, flush_typed, shutdown, shutdown_typed, health}",
+        "crates/sc-observability-otlp/src/runtime.rs::BufferedMetric::Released",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::{emit_log_released, emit_span_released, emit_metric_released}",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::{log_record, span_signal, metric_record}",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::span_signal helpers {started_record, span_status, span_event, trace_context, attributes, attribute, transport_error}",
+        "crates/sc-observability-otlp/src/config/validation.rs::validated_released_telemetry_bounds",
+        "crates/sc-observability-otlp/src/config/validation.rs::validated_telemetry_bounds_with_delays immediate=true route, immediate parameter and branch (retain the canonical false route)",
+        "crates/sc-observability-otlp/src/config/validation.rs::validated_transport_bounds_with_delays immediate=true route and immediate parameter (retain the canonical false route)",
+        "crates/sc-observability-otlp/src/config/validation.rs::resolve_retry immediate parameter and immediate && value.value == 0 branch (retain checked positive-delay path)",
+        "crates/sc-observability-otlp/src/config/validation.rs::RetryDelay::Immediate variant"
       ]
     },
     {
@@ -1675,7 +1897,7 @@
         "signature identity: preserve CompleteSpan declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "CompleteSpan remains the released root owner; its internal V2CompleteSpan counterpart is separate.",
+      "conversion": "The released CompleteSpan remains declared in assembly.rs; the internal V2SpanAssembler::push returns sc_observability_types::otlp::OtlpCompleteSpan, a separate canonical record type.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/assembly.rs",
@@ -1702,7 +1924,7 @@
         "signature identity: preserve TelemetryProjectors declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
       ],
-      "conversion": "The released TelemetryProjectors facade in compat.rs delegates to ProjectorSet using its retained Telemetry wrapper; canonical V2TelemetryProjectors attaches canonical v2 projectors to RuntimeTelemetry, forwards their canonical outputs without a released round trip, and does not import compatibility code.",
+      "conversion": "The released root TelemetryProjectors export in lib.rs (72-75) forwards to the compat.rs facade (554-620), which uses ProjectorSet (projectors.rs:31-41, 51-116), AttachedParts (43-49), TelemetryEmit (118-122; implemented for Telemetry in compat.rs:535-547), and AttachedLogProjector/AttachedSpanProjector/AttachedMetricProjector with their TypedLogProjector/TypedSpanProjector/TypedMetricProjector implementations (projectors.rs:266-348). The released LogProjector/SpanProjector/MetricProjector forwarding implementations are in compat.rs:629-674. The v2 V2TelemetryProjectors implementation (projectors.rs:134-210) instead wraps canonical projectors with CanonicalAttached (213-258) and telemetry_to_projection_error (260-264); it does not use the released projector plumbing. telemetry_to_projection_failure (350-352) is used only by the three released Typed*Projector implementations.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/projectors.rs",
@@ -1714,8 +1936,19 @@
         "symbol": "V2TelemetryProjectors"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
-      ]
+        "crates/sc-observability-otlp/src/lib.rs::root compat re-export of TelemetryProjectors (lines 72-75)",
+        "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::{new, with_log_projector, with_span_projector, with_metric_projector, with_filter, into_registration}",
+        "crates/sc-observability-otlp/src/compat.rs::TelemetryEmit for Telemetry",
+        "crates/sc-observability-otlp/src/compat.rs::{LogProjector, SpanProjector, MetricProjector} for Attached*Projector",
+        "crates/sc-observability-otlp/src/projectors.rs::ProjectorSet<T, R> and impl ProjectorSet<T, R> (lines 31-41, 51-116); used by compat.rs::TelemetryProjectors",
+        "crates/sc-observability-otlp/src/projectors.rs::AttachedParts<T, R> type alias (lines 43-49); returned by ProjectorSet::into_attached and consumed by compat.rs::TelemetryProjectors::into_registration",
+        "crates/sc-observability-otlp/src/projectors.rs::TelemetryEmit trait (lines 118-122); implemented only by compat.rs::TelemetryEmit for Telemetry (lines 535-547)",
+        "crates/sc-observability-otlp/src/projectors.rs::AttachedLogProjector<T, R> and impl TypedLogProjector<T> for AttachedLogProjector<T, R> (lines 266-292); forwarded through compat.rs::impl LogProjector<T> for AttachedLogProjector<T, R> (lines 629-638)",
+        "crates/sc-observability-otlp/src/projectors.rs::AttachedSpanProjector<T, R> and impl TypedSpanProjector<T> for AttachedSpanProjector<T, R> (lines 294-320); forwarded through compat.rs::impl SpanProjector<T> for AttachedSpanProjector<T, R> (lines 644-655)",
+        "crates/sc-observability-otlp/src/projectors.rs::AttachedMetricProjector<T, R> and impl TypedMetricProjector<T> for AttachedMetricProjector<T, R> (lines 322-348); forwarded through compat.rs::impl MetricProjector<T> for AttachedMetricProjector<T, R> (lines 662-674)",
+        "crates/sc-observability-otlp/src/projectors.rs::telemetry_to_projection_failure (lines 350-352); called only by the three released Typed*Projector implementations above"
+      ],
+      "removal_rationale": "The released TelemetryProjectors root re-export and compat facade, TelemetryEmit implementation, and released projector-trait forwarding implementations may be removed together with their projectors.rs-only ProjectorSet/AttachedParts/TelemetryEmit/Attached*Projector and Typed*Projector implementation plumbing and telemetry_to_projection_failure helper. The source inventory shows those projectors.rs declarations are only consumed by the released compat path. Preserve the independent V2TelemetryProjectors, CanonicalAttached, and telemetry_to_projection_error path; projectors.rs is not wholly removable."
     }
   ],
   "record_contract": {
@@ -4044,11 +4277,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/lib.rs",
+        "path": "crates/sc-observe/src/compat.rs",
         "owner": "ObservabilityConfig",
         "member": "default_for"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/compat.rs"
+      ],
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::default_for wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::default_for_typed",
@@ -4093,11 +4329,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/lib.rs",
+        "path": "crates/sc-observe/src/compat.rs",
         "owner": "ObservabilityConfig",
         "member": "service_name"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/compat.rs"
+      ],
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::service_name wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::service_name_typed",
@@ -4142,11 +4381,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/lib.rs",
+        "path": "crates/sc-observe/src/compat.rs",
         "owner": "Observability",
         "member": "new"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/compat.rs"
+      ],
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::new wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::new_typed",
@@ -4241,11 +4483,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/lib.rs",
+        "path": "crates/sc-observe/src/compat.rs",
         "owner": "Observability",
         "member": "flush"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/compat.rs"
+      ],
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::flush wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::flush_typed",
@@ -4290,11 +4535,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/lib.rs",
+        "path": "crates/sc-observe/src/compat.rs",
         "owner": "Observability",
         "member": "shutdown"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/compat.rs"
+      ],
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::shutdown wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::shutdown_typed",
@@ -4441,11 +4689,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/lib.rs",
+        "path": "crates/sc-observe/src/compat.rs",
         "owner": "ObservabilityBuilder",
         "member": "build"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/compat.rs"
+      ],
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityBuilder::build wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::build_typed",
@@ -4479,7 +4730,7 @@
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::new exactly as recorded in this row baseline_signature: pub fn new(config: TelemetryConfig) -> Result<Self, InitError>",
         "error: preserve released InitError failure type at sc_observability_otlp::Telemetry::new boundary",
-        "error: released InitError is produced one way from InitFailure, which is also the canonical RuntimeTelemetry::new error: crates/sc-observability-otlp/src/compat.rs Telemetry::new maps Telemetry::new_typed through From<InitFailure> for InitError, which moves the ErrorContext box with diagnostic and source; new_typed runs validate_released_config and validated_released_telemetry_bounds, then RuntimeTelemetry::new_prepared (crates/sc-observability-otlp/src/lib.rs), not RuntimeTelemetry::new"
+        "error: released InitError is produced one way from InitFailure, which is also the canonical RuntimeTelemetry::new error: crates/sc-observability-otlp/src/compat.rs Telemetry::new maps Telemetry::new_typed through From<InitFailure> for InitError, which moves the ErrorContext box with diagnostic and source; new_typed runs validate_released_config and validated_released_telemetry_bounds, then RuntimeTelemetry::new_prepared (crates/sc-observability-otlp/src/runtime.rs), not RuntimeTelemetry::new"
       ],
       "treatment": "new_adapter",
       "conversion": "The released Telemetry::new in compat.rs delegates to Telemetry::new_typed, which validates the released TelemetryConfig, converts it with into_runtime, derives validated released telemetry bounds, and calls RuntimeTelemetry::new_prepared. The released new maps InitFailure into InitError.",
@@ -4509,7 +4760,7 @@
         "error: preserve released InitFailure failure type at sc_observability_otlp::Telemetry::new_typed boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released Telemetry facade in compat.rs converts its TelemetryConfig and wraps RuntimeTelemetry; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs converts its TelemetryConfig and wraps RuntimeTelemetry; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4523,7 +4774,7 @@
         "member": "new_typed"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::new_typed"
       ]
     },
     {
@@ -4536,7 +4787,7 @@
         "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_log boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4550,7 +4801,9 @@
         "member": "emit_log"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::emit_log",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::emit_log_released",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::log_record"
       ]
     },
     {
@@ -4563,7 +4816,7 @@
         "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_span boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released Telemetry facade in compat.rs delegates to the crate-private released span admission of RuntimeTelemetry, which converts the released signal to the canonical model before the shared bounded assembler, and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs delegates to the crate-private released span admission of RuntimeTelemetry, which converts the released signal to the canonical model before the shared bounded assembler, and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4577,7 +4830,9 @@
         "member": "emit_span"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::emit_span",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::emit_span_released",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::{span_signal, started_record, span_status, span_event, trace_context, attributes, attribute, transport_error}"
       ]
     },
     {
@@ -4590,7 +4845,7 @@
         "error: preserve released TelemetryError failure type at sc_observability_otlp::Telemetry::emit_metric boundary"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released Telemetry facade in compat.rs delegates to the crate-private released metric admission of RuntimeTelemetry, which accepts a released scalar histogram without transport and converts other records to the canonical model at flush, and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs delegates to the crate-private released metric admission of RuntimeTelemetry, which accepts a released scalar histogram without transport and converts other records to the canonical model at flush, and maps its canonical sc_observability_types::v2::TelemetryError through legacy_telemetry_error; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4604,7 +4859,11 @@
         "member": "emit_metric"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::emit_metric",
+        "crates/sc-observability-otlp/src/runtime.rs::BufferedMetric::Released",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::emit_metric_released",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
     {
@@ -4615,10 +4874,10 @@
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::flush exactly as recorded in this row baseline_signature: pub fn flush(&self) -> Result<(), FlushError>",
         "error: preserve released FlushError failure type at sc_observability_otlp::Telemetry::flush boundary",
-        "error: released FlushError is produced one way from FlushFailure, which is also the canonical RuntimeTelemetry::flush error: crates/sc-observability-otlp/src/compat.rs Telemetry::flush maps Telemetry::flush_typed, which returns RuntimeTelemetry::flush_typed (crates/sc-observability-otlp/src/lib.rs) unchanged, through From<FlushFailure> for FlushError, moving the ErrorContext box with diagnostic and source"
+        "error: released FlushError is produced one way from FlushFailure, which is also the canonical RuntimeTelemetry::flush error: crates/sc-observability-otlp/src/compat.rs Telemetry::flush maps Telemetry::flush_typed, which returns RuntimeTelemetry::flush_typed (crates/sc-observability-otlp/src/runtime.rs) unchanged, through From<FlushFailure> for FlushError, moving the ErrorContext box with diagnostic and source"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released Telemetry::flush in compat.rs delegates to flush_typed and converts FlushFailure into released FlushError; flush_typed calls the inner RuntimeTelemetry; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry::flush in compat.rs delegates to flush_typed and converts FlushFailure into released FlushError; flush_typed calls the inner RuntimeTelemetry; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4632,7 +4891,10 @@
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::flush",
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::flush_typed",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
     {
@@ -4645,7 +4907,7 @@
         "error: preserve released FlushFailure failure type at sc_observability_otlp::Telemetry::flush_typed boundary"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::flush_typed; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::flush_typed; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4659,7 +4921,9 @@
         "member": "flush_typed"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::flush_typed",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
     {
@@ -4670,10 +4934,10 @@
       "obligations": [
         "signature: preserve sc_observability_otlp::Telemetry::shutdown exactly as recorded in this row baseline_signature: pub fn shutdown(&self) -> Result<(), ShutdownError>",
         "error: preserve released ShutdownError failure type at sc_observability_otlp::Telemetry::shutdown boundary",
-        "error: released ShutdownError is produced one way from ShutdownFailure, which is also the canonical RuntimeTelemetry::shutdown error: crates/sc-observability-otlp/src/compat.rs Telemetry::shutdown maps Telemetry::shutdown_typed, which returns RuntimeTelemetry::shutdown_typed (crates/sc-observability-otlp/src/lib.rs) unchanged, through From<ShutdownFailure> for ShutdownError, moving the ErrorContext box with diagnostic and source"
+        "error: released ShutdownError is produced one way from ShutdownFailure, which is also the canonical RuntimeTelemetry::shutdown error: crates/sc-observability-otlp/src/compat.rs Telemetry::shutdown maps Telemetry::shutdown_typed, which returns RuntimeTelemetry::shutdown_typed (crates/sc-observability-otlp/src/runtime.rs) unchanged, through From<ShutdownFailure> for ShutdownError, moving the ErrorContext box with diagnostic and source"
       ],
       "treatment": "new_adapter",
-      "conversion": "The released Telemetry::shutdown in compat.rs delegates to shutdown_typed and converts ShutdownFailure into released ShutdownError; shutdown_typed calls the inner RuntimeTelemetry; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry::shutdown in compat.rs delegates to shutdown_typed and converts ShutdownFailure into released ShutdownError; shutdown_typed calls the inner RuntimeTelemetry; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4687,7 +4951,10 @@
         "member": "shutdown"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::shutdown",
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::shutdown_typed",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
     {
@@ -4700,7 +4967,7 @@
         "error: preserve released ShutdownFailure failure type at sc_observability_otlp::Telemetry::shutdown_typed boundary"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::shutdown_typed; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::shutdown_typed; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4714,7 +4981,9 @@
         "member": "shutdown_typed"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::shutdown_typed",
+        "crates/sc-observability-otlp/src/runtime.rs::RuntimeTelemetry::flush_typed::BufferedMetric::Released arm",
+        "crates/sc-observability-otlp/src/legacy_projection.rs::{metric_record, attributes, attribute, transport_error}"
       ]
     },
     {
@@ -4727,7 +4996,7 @@
         "receiver: preserve released &self receiver at sc_observability_otlp::Telemetry::health boundary"
       ],
       "treatment": "existing_pair",
-      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::health; the canonical runtime does not import compatibility code.",
+      "conversion": "The released Telemetry facade in compat.rs delegates to RuntimeTelemetry::health; the selected RuntimeTelemetry still contains released-only admission or projection sites, listed precisely on the Telemetry owner row.",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observability-otlp/src/lib.rs",
@@ -4741,7 +5010,7 @@
         "member": "health"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::Telemetry::health"
       ]
     },
     {
@@ -5175,7 +5444,10 @@
         "owner": "SpanAssembler",
         "member": "push"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observability-otlp/src/compat.rs"
+      ],
+      "removal_rationale": "Remove only the released deprecated sc_observability_otlp::SpanAssembler::push wrapper method declared in crates/sc-observability-otlp/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observability_otlp::SpanAssembler::push_typed",
@@ -5251,7 +5523,7 @@
         "member": "new"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::new"
       ]
     },
     {
@@ -5278,7 +5550,7 @@
         "member": "with_log_projector"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::with_log_projector"
       ]
     },
     {
@@ -5305,7 +5577,7 @@
         "member": "with_span_projector"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::with_span_projector"
       ]
     },
     {
@@ -5332,7 +5604,7 @@
         "member": "with_metric_projector"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::with_metric_projector"
       ]
     },
     {
@@ -5359,7 +5631,7 @@
         "member": "with_filter"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::with_filter"
       ]
     },
     {
@@ -5386,7 +5658,7 @@
         "member": "into_registration"
       },
       "removable_paths": [
-        "crates/sc-observability-otlp/src/compat.rs"
+        "crates/sc-observability-otlp/src/compat.rs::TelemetryProjectors::into_registration"
       ]
     },
     {
@@ -5472,7 +5744,7 @@
       "symbol": "sc_observability_dto::from_core_health",
       "owner": "sc_observability_dto",
       "baseline_signature": "pub fn from_core_health( value: core::LoggingHealthReport, level: core::LevelState, ) -> Result<LogHealthDto, Failure>",
-      "canonical_signature": null,
+      "canonical_signature": "pub fn from_canonical_core_health( value: core::LoggingHealthReport, level: core::LevelState, ) -> LogHealthDto",
       "obligations": [
         "signature: preserve sc_observability_dto::from_core_health exactly as recorded in this row baseline_signature: pub fn from_core_health( value: core::LoggingHealthReport, level: core::LevelState, ) -> Result<LogHealthDto, Failure>",
         "error: preserve released Failure failure type at sc_observability_dto::from_core_health boundary"
@@ -5485,7 +5757,12 @@
         "owner": null,
         "member": "from_core_health"
       },
-      "canonical_source": null,
+      "canonical_source": {
+        "revision": "selected_head",
+        "path": "crates/sc-observability-dto/src/conversion_impl/mod.rs",
+        "owner": null,
+        "member": "from_canonical_core_health"
+      },
       "removable_paths": [
         "crates/sc-observability-dto/src/conversion.rs"
       ]

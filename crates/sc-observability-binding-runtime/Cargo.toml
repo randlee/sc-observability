@@ -21,6 +21,7 @@ arc-swap = "1.7"
 serde_json.workspace = true
 
 [dev-dependencies]
+sc-observability-log = { workspace = true, features = ["test_hooks"] }
 tempfile.workspace = true
 
 [lints]

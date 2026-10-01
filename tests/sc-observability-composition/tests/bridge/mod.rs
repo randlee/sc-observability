@@ -81,7 +81,7 @@ pub fn isolated(name: &str) -> bool {
         if Instant::now() >= deadline {
             child.kill().expect("kill timed out test");
             child.wait().expect("reap test");
-            panic!("composition child exceeded45s: {name}");
+            panic!("composition child exceeded 45s: {name}");
         }
         std::thread::sleep(Duration::from_millis(10));
     };

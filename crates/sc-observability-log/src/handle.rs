@@ -722,6 +722,23 @@ static DETACHED_HELPERS: AtomicU32 = AtomicU32::new(0);
 /// Set while a flush helper runs: at most one flush helper per installed bridge.
 static FLUSH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
+// MUTEX: transfers the one-shot observer into the next flush claim; no callback runs under it.
+#[cfg(feature = "test_hooks")]
+static FLUSH_COMPLETION: OnceLock<Mutex<Option<mpsc::SyncSender<bool>>>> = OnceLock::new();
+
+/// Observes whether the next claimed flush released its flag before notifying.
+///
+/// Register before starting the flush. The isolated test must not start another
+/// flush until it receives the witness; `true` means the flag was clear at send.
+#[cfg(feature = "test_hooks")]
+#[doc(hidden)]
+pub fn notify_next_flush_complete(completed: mpsc::SyncSender<bool>) {
+    *FLUSH_COMPLETION
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some(completed);
+}
+
 /// Per-helper state shared by the caller and the helper of one [`run_bounded`] call.
 const HELPER_RUNNING: u8 = 0;
 /// The caller timed out and counted the helper in its detached counter.
@@ -747,6 +764,8 @@ impl Drop for HelperExit {
 /// Exclusive claim on a single-flight flag; released on drop, including during unwinding.
 struct Flight {
     flag: &'static AtomicBool,
+    #[cfg(feature = "test_hooks")]
+    completion: Option<mpsc::SyncSender<bool>>,
 }
 
 impl Flight {
@@ -754,13 +773,31 @@ impl Flight {
     fn claim(flag: &'static AtomicBool) -> Option<Self> {
         flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .ok()
-            .map(|_| Self { flag })
+            .map(|_| Self {
+                flag,
+                #[cfg(feature = "test_hooks")]
+                completion: if std::ptr::eq(flag, &raw const FLUSH_IN_FLIGHT) {
+                    FLUSH_COMPLETION
+                        .get_or_init(|| Mutex::new(None))
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .take()
+                } else {
+                    None
+                },
+            })
     }
 }
 
 impl Drop for Flight {
     fn drop(&mut self) {
         self.flag.store(false, Ordering::SeqCst);
+        #[cfg(feature = "test_hooks")]
+        if let Some(completed) = self.completion.take() {
+            // Capture at the notification site: an early notification must not
+            // pass just because the receiver happens to run after the clear.
+            let _ = completed.send(!self.flag.load(Ordering::SeqCst));
+        }
     }
 }
 

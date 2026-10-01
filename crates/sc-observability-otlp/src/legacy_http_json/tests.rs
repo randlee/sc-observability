@@ -9,6 +9,7 @@ use sc_observability_types::{
     TargetCategory, Timestamp,
 };
 use serde_json::Value;
+use std::collections::VecDeque;
 use std::fs;
 use std::io::{BufRead, ErrorKind, Read, Write};
 use std::net::TcpListener;
@@ -23,6 +24,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 // This is a test watchdog, not the production handshake deadline (1 ms).
 const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
+const REQUEST_FIXTURE_WATCHDOG: Duration = Duration::from_secs(2);
 const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 4_000;
 const STALLED_RETRY_REQUEST_TIMEOUT_MS: u64 = 4_000;
 const STALLED_RETRY_BACKOFF_MS: u64 = 2_500;
@@ -173,16 +175,17 @@ fn sample_log() -> LogEvent {
 }
 
 fn read_request(stream: &mut std::net::TcpStream) -> String {
-    let mut request = Vec::new();
-    let mut buffer = [0_u8; 4096];
-    let read = stream.read(&mut buffer).expect("read request");
-    request.extend_from_slice(&buffer[..read]);
-    String::from_utf8_lossy(&request).into_owned()
+    read_framed_request(stream, Instant::now() + REQUEST_FIXTURE_WATCHDOG)
+        .expect("read complete HTTP request")
 }
 
 const RETRY_OBSERVER_SERVER_WATCHDOG: Duration = Duration::from_secs(8);
 const RETRY_OBSERVER_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const RETRY_OBSERVER_NEGATIVE_WINDOW: Duration = Duration::from_millis(100);
+const RETRY_SLEEP_BUDGET_REQUEST_CONSUMPTION: Duration = Duration::from_millis(800);
+const RETRY_SLEEP_BUDGET_SEQUENCE_TIMEOUT_MS: u64 = 1_500;
+const RETRY_SLEEP_BUDGET_MAX_OBSERVED_DELAY: Duration = Duration::from_millis(700);
+const RETRY_SLEEP_BUDGET_BACKOFF_MS: u64 = 2_000;
 
 fn accept_retry_observer_request(listener: &TcpListener, deadline: Instant) -> std::net::TcpStream {
     loop {
@@ -216,23 +219,36 @@ fn set_retry_observer_io_deadlines(stream: &std::net::TcpStream, deadline: Insta
         .expect("set retry-observer server write deadline");
 }
 
-fn read_retry_observer_request(stream: &mut std::net::TcpStream, deadline: Instant) -> String {
+struct DeadlineReader<'a> {
+    stream: &'a mut std::net::TcpStream,
+    deadline: Instant,
+}
+
+impl Read for DeadlineReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let remaining = self.deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(std::io::Error::new(
+                ErrorKind::TimedOut,
+                "server watchdog expired",
+            ));
+        }
+        self.stream.set_read_timeout(Some(remaining))?;
+        self.stream.read(buffer)
+    }
+}
+
+fn read_framed_request_from_reader(reader: &mut impl Read) -> Result<String, String> {
     let mut request = Vec::new();
     let mut buffer = [0_u8; 4096];
     let mut expected_len = None;
     loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        assert!(
-            !remaining.is_zero(),
-            "server watchdog expired before request read"
-        );
-        stream
-            .set_read_timeout(Some(remaining))
-            .expect("set retry-observer request read deadline");
-        let read = stream
+        let read = reader
             .read(&mut buffer)
-            .expect("read complete HTTP request");
-        assert_ne!(read, 0, "client closed before sending the complete request");
+            .map_err(|error| format!("read complete HTTP request: {error}"))?;
+        if read == 0 {
+            return Err("client closed before sending the complete request".to_owned());
+        }
         request.extend_from_slice(&buffer[..read]);
 
         if expected_len.is_none()
@@ -247,14 +263,66 @@ fn read_retry_observer_request(stream: &mut std::net::TcpStream, deadline: Insta
                         .then(|| value.trim().parse::<usize>().ok())
                         .flatten()
                 })
-                .expect("HTTP request includes a valid Content-Length");
+                .ok_or_else(|| "HTTP request includes a valid Content-Length".to_owned())?;
             expected_len = Some(header_end + 4 + content_len);
         }
 
         if expected_len.is_some_and(|expected| request.len() >= expected) {
-            return String::from_utf8_lossy(&request).into_owned();
+            return Ok(String::from_utf8_lossy(&request).into_owned());
         }
     }
+}
+
+fn read_framed_request(
+    stream: &mut std::net::TcpStream,
+    deadline: Instant,
+) -> Result<String, String> {
+    read_framed_request_from_reader(&mut DeadlineReader { stream, deadline })
+}
+
+fn read_retry_observer_request(stream: &mut std::net::TcpStream, deadline: Instant) -> String {
+    read_framed_request(stream, deadline).expect("read complete retry-observer HTTP request")
+}
+
+#[test]
+fn framed_request_reader_collects_fragmented_headers_and_body() {
+    struct ScriptedReader(VecDeque<Vec<u8>>);
+    impl Read for ScriptedReader {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            let Some(chunk) = self.0.pop_front() else {
+                return Ok(0);
+            };
+            buffer[..chunk.len()].copy_from_slice(&chunk);
+            Ok(chunk.len())
+        }
+    }
+    let mut reader = ScriptedReader(VecDeque::from([
+        b"POST /v1/logs HTTP/1.1\r\nContent-".to_vec(),
+        b"Length: 5\r\n\r\nhe".to_vec(),
+        b"llo".to_vec(),
+    ]));
+    let request = read_framed_request_from_reader(&mut reader).expect("complete request");
+    assert!(request.ends_with("\r\n\r\nhello"));
+}
+
+#[test]
+fn framed_request_reader_rejects_premature_eof() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind fixture listener");
+    let address = listener.local_addr().expect("fixture address");
+    let client = thread::spawn(move || {
+        let mut stream = std::net::TcpStream::connect(address).expect("connect fixture client");
+        stream
+            .write_all(b"POST /v1/logs HTTP/1.1\r\nContent-Length: 5\r\n\r\nhe")
+            .expect("write incomplete request");
+        stream
+            .shutdown(std::net::Shutdown::Write)
+            .expect("close incomplete request");
+    });
+    let (mut stream, _) = listener.accept().expect("accept fixture client");
+    let error = read_framed_request(&mut stream, Instant::now() + REQUEST_FIXTURE_WATCHDOG)
+        .expect_err("premature EOF must not count as a request");
+    client.join().expect("join fixture client");
+    assert_eq!(error, "client closed before sending the complete request");
 }
 
 fn retrying_server(
@@ -303,6 +371,77 @@ fn join_retry_observer_server(server: thread::JoinHandle<()>) {
         thread::sleep(RETRY_OBSERVER_ACCEPT_POLL_INTERVAL);
     }
     server.join().expect("retry-observer server exits cleanly");
+}
+
+fn retry_sleep_budget_server(
+    listener: TcpListener,
+    send_retryable_response: bool,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        listener
+            .set_nonblocking(true)
+            .expect("make retry-budget listener nonblocking");
+        let deadline = Instant::now() + RETRY_OBSERVER_SERVER_WATCHDOG;
+        let mut first = accept_retry_observer_request(&listener, deadline);
+        set_retry_observer_io_deadlines(&first, deadline);
+        let request = read_retry_observer_request(&mut first, deadline);
+        assert!(request.contains("\"hello\""));
+        thread::sleep(RETRY_SLEEP_BUDGET_REQUEST_CONSUMPTION);
+        if send_retryable_response {
+            first
+                .write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 2\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("write delayed retry response");
+        }
+    })
+}
+
+fn assert_retry_sleep_uses_post_request_remaining(send_retryable_response: bool) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = retry_sleep_budget_server(listener, send_retryable_response);
+    let (delay_tx, delay_rx) = mpsc::channel();
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry_timeout(
+        format!("http://{address}"),
+        retry_policy(
+            1,
+            RETRY_SLEEP_BUDGET_BACKOFF_MS,
+            RETRY_SLEEP_BUDGET_BACKOFF_MS,
+            RETRY_SLEEP_BUDGET_SEQUENCE_TIMEOUT_MS,
+            RETRY_SLEEP_BUDGET_SEQUENCE_TIMEOUT_MS,
+            50,
+        ),
+        1_200,
+        1,
+        Some(delay_tx),
+    )
+    .expect("construct exporter");
+    let export_thread = thread::spawn(move || exporter.send_payload_sync("logs", &logs_payload()));
+    let delay = delay_rx
+        .recv_timeout(RETRY_OBSERVER_SERVER_WATCHDOG)
+        .expect("retry entered the observed backoff");
+    let result = export_thread.join().expect("join export thread");
+    join_retry_observer_server(server);
+
+    assert!(
+        delay <= RETRY_SLEEP_BUDGET_MAX_OBSERVED_DELAY,
+        "retry sleep {delay:?} exceeded the post-request remaining budget"
+    );
+    assert!(matches!(
+        result,
+        Err(sc_observability_types::v2::ExportError::RetryDeadlineExhausted { .. })
+    ));
+}
+
+#[test]
+fn retryable_response_caps_jittered_sleep_by_post_request_remaining() {
+    assert_retry_sleep_uses_post_request_remaining(true);
+}
+
+#[test]
+fn transport_error_caps_jittered_sleep_by_post_request_remaining() {
+    assert_retry_sleep_uses_post_request_remaining(false);
 }
 
 // Adapted from `otlp_http_exporter_loads_custom_ca_bundle` at immutable
