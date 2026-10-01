@@ -35,6 +35,9 @@ use std::sync::{
 };
 use std::time::Duration;
 
+#[cfg(feature = "otlp-telemetry")]
+mod telemetry;
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PythonLoggerConfig {
@@ -1069,6 +1072,8 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(_validate_event, module)?)?;
     module.add_function(wrap_pyfunction!(create_owned, module)?)?;
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
+    #[cfg(feature = "otlp-telemetry")]
+    telemetry::register(module)?;
     #[cfg(feature = "test-hooks")]
     module.add_function(wrap_pyfunction!(_test_force_failure, module)?)?;
     #[cfg(feature = "test-hooks")]
