@@ -29,7 +29,7 @@ COMPANION_MEMBERS = (
     "crates/sc-observability-binding-runtime",
     "bindings/python/sc-observability-py",
     "examples/rust-python-logging",
-    "examples/otlp-legacy",
+    "examples/otlp-sync-http",
     "examples/otlp-sdk",
     "examples/log-settings",
     "tests/sc-observability-composition",
@@ -60,15 +60,15 @@ class WorkspaceMemberRosterTests(unittest.TestCase):
         workspace = qualification_metadata.tomllib.loads(
             (qualification_metadata.ROOT / "Cargo.toml").read_text(encoding="utf-8")
         )
-        without_otlp_legacy = tuple(
+        without_otlp_sync_http = tuple(
             member
             for member in qualification_metadata.UNPUBLISHED_COMPANION_MEMBERS
-            if member != "examples/otlp-legacy"
+            if member != "examples/otlp-sync-http"
         )
         with mock.patch.object(
             qualification_metadata,
             "UNPUBLISHED_COMPANION_MEMBERS",
-            without_otlp_legacy,
+            without_otlp_sync_http,
         ):
             with self.assertRaisesRegex(SystemExit, "unrecognized members"):
                 validate_workspace_member_roster(tuple(workspace["workspace"]["members"]), STAGED_PACKAGES)

@@ -416,7 +416,7 @@ impl RuntimeTelemetry {
     /// Flushes telemetry and awaits the shared backend lifecycle barrier.
     ///
     /// SDK callers must use this method from their entered runtime; it never
-    /// blocks that runtime thread to emulate legacy HTTP behavior.
+    /// blocks that runtime thread to emulate synchronous HTTP behavior.
     pub async fn flush_async_typed(&self) -> Result<(), FlushFailure> {
         let _ = self.flush_outcome();
         self.exporters
@@ -530,7 +530,7 @@ impl RuntimeTelemetry {
 
     /// Shuts telemetry down and awaits the shared backend lifecycle barrier.
     ///
-    /// SDK callers use this method to await admitted RPC completion. Legacy
+    /// SDK callers use this method to await admitted RPC completion. Synchronous HTTP
     /// callers keep using [`RuntimeTelemetry::shutdown_typed`], whose backend owns a
     /// bounded blocking worker shutdown.
     pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownFailure> {

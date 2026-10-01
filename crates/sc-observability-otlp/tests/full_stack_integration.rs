@@ -7,15 +7,15 @@ use std::net::TcpListener;
 use std::sync::Arc;
 #[cfg(feature = "otlp-sdk")]
 use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 use std::io::{ErrorKind, Read, Write};
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 use sc_observability_otlp::AuthHeader;
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 use sc_observability_otlp::OtlpProtocol;
 #[cfg(feature = "otlp-sdk")]
 use sc_observability_otlp::v2::AuthHeader as V2AuthHeader;
@@ -50,7 +50,7 @@ use sc_observability_types::{
     TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 use serde_json::Value;
 use serde_json::{Map, json};
 
@@ -400,8 +400,8 @@ fn enabled_telemetry_config() -> V2TelemetryConfig {
         .expect("valid enabled telemetry config")
 }
 
-#[cfg(feature = "legacy-http-json")]
-fn enabled_legacy_http_json_config(
+#[cfg(feature = "sync-http")]
+fn enabled_sync_http_config(
     address: std::net::SocketAddr,
 ) -> sc_observability_otlp::TelemetryConfig {
     let transport = OtelConfig {
@@ -419,11 +419,11 @@ fn enabled_legacy_http_json_config(
         .enable_metrics(MetricsConfig::default())
         .with_transport(transport)
         .build_typed()
-        .expect("valid legacy HTTP/JSON config")
+        .expect("valid synchronous HTTP/JSON config")
 }
 
-#[cfg(feature = "legacy-http-json")]
-fn enabled_legacy_http_json_config_with_auth(
+#[cfg(feature = "sync-http")]
+fn enabled_sync_http_config_with_auth(
     address: std::net::SocketAddr,
     credential: &str,
 ) -> sc_observability_otlp::TelemetryConfig {
@@ -441,11 +441,11 @@ fn enabled_legacy_http_json_config_with_auth(
         .enable_logs(LogsConfig::default())
         .with_transport(transport)
         .build_typed()
-        .expect("valid authenticated legacy HTTP/JSON config")
+        .expect("valid authenticated synchronous HTTP/JSON config")
 }
 
-#[cfg(feature = "legacy-http-json")]
-fn enabled_legacy_http_json_retry_config(
+#[cfg(feature = "sync-http")]
+fn enabled_sync_http_retry_config(
     address: std::net::SocketAddr,
     max_retries: u32,
 ) -> sc_observability_otlp::TelemetryConfig {
@@ -465,7 +465,7 @@ fn enabled_legacy_http_json_retry_config(
         .enable_logs(LogsConfig::default())
         .with_transport(transport)
         .build_typed()
-        .expect("valid legacy retry config")
+        .expect("valid sync-http retry config")
 }
 
 #[cfg(feature = "otlp-sdk")]
@@ -568,7 +568,7 @@ fn observation() -> Observation<AgentPayload> {
     )
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 fn completed_span_signals() -> [SpanSignal; 3] {
     let trace = trace_context();
     let started = SpanRecord::<SpanStarted>::new(
@@ -594,7 +594,7 @@ fn completed_span_signals() -> [SpanSignal; 3] {
     ]
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 fn counter_metric() -> MetricRecord {
     MetricRecord {
         timestamp: Timestamp::UNIX_EPOCH,
@@ -607,7 +607,7 @@ fn counter_metric() -> MetricRecord {
     }
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 fn gauge_metric() -> MetricRecord {
     MetricRecord {
         timestamp: Timestamp::UNIX_EPOCH,
@@ -738,7 +738,7 @@ fn canonical_metrics() -> Vec<CanonicalMetricRecord> {
     ]
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 fn scalar_histogram_metric() -> MetricRecord {
     MetricRecord {
         timestamp: Timestamp::UNIX_EPOCH,
@@ -788,15 +788,15 @@ fn disabled_public_factory_never_contacts_an_available_collector() {
     assert_eq!(telemetry.health().state, TelemetryHealthState::Unavailable);
 }
 
-#[cfg(feature = "legacy-http-json")]
-const LEGACY_COLLECTOR_TIMEOUT: Duration = Duration::from_secs(2);
+#[cfg(feature = "sync-http")]
+const SYNC_HTTP_COLLECTOR_TIMEOUT: Duration = Duration::from_secs(2);
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 fn read_http_request(stream: &mut std::net::TcpStream) -> String {
     const MAX_REQUEST_BYTES: usize = 1024 * 1024;
     let mut request = Vec::new();
     let mut buffer = [0_u8; 4096];
-    let deadline = Instant::now() + LEGACY_COLLECTOR_TIMEOUT;
+    let deadline = Instant::now() + SYNC_HTTP_COLLECTOR_TIMEOUT;
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         assert!(
@@ -838,17 +838,17 @@ fn read_http_request(stream: &mut std::net::TcpStream) -> String {
     String::from_utf8(request).expect("HTTP/JSON collector request is UTF-8")
 }
 
-#[cfg(feature = "legacy-http-json")]
-fn accept_legacy_export(listener: &TcpListener) -> std::io::Result<std::net::TcpStream> {
+#[cfg(feature = "sync-http")]
+fn accept_sync_http_export(listener: &TcpListener) -> std::io::Result<std::net::TcpStream> {
     const POLL_INTERVAL: Duration = Duration::from_millis(10);
     listener.set_nonblocking(true)?;
-    let deadline = Instant::now() + LEGACY_COLLECTOR_TIMEOUT;
+    let deadline = Instant::now() + SYNC_HTTP_COLLECTOR_TIMEOUT;
     loop {
         match listener.accept() {
             Ok((stream, _)) => {
                 stream.set_nonblocking(false)?;
-                stream.set_read_timeout(Some(LEGACY_COLLECTOR_TIMEOUT))?;
-                stream.set_write_timeout(Some(LEGACY_COLLECTOR_TIMEOUT))?;
+                stream.set_read_timeout(Some(SYNC_HTTP_COLLECTOR_TIMEOUT))?;
+                stream.set_write_timeout(Some(SYNC_HTTP_COLLECTOR_TIMEOUT))?;
                 return Ok(stream);
             }
             Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {
@@ -857,7 +857,7 @@ fn accept_legacy_export(listener: &TcpListener) -> std::io::Result<std::net::Tcp
             Err(error) if error.kind() == ErrorKind::WouldBlock => {
                 return Err(std::io::Error::new(
                     ErrorKind::TimedOut,
-                    "timed out waiting for the expected legacy export",
+                    "timed out waiting for the expected sync-http export",
                 ));
             }
             Err(error) => return Err(error),
@@ -865,8 +865,8 @@ fn accept_legacy_export(listener: &TcpListener) -> std::io::Result<std::net::Tcp
     }
 }
 
-#[cfg(feature = "legacy-http-json")]
-fn assert_no_legacy_export(listener: &TcpListener) {
+#[cfg(feature = "sync-http")]
+fn assert_no_sync_http_export(listener: &TcpListener) {
     const POLL_INTERVAL: Duration = Duration::from_millis(10);
     const QUIET_WINDOW: Duration = Duration::from_millis(250);
     listener
@@ -879,15 +879,15 @@ fn assert_no_legacy_export(listener: &TcpListener) {
                 std::thread::sleep(POLL_INTERVAL);
             }
             Err(error) if error.kind() == ErrorKind::WouldBlock => break,
-            Ok((stream, _)) => panic!("unexpected legacy export connection: {stream:?}"),
+            Ok((stream, _)) => panic!("unexpected sync-http export connection: {stream:?}"),
             Err(error) => panic!("inspect collector connection: {error}"),
         }
     }
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn legacy_collector_reassembles_a_fragmented_request_larger_than_one_read() {
+fn sync_http_collector_reassembles_a_fragmented_request_larger_than_one_read() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
     let address = listener.local_addr().expect("collector address");
     let body = format!(r#"{{"payload":"{}"}}"#, "x".repeat(8 * 1024));
@@ -896,7 +896,7 @@ fn legacy_collector_reassembles_a_fragmented_request_larger_than_one_read() {
         body.len()
     );
     let collector = std::thread::spawn(move || {
-        let mut stream = accept_legacy_export(&listener).expect("accept fragmented request");
+        let mut stream = accept_sync_http_export(&listener).expect("accept fragmented request");
         let request = read_http_request(&mut stream);
         stream
             .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -932,12 +932,12 @@ fn legacy_collector_reassembles_a_fragmented_request_larger_than_one_read() {
     assert_eq!(collector.join().expect("collector exits"), expected);
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn legacy_collector_fails_boundedly_when_the_expected_export_is_omitted() {
+fn sync_http_collector_fails_boundedly_when_the_expected_export_is_omitted() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
     let started = Instant::now();
-    let error = accept_legacy_export(&listener).expect_err("missing export times out");
+    let error = accept_sync_http_export(&listener).expect_err("missing export times out");
     assert_eq!(error.kind(), ErrorKind::TimedOut);
     assert!(
         started.elapsed() < Duration::from_secs(3),
@@ -945,21 +945,21 @@ fn legacy_collector_fails_boundedly_when_the_expected_export_is_omitted() {
     );
 }
 
-#[cfg(feature = "legacy-http-json")]
-fn decoded_legacy_log(request: &str) -> Value {
-    decoded_legacy_payload(request)["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0].clone()
+#[cfg(feature = "sync-http")]
+fn decoded_sync_http_log(request: &str) -> Value {
+    decoded_sync_http_payload(request)["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0].clone()
 }
 
-#[cfg(feature = "legacy-http-json")]
-fn decoded_legacy_payload(request: &str) -> Value {
+#[cfg(feature = "sync-http")]
+fn decoded_sync_http_payload(request: &str) -> Value {
     let (_, body) = request
         .split_once("\r\n\r\n")
         .expect("HTTP request has a payload delimiter");
     serde_json::from_str::<Value>(body).expect("collector payload is OTLP JSON")
 }
 
-#[cfg(feature = "legacy-http-json")]
-fn assert_legacy_default_resource_and_scope(resource_group: &Value, scope_field: &str) {
+#[cfg(feature = "sync-http")]
+fn assert_sync_http_default_resource_and_scope(resource_group: &Value, scope_field: &str) {
     let resource_attributes = resource_group["resource"]["attributes"]
         .as_array()
         .expect("resource attributes");
@@ -995,7 +995,7 @@ fn assert_legacy_default_resource_and_scope(resource_group: &Value, scope_field:
     );
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 fn assert_decoded_log(level: &Value, body: &Value, attributes: &[Value]) {
     assert_eq!(level, &json!(9), "Info maps to OTLP severity number 9");
     assert_eq!(
@@ -1010,37 +1010,37 @@ fn assert_decoded_log(level: &Value, body: &Value, attributes: &[Value]) {
     );
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_http_json_factory_exports_a_decoded_log_to_a_hermetic_collector() {
+fn public_sync_http_factory_exports_a_decoded_log_to_a_hermetic_collector() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
     let address = listener.local_addr().expect("collector address");
     let collector = std::thread::spawn(move || {
-        let mut stream = accept_legacy_export(&listener).expect("accept legacy export");
+        let mut stream = accept_sync_http_export(&listener).expect("accept sync-http export");
         let request = read_http_request(&mut stream);
         assert!(request.starts_with("POST /v1/logs HTTP/1.1"));
         stream
             .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-            .expect("acknowledge legacy export");
+            .expect("acknowledge sync-http export");
         request
     });
 
-    let telemetry = Telemetry::new_typed(enabled_legacy_http_json_config(address))
-        .expect("public legacy factory constructs");
+    let telemetry = Telemetry::new_typed(enabled_sync_http_config(address))
+        .expect("public sync-http factory constructs");
     telemetry
         .emit_log(&log_event(service_name(), "tool_use"))
-        .expect("public legacy facade admits the log");
+        .expect("public sync-http facade admits the log");
     telemetry
         .flush_typed()
-        .expect("legacy worker barrier completes the export");
+        .expect("sync-http worker barrier completes the export");
     telemetry
         .shutdown_typed()
-        .expect("legacy shutdown completes after its worker barrier");
+        .expect("sync-http shutdown completes after its worker barrier");
 
     let request = collector.join().expect("collector exits");
-    let payload = decoded_legacy_payload(&request);
-    assert_legacy_default_resource_and_scope(&payload["resourceLogs"][0], "scopeLogs");
-    let log = decoded_legacy_log(&request);
+    let payload = decoded_sync_http_payload(&request);
+    assert_sync_http_default_resource_and_scope(&payload["resourceLogs"][0], "scopeLogs");
+    let log = decoded_sync_http_log(&request);
     assert_decoded_log(
         &log["severityNumber"],
         &log["body"],
@@ -1048,14 +1048,14 @@ fn public_legacy_http_json_factory_exports_a_decoded_log_to_a_hermetic_collector
     );
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_factory_redacts_rejected_authorization_from_diagnostics_and_health() {
-    const CREDENTIAL: &str = "authorization: Bearer d9-legacy-secret";
+fn public_sync_http_factory_redacts_rejected_authorization_from_diagnostics_and_health() {
+    const CREDENTIAL: &str = "authorization: Bearer d9-sync-http-secret";
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
     let address = listener.local_addr().expect("collector address");
     let collector = std::thread::spawn(move || {
-        let mut stream = accept_legacy_export(&listener).expect("accept legacy export");
+        let mut stream = accept_sync_http_export(&listener).expect("accept sync-http export");
         let request = read_http_request(&mut stream);
         assert!(
             request.contains(CREDENTIAL),
@@ -1068,37 +1068,35 @@ fn public_legacy_factory_redacts_rejected_authorization_from_diagnostics_and_hea
             .expect("reject credential");
     });
 
-    let telemetry = Telemetry::new_typed(enabled_legacy_http_json_config_with_auth(
-        address, CREDENTIAL,
-    ))
-    .expect("public legacy factory constructs");
+    let telemetry = Telemetry::new_typed(enabled_sync_http_config_with_auth(address, CREDENTIAL))
+        .expect("public sync-http factory constructs");
     telemetry
         .emit_log(&log_event(service_name(), "rejected credential"))
-        .expect("legacy factory admits log before export");
+        .expect("sync-http factory admits log before export");
     let error = telemetry
         .flush_typed()
         .expect_err("collector credential rejection reaches the lifecycle barrier");
     let diagnostic = format!("{error:?}");
     assert!(
-        !diagnostic.contains("d9-legacy-secret"),
+        !diagnostic.contains("d9-sync-http-secret"),
         "public flush diagnostics redact credentials"
     );
     let health = format!("{:?}", telemetry.health());
     assert!(
-        !health.contains("d9-legacy-secret"),
+        !health.contains("d9-sync-http-secret"),
         "public health diagnostics redact credentials"
     );
     collector.join().expect("collector exits");
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_factory_reports_retry_exhaustion_after_the_configured_attempts() {
+fn public_sync_http_factory_reports_retry_exhaustion_after_the_configured_attempts() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
     let address = listener.local_addr().expect("collector address");
     let collector = std::thread::spawn(move || {
         for _ in 0..2 {
-            let mut stream = accept_legacy_export(&listener).expect("accept retry attempt");
+            let mut stream = accept_sync_http_export(&listener).expect("accept retry attempt");
             let request = read_http_request(&mut stream);
             assert!(request.starts_with("POST /v1/logs HTTP/1.1"));
             stream
@@ -1109,11 +1107,11 @@ fn public_legacy_factory_reports_retry_exhaustion_after_the_configured_attempts(
         }
     });
 
-    let telemetry = Telemetry::new_typed(enabled_legacy_http_json_retry_config(address, 1))
-        .expect("public legacy factory constructs");
+    let telemetry = Telemetry::new_typed(enabled_sync_http_retry_config(address, 1))
+        .expect("public sync-http factory constructs");
     telemetry
         .emit_log(&log_event(service_name(), "retry exhaustion"))
-        .expect("legacy factory admits log before export");
+        .expect("sync-http factory admits log before export");
     let error = telemetry
         .flush_typed()
         .expect_err("retryable collector failures exhaust the configured attempt budget");
@@ -1124,15 +1122,15 @@ fn public_legacy_factory_reports_retry_exhaustion_after_the_configured_attempts(
     assert_eq!(
         export_error.code(),
         sc_observability_types::error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
-        "the retained export cause classifies exhausted legacy retry attempts with the stable error code"
+        "the retained export cause classifies exhausted sync-http retry attempts with the stable error code"
     );
     assert_eq!(telemetry.health().dropped_exports_total, 1);
     collector.join().expect("collector exits");
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_factory_recovers_a_partial_log_export_failure() {
+fn public_sync_http_factory_recovers_a_partial_log_export_failure() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
     let address = listener.local_addr().expect("collector address");
     let collector = std::thread::spawn(move || {
@@ -1140,7 +1138,7 @@ fn public_legacy_factory_recovers_a_partial_log_export_failure() {
             b"500 Internal Server Error".as_slice(),
             b"200 OK".as_slice(),
         ] {
-            let mut stream = accept_legacy_export(&listener).expect("accept export");
+            let mut stream = accept_sync_http_export(&listener).expect("accept export");
             let request = read_http_request(&mut stream);
             assert!(
                 request.starts_with("POST /v1/logs HTTP/1.1"),
@@ -1156,11 +1154,11 @@ fn public_legacy_factory_recovers_a_partial_log_export_failure() {
         }
     });
 
-    let telemetry = Telemetry::new_typed(enabled_legacy_http_json_retry_config(address, 0))
-        .expect("public legacy factory constructs");
+    let telemetry = Telemetry::new_typed(enabled_sync_http_retry_config(address, 0))
+        .expect("public sync-http factory constructs");
     telemetry
-        .emit_log(&log_event(service_name(), "partial legacy failure"))
-        .expect("legacy factory admits failing log");
+        .emit_log(&log_event(service_name(), "partial sync-http failure"))
+        .expect("sync-http factory admits failing log");
     telemetry
         .flush_typed()
         .expect_err("non-retried log failure reaches the lifecycle barrier");
@@ -1177,8 +1175,8 @@ fn public_legacy_factory_recovers_a_partial_log_export_failure() {
     );
 
     telemetry
-        .emit_log(&log_event(service_name(), "partial legacy recovery"))
-        .expect("legacy factory admits recovery log");
+        .emit_log(&log_event(service_name(), "partial sync-http recovery"))
+        .expect("sync-http factory admits recovery log");
     telemetry
         .flush_typed()
         .expect("next log export recovers the affected exporter");
@@ -1189,30 +1187,30 @@ fn public_legacy_factory_recovers_a_partial_log_export_failure() {
     );
     telemetry
         .shutdown_typed()
-        .expect("legacy recovery scenario shuts down cleanly");
+        .expect("sync-http recovery scenario shuts down cleanly");
     collector.join().expect("collector exits");
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_http_json_factory_exports_decoded_trace_counter_and_gauge() {
+fn public_sync_http_factory_exports_decoded_trace_counter_and_gauge() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
     let address = listener.local_addr().expect("collector address");
     let collector = std::thread::spawn(move || {
         let mut requests = Vec::new();
         for _ in 0..3 {
-            let mut stream = accept_legacy_export(&listener).expect("accept legacy export");
+            let mut stream = accept_sync_http_export(&listener).expect("accept sync-http export");
             let request = read_http_request(&mut stream);
             stream
                 .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-                .expect("acknowledge legacy export");
+                .expect("acknowledge sync-http export");
             requests.push(request);
         }
         requests
     });
 
-    let telemetry = Telemetry::new_typed(enabled_legacy_http_json_config(address))
-        .expect("public legacy factory constructs");
+    let telemetry = Telemetry::new_typed(enabled_sync_http_config(address))
+        .expect("public sync-http factory constructs");
     telemetry
         .emit_log(&log_event(service_name(), "tool_use"))
         .expect("admit log");
@@ -1225,13 +1223,13 @@ fn public_legacy_http_json_factory_exports_decoded_trace_counter_and_gauge() {
     telemetry.emit_metric(&gauge_metric()).expect("admit gauge");
     telemetry
         .flush_typed()
-        .expect("legacy worker barrier completes every export");
+        .expect("sync-http worker barrier completes every export");
     telemetry
         .shutdown_typed()
-        .expect("legacy shutdown completes after every export");
+        .expect("sync-http shutdown completes after every export");
     telemetry
         .shutdown_typed()
-        .expect("legacy public-factory shutdown remains idempotent after a completed export");
+        .expect("sync-http public-factory shutdown remains idempotent after a completed export");
 
     let requests = collector.join().expect("collector exits");
     let logs = requests
@@ -1246,9 +1244,9 @@ fn public_legacy_http_json_factory_exports_decoded_trace_counter_and_gauge() {
         .iter()
         .find(|request| request.starts_with("POST /v1/metrics HTTP/1.1"))
         .expect("metrics request");
-    let log_payload = decoded_legacy_payload(logs);
-    assert_legacy_default_resource_and_scope(&log_payload["resourceLogs"][0], "scopeLogs");
-    let log = decoded_legacy_log(logs);
+    let log_payload = decoded_sync_http_payload(logs);
+    assert_sync_http_default_resource_and_scope(&log_payload["resourceLogs"][0], "scopeLogs");
+    let log = decoded_sync_http_log(logs);
     assert_decoded_log(
         &log["severityNumber"],
         &log["body"],
@@ -1257,14 +1255,14 @@ fn public_legacy_http_json_factory_exports_decoded_trace_counter_and_gauge() {
 
     let (_, trace_body) = traces.split_once("\r\n\r\n").expect("trace payload");
     let trace_payload = serde_json::from_str::<Value>(trace_body).expect("OTLP trace JSON");
-    assert_legacy_default_resource_and_scope(&trace_payload["resourceSpans"][0], "scopeSpans");
+    assert_sync_http_default_resource_and_scope(&trace_payload["resourceSpans"][0], "scopeSpans");
     let trace = trace_payload["resourceSpans"][0]["scopeSpans"][0]["spans"][0].clone();
     assert_eq!(trace["name"], "agent.run");
     assert_eq!(trace["parentSpanId"], "fedcba9876543210");
-    assert_eq!(trace["kind"], 1, "legacy facade maps to internal kind");
+    assert_eq!(trace["kind"], 1, "sync-http facade maps to internal kind");
     assert_eq!(
         trace["flags"], 0,
-        "the released legacy trace defaults its decoded trace flags to zero"
+        "the released sync-http trace defaults its decoded trace flags to zero"
     );
     assert_eq!(trace["events"][0]["name"], "tool.call");
     assert_eq!(trace["status"]["code"], "STATUS_CODE_OK", "span is OK");
@@ -1272,7 +1270,10 @@ fn public_legacy_http_json_factory_exports_decoded_trace_counter_and_gauge() {
 
     let (_, metric_body) = metrics.split_once("\r\n\r\n").expect("metric payload");
     let metric_payload = serde_json::from_str::<Value>(metric_body).expect("OTLP metric JSON");
-    assert_legacy_default_resource_and_scope(&metric_payload["resourceMetrics"][0], "scopeMetrics");
+    assert_sync_http_default_resource_and_scope(
+        &metric_payload["resourceMetrics"][0],
+        "scopeMetrics",
+    );
     let exported = metric_payload["resourceMetrics"][0]["scopeMetrics"][0]["metrics"].clone();
     assert_eq!(exported[0]["name"], "agent.events_total");
     assert!(exported[0]["sum"].is_object());
@@ -1280,46 +1281,46 @@ fn public_legacy_http_json_factory_exports_decoded_trace_counter_and_gauge() {
     assert!(exported[1]["gauge"].is_object());
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-#[ignore = "requires a harness-owned pinned desktop viewer; set D9_VIEWER_LEGACY_ADDRESS"]
-fn public_legacy_factory_exports_three_signals_to_the_pinned_desktop_viewer() {
-    let address = std::env::var("D9_VIEWER_LEGACY_ADDRESS")
-        .expect("D9_VIEWER_LEGACY_ADDRESS is set to the isolated viewer address")
+#[ignore = "requires a harness-owned pinned desktop viewer; set D9_VIEWER_SYNC_HTTP_ADDRESS"]
+fn public_sync_http_factory_exports_three_signals_to_the_pinned_desktop_viewer() {
+    let address = std::env::var("D9_VIEWER_SYNC_HTTP_ADDRESS")
+        .expect("D9_VIEWER_SYNC_HTTP_ADDRESS is set to the isolated viewer address")
         .parse()
-        .expect("D9_VIEWER_LEGACY_ADDRESS is a socket address");
-    let telemetry = Telemetry::new_typed(enabled_legacy_http_json_config(address))
-        .expect("public legacy factory constructs");
+        .expect("D9_VIEWER_SYNC_HTTP_ADDRESS is a socket address");
+    let telemetry = Telemetry::new_typed(enabled_sync_http_config(address))
+        .expect("public sync-http factory constructs");
     telemetry
-        .emit_log(&log_event(service_name(), "d9-viewer-legacy-factory"))
-        .expect("legacy factory admits viewer log");
+        .emit_log(&log_event(service_name(), "d9-viewer-sync-http-factory"))
+        .expect("sync-http factory admits viewer log");
     for signal in completed_span_signals() {
         telemetry
             .emit_span(&signal)
-            .expect("legacy factory admits viewer span signal");
+            .expect("sync-http factory admits viewer span signal");
     }
     telemetry
         .emit_metric(&counter_metric())
-        .expect("legacy factory admits viewer counter");
+        .expect("sync-http factory admits viewer counter");
     telemetry
         .emit_metric(&gauge_metric())
-        .expect("legacy factory admits viewer gauge");
+        .expect("sync-http factory admits viewer gauge");
     telemetry
         .flush_typed()
-        .expect("legacy worker barrier delivers all viewer signals");
+        .expect("sync-http worker barrier delivers all viewer signals");
     telemetry
         .shutdown_typed()
-        .expect("legacy viewer delivery shuts down after its worker barrier");
+        .expect("sync-http viewer delivery shuts down after its worker barrier");
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_factory_accepts_scalar_histogram_without_wire_or_degraded_health() {
+fn public_sync_http_factory_accepts_scalar_histogram_without_wire_or_degraded_health() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
-    let telemetry = Telemetry::new_typed(enabled_legacy_http_json_config(
+    let telemetry = Telemetry::new_typed(enabled_sync_http_config(
         listener.local_addr().expect("collector address"),
     ))
-    .expect("public legacy factory constructs");
+    .expect("public sync-http factory constructs");
     telemetry
         .emit_metric(&scalar_histogram_metric())
         .expect("released scalar metric is accepted at admission");
@@ -1341,19 +1342,19 @@ fn public_legacy_factory_accepts_scalar_histogram_without_wire_or_degraded_healt
         health.last_error.is_none(),
         "accepted released scalar histogram retains no exporter error: {health:?}"
     );
-    assert_no_legacy_export(&listener);
+    assert_no_sync_http_export(&listener);
     telemetry
         .shutdown_typed()
         .expect("released scalar histogram shutdown remains clean");
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_factory_shutdown_is_idempotent() {
-    let telemetry = Telemetry::new_typed(enabled_legacy_http_json_config(
+fn public_sync_http_factory_shutdown_is_idempotent() {
+    let telemetry = Telemetry::new_typed(enabled_sync_http_config(
         "127.0.0.1:1".parse().expect("loopback address"),
     ))
-    .expect("public legacy factory constructs");
+    .expect("public sync-http factory constructs");
 
     telemetry
         .shutdown_typed()
@@ -2072,7 +2073,7 @@ fn admitted_sdk_export_failure_reaches_public_health_once() {
 
 /// Bounds the entire public-factory scenario, including exporter construction and cleanup.
 /// The parent owns and reaps the child even when a regression strands a worker thread.
-#[cfg(any(feature = "legacy-http-json", feature = "otlp-sdk"))]
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn public_factory_scenario_child(name: &str) -> bool {
     const CHILD_CASE: &str = "SC_OTLP_PUBLIC_FACTORY_CASE";
     const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(30);
@@ -2118,7 +2119,7 @@ fn public_factory_scenario_child(name: &str) -> bool {
     }
 }
 
-#[cfg(any(feature = "legacy-http-json", feature = "otlp-sdk"))]
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn public_flush_export_cause(
     failure: &sc_observability_types::typed::FlushFailure,
 ) -> &sc_observability_types::v2::ExportError {
@@ -2131,22 +2132,22 @@ fn public_flush_export_cause(
         .expect("native typed exporter cause")
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_factory_recovers_after_collector_unavailability() {
+fn public_sync_http_factory_recovers_after_collector_unavailability() {
     if !public_factory_scenario_child(
-        "public_legacy_factory_recovers_after_collector_unavailability",
+        "public_sync_http_factory_recovers_after_collector_unavailability",
     ) {
         return;
     }
     let reservation = TcpListener::bind("127.0.0.1:0").expect("reserve collector endpoint");
     let address = reservation.local_addr().expect("endpoint");
     drop(reservation);
-    let mut config = enabled_legacy_http_json_retry_config(address, 0);
+    let mut config = enabled_sync_http_retry_config(address, 0);
     config.transport.timeout_ms = 500_u64.into();
-    let telemetry = Telemetry::new_typed(config).expect("public legacy factory");
+    let telemetry = Telemetry::new_typed(config).expect("public sync-http factory");
     telemetry
-        .emit_log(&log_event(service_name(), "unavailable legacy"))
+        .emit_log(&log_event(service_name(), "unavailable sync-http"))
         .expect("admission does not require an available collector");
     let failure = telemetry
         .flush_typed()
@@ -2162,20 +2163,20 @@ fn public_legacy_factory_recovers_after_collector_unavailability() {
 
     let listener = TcpListener::bind(address).expect("recover the same endpoint");
     let collector = std::thread::spawn(move || {
-        let mut stream = accept_legacy_export(&listener).expect("accept recovery export");
+        let mut stream = accept_sync_http_export(&listener).expect("accept recovery export");
         let request = read_http_request(&mut stream);
-        let log = decoded_legacy_log(&request);
+        let log = decoded_sync_http_log(&request);
         stream
             .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .expect("acknowledge delivered recovery payload");
         log
     });
     telemetry
-        .emit_log(&log_event(service_name(), "recovered legacy"))
+        .emit_log(&log_event(service_name(), "recovered sync-http"))
         .expect("admit subsequent export");
     telemetry.flush_typed().expect("same factory recovers");
     let log = collector.join().expect("collector joined");
-    assert_eq!(log["body"]["stringValue"], "recovered legacy");
+    assert_eq!(log["body"]["stringValue"], "recovered sync-http");
     assert_eq!(log["severityNumber"], 9);
     let recovered = telemetry.health();
     assert_eq!(recovered.state, TelemetryHealthState::Healthy);
@@ -2235,7 +2236,7 @@ fn public_sdk_factory_recovers_after_collector_unavailability() {
     });
 }
 
-#[cfg(any(feature = "legacy-http-json", feature = "otlp-sdk"))]
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn invalid_event() -> LogEvent {
     let mut event = log_event(service_name(), "invalid entity must never reach collector");
     event
@@ -2246,11 +2247,11 @@ fn invalid_event() -> LogEvent {
     event
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_factory_rejects_invalid_model_before_collector_contact() {
+fn public_sync_http_factory_rejects_invalid_model_before_collector_contact() {
     if !public_factory_scenario_child(
-        "public_legacy_factory_rejects_invalid_model_before_collector_contact",
+        "public_sync_http_factory_rejects_invalid_model_before_collector_contact",
     ) {
         return;
     }
@@ -2258,7 +2259,7 @@ fn public_legacy_factory_rejects_invalid_model_before_collector_contact() {
     listener.set_nonblocking(true).expect("nonblocking witness");
     let mut transport = V2OtelConfig::default();
     transport.enabled = true;
-    transport.backend = sc_observability_otlp::v2::ExporterBackend::LegacyHttpJson;
+    transport.backend = sc_observability_otlp::v2::ExporterBackend::SyncHttp;
     transport.protocol = sc_observability_otlp::v2::OtlpProtocol::HttpJson;
     transport.endpoint = Some(
         V2OtlpEndpoint::new_typed(format!("http://{}", listener.local_addr().unwrap())).unwrap(),
@@ -2267,8 +2268,8 @@ fn public_legacy_factory_rejects_invalid_model_before_collector_contact() {
         .enable_logs(LogsConfig::default())
         .with_transport(transport)
         .build_typed()
-        .expect("canonical legacy config");
-    let telemetry = V2Telemetry::new_typed(config).expect("canonical public legacy factory");
+        .expect("canonical sync-http config");
+    let telemetry = V2Telemetry::new_typed(config).expect("canonical public sync-http factory");
     let error = telemetry
         .emit_log(&invalid_event())
         .expect_err("invalid canonical model");
@@ -2334,10 +2335,11 @@ fn public_sdk_factory_rejects_invalid_model_before_collector_contact() {
     });
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 #[test]
-fn public_legacy_factory_reports_stalled_collector_timeout() {
-    if !public_factory_scenario_child("public_legacy_factory_reports_stalled_collector_timeout") {
+fn public_sync_http_factory_reports_stalled_collector_timeout() {
+    if !public_factory_scenario_child("public_sync_http_factory_reports_stalled_collector_timeout")
+    {
         return;
     }
     let listener = TcpListener::bind("127.0.0.1:0").expect("stalled collector");
@@ -2345,10 +2347,10 @@ fn public_legacy_factory_reports_stalled_collector_timeout() {
     let (observed_tx, observed_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
     let collector = std::thread::spawn(move || {
-        let mut stream = accept_legacy_export(&listener).expect("accept public factory request");
+        let mut stream = accept_sync_http_export(&listener).expect("accept public factory request");
         let request = read_http_request(&mut stream);
         assert_eq!(
-            decoded_legacy_log(&request)["body"]["stringValue"],
+            decoded_sync_http_log(&request)["body"]["stringValue"],
             "stalled collector"
         );
         observed_tx.send(()).expect("request observed");
@@ -2357,7 +2359,7 @@ fn public_legacy_factory_reports_stalled_collector_timeout() {
     });
     let mut transport = V2OtelConfig::default();
     transport.enabled = true;
-    transport.backend = sc_observability_otlp::v2::ExporterBackend::LegacyHttpJson;
+    transport.backend = sc_observability_otlp::v2::ExporterBackend::SyncHttp;
     transport.protocol = sc_observability_otlp::v2::OtlpProtocol::HttpJson;
     transport.endpoint =
         Some(V2OtlpEndpoint::new_typed(format!("http://{address}")).expect("endpoint"));
@@ -2374,7 +2376,7 @@ fn public_legacy_factory_reports_stalled_collector_timeout() {
         .with_transport(transport)
         .build_typed()
         .expect("stalled collector config");
-    let telemetry = V2Telemetry::new_typed(config).expect("public legacy factory");
+    let telemetry = V2Telemetry::new_typed(config).expect("public sync-http factory");
     telemetry
         .emit_log(&log_event(service_name(), "stalled collector"))
         .expect("admit stalled export");

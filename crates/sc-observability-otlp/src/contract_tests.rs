@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use super::config::{
-    BackendTransportBounds, ExporterBackend, LegacyRetryPolicy, OtelConfig, OtlpProtocol,
+    BackendTransportBounds, ExporterBackend, OtelConfig, OtlpProtocol, SyncHttpRetryPolicy,
     validated_transport_bounds,
 };
 use super::constants;
@@ -15,10 +15,10 @@ use sc_observability_types::error_codes::otlp;
 use sc_observability_types::v2::MetricRecord;
 use sc_observability_types::v2::{ConfigFailure, ExportError};
 
-fn legacy_config() -> OtelConfig {
+fn sync_http_config() -> OtelConfig {
     OtelConfig {
         enabled: true,
-        backend: ExporterBackend::LegacyHttpJson,
+        backend: ExporterBackend::SyncHttp,
         protocol: OtlpProtocol::HttpJson,
         ..OtelConfig::default()
     }
@@ -29,7 +29,7 @@ fn contract_tests_validation_order() {
     let config = OtelConfig {
         timeout_ms: Some(0_u64.into()),
         queue_capacity: Some(0),
-        ..legacy_config()
+        ..sync_http_config()
     };
     let error = validated_transport_bounds(&config).expect_err("timeout is checked first");
     assert!(matches!(error, ConfigFailure::ZeroDuration { .. }));
@@ -37,34 +37,34 @@ fn contract_tests_validation_order() {
 }
 
 #[test]
-fn contract_tests_every_legacy_duration_precedes_later_validation_bullets() {
+fn contract_tests_every_sync_http_duration_precedes_later_validation_bullets() {
     let cases = [
         (
             "legacy_retry.initial_backoff_ms",
-            LegacyRetryPolicy {
+            SyncHttpRetryPolicy {
                 initial_backoff_ms: Some(0_u64.into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             },
         ),
         (
             "legacy_retry.max_backoff_ms",
-            LegacyRetryPolicy {
+            SyncHttpRetryPolicy {
                 max_backoff_ms: Some(0_u64.into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             },
         ),
         (
             "legacy_retry.retry_sequence_timeout_ms",
-            LegacyRetryPolicy {
+            SyncHttpRetryPolicy {
                 retry_sequence_timeout_ms: Some(0_u64.into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             },
         ),
         (
             "legacy_retry.retry_after_cap_ms",
-            LegacyRetryPolicy {
+            SyncHttpRetryPolicy {
                 retry_after_cap_ms: Some(0_u64.into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             },
         ),
     ];
@@ -76,7 +76,7 @@ fn contract_tests_every_legacy_duration_precedes_later_validation_bullets() {
                 OtelConfig {
                     legacy_retry: Some(legacy_retry.clone()),
                     queue_capacity: Some(0),
-                    ..legacy_config()
+                    ..sync_http_config()
                 },
             ),
             (
@@ -84,7 +84,7 @@ fn contract_tests_every_legacy_duration_precedes_later_validation_bullets() {
                 OtelConfig {
                     legacy_retry: Some(legacy_retry.clone()),
                     protocol: OtlpProtocol::Grpc,
-                    ..legacy_config()
+                    ..sync_http_config()
                 },
             ),
             (
@@ -92,12 +92,12 @@ fn contract_tests_every_legacy_duration_precedes_later_validation_bullets() {
                 OtelConfig {
                     legacy_retry: Some(legacy_retry),
                     insecure_skip_verify: true,
-                    ..legacy_config()
+                    ..sync_http_config()
                 },
             ),
         ] {
             let error = validated_transport_bounds(&config)
-                .expect_err("a zero legacy duration must be rejected first");
+                .expect_err("a zero sync-http duration must be rejected first");
             assert!(
                 matches!(error, ConfigFailure::ZeroDuration { .. }),
                 "{field} must precede {later_failure}; got {error:?}"
@@ -112,14 +112,14 @@ fn contract_tests_every_legacy_duration_precedes_later_validation_bullets() {
 }
 
 #[test]
-fn contract_tests_legacy_retry_duration_precedes_capacity() {
+fn contract_tests_sync_http_retry_duration_precedes_capacity() {
     let error = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(LegacyRetryPolicy {
+        legacy_retry: Some(SyncHttpRetryPolicy {
             initial_backoff_ms: Some(0_u64.into()),
-            ..LegacyRetryPolicy::default()
+            ..SyncHttpRetryPolicy::default()
         }),
         queue_capacity: Some(0),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("initial backoff validation precedes capacity");
 
@@ -132,14 +132,14 @@ fn contract_tests_legacy_retry_duration_precedes_capacity() {
 
 #[test]
 fn contract_tests_resolved_defaults() {
-    let bounds = validated_transport_bounds(&legacy_config()).expect("default legacy bounds");
+    let bounds = validated_transport_bounds(&sync_http_config()).expect("default sync-http bounds");
     assert_eq!(bounds.queue_capacity().get(), 1_024);
     assert_eq!(bounds.queue_byte_capacity().get(), 16 * 1024 * 1024);
     assert_eq!(bounds.request_timeout().get().as_millis(), 3_000);
     assert_eq!(bounds.lifecycle().flush().get().as_millis(), 30_000);
     assert_eq!(bounds.lifecycle().shutdown().get().as_millis(), 30_000);
-    let BackendTransportBounds::Legacy(retry) = bounds.backend() else {
-        panic!("legacy selection retains retry policy");
+    let BackendTransportBounds::SyncHttp(retry) = bounds.backend() else {
+        panic!("sync-http selection retains retry policy");
     };
     assert_eq!(retry.max_retries(), 3);
     assert_eq!(retry.jitter().get(), 20);
@@ -153,7 +153,7 @@ fn contract_tests_resolved_defaults() {
 fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
     let default_timeout = validated_transport_bounds(&OtelConfig {
         lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("a shutdown bound below the default timeout is invalid");
     assert!(matches!(
@@ -168,7 +168,7 @@ fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
     let explicit_timeout = validated_transport_bounds(&OtelConfig {
         timeout_ms: Some(3_001_u64.into()),
         lifecycle_shutdown_timeout_ms: Some(3_000_u64.into()),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("a shutdown bound below an explicit timeout is invalid");
     assert!(matches!(
@@ -183,7 +183,7 @@ fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
     let explicit_default_timeout = validated_transport_bounds(&OtelConfig {
         timeout_ms: Some(constants::DEFAULT_OTLP_TIMEOUT_MS.into()),
         lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("an explicit default timeout still records its explicit origin");
     assert!(matches!(
@@ -200,7 +200,7 @@ fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
 fn contract_tests_stable_failure_codes() {
     let zero = validated_transport_bounds(&OtelConfig {
         timeout_ms: Some(0_u64.into()),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("zero timeout");
     assert_eq!(zero.diagnostic().code, otlp::OTLP_CONFIG_ZERO_DURATION);
@@ -208,10 +208,10 @@ fn contract_tests_stable_failure_codes() {
     let not_applicable = validated_transport_bounds(&OtelConfig {
         enabled: true,
         backend: ExporterBackend::OpenTelemetrySdk,
-        legacy_retry: Some(LegacyRetryPolicy::default()),
+        legacy_retry: Some(SyncHttpRetryPolicy::default()),
         ..OtelConfig::default()
     })
-    .expect_err("SDK must not silently accept legacy fields");
+    .expect_err("SDK must not silently accept sync-http fields");
     assert!(matches!(
         not_applicable,
         ConfigFailure::ConfigFieldNotApplicable { .. }
@@ -231,7 +231,7 @@ fn sdk_config() -> OtelConfig {
 }
 
 fn assert_sdk_not_applicable_field(config: &OtelConfig, expected_field: &str) {
-    let error = validated_transport_bounds(config).expect_err("SDK rejects legacy retry fields");
+    let error = validated_transport_bounds(config).expect_err("SDK rejects sync-http retry fields");
     assert!(matches!(
         error,
         ConfigFailure::ConfigFieldNotApplicable { .. }
@@ -243,12 +243,12 @@ fn assert_sdk_not_applicable_field(config: &OtelConfig, expected_field: &str) {
 }
 
 #[test]
-fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_legacy_field() {
+fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_sync_http_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
@@ -256,9 +256,9 @@ fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_legacy_field() {
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES + 1),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
@@ -267,12 +267,12 @@ fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_legacy_field() {
 }
 
 #[test]
-fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_legacy_field() {
+fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_sync_http_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 initial_backoff_ms: Some(constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
@@ -280,9 +280,9 @@ fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_legacy_field
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 initial_backoff_ms: Some((constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS + 1).into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
@@ -291,12 +291,12 @@ fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_legacy_field
 }
 
 #[test]
-fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_legacy_field() {
+fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_sync_http_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 max_backoff_ms: Some(constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
@@ -304,9 +304,9 @@ fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_legacy_field() {
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 max_backoff_ms: Some((constants::DEFAULT_OTLP_MAX_BACKOFF_MS + 1).into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
@@ -317,9 +317,9 @@ fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_legacy_field() {
 #[test]
 fn contract_tests_disabled_rejects_explicit_default_retained_field() {
     let error = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(LegacyRetryPolicy {
+        legacy_retry: Some(SyncHttpRetryPolicy {
             max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES),
-            ..LegacyRetryPolicy::default()
+            ..SyncHttpRetryPolicy::default()
         }),
         ..OtelConfig::default()
     })
@@ -339,12 +339,12 @@ fn contract_tests_disabled_rejects_explicit_default_retained_field() {
 }
 
 #[test]
-fn contract_tests_sdk_reports_retry_jitter_as_the_first_supplied_legacy_field() {
+fn contract_tests_sdk_reports_retry_jitter_as_the_first_supplied_sync_http_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 retry_jitter_percent: Some(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
@@ -356,13 +356,13 @@ fn contract_tests_sdk_reports_retry_jitter_as_the_first_supplied_legacy_field() 
 fn contract_tests_sdk_reports_retry_sequence_timeout_before_later_wire_fields() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 retry_sequence_timeout_ms: Some(
                     constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS.into(),
                 ),
                 retry_after_cap_ms: Some(constants::DEFAULT_OTLP_RETRY_AFTER_CAP_MS.into()),
                 retry_jitter_percent: Some(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             ..sdk_config()
         },
@@ -374,7 +374,7 @@ fn contract_tests_sdk_reports_retry_sequence_timeout_before_later_wire_fields() 
 fn contract_tests_record_and_byte_capacity() {
     let records = validated_transport_bounds(&OtelConfig {
         queue_capacity: Some(0),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("zero records is invalid");
     assert!(matches!(
@@ -385,7 +385,7 @@ fn contract_tests_record_and_byte_capacity() {
 
     let bytes = validated_transport_bounds(&OtelConfig {
         queue_byte_capacity: Some(0),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("zero bytes is invalid");
     assert!(matches!(
@@ -400,7 +400,7 @@ fn contract_tests_record_and_byte_capacity() {
     let upper_bounds = validated_transport_bounds(&OtelConfig {
         queue_capacity: Some(constants::MAX_OTLP_QUEUE_CAPACITY),
         queue_byte_capacity: Some(constants::MAX_OTLP_QUEUE_BYTE_CAPACITY),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect("record and byte upper bounds are accepted");
     assert_eq!(
@@ -414,7 +414,7 @@ fn contract_tests_record_and_byte_capacity() {
 
     let records_overflow = validated_transport_bounds(&OtelConfig {
         queue_capacity: Some(constants::MAX_OTLP_QUEUE_CAPACITY + 1),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("record capacity above the upper bound is invalid");
     assert!(matches!(
@@ -428,7 +428,7 @@ fn contract_tests_record_and_byte_capacity() {
 
     let bytes_overflow = validated_transport_bounds(&OtelConfig {
         queue_byte_capacity: Some(constants::MAX_OTLP_QUEUE_BYTE_CAPACITY + 1),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("byte capacity above the upper bound is invalid");
     assert!(matches!(
@@ -445,7 +445,7 @@ fn contract_tests_record_and_byte_capacity() {
 fn contract_tests_bound_messages_use_named_constants() {
     let records = validated_transport_bounds(&OtelConfig {
         queue_capacity: Some(constants::MAX_OTLP_QUEUE_CAPACITY + 1),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("record capacity above the named bound is invalid");
     assert_eq!(
@@ -457,11 +457,11 @@ fn contract_tests_bound_messages_use_named_constants() {
     );
 
     let jitter = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(LegacyRetryPolicy {
+        legacy_retry: Some(SyncHttpRetryPolicy {
             retry_jitter_percent: Some(constants::MAX_OTLP_RETRY_JITTER_PERCENT + 1),
-            ..LegacyRetryPolicy::default()
+            ..SyncHttpRetryPolicy::default()
         }),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("jitter above the named bound is invalid");
     assert_eq!(
@@ -476,18 +476,18 @@ fn contract_tests_bound_messages_use_named_constants() {
 #[test]
 fn contract_tests_remaining_validation_variants_and_bullet_order() {
     let jitter = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(LegacyRetryPolicy {
+        legacy_retry: Some(SyncHttpRetryPolicy {
             retry_jitter_percent: Some(101),
-            ..LegacyRetryPolicy::default()
+            ..SyncHttpRetryPolicy::default()
         }),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("jitter above 100 is invalid");
     assert!(matches!(jitter, ConfigFailure::InvalidJitterPercent { .. }));
 
     let insecure = validated_transport_bounds(&OtelConfig {
         insecure_skip_verify: true,
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("insecure verification is rejected after ordered bounds");
     assert!(matches!(
@@ -504,18 +504,18 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
     );
     assert_eq!(
         insecure.diagnostic().details["backend"].as_str(),
-        Some("legacy_http_json")
+        Some("sync_http")
     );
 
     let shutdown_before_retry_bound = validated_transport_bounds(&OtelConfig {
         lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
-        legacy_retry: Some(LegacyRetryPolicy {
+        legacy_retry: Some(SyncHttpRetryPolicy {
             retry_sequence_timeout_ms: Some(1_u64.into()),
-            ..LegacyRetryPolicy::default()
+            ..SyncHttpRetryPolicy::default()
         }),
-        ..legacy_config()
+        ..sync_http_config()
     })
-    .expect_err("shared shutdown ordering precedes legacy retry ordering");
+    .expect_err("shared shutdown ordering precedes sync-http retry ordering");
     assert!(matches!(
         shutdown_before_retry_bound,
         ConfigFailure::InvalidBoundOrdering { .. }
@@ -526,12 +526,12 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
     );
 
     let retry_after_cap = validated_transport_bounds(&OtelConfig {
-        legacy_retry: Some(LegacyRetryPolicy {
+        legacy_retry: Some(SyncHttpRetryPolicy {
             retry_sequence_timeout_ms: Some(3_000_u64.into()),
             retry_after_cap_ms: Some(3_001_u64.into()),
-            ..LegacyRetryPolicy::default()
+            ..SyncHttpRetryPolicy::default()
         }),
-        ..legacy_config()
+        ..sync_http_config()
     })
     .expect_err("retry-after cap may not exceed retry sequence timeout");
     assert!(matches!(
@@ -803,16 +803,16 @@ fn released_checked_delays_preserve_zero_without_weakening_canonical_validation(
             timeout_ms: Some(timeout.into()),
             lifecycle_flush_timeout_ms: Some(budget.into()),
             lifecycle_shutdown_timeout_ms: Some(budget.into()),
-            legacy_retry: Some(LegacyRetryPolicy {
+            legacy_retry: Some(SyncHttpRetryPolicy {
                 initial_backoff_ms: Some(0_u64.into()),
                 max_backoff_ms: Some(0_u64.into()),
                 retry_sequence_timeout_ms: Some(budget.into()),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             }),
             endpoint: Some(
                 super::config::OtlpEndpoint::new_typed("http://127.0.0.1:4318").unwrap(),
             ),
-            ..legacy_config()
+            ..sync_http_config()
         };
         assert!(matches!(
             validated_transport_bounds(&transport),
@@ -827,8 +827,8 @@ fn released_checked_delays_preserve_zero_without_weakening_canonical_validation(
             metrics: None,
         };
         let bounds = super::config::validated_released_telemetry_bounds(&config).unwrap();
-        let BackendTransportBounds::Legacy(retry) = bounds.backend() else {
-            panic!("legacy bounds")
+        let BackendTransportBounds::SyncHttp(retry) = bounds.backend() else {
+            panic!("sync-http bounds")
         };
         assert_eq!(retry.initial_backoff().get(), std::time::Duration::ZERO);
         assert_eq!(retry.max_backoff().get(), std::time::Duration::ZERO);

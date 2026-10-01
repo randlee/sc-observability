@@ -71,7 +71,7 @@ typed code, remediation, or drop cause instead of relying on numeric casts.
 Applications own environment/config translation. Construct validated
 `TelemetryConfig` explicitly with backend and protocol; shared crates must
 not override explicit values from ambient `OTEL_*` variables. SDK operation
-requires the caller's Tokio runtime. Legacy HTTP/JSON uses its bounded plain
+requires the caller's Tokio runtime. Synchronous HTTP/JSON uses its bounded plain
 thread worker. Unsupported enabled combinations fail construction with a typed
 error, rather than falling back to the disabled no-network implementation.
 The exporter set and backend traits stay crate-private.
@@ -80,7 +80,7 @@ Use the D21 config contract in `crates/sc-observability-otlp/src/config.rs` and
 `constants.rs`, not historical transport defaults. The declared defaults are
 3,000 ms per request; 30,000 ms lifecycle flush/shutdown; queue capacity 1,024
 records and 16 MiB aggregate bytes; 256-record log/trace/metric batches; and a
-5,000 ms metric interval. Legacy retries default to three retries, 250 ms
+5,000 ms metric interval. Synchronous HTTP retries default to three retries, 250 ms
 initial backoff, 5,000 ms maximum backoff, a 30,000 ms sequence timeout,
 5,000 ms Retry-After cap and 20 percent jitter. Defaults apply only when a
 value is absent; a rejected explicit value is not silently replaced. Preserve

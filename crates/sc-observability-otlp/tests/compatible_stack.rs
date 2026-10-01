@@ -17,9 +17,9 @@
     reason = "the released consumers intentionally use the retained root facade and its legacy error enum"
 )]
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 mod http_collector {
-    //! Caller-owned loopback HTTP/1.1 collector for the legacy JSON backend.
+    //! Caller-owned loopback HTTP/1.1 collector for the synchronous HTTP/JSON backend.
 
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -412,7 +412,7 @@ mod grpc_collector {
     }
 }
 
-#[cfg(any(feature = "otlp-sdk", feature = "legacy-http-json"))]
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
 mod support {
     //! Temp-root guard, projector and health assertion shared by every consumer.
 
@@ -751,9 +751,9 @@ mod sdk_backend {
     }
 }
 
-#[cfg(feature = "legacy-http-json")]
-mod legacy_backend {
-    //! Released `HttpJson` and v2 `ExporterBackend::LegacyHttpJson` delivery.
+#[cfg(feature = "sync-http")]
+mod sync_http_backend {
+    //! Released `HttpJson` and v2 `ExporterBackend::SyncHttp` delivery.
 
     use std::sync::Arc;
 
@@ -785,7 +785,7 @@ mod legacy_backend {
                     .content_type
                     .as_deref()
                     .is_some_and(|value| value.starts_with(JSON)),
-                "legacy backend must send JSON, got {:?}",
+                "sync-http backend must send JSON, got {:?}",
                 request.content_type
             );
         }
@@ -809,12 +809,12 @@ mod legacy_backend {
     }
 
     #[test]
-    fn released_root_consumer_delivers_logs_through_legacy_json_backend() {
-        const MESSAGE: &str = "released-legacy-delivery-message";
+    fn released_root_consumer_delivers_logs_through_sync_http_json_backend() {
+        const MESSAGE: &str = "released-sync-http-delivery-message";
         let collector = Collector::start(JSON, b"{}");
-        let root = TempRoot::new("released-legacy");
+        let root = TempRoot::new("released-sync-http");
 
-        // Released protocol -> backend mapping: HttpJson selects legacy JSON.
+        // Released protocol -> backend mapping: HttpJson selects synchronous HTTP/JSON.
         let transport = OtelConfig {
             enabled: true,
             endpoint: Some(
@@ -828,7 +828,8 @@ mod legacy_backend {
             .with_transport(transport)
             .build_typed()
             .expect("released config");
-        let telemetry = Arc::new(Telemetry::new_typed(config).expect("released legacy telemetry"));
+        let telemetry =
+            Arc::new(Telemetry::new_typed(config).expect("released sync-http telemetry"));
         let observe_config = ObservabilityConfig::default_for(
             ToolName::new(SERVICE).expect("tool"),
             root.path().to_path_buf(),
@@ -849,7 +850,7 @@ mod legacy_backend {
             .expect("emit through sc-observe");
         telemetry
             .flush_typed()
-            .expect("legacy flush delivers to the collector");
+            .expect("sync-http flush delivers to the collector");
         assert_healthy(&telemetry.health());
         assert_healthy(
             &observability
@@ -861,7 +862,7 @@ mod legacy_backend {
         let local = std::fs::read_to_string(root.log_file(SERVICE)).expect("local log file");
         assert!(local.contains(MESSAGE), "sc-observe also logged locally");
 
-        telemetry.shutdown_typed().expect("legacy shutdown");
+        telemetry.shutdown_typed().expect("sync-http shutdown");
         assert!(matches!(
             telemetry.emit_log(&log_event("after-shutdown")),
             Err(TelemetryError::Shutdown)
@@ -873,13 +874,12 @@ mod legacy_backend {
     }
 
     #[test]
-    fn v2_consumer_delivers_logs_through_legacy_json_backend() {
-        const MESSAGE: &str = "v2-legacy-delivery-message";
+    fn v2_consumer_delivers_logs_through_sync_http_json_backend() {
+        const MESSAGE: &str = "v2-sync-http-delivery-message";
         let collector = Collector::start(JSON, b"{}");
-        let root = TempRoot::new("v2-legacy");
+        let root = TempRoot::new("v2-sync-http");
 
-        let mut transport =
-            V2OtelConfig::new(ExporterBackend::LegacyHttpJson, V2OtlpProtocol::HttpJson);
+        let mut transport = V2OtelConfig::new(ExporterBackend::SyncHttp, V2OtlpProtocol::HttpJson);
         transport.enabled = true;
         transport.endpoint =
             Some(V2OtlpEndpoint::new_typed(collector.endpoint()).expect("collector endpoint"));
@@ -888,7 +888,7 @@ mod legacy_backend {
             .with_transport(transport)
             .build_typed()
             .expect("v2 config");
-        let telemetry = Arc::new(V2Telemetry::new_typed(config).expect("v2 legacy telemetry"));
+        let telemetry = Arc::new(V2Telemetry::new_typed(config).expect("v2 sync-http telemetry"));
         let observe_config = sc_observe::v2::ObservabilityConfig::default_for(
             ToolName::new(SERVICE).expect("tool"),
             root.path().to_path_buf(),
@@ -909,7 +909,7 @@ mod legacy_backend {
             .expect("emit through sc-observe");
         telemetry
             .flush_typed()
-            .expect("legacy flush delivers to the collector");
+            .expect("sync-http flush delivers to the collector");
         assert_healthy(&telemetry.health());
         assert_healthy(
             &observability
@@ -921,7 +921,7 @@ mod legacy_backend {
         let local = std::fs::read_to_string(root.log_file(SERVICE)).expect("local log file");
         assert!(local.contains(MESSAGE), "sc-observe also logged locally");
 
-        telemetry.shutdown_typed().expect("legacy shutdown");
+        telemetry.shutdown_typed().expect("sync-http shutdown");
         assert!(matches!(
             telemetry.emit_log(&log_event("after-shutdown")),
             Err(V2TelemetryError::Shutdown { .. })
@@ -935,7 +935,7 @@ mod legacy_backend {
 
 /// Without a backend feature the public configuration is rejected, never
 /// redirected to a different exporter.
-#[cfg(not(all(feature = "otlp-sdk", feature = "legacy-http-json")))]
+#[cfg(not(all(feature = "otlp-sdk", feature = "sync-http")))]
 mod absent_backend {
     fn service() -> sc_observability_types::ServiceName {
         sc_observability_types::ServiceName::new("compatible-stack-absent").expect("valid service")
@@ -991,9 +991,9 @@ mod absent_backend {
         }
     }
 
-    #[cfg(not(feature = "legacy-http-json"))]
+    #[cfg(not(feature = "sync-http"))]
     #[test]
-    fn legacy_selection_is_rejected_for_both_consumers_without_the_legacy_feature() {
+    fn sync_http_selection_is_rejected_for_both_consumers_without_the_sync_http_feature() {
         use sc_observability_otlp::v2::{
             ExporterBackend, OtelConfig as V2OtelConfig, OtlpEndpoint as V2OtlpEndpoint,
             OtlpProtocol as V2OtlpProtocol, Telemetry as V2Telemetry,
@@ -1017,8 +1017,7 @@ mod absent_backend {
             panic!("released HttpJson must not fall back to another exporter");
         };
 
-        let mut transport =
-            V2OtelConfig::new(ExporterBackend::LegacyHttpJson, V2OtlpProtocol::HttpJson);
+        let mut transport = V2OtelConfig::new(ExporterBackend::SyncHttp, V2OtlpProtocol::HttpJson);
         transport.enabled = true;
         transport.endpoint =
             Some(V2OtlpEndpoint::new_typed("http://127.0.0.1:1").expect("endpoint"));
@@ -1028,7 +1027,7 @@ mod absent_backend {
             .build_typed()
             .expect("v2 config");
         let Err(v2_error) = V2Telemetry::new_typed(v2) else {
-            panic!("v2 legacy selection must not fall back to another exporter");
+            panic!("v2 sync-http selection must not fall back to another exporter");
         };
 
         for error in [&released_error, &v2_error] {

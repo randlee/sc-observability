@@ -72,12 +72,12 @@ fn telemetry_config() -> TelemetryConfig {
         .expect("valid telemetry config")
 }
 
-fn legacy_telemetry_config(protocol: OtlpProtocol) -> TelemetryConfig {
+fn sync_http_telemetry_config(protocol: OtlpProtocol) -> TelemetryConfig {
     TelemetryConfigBuilder::new(service_name())
         .enable_logs(LogsConfig::default())
         .with_transport(OtelConfig {
             enabled: true,
-            backend: ExporterBackend::LegacyHttpJson,
+            backend: ExporterBackend::SyncHttp,
             protocol,
             endpoint: Some(
                 OtlpEndpoint::new_typed("https://otel.example.internal")
@@ -86,7 +86,7 @@ fn legacy_telemetry_config(protocol: OtlpProtocol) -> TelemetryConfig {
             ..OtelConfig::default()
         })
         .build_typed()
-        .expect("valid legacy telemetry config")
+        .expect("valid sync-http telemetry config")
 }
 
 /// Test-only construction seam: enabled production configurations must
@@ -343,13 +343,13 @@ fn injected_exporter_set_routes_enabled_signals_and_reports_health() {
 }
 
 #[test]
-fn legacy_factory_rejects_non_json_protocol_before_backend_availability() {
-    let mut invalid_config = legacy_telemetry_config(OtlpProtocol::HttpJson);
+fn sync_http_factory_rejects_non_json_protocol_before_backend_availability() {
+    let mut invalid_config = sync_http_telemetry_config(OtlpProtocol::HttpJson);
     invalid_config.transport.protocol = OtlpProtocol::HttpBinary;
     let bounds = validated_transport_bounds(&invalid_config.transport)
         .expect("configuration bounds precede backend availability");
     let Err(protocol_error) = exporter_factory(&invalid_config, &bounds) else {
-        panic!("the legacy HTTP/JSON backend must reject a binary protocol");
+        panic!("the synchronous HTTP/JSON backend must reject a binary protocol");
     };
     assert!(matches!(
         protocol_error,
@@ -361,21 +361,21 @@ fn legacy_factory_rejects_non_json_protocol_before_backend_availability() {
     );
     assert_eq!(
         protocol_error.diagnostic().details["backend"].as_str(),
-        Some("legacy_http_json")
+        Some("sync_http")
     );
 
-    let config = legacy_telemetry_config(OtlpProtocol::HttpJson);
+    let config = sync_http_telemetry_config(OtlpProtocol::HttpJson);
     let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
-    #[cfg(feature = "legacy-http-json")]
+    #[cfg(feature = "sync-http")]
     {
         let exporters = exporter_factory(&config, &bounds)
-            .expect("the configured legacy backend is composed when enabled");
+            .expect("the configured sync-http backend is composed when enabled");
         exporters.lifecycle.blocking_preflight().expect("preflight");
     }
-    #[cfg(not(feature = "legacy-http-json"))]
+    #[cfg(not(feature = "sync-http"))]
     {
         let Err(backend_error) = exporter_factory(&config, &bounds) else {
-            panic!("the disabled legacy feature must reject construction");
+            panic!("the disabled sync-http feature must reject construction");
         };
         assert!(matches!(
             backend_error,
@@ -2006,7 +2006,7 @@ mod canonical_ingress {
     }
 }
 
-#[cfg(all(feature = "otlp-sdk", feature = "legacy-http-json"))]
+#[cfg(all(feature = "otlp-sdk", feature = "sync-http"))]
 mod current_health_recovery {
     //! Public health follows current backend delivery on both backends: a
     //! loopback collector rejects scripted requests, then accepts them.
@@ -2147,7 +2147,7 @@ mod current_health_recovery {
 
     enum Backend {
         Sdk(tokio::runtime::Runtime),
-        Legacy,
+        SyncHttp,
     }
 
     impl Backend {
@@ -2159,14 +2159,14 @@ mod current_health_recovery {
                         .build()
                         .expect("caller runtime"),
                 ),
-                Self::Legacy,
+                Self::SyncHttp,
             ]
         }
 
         fn telemetry(&self, endpoint: &str) -> Telemetry {
             let (backend, protocol) = match self {
                 Self::Sdk(_) => (ExporterBackend::OpenTelemetrySdk, OtlpProtocol::HttpBinary),
-                Self::Legacy => (ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson),
+                Self::SyncHttp => (ExporterBackend::SyncHttp, OtlpProtocol::HttpJson),
             };
             let config = TelemetryConfigBuilder::new(service_name())
                 .enable_logs(LogsConfig::default())
@@ -2182,7 +2182,7 @@ mod current_health_recovery {
                 .expect("valid telemetry config");
             let _entered = match self {
                 Self::Sdk(runtime) => Some(runtime.enter()),
-                Self::Legacy => None,
+                Self::SyncHttp => None,
             };
             Telemetry::new_typed(config).expect("backend telemetry")
         }
@@ -2190,14 +2190,14 @@ mod current_health_recovery {
         fn flush(&self, telemetry: &Telemetry) -> Result<(), FlushFailure> {
             match self {
                 Self::Sdk(runtime) => runtime.block_on(telemetry.flush_async_typed()),
-                Self::Legacy => telemetry.flush_typed(),
+                Self::SyncHttp => telemetry.flush_typed(),
             }
         }
 
         fn shutdown(&self, telemetry: &Telemetry) {
             let result = match self {
                 Self::Sdk(runtime) => runtime.block_on(telemetry.shutdown_async_typed()),
-                Self::Legacy => telemetry.shutdown_typed(),
+                Self::SyncHttp => telemetry.shutdown_typed(),
             };
             result.expect("shutdown after recovery");
         }
@@ -2205,7 +2205,7 @@ mod current_health_recovery {
         fn name(&self) -> &'static str {
             match self {
                 Self::Sdk(_) => "sdk",
-                Self::Legacy => "legacy",
+                Self::SyncHttp => "sync-http",
             }
         }
     }

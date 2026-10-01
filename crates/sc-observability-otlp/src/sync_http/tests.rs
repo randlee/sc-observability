@@ -1,7 +1,7 @@
 use super::implementation::{
     OtlpHttpExporter, build_logs_payload, normalize_logs_endpoint, parse_retry_after,
 };
-use crate::config::LegacyRetryPolicy;
+use crate::config::SyncHttpRetryPolicy;
 use crate::contracts::{ExporterLifecycle, LogExporter};
 use crate::lifecycle::LifecycleState;
 use sc_observability_types::{
@@ -35,38 +35,38 @@ const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(10);
 const STALLED_RETRY_CLEANUP_WATCHDOG: Duration = Duration::from_secs(2);
 
 #[test]
-fn legacy_error_remediations_preserve_diagnostics_and_match_failure_semantics() {
+fn sync_http_error_remediations_preserve_diagnostics_and_match_failure_semantics() {
     let cases = [
         (
             super::implementation::worker_terminated_error(),
             sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED,
-            "legacy HTTP worker terminated",
+            "synchronous HTTP worker terminated",
             Remediation::recoverable(
-                "restart the legacy HTTP exporter",
+                "restart the synchronous HTTP exporter",
                 ["resubmit any batch that was not acknowledged"],
             ),
         ),
         (
             super::implementation::queue_full_error(),
             sc_observability_types::error_codes::otlp::OTLP_QUEUE_FULL,
-            "legacy HTTP worker admission is full",
+            "synchronous HTTP worker admission is full",
             Remediation::recoverable(
-                "wait for legacy HTTP worker capacity",
+                "wait for synchronous HTTP worker capacity",
                 ["retry the export after capacity is available"],
             ),
         ),
         (
             super::implementation::shutdown_cancelled_error(),
             sc_observability_types::error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
-            "legacy retry was cancelled by shutdown",
+            "synchronous HTTP retry was cancelled by shutdown",
             Remediation::not_recoverable(
-                "the legacy HTTP exporter is shutting down and cannot retry this batch",
+                "the synchronous HTTP exporter is shutting down and cannot retry this batch",
             ),
         ),
         (
             super::implementation::retry_deadline_error(),
             sc_observability_types::error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED,
-            "legacy retry sequence exceeded its deadline",
+            "synchronous HTTP retry sequence exceeded its deadline",
             Remediation::recoverable(
                 "restore collector availability before retrying the export",
                 ["increase the retry sequence deadline only when the delivery budget permits"],
@@ -75,7 +75,7 @@ fn legacy_error_remediations_preserve_diagnostics_and_match_failure_semantics() 
         (
             super::implementation::non_retryable_status_error(400),
             sc_observability_types::error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL,
-            "legacy collector returned terminal HTTP status 400",
+            "synchronous HTTP collector returned terminal HTTP status 400",
             Remediation::not_recoverable(
                 "correct the collector request, credentials, or endpoint before submitting a new batch",
             ),
@@ -214,8 +214,8 @@ fn sample_log() -> LogEvent {
         version: SchemaVersion::new("v1").expect("schema version"),
         timestamp: Timestamp::UNIX_EPOCH,
         level: Level::Info,
-        service: ServiceName::new("legacy-test").expect("service"),
-        target: TargetCategory::new("legacy.http").expect("target"),
+        service: ServiceName::new("sync-http-test").expect("service"),
+        target: TargetCategory::new("sync-http.http").expect("target"),
         action: ActionName::new("export").expect("action"),
         message: Some("hello".to_owned()),
         identity: ProcessIdentity::default(),
@@ -553,8 +553,8 @@ fn retry_policy(
     retry_sequence_timeout_ms: u64,
     retry_after_cap_ms: u64,
     retry_jitter_percent: u8,
-) -> LegacyRetryPolicy {
-    LegacyRetryPolicy {
+) -> SyncHttpRetryPolicy {
+    SyncHttpRetryPolicy {
         max_retries: Some(max_retries),
         initial_backoff_ms: Some(initial_backoff_ms.into()),
         max_backoff_ms: Some(max_backoff_ms.into()),
@@ -774,7 +774,7 @@ fn provenance_pin_and_destination_disposition_are_present() {
     let destinations = [
         (
             "crates/sc-observability-otlp/src/lib.rs",
-            "crates/sc-observability-otlp/src/legacy_http_json/implementation.rs",
+            "crates/sc-observability-otlp/src/sync_http/implementation.rs",
             "transplant-and-adapt",
         ),
         (
@@ -784,7 +784,7 @@ fn provenance_pin_and_destination_disposition_are_present() {
         ),
         (
             "crates/sc-observability-otlp/tests/timestamp_export_integration.rs",
-            "crates/sc-observability-otlp/src/legacy_http_json/tests.rs",
+            "crates/sc-observability-otlp/src/sync_http/tests.rs",
             "transplant-and-adapt",
         ),
     ];
@@ -831,7 +831,7 @@ fn log_payload_preserves_service_correlation_timestamp_severity_and_body() {
     );
     assert_eq!(
         resource_logs["resource"]["attributes"][0]["value"]["stringValue"],
-        "legacy-test"
+        "sync-http-test"
     );
     assert!(
         log["attributes"]
@@ -1814,7 +1814,7 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
     });
     let transport = crate::config::OtelConfig {
         enabled: true,
-        backend: crate::config::ExporterBackend::LegacyHttpJson,
+        backend: crate::config::ExporterBackend::SyncHttp,
         protocol: crate::config::OtlpProtocol::HttpJson,
         endpoint: Some(
             crate::config::OtlpEndpoint::new_typed(format!("http://{address}")).unwrap(),

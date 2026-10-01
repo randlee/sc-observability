@@ -2529,21 +2529,21 @@ a more precise row below.
 | `InvalidEndpoint` | `OTLP_CONFIG_INVALID_ENDPOINT` | `ConfigFailure` | endpoint URL syntax is invalid | provide a valid endpoint URL | field only | after config correction |
 | `InvalidHeader` | `OTLP_CONFIG_INVALID_HEADER` | `ConfigFailure` | header/auth syntax or credential placement is invalid | correct the header/auth configuration | field only | after config correction |
 | `InvalidConfig` | `OTLP_CONFIG_INVALID` | legacy `InitFailure` compatibility | generic configuration construction failed | inspect the typed configuration diagnostic | no additional data | after config correction |
-| `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/legacy-worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
+| `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/sync-http worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
 | `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
 | `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
 | `TokioRuntimeRequired` | `OTLP_TOKIO_RUNTIME_REQUIRED` | `ConfigFailure` | SDK construction lacks an entered Tokio runtime | construct inside the host runtime | no dynamic data | after entering a runtime |
-| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportError` | legacy synchronous lifecycle entered Tokio; construction preserves this condition as the redacted source of `TransportConstructionFailed` | use a plain thread or async lifecycle | no dynamic data | in a supported context |
+| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportError` | synchronous HTTP lifecycle entered Tokio; construction preserves this condition as the redacted source of `TransportConstructionFailed` | use a plain thread or async lifecycle | no dynamic data | in a supported context |
 | `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `ExportError` | SDK synchronous completion requested | await the typed async operation | no dynamic data | through async lifecycle |
 | `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ExportError` | host runtime ended before completion | keep the runtime alive through awaited shutdown | bounded state/counts | with a live replacement runtime/instance |
 | `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `ExportError` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider | duration/state only | operation-specific |
 | `QueueFull` | `OTLP_QUEUE_FULL` | `ExportError` | bounded admission queue saturated | preserve fail-open behavior and inspect health | capacity/depth only | yes, later admission |
-| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportError` | SDK dispatcher or legacy worker terminated unexpectedly | correct the terminal cause and construct a new instance | bounded typed source; no credentials | only with a new instance |
-| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ExportError` | shutdown cancelled a retryable pre-barrier legacy sequence | inspect terminal health; resend only if duplicates are acceptable | attempt/count only | caller decision; duplicates possible |
-| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportError` | no legacy sequence budget remains | increase the validated sequence bound or restore collector health | budget/attempt only | new operation after recovery |
+| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportError` | SDK dispatcher or synchronous HTTP worker terminated unexpectedly | correct the terminal cause and construct a new instance | bounded typed source; no credentials | only with a new instance |
+| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ExportError` | shutdown cancelled a retryable pre-barrier synchronous HTTP sequence | inspect terminal health; resend only if duplicates are acceptable | attempt/count only | caller decision; duplicates possible |
+| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportError` | no synchronous HTTP sequence budget remains | increase the validated sequence bound or restore collector health | budget/attempt only | new operation after recovery |
 | `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportError` | collector returned a non-retryable HTTP status | correct request/auth/config before retrying | status/category only; no body/headers | after cause correction |
-| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportError` | legacy maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
-| `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportError` | SDK or legacy provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
+| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportError` | synchronous HTTP maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
+| `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportError` | SDK or synchronous HTTP provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
 | `SpanAssemblyFailed` | `OTLP_SPAN_ASSEMBLY_FAILED` | legacy `EventFailure` / `ProjectionFailure` compatibility | lifecycle signals cannot form a complete span | emit matching signals in order | identifiers only | after correcting signal order |
 | `FlushFailed` | `OTLP_FLUSH_FAILED` | legacy `FlushFailure` / `ShutdownFailure` compatibility | telemetry flush cannot complete | inspect exporter health and retry after recovery | bounded source/state | after recovery |
 | `IncompleteSpanDropped` | `OTLP_INCOMPLETE_SPAN_DROPPED` | legacy `ShutdownFailure` compatibility | shutdown drops unmatched span state | emit matching ended signals before shutdown | count only | on a new complete sequence |
@@ -2679,16 +2679,16 @@ The factory validates this closed matrix before allocating providers/workers:
 | --- | --- | --- | --- |
 | disabled (transport disabled) | none | none | the sole no-network disabled implementation |
 | `OpenTelemetrySdk` | SDK-supported gRPC or HTTP/protobuf | `otlp-sdk`; entered caller Tokio runtime | stable unsupported-protocol/runtime error |
-| `LegacyHttpJson` | `HttpJson` only | `legacy-http-json`; plain-thread construction | reserved typed error until D.8 |
+| `SyncHttp` | `HttpJson` only | `sync-http`; plain-thread construction | reserved typed error until D.8 |
 
 Delete public/production `Noop*Exporter` fallbacks; disabled construction is an
 explicit private disabled set and an enabled selection can never reach it.
 Every existing `OtelConfig` field receives one disposition: endpoint,
-headers/auth, CA/TLS and `timeout_ms` map to the SDK/legacy builders;
+headers/auth, CA/TLS and `timeout_ms` map to the SDK/synchronous HTTP builders;
 `debug_local_export` is a separate diagnostic mirror outside exporter
 selection; `insecure_skip_verify` is either implemented by the backend with an
 explicit security warning or rejected at construction—never ignored.
-`timeout_ms` covers the entire legacy HTTP request, including connect, TLS,
+`timeout_ms` covers the entire synchronous HTTP request, including connect, TLS,
 request write, response headers, and response read. Endpoint and header/auth
 values are validated before provider/worker construction; malformed endpoints,
 invalid header syntax, and forbidden credential placement return named
@@ -2706,12 +2706,12 @@ fields plus a grouped `legacy_retry` object:
 | `lifecycle_flush_timeout_ms` | both backends | `30_000` |
 | `lifecycle_shutdown_timeout_ms` | both backends | `30_000` |
 | `queue_capacity` | both backends; bounded admission queue | `1_024` |
-| `legacy_retry.max_retries` | legacy only, optional on wire | `3` |
-| `legacy_retry.initial_backoff_ms` | legacy only, optional on wire | `250` |
-| `legacy_retry.max_backoff_ms` | legacy only, optional on wire | `5_000` |
-| `legacy_retry.retry_sequence_timeout_ms` | legacy only, optional on wire | `30_000` |
-| `legacy_retry.retry_after_cap_ms` | legacy only, optional on wire | `5_000` |
-| `legacy_retry.retry_jitter_percent` | legacy only, optional on wire | `20` |
+| `legacy_retry.max_retries` | sync-http only, optional on wire | `3` |
+| `legacy_retry.initial_backoff_ms` | sync-http only, optional on wire | `250` |
+| `legacy_retry.max_backoff_ms` | sync-http only, optional on wire | `5_000` |
+| `legacy_retry.retry_sequence_timeout_ms` | sync-http only, optional on wire | `30_000` |
+| `legacy_retry.retry_after_cap_ms` | sync-http only, optional on wire | `5_000` |
+| `legacy_retry.retry_jitter_percent` | sync-http only, optional on wire | `20` |
 
 `queue_capacity` counts admitted records, not batches, and is validated as `1..=65_536`. A separate checked `queue_byte_capacity` defaults to 16 MiB, has a hard 64 MiB maximum, and bounds the serialized payload bytes held by all queued/in-flight batches. Admission reserves both record and byte credits atomically; either exhausted budget returns QueueFull. Records larger than 1 MiB are rejected before enqueue; batches split at 512 records or 1 MiB. The queue cannot retain 65,536 one-MiB batches. A 413 is terminal for that split batch,
 which is counted once as failed/dropped rather than retried as a larger batch.
@@ -2731,7 +2731,7 @@ pub struct TelemetryHealth {
 ```
 
 For `OpenTelemetrySdk`, the three shared timeout fields map to SDK lifecycle /
-export construction. Any explicit legacy-only field—including the pre-existing
+export construction. Any explicit sync-http-only field—including the pre-existing
 `max_retries`, `initial_backoff_ms`, and `max_backoff_ms`—returns
 `ConfigFieldNotApplicable`. Nothing is ignored. This 2.0 optional-field change
 and its migration from the former unconditional retry defaults are documented.
@@ -2808,7 +2808,7 @@ pub(crate) struct ValidatedTransportBounds {
 pub(crate) enum BackendTransportBounds {
     Disabled,
     Sdk,
-    Legacy(RetryPolicy),
+    SyncHttp(RetryPolicy),
 }
 
 impl ValidatedTransportBounds {
@@ -2824,17 +2824,17 @@ The constructor derives `Disabled` from `config.enabled == false`; otherwise
 it derives the backend only from `config.backend`.
 `LifecycleBounds` holds checked positive flush/shutdown durations;
 `RetryPolicy` holds `max_retries`, checked initial/max/sequence/Retry-After
-durations, and `BoundedPercent(0..=100)`. `BackendTransportBounds` makes legacy
+durations, and `BoundedPercent(0..=100)`. `BackendTransportBounds` makes sync-http
 retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
 
 - every millisecond duration is positive and convertible to `Duration`;
 - `lifecycle_shutdown_timeout_ms >= timeout_ms`;
 - `lifecycle_flush_timeout_ms >= timeout_ms`;
 - `queue_capacity` is in `1..=65_536`, otherwise `InvalidQueueCapacity`;
-- for legacy, `max_backoff_ms >= initial_backoff_ms`;
-- for legacy, `retry_sequence_timeout_ms >= timeout_ms`;
-- for legacy, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;
-- for legacy, `retry_jitter_percent <= 100`;
+- for sync-http, `max_backoff_ms >= initial_backoff_ms`;
+- for sync-http, `retry_sequence_timeout_ms >= timeout_ms`;
+- for sync-http, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;
+- for sync-http, `retry_jitter_percent <= 100`;
 - reject every explicit field inapplicable to disabled transport or the
   selected backend with `ConfigFieldNotApplicable`;
 - reject a requested insecure verification override when the selected backend
@@ -2855,9 +2855,9 @@ the public operation is admitted.
 Construction order is fixed: resolve defaults and create `ResolvedField`
 values; run the ordered validation list above; build
 `ValidatedTransportBounds`; then check feature/backend/protocol availability.
-Thus a malformed legacy config fails deterministically before D.6's reserved
+Thus a malformed sync-http config fails deterministically before D.6's reserved
 `UnsupportedBackend`. Disabled transport still validates explicitly supplied
-shared fields, rejects every explicit legacy-only retry field with
+shared fields, rejects every explicit sync-http-only retry field with
 `ConfigFieldNotApplicable { target: OtlpConfigTarget::Disabled, .. }`, yields
 `BackendTransportBounds::Disabled`, and never constructs a network
 provider/worker. SDK inapplicability instead records

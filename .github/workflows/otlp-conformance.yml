@@ -27,8 +27,8 @@ jobs:
       matrix:
         features:
           - otlp-sdk
-          - legacy-http-json
-          - otlp-sdk,legacy-http-json
+          - sync-http
+          - otlp-sdk,sync-http
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
@@ -40,12 +40,12 @@ jobs:
           --test full_stack_integration --features ${{ matrix.features }}
 
       - name: Run the canonical span and histogram corpus through both production backends
-        if: matrix.features == 'otlp-sdk,legacy-http-json'
+        if: matrix.features == 'otlp-sdk,sync-http'
         run: >-
           cargo test --locked -p sc-observability-otlp
-          --test canonical_ingress --features otlp-sdk,legacy-http-json
+          --test canonical_ingress --features otlp-sdk,sync-http
       - name: Validate non-Grafana legacy OTLP provenance
-        if: matrix.features == 'otlp-sdk,legacy-http-json'
+        if: matrix.features == 'otlp-sdk,sync-http'
         run: >-
           python3 -m unittest scripts.ci.tests.test_legacy_otlp_provenance
 
@@ -108,16 +108,16 @@ jobs:
             --state-dir "$VIEWER_STATE_DIR" \
             --host 127.0.0.1 --http "$D9_VIEWER_HTTP" \
             --grpc "$D9_VIEWER_GRPC" --ui "$D9_VIEWER_UI"
-      - name: Run legacy public factory against the pinned viewer
+      - name: Run sync-http public factory against the pinned viewer
         run: >-
-          D9_VIEWER_LEGACY_ADDRESS=127.0.0.1:$D9_VIEWER_HTTP
+          D9_VIEWER_SYNC_HTTP_ADDRESS=127.0.0.1:$D9_VIEWER_HTTP
           cargo test --locked -p sc-observability-otlp
-          --test full_stack_integration --features legacy-http-json
-          -- --ignored public_legacy_factory_exports_three_signals_to_the_pinned_desktop_viewer
-      - name: Query legacy public-factory output in the pinned viewer
+          --test full_stack_integration --features sync-http
+          -- --ignored public_sync_http_factory_exports_three_signals_to_the_pinned_desktop_viewer
+      - name: Query sync-http public-factory output in the pinned viewer
         run: >-
           python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py assert-production
-          --state-dir "$VIEWER_STATE_DIR" --backend legacy
+          --state-dir "$VIEWER_STATE_DIR" --backend sync-http
       - name: Run SDK public factory against the pinned viewer
         run: >-
           D9_VIEWER_SDK_ADDRESS=127.0.0.1:$D9_VIEWER_GRPC

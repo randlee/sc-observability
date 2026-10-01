@@ -38,25 +38,25 @@ default_features = false
 
 [transport.reqwest]
 version = "=0.12.28"
-backends = ["otlp-sdk", "legacy-http-json"]
+backends = ["otlp-sdk", "sync-http"]
 features = ["blocking", "json", "rustls-tls"]
 default_features = false
 
 [transport.httpdate]
 version = "=1.0.3"
-backends = ["legacy-http-json"]
+backends = ["sync-http"]
 features = []
 default_features = true
 
 [transport.getrandom]
 version = "=0.4.3"
-backends = ["legacy-http-json"]
+backends = ["sync-http"]
 features = []
 default_features = true
 
 [transport.tokio]
 version = "=1.53.1"
-backends = ["otlp-sdk", "legacy-http-json"]
+backends = ["otlp-sdk", "sync-http"]
 features = ["rt", "rt-multi-thread", "macros", "time", "sync"]
 default_features = true
 
@@ -92,7 +92,7 @@ package = "sc-observability-composition"
 opentelemetry-proto = { features = ["gen-tonic", "logs", "metrics", "trace"], default_features = false }
 sc-observability = { features = [], default_features = true }
 sc-observability-log = { features = [], default_features = true }
-sc-observability-otlp = { features = ["legacy-http-json", "otlp-sdk"], default_features = true }
+sc-observability-otlp = { features = ["sync-http", "otlp-sdk"], default_features = true }
 sc-observability-types = { features = [], default_features = true }
 sc-observe = { features = [], default_features = true }
 serde_json = { features = [], default_features = true }

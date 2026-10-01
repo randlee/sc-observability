@@ -123,7 +123,7 @@ fn released_facade_carries_the_transport_timeout() {
 // Frozen oracle: actual unmodified 1.4.1 c578912653233c7dc678fefe5af575118dbbaaa1
 // compiled by the release audit. Expected diagnostics are independent data, not
 // computed with the candidate validator. Shutdown/collector behavior is separate.
-#[cfg(all(feature = "otlp-sdk", feature = "legacy-http-json"))]
+#[cfg(all(feature = "otlp-sdk", feature = "sync-http"))]
 mod released_oracle {
     #![expect(
         deprecated,

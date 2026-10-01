@@ -108,7 +108,7 @@ def validate_transport_dependencies(root: Path) -> set[str]:
             raise SystemExit(prefix + "effective dependency features differ from transport policy")
         if name in activated("default"):
             raise SystemExit(prefix + "must not be enabled by default")
-        for backend in ("otlp-sdk", "legacy-http-json"):
+        for backend in ("otlp-sdk", "sync-http"):
             if (name in activated(backend)) != (backend in rule["backends"]):
                 raise SystemExit(prefix + f"incorrect binding to {backend}")
     return set(policy)

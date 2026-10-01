@@ -1,4 +1,4 @@
-//! Legacy HTTP/JSON adapter module root staged by the OTLP contract.
+//! Synchronous HTTP/JSON adapter module root staged by the OTLP contract.
 
 mod implementation;
 mod payload;

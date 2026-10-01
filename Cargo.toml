@@ -11,7 +11,7 @@ members = [
   "crates/sc-observability-binding-runtime",
   "bindings/python/sc-observability-py",
   "examples/rust-python-logging",
-  "examples/otlp-legacy",
+  "examples/otlp-sync-http",
   "examples/otlp-sdk",
   "examples/log-settings",
   "tests/sc-observability-composition",

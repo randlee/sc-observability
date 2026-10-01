@@ -30,15 +30,15 @@ pub const DEFAULT_OTLP_MAX_RETRIES: u32 = 3;
 pub const DEFAULT_OTLP_INITIAL_BACKOFF_MS: u64 = 250;
 /// Default maximum OTLP retry backoff in milliseconds.
 pub const DEFAULT_OTLP_MAX_BACKOFF_MS: u64 = 5_000;
-/// Default total deadline for one legacy retry sequence.
+/// Default total deadline for one synchronous HTTP retry sequence.
 pub const DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 30_000;
 /// Minimum lifecycle and retry budget retained by released OTLP compatibility.
 pub(crate) const RELEASED_OTLP_BUDGET_FLOOR_MS: u64 = 30_000;
-/// Default upper bound for a legacy Retry-After value.
+/// Default upper bound for a synchronous HTTP Retry-After value.
 pub const DEFAULT_OTLP_RETRY_AFTER_CAP_MS: u64 = 5_000;
-/// Default legacy retry jitter percentage.
+/// Default synchronous HTTP retry jitter percentage.
 pub const DEFAULT_OTLP_RETRY_JITTER_PERCENT: u8 = 20;
-/// Maximum legacy retry jitter percentage.
+/// Maximum synchronous HTTP retry jitter percentage.
 pub const MAX_OTLP_RETRY_JITTER_PERCENT: u8 = 100;
 /// Default log batch size for exporter flushes.
 pub const DEFAULT_LOG_BATCH_SIZE: usize = 256;

@@ -33,10 +33,10 @@ mod projectors;
 mod runtime;
 mod testing;
 
-#[cfg(feature = "legacy-http-json")]
-mod legacy_http_json;
 #[cfg(feature = "otlp-sdk")]
 mod sdk;
+#[cfg(feature = "sync-http")]
+mod sync_http;
 
 pub mod constants;
 pub mod error_codes;
@@ -77,7 +77,8 @@ pub use compat::{
 };
 #[doc(inline)]
 pub use config::{
-    ExporterBackend, LegacyRetryPolicy, LogsConfig, MetricsConfig, ResourceAttributes, TracesConfig,
+    ExporterBackend, LogsConfig, MetricsConfig, ResourceAttributes, SyncHttpRetryPolicy,
+    TracesConfig,
 };
 #[doc(inline)]
 pub use projectors::V2TelemetryProjectors;
@@ -99,7 +100,7 @@ pub mod v2 {
         ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
     };
     #[doc(inline)]
-    pub use crate::{ExporterBackend, LegacyRetryPolicy};
+    pub use crate::{ExporterBackend, SyncHttpRetryPolicy};
     #[doc(inline)]
     pub use sc_observability_types::v2::{
         ConfigFailure, EventError, FlushError, InitError, ShutdownError, TelemetryError,

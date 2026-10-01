@@ -72,9 +72,9 @@ class TransportPolicyTests(unittest.TestCase):
         self.replace(MANIFEST, 'tonic = { workspace = true, optional = true }', 'tonic = { workspace = true, optional = true, features = ["router"] }')
         self.rejects("tonic: effective dependency features differ")
 
-    def test_tonic_rejected_in_legacy_runtime(self):
-        self.replace(MANIFEST, 'legacy-http-json = ["dep:reqwest",', 'legacy-http-json = ["dep:tonic", "dep:reqwest",')
-        self.rejects("tonic: incorrect binding to legacy-http-json")
+    def test_tonic_rejected_in_sync_http_runtime(self):
+        self.replace(MANIFEST, 'sync-http = ["dep:reqwest",', 'sync-http = ["dep:tonic", "dep:reqwest",')
+        self.rejects("tonic: incorrect binding to sync-http")
 
     def test_nonoptional_transport(self):
         self.replace(MANIFEST, 'reqwest = { workspace = true, optional = true }', 'reqwest.workspace = true')
@@ -84,16 +84,16 @@ class TransportPolicyTests(unittest.TestCase):
         self.replace(MANIFEST, '"dep:opentelemetry", ', '')
         self.rejects("opentelemetry: incorrect binding")
 
-    def test_legacy_pulls_sdk_through_feature_alias(self):
-        self.replace(MANIFEST, 'legacy-http-json = [', 'bridge = ["otlp-sdk"]\nlegacy-http-json = ["bridge", ')
-        self.rejects("incorrect binding to legacy-http-json")
+    def test_sync_http_pulls_sdk_through_feature_alias(self):
+        self.replace(MANIFEST, 'sync-http = [', 'bridge = ["otlp-sdk"]\nsync-http = ["bridge", ')
+        self.rejects("incorrect binding to sync-http")
 
     def test_dependency_feature_implicitly_enables_sdk(self):
-        self.replace(MANIFEST, 'legacy-http-json = [', 'legacy-http-json = ["opentelemetry/trace", ')
-        self.rejects("incorrect binding to legacy-http-json")
+        self.replace(MANIFEST, 'sync-http = [', 'sync-http = ["opentelemetry/trace", ')
+        self.rejects("incorrect binding to sync-http")
 
     def test_weak_feature_does_not_enable_dependency(self):
-        self.replace(MANIFEST, 'legacy-http-json = [', 'legacy-http-json = ["opentelemetry?/trace", ')
+        self.replace(MANIFEST, 'sync-http = [', 'sync-http = ["opentelemetry?/trace", ')
         validate_transport_dependencies(self.root)
 
     def test_default_backend(self):
@@ -194,7 +194,7 @@ class CompositionHarnessTests(unittest.TestCase):
         self.rejects("tonic effective features differ from policy")
 
     def test_otlp_backend_feature_removed(self):
-        self.replace(HARNESS, 'features = ["otlp-sdk", "legacy-http-json"]', 'features = ["otlp-sdk"]')
+        self.replace(HARNESS, 'features = ["otlp-sdk", "sync-http"]', 'features = ["otlp-sdk"]')
         self.rejects("sc-observability-otlp effective features differ from policy")
 
     def test_unreviewed_dev_dependency(self):

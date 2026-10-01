@@ -1,5 +1,5 @@
 [package]
-name = "otlp-legacy-example"
+name = "otlp-sync-http-example"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ authors.workspace = true
 publish = false
 
 [dependencies]
-sc-observability-otlp = { workspace = true, features = ["legacy-http-json"] }
+sc-observability-otlp = { workspace = true, features = ["sync-http"] }
 sc-observability-types.workspace = true
 
 [lints]

@@ -413,7 +413,7 @@ impl HttpProtobufTransport {
 const PROTOBUF_CONTENT_TYPE: &str = "application/x-protobuf";
 
 /// OTLP/HTTP signal path: the explicit endpoint with `/v1/{signal}` appended
-/// unless it already ends there (the legacy HTTP backend's rule).
+/// unless it already ends there (the synchronous HTTP backend's rule).
 fn signal_url(endpoint: &str, signal: &str) -> String {
     let endpoint = endpoint.trim_end_matches('/');
     let suffix = format!("/v1/{signal}");

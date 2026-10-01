@@ -761,9 +761,9 @@ graph TD
 ### Phase D transport allowlist
 
 The OTLP dependency allowlist explicitly permits the feature-gated
-`legacy-http-json` feature and its reviewed `reqwest`, `httpdate`, `getrandom`,
+`sync-http` feature and its reviewed `reqwest`, `httpdate`, `getrandom`,
 and Tokio `rt`/`sync` dependencies; obs-d-21 owns this normative declaration.
-The legacy transport uses `reqwest =0.12.28` with `blocking`, `json`,
+The synchronous HTTP transport uses `reqwest =0.12.28` with `blocking`, `json`,
 `rustls-tls` and default features off, and `httpdate =1.0.3`; its transitive
 Tokio use does not impose a caller-owned runtime. The separate `otlp-sdk`
 feature admits the reviewed `opentelemetry*` SDK family and its explicitly
@@ -1199,7 +1199,7 @@ in [the CI policy](ci-policy.md).
   path without owning a Tokio runtime.
 - **Decision**: Use one backend-neutral lifecycle state machine,
   ordered barriers, deadlines, health/accounting, and crate-private exporter
-  traits. The official SDK adapter requires a caller Tokio runtime; the legacy
+  traits. The official SDK adapter requires a caller Tokio runtime; the synchronous HTTP
   adapter owns a bounded plain-thread worker and uses the same lifecycle core.
   Backend/protocol combinations are validated at construction. Enabled
   transports never fall back to no-op. Imported code/docs are governed by the
@@ -1225,7 +1225,7 @@ in [the CI policy](ci-policy.md).
   logging structural choices and consumer migration recipe without inventing
   a second contract owner or serializing the two wave-1 contract sprints.
 - **Decision — ADR-018 amendment**: Section 6's Phase D transport allowlist
-  refines ADR-018 with the legacy feature's reqwest/httpdate pins, explicit
+  refines ADR-018 with the `sync-http` feature's reqwest/httpdate pins, explicit
   getrandom and Tokio rt/sync use, and independently gated SDK dependencies.
   obs-d-21 records the reviewed exact Cargo.lock/manifest pins. obs-d-8 uses
   this declaration without adding a second allowlist or editing ADR-018's
@@ -1514,7 +1514,7 @@ was reworded accordingly to describe the remaining validation.
   `validate_dependency_bans.sh` and `validate_repo_boundaries.sh` both run it.
 - **Scope boundary**: Production transport roles are unchanged. `tonic`
   remains an optional `otlp-sdk`-only transport with the reviewed `transport`
-  feature, the transport table rejects it in `legacy-http-json`, and the SDK
+  feature, the transport table rejects it in `sync-http`, and the SDK
   lock pins stay as reviewed.
 - **Contracts**: ADR-004, ADR-009, ADR-018, ADR-019, ADR-020, LAY-001–007 and
   quality-policy RULE-007; D9 owns the collector qualification.

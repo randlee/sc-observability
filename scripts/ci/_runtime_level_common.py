@@ -26,7 +26,7 @@ UNPUBLISHED_COMPANION_PACKAGES = (
 UNPUBLISHED_COMPANION_MEMBERS = UNPUBLISHED_COMPANION_PACKAGES + (
     "bindings/python/sc-observability-py",
     "examples/rust-python-logging",
-    "examples/otlp-legacy",
+    "examples/otlp-sync-http",
     "examples/otlp-sdk",
     "examples/log-settings",
     "tests/sc-observability-composition",

@@ -16,8 +16,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TESTS = (
-    'public_legacy_http_json_factory_exports_decoded_trace_counter_and_gauge',
-    'public_legacy_factory_recovers_a_partial_log_export_failure',
+    'public_sync_http_factory_exports_decoded_trace_counter_and_gauge',
+    'public_sync_http_factory_recovers_a_partial_log_export_failure',
 )
 
 
@@ -26,7 +26,7 @@ def main() -> None:
         subprocess.run(
             [
                 'cargo', 'test', '--locked', '-p', 'sc-observability-otlp',
-                '--test', 'full_stack_integration', '--features', 'legacy-http-json',
+                '--test', 'full_stack_integration', '--features', 'sync-http',
                 '--', test,
             ],
             cwd=ROOT,

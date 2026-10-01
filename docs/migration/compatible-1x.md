@@ -224,11 +224,11 @@ Cargo feature is enabled:
 | Backend | Feature | Protocols | Runtime |
 | --- | --- | --- | --- |
 | `ExporterBackend::OpenTelemetrySdk` | `otlp-sdk` | `Grpc`, `HttpBinary` | the caller's Tokio runtime |
-| `ExporterBackend::LegacyHttpJson` | `legacy-http-json` | `HttpJson` | one private worker thread |
+| `ExporterBackend::SyncHttp` | `sync-http` | `HttpJson` | one private worker thread |
 
 The released root facade keeps the 1.4.1 protocol choice and derives the
 backend from it: `HttpBinary` (the released default) and `Grpc` select the
-SDK backend, and `HttpJson` selects the legacy backend. `v2::OtelConfig`
+SDK backend, and `HttpJson` selects the synchronous HTTP backend. `v2::OtelConfig`
 names the backend explicitly. Enabled telemetry whose backend feature is not
 compiled in fails construction with a typed error. It never falls back to
 the disabled, no-network exporter.
@@ -270,9 +270,9 @@ runtime.block_on(async move {
 # }
 ```
 
-The blocking `flush`/`shutdown` calls are for the legacy backend. The SDK
+The blocking `flush`/`shutdown` calls are for the synchronous HTTP backend. The SDK
 backend reports them as `ExportError::AsyncLifecycleRequired`; use
-`flush_async_typed` and `shutdown_async_typed`. The legacy backend's
+`flush_async_typed` and `shutdown_async_typed`. The synchronous HTTP backend's
 blocking lifecycle, in turn, is rejected from inside an entered Tokio
 runtime with `ExportError::BlockingBackendInAsyncContext`. Call it from a
 plain thread.
@@ -309,7 +309,7 @@ Build the five crates with both OTLP backends, then pass each library to
 ```sh
 cargo build --locked -p sc-observability-types -p sc-observability -p sc-observe \
   -p sc-observability-log -p sc-observability-otlp \
-  --features sc-observability-otlp/otlp-sdk,sc-observability-otlp/legacy-http-json \
+  --features sc-observability-otlp/otlp-sdk,sc-observability-otlp/sync-http \
   --message-format=json
 rustdoc --test --edition 2024 -L dependency=target/debug/deps \
   --extern sc_observability=<rlib> --extern sc_observability_types=<rlib> \
