@@ -741,6 +741,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the released init conversion matrix keeps all variant and root-contract rows adjacent"
+    )]
     fn legacy_init_table_preserves_released_variants_and_contracts() {
         let logger_remediation = Remediation::recoverable("repair logger configuration", ["retry"]);
         let runtime_remediation = Remediation::recoverable("restore runtime", ["retry"]);
@@ -760,6 +764,21 @@ mod tests {
                 ),
                 "SC_OBSERVABILITY_LOGGER_QUEUE_CAPACITY_INVALID",
                 logger_remediation.clone(),
+            ),
+            (
+                "configuration runtime-start code remains logger",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Configuration {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED",
+                            runtime_remediation.clone(),
+                        )),
+                    },
+                    LevelFilter::Info,
+                    LevelFilter::Trace,
+                ),
+                "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED",
+                runtime_remediation.clone(),
             ),
             (
                 "runtime logger",
@@ -813,7 +832,9 @@ mod tests {
 
         for (name, error, code, remediation) in cases {
             match name {
-                "configuration logger" | "runtime logger" => {
+                "configuration logger"
+                | "configuration runtime-start code remains logger"
+                | "runtime logger" => {
                     assert!(matches!(error, InitError::Logger { .. }));
                 }
                 "runtime start" => assert!(matches!(error, InitError::RuntimeStart { .. })),
@@ -825,6 +846,9 @@ mod tests {
             let expected_display = match name {
                 "configuration logger" => {
                     "sc-observability logger construction failed: SC_OBSERVABILITY_LOGGER_QUEUE_CAPACITY_INVALID fixture"
+                }
+                "configuration runtime-start code remains logger" => {
+                    "sc-observability logger construction failed: SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED fixture"
                 }
                 "runtime logger" => {
                     "sc-observability logger construction failed: SC_OBSERVABILITY_LOGGER_RUNTIME_UNAVAILABLE fixture"
