@@ -29,7 +29,7 @@ pub fn from_canonical_diagnostic(
             format!("diagnostic metadata exceeds {MAX_DIAGNOSTIC_FIELD_BYTES} bytes"),
         ));
     }
-    let details = from_fields(value.details.clone())?;
+    let details = from_fields(value.details.clone());
     let result = CanonicalDiagnosticDto {
         diagnostic,
         cause: value.cause.clone(),

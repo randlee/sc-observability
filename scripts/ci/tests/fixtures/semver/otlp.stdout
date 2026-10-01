@@ -1,0 +1,47 @@
+
+--- failure module_missing: pub module removed or renamed ---
+
+Description:
+A publicly-visible module cannot be imported by its prior path. A `pub use` may have been removed, or the module may have been renamed, removed, or made non-public.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.48.0/src/lints/module_missing.ron
+
+Failed in:
+  mod sc_observability_otlp::constants, previously in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:1
+  mod sc_observability_otlp::error_codes, previously in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:1
+
+--- failure pub_module_level_const_missing: pub module-level const is missing ---
+
+Description:
+A public const is missing or renamed
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#item-remove
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.48.0/src/lints/pub_module_level_const_missing.ron
+
+Failed in:
+  ALL in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:31
+  TELEMETRY_INCOMPLETE_SPAN_DROPPED in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:24
+  TELEMETRY_FLUSH_FAILED in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:18
+  TELEMETRY_INVALID_PROTOCOL in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:12
+  DEFAULT_METRIC_BATCH_SIZE in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:16
+  DEFAULT_LOG_BATCH_SIZE in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:12
+  DEFAULT_OTLP_INITIAL_BACKOFF_MS in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:8
+  DEFAULT_OTLP_TIMEOUT_MS in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:4
+  TELEMETRY_SPAN_ASSEMBLY_FAILED in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:27
+  TELEMETRY_EXPORTER_INIT_FAILED in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:21
+  TELEMETRY_EXPORT_FAILED in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:15
+  TELEMETRY_INVALID_CONFIG in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:9
+  TELEMETRY_SHUTDOWN in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/error_codes.rs:6
+  DEFAULT_METRIC_EXPORT_INTERVAL_MS in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:18
+  DEFAULT_TRACE_BATCH_SIZE in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:14
+  DEFAULT_OTLP_MAX_BACKOFF_MS in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:10
+  DEFAULT_OTLP_MAX_RETRIES in file /cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sc-observability-otlp-1.4.1/src/constants.rs:6
+
+--- failure struct_marked_non_exhaustive: struct marked #[non_exhaustive] ---
+
+Description:
+A public struct has been marked #[non_exhaustive], which will prevent it from being constructed using a struct literal outside of its crate. It previously had no private fields, so a struct literal could be used to construct it outside its crate.
+        ref: https://doc.rust-lang.org/cargo/reference/semver.html#attr-adding-non-exhaustive
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.48.0/src/lints/struct_marked_non_exhaustive.ron
+
+Failed in:
+  struct OtelConfig in /repo/crates/sc-observability-otlp/src/config.rs:371

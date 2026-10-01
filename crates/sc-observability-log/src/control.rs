@@ -4,11 +4,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use crate::error::EmitError;
 use crate::health::BridgeLifecycle;
 use crate::{
-    BridgeHealthReport, ControlError, EmitError, FieldKeyError, FlushError, LifecyclePhase, handle,
-    health, mapping,
+    BridgeHealthReport, ControlError, FieldKeyError, LifecyclePhase, handle, health, mapping,
 };
+use sc_observability_types::v2::FlushError;
 
 /// Typed direct producer input. Bridge-owned envelope identity and timestamps
 /// remain absent, so a caller cannot replace host provenance.
@@ -180,7 +181,7 @@ impl LogControl {
     reason = "shared admission retains the legacy core boundary until D18"
 )]
 pub(crate) fn submit_event(
-    logger: &sc_observability::Logger,
+    logger: &sc_observability::v2::Logger,
     event: sc_observability_types::LogEvent,
 ) -> Result<EmitOutcome, EmitError> {
     logger
@@ -271,20 +272,22 @@ fn diagnostic_from_context(
     }
 }
 
-pub(crate) fn core_emit_error(error: &sc_observability::TryLogError) -> EmitError {
+pub(crate) fn core_emit_error(error: &sc_observability_types::v2::EventError) -> EmitError {
     match error {
-        sc_observability::TryLogError::InvalidEvent(source) => EmitError::InvalidEvent {
-            diagnostic: crate::error::diagnostic_from_info(source),
+        sc_observability_types::v2::EventError::Validation { context } => EmitError::InvalidEvent {
+            diagnostic: diagnostic_from_context(context),
         },
-        sc_observability::TryLogError::QueueFull(source) => EmitError::QueueFull {
-            diagnostic: diagnostic_from_context(source),
-        },
-        sc_observability::TryLogError::WriterDegraded(source) => EmitError::WriterDegraded {
-            diagnostic: diagnostic_from_context(source),
-        },
-        sc_observability::TryLogError::ShutdownTimedOut(source) => EmitError::ShutdownTimedOut {
-            diagnostic: diagnostic_from_context(source),
-        },
+        sc_observability_types::v2::EventError::Routing { context } => {
+            let diagnostic = diagnostic_from_context(context);
+            match diagnostic.code.as_str() {
+                "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => EmitError::QueueFull { diagnostic },
+                "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => {
+                    EmitError::ShutdownTimedOut { diagnostic }
+                }
+                _ => EmitError::WriterDegraded { diagnostic },
+            }
+        }
+        _ => EmitError::Panicked,
     }
 }
 

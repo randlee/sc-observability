@@ -203,6 +203,98 @@ fn unknown_errors_remain_tagged_failures() {
 }
 
 #[test]
+fn canonical_envelope_decodes_each_declared_failure_kind() {
+    let diagnostic: CanonicalDiagnosticDto = serde_json::from_value(json!({
+        "at": "2024-01-01T00:00:00Z",
+        "code": "TEST_FAILURE",
+        "message": "test failure",
+        "remediation": { "kind": "recoverable", "steps": ["retry"] },
+        "cause": "bounded cause",
+        "docs": "https://example.test/failure",
+        "details": {}
+    }))
+    .unwrap();
+    let failures = vec![
+        CanonicalFailureDto::Validation {
+            diagnostic: Box::new(diagnostic.clone()),
+            field: "field".into(),
+        },
+        CanonicalFailureDto::QueueFull {
+            diagnostic: Box::new(diagnostic.clone()),
+        },
+        CanonicalFailureDto::BelowBaseline {
+            diagnostic: Box::new(diagnostic.clone()),
+            requested: LevelFilterDto::Trace,
+            configured: LevelFilterDto::Info,
+        },
+        CanonicalFailureDto::UnsupportedLevel {
+            diagnostic: Box::new(diagnostic.clone()),
+            requested: LevelFilterDto::Trace,
+            available: LevelFilterDto::Info,
+        },
+        CanonicalFailureDto::PermissionDenied {
+            diagnostic: Box::new(diagnostic.clone()),
+        },
+        CanonicalFailureDto::Closed {
+            diagnostic: Box::new(diagnostic.clone()),
+        },
+        CanonicalFailureDto::Unavailable {
+            diagnostic: Box::new(diagnostic.clone()),
+        },
+        CanonicalFailureDto::Io {
+            diagnostic: Box::new(diagnostic.clone()),
+        },
+        CanonicalFailureDto::Timeout {
+            diagnostic: Box::new(diagnostic.clone()),
+            operation: "flush".into(),
+        },
+        CanonicalFailureDto::Cancelled {
+            diagnostic: Box::new(diagnostic.clone()),
+            operation: "flush".into(),
+        },
+        CanonicalFailureDto::UnsupportedVersion {
+            diagnostic: Box::new(diagnostic.clone()),
+            received: 2,
+        },
+        CanonicalFailureDto::Internal {
+            diagnostic: Box::new(diagnostic.clone()),
+        },
+        CanonicalFailureDto::UnknownRemote {
+            diagnostic: Box::new(diagnostic),
+            remote_kind: "future_failure".into(),
+        },
+    ];
+
+    let mut declared_kinds = failures
+        .iter()
+        .map(|error| {
+            serde_json::to_value(error).unwrap()["kind"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    declared_kinds.sort_unstable();
+    let mut known_kinds = CanonicalFailureDto::KNOWN_KINDS
+        .iter()
+        .map(|kind| (*kind).to_owned())
+        .collect::<Vec<_>>();
+    known_kinds.sort_unstable();
+    assert_eq!(declared_kinds, known_kinds);
+
+    for error in failures {
+        let expected = CanonicalWireEnvelope::<AdmissionDto>::Error {
+            schema_version: 1,
+            error,
+        };
+        assert_eq!(
+            decode_canonical_envelope(serde_json::to_value(&expected).unwrap()).unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn nested_export_timeout_keeps_lifecycle_category_and_code() {
     let code = core::error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT;
     let context = || {

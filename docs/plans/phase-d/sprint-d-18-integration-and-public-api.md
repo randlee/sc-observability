@@ -4,16 +4,21 @@
 
 Generated projection of `obs-d-18`; the bead is authoritative.
 
+> This release-prep layer is complete for its independent inventory and policy
+> documentation scope. It does not claim full production composition or final
+> semver/publication approval.
+
 ## Plan metadata
 
+- Status: complete
 - Wave: 3
 - Layer: 19
 - Assignee / model: cobs / terra
 - Relation: `must_follow`
 - Closure: `integration`
 - Target boundary: phase integration
-- Branch: `sprint/d-18-integration-and-public-api`
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-18-integration-and-public-api`
+- Branch: `fix/d18-combined-repairs`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/fix/d18-combined-repairs`
 - PR target (merge order only): `sprint/d-20-language-binding-migration`
 - Blocked by: `obs-d-2-sanity`, `obs-d-3-sanity`, `obs-d-21-sanity`, `obs-d-20-sanity`, `obs-d-1-sanity`, `obs-d-10-sanity`, `obs-d-17-sanity`, `obs-d-14-sanity`, `obs-d-6-sanity`, `obs-d-4-sanity`, `obs-d-19-sanity`, `obs-d-5-sanity`, `obs-d-15-sanity`, `obs-d-8-sanity`, `obs-d-7-sanity`
 - Requirements: LAY-001, LAY-002, LAY-003, LAY-004, LAY-005, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-009, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-042, LOG-046, LOG-047, LOG-048, NFR-001, NFR-002, NFR-003, NFR-005, NFR-006, NFR-007, NFR-008, NFR-009, NFR-010, NFR-011, NFR-012, OBS-004, OBS-007, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-024, OTLP-001, OTLP-002, OTLP-005, OTLP-006, OTLP-007, OTLP-011, OTLP-012, OTLP-015, OTLP-017, OTLP-019, OTLP-021, OTLP-023, PHB-002, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, PHB-012, PHB-013, PHB-014, PHC-002, PHC-004, PHD-001, PHD-002, PHD-003, PHD-004, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-020, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
@@ -277,7 +282,7 @@ Consume obs-d-12 contract specification and write this exact row in owned docs/p
 
 ## Handoff from obs-d-10
 
-Consume obs-d-10's independent six-wheel/30-native-cell proof and policy specification after obs-d-10-sanity. Activate release/python-platform-policy.json and inventory, then write in owned docs/project-plan.md: "Python uses abi3-py310, cp310-abi3 wheels and requires-python >=3.10 without an upper/exclusion cap; six platforms and 30 native installed-suite cells are proved from one immutable source. Raising the floor or adding a cap requires a separately approved compatibility decision, supported-interpreter matrix and guard expected-value update." obs-d-10 does not wait on this activation and does not edit this document.
+Consume obs-d-10's independent six-wheel/29-native-cell proof and policy specification after obs-d-10-sanity. Activate release/python-platform-policy.json and inventory, then write in owned docs/project-plan.md: "Python uses abi3-py310, cp310-abi3 wheels and requires-python >=3.10 without an upper/exclusion cap; six platforms and 29 native installed-suite cells are proved from one immutable source, with Windows ARM64 running 3.11–3.14 because native CPython 3.10 is unavailable. Raising the floor or adding a cap requires a separately approved compatibility decision, supported-interpreter matrix and guard expected-value update." obs-d-10 does not wait on this activation and does not edit this document.
 
 
 ## Handoff from obs-d-21 (wave 1)

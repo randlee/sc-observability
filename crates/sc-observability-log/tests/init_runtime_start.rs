@@ -22,10 +22,12 @@ fn coordinator_failure_returns_runtime_start_before_global_install() {
     failed.level = LevelFilter::Info;
     failed.enable_console_sink = false;
     fail_next_shutdown_coordinator_reservation();
-    assert!(matches!(
-        sc_observability_log::init(failed, options.clone()),
-        Err(InitError::RuntimeStart { .. })
-    ));
+    let error = sc_observability_log::init(failed, options.clone()).unwrap_err();
+    assert!(matches!(error, InitError::RuntimeStart { .. }));
+    assert_eq!(
+        error.code().as_str(),
+        "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED"
+    );
 
     let mut retry = LoggerConfig::default_for(
         ServiceName::new("runtime-start").unwrap(),

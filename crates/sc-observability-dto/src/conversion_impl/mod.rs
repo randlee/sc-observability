@@ -6,7 +6,7 @@ use crate::constants::{
 use crate::error_codes;
 use crate::{
     AdmissionDto, AggregationTemporalityDto, AvailabilityDto, CanonicalDiagnosticDto,
-    CanonicalFailureDto, CanonicalWireEnvelope, ChangeDiagnosticDto, Diagnostic,
+    CanonicalFailureDto, CanonicalWireEnvelope, ChangeDiagnosticDto, DecimalDtoError, Diagnostic,
     DiagnosticSummaryDto, Failure, HistogramPointDto, LevelChangeDto, LevelChangeSourceDto,
     LevelDto, LevelFilterDto, LevelRequestDto, LevelStateDto, LogEventDto, LogHealthDto,
     LogOrderDto, LogQueryDto, LogSnapshotDto, LoggingHealthDto, MaintenanceHealthDto,
@@ -18,7 +18,11 @@ use crate::{
 use sc_observability_types as core;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
+use std::any::Any;
 use std::collections::BTreeMap;
+
+const UNREGISTERED_CODE_REMEDIATION: &str =
+    "Inspect the diagnostic code and follow the emitting component's recovery guidance";
 
 /// Host-selected values that cannot be supplied through an input DTO.
 #[derive(Debug, Clone)]
@@ -31,6 +35,9 @@ pub struct EventStamp {
     pub identity: core::ProcessIdentity,
 }
 /// Constructs a boundary diagnostic using the sole binding-owned registry.
+///
+/// Native producers may retain codes outside that registry. Those diagnostics
+/// receive an explicit recovery step rather than an empty recoverable payload.
 pub fn boundary_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic {
     let entry = error_codes::REGISTRY
         .iter()
@@ -42,7 +49,7 @@ pub fn boundary_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic
         remediation: RemediationDto::Recoverable {
             steps: entry
                 .map(|entry| vec![entry.remediation.into()])
-                .unwrap_or_default(),
+                .unwrap_or_else(|| vec![UNREGISTERED_CODE_REMEDIATION.into()]),
         },
     }
 }
@@ -56,11 +63,34 @@ pub fn invalid_input(field: impl Into<String>, message: impl Into<String>) -> Fa
         field: field.into(),
     }
 }
-fn checked<T, E: std::fmt::Display>(
+fn checked<T, E: std::fmt::Display + 'static>(
     value: std::result::Result<T, E>,
     field: &str,
 ) -> Result<T, Failure> {
-    value.map_err(|error| invalid_input(field, error.to_string()))
+    value.map_err(|error| {
+        let source = &error as &dyn Any;
+        let code = source
+            .downcast_ref::<core::ValueValidationError>()
+            .map(|error| error.code().as_str())
+            .or_else(|| {
+                source
+                    .downcast_ref::<DecimalDtoError>()
+                    .map(|error| error.code())
+            });
+        let diagnostic = code.map_or_else(
+            || {
+                boundary_diagnostic(
+                    error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT,
+                    error.to_string(),
+                )
+            },
+            |code| boundary_diagnostic(code, error.to_string()),
+        );
+        Failure::Validation {
+            diagnostic: Box::new(diagnostic),
+            field: field.into(),
+        }
+    })
 }
 fn version(version: u32) -> Result<(), Failure> {
     if version == 1 {
@@ -117,7 +147,7 @@ fn decode<T: DeserializeOwned>(value: Value, field: &str) -> Result<T, Failure> 
 pub fn decode_event(value: Value) -> Result<LogEventDto, Failure> {
     check_event_keys(&value)?;
     let dto: LogEventDto = decode(value, "event")?;
-    validate_event(&dto)?;
+    check_input_provenance(&dto.fields, "fields")?;
     Ok(dto)
 }
 /// Decodes and validates the inclusive native query contract.
@@ -129,9 +159,7 @@ pub fn decode_query(value: Value) -> Result<LogQueryDto, Failure> {
             }
         }
     }
-    let dto: LogQueryDto = decode(value, "query")?;
-    to_core_query(dto.clone())?;
-    Ok(dto)
+    decode(value, "query")
 }
 /// Decodes the owner-level request without granting an ownership capability.
 pub fn decode_level_request(value: Value) -> Result<LevelRequestDto, Failure> {
@@ -178,6 +206,36 @@ pub fn normalize_field_key(value: &str) -> String {
 pub fn is_protected_key(key: &str) -> bool {
     key.starts_with("sc_observability.binding.")
         || normalize_field_key(key).starts_with("sc_observability.binding.")
+}
+fn check_input_provenance(fields: &BTreeMap<String, ValueDto>, field: &str) -> Result<(), Failure> {
+    for (key, value) in fields {
+        let path = format!("{field}.{key}");
+        if is_protected_key(key) {
+            return Err(invalid_input(path, "reserved binding provenance field"));
+        }
+        match value {
+            ValueDto::Array { value } => {
+                for (index, value) in value.iter().enumerate() {
+                    check_input_provenance_value(value, &format!("{path}[{index}]"))?;
+                }
+            }
+            ValueDto::Object { value } => check_input_provenance(value, &path)?,
+            _ => {}
+        }
+    }
+    Ok(())
+}
+fn check_input_provenance_value(value: &ValueDto, field: &str) -> Result<(), Failure> {
+    match value {
+        ValueDto::Array { value } => {
+            for (index, value) in value.iter().enumerate() {
+                check_input_provenance_value(value, &format!("{field}[{index}]"))?;
+            }
+        }
+        ValueDto::Object { value } => check_input_provenance(value, field)?,
+        _ => {}
+    }
+    Ok(())
 }
 fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result<Value, Failure> {
     Ok(match value {
@@ -234,7 +292,17 @@ fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result
 }
 /// Encodes JSON values losslessly, distinguishing integer and float domains.
 pub fn from_json_value(value: Value) -> Result<ValueDto, Failure> {
-    Ok(match value {
+    Ok(from_json_value_total(value))
+}
+
+/// Encodes a `serde_json::Value` using the workspace's finite `Number` domains.
+///
+/// The public conversion retains its `Result` signature for released API
+/// compatibility. Without `serde_json`'s `arbitrary_precision` feature, every
+/// non-integer `Number` is backed by an `f64`, so recursive JSON projection is
+/// total and does not create a synthetic binding failure.
+fn from_json_value_total(value: Value) -> ValueDto {
+    match value {
         Value::Null => ValueDto::Null {},
         Value::Bool(value) => ValueDto::Boolean { value },
         Value::String(value) => ValueDto::String { value },
@@ -247,74 +315,48 @@ pub fn from_json_value(value: Value) -> Result<ValueDto, Failure> {
                 ValueDto::Float {
                     value: value
                         .as_f64()
-                        .ok_or_else(|| invalid_input("value", "unrepresentable float"))?,
+                        .expect("non-arbitrary serde_json numbers are representable f64 values"),
                 }
             }
         }
         Value::Array(value) => ValueDto::Array {
-            value: value
-                .into_iter()
-                .map(from_json_value)
-                .collect::<Result<_, _>>()?,
+            value: value.into_iter().map(from_json_value_total).collect(),
         },
         Value::Object(value) => ValueDto::Object {
             value: value
                 .into_iter()
-                .map(|(k, v)| Ok((k, from_json_value(v)?)))
-                .collect::<Result<_, Failure>>()?,
+                .map(|(key, value)| (key, from_json_value_total(value)))
+                .collect(),
         },
-    })
+    }
 }
-fn from_fields(fields: Map<String, Value>) -> Result<BTreeMap<String, ValueDto>, Failure> {
+fn from_fields(fields: Map<String, Value>) -> BTreeMap<String, ValueDto> {
     fields
         .into_iter()
-        .map(|(k, v)| Ok((k, from_json_value(v)?)))
+        .map(|(key, value)| (key, from_json_value_total(value)))
         .collect()
 }
 fn trace(value: TraceContextDto) -> Result<core::TraceContext, Failure> {
     Ok(core::TraceContext {
         trace_id: checked(core::TraceId::new(value.trace_id), "trace.trace_id")?,
         span_id: checked(core::SpanId::new(value.span_id), "trace.span_id")?,
-        parent_span_id: value
-            .parent_span_id
-            .map(|v| checked(core::SpanId::new(v), "trace.parent_span_id"))
-            .transpose()?,
+        parent_span_id: optional_checked(value.parent_span_id, "trace.parent_span_id", |value| {
+            core::SpanId::new(value)
+        })?,
     })
 }
-fn validate_event(dto: &LogEventDto) -> Result<(), Failure> {
-    // Serialized size and container depth are checked on the original JSON in
-    // `decode_event`. Re-serializing here would add omitted nullable fields and
-    // could reject a request that was within the raw 64 KiB boundary.
-    version(dto.schema_version)?;
-    checked(core::TargetCategory::new(dto.target.clone()), "target")?;
-    checked(core::ActionName::new(dto.action.clone()), "action")?;
-    if let Some(value) = dto.trace.clone() {
-        trace(value)?;
-    }
-    for (field, value) in [
-        ("request_id", &dto.request_id),
-        ("correlation_id", &dto.correlation_id),
-    ] {
-        if let Some(value) = value {
-            checked(core::CorrelationId::new(value.clone()), field)?;
-        }
-    }
-    if let Some(value) = &dto.outcome {
-        checked(core::OutcomeLabel::new(value.clone()), "outcome")?;
-    }
-    to_value(
-        ValueDto::Object {
-            value: dto.fields.clone(),
-        },
-        "fields",
-        true,
-        0,
-    )?;
-    Ok(())
+fn optional_checked<T, E: std::fmt::Display + 'static>(
+    value: Option<String>,
+    field: &str,
+    convert: impl FnOnce(String) -> Result<T, E>,
+) -> Result<Option<T>, Failure> {
+    value
+        .map(|value| checked(convert(value), field))
+        .transpose()
 }
 /// Converts validated event input using host-selected identity and time.
 pub fn to_core_event(dto: LogEventDto, stamp: EventStamp) -> Result<core::LogEvent, Failure> {
-    validate_event(&dto)?;
+    version(dto.schema_version)?;
     let Value::Object(fields) =
         to_value(ValueDto::Object { value: dto.fields }, "fields", true, 0)?
     else {
@@ -333,18 +375,15 @@ pub fn to_core_event(dto: LogEventDto, stamp: EventStamp) -> Result<core::LogEve
         action: checked(core::ActionName::new(dto.action), "action")?,
         message: dto.message,
         trace: dto.trace.map(trace).transpose()?,
-        request_id: dto
-            .request_id
-            .map(|v| checked(core::CorrelationId::new(v), "request_id"))
-            .transpose()?,
-        correlation_id: dto
-            .correlation_id
-            .map(|v| checked(core::CorrelationId::new(v), "correlation_id"))
-            .transpose()?,
-        outcome: dto
-            .outcome
-            .map(|v| checked(core::OutcomeLabel::new(v), "outcome"))
-            .transpose()?,
+        request_id: optional_checked(dto.request_id, "request_id", |value| {
+            core::CorrelationId::new(value)
+        })?,
+        correlation_id: optional_checked(dto.correlation_id, "correlation_id", |value| {
+            core::CorrelationId::new(value)
+        })?,
+        outcome: optional_checked(dto.outcome, "outcome", |value| {
+            core::OutcomeLabel::new(value)
+        })?,
         diagnostic: None,
         state_transition: None,
         fields,
@@ -368,27 +407,20 @@ pub fn to_core_query(dto: LogQueryDto) -> Result<core::LogQuery, Failure> {
         ));
     }
     let query = core::LogQuery {
-        service: dto
-            .service
-            .map(|v| checked(core::ServiceName::new(v), "service"))
-            .transpose()?,
+        service: optional_checked(dto.service, "service", |value| {
+            core::ServiceName::new(value)
+        })?,
         levels: dto.levels.into_iter().map(Into::into).collect(),
-        target: dto
-            .target
-            .map(|v| checked(core::TargetCategory::new(v), "target"))
-            .transpose()?,
-        action: dto
-            .action
-            .map(|v| checked(core::ActionName::new(v), "action"))
-            .transpose()?,
-        request_id: dto
-            .request_id
-            .map(|v| checked(core::CorrelationId::new(v), "request_id"))
-            .transpose()?,
-        correlation_id: dto
-            .correlation_id
-            .map(|v| checked(core::CorrelationId::new(v), "correlation_id"))
-            .transpose()?,
+        target: optional_checked(dto.target, "target", |value| {
+            core::TargetCategory::new(value)
+        })?,
+        action: optional_checked(dto.action, "action", core::ActionName::new)?,
+        request_id: optional_checked(dto.request_id, "request_id", |value| {
+            core::CorrelationId::new(value)
+        })?,
+        correlation_id: optional_checked(dto.correlation_id, "correlation_id", |value| {
+            core::CorrelationId::new(value)
+        })?,
         since: dto.since.map(|v| timestamp(v, "since")).transpose()?,
         until: dto.until.map(|v| timestamp(v, "until")).transpose()?,
         field_matches: dto
@@ -572,21 +604,16 @@ pub fn from_core_event(v: core::LogEvent) -> Result<StoredEventDto, Failure> {
         request_id: v.request_id.map(|v| v.as_str().into()),
         correlation_id: v.correlation_id.map(|v| v.as_str().into()),
         outcome: v.outcome.map(|v| v.as_str().into()),
-        fields: from_fields(v.fields)?,
-        diagnostic: v
-            .diagnostic
-            .map(|d| {
-                Ok(StoredDiagnosticDto {
-                    timestamp: d.timestamp.to_string(),
-                    code: d.code.as_str().into(),
-                    message: d.message,
-                    cause: d.cause,
-                    remediation: d.remediation.into(),
-                    docs: d.docs,
-                    details: from_fields(d.details)?,
-                })
-            })
-            .transpose()?,
+        fields: from_fields(v.fields),
+        diagnostic: v.diagnostic.map(|d| StoredDiagnosticDto {
+            timestamp: d.timestamp.to_string(),
+            code: d.code.as_str().into(),
+            message: d.message,
+            cause: d.cause,
+            remediation: d.remediation.into(),
+            docs: d.docs,
+            details: from_fields(d.details),
+        }),
         state_transition: v.state_transition.map(|v| StateTransitionDto {
             entity_kind: v.entity_kind.as_str().into(),
             entity_id: v.entity_id.map(|value| value.as_str().into()),
@@ -781,22 +808,7 @@ pub fn decode_envelope<T: DeserializeOwned>(value: Value) -> Result<WireEnvelope
                 .get("kind")
                 .and_then(Value::as_str)
                 .ok_or_else(|| invalid_input("response", "missing failure kind"))?;
-            const KNOWN: &[&str] = &[
-                "validation",
-                "queue_full",
-                "below_baseline",
-                "unsupported_level",
-                "permission_denied",
-                "closed",
-                "unavailable",
-                "io",
-                "timeout",
-                "cancelled",
-                "unsupported_version",
-                "internal",
-                "unknown_remote",
-            ];
-            let error = if KNOWN.contains(&tag) {
+            let error = if Failure::<Diagnostic>::KNOWN_KINDS.contains(&tag) {
                 checked(serde_json::from_value(error.clone()), "response")?
             } else {
                 Failure::UnknownRemote {

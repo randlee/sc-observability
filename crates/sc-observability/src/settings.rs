@@ -162,10 +162,14 @@ impl LogSettingsError {
                 error_codes::LOG_INVALID_VALUE,
                 message,
                 Remediation::recoverable(
-                    "correct the supplied logging setting",
-                    std::iter::empty::<String>(),
+                    format!("Use a documented setting key: {SUPPORTED_ENV_KEYS}; application namespaces replace the leading SC prefix, for example APP_LOG_LEVEL."),
+                    [
+                        "For SC_LOG_FILE and SC_LOG_CONSOLE, use exactly lowercase true or false.",
+                        "Use exact ${prefix}_LOG_ prefix casing and see docs/logging/d-1-log-settings.md for accepted values and JSON fields.",
+                    ],
                 ),
-            )),
+            )
+            .docs(SETTINGS_DOCS)),
         }
     }
 
@@ -175,10 +179,14 @@ impl LogSettingsError {
                 error_codes::LOG_RESOLUTION,
                 message,
                 Remediation::recoverable(
-                    "provide a valid effective logging configuration",
-                    ["set a non-empty default log root or override it with a valid root"],
+                    "Set a non-empty logRoot, SC_LOG_ROOT, or ${prefix}_LOG_ROOT path.",
+                    [
+                        "Use the exact ${prefix}_LOG_ prefix casing for environment keys; a JSON logRoot takes precedence when non-empty.",
+                        "See docs/logging/d-1-log-settings.md for settings precedence and accepted keys.",
+                    ],
                 ),
-            )),
+            )
+            .docs(SETTINGS_DOCS)),
         }
     }
 
@@ -194,10 +202,14 @@ impl LogSettingsError {
                     error_codes::LOG_INVALID_VALUE,
                     message,
                     Remediation::recoverable(
-                        "correct the supplied logging setting",
-                        std::iter::empty::<String>(),
+                        format!("Use a documented setting key: {SUPPORTED_ENV_KEYS}; application namespaces replace the leading SC prefix, for example APP_LOG_LEVEL."),
+                        [
+                            "For SC_LOG_FILE and SC_LOG_CONSOLE, use exactly lowercase true or false.",
+                            "Use exact ${prefix}_LOG_ prefix casing and see docs/logging/d-1-log-settings.md for accepted values and JSON fields.",
+                        ],
                     ),
                 )
+                .docs(SETTINGS_DOCS)
                 .cause(cause)
                 .source(Box::new(source)),
             ),
@@ -210,10 +222,14 @@ impl LogSettingsError {
                 error_codes::LOG_INVALID_ENVIRONMENT,
                 message,
                 Remediation::recoverable(
-                    "correct the selected logging environment namespace",
-                    std::iter::empty::<String>(),
+                    "Use the exact ${prefix}_LOG_ prefix casing (SC_LOG_ for shared settings); selected keys and values must be UTF-8.",
+                    [
+                        format!("Remove case-folded duplicate keys and set only the documented keys: {SUPPORTED_ENV_KEYS}."),
+                        format!("See {SETTINGS_DOCS} for namespace selection rules."),
+                    ],
                 ),
-            )),
+            )
+            .docs(SETTINGS_DOCS)),
         }
     }
 
@@ -223,10 +239,14 @@ impl LogSettingsError {
                 error_codes::LOG_UNKNOWN_KEY,
                 message,
                 Remediation::recoverable(
-                    "remove or rename the unsupported logging environment key",
-                    std::iter::empty::<String>(),
+                    format!("Rename the key to one of the supported settings: {SUPPORTED_ENV_KEYS}."),
+                    [
+                        "Use exact ${prefix}_LOG_ prefix casing; application namespaces replace the leading SC (for example APP_LOG_LEVEL).",
+                        "See docs/logging/d-1-log-settings.md for the complete key table and accepted values.",
+                    ],
                 ),
-            )),
+            )
+            .docs(SETTINGS_DOCS)),
         }
     }
 
@@ -240,12 +260,18 @@ impl LogSettingsError {
                 ),
                 Remediation::recoverable(
                     format!("choose an application prefix other than {SHARED_ENV_PREFIX}"),
-                    std::iter::empty::<String>(),
+                    [
+                        "Application prefixes use exact case and form keys as ${prefix}_LOG_<KEY>; use SC_LOG_ only for shared settings.",
+                        "See docs/logging/d-1-log-settings.md for prefix and environment key rules.",
+                    ],
                 ),
-            )),
+            )
+            .docs(SETTINGS_DOCS)),
         }
     }
 }
 
 pub(crate) const SHARED_ENV_PREFIX: &str = "SC";
 pub(crate) const LOG_ENV_NAMESPACE_SUFFIX: &str = "_LOG_";
+const SETTINGS_DOCS: &str = "docs/logging/d-1-log-settings.md";
+const SUPPORTED_ENV_KEYS: &str = "SC_LOG_LEVEL, SC_LOG_ROOT, SC_LOG_FILE, SC_LOG_CONSOLE, SC_LOG_ROTATION_MAX_BYTES, SC_LOG_ROTATION_MAX_FILES, SC_LOG_RETENTION_MAX_AGE_MS, SC_LOG_MAINTENANCE_CADENCE_MS, SC_LOG_WRITER_SHUTDOWN_TIMEOUT_MS, and SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS";

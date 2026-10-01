@@ -14,7 +14,7 @@ use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegis
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
     BridgeOptions, EventLevel, LoggerConfig, PolicyRejection, ServiceName, TargetCategory,
-    attach_logger,
+    attach_logger, instrument,
 };
 use sc_observability_types::LogEvent;
 use serde_json::json;
@@ -37,13 +37,21 @@ impl BridgeEventPolicy for PanicPolicy {
     }
 }
 
+struct Admit;
+
+impl BridgeEventPolicy for Admit {
+    fn decide(&self, _: &LogEvent) -> BridgeEventDecision {
+        BridgeEventDecision::Admit
+    }
+}
+
 struct RecordingSink {
     events: Arc<Mutex<Vec<LogEvent>>>,
 }
 
 #[allow(deprecated)]
 impl LogSink for RecordingSink {
-    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         self.events
             .lock()
             .expect("recording lock")
@@ -94,11 +102,15 @@ fn event() -> BridgeEvent {
     }
 }
 
+#[instrument(name = "policy.attached", skip_all)]
+fn instrumented_attachment_fixture() {}
+
 fn attach_with(
     policy: Arc<dyn BridgeEventPolicy>,
 ) -> (
+    tempfile::TempDir,
     sc_observability_log::LogAttachment,
-    Arc<sc_observability::Logger>,
+    Arc<sc_observability::v2::Logger>,
     Arc<Mutex<Vec<LogEvent>>>,
 ) {
     attach_with_config(policy, |_| {})
@@ -108,23 +120,23 @@ fn attach_with_config(
     policy: Arc<dyn BridgeEventPolicy>,
     configure: impl FnOnce(&mut LoggerConfig),
 ) -> (
+    tempfile::TempDir,
     sc_observability_log::LogAttachment,
-    Arc<sc_observability::Logger>,
+    Arc<sc_observability::v2::Logger>,
     Arc<Mutex<Vec<LogEvent>>>,
 ) {
     let root = tempfile::tempdir().expect("temp root");
-    let root = Box::leak(Box::new(root));
     let mut config = LoggerConfig::default_for(
         ServiceName::new("policy").expect("service"),
         root.path().to_path_buf(),
     );
     configure(&mut config);
     let events = Arc::new(Mutex::new(Vec::new()));
-    let mut builder = sc_observability::LoggerBuilder::new_typed(config).expect("builder");
+    let mut builder = sc_observability::v2::LoggerBuilder::new(config).expect("builder");
     builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
-    let logger = Arc::new(builder.build_typed().expect("host logger"));
+    let logger = Arc::new(builder.build().expect("host logger"));
     // Keep the host Arc in the attachment fixture; successful detach proves
     // that the attachment itself released its Arc in the lifecycle fixture.
     let options = AttachmentOptions::new(
@@ -135,20 +147,20 @@ fn attach_with_config(
         policy,
     );
     let attachment = attach_logger(Arc::clone(&logger), options).expect("attach");
-    (attachment, logger, events)
+    (root, attachment, logger, events)
 }
 
 #[test]
 fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let (mut attachment, host, events) = attach_with(Arc::new(Deny));
+    let (_root, mut attachment, host, events) = attach_with(Arc::new(Deny));
     let control = attachment.control();
     let before = control
         .dropped_events()
         .get(sc_observability_log::DropCause::InvalidEvent);
     assert!(matches!(
         control.try_log(event()),
-        Err(sc_observability_log::EmitError::InvalidEvent { .. })
+        Err(sc_observability_log::v2::EmitError::InvalidEvent { .. })
     ));
     let after = control
         .dropped_events()
@@ -160,12 +172,19 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases attachment logger"));
     let _ = host.shutdown();
 
-    let (mut attachment, host, events) = attach_with(Arc::new(PanicPolicy));
+    let (_root, mut attachment, host, events) = attach_with(Arc::new(PanicPolicy));
     let control = attachment.control();
+    let before = control
+        .dropped_events()
+        .get(sc_observability_log::DropCause::LoggerPanicked);
     assert!(matches!(
         control.try_log(event()),
-        Err(sc_observability_log::EmitError::Panicked)
+        Err(sc_observability_log::v2::EmitError::Panicked)
     ));
+    let after = control
+        .dropped_events()
+        .get(sc_observability_log::DropCause::LoggerPanicked);
+    assert_eq!(after, before + 1);
     assert!(events.lock().expect("recording lock").is_empty());
     attachment.detach(Duration::from_secs(2)).expect("detach");
     let host =
@@ -174,9 +193,31 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
 }
 
 #[test]
+fn instrumented_completion_is_routed_through_attachment() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    let (_root, mut attachment, host, events) = attach_with(Arc::new(Admit));
+    let control = attachment.control();
+
+    instrumented_attachment_fixture();
+    control
+        .flush(Duration::from_secs(2))
+        .expect("flush instrumented event");
+
+    let events = events.lock().expect("recording lock");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].action.as_str(), "policy.attached");
+    drop(events);
+
+    attachment.detach(Duration::from_secs(2)).expect("detach");
+    Arc::try_unwrap(host)
+        .unwrap_or_else(|_| panic!("detach releases attachment logger"))
+        .shutdown();
+}
+
+#[test]
 fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let (mut attachment, host, events) = attach_with_config(
+    let (_root, mut attachment, host, events) = attach_with_config(
         Arc::new(AllowlistAndBound {
             max_message_bytes: 64,
         }),
@@ -191,14 +232,14 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
     denied.target = TargetCategory::new("policy.other").expect("target");
     assert!(matches!(
         control.try_log(denied),
-        Err(sc_observability_log::EmitError::InvalidEvent { .. })
+        Err(sc_observability_log::v2::EmitError::InvalidEvent { .. })
     ));
 
     let mut oversized = event();
     oversized.message = Some("x".repeat(65));
     assert!(matches!(
         control.try_log(oversized),
-        Err(sc_observability_log::EmitError::InvalidEvent { .. })
+        Err(sc_observability_log::v2::EmitError::InvalidEvent { .. })
     ));
     assert_eq!(
         control
@@ -252,7 +293,7 @@ fn every_policy_reason_has_concrete_steps_and_facade_diagnostics() {
         PolicyRejection::PayloadTooLarge,
         PolicyRejection::Invalid,
     ] {
-        let (mut attachment, host, events) = attach_with(Arc::new(Reject(reason)));
+        let (_root, mut attachment, host, events) = attach_with(Arc::new(Reject(reason)));
         let control = attachment.control();
         let before = control
             .dropped_events()
@@ -267,7 +308,7 @@ fn every_policy_reason_has_concrete_steps_and_facade_diagnostics() {
             error.code(),
             sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_POLICY_REJECTED
         );
-        let sc_observability_log::EmitError::InvalidEvent { diagnostic } = error else {
+        let sc_observability_log::v2::EmitError::InvalidEvent { diagnostic } = error else {
             panic!("typed diagnostic")
         };
         assert!(

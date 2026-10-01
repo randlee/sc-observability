@@ -12,17 +12,18 @@
     clippy::must_use_candidate,
     reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
 )]
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
+use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::error_codes;
 use sc_observability_types::typed::EventFailure;
 #[allow(
     deprecated,
-    reason = "span assembly retains its published EventError adapter boundary"
+    reason = "the retained released SpanAssembler::push signature returns the root EventError"
 )]
 use sc_observability_types::{
-    ErrorContext, EventError, Remediation, SpanEnded, SpanEvent, SpanRecord, SpanSignal,
-    SpanStarted,
+    ErrorContext, EventError, Remediation, SpanEnded, SpanEvent, SpanId, SpanRecord, SpanSignal,
+    SpanStarted, TraceId,
 };
 
 use sc_observability_types::v2::{
@@ -37,6 +38,26 @@ pub struct CompleteSpan {
     pub record: SpanRecord<SpanEnded>,
     /// Ordered span events attached before completion.
     pub events: Vec<SpanEvent>,
+}
+
+/// Losses caused by bounded live-span assembly.
+///
+/// The assembler never silently discards retained state: callers consume this
+/// snapshot and surface it through their health/accounting boundary.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SpanAssemblyLoss {
+    /// Started spans evicted before their matching end signal arrived.
+    pub evicted_spans: u64,
+    /// Events discarded after their span reached its bounded event capacity.
+    pub evicted_events: u64,
+}
+
+impl SpanAssemblyLoss {
+    /// Returns the total number of discarded lifecycle records.
+    #[must_use]
+    pub const fn total(self) -> u64 {
+        self.evicted_spans + self.evicted_events
+    }
 }
 
 /// Completed 2.0 span staged for the canonical OTLP exporters.
@@ -62,6 +83,10 @@ pub(crate) struct V2CompleteSpan {
 pub struct SpanAssembler {
     started: HashMap<String, SpanRecord<SpanStarted>>,
     events: HashMap<String, Vec<SpanEvent>>,
+    started_order: VecDeque<String>,
+    max_live_spans: usize,
+    max_events_per_span: usize,
+    loss: SpanAssemblyLoss,
 }
 
 /// Stateful assembler for the staged validated 2.0 span contract.
@@ -82,13 +107,26 @@ pub(crate) struct V2SpanAssembler {
 impl SpanAssembler {
     /// Creates an empty assembler.
     pub fn new() -> Self {
+        Self::with_limits(MAX_OTLP_LIVE_SPANS, MAX_OTLP_EVENTS_PER_SPAN)
+    }
+
+    /// Creates an assembler with explicit bounded live-span and event limits.
+    ///
+    /// Zero limits are normalized to one so every caller retains a valid,
+    /// bounded assembly domain.
+    #[must_use]
+    pub fn with_limits(max_live_spans: usize, max_events_per_span: usize) -> Self {
         Self {
             started: HashMap::new(),
             events: HashMap::new(),
+            started_order: VecDeque::new(),
+            max_live_spans: max_live_spans.max(1),
+            max_events_per_span: max_events_per_span.max(1),
+            loss: SpanAssemblyLoss::default(),
         }
     }
 
-    pub(crate) fn has_started(&self, trace_id: &str, span_id: &str) -> bool {
+    pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
         self.started.contains_key(&span_key(trace_id, span_id))
     }
 
@@ -114,16 +152,19 @@ impl SpanAssembler {
     pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure> {
         match signal {
             SpanSignal::Started(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
+                let key = span_key(&record.trace().trace_id, &record.trace().span_id);
+                if self.started.contains_key(&key) {
+                    self.remove_started(&key);
+                } else if self.started.len() >= self.max_live_spans {
+                    self.evict_oldest();
+                }
                 self.events.insert(key.clone(), Vec::new());
+                self.started_order.push_back(key.clone());
                 self.started.insert(key, record);
                 Ok(None)
             }
             SpanSignal::Event(event) => {
-                let key = span_key(event.trace.trace_id.as_str(), event.trace.span_id.as_str());
+                let key = span_key(&event.trace.trace_id, &event.trace.span_id);
                 if !self.started.contains_key(&key) {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
@@ -142,14 +183,16 @@ impl SpanAssembler {
                         ),
                     ))));
                 }
-                self.events.entry(key).or_default().push(event);
+                let events = self.events.entry(key).or_default();
+                if events.len() >= self.max_events_per_span {
+                    self.loss.evicted_events += 1;
+                } else {
+                    events.push(event);
+                }
                 Ok(None)
             }
             SpanSignal::Ended(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
+                let key = span_key(&record.trace().trace_id, &record.trace().span_id);
                 let Some(started) = self.started.get(&key) else {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
@@ -168,7 +211,7 @@ impl SpanAssembler {
                         ),
                     ))));
                 }
-                self.started.remove(&key);
+                self.remove_started(&key);
                 let events = self.events.remove(&key).expect(
                     "started span always has an event buffer; this is an internal invariant",
                 );
@@ -182,7 +225,28 @@ impl SpanAssembler {
         let dropped = self.started.len();
         self.started.clear();
         self.events.clear();
+        self.started_order.clear();
         dropped
+    }
+
+    /// Returns and clears bounded-assembly losses since the prior observation.
+    pub fn take_loss(&mut self) -> SpanAssemblyLoss {
+        std::mem::take(&mut self.loss)
+    }
+
+    fn evict_oldest(&mut self) {
+        let Some(key) = self.started_order.pop_front() else {
+            return;
+        };
+        if self.started.remove(&key).is_some() {
+            self.events.remove(&key);
+            self.loss.evicted_spans += 1;
+        }
+    }
+
+    fn remove_started(&mut self, key: &str) {
+        self.started.remove(key);
+        self.started_order.retain(|candidate| candidate != key);
     }
 
     #[cfg(test)]
@@ -211,16 +275,13 @@ impl V2SpanAssembler {
     ) -> Result<Option<V2CompleteSpan>, V2EventError> {
         match signal {
             V2SpanSignal::Started(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
+                let key = span_key(&record.trace().trace_id, &record.trace().span_id);
                 self.events.insert(key.clone(), Vec::new());
                 self.started.insert(key, record);
                 Ok(None)
             }
             V2SpanSignal::Event(event) => {
-                let key = span_key(event.trace.trace_id.as_str(), event.trace.span_id.as_str());
+                let key = span_key(&event.trace.trace_id, &event.trace.span_id);
                 let Some(started) = self.started.get(&key) else {
                     return Err(v2_lifecycle_error(
                         "received span event without a matching started span",
@@ -237,28 +298,27 @@ impl V2SpanAssembler {
                 Ok(None)
             }
             V2SpanSignal::Ended(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
-                let Some(started) = self.started.get(&key) else {
+                let key = span_key(&record.trace().trace_id, &record.trace().span_id);
+                let Some(started) = self.started.remove(&key) else {
                     return Err(v2_lifecycle_error(
                         "received ended span without a matching started span",
                         "emit started and ended span signals with the same trace context",
                     ));
                 };
                 if started.trace() != record.trace() {
+                    self.started.insert(key, started);
                     return Err(v2_lifecycle_error(
                         "received ended span with mismatched trace context",
                         "preserve trace identifiers, parent, and flags across one span lifecycle",
                     ));
                 }
-                self.started
-                    .remove(&key)
-                    .expect("started span was checked before removal");
-                let events = self.events.remove(&key).expect(
-                    "started span always has an event buffer; this is an internal invariant",
-                );
+                let Some(events) = self.events.remove(&key) else {
+                    self.started.insert(key, started);
+                    return Err(v2_lifecycle_error(
+                        "received ended span whose event buffer is missing",
+                        "preserve started span state until its matching event buffer is available",
+                    ));
+                };
                 Ok(Some(V2CompleteSpan { record, events }))
             }
         }
@@ -270,6 +330,11 @@ impl V2SpanAssembler {
         self.started.clear();
         self.events.clear();
         dropped
+    }
+
+    #[cfg(test)]
+    fn remove_event_buffer(&mut self, key: &str) -> Option<Vec<V2SpanEvent>> {
+        self.events.remove(key)
     }
 }
 
@@ -299,11 +364,11 @@ impl Default for SpanAssembler {
     }
 }
 
-pub(crate) fn span_key(trace_id: &str, span_id: &str) -> String {
-    let mut key = String::with_capacity(trace_id.len() + span_id.len() + 1);
-    key.push_str(trace_id);
+pub(crate) fn span_key(trace_id: &TraceId, span_id: &SpanId) -> String {
+    let mut key = String::with_capacity(trace_id.as_str().len() + span_id.as_str().len() + 1);
+    key.push_str(trace_id.as_str());
     key.push(':');
-    key.push_str(span_id);
+    key.push_str(span_id.as_str());
     key
 }
 
@@ -400,6 +465,32 @@ mod tests {
         let error = assembler
             .push(V2SpanSignal::Ended(ended))
             .expect_err("different flags are not the same lifecycle");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::OTLP_SPAN_ASSEMBLY_FAILED
+        );
+        assert_eq!(assembler.flush_incomplete(), 1);
+    }
+
+    #[test]
+    fn v2_assembly_missing_event_buffer_returns_error_without_dropping_started_span() {
+        let trace = trace(0x01);
+        let started_record = started(trace.clone());
+        let ended = started_record
+            .clone()
+            .end(SpanStatus::Ok, DurationMs::from(1));
+        let key = span_key(&trace.trace_id, &trace.span_id);
+        let mut assembler = V2SpanAssembler::new();
+
+        assembler
+            .push(V2SpanSignal::Started(started_record))
+            .expect("started signal");
+        assert!(assembler.remove_event_buffer(&key).is_some());
+
+        let error = assembler
+            .push(V2SpanSignal::Ended(ended))
+            .expect_err("missing event buffer is a lifecycle failure, not a panic");
 
         assert_eq!(
             error.diagnostic().code,

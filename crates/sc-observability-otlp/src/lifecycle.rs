@@ -43,10 +43,6 @@ impl SignalKind {
 }
 
 /// Snapshot of lifecycle state and fail-open accounting for health surfaces.
-#[allow(
-    dead_code,
-    reason = "D.18 exposes lifecycle health through the public facade"
-)]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct LifecycleHealth {
     /// Current lifecycle phase.
@@ -61,6 +57,18 @@ pub(crate) struct LifecycleHealth {
     pub(crate) degraded: bool,
     /// Last diagnostic recorded by the lifecycle core.
     pub(crate) last_error: Option<DiagnosticSummary>,
+}
+
+impl LifecycleHealth {
+    /// Returns aggregate terminal losses without counting active admissions.
+    pub(crate) fn dropped_total(&self) -> u64 {
+        self.dropped_by_signal.iter().sum()
+    }
+
+    /// Returns terminal losses for one signal family.
+    pub(crate) fn dropped_for(&self, signal: SignalKind) -> u64 {
+        self.dropped_by_signal[signal.index()]
+    }
 }
 
 /// Terminal state of the shared lifecycle machine.
@@ -168,7 +176,10 @@ impl LifecycleCore {
     /// Constructs the state machine from D.21's validated, backend-neutral
     /// bounds.  Exporter preflight is intentionally performed before any
     /// state becomes visible to callers.
-    #[allow(dead_code, reason = "D.18 constructs the staged lifecycle core")]
+    #[allow(
+        dead_code,
+        reason = "only unused in the lib build; the unified lifecycle test binary uses it, making #[expect] unfulfilled under --all-targets"
+    )]
     pub(crate) fn new(
         exporters: ExporterSet,
         bounds: &ValidatedTransportBounds,
@@ -369,10 +380,6 @@ impl LifecycleCore {
     }
 
     /// Returns a point-in-time health/accounting snapshot.
-    #[allow(
-        dead_code,
-        reason = "D.18 exposes lifecycle health through the public facade"
-    )]
     pub(crate) fn health(&self) -> LifecycleHealth {
         let state = self.inner.state.lock().expect("lifecycle state lock");
         LifecycleHealth {
@@ -480,6 +487,11 @@ pub(crate) struct LifecycleWaiter {
 impl LifecycleWaiter {
     fn new(operation: Arc<Operation>) -> Self {
         Self { operation }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn expire_for_test(&self) {
+        self.operation.finish(Err(lifecycle_timeout_error()));
     }
 }
 

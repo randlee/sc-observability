@@ -5,9 +5,9 @@
 //! and does not activate the production [`crate::Telemetry`] factory; D.18
 //! retains that composition boundary.
 
-use crate::TelemetryConfig;
 use crate::config::{validated_backend_connection, validated_telemetry_bounds};
 use crate::sdk::implementation::{SdkAdapterSet, build_exporter_set};
+use crate::v2::TelemetryConfig;
 use sc_observability_types::otlp::{OtlpCompleteSpan, OtlpLogRecord, OtlpMetricRecord, OtlpRecord};
 use sc_observability_types::typed::InitFailure;
 use sc_observability_types::v2::ExportError;

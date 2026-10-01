@@ -46,6 +46,26 @@ fn decimal_domains_are_canonical() {
     );
     assert!(serde_json::from_value::<DecimalDto>(json!(1)).is_err());
 }
+
+#[test]
+fn json_number_projection_is_total_in_every_workspace_number_domain() {
+    let value = json!({
+        "signed": -1,
+        "unsigned": u64::MAX,
+        "float": 1.5,
+        "nested": [-2, 2.5]
+    });
+
+    let projected = from_json_value(value).unwrap();
+    assert!(matches!(
+        projected,
+        ValueDto::Object { value }
+            if matches!(value["signed"], ValueDto::Integer { ref value } if value.as_str() == "-1")
+                && matches!(value["unsigned"], ValueDto::Integer { ref value } if value.as_str() == u64::MAX.to_string())
+                && matches!(value["float"], ValueDto::Float { value } if value == 1.5)
+                && matches!(value["nested"], ValueDto::Array { ref value } if matches!(value[..], [ValueDto::Integer { .. }, ValueDto::Float { value: 2.5 }]))
+    ));
+}
 #[test]
 fn checked_event_preserves_integer_and_host_stamp() {
     let mut raw = event();
@@ -74,13 +94,26 @@ fn inputs_reject_missing_unknown_and_invalid_versions() {
     let mut raw = event();
     raw["schema_version"] = json!(2);
     assert!(matches!(
-        decode_event(raw),
+        to_core_event(decode_event(raw).unwrap(), stamp()),
         Err(Failure::UnsupportedVersion { received: 2, .. })
     ));
     let mut raw = event();
     raw["level"] = json!("fatal");
     assert!(decode_event(raw).is_err());
     assert!(decode_level_request(json!({"kind":"reset","level":"trace"})).is_err());
+}
+
+#[test]
+fn typed_constructor_codes_survive_dto_validation() {
+    let mut raw = event();
+    raw["target"] = json!("invalid target");
+    assert!(matches!(
+        to_core_event(decode_event(raw).unwrap(), stamp()),
+        Err(Failure::Validation { diagnostic, field })
+            if field == "target"
+                && diagnostic.code == core::error_codes::VALUE_VALIDATION_FAILED.as_str()
+                && matches!(diagnostic.remediation, RemediationDto::Recoverable { ref steps } if !steps.is_empty())
+    ));
 }
 #[test]
 fn spoofed_provenance_is_rejected_at_all_depths() {
@@ -136,7 +169,7 @@ fn query_defaults_and_inclusive_bounds() {
         json!({"schema_version":1,"since":"1970-01-01T01:00:00+01:00"}),
         json!({"schema_version":1,"field_matches":[{"field":"","value":{"kind":"null"}}]}),
     ] {
-        assert!(decode_query(raw).is_err());
+        assert!(decode_query(raw).and_then(to_core_query).is_err());
     }
     let query=decode_query(json!({"schema_version":1,"limit":1000,"field_matches":[{"field":"sc_observability.binding.language","value":{"kind":"string","value":"python"}}]})).unwrap();
     assert_eq!(query.limit, 1000);
@@ -247,6 +280,21 @@ fn registry_has_unique_literals_and_exact_remediation() {
         );
         validate_diagnostic(&diagnostic, "test").unwrap();
     }
+}
+
+#[test]
+fn unregistered_boundary_code_has_explicit_recovery() {
+    let diagnostic = boundary_diagnostic("SC_EXTERNAL_COMPONENT_FAILURE", "external failure");
+    assert_eq!(
+        diagnostic.remediation,
+        RemediationDto::Recoverable {
+            steps: vec![
+                "Inspect the diagnostic code and follow the emitting component's recovery guidance"
+                    .into()
+            ]
+        }
+    );
+    validate_diagnostic(&diagnostic, "test").unwrap();
 }
 
 #[test]
@@ -371,9 +419,7 @@ fn complete_health_projection_and_unsigned_wire_counters() {
         }),
         last_error: Some(summary),
     };
-    let project_health: fn(core::LoggingHealthReport, core::LevelState) -> LogHealthDto =
-        from_core_health;
-    let dto = project_health(
+    let dto = from_core_health(
         native,
         core::LevelState {
             configured_level: core::LevelFilter::Info,

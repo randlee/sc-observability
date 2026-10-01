@@ -1,13 +1,8 @@
-#![allow(
-    deprecated,
-    reason = "process identity retains its published resolver signature while typed callers use explicit adapters"
-)]
-
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::IdentityError;
+use crate::v2::IdentityError;
 
 /// Caller-resolved process identity attached to observations and log events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

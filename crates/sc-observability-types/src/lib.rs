@@ -59,12 +59,14 @@ pub use diagnostic::{
 #[doc(inline)]
 #[allow(
     deprecated,
-    reason = "the crate root re-exports the retained legacy wrapper names"
+    reason = "the root exports retain released compatibility wrappers during the transition"
 )]
 pub use errors::{
     EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
     ProjectionError, ShutdownError, SubscriberError, TelemetryError,
 };
+#[doc(inline)]
+pub use errors_v2::{ConfigFailure, FailureClassification, MetricModelError};
 #[doc(inline)]
 pub use events::{LogEvent, Observable, Observation};
 #[doc(inline)]

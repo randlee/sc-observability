@@ -2,17 +2,12 @@ use std::fmt;
 use std::path::PathBuf;
 
 use super::validation::{
-    config_failure_to_init_failure, invalid_endpoint, invalid_header, is_valid_http_endpoint,
-    validate_config_typed,
+    invalid_endpoint, invalid_header, is_valid_http_endpoint, validate_config_typed,
 };
 use crate::constants;
 use sc_observability_types::typed::InitFailure;
 use sc_observability_types::v2::ConfigFailure;
-#[allow(
-    deprecated,
-    reason = "OTLP config retains InitError in its published compatibility signatures"
-)]
-use sc_observability_types::{DurationMs, InitError, ServiceName};
+use sc_observability_types::{DurationMs, ServiceName};
 use serde_json::{Map, Value};
 
 /// Supported OTLP transport protocols.
@@ -78,35 +73,12 @@ pub struct LegacyRetryPolicy {
 pub struct OtlpEndpoint(String);
 
 impl OtlpEndpoint {
-    /// Creates a validated OTLP endpoint using the documented HTTP(S) subset.
-    ///
-    /// The endpoint grammar intentionally admits `http://` or `https://` URLs
-    /// with an ASCII DNS host (letters, digits, `.` and `-`) or bracketed IPv6
-    /// literal, each with an optional numeric port and path/query/fragment.
-    /// It rejects URL userinfo, underscores, raw Unicode host names, and
-    /// unbracketed IPv6 literals. Callers requiring broader URL support must
-    /// normalize it before constructing this contract type.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility constructor keeps the published InitError signature"
-    )]
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use OtlpEndpoint::new_typed(); see migrate-error-api.md."
-    )]
-    pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
-        Self::new_typed(value)
-            .map_err(config_failure_to_init_failure)
-            .map_err(Into::into)
-    }
-
     /// Creates a validated OTLP endpoint with a canonical configuration failure.
     ///
     /// Emptiness is checked against the trimmed value, but the original,
     /// untrimmed `value` is stored: this is intentional retained legacy
-    /// behavior, not an oversight, and both the legacy [`OtlpEndpoint::new`]
-    /// and this typed constructor preserve it identically. Callers that
-    /// require a trimmed endpoint must trim before calling.
+    /// behavior, not an oversight. Callers that require a trimmed endpoint
+    /// must trim before calling.
     pub fn new_typed(value: impl Into<String>) -> Result<Self, ConfigFailure> {
         let value = value.into();
         if value.trim().is_empty() {
@@ -142,20 +114,6 @@ impl AsRef<str> for OtlpEndpoint {
     }
 }
 
-impl TryFrom<String> for OtlpEndpoint {
-    #[allow(
-        deprecated,
-        reason = "TryFrom preserves the published InitError compatibility contract"
-    )]
-    type Error = InitError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new_typed(value)
-            .map_err(config_failure_to_init_failure)
-            .map_err(Into::into)
-    }
-}
-
 /// Validated authorization header value for OTLP transport.
 ///
 /// `Debug` redacts the wrapped credential (`AuthHeader("<redacted>")`) so it
@@ -174,28 +132,12 @@ impl fmt::Debug for AuthHeader {
 }
 
 impl AuthHeader {
-    /// Creates a validated non-empty authorization header value.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility constructor keeps the published InitError signature"
-    )]
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use AuthHeader::new_typed(); see migrate-error-api.md."
-    )]
-    pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
-        Self::new_typed(value)
-            .map_err(config_failure_to_init_failure)
-            .map_err(Into::into)
-    }
-
     /// Creates a validated authorization header with a canonical configuration failure.
     ///
     /// Emptiness is checked against the trimmed value, but the original,
     /// untrimmed `value` is stored: this is intentional retained legacy
-    /// behavior, not an oversight, and both the legacy [`AuthHeader::new`]
-    /// and this typed constructor preserve it identically. Callers that
-    /// require a trimmed header value must trim before calling.
+    /// behavior, not an oversight. Callers that require a trimmed header
+    /// value must trim before calling.
     pub fn new_typed(value: impl Into<String>) -> Result<Self, ConfigFailure> {
         let value = value.into();
         if value.trim().is_empty() {
@@ -231,20 +173,6 @@ impl AsRef<str> for AuthHeader {
     }
 }
 
-impl TryFrom<String> for AuthHeader {
-    #[allow(
-        deprecated,
-        reason = "TryFrom preserves the published InitError compatibility contract"
-    )]
-    type Error = InitError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new_typed(value)
-            .map_err(config_failure_to_init_failure)
-            .map_err(Into::into)
-    }
-}
-
 /// Transport-level OTLP configuration.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -277,21 +205,8 @@ pub struct OtelConfig {
     pub debug_local_export: bool,
     /// Legacy-only retry settings. `None` means no legacy-only field was supplied.
     pub legacy_retry: Option<LegacyRetryPolicy>,
-    /// Retained compatibility retry count. `None` means the field was not supplied.
-    #[deprecated(since = "2.0.0", note = "Use legacy_retry.max_retries")]
-    pub max_retries: Option<u32>,
-    /// Retained compatibility initial backoff. `None` means the field was not supplied.
-    #[deprecated(since = "2.0.0", note = "Use legacy_retry.initial_backoff_ms")]
-    pub initial_backoff_ms: Option<DurationMs>,
-    /// Retained compatibility maximum backoff. `None` means the field was not supplied.
-    #[deprecated(since = "2.0.0", note = "Use legacy_retry.max_backoff_ms")]
-    pub max_backoff_ms: Option<DurationMs>,
 }
 
-#[allow(
-    deprecated,
-    reason = "the retained compatibility fields must preserve their historical defaults until D.18"
-)]
 impl Default for OtelConfig {
     fn default() -> Self {
         Self {
@@ -309,9 +224,6 @@ impl Default for OtelConfig {
             queue_byte_capacity: None,
             debug_local_export: false,
             legacy_retry: None,
-            max_retries: None,
-            initial_backoff_ms: None,
-            max_backoff_ms: None,
         }
     }
 }
@@ -474,23 +386,11 @@ impl TelemetryConfigBuilder {
     /// let config = TelemetryConfigBuilder::new(
     ///     ServiceName::new("demo").expect("valid service"),
     /// )
-    /// .build()
+    /// .build_typed()
     /// .expect("valid telemetry config");
     ///
     /// assert_eq!(config.service_name.as_str(), "demo");
     /// ```
-    #[allow(
-        deprecated,
-        reason = "retained compatibility builder keeps the published InitError signature"
-    )]
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use TelemetryConfigBuilder::build_typed(); see migrate-error-api.md."
-    )]
-    pub fn build(self) -> Result<TelemetryConfig, InitError> {
-        self.build_typed().map_err(Into::into)
-    }
-
     /// Finalizes the telemetry configuration with a neutral initialization failure.
     pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure> {
         let config = TelemetryConfig {

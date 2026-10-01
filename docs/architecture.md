@@ -1,6 +1,6 @@
 # SC-Observability Architecture
 
-**Status**: Approved baseline; ADR-011–ADR-019 Accepted for Phase D
+**Status**: Approved baseline; ADR-011–ADR-020 Accepted for Phase D
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)
@@ -815,6 +815,7 @@ ADR navigation index (status is recorded in each decision below):
 - [ADR-017: Phase D 2.0 Error Surface](#adr-017-phase-d-20-error-surface)
 - [ADR-018: Dual OTLP Backends And Shared Lifecycle](#adr-018-dual-otlp-backends-and-shared-lifecycle)
 - [ADR-019: Phase D Implementation Decisions](#adr-019-phase-d-implementation-decisions)
+- [ADR-020: Compatible 1.x Adoption Of Phase D](#adr-020-compatible-1x-adoption-of-phase-d)
 
 ### ADR-001: Observation-First Producers
 

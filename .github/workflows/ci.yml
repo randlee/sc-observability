@@ -132,6 +132,9 @@ jobs:
       - name: Install nightly toolchain for cargo-public-api
         run: rustup toolchain install nightly
 
+      - name: Run public API validator fixtures
+        run: python3 -m unittest discover -s scripts/ci/tests -p test_validate_public_api.py -v
+
       - name: Validate public API diff visibility
         id: public_api_diff
         continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
@@ -213,6 +216,7 @@ jobs:
       - name: Run staged-package and retry idempotency tests
         run: |
           python3 -m unittest \
+            scripts.ci.tests.test_release_wheel_targets \
             scripts.ci.tests.test_prepare_release_staged_packages \
             scripts.ci.tests.test_publish_retry_idempotency
 

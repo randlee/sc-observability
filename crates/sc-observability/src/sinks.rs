@@ -7,6 +7,7 @@ use std::time::{Duration, SystemTime};
 
 use sc_observability_types::ErrorContext;
 use sc_observability_types::typed::EventFailure;
+use sc_observability_types::typed::LogSinkFailure;
 use sc_observability_types::v2::LogSinkError;
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, Level, LogEvent, Remediation, SinkHealth, SinkHealthState,
@@ -183,9 +184,12 @@ impl JsonlFileSink {
         rotation_max_files: usize,
         incoming_len: u64,
     ) -> Result<bool, LogSinkError> {
-        if let Ok(metadata) = fs::metadata(&self.path)
-            && metadata.len().saturating_add(incoming_len) > rotation_max_bytes
-        {
+        let metadata = match fs::metadata(&self.path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(self.mark_failure(error)),
+        };
+        if metadata.len().saturating_add(incoming_len) > rotation_max_bytes {
             for idx in (1..rotation_max_files).rev() {
                 let src = self.rotated_path(idx);
                 let dest = self.rotated_path(idx + 1);
@@ -265,9 +269,7 @@ impl JsonlFileSink {
         let Some(parent) = self.path.parent() else {
             return Ok(0);
         };
-        let Ok(entries) = fs::read_dir(parent) else {
-            return Ok(0);
-        };
+        let entries = fs::read_dir(parent).map_err(|error| self.mark_failure(error))?;
 
         let mut retained_files = Vec::new();
         for entry in entries {
@@ -374,36 +376,43 @@ impl JsonlFileSink {
     }
 }
 
-impl crate::typed::TypedLogSink for JsonlFileSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
-        }
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
+impl LogSink for JsonlFileSink {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        (|| -> Result<(), LogSinkError> {
+            if let Some(parent) = self.path.parent() {
+                fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
+            }
 
-        let mut line =
-            serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
-        line.push(b'\n');
-        if let Some(policy) = self.legacy_policy {
-            self.rotate_if_needed(
-                policy.rotation.max_bytes.as_u64(),
-                policy.rotation.max_files.as_usize(),
-                line.len() as u64,
-            )?;
-            self.prune_old_files(policy.retention)?;
-        }
+            let mut line = serialize_event_bounded(event)
+                .map_err(|context| LogSinkError::Write { context })?;
+            line.push(b'\n');
+            if let Some(policy) = self.legacy_policy {
+                self.rotate_if_needed(
+                    policy.rotation.max_bytes.as_u64(),
+                    policy.rotation.max_files.as_usize(),
+                    line.len() as u64,
+                )?;
+                self.prune_old_files(policy.retention)?;
+            }
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)
-            .map_err(|err| self.mark_failure(err))?;
-        file.write_all(&line)
-            .and_then(|()| file.flush())
-            .map_err(|err| self.mark_failure(err))?;
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.path)
+                .map_err(|err| self.mark_failure(err))?;
+            file.write_all(&line)
+                .and_then(|()| file.flush())
+                .map_err(|err| self.mark_failure(err))?;
 
-        let mut health = self.health.write().expect("file sink health poisoned");
-        health.state = SinkHealthState::Healthy;
-        Ok(())
+            let mut health = self.health.write().expect("file sink health poisoned");
+            health.state = SinkHealthState::Healthy;
+            Ok(())
+        })()
+        .map_err(legacy_sink_error)
     }
 
     fn health(&self) -> SinkHealth {
@@ -411,16 +420,6 @@ impl crate::typed::TypedLogSink for JsonlFileSink {
             .read()
             .expect("file sink health poisoned")
             .clone()
-    }
-}
-
-impl LogSink for JsonlFileSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        <Self as crate::typed::TypedLogSink>::write(self, event)
-    }
-
-    fn health(&self) -> SinkHealth {
-        <Self as crate::typed::TypedLogSink>::health(self)
     }
 }
 
@@ -529,16 +528,23 @@ impl ConsoleSink {
     }
 }
 
-impl crate::typed::TypedLogSink for ConsoleSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
-        let line = Self::format_line(event);
-        self.writer
-            .write_line(&line)
-            .map_err(|err| self.mark_failure(err))?;
-        let mut health = self.health.write().expect("console sink health poisoned");
-        health.state = SinkHealthState::Healthy;
-        Ok(())
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
+impl LogSink for ConsoleSink {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        (|| -> Result<(), LogSinkError> {
+            serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
+            let line = Self::format_line(event);
+            self.writer
+                .write_line(&line)
+                .map_err(|err| self.mark_failure(err))?;
+            let mut health = self.health.write().expect("console sink health poisoned");
+            health.state = SinkHealthState::Healthy;
+            Ok(())
+        })()
+        .map_err(legacy_sink_error)
     }
 
     fn health(&self) -> SinkHealth {
@@ -546,16 +552,6 @@ impl crate::typed::TypedLogSink for ConsoleSink {
             .read()
             .expect("console sink health poisoned")
             .clone()
-    }
-}
-
-impl LogSink for ConsoleSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        <Self as crate::typed::TypedLogSink>::write(self, event)
-    }
-
-    fn health(&self) -> SinkHealth {
-        <Self as crate::typed::TypedLogSink>::health(self)
     }
 }
 
@@ -642,21 +638,25 @@ impl FaultInjectingSink {
 }
 
 #[cfg(feature = "fault-injection")]
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 impl LogSink for FaultInjectingSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         if let Some(state) = self.current_state() {
-            return Err(LogSinkError::Write {
+            return Err(legacy_sink_error(LogSinkError::Write {
                 context: Box::new(fault_injection_error_context(state)),
-            });
+            }));
         }
         self.inner.write(event)
     }
 
-    fn flush(&self) -> Result<(), LogSinkError> {
+    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
         if let Some(state) = self.current_state() {
-            return Err(LogSinkError::Flush {
+            return Err(legacy_sink_error(LogSinkError::Flush {
                 context: Box::new(fault_injection_error_context(state)),
-            });
+            }));
         }
         self.inner.flush()
     }
@@ -715,6 +715,14 @@ where
     }
 }
 
+#[expect(
+    deprecated,
+    reason = "convert canonical sink errors at the retained 1.x trait boundary"
+)]
+fn legacy_sink_error(error: LogSinkError) -> sc_observability_types::LogSinkError {
+    LogSinkFailure::from_context(error.into_context()).into()
+}
+
 #[cfg(feature = "fault-injection")]
 fn fault_injection_error_context(state: SinkHealthState) -> ErrorContext {
     let forced_state = match state {
@@ -764,8 +772,8 @@ mod tests {
     use super::*;
     use crate::{FileCount, RetentionMaxAge};
     use sc_observability_types::{
-        ActionName, Level, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
-        TargetCategory, constants::OBSERVATION_ENVELOPE_VERSION,
+        ActionName, DiagnosticInfo, Level, OutcomeLabel, ProcessIdentity, SchemaVersion,
+        ServiceName, TargetCategory, constants::OBSERVATION_ENVELOPE_VERSION,
     };
     use serde_json::json;
     use std::fs;
@@ -774,7 +782,7 @@ mod tests {
     use std::time::Duration;
 
     #[cfg(feature = "fault-injection")]
-    use sc_observability_types::{DiagnosticInfo, typed::LogSinkFailure};
+    use sc_observability_types::typed::LogSinkFailure;
 
     struct TestRoot(tempfile::TempDir);
 
@@ -917,6 +925,67 @@ mod tests {
     }
 
     #[test]
+    fn retained_prune_read_dir_failure_uses_maintenance_error_code() {
+        let root = temp_root("maintenance-read-dir-error");
+        let parent = root.join("logs");
+        fs::write(&parent, "not a directory").expect("create invalid log parent");
+        let active_path = parent.join("service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path);
+
+        let error = sink
+            .perform_maintenance(&RetainedLogPolicy {
+                rotation_max_bytes: bytes(u64::MAX),
+                rotation_max_files: file_count(1),
+                retention_max_age: retention_secs(3600),
+                maintenance_cadence: cadence_secs(60),
+                writer_shutdown_timeout: join_secs(5),
+                maintenance_max_work_per_pass: None,
+            })
+            .expect_err("reading the regular-file log parent must fail maintenance");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_MAINTENANCE_FAILED
+        );
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[test]
+    fn rotation_metadata_not_found_is_benign() {
+        let root = temp_root("rotation-metadata-not-found");
+        let active_path = root.join("logs/service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path);
+
+        assert!(
+            !sink
+                .rotate_if_needed(u64::MAX, 1, 0)
+                .expect("missing active file does not require rotation")
+        );
+        assert_eq!(sink.health().state, SinkHealthState::Healthy);
+    }
+
+    #[test]
+    fn rotation_metadata_io_failure_marks_sink_failure() {
+        let root = temp_root("rotation-metadata-io-error");
+        let parent = root.join("logs");
+        fs::write(&parent, "not a directory").expect("create invalid log parent");
+        let active_path = parent.join("service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path.clone());
+        let metadata_error = fs::metadata(&active_path).expect_err("parent is not a directory");
+        assert_ne!(metadata_error.kind(), io::ErrorKind::NotFound);
+
+        let error = sink
+            .rotate_if_needed(u64::MAX, 1, 0)
+            .expect_err("metadata I/O failure must be surfaced");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[test]
     fn maintenance_max_work_per_pass_limits_pruning() {
         let root = temp_root("maintenance-budget");
         let active_path = root.join("logs/service.log.jsonl");
@@ -970,17 +1039,6 @@ mod tests {
             )
         );
         assert!(std::error::Error::source(&error).is_some());
-        let typed_error = crate::typed::TypedLogSink::write(&sink, &log_event())
-            .expect_err("typed write failure");
-        assert_eq!(
-            typed_error.diagnostic().code,
-            error_codes::LOGGER_SINK_WRITE_FAILED
-        );
-        assert_eq!(
-            typed_error.diagnostic().remediation,
-            error.diagnostic().remediation
-        );
-        assert!(std::error::Error::source(&typed_error).is_some());
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
 
         let console = ConsoleSink::from_writer(Box::new(FailingConsoleWriter));

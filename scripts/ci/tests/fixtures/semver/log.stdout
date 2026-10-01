@@ -1,0 +1,11 @@
+
+--- failure auto_trait_impl_removed: auto trait no longer implemented ---
+
+Description:
+A public type has stopped implementing one or more auto traits. This can break downstream code that depends on the traits being implemented.
+        ref: https://doc.rust-lang.org/reference/special-types-and-traits.html#auto-traits
+       impl: https://github.com/obi1kenobi/cargo-semver-checks/tree/v0.48.0/src/lints/auto_trait_impl_removed.ron
+
+Failed in:
+  type LogControl is no longer UnwindSafe, in /repo/crates/sc-observability-log/src/control.rs:43
+  type LogControl is no longer RefUnwindSafe, in /repo/crates/sc-observability-log/src/control.rs:43

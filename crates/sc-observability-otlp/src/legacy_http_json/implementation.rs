@@ -6,9 +6,12 @@
 //! overall retry-sequence deadline. The blocking client is owned exclusively
 //! by one private worker thread.
 
-#![allow(
-    dead_code,
-    reason = "D.18 wires this staged legacy backend into the facade after D.8"
+#![cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D.18 wires this staged legacy backend into the facade after D.8"
+    )
 )]
 
 use std::fs;
@@ -38,7 +41,7 @@ use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
     LogRecord, MetricExporter, TraceExporter,
 };
-use crate::lifecycle::{LifecycleCore, SignalKind};
+use crate::lifecycle::{LifecycleCore, LifecycleState, SignalKind};
 use sc_observability_types::v2::{ExportError, MetricRecord, TelemetryError};
 use sc_observability_types::{ErrorContext, LogEvent, Remediation, error_codes};
 
@@ -47,7 +50,17 @@ use sc_observability_types::{ErrorContext, LogEvent, Remediation, error_codes};
 pub(super) use super::payload::{build_logs_payload, log_record};
 use super::payload::{build_metrics_payload, build_traces_payload, metric_record, span_record};
 
+/// Caps untrusted server-provided `Retry-After` values before date or integer parsing.
+///
+/// 128 bytes leaves room for the standard HTTP-date and integer-seconds forms,
+/// including long delays, while rejecting oversized input. Raising this limit
+/// would allow larger remote-controlled values into the parser.
 const RETRY_AFTER_HEADER_LIMIT: usize = 128;
+
+/// Bounds idle worker and cancellation polling while avoiding a tight busy loop.
+///
+/// Five milliseconds keeps shutdown/control observation responsive without
+/// repeatedly waking the worker at CPU speed; changing it shifts that latency/CPU trade-off.
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 #[cfg(test)]
@@ -353,6 +366,10 @@ impl Worker {
 }
 
 impl ExporterLifecycle for Worker {
+    fn is_shutdown(&self) -> bool {
+        self.inner.terminated.load(Ordering::Acquire) || self.inner.stop.load(Ordering::Acquire)
+    }
+
     fn blocking_preflight(&self) -> Result<(), ExportError> {
         Ok(())
     }
@@ -389,7 +406,7 @@ impl ExporterLifecycle for Worker {
     }
 }
 
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "the dedicated worker takes ownership of its channels and validated config"
 )]
@@ -698,6 +715,12 @@ fn apply_jitter(delay: Duration, percent: u8, state: &mut u64) -> Duration {
     Duration::from_millis(u64::try_from(millis.min(u128::from(u64::MAX))).unwrap_or(u64::MAX))
 }
 
+/// Seeds retry jitter from OS entropy, with a deterministic fallback if it is unavailable.
+///
+/// The fixed `0xa5a5_5a5a_1234_5678` pattern keeps the worker's PRNG usable
+/// without treating the fallback as entropy. If several workers take this
+/// path, they start with the same seed and lose jitter decorrelation, so their
+/// retries may align.
 fn seed_from_os() -> u64 {
     let mut seed = [0_u8; 8];
     if getrandom::fill(&mut seed).is_ok() {
@@ -948,7 +971,22 @@ impl MetricExporter<ExportRecord<MetricRecord>> for OtlpHttpExporter {
 }
 
 impl ExporterLifecycle for OtlpHttpExporter {
+    fn is_shutdown(&self) -> bool {
+        self.backend.lifecycle.health().phase != LifecycleState::Open
+    }
+
+    fn lifecycle_health(&self) -> Option<crate::lifecycle::LifecycleHealth> {
+        Some(self.backend.lifecycle.health())
+    }
+
     fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn blocking_lifecycle_preflight(&self) -> Result<(), ExportError> {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err(blocking_in_async_error());
+        }
         Ok(())
     }
 

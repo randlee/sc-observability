@@ -2,24 +2,16 @@
     clippy::missing_errors_doc,
     reason = "builder error behavior is documented at the facade level, and repeating it on each constructor would add low-signal boilerplate"
 )]
-#![expect(
-    clippy::must_use_candidate,
-    reason = "builder methods are used immediately in fluent construction, so extra must_use decoration is intentionally omitted here"
-)]
-
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 use sc_observability_types::typed::InitFailure;
-#[allow(
-    deprecated,
-    reason = "the builder retains InitError in its published compatibility signature"
-)]
-use sc_observability_types::{ErrorContext, InitError, Remediation};
+use sc_observability_types::{ErrorContext, Remediation, v2::InitError as CanonicalInitError};
 
 use crate::typed::{TypedLogSink, legacy_sink};
 use crate::{
-    ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, Logger, LoggerConfig, LoggerRuntime,
-    Running, SinkHealthState, SinkRegistration, default_log_path, error_codes,
+    CanonicalLogger, ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, LoggerConfig,
+    LoggerRuntime, QueueCapacity, Running, SinkHealthState, SinkRegistration, default_log_path,
+    error_codes,
 };
 
 impl SinkRegistration {
@@ -38,24 +30,24 @@ impl SinkRegistration {
     missing_debug_implementations,
     reason = "the builder stores registration trait objects whose debug representation is not part of the public API"
 )]
-pub struct LoggerBuilder {
+pub struct CanonicalLoggerBuilder {
     config: LoggerConfig,
     file_sink: Option<Arc<JsonlFileSink>>,
     sinks: Vec<SinkRegistration>,
     typed_sinks: Vec<Arc<dyn TypedLogSink>>,
 }
 
-/// Compatibility name for canonical, macro-generated initialization failures.
-pub type SinkRegistrationError = InitFailure;
+/// Canonical initialization failure returned when sink registration is rejected.
+pub type SinkRegistrationError = CanonicalInitError;
 
-impl LoggerBuilder {
+impl CanonicalLoggerBuilder {
     /// Creates a builder with the configured built-in sinks.
     ///
     /// # Examples
     ///
     /// ```
     /// use std::path::PathBuf;
-    /// use sc_observability::{LoggerBuilder, LoggerConfig};
+    /// use sc_observability::{LoggerConfig, v2::LoggerBuilder};
     /// use sc_observability_types::ServiceName;
     ///
     /// let builder = LoggerBuilder::new(LoggerConfig::default_for(
@@ -66,20 +58,7 @@ impl LoggerBuilder {
     ///
     /// let _logger = builder.build();
     /// ```
-    #[allow(
-        deprecated,
-        reason = "retained compatibility constructor keeps the published InitError signature"
-    )]
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use LoggerBuilder::new_typed(); see migrate-error-api.md."
-    )]
-    pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
-        Self::new_typed(config).map_err(Into::into)
-    }
-
-    /// Creates a builder with the configured built-in sinks and typed failures.
-    pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
+    pub fn new(config: LoggerConfig) -> Result<Self, CanonicalInitError> {
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let mut sinks = Vec::new();
         let mut file_sink = None;
@@ -100,6 +79,11 @@ impl LoggerBuilder {
             sinks,
             typed_sinks: Vec::new(),
         })
+    }
+
+    /// Creates a builder with the released typed initialization failure.
+    pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
+        Self::new(config).map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     /// Registers one additional sink before the logger runtime is built.
@@ -126,37 +110,43 @@ impl LoggerBuilder {
             .iter()
             .any(|registered| Arc::ptr_eq(registered, &sink))
         {
-            return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-                error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE,
-                "typed sink is already registered",
-                Remediation::recoverable(
-                    "register each typed sink instance only once",
-                    ["remove the duplicate registration"],
-                ),
-            ))));
+            return Err(CanonicalInitError::Configuration {
+                context: Box::new(ErrorContext::new(
+                    error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE,
+                    "typed sink is already registered",
+                    Remediation::recoverable(
+                        "register each typed sink instance only once",
+                        ["remove the duplicate registration"],
+                    ),
+                )),
+            });
         }
 
         match sink.health().state {
             SinkHealthState::Healthy => {}
             SinkHealthState::DegradedDropping => {
-                return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-                    error_codes::SC_LOG_SINK_REGISTRATION_INVALID,
-                    "typed sink is degraded and cannot be registered",
-                    Remediation::recoverable(
-                        "restore the sink to a healthy state before registration",
-                        ["repair the sink", "register a healthy sink"],
-                    ),
-                ))));
+                return Err(CanonicalInitError::Configuration {
+                    context: Box::new(ErrorContext::new(
+                        error_codes::SC_LOG_SINK_REGISTRATION_INVALID,
+                        "typed sink is degraded and cannot be registered",
+                        Remediation::recoverable(
+                            "restore the sink to a healthy state before registration",
+                            ["repair the sink", "register a healthy sink"],
+                        ),
+                    )),
+                });
             }
             SinkHealthState::Unavailable => {
-                return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-                    error_codes::SC_LOG_SINK_REGISTRATION_CLOSED,
-                    "typed sink is unavailable and closed to registration",
-                    Remediation::recoverable(
-                        "create a healthy replacement sink before registration",
-                        ["create a replacement sink"],
-                    ),
-                ))));
+                return Err(CanonicalInitError::Configuration {
+                    context: Box::new(ErrorContext::new(
+                        error_codes::SC_LOG_SINK_REGISTRATION_CLOSED,
+                        "typed sink is unavailable and closed to registration",
+                        Remediation::recoverable(
+                            "create a healthy replacement sink before registration",
+                            ["create a replacement sink"],
+                        ),
+                    )),
+                });
             }
         }
 
@@ -164,43 +154,36 @@ impl LoggerBuilder {
         Ok(self.register_sink(SinkRegistration::typed(sink)))
     }
 
-    /// Finalizes construction and returns the logger runtime.
-    ///
-    /// # Panics
-    ///
-    /// Panics when the operating system cannot start the writer thread. New
-    /// code that needs a recoverable startup error should use
-    /// [`Self::build_typed`].
-    pub fn build(self) -> Logger<Running> {
-        self.build_typed()
-            .expect("operating system could not start the writer thread")
+    /// Finalizes construction with the canonical recoverable error surface.
+    pub fn build(self) -> Result<CanonicalLogger<Running>, CanonicalInitError> {
+        self.build_inner().map(|(logger, _)| logger)
     }
 
-    /// Finalizes construction with a recoverable typed startup failure.
-    pub fn build_typed(self) -> Result<Logger<Running>, InitFailure> {
-        Ok(self.build_inner()?.0)
+    /// Finalizes construction with the released typed initialization failure.
+    pub fn build_typed(self) -> Result<CanonicalLogger<Running>, InitFailure> {
+        self.build()
+            .map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     /// Finalizes construction and returns the logger with weak level ownership.
-    #[allow(
-        deprecated,
-        reason = "supported owner-returning method keeps its published InitError signature"
-    )]
     pub fn build_with_level_owner(
         self,
-    ) -> Result<(Logger<Running>, LevelOwner), sc_observability_types::InitError> {
-        self.build_with_level_owner_typed().map_err(Into::into)
-    }
-
-    /// Finalizes construction with weak level ownership and typed failures.
-    pub fn build_with_level_owner_typed(
-        self,
-    ) -> Result<(Logger<Running>, LevelOwner), InitFailure> {
+    ) -> Result<(CanonicalLogger<Running>, LevelOwner), CanonicalInitError> {
         let (logger, control) = self.build_inner()?;
         Ok((logger, LevelOwner::new(&control)))
     }
 
-    fn build_inner(self) -> Result<(Logger<Running>, Arc<Mutex<LevelControl>>), InitFailure> {
+    /// Finalizes construction with the released typed initialization failure.
+    pub fn build_with_level_owner_typed(
+        self,
+    ) -> Result<(CanonicalLogger<Running>, LevelOwner), InitFailure> {
+        self.build_with_level_owner()
+            .map_err(|error| InitFailure::from_context(error.into_context()))
+    }
+
+    fn build_inner(
+        self,
+    ) -> Result<(CanonicalLogger<Running>, Arc<Mutex<LevelControl>>), CanonicalInitError> {
         let Self {
             config,
             file_sink,
@@ -208,17 +191,32 @@ impl LoggerBuilder {
             typed_sinks: _,
         } = self;
         if sinks.is_empty() {
-            return Err(InitFailure::logger_initialization(
-                "logger must have at least one registered sink",
-                Remediation::recoverable(
-                    "enable a built-in sink or register a sink before building the logger",
-                    [
-                        "set LoggerConfig.enable_file_sink or enable_console_sink to true",
-                        "register a sink with LoggerBuilder::register_sink",
-                    ],
-                ),
-            ));
+            return Err(CanonicalInitError::Configuration {
+                context: InitFailure::logger_initialization(
+                    "logger must have at least one registered sink",
+                    Remediation::recoverable(
+                        "enable a built-in sink or register a sink before building the logger",
+                        [
+                            "set LoggerConfig.enable_file_sink or enable_console_sink to true",
+                            "register a sink with v2::LoggerBuilder::register_sink",
+                        ],
+                    ),
+                )
+                .into_context(),
+            });
         }
+        let queue_capacity = QueueCapacity::new(config.queue_capacity).ok_or_else(|| {
+            CanonicalInitError::Configuration {
+                context: InitFailure::logger_initialization(
+                    "logger queue capacity must be positive",
+                    Remediation::recoverable(
+                        "set LoggerConfig.queue_capacity to a positive value",
+                        ["use a queue capacity of at least one record"],
+                    ),
+                )
+                .into_context(),
+            }
+        })?;
         let config = Arc::new(config);
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let query_available = active_log_path.exists() || config.enable_file_sink;
@@ -228,18 +226,21 @@ impl LoggerBuilder {
             sinks.clone(),
             file_sink,
             retained_log_policy,
-            config.queue_capacity.get(),
+            queue_capacity.get(),
             #[cfg(test)]
             config.maintenance_test_pass_delay,
             #[cfg(test)]
             config.maintenance_test_pass_signal.clone(),
             #[cfg(test)]
             config.writer_start_should_fail,
-        )?;
+        )
+        .map_err(|failure| CanonicalInitError::Runtime {
+            context: failure.into_context(),
+        })?;
         let diagnostic_admitter = runtime.diagnostic_admitter();
         let control = Arc::new(Mutex::new(LevelControl::new(&config, &diagnostic_admitter)));
         Ok((
-            Logger {
+            CanonicalLogger {
                 runtime,
                 diagnostic_admitter: Some(diagnostic_admitter),
                 config,

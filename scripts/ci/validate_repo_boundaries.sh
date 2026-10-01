@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+python3 -m unittest discover -s scripts/ci/tests -p test_compat_registry.py -v
+
 python3 - <<'PY'
 from pathlib import Path
+import json
 import re
 import subprocess
 import sys
 import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
+sys.path.insert(0, str(Path('scripts/ci').resolve()))
 from release_manifest import workspace_members
+from compatibility_registry import (
+    validate_compatibility_source_boundary,
+    validate_contract_signatures,
+)
 
 def is_release_manifest(path: Path, workspace_toml: Path):
     data = load_toml(path)
@@ -125,6 +133,60 @@ for crate_root in shared_crate_roots:
             if p.suffix in {".rs", ".toml"} and p.is_file()
         )
 
+# D22 compatible-contract boundary. The one source-audited registry is the
+# authority for released-path exceptions while facades are progressively moved
+# into `src/compat`. Canonical source may never reach back into that module;
+# roots may re-export compat owners only when a registry exception records it.
+registry_path = root / "docs/compatibility/registry.json"
+if not registry_path.exists():
+    raise SystemExit("docs/compatibility/registry.json is missing")
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+if registry.get("registry_version") != 2:
+    raise SystemExit("compatibility registry version is missing or unsupported")
+if registry.get("baseline", {}).get("commit") != "c578912653233c7dc678fefe5af575118dbbaaa1":
+    raise SystemExit("compatibility registry baseline is not the pinned v1.4.1 audit")
+symbols = registry.get("symbols", [])
+required_record_fields = {
+    "symbol",
+    "baseline_signature",
+    "canonical_signature",
+    "obligations",
+    "treatment",
+    "conversion",
+    "removable_paths",
+}
+required_symbol_fields = {"area", "kind", "status", "canonical"} | required_record_fields
+if len(symbols) != 58 or len({row.get("symbol") for row in symbols}) != 58:
+    raise SystemExit("compatibility registry must contain each of the 58 audited symbols once")
+if any(not required_symbol_fields.issubset(row) for row in symbols):
+    raise SystemExit("compatibility registry has an incomplete symbol row")
+if {row["status"] for row in symbols} - {"restored_root", "canonical_routed", "pending_d23_wrapper"}:
+    raise SystemExit("compatibility registry has an unknown disposition")
+allowed_treatments = {"unchanged_alias", "existing_pair", "new_adapter", "restoration"}
+all_contract_rows = symbols + registry.get("method_contracts", []) + registry.get("trait_slot_contracts", [])
+if len(registry.get("method_contracts", [])) != 141:
+    raise SystemExit("compatibility registry must contain all 141 audited inherent/free callables")
+if len({row.get("symbol") for row in registry["method_contracts"]}) != 141:
+    raise SystemExit("compatibility callable records must have unique symbols")
+if len(registry.get("trait_slot_contracts", [])) != 12:
+    raise SystemExit("compatibility registry must contain all 12 audited trait slots")
+if len({row.get("symbol") for row in registry["trait_slot_contracts"]}) != 12:
+    raise SystemExit("compatibility trait-slot records must have unique symbols")
+if any(not required_record_fields.issubset(row) for row in all_contract_rows):
+    raise SystemExit("compatibility registry has an incomplete contract record")
+if {row["treatment"] for row in all_contract_rows} - allowed_treatments:
+    raise SystemExit("compatibility registry has an unknown four-way treatment")
+try:
+    validate_contract_signatures(all_contract_rows)
+except ValueError as error:
+    raise SystemExit(error) from error
+if any(row["canonical_signature"] is None and row["treatment"] != "restoration" for row in all_contract_rows):
+    raise SystemExit("missing canonical signatures must be explicit restoration records")
+try:
+    validate_compatibility_source_boundary(root, source_files, registry)
+except ValueError as error:
+    raise SystemExit(error) from error
+
 for path in source_files:
     text = path.read_text(encoding="utf-8")
     # Enforce the shared-repo boundary: no source-code coupling to agent-team-mail crates.
@@ -193,14 +255,14 @@ if not (root / "examples/atm-adapter-example/Cargo.toml").exists():
     raise SystemExit("examples/atm-adapter-example/Cargo.toml is missing")
 
 subprocess.run(
-    ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml"],
+    ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml", "--locked"],
     cwd=root,
     check=True,
 )
 
 # D.17's existing consumer migration replaces the temporary expected-failure gate.
 subprocess.run(
-    ["cargo", "check", "--manifest-path", "examples/custom-sink-example/Cargo.toml"],
+    ["cargo", "check", "--manifest-path", "examples/custom-sink-example/Cargo.toml", "--locked"],
     cwd=root,
     check=True,
 )

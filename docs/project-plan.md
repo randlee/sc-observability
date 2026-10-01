@@ -526,7 +526,8 @@ The authoritative execution plan is the obs-phase-d bead, projected in
 
 The Python contract is PyO3 abi3-py310, cp310-abi3 wheels and requires-python
 >=3.10 without an upper/exclusion cap. The target matrix has six platforms and
-30 native installed-suite cells at one immutable source. Raising the floor or
+29 native installed-suite cells at one immutable source (Windows ARM64 runs
+3.11–3.14 because native CPython 3.10 is unavailable). Raising the floor or
 adding a cap requires a separately approved compatibility decision, an updated
 supported-interpreter matrix and guard expectations; it is not an incidental
 packaging edit. obs-d-10 supplies the guard and policy specification; obs-d-18

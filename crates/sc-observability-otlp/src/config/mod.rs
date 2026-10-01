@@ -24,85 +24,27 @@ pub use types::{
     OtlpEndpoint, OtlpProtocol, ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder,
     TracesConfig,
 };
+pub(crate) use validation::validate_config_typed;
 pub(crate) use validation::{
     BackendTransportBounds, RetryPolicy, ValidatedBackendConnection, ValidatedTransportBounds,
     validated_backend_connection, validated_telemetry_bounds, validated_transport_bounds,
 };
-#[cfg(test)]
-pub(crate) use validation::{validate_config, validate_config_typed};
 
 #[cfg(test)]
 use crate::error_codes;
 #[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "compatibility tests exercise the retained InitError signatures"
-)]
-use sc_observability_types::{InitError, typed::InitFailure};
-#[cfg(test)]
 use serde_json::{Map, Value};
 
 #[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "OTLP config compatibility tests exercise retained constructors and builder"
-)]
 mod tests {
     use super::*;
     use sc_observability_types::v2::ConfigFailure;
     use sc_observability_types::{DiagnosticInfo, ServiceName};
 
     #[test]
-    fn typed_config_entry_points_preserve_legacy_diagnostics() {
-        fn assert_stable_diagnostic_parity(
-            legacy: &sc_observability_types::Diagnostic,
-            typed: &sc_observability_types::Diagnostic,
-        ) {
-            assert_eq!(legacy.code, typed.code);
-            assert_eq!(legacy.message, typed.message);
-            assert_eq!(legacy.cause, typed.cause);
-            assert_eq!(legacy.remediation, typed.remediation);
-            assert_eq!(legacy.docs, typed.docs);
-            assert_eq!(legacy.details, typed.details);
-        }
-
-        let legacy_endpoint = OtlpEndpoint::new("not-a-url").expect_err("legacy endpoint");
-        let typed_endpoint = OtlpEndpoint::new_typed("not-a-url").expect_err("typed endpoint");
-        assert_stable_diagnostic_parity(legacy_endpoint.diagnostic(), typed_endpoint.diagnostic());
-
-        for value in ["", "   "] {
-            let legacy_endpoint = OtlpEndpoint::new(value).expect_err("legacy empty endpoint");
-            let typed_endpoint = OtlpEndpoint::new_typed(value).expect_err("typed empty endpoint");
-            assert_stable_diagnostic_parity(
-                legacy_endpoint.diagnostic(),
-                typed_endpoint.diagnostic(),
-            );
-        }
-
-        let legacy_header = AuthHeader::new(" ").expect_err("legacy header");
-        let typed_header = AuthHeader::new_typed(" ").expect_err("typed header");
-        assert_stable_diagnostic_parity(legacy_header.diagnostic(), typed_header.diagnostic());
-
-        let transport = OtelConfig {
-            enabled: true,
-            endpoint: None,
-            ..OtelConfig::default()
-        };
-        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(transport.clone())
-            .build()
-            .expect_err("legacy configuration");
-        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(transport)
-            .build_typed()
-            .expect_err("typed configuration");
-        assert_stable_diagnostic_parity(legacy.diagnostic(), typed.diagnostic());
-    }
-
-    #[test]
     fn otlp_endpoint_accepts_valid_http_and_https_values() {
-        let https = OtlpEndpoint::new("https://otel.example.internal").expect("valid https");
-        let http = OtlpEndpoint::try_from("http://localhost:4318".to_string()).expect("valid http");
+        let https = OtlpEndpoint::new_typed("https://otel.example.internal").expect("valid https");
+        let http = OtlpEndpoint::new_typed("http://localhost:4318").expect("valid http");
         let ipv6 = OtlpEndpoint::new_typed("https://[::1]:4318/v1/logs?signal=logs")
             .expect("valid bracketed IPv6 endpoint");
 
@@ -114,8 +56,8 @@ mod tests {
 
     #[test]
     fn otlp_endpoint_rejects_empty_or_scheme_less_values() {
-        assert!(OtlpEndpoint::new("").is_err());
-        assert!(OtlpEndpoint::new("otel.example.internal").is_err());
+        assert!(OtlpEndpoint::new_typed("").is_err());
+        assert!(OtlpEndpoint::new_typed("otel.example.internal").is_err());
     }
 
     #[test]
@@ -170,8 +112,8 @@ mod tests {
 
     #[test]
     fn auth_header_rejects_empty_values() {
-        assert!(AuthHeader::new("").is_err());
-        assert!(AuthHeader::new("   ").is_err());
+        assert!(AuthHeader::new_typed("").is_err());
+        assert!(AuthHeader::new_typed("   ").is_err());
     }
 
     #[test]
@@ -192,33 +134,29 @@ mod tests {
 
     #[test]
     fn auth_header_accepts_non_empty_values() {
-        let header = AuthHeader::try_from("Bearer abc123".to_string()).expect("valid header");
+        let header = AuthHeader::new_typed("Bearer abc123").expect("valid header");
         assert_eq!(header.as_ref(), "Bearer abc123");
         assert_eq!(header.to_string(), "Bearer abc123");
     }
 
     #[test]
-    fn endpoint_and_auth_header_legacy_and_typed_constructors_preserve_surrounding_whitespace() {
+    fn endpoint_and_auth_header_constructors_preserve_surrounding_whitespace() {
         // Leading whitespace before the endpoint's required http(s):// scheme is
         // rejected by the scheme check itself (unrelated to this finding); this
         // covers the actually-reachable retained-whitespace case, trailing space.
         let padded_endpoint = "https://otel.example.internal  ";
-        let legacy = OtlpEndpoint::new(padded_endpoint).expect("legacy endpoint");
         let typed = OtlpEndpoint::new_typed(padded_endpoint).expect("typed endpoint");
-        assert_eq!(legacy.as_str(), padded_endpoint);
         assert_eq!(typed.as_str(), padded_endpoint);
 
         let padded_header = "  Bearer abc123  ";
-        let legacy_header = AuthHeader::new(padded_header).expect("legacy header");
         let typed_header = AuthHeader::new_typed(padded_header).expect("typed header");
-        assert_eq!(legacy_header.as_str(), padded_header);
         assert_eq!(typed_header.as_str(), padded_header);
     }
 
     #[test]
     fn auth_header_debug_redacts_but_display_and_as_str_retain_the_raw_credential() {
         let secret = "Bearer super-secret-token";
-        let header = AuthHeader::try_from(secret.to_string()).expect("valid header");
+        let header = AuthHeader::new_typed(secret).expect("valid header");
 
         let debug_output = format!("{header:?}");
         assert!(
@@ -245,15 +183,7 @@ mod tests {
 
     #[test]
     fn telemetry_config_builder_build_validates_transport() {
-        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(OtelConfig {
-                enabled: true,
-                endpoint: None,
-                ..OtelConfig::default()
-            })
-            .build()
-            .expect_err("legacy missing endpoint");
-        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+        let failure = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
                 enabled: true,
                 endpoint: None,
@@ -261,9 +191,10 @@ mod tests {
             })
             .build_typed()
             .expect_err("typed missing endpoint");
-
-        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
-        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+        assert_eq!(
+            failure.diagnostic().code,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+        );
     }
 
     #[test]
@@ -272,128 +203,101 @@ mod tests {
             OtelConfig {
                 enabled: true,
                 endpoint: Some(
-                    OtlpEndpoint::new("https://otel.example.internal").expect("endpoint"),
+                    OtlpEndpoint::new_typed("https://otel.example.internal").expect("endpoint"),
                 ),
                 ..OtelConfig::default()
             }
         }
-
-        fn assert_parity(legacy: &InitError, typed: &InitFailure) {
-            assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
-            assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
-        }
-
-        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(transport())
-            .enable_logs(LogsConfig { batch_size: 0 })
-            .build()
-            .expect_err("legacy zero batch");
-        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+        let zero_batch = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(transport())
             .enable_logs(LogsConfig { batch_size: 0 })
             .build_typed()
-            .expect_err("typed zero batch");
-        assert_parity(&legacy, &typed);
+            .expect_err("zero batch");
+        assert_eq!(
+            zero_batch.diagnostic().code,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+        );
 
-        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(transport())
-            .enable_metrics(MetricsConfig {
-                batch_size: 1,
-                export_interval_ms: 0_u64.into(),
-            })
-            .build()
-            .expect_err("legacy zero interval");
-        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+        let zero_interval = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(transport())
             .enable_metrics(MetricsConfig {
                 batch_size: 1,
                 export_interval_ms: 0_u64.into(),
             })
             .build_typed()
-            .expect_err("typed zero interval");
-        assert_parity(&legacy, &typed);
+            .expect_err("zero interval");
+        assert_eq!(
+            zero_interval.diagnostic().code,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+        );
 
-        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(OtelConfig {
-                timeout_ms: Some(0_u64.into()),
-                ..transport()
-            })
-            .enable_logs(LogsConfig::default())
-            .build()
-            .expect_err("legacy zero timeout");
-        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+        let zero_timeout = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
                 timeout_ms: Some(0_u64.into()),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
             .build_typed()
-            .expect_err("typed zero timeout");
-        assert_parity(&legacy, &typed);
+            .expect_err("zero timeout");
+        assert_eq!(
+            zero_timeout.diagnostic().code,
+            error_codes::OTLP_CONFIG_ZERO_DURATION
+        );
 
-        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(OtelConfig {
-                backend: ExporterBackend::LegacyHttpJson,
-                legacy_retry: Some(LegacyRetryPolicy {
-                    initial_backoff_ms: Some(2_000_u64.into()),
-                    max_backoff_ms: Some(1_000_u64.into()),
-                    ..LegacyRetryPolicy::default()
-                }),
-                ..transport()
-            })
-            .enable_logs(LogsConfig::default())
-            .build()
-            .expect_err("legacy inverted backoff");
-        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(OtelConfig {
-                backend: ExporterBackend::LegacyHttpJson,
-                legacy_retry: Some(LegacyRetryPolicy {
-                    initial_backoff_ms: Some(2_000_u64.into()),
-                    max_backoff_ms: Some(1_000_u64.into()),
-                    ..LegacyRetryPolicy::default()
-                }),
-                ..transport()
-            })
-            .enable_logs(LogsConfig::default())
-            .build_typed()
-            .expect_err("typed inverted backoff");
-        assert_parity(&legacy, &typed);
+        let inverted_backoff =
+            TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+                .with_transport(OtelConfig {
+                    backend: ExporterBackend::LegacyHttpJson,
+                    legacy_retry: Some(LegacyRetryPolicy {
+                        initial_backoff_ms: Some(2_000_u64.into()),
+                        max_backoff_ms: Some(1_000_u64.into()),
+                        ..LegacyRetryPolicy::default()
+                    }),
+                    ..transport()
+                })
+                .enable_logs(LogsConfig::default())
+                .build_typed()
+                .expect_err("inverted backoff");
+        assert_eq!(
+            inverted_backoff.diagnostic().code,
+            error_codes::OTLP_CONFIG_BOUND_ORDER
+        );
 
-        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(transport())
-            .build()
-            .expect_err("legacy missing signal");
-        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(transport())
-            .build_typed()
-            .expect_err("typed missing signal");
-        assert_parity(&legacy, &typed);
+        let missing_signal =
+            TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+                .with_transport(transport())
+                .build_typed()
+                .expect_err("missing signal");
+        assert_eq!(
+            missing_signal.diagnostic().code,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+        );
     }
 
     #[test]
     fn public_builder_preserves_existing_protocol_endpoint_acceptance() {
         // Endpoint validation intentionally admits documented HTTP(S) endpoints for
         // every protocol. Protocol-specific transport handling is deferred to the
-        // exporter layer, so neither API invents a protocol/endpoint rejection.
+        // exporter layer, so the canonical API does not invent a rejection.
         let transport = OtelConfig {
             enabled: true,
-            endpoint: Some(OtlpEndpoint::new("https://otel.example.internal").expect("endpoint")),
+            endpoint: Some(
+                OtlpEndpoint::new_typed("https://otel.example.internal").expect("endpoint"),
+            ),
             protocol: OtlpProtocol::Grpc,
             ..OtelConfig::default()
         };
-        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
-            .with_transport(transport.clone())
-            .enable_logs(LogsConfig::default())
-            .build()
-            .expect("legacy accepts the transport combination");
-        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+        let config = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(transport)
             .enable_logs(LogsConfig::default())
             .build_typed()
-            .expect("typed accepts the transport combination");
+            .expect("valid transport combination");
 
-        assert_eq!(legacy.transport.protocol, typed.transport.protocol);
-        assert_eq!(legacy.transport.endpoint, typed.transport.endpoint);
+        assert_eq!(config.transport.protocol, OtlpProtocol::Grpc);
+        assert_eq!(
+            config.transport.endpoint.as_ref().map(OtlpEndpoint::as_str),
+            Some("https://otel.example.internal")
+        );
     }
 
     #[test]
@@ -411,10 +315,11 @@ mod tests {
             metrics: None,
         };
 
-        let legacy = validate_config(&config).expect_err("legacy zero timeout");
-        let typed = validate_config_typed(&config).expect_err("typed zero timeout");
-        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
-        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+        let failure = validate_config_typed(&config).expect_err("zero timeout");
+        assert_eq!(
+            failure.diagnostic().code,
+            error_codes::OTLP_CONFIG_ZERO_DURATION
+        );
     }
 
     #[test]
@@ -460,10 +365,11 @@ mod tests {
             metrics: None,
         };
 
-        let legacy = validate_config(&config).expect_err("legacy backoff inversion");
-        let typed = validate_config_typed(&config).expect_err("typed backoff inversion");
-        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
-        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+        let failure = validate_config_typed(&config).expect_err("backoff inversion");
+        assert_eq!(
+            failure.diagnostic().details["field"].as_str(),
+            Some("legacy_retry.initial_backoff_ms")
+        );
     }
 
     #[test]
@@ -475,7 +381,8 @@ mod tests {
             transport: OtelConfig {
                 enabled: true,
                 endpoint: Some(
-                    OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
+                    OtlpEndpoint::new_typed("https://otel.example.internal")
+                        .expect("valid endpoint"),
                 ),
                 ..OtelConfig::default()
             },
@@ -484,10 +391,11 @@ mod tests {
             metrics: None,
         };
 
-        let legacy = validate_config(&config).expect_err("legacy no signals");
-        let typed = validate_config_typed(&config).expect_err("typed no signals");
-        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
-        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+        let failure = validate_config_typed(&config).expect_err("no signals");
+        assert_eq!(
+            failure.diagnostic().code,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+        );
     }
 
     #[test]
@@ -496,7 +404,7 @@ mod tests {
         let base_transport = OtelConfig {
             enabled: true,
             endpoint: Some(
-                OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
+                OtlpEndpoint::new_typed("https://otel.example.internal").expect("valid endpoint"),
             ),
             ..OtelConfig::default()
         };
@@ -509,10 +417,11 @@ mod tests {
             traces: None,
             metrics: None,
         };
-        let legacy = validate_config(&zero_logs).expect_err("legacy zero logs batch");
-        let typed = validate_config_typed(&zero_logs).expect_err("typed zero logs batch");
-        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
-        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+        let failure = validate_config_typed(&zero_logs).expect_err("zero logs batch");
+        assert_eq!(
+            failure.diagnostic().code,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+        );
 
         let zero_metrics = TelemetryConfig {
             service_name,
@@ -525,10 +434,11 @@ mod tests {
                 export_interval_ms: 0_u64.into(),
             }),
         };
-        let legacy = validate_config(&zero_metrics).expect_err("legacy zero metric interval");
-        let typed = validate_config_typed(&zero_metrics).expect_err("typed zero metric interval");
-        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
-        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+        let failure = validate_config_typed(&zero_metrics).expect_err("zero metric interval");
+        assert_eq!(
+            failure.diagnostic().code,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+        );
     }
 
     #[test]
@@ -540,7 +450,7 @@ mod tests {
 
         let config = TelemetryConfigBuilder::new(service_name)
             .with_resource(resource.clone())
-            .build()
+            .build_typed()
             .expect("valid telemetry config");
 
         assert_eq!(config.resource, resource);

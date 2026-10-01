@@ -101,10 +101,10 @@ if obs_target_runtime_deps != {"cfg(windows)": {"windows-sys"}}:
         "sc-observability target-specific runtime dependency set drifted from allowed baseline: "
         f"{obs_target_runtime_deps}"
     )
-if obs_test_deps - {"temp-env", "tempfile"}:
+if obs_test_deps - {"temp-env", "tempfile", "trybuild"}:
     raise SystemExit(
         "sc-observability test dependency set drifted from allowed baseline: "
-        f"{sorted(obs_test_deps - {'temp-env', 'tempfile'})}"
+        f"{sorted(obs_test_deps - {'temp-env', 'tempfile', 'trybuild'})}"
     )
 
 if observe_runtime_deps != {"sc-observability-types", "sc-observability"}:

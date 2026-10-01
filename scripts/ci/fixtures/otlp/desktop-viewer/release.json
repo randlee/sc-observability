@@ -1,0 +1,9 @@
+{
+  "version": "0.5.0",
+  "platform": "darwin_arm64",
+  "source_commit": "13dd20379b74520034bdfe0fc936775ccacd8113",
+  "artifact_url": "https://github.com/CtrlSpice/otel-desktop-viewer/releases/download/v0.5.0/otel-desktop-viewer_darwin_arm64.tar.gz",
+  "artifact_sha256": "e4a0051f827e6a40f52b097f490d7832af85bae577f4b33a69a986112c7618a4",
+  "binary_sha256": "d8b84e175904a81d9f977aee71fa0588ebdf5479efeaebb2285096fe3e414cb9",
+  "binary_name": "otel-desktop-viewer"
+}

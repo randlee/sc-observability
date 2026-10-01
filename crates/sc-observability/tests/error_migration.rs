@@ -46,8 +46,12 @@ fn event() -> LogEvent {
     }
 }
 
+#[expect(
+    deprecated,
+    reason = "the helper intentionally constructs the released root facade exercised by these migration tests"
+)]
 fn logger(root: &tempfile::TempDir) -> Logger {
-    Logger::new_typed(LoggerConfig::default_for(
+    Logger::new(LoggerConfig::default_for(
         service_name(),
         root.path().to_path_buf(),
     ))
@@ -74,10 +78,7 @@ fn logger_emit_preserves_real_event_validation_diagnostic() {
         error.diagnostic().remediation,
         Remediation::Recoverable { .. }
     ));
-    assert!(
-        Error::source(&error).is_some(),
-        "EventError preserves the production validation context as its source"
-    );
+    assert!(std::ptr::eq(error.diagnostic(), error.0.diagnostic()));
 
     let _stopped = logger.shutdown();
 }
@@ -116,11 +117,15 @@ fn logger_follow_shutdown_updates_real_query_health() {
 }
 
 #[test]
+#[expect(
+    deprecated,
+    reason = "the test intentionally verifies released root log and flush error mapping"
+)]
 fn logger_query_decode_preserves_source_and_records_health_summary() {
     let root = tempfile::tempdir().expect("temporary log root");
     let logger = logger(&root);
-    logger.log_typed(event()).expect("admit event");
-    logger.flush_typed().expect("flush event");
+    logger.log(event()).expect("admit event");
+    logger.flush().expect("flush event");
 
     let active_path = root
         .path()

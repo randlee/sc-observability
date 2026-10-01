@@ -6,17 +6,18 @@
 
 use std::sync::Arc;
 
-use sc_observability_types::v2::LogSinkError;
+use sc_observability_types::typed::LogSinkFailure;
+use sc_observability_types::v2::LogSinkError as CanonicalLogSinkError;
 
 use crate::{LogEvent, LogSink, SinkHealth};
 
 /// A logger sink that reports neutral typed failures.
 pub trait TypedLogSink: Send + Sync {
     /// Writes one event to the sink.
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
+    fn write(&self, event: &LogEvent) -> Result<(), CanonicalLogSinkError>;
 
     /// Flushes buffered state.
-    fn flush(&self) -> Result<(), LogSinkError> {
+    fn flush(&self) -> Result<(), CanonicalLogSinkError> {
         Ok(())
     }
 
@@ -40,13 +41,21 @@ struct LegacySinkAdapter {
     value: Arc<dyn TypedLogSink>,
 }
 
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 impl LogSink for LegacySinkAdapter {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        self.value.write(event)
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        self.value
+            .write(event)
+            .map_err(|error| LogSinkFailure::from_context(error.into_context()).into())
     }
 
-    fn flush(&self) -> Result<(), LogSinkError> {
-        self.value.flush()
+    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+        self.value
+            .flush()
+            .map_err(|error| LogSinkFailure::from_context(error.into_context()).into())
     }
 
     fn health(&self) -> SinkHealth {
@@ -58,13 +67,21 @@ struct TypedSinkAdapter {
     value: Arc<dyn LogSink>,
 }
 
+#[expect(
+    deprecated,
+    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
+)]
 impl TypedLogSink for TypedSinkAdapter {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        self.value.write(event)
+    fn write(&self, event: &LogEvent) -> Result<(), CanonicalLogSinkError> {
+        self.value
+            .write(event)
+            .map_err(|error| CanonicalLogSinkError::Write { context: error.0 })
     }
 
-    fn flush(&self) -> Result<(), LogSinkError> {
-        self.value.flush()
+    fn flush(&self) -> Result<(), CanonicalLogSinkError> {
+        self.value
+            .flush()
+            .map_err(|error| CanonicalLogSinkError::Flush { context: error.0 })
     }
 
     fn health(&self) -> SinkHealth {

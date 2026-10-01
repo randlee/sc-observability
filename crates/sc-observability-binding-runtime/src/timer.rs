@@ -57,7 +57,7 @@ pub(crate) fn shared() -> Result<Arc<TimerService>, InitError> {
     });
     let worker = timer.clone();
     crate::spawn::spawn("binding-timer", move || worker.run())
-        .map_err(|e| error::init_runtime(e.to_string(), Some(Box::new(e))))?;
+        .map_err(|e| error::init_runtime(e.to_string(), Box::new(e)))?;
     *cell = Some(timer.clone());
     Ok(timer)
 }

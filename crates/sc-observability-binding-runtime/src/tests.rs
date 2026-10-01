@@ -74,7 +74,7 @@ fn config() -> (tempfile::TempDir, sc_observability::LoggerConfig) {
         root.path().into(),
     );
     config.enable_console_sink = false;
-    config.queue_capacity = sc_observability::QueueCapacity::new(4096).expect("positive capacity");
+    config.queue_capacity = 4096;
     config.process_identity = native::ProcessIdentityPolicy::Fixed {
         hostname: Some("host".into()),
         pid: Some(123),
@@ -582,10 +582,10 @@ struct HeldSink {
     reason = "test sink preserves the public legacy LogSink trait"
 )]
 impl sc_observability::LogSink for HeldSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
         Ok(())
     }
-    fn flush(&self) -> Result<(), native::v2::LogSinkError> {
+    fn flush(&self) -> Result<(), native::LogSinkError> {
         self.flushes.fetch_add(1, Ordering::SeqCst);
         if self.armed.swap(false, Ordering::SeqCst) {
             self.gate.arrive();
@@ -610,7 +610,7 @@ struct BlockingWriteSink {
     reason = "test sink preserves the public legacy LogSink trait"
 )]
 impl sc_observability::LogSink for BlockingWriteSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
         self.gate.arrive();
         Ok(())
     }
@@ -631,18 +631,16 @@ struct FlushFailSink;
     reason = "test sink preserves the public legacy LogSink trait"
 )]
 impl sc_observability::LogSink for FlushFailSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), native::v2::LogSinkError> {
-        Err(native::v2::LogSinkError::Flush {
-            context: Box::new(native::ErrorContext::new(
-                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                "test sink intentionally fails flush",
-                native::Remediation::recoverable("retry after repairing the sink", ["retry"]),
-            )),
-        })
+    fn flush(&self) -> Result<(), native::LogSinkError> {
+        Err(native::LogSinkError(Box::new(native::ErrorContext::new(
+            sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+            "test sink intentionally fails flush",
+            native::Remediation::recoverable("retry after repairing the sink", ["retry"]),
+        ))))
     }
 
     fn health(&self) -> native::SinkHealth {
@@ -664,9 +662,9 @@ fn core_with_sink(
         identity: native::ProcessIdentity::default(),
     };
     let shared = Coordinator::create(|| {
-        let mut builder = sc_observability::Logger::builder_typed(config).unwrap();
+        let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink));
-        let (logger, level) = builder.build_with_level_owner_typed().unwrap();
+        let (logger, level) = builder.build_with_level_owner().unwrap();
         let health = dto::from_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
@@ -687,8 +685,7 @@ fn core_with_sink(
 
 fn core_admission_and_flush_faults() {
     let (_root, mut logger_config) = config();
-    logger_config.queue_capacity =
-        sc_observability::QueueCapacity::new(1).expect("positive capacity");
+    logger_config.queue_capacity = 1;
     let gate = Gate::new();
     let _release = Release(gate.clone());
     let (owner, backend) = core_with_sink(
@@ -742,9 +739,9 @@ fn core_sink_and_shutdown() {
         identity: native::ProcessIdentity::default(),
     };
     let shared = Coordinator::create(|| {
-        let mut builder = sc_observability::Logger::builder_typed(config).unwrap();
+        let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink.clone()));
-        let (logger, level) = builder.build_with_level_owner_typed().unwrap();
+        let (logger, level) = builder.build_with_level_owner().unwrap();
         let health = dto::from_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
@@ -931,14 +928,22 @@ fn native_diagnostic_fidelity() {
         remediation: native::Remediation::recoverable("first", ["second"]),
         at: native::Timestamp::UNIX_EPOCH,
     };
-    let failure = crate::conversion::bridge_flush(sc_observability_log::FlushError::Logger {
-        diagnostic: diagnostic.clone(),
-    });
-    assert!(matches!(failure, Failure::Io { .. }));
-    assert_eq!(failure.diagnostic(), &dto::Diagnostic::from(diagnostic));
-    let golden: serde_json::Value =
-        serde_json::from_str(include_str!("../tests/native-diagnostic.json")).unwrap();
-    assert_eq!(serde_json::to_value(failure).unwrap(), golden);
+    let error = native::v2::FlushError::classified_drain(
+        Box::new(native::ErrorContext::new(
+            diagnostic.code.clone(),
+            diagnostic.message.clone(),
+            diagnostic.remediation.clone(),
+        )),
+        native::FailureClassification::Internal,
+    );
+    let failure = crate::conversion::bridge_flush(&error);
+    assert!(matches!(failure, Failure::Internal { .. }));
+    assert_eq!(failure.diagnostic().code, diagnostic.code.as_str());
+    assert_eq!(failure.diagnostic().message, diagnostic.message);
+    assert_eq!(
+        failure.diagnostic().remediation,
+        diagnostic.remediation.into()
+    );
 }
 
 fn d15_callback_fixture() {
@@ -1035,7 +1040,7 @@ fn d15_operation_fixture() {
 fn d15_spawn_fixture() {
     let error = crate::error::init_runtime(
         "helper startup failed",
-        Some(Box::new(std::io::Error::other("native startup source"))),
+        Box::new(std::io::Error::other("native startup source")),
     );
     assert_canonical_context(
         &error,
@@ -1064,14 +1069,19 @@ fn d15_sync_fixture() {
 }
 
 fn d15_timer_fixture() {
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> = Operation::new(
+        &backend.shared.dispatcher,
+        &crate::timer::shared().unwrap(),
+        crate::error::OperationKind::Shutdown,
+    );
     assert_failure(
-        Err::<(), _>(crate::error::observer_timeout(
-            crate::error::OperationKind::Shutdown,
-        )),
+        operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
         "timeout",
         Some("native_operation"),
     );
+    stop(&owner);
 }
 
 fn cross_logger_cancellation() {

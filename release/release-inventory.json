@@ -55,7 +55,7 @@
     }
   ],
   "qualificationCandidate": {
-    "version": "1.4.0",
+    "version": "1.5.0",
     "publication": "pending_phase_c_sc_publish_and_owner_authorization",
     "packages": [
       "sc-observability-types",
@@ -63,10 +63,23 @@
       "sc-observe",
       "sc-observability-otlp",
       "sc-observability-log-macros",
-      "sc-observability-log"
+      "sc-observability-log",
+      "sc-observability-dto",
+      "sc-observability-binding-runtime",
+      "sc-observability-py"
+    ],
+    "deferredStandalonePackages": [
+      {
+        "package": "sc-observability-tauri",
+        "baselineVersion": "1.4.1",
+        "reason": "The Tauri adapter is a separate workspace and remains pending its standalone API/publication qualification in release/bindings-artifacts.toml; it is not one of this candidate's nine workspace API packages."
+      }
     ],
     "bindingInventory": "release/bindings-artifacts.toml",
     "bindingChannels": ["crates.io", "pypi", "npm"],
+    "pythonPolicy": "release/python-platform-policy.json",
+    "pythonPlatforms": 6,
+    "pythonNativeInstalledSuiteCells": 29,
     "bindingPublication": "pending_phase_c_sc_publish_and_owner_authorization",
     "handoff": "docs/plans/phase-b/handoff-b-2.md",
     "stageManifest": "stage-manifest.json",

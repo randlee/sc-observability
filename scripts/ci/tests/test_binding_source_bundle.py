@@ -19,6 +19,75 @@ BUNDLE=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(BUNDLE)
 from _log_staging import PACKAGES, inspect_archive, read_stage_manifest, sha256
 
 class SourceBoundaryTests(unittest.TestCase):
+    def registry_lock(self, packages):
+        return {'package': packages}
+
+    def write_lock(self, path, packages):
+        lines=['version = 4']
+        for package in packages:
+            lines.extend(['','[[package]]'])
+            for key in ('name','version','source','checksum','dependencies'):
+                if key in package:lines.append(f'{key} = {json.dumps(package[key])}')
+        path.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+
+    def verify_registry_selection(self, source, staged, roots):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary);source_lock=directory/'reviewed-source.lock';staged_lock=directory/'Cargo.lock'
+            self.write_lock(source_lock,source['package']);self.write_lock(staged_lock,staged['package'])
+            return BUNDLE.verify_registry_selection(source_lock,staged_lock,roots)
+
+    def package(self, name, version, *, source=None, checksum=None, dependencies=None):
+        package={'name':name,'version':version}
+        if source is not None:package['source']=source
+        if checksum is not None:package['checksum']=checksum
+        if dependencies is not None:package['dependencies']=dependencies
+        return package
+
+    def test_verify_registry_selection_accepts_source_lock_widened_by_feature_only_packages(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='tokio',dependencies=['getrandom 0.2.0 (registry+https://example.invalid/index)']),
+            self.package('getrandom','0.2.0',source=registry,checksum='getrandom'),
+        ])
+        staged=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='tokio'),
+        ])
+        self.assertEqual(self.verify_registry_selection(source,staged,[('binding','1.0.0')]),[{'name':'tokio','version':'1.0.0','source':registry,'checksum':'tokio'}])
+
+    def test_verify_registry_selection_rejects_extra_unselected_staged_registry_identity(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0'),
+        ])
+        staged=self.registry_lock([
+            self.package('binding','1.0.0'),
+            self.package('unrelated','1.0.0',source=registry,checksum='reviewed'),
+        ])
+        with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+            self.verify_registry_selection(source,staged,[('binding','1.0.0')])
+
+    def test_verify_registry_selection_rejects_changed_selected_identity(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='reviewed'),
+        ])
+        mutations={
+            'version':('1.0.1',registry,'reviewed'),
+            'source':('1.0.0','registry+https://other.invalid/index','reviewed'),
+            'checksum':('1.0.0',registry,'changed'),
+        }
+        for field,(version,source_registry,checksum) in mutations.items():
+            with self.subTest(field=field):
+                staged=self.registry_lock([
+                    self.package('binding','1.0.0',dependencies=[f'tokio {version} ({source_registry})']),
+                    self.package('tokio',version,source=source_registry,checksum=checksum),
+                ])
+                with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+                    self.verify_registry_selection(source,staged,[('binding','1.0.0')])
+
     def test_read_stage_manifest_decodes_utf8_explicitly(self):
         with tempfile.TemporaryDirectory() as temporary:
             stage = Path(temporary)
@@ -199,4 +268,26 @@ class SourceBoundaryTests(unittest.TestCase):
             self.assertIn(('serde_json','1.0.149'),selection)
             self.assertIn(('libc','0.2.189'),selection)
             self.assertTrue(all(p['checksum'] for p in record['registry_selection']))
+
+    def test_bundle_accepts_source_lock_widened_by_workspace_feature_unification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);adapter=root/'adapter';unrelated=root/'unrelated'
+            (root/'Cargo.toml').write_text('[workspace]\nmembers=["adapter","unrelated"]\nresolver="2"\n')
+            for member in (adapter,unrelated):(member/'src').mkdir(parents=True);(member/'src/lib.rs').write_text('pub fn fixture() {}\n')
+            (adapter/'Cargo.toml').write_text('[package]\nname="bundle-feature-adapter"\nversion="0.1.0"\nedition="2024"\nlicense="MIT"\n[dependencies]\ntokio={version="=1.49.0",default-features=false,features=["sync"]}\nserde_json="=1.0.151"\n')
+            (unrelated/'Cargo.toml').write_text('[package]\nname="bundle-feature-unrelated"\nversion="0.1.0"\nedition="2024"\nlicense="MIT"\n[dependencies]\ntokio={version="=1.49.0",default-features=false,features=["net"]}\n')
+            (root/'.gitignore').write_text('adapter/bundle/\n')
+            self.command(root,'cargo','generate-lockfile')
+            source_lock=(root/'Cargo.lock').read_text(encoding='utf-8')
+            self.assertIn('name = "mio"',source_lock)
+            self.command(root,'cargo','fetch','--locked')
+            self.command(root,'cargo','metadata','--locked','--offline','--format-version','1')
+            self.command(root,'git','init','-q');self.command(root,'git','add','.')
+            self.command(root,'git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','feature-unified fixture')
+            result=self.invoke(adapter)
+            self.assertEqual(result.returncode,0,result.stderr)
+            staged_lock=(adapter/'bundle/Cargo.lock').read_text(encoding='utf-8')
+            self.assertNotIn('name = "mio"',staged_lock)
+            record=json.loads((adapter/'bundle/manifest.json').read_text(encoding='utf-8'))
+            self.assertNotIn('mio',{package['name'] for package in record['registry_selection']})
 if __name__=='__main__':unittest.main()

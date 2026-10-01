@@ -48,7 +48,7 @@ def manifests_confined(root):
 def registry_identities(lock):
     return sorted(({'name':p['name'],'version':p['version'],'source':p['source'],'checksum':p['checksum']} for p in lock['package'] if p.get('source','').startswith('registry+')),key=lambda p:(p['name'],p['version'],p['source']))
 
-def reviewed_registry_closure(lock, roots):
+def lock_closure(lock, roots):
     packages=lock['package'];selected=set()
     def follow(package):
         identity=(package['name'],package['version'],package.get('source'))
@@ -64,11 +64,30 @@ def reviewed_registry_closure(lock, roots):
         matches=[p for p in packages if p['name']==name and p['version']==version and p.get('source') is None]
         if len(matches)!=1:raise BundleError('BUNDLE_STALE_LOCK',f'missing source-lock package: {name} {version}')
         follow(matches[0])
-    return registry_identities({'package':[p for p in packages if (p['name'],p['version'],p.get('source')) in selected]})
+    return [p for p in packages if (p['name'],p['version'],p.get('source')) in selected]
+
+def reviewed_registry_closure(source_lock, staged_lock, roots):
+    """Return the reviewed identities for the staged package closure.
+
+    A workspace lock can include optional feature edges selected by unrelated
+    members.  The staged lock is authoritative for which dependencies the
+    isolated packaged consumer resolves, but each selected registry identity
+    must still be byte-for-byte reviewed in the source lock.
+    """
+    reviewed={
+        (entry['name'],entry['version'],entry['source'],entry['checksum']):entry
+        for entry in registry_identities({'package':lock_closure(source_lock,roots)})
+    }
+    selected=registry_identities({'package':lock_closure(staged_lock,roots)})
+    missing=[entry for entry in selected if (entry['name'],entry['version'],entry['source'],entry['checksum']) not in reviewed]
+    if missing:raise BundleError('BUNDLE_REGISTRY_DRIFT','staged registry selection contains an unreviewed identity')
+    return selected
 
 def verify_registry_selection(source_lock, staged_lock, roots):
-    expected=reviewed_registry_closure(tomllib.loads(source_lock.read_text(encoding='utf-8')),roots)
-    actual=registry_identities(tomllib.loads(staged_lock.read_text(encoding='utf-8')))
+    source=tomllib.loads(source_lock.read_text(encoding='utf-8'))
+    staged=tomllib.loads(staged_lock.read_text(encoding='utf-8'))
+    expected=reviewed_registry_closure(source,staged,roots)
+    actual=registry_identities(staged)
     if expected!=actual:raise BundleError('BUNDLE_REGISTRY_DRIFT','staged registry name/version/source/checksum closure differs from reviewed source lock')
     return expected
 

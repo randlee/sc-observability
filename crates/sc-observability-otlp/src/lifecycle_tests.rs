@@ -4,7 +4,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
 use std::time::Duration;
@@ -30,18 +30,25 @@ struct PendingUntilReleased {
     released: Arc<AtomicBool>,
     entered: Option<Arc<AtomicBool>>,
     block_until_released: bool,
+    release_signal: Option<mpsc::Receiver<()>>,
 }
 
 impl Future for PendingUntilReleased {
     type Output = Result<(), ExportError>;
 
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if self.block_until_released {
             if let Some(entered) = &self.entered {
                 entered.store(true, Ordering::Release);
             }
-            while !self.released.load(Ordering::Acquire) {
-                thread::yield_now();
+            let release_signal = self
+                .as_mut()
+                .get_mut()
+                .release_signal
+                .take()
+                .expect("blocking test future has one release signal");
+            if release_signal.recv_timeout(Duration::from_secs(1)).is_err() {
+                return Poll::Ready(Err(admission_timeout()));
             }
         }
         if self.released.load(Ordering::Acquire) {
@@ -59,9 +66,14 @@ struct RecordingLifecycle {
     terminal: Option<fn() -> ExportError>,
     block_next_flush: AtomicBool,
     flush_entered: Option<Arc<AtomicBool>>,
+    next_flush_release_signal: Mutex<Option<mpsc::Receiver<()>>>,
 }
 
 impl ExporterLifecycle for RecordingLifecycle {
+    fn is_shutdown(&self) -> bool {
+        self.shutdowns.load(Ordering::Acquire) > 0
+    }
+
     fn blocking_preflight(&self) -> Result<(), ExportError> {
         Ok(())
     }
@@ -71,10 +83,20 @@ impl ExporterLifecycle for RecordingLifecycle {
         if let Some(error) = self.terminal {
             return Box::pin(async move { Err(error()) });
         }
+        let block_until_released = self.block_next_flush.swap(false, Ordering::AcqRel);
+        let release_signal = if block_until_released {
+            self.next_flush_release_signal
+                .lock()
+                .expect("next-flush release signal lock")
+                .take()
+        } else {
+            None
+        };
         Box::pin(PendingUntilReleased {
             released: Arc::clone(&self.released),
             entered: self.flush_entered.clone(),
-            block_until_released: self.block_next_flush.swap(false, Ordering::AcqRel),
+            block_until_released,
+            release_signal,
         })
     }
 
@@ -87,6 +109,7 @@ impl ExporterLifecycle for RecordingLifecycle {
             released: Arc::clone(&self.released),
             entered: None,
             block_until_released: false,
+            release_signal: None,
         })
     }
 
@@ -118,6 +141,7 @@ fn fixture(
         terminal,
         block_next_flush: AtomicBool::new(false),
         flush_entered: None,
+        next_flush_release_signal: Mutex::new(None),
     });
     let exporters = ExporterSet {
         logs: Arc::new(RecordingLogExporter::default()),
@@ -244,6 +268,7 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
     let released = Arc::new(AtomicBool::new(false));
     let entered = Arc::new(AtomicBool::new(false));
     let second_polled = Arc::new(AtomicBool::new(false));
+    let (release_tx, release_rx) = mpsc::channel();
     let lifecycle = Arc::new(RecordingLifecycle {
         flushes: Arc::clone(&flushes),
         shutdowns: Arc::new(AtomicUsize::new(0)),
@@ -251,6 +276,7 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
         terminal: None,
         block_next_flush: AtomicBool::new(true),
         flush_entered: Some(Arc::clone(&entered)),
+        next_flush_release_signal: Mutex::new(Some(release_rx)),
     });
     let exporters = ExporterSet {
         logs: Arc::new(RecordingLogExporter::default()),
@@ -266,7 +292,12 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
     let mut first = core.flush_async();
     let mut second = core.flush_async();
 
-    let first_thread = thread::spawn(move || poll_once(&mut first));
+    let (first_result_tx, first_result_rx) = mpsc::channel();
+    thread::spawn(move || {
+        first_result_tx
+            .send(poll_once(&mut first))
+            .expect("first waiter reports completion");
+    });
     let deadline = std::time::Instant::now() + Duration::from_secs(1);
     while !entered.load(Ordering::Acquire) {
         assert!(
@@ -276,10 +307,13 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
         thread::yield_now();
     }
     let second_polled_for_thread = Arc::clone(&second_polled);
-    let second_thread = thread::spawn(move || {
+    let (second_result_tx, second_result_rx) = mpsc::channel();
+    thread::spawn(move || {
         let result = poll_once(&mut second);
         second_polled_for_thread.store(true, Ordering::Release);
-        (second, result)
+        second_result_tx
+            .send((second, result))
+            .expect("second waiter reports completion");
     });
     let deadline = std::time::Instant::now() + Duration::from_secs(1);
     while !second_polled.load(Ordering::Acquire) {
@@ -291,11 +325,18 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
     }
     let flushes_before_release = flushes.load(Ordering::Acquire);
     released.store(true, Ordering::Release);
+    release_tx
+        .send(())
+        .expect("release the bounded first waiter");
     assert!(matches!(
-        first_thread.join().expect("first waiter thread"),
+        first_result_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("first waiter completes before its deadline"),
         Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
     ));
-    let (mut second, second_result) = second_thread.join().expect("second waiter thread");
+    let (mut second, second_result) = second_result_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("second waiter completes before its deadline");
     assert!(second_result.is_pending());
     assert_eq!(flushes_before_release, 1);
     assert!(matches!(
@@ -523,15 +564,11 @@ fn empty_flush_excludes_first_later_admission() {
 
 #[test]
 fn admission_failure_after_timed_out_window_reaches_next_barrier() {
-    let transport = OtelConfig {
-        timeout_ms: Some(1.into()),
-        lifecycle_flush_timeout_ms: Some(2.into()),
-        ..OtelConfig::default()
-    };
-    let (core, _, _, released) = fixture(None, &transport);
+    let (core, _, _, released) = fixture(None, &OtelConfig::default());
     let admission = core.admit(SignalKind::Logs, (), 1).unwrap();
     let mut expired = core.flush_async();
-    thread::sleep(Duration::from_millis(5));
+    assert!(poll_once(&mut expired).is_pending());
+    expired.expire_for_test();
     assert!(matches!(
         poll_once(&mut expired),
         Poll::Ready(Err(ExportError::LifecycleTimeout { .. }))
@@ -568,14 +605,21 @@ fn ordered_barrier_wakes_after_its_last_admission_finishes() {
         .admit(SignalKind::Logs, (), 1)
         .expect("admit log record");
     let (completion_attempt_tx, completion_attempt_rx) = mpsc::channel();
-    let completion_started = Arc::new(Barrier::new(2));
-    let completion_started_for_thread = Arc::clone(&completion_started);
+    let (completion_ready_tx, completion_ready_rx) = mpsc::channel();
+    let completion_ready_rx = Arc::new(Mutex::new(completion_ready_rx));
+    let completion_ready_rx_for_hook = Arc::clone(&completion_ready_rx);
+    let (completion_release_tx, completion_release_rx) = mpsc::channel();
     let (completion_done_tx, completion_done_rx) = mpsc::channel();
     let completion_thread = thread::spawn(move || {
         completion_attempt_rx
-            .recv()
+            .recv_timeout(Duration::from_secs(1))
             .expect("registration hook signals completion attempt");
-        completion_started_for_thread.wait();
+        completion_ready_tx
+            .send(())
+            .expect("completion thread reports it is ready to finish");
+        completion_release_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("registration hook releases completion after waker registration");
         admitted.complete(Ok(()));
         completion_done_tx
             .send(())
@@ -585,7 +629,14 @@ fn ordered_barrier_wakes_after_its_last_admission_finishes() {
         completion_attempt_tx
             .send(())
             .expect("start completion while the admission mutex is held");
-        completion_started.wait();
+        completion_ready_rx_for_hook
+            .lock()
+            .expect("completion-ready receiver lock")
+            .recv_timeout(Duration::from_secs(1))
+            .expect("completion thread reaches the bounded test gate");
+        completion_release_tx
+            .send(())
+            .expect("release completion after waker registration");
     });
     let mut flush = core.flush_async();
     let wake_counter = Arc::new(CountingWake {
@@ -596,10 +647,10 @@ fn ordered_barrier_wakes_after_its_last_admission_finishes() {
     assert!(poll_with_waker(&mut flush, &waker).is_pending());
 
     // `poll_with_waker` releases the admission mutex before it returns, so
-    // completion may legitimately wake immediately. The hook/barrier above
-    // already proves completion attempted while that mutex was held; assert
-    // the one required wake after completion instead of observing a racy
-    // pre-completion count here.
+    // completion may legitimately wake immediately. The bounded channel gate
+    // proves registration reached the waiting completion before releasing it;
+    // assert the one required wake after completion instead of observing a
+    // racy pre-completion count here.
     completion_done_rx
         .recv_timeout(Duration::from_secs(1))
         .expect("completion proceeds after waker registration");
@@ -782,16 +833,10 @@ fn cancelled_waiter_can_be_replaced_without_duplicate_shutdown() {
 
 #[test]
 fn lifecycle_deadline_and_runtime_termination_are_typed() {
-    let transport = OtelConfig {
-        timeout_ms: Some(1.into()),
-        lifecycle_flush_timeout_ms: Some(2.into()),
-        lifecycle_shutdown_timeout_ms: Some(2.into()),
-        ..OtelConfig::default()
-    };
-    let (core, _, _, _) = fixture(None, &transport);
+    let (core, _, _, _) = fixture(None, &OtelConfig::default());
     let mut flush = core.flush_async();
     assert!(poll_once(&mut flush).is_pending());
-    thread::sleep(Duration::from_millis(5));
+    flush.expire_for_test();
     let Poll::Ready(result) = poll_once(&mut flush) else {
         panic!("deadline result remained pending")
     };

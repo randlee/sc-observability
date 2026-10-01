@@ -7,9 +7,12 @@
 //! no SDK-specific record construction, so either transport retains the
 //! caller-runtime, admission, and resource-grouping invariants.
 
-#![allow(
-    dead_code,
-    reason = "D.18 composes these crate-private scheduling primitives after the transport decision"
+#![cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D.18 composes these crate-private scheduling primitives after the transport decision"
+    )
 )]
 
 use std::future::Future;
@@ -31,7 +34,7 @@ use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
     LifecycleFuture, LogExporter, LogRecord, MetricExporter, Resource, TraceExporter,
 };
-use crate::lifecycle::{Admitted, LifecycleCore, SignalKind};
+use crate::lifecycle::{Admitted, LifecycleCore, LifecycleState, SignalKind};
 use sc_observability_types::otlp::group_records_by_resource_and_scope;
 use sc_observability_types::v2::{
     AggregationTemporality, AttributeValue, Attributes, ExportError, MetricRecord, MetricValue,
@@ -302,6 +305,10 @@ where
 }
 
 impl ExporterLifecycle for SdkTerminal {
+    fn is_shutdown(&self) -> bool {
+        false
+    }
+
     fn blocking_preflight(&self) -> Result<(), ExportError> {
         Ok(())
     }
@@ -331,8 +338,20 @@ struct SdkLifecycle {
 }
 
 impl ExporterLifecycle for SdkLifecycle {
+    fn is_shutdown(&self) -> bool {
+        self.lifecycle.health().phase != LifecycleState::Open
+    }
+
+    fn lifecycle_health(&self) -> Option<crate::lifecycle::LifecycleHealth> {
+        Some(self.lifecycle.health())
+    }
+
     fn blocking_preflight(&self) -> Result<(), ExportError> {
         Ok(())
+    }
+
+    fn blocking_lifecycle_preflight(&self) -> Result<(), ExportError> {
+        Err(async_lifecycle_required_error())
     }
 
     fn flush_async(&self) -> LifecycleFuture {

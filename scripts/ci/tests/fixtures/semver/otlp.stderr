@@ -1,0 +1,13 @@
+    Building sc-observability-otlp v2.0.0 (current)
+       Built [   4.523s] (current)
+     Parsing sc-observability-otlp v2.0.0 (current)
+      Parsed [   0.004s] (current)
+    Building sc-observability-otlp v1.4.1 (baseline)
+       Built [   3.463s] (baseline)
+     Parsing sc-observability-otlp v1.4.1 (baseline)
+      Parsed [   0.002s] (baseline)
+    Checking sc-observability-otlp v1.4.1 -> v2.0.0 (assume minor change)
+     Checked [   0.004s] 196 checks: 193 pass, 3 fail, 0 warn, 57 skip
+
+     Summary semver requires new major version: 3 major and 0 minor checks failed
+    Finished [   8.683s] sc-observability-otlp

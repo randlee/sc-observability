@@ -10,12 +10,13 @@ use sc_observability_types::typed::{
     ClassifiedError, ProjectionFailureKind, SubscriberFailureKind, typed_log_projector,
     typed_metric_projector, typed_span_projector, typed_subscriber,
 };
+use sc_observability_types::v2::{ProjectionError, SubscriberError};
 use sc_observability_types::{
     ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, MetricKind, MetricName,
-    MetricUnit, Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity, ProjectionError,
+    MetricUnit, Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity,
     ProjectionRegistration, Remediation, SchemaVersion, ServiceName, SpanId, SpanProjector,
-    SpanRecord, SpanSignal, SpanStarted, SubscriberError, SubscriberRegistration, TargetCategory,
-    Timestamp, TraceContext, TraceId,
+    SpanRecord, SpanSignal, SpanStarted, SubscriberRegistration, TargetCategory, Timestamp,
+    TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -34,7 +35,7 @@ impl ObservationSubscriber<AgentEvent> for RecordingSubscriber {
     fn observe(
         &self,
         _observation: &Observation<AgentEvent>,
-    ) -> Result<(), sc_observability_types::SubscriberError> {
+    ) -> Result<(), sc_observability_types::v2::SubscriberError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(())
     }
@@ -49,7 +50,7 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
     fn project_logs(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
+    ) -> Result<Vec<LogEvent>, sc_observability_types::v2::ProjectionError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(vec![LogEvent {
             version: SchemaVersion::new(
@@ -90,7 +91,7 @@ impl SpanProjector<AgentEvent> for RecordingSpanProjector {
     fn project_spans(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<SpanSignal>, sc_observability_types::ProjectionError> {
+    ) -> Result<Vec<SpanSignal>, sc_observability_types::v2::ProjectionError> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(vec![SpanSignal::Started(SpanRecord::<SpanStarted>::new(
             Timestamp::UNIX_EPOCH,
@@ -112,13 +113,14 @@ struct FailingSubscriber {
 
 impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
     fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
-        Err(SubscriberError(
-            self.context
+        Err(SubscriberError::Subscriber {
+            context: self
+                .context
                 .lock()
                 .expect("subscriber context poisoned")
                 .take()
                 .expect("subscriber fixture invoked once"),
-        ))
+        })
     }
 }
 
@@ -131,13 +133,14 @@ impl sc_observability_types::LogProjector<AgentEvent> for FailingLogProjector {
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<LogEvent>, ProjectionError> {
-        Err(ProjectionError(
-            self.context
+        Err(ProjectionError::Projection {
+            context: self
+                .context
                 .lock()
                 .expect("log projector context poisoned")
                 .take()
                 .expect("log projector fixture invoked once"),
-        ))
+        })
     }
 }
 
@@ -150,13 +153,14 @@ impl SpanProjector<AgentEvent> for FailingSpanProjector {
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        Err(ProjectionError(
-            self.context
+        Err(ProjectionError::Projection {
+            context: self
+                .context
                 .lock()
                 .expect("span projector context poisoned")
                 .take()
                 .expect("span projector fixture invoked once"),
-        ))
+        })
     }
 }
 
@@ -169,13 +173,14 @@ impl sc_observability_types::MetricProjector<AgentEvent> for FailingMetricProjec
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<sc_observability_types::MetricRecord>, ProjectionError> {
-        Err(ProjectionError(
-            self.context
+        Err(ProjectionError::Projection {
+            context: self
+                .context
                 .lock()
                 .expect("metric projector context poisoned")
                 .take()
                 .expect("metric projector fixture invoked once"),
-        ))
+        })
     }
 }
 
@@ -183,8 +188,10 @@ impl sc_observability_types::MetricProjector<AgentEvent> for RecordingMetricProj
     fn project_metrics(
         &self,
         observation: &Observation<AgentEvent>,
-    ) -> Result<Vec<sc_observability_types::MetricRecord>, sc_observability_types::ProjectionError>
-    {
+    ) -> Result<
+        Vec<sc_observability_types::MetricRecord>,
+        sc_observability_types::v2::ProjectionError,
+    > {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(vec![sc_observability_types::MetricRecord {
             timestamp: Timestamp::UNIX_EPOCH,
@@ -292,7 +299,7 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
 
     let typed_root = temp_path("fanout-typed");
     let typed_config =
-        ObservabilityConfig::default_for_typed(tool_name(), typed_root.clone()).expect("config");
+        ObservabilityConfig::default_for(tool_name(), typed_root.clone()).expect("config");
     let typed = Observability::builder(typed_config)
         .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
             id: "subscriber",
@@ -311,7 +318,7 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
                     count: metric_count.clone(),
                 })),
         )
-        .build_typed()
+        .build()
         .expect("typed runtime");
 
     legacy.emit(observation()).expect("legacy emit");
@@ -347,7 +354,7 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
     assert!(legacy_contents.contains("\"action\":\"observation.received\""));
     assert!(typed_contents.contains("\"action\":\"observation.received\""));
     legacy.shutdown().expect("legacy shutdown");
-    typed.shutdown_typed().expect("typed shutdown");
+    typed.shutdown().expect("typed shutdown");
 }
 
 #[test]

@@ -9,9 +9,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use sc_observability::RetainedLogPolicy;
-use sc_observability_otlp::{
-    AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
-    TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
+use sc_observability_otlp::v2::{
+    AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
+    ResourceAttributes, Telemetry, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::typed::ProjectionFailure;
 use sc_observability_types::{
@@ -304,7 +304,7 @@ fn telemetry_config_from_env(
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
         .with_transport(transport)
-        .with_resource(sc_observability_otlp::ResourceAttributes {
+        .with_resource(ResourceAttributes {
             attributes: [
                 ("service.namespace".to_string(), json!("atm")),
                 ("service.name".to_string(), json!("atm")),
@@ -378,7 +378,7 @@ where
         for event in &events {
             self.telemetry
                 .emit_log(event)
-                .map_err(legacy_telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_failure)?;
         }
         Ok(events)
     }
@@ -401,7 +401,7 @@ where
         for span in &spans {
             self.telemetry
                 .emit_span(span)
-                .map_err(legacy_telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_failure)?;
         }
         Ok(spans)
     }
@@ -424,31 +424,18 @@ where
         for metric in &metrics {
             self.telemetry
                 .emit_metric(metric)
-                .map_err(legacy_telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_failure)?;
         }
         Ok(metrics)
     }
 }
 
-// `Telemetry::emit_*` currently exposes the retained root `TelemetryError`
-// compatibility boundary. The canonical v2 error is staged in the producer's
-// lifecycle core, but its public facade is not activated until obs-d-18.
-// Keep this adapter explicitly legacy-named so this consumer does not claim a
-// v2 contract that the dependency does not yet expose.
-fn legacy_telemetry_to_projection_failure(
-    error: sc_observability_types::TelemetryError,
+// The ATM adapter's projector callback still uses the typed extension trait;
+// move the canonical telemetry context through that boundary unchanged.
+fn canonical_telemetry_to_projection_failure(
+    error: sc_observability_otlp::v2::TelemetryError,
 ) -> ProjectionFailure {
-    match error {
-        sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionFailure::telemetry_closed(
-                "telemetry runtime is shut down",
-                Remediation::not_recoverable("do not project telemetry after shutdown"),
-            )
-        }
-        sc_observability_types::TelemetryError::ExportFailure(context) => {
-            ProjectionFailure::from_context(context)
-        }
-    }
+    ProjectionFailure::from_context(error.into_context())
 }
 
 fn validation_to_projection_failure(
@@ -518,6 +505,7 @@ impl sc_observability_types::typed::TypedLogProjector<AgentInfoEvent> for AtmLog
 
 #[derive(Default)]
 struct AtmSpanProjector {
+    // Shared across calls so each end event can recover its matching start timestamp.
     started: Mutex<HashMap<String, sc_observability_types::Timestamp>>,
 }
 

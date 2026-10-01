@@ -107,7 +107,7 @@ fn full_queue_drops_without_blocking() {
         ServiceName::new("queue-full").unwrap(),
         root.path().to_path_buf(),
     );
-    config.queue_capacity = sc_observability::QueueCapacity::new(1).expect("positive capacity");
+    config.queue_capacity = 1;
     config.enable_console_sink = true;
     let options = BridgeOptions {
         default_action: ActionName::new("log.record").unwrap(),

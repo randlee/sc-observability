@@ -20,6 +20,8 @@ fn register<T: JsonSchema>(
     Ok(())
 }
 type SchemaMap = Map<String, Value>;
+const SCHEMA_REGENERATION_COMMAND: &str = "cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- --output bindings/schema/v1.json --errors-output bindings/schema/errors-v1.json";
+
 fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
     let settings = SchemaSettings::draft2020_12();
     let mut generator = (if output {
@@ -155,9 +157,9 @@ fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
             .as_str()
             .ok_or_else(|| format!("missing definition reference for {entrypoint}"))?
             .to_owned();
-        let generated_name = reference
-            .strip_prefix("#/$defs/")
-            .ok_or("non-local reference")?;
+        let generated_name = reference.strip_prefix("#/$defs/").ok_or_else(|| {
+            format!("entrypoint {entrypoint}: non-local reference {reference:?}")
+        })?;
         if generated_name == public_name {
             continue;
         }
@@ -232,6 +234,16 @@ fn prefix_refs(value: &mut Value, prefix: &str) -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
+
+fn prefix_definition_refs(
+    definition_name: &str,
+    value: &mut Value,
+    prefix: &str,
+) -> Result<(), Box<dyn Error>> {
+    prefix_refs(value, prefix)
+        .map_err(|error| format!("schema definition {definition_name}: {error}").into())
+}
+
 fn supported(node: &Value, defs: &Map<String, Value>) -> Result<(), Box<dyn Error>> {
     if node.is_boolean() {
         return Ok(());
@@ -297,6 +309,26 @@ fn supported(node: &Value, defs: &Map<String, Value>) -> Result<(), Box<dyn Erro
     }
     Ok(())
 }
+
+fn validate_named_schema(
+    name: &str,
+    node: &Value,
+    defs: &Map<String, Value>,
+) -> Result<(), Box<dyn Error>> {
+    supported(node, defs).map_err(|error| format!("schema {name}: {error}").into())
+}
+
+fn insert_definition(
+    defs: &mut SchemaMap,
+    name: String,
+    value: Value,
+) -> Result<(), Box<dyn Error>> {
+    if defs.insert(name.clone(), value).is_some() {
+        return Err(format!("duplicate schema name: {name}").into());
+    }
+    Ok(())
+}
+
 fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut bytes = serde_json::to_vec_pretty(value)?;
     bytes.push(b'\n');
@@ -305,7 +337,7 @@ fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
 fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn Error>> {
     if check {
         if std::fs::read(path)? != bytes {
-            return Err(format!("generated drift: {}", path.display()).into());
+            return Err(generated_drift_error(path).into());
         }
     } else {
         if let Some(parent) = path.parent() {
@@ -315,6 +347,14 @@ fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn 
     }
     Ok(())
 }
+
+fn generated_drift_error(path: &Path) -> String {
+    format!(
+        "generated drift: {}; regenerate with `{SCHEMA_REGENERATION_COMMAND}`",
+        path.display()
+    )
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut output = None;
     let mut errors_output = None;
@@ -335,19 +375,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (is_output, prefix) in [(false, "Input"), (true, "Output")] {
         let (definitions, entries) = definitions(is_output)?;
         for (name, mut value) in definitions {
+            let definition_name = format!("{prefix}{name}");
             input_strict(&mut value, is_output);
-            prefix_refs(&mut value, prefix)?;
-            if defs.insert(format!("{prefix}{name}"), value).is_some() {
-                return Err("duplicate schema name".into());
-            }
+            prefix_definition_refs(&definition_name, &mut value, prefix)?;
+            insert_definition(&mut defs, definition_name, value)?;
         }
         for (name, mut value) in entries {
-            prefix_refs(&mut value, prefix)?;
-            entrypoints.insert(format!("{prefix}{name}"), value);
+            let entrypoint_name = format!("{prefix}{name}");
+            prefix_definition_refs(&entrypoint_name, &mut value, prefix)?;
+            entrypoints.insert(entrypoint_name, value);
         }
     }
-    for node in defs.values().chain(entrypoints.values()) {
-        supported(node, &defs)?;
+    for (name, node) in defs.iter().chain(entrypoints.iter()) {
+        validate_named_schema(name, node, &defs)?;
     }
     let registry = serde_json::to_value(error_codes::REGISTRY)?;
     let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":1,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":constants::MAX_WIRE_PAYLOAD_BYTES,"container_depth":constants::MAX_CONTAINER_DEPTH,"query_limit":constants::MAX_QUERY_LIMIT,"timeout_ms":constants::MAX_TIMEOUT_MS,"diagnostic_string_bytes":constants::MAX_DIAGNOSTIC_FIELD_BYTES,"remediation_steps":constants::MAX_REMEDIATION_STEPS},"defaults":{"query_limit":constants::DEFAULT_QUERY_LIMIT,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
@@ -358,4 +398,54 @@ fn main() -> Result<(), Box<dyn Error>> {
         check,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reference_errors_include_the_schema_definition_name() {
+        for (reference, expected) in [
+            (Value::Null, "non-string reference"),
+            (
+                Value::String("https://example.com/schema".into()),
+                "non-local reference",
+            ),
+        ] {
+            let mut schema = json!({"$ref": reference});
+            let error = prefix_definition_refs("InputExample", &mut schema, "Input")
+                .expect_err("invalid reference should fail")
+                .to_string();
+            assert!(error.contains("schema definition InputExample"));
+            assert!(error.contains(expected));
+        }
+    }
+
+    #[test]
+    fn invalid_schema_errors_include_the_schema_name() {
+        let error = validate_named_schema("InputExample", &json!("invalid"), &SchemaMap::new())
+            .expect_err("scalar schema nodes are unsupported")
+            .to_string();
+        assert!(error.contains("schema InputExample"));
+        assert!(error.contains("schema node must be object or boolean"));
+    }
+
+    #[test]
+    fn duplicate_schema_error_includes_the_duplicate_name() {
+        let mut defs = SchemaMap::new();
+        insert_definition(&mut defs, "InputExample".into(), json!({"type":"object"}))
+            .unwrap();
+        let error = insert_definition(&mut defs, "InputExample".into(), json!({"type":"string"}))
+            .expect_err("duplicate schema names should fail")
+            .to_string();
+        assert!(error.contains("duplicate schema name: InputExample"));
+    }
+
+    #[test]
+    fn drift_error_includes_the_schema_regeneration_command() {
+        let error = generated_drift_error(Path::new("bindings/schema/v1.json"));
+        assert!(error.contains("bindings/schema/v1.json"));
+        assert!(error.contains(SCHEMA_REGENERATION_COMMAND));
+    }
 }

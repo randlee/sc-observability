@@ -1,13 +1,15 @@
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
 
 use sc_observability::{
     EnvSnapshot, LogSettings, LogSettingsError, LogSettingsInputs, ResolvedLogSettings,
     RetainedLogPolicy, error_codes,
 };
-use sc_observability_types::{EnvPrefix, LevelFilter, ServiceName};
+use sc_observability_types::{EnvPrefix, LevelFilter, Remediation, ServiceName};
 
 fn snapshot(values: &[(&str, &str)]) -> EnvSnapshot {
     EnvSnapshot::from_pairs(
@@ -39,6 +41,63 @@ fn settings_error_codes_match_documented_stable_names() {
     for (code, expected) in codes {
         assert_eq!(code.as_str(), expected);
     }
+}
+
+#[test]
+fn settings_errors_include_actionable_recovery_steps_and_docs() {
+    let invalid_value = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_FILE", "yes")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
+    let invalid_environment = LogSettings::from_env(
+        &snapshot(&[("sc_log_level", "Info")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
+    let unknown_key = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_UNKNOWN", "x")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
+    let prefix_collision =
+        LogSettings::from_application_env(&snapshot(&[]), EnvPrefix::new("SC").unwrap())
+            .unwrap_err();
+    let resolution = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: LogSettings::default(),
+        application_env: None,
+        default_root: PathBuf::new(),
+    })
+    .unwrap_err();
+
+    let errors = [
+        invalid_value,
+        invalid_environment,
+        unknown_key,
+        prefix_collision,
+        resolution,
+    ];
+    let mut all_steps = Vec::new();
+    for error in errors {
+        let diagnostic = error.context().diagnostic();
+        assert_eq!(
+            diagnostic.docs.as_deref(),
+            Some("docs/logging/d-1-log-settings.md")
+        );
+        let Remediation::Recoverable { steps } = &diagnostic.remediation else {
+            panic!("settings errors must be recoverable");
+        };
+        assert!(!steps.steps().is_empty(), "{}", error.code());
+        all_steps.extend(steps.steps().iter().cloned());
+    }
+
+    let all_steps = all_steps.join(" ");
+    assert!(all_steps.contains("SC_LOG_ROTATION_MAX_BYTES"));
+    assert!(all_steps.contains("SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS"));
+    assert!(all_steps.contains("${prefix}_LOG_"));
+    assert!(all_steps.contains("lowercase true or false"));
+    assert!(all_steps.contains("docs/logging/d-1-log-settings.md"));
 }
 
 #[test]
@@ -355,7 +414,7 @@ fn precedence_root_exception_and_conversion_preserve_defaults() {
     let config = resolved.into_logger_config(ServiceName::new("settings-test").unwrap());
     assert_eq!(config.level, LevelFilter::Error);
     assert_eq!(
-        config.queue_capacity.get(),
+        config.queue_capacity,
         sc_observability::constants::DEFAULT_LOG_QUEUE_CAPACITY
     );
     assert!(config.redaction.redact_bearer_tokens);
@@ -555,19 +614,25 @@ fn settings_conversion_preserves_every_non_inventory_default() {
 }
 
 #[test]
-fn rejects_empty_unknown_case_and_prefix_collision() {
-    let empty = LogSettings::from_env(
+fn permits_empty_root_until_effective_resolution_and_rejects_unknown_case_and_prefix_collision() {
+    let empty_root = LogSettings::from_env(
         &snapshot(&[("SC_LOG_ROOT", "")]),
         EnvPrefix::new("SC").unwrap(),
     )
-    .unwrap_err();
-    assert_eq!(empty.code(), error_codes::LOG_INVALID_VALUE);
+    .expect("an empty root is deferred to the effective-root validator");
+    assert_eq!(empty_root.log_root, Some(PathBuf::new()));
     let unknown = LogSettings::from_env(
         &snapshot(&[("SC_LOG_UNKNOWN", "x")]),
         EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
     assert_eq!(unknown.code(), error_codes::LOG_UNKNOWN_KEY);
+    let empty_unknown = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_UNKNOWN", "")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .unwrap_err();
+    assert_eq!(empty_unknown.code(), error_codes::LOG_UNKNOWN_KEY);
     let case = LogSettings::from_env(
         &snapshot(&[("sc_log_level", "Info")]),
         EnvPrefix::new("SC").unwrap(),
@@ -583,7 +648,7 @@ fn rejects_empty_unknown_case_and_prefix_collision() {
     ));
     assert_eq!(collision.code(), error_codes::LOG_PREFIX_COLLISION);
 
-    for error in [&empty, &unknown, &case, &collision] {
+    for error in [&unknown, &empty_unknown, &case, &collision] {
         assert!(
             error_codes::ALL.contains(&error.code()),
             "emitted code {} must be registered",
@@ -604,6 +669,18 @@ fn rejects_non_utf8_key_in_selected_namespace() {
     assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
 }
 
+#[cfg(windows)]
+#[test]
+fn rejects_non_utf8_key_in_selected_namespace() {
+    let snapshot = EnvSnapshot::from_pairs([(
+        OsString::from_wide(&[0x0053, 0x0043, 0x005F, 0xD800]),
+        OsString::from("ignored"),
+    )]);
+
+    let error = LogSettings::from_env(&snapshot, EnvPrefix::new("SC").unwrap()).unwrap_err();
+    assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
+}
+
 #[test]
 fn empty_json_root_is_never_overridden_and_json_null_is_unset() {
     let file: LogSettings = serde_json::from_str(r#"{"logRoot":""}"#).unwrap();
@@ -614,7 +691,7 @@ fn empty_json_root_is_never_overridden_and_json_null_is_unset() {
         default_root: PathBuf::from("/default"),
     })
     .unwrap_err();
-    assert_eq!(error.code(), error_codes::LOG_INVALID_VALUE);
+    assert_eq!(error.code(), error_codes::LOG_RESOLUTION);
     let null: LogSettings =
         serde_json::from_str(r#"{"level":null,"retainedLogPolicy":null}"#).unwrap();
     let resolved = LogSettings::resolve(LogSettingsInputs {
@@ -626,4 +703,24 @@ fn empty_json_root_is_never_overridden_and_json_null_is_unset() {
     .unwrap();
     assert_eq!(resolved.level, LevelFilter::Info);
     assert_eq!(resolved.retained_log_policy, RetainedLogPolicy::default());
+}
+
+#[test]
+fn shadowed_empty_root_is_ignored_before_effective_root_validation() {
+    let shared_env = LogSettings::from_env(
+        &snapshot(&[("SC_LOG_ROOT", "")]),
+        EnvPrefix::new("SC").unwrap(),
+    )
+    .expect("an empty shadowed root parses for precedence resolution");
+    let file: LogSettings = serde_json::from_str(r#"{"logRoot":"/json"}"#).unwrap();
+
+    let resolved = LogSettings::resolve(LogSettingsInputs {
+        file: Some(file),
+        shared_env,
+        application_env: None,
+        default_root: PathBuf::from("/default"),
+    })
+    .expect("the non-empty effective root is the only validated root");
+
+    assert_eq!(resolved.log_root.as_ref(), std::path::Path::new("/json"));
 }

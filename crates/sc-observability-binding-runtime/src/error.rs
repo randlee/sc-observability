@@ -57,7 +57,7 @@ fn context(
 
 pub(crate) fn init_runtime(
     message: impl Into<String>,
-    source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
+    source: Box<dyn std::error::Error + Send + Sync + 'static>,
 ) -> native::v2::InitError {
     let context = context(
         ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED),
@@ -67,11 +67,7 @@ pub(crate) fn init_runtime(
             std::iter::empty::<String>(),
         ),
     );
-    let context = if let Some(source) = source {
-        Box::new((*context).source(source))
-    } else {
-        context
-    };
+    let context = Box::new((*context).source(source));
     native::v2::InitError::Runtime { context }
 }
 
@@ -85,20 +81,6 @@ pub(crate) fn init_runtime_internal(message: impl Into<String>) -> native::v2::I
             ),
         ),
     }
-}
-
-pub(crate) fn flush_drain(source: Box<native::ErrorContext>) -> native::v2::FlushError {
-    let (code, message, remediation) = {
-        let diagnostic = source.diagnostic();
-        (
-            diagnostic.code.clone(),
-            diagnostic.message.clone(),
-            diagnostic.remediation.clone(),
-        )
-    };
-    let sink = native::v2::LogSinkError::Flush { context: source };
-    let context = Box::new(ErrorContext::new(code, message, remediation).source(Box::new(sink)));
-    native::v2::FlushError::Drain { context }
 }
 
 fn registry_remediation(code: &'static str) -> Remediation {
@@ -130,13 +112,14 @@ pub(crate) fn subscriber_waiters_full(message: impl Into<String>) -> native::v2:
 }
 
 pub(crate) fn shutdown_drain(message: impl Into<String>) -> native::v2::ShutdownError {
-    native::v2::ShutdownError::Drain {
-        context: context(
+    native::v2::ShutdownError::classified_drain(
+        context(
             ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_INTERNAL),
             message,
             Remediation::not_recoverable("inspect the retained shutdown diagnostic"),
         ),
-    }
+        native::v2::FailureClassification::Internal,
+    )
 }
 
 pub(crate) fn observer_timeout(kind: OperationKind) -> Failure {

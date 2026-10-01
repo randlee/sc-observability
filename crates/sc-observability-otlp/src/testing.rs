@@ -36,6 +36,12 @@ impl RecordingLifecycle {
 }
 
 impl ExporterLifecycle for RecordingLifecycle {
+    fn is_shutdown(&self) -> bool {
+        let calls = self.calls.lock().expect("calls poisoned");
+        calls.contains(&LifecycleCall::ShutdownBlocking)
+            || calls.contains(&LifecycleCall::ShutdownAsync)
+    }
+
     fn blocking_preflight(&self) -> Result<(), ExportError> {
         self.record(LifecycleCall::BlockingPreflight);
         Ok(())

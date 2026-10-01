@@ -5,11 +5,11 @@
 
 use sc_observability_types::ErrorCode;
 
-/// `InitError::AlreadyInitialized`: the bridge was already installed in this process.
+/// Canonical init configuration error: the bridge was already installed in this process.
 /// Recovery: reuse the installed bridge or detach it before installing another.
 pub const SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED");
-/// `InitError::ForeignLoggerInstalled`: another `log::Log` implementation owns the facade.
+/// Canonical init configuration error: another `log::Log` implementation owns the facade.
 /// Recovery: remove the competing logger or use the owner that installed it.
 pub const SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED");
@@ -17,23 +17,23 @@ pub const SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
 /// Recovery: provide a fixed identity or a resolver that returns a hostname.
 pub const SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED");
-/// `FlushError::TimedOut`: the writer did not acknowledge a flush within the timeout.
+/// Canonical flush diagnostic: the writer did not acknowledge a flush within the timeout.
 /// Recovery: inspect writer health, then retry with a live logger and bounded timeout.
 pub const SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT");
-/// `ShutdownError::TimedOut`: shutdown did not finish within the timeout.
+/// Canonical shutdown diagnostic: shutdown did not finish within the timeout.
 /// Recovery: inspect retained shutdown health and construct a new owner if needed.
 pub const SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT");
-/// `FlushError::HelperSpawn` / `ShutdownError::HelperSpawn`: the helper thread could not start.
+/// Canonical flush/shutdown diagnostic: the helper thread could not start.
 /// Recovery: provide available thread resources and retry the bounded operation.
 pub const SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED");
-/// `FlushError::HelperLost` / `ShutdownError::HelperLost`: the helper thread ended without a result.
+/// Canonical flush/shutdown diagnostic: the helper thread ended without a result.
 /// Recovery: inspect the retained failure and construct a new logger owner.
 pub const SC_OBSERVABILITY_LOG_HELPER_LOST: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_HELPER_LOST");
-/// `InitError::UnsupportedLevel`: the executable's static facade cap cannot retain the baseline.
+/// Canonical init configuration diagnostic: the executable's static facade cap cannot retain the baseline.
 /// Recovery: choose a baseline supported by the executable's static facade cap.
 pub const SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL");
@@ -65,7 +65,7 @@ pub const SC_OBSERVABILITY_LOG_STATUS_UNAVAILABLE: ErrorCode =
 /// Recovery: initialize the logger before waiting for shutdown.
 pub const SC_OBSERVABILITY_LOG_SHUTDOWN_NOT_STARTED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_SHUTDOWN_NOT_STARTED");
-/// `FlushError::InProgress`: a previous flush helper is still running; no new flush was started.
+/// Canonical flush diagnostic: a previous flush helper is still running; no new flush was started.
 /// Recovery: await the existing flush operation before requesting another.
 pub const SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS");

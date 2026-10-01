@@ -8,12 +8,17 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
-use crate::control::BridgeEvent;
+#[cfg(test)]
+use std::cell::Cell;
+
+use crate::control::{BridgeEvent, LogControl};
+use crate::error::EmitError;
 use crate::handle;
-use crate::{DropCause, EmitError, LogControl, mapping};
+use crate::{DropCause, mapping};
+use sc_observability_types::v2::FlushError as CoreFlushError;
 use sc_observability_types::{
-    AdmissionOutcome, ErrorCode, ErrorContext, LogEvent, OperationDiagnostic, ProcessIdentity,
-    Remediation, ServiceName, Timestamp,
+    AdmissionOutcome, ErrorCode, ErrorContext, FailureClassification, LogEvent,
+    OperationDiagnostic, ProcessIdentity, Remediation, ServiceName, Timestamp,
 };
 
 const MODE_EMPTY: u8 = 0;
@@ -40,6 +45,11 @@ static ATTACHMENT: Mutex<AttachmentRegistry> = Mutex::new(AttachmentRegistry {
     abandoned: false,
 });
 static DRAINED: Condvar = Condvar::new();
+
+#[cfg(test)]
+thread_local! {
+    static ATTACHMENT_ENTRIES: Cell<usize> = const { Cell::new(0) };
+}
 
 /// Open host policy evaluated after bridge event assembly and before logger admission.
 pub trait BridgeEventPolicy: Send + Sync {
@@ -194,7 +204,7 @@ impl DetachError {
 
 /// Shared state retained by an attachment, its controls, and in-flight calls.
 pub(crate) struct AttachmentState {
-    pub(crate) logger: Arc<sc_observability::Logger>,
+    pub(crate) logger: Arc<sc_observability::v2::Logger>,
     pub(crate) options: crate::BridgeOptions,
     policy: Arc<dyn BridgeEventPolicy>,
     service: ServiceName,
@@ -246,6 +256,8 @@ impl Drop for AttachmentCompletion {
 }
 
 fn enter_attachment(saved: Option<&Weak<AttachmentState>>) -> Option<AttachmentCall> {
+    #[cfg(test)]
+    ATTACHMENT_ENTRIES.with(|entries| entries.set(entries.get() + 1));
     let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
     if registry.mode != MODE_ATTACHED {
         return None;
@@ -332,7 +344,7 @@ impl Drop for LogAttachment {
 /// Returns [`DetachError::ForeignLoggerInstalled`] when the process facade is
 /// occupied by an owned bridge, another attachment, or a foreign `log::Log`.
 pub fn attach_logger(
-    logger: Arc<sc_observability::Logger>,
+    logger: Arc<sc_observability::v2::Logger>,
     options: AttachmentOptions,
 ) -> Result<LogAttachment, DetachError> {
     let mut registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
@@ -468,13 +480,6 @@ pub(crate) fn attached_enabled(level: sc_observability_types::Level) -> Option<b
     ))
 }
 
-pub(crate) fn attached_options() -> Option<crate::BridgeOptions> {
-    let registry = ATTACHMENT.lock().unwrap_or_else(PoisonError::into_inner);
-    (registry.mode == MODE_ATTACHED)
-        .then(|| registry.state.as_ref().map(|state| state.options.clone()))
-        .flatten()
-}
-
 pub(crate) fn is_attached() -> bool {
     ATTACHMENT
         .lock()
@@ -489,6 +494,13 @@ pub(crate) fn submit_parts_if_attached(
     let Some(call) = enter_attachment(None) else {
         return Err(Box::new(parts));
     };
+    Ok(submit_parts_to_attachment(call, parts))
+}
+
+fn submit_parts_to_attachment(
+    call: AttachmentCall,
+    parts: crate::__private::EventParts,
+) -> Result<AdmissionOutcome, DropCause> {
     let state = &call.state;
     let mut event = mapping::assemble_event(
         parts,
@@ -498,17 +510,24 @@ pub(crate) fn submit_parts_if_attached(
     );
     event.trace = crate::context::current_trace();
     if let Err(cause) = policy_allows(state, &event) {
-        return Ok(Err(handle::Rejection::drop_cause(&cause)));
+        return Err(handle::Rejection::drop_cause(&cause));
     }
-    Ok(match state.logger.try_log_with_outcome(event) {
+    let outcome = match state.logger.try_log_with_outcome(event) {
         Ok(outcome) => Ok(outcome),
         Err(error) => Err(match error {
-            sc_observability::TryLogError::QueueFull(_) => DropCause::QueueFull,
-            sc_observability::TryLogError::InvalidEvent(_) => DropCause::InvalidEvent,
-            sc_observability::TryLogError::WriterDegraded(_) => DropCause::WriterDegraded,
-            sc_observability::TryLogError::ShutdownTimedOut(_) => DropCause::ShutdownTimedOut,
+            sc_observability_types::v2::EventError::Validation { .. } => DropCause::InvalidEvent,
+            sc_observability_types::v2::EventError::Routing { context } => {
+                match context.diagnostic().code.as_str() {
+                    "SC_OBSERVABILITY_LOGGER_QUEUE_FULL" => DropCause::QueueFull,
+                    "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT" => DropCause::ShutdownTimedOut,
+                    _ => DropCause::WriterDegraded,
+                }
+            }
+            _ => DropCause::WriterDegraded,
         }),
-    })
+    };
+    drop(call);
+    outcome
 }
 
 pub(crate) fn submit_control(
@@ -542,12 +561,13 @@ pub(crate) fn submit_current_control(event: BridgeEvent) -> Result<AdmissionOutc
 pub(crate) fn flush_attached(
     saved: &Weak<AttachmentState>,
     timeout: Duration,
-) -> Result<(), crate::FlushError> {
-    let call = enter_attachment(Some(saved)).ok_or(crate::FlushError::NotInstalled)?;
+) -> Result<(), CoreFlushError> {
+    let call = enter_attachment(Some(saved))
+        .ok_or_else(|| attachment_flush_error("saved attachment is not installed"))?;
     flush_call(call, timeout)
 }
 
-fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), crate::FlushError> {
+fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), CoreFlushError> {
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     std::thread::Builder::new()
         .name("sc-observability-log-attachment-flush".to_owned())
@@ -559,43 +579,57 @@ fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), crate::Flus
             drop(call);
             let _ = sender.send(result);
         })
-        .map_err(|source| crate::FlushError::HelperSpawn {
-            diagnostic: OperationDiagnostic {
-                code: crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
-                message: source.to_string(),
-                remediation: Remediation::recoverable(
-                    "retry the bounded attachment flush",
-                    std::iter::empty::<String>(),
+        .map_err(|source| {
+            crate::error::flush_drain_as(
+                crate::error::operation_context_with_source(
+                    crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
+                    source.to_string(),
+                    Remediation::not_recoverable("inspect thread resource availability"),
+                    source,
                 ),
-                at: Timestamp::now_utc(),
-            },
+                FailureClassification::Unavailable,
+            )
         })?;
     match receiver.recv_timeout(timeout) {
         Ok(Ok(())) => Ok(()),
-        Ok(Err(source)) => Err(crate::FlushError::Logger {
-            diagnostic: crate::error::diagnostic_from_info(&source),
-        }),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            Err(crate::FlushError::TimedOut { timeout })
-        }
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            Err(crate::FlushError::HelperLost {
-                diagnostic: OperationDiagnostic {
-                    code: crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-                    message: "attachment flush helper ended without a result".to_owned(),
-                    remediation: Remediation::not_recoverable(
-                        "inspect host logger health before retrying",
-                    ),
-                    at: Timestamp::now_utc(),
-                },
-            })
-        }
+        Ok(Err(source)) => Err(crate::error::flush_drain(source.into_context())),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(crate::error::flush_drain_as(
+            crate::error::operation_context(
+                crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT,
+                format!("attachment flush did not complete within {timeout:?}"),
+                Remediation::recoverable(
+                    "retry after inspecting host logger health",
+                    ["use a bounded timeout"],
+                ),
+            ),
+            FailureClassification::timeout("flush"),
+        )),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(crate::error::flush_drain_as(
+            crate::error::operation_context(
+                crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
+                "attachment flush helper ended without a result",
+                Remediation::not_recoverable("inspect host logger health before retrying"),
+            ),
+            FailureClassification::Internal,
+        )),
     }
 }
 
-pub(crate) fn flush_current_attachment(timeout: Duration) -> Result<(), crate::FlushError> {
-    let call = enter_attachment(None).ok_or(crate::FlushError::NotInstalled)?;
+pub(crate) fn flush_current_attachment(timeout: Duration) -> Result<(), CoreFlushError> {
+    let call = enter_attachment(None)
+        .ok_or_else(|| attachment_flush_error("no logger attachment is installed"))?;
     flush_call(call, timeout)
+}
+
+fn attachment_flush_error(message: &str) -> CoreFlushError {
+    crate::error::flush_drain_as(
+        crate::error::operation_context(
+            crate::error_codes::SC_LOG_DETACH_NOT_INSTALLED,
+            message,
+            Remediation::not_recoverable("attach a logger before requesting a flush"),
+        ),
+        FailureClassification::Closed,
+    )
 }
 
 pub(crate) fn mark_owned_running() {
@@ -622,21 +656,122 @@ impl log::Log for Bridge {
     }
 
     fn log(&self, record: &log::Record<'_>) {
-        if !self.enabled(record.metadata()) {
-            return;
-        }
-        let _ = handle::submit_guarded(|| {
-            let options = attached_options()
-                .or_else(|| handle::current_installed().map(|installed| installed.options.clone()))
-                .ok_or(DropCause::NotInstalled)?;
-            let mapped = mapping::record_to_parts(record, &options)
+        let _ = handle::submit_guarded(|| -> Result<(), DropCause> {
+            let level = mapping::map_level(record.level());
+            if let Some(call) = enter_attachment(None) {
+                if !handle::level_enabled(level, call.state.logger.level_state().effective_level) {
+                    return Ok(());
+                }
+                let mapped = mapping::record_to_parts(record, &call.state.options)
+                    .map_err(|_label_error| DropCause::InvalidEvent)?;
+                for _ in 0..mapped.omitted_fields {
+                    handle::record_drop(DropCause::InvalidEvent);
+                }
+                return submit_parts_to_attachment(call, mapped.parts).map(|_| ());
+            }
+
+            let installed = handle::current_installed().ok_or(DropCause::NotInstalled)?;
+            if !handle::level_enabled(level, installed.logger.level_state().effective_level) {
+                return Ok(());
+            }
+            let mapped = mapping::record_to_parts(record, &installed.options)
                 .map_err(|_label_error| DropCause::InvalidEvent)?;
             for _ in 0..mapped.omitted_fields {
                 handle::record_drop(DropCause::InvalidEvent);
             }
-            handle::submit_installed(mapped.parts)
+            handle::submit_to(&installed, mapped.parts).map(|_| ())
         });
     }
 
     fn flush(&self) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Admit;
+
+    impl BridgeEventPolicy for Admit {
+        fn decide(&self, _: &LogEvent) -> BridgeEventDecision {
+            BridgeEventDecision::Admit
+        }
+    }
+
+    #[test]
+    fn facade_record_enters_an_attachment_once() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_BRIDGE_ENTRY_CHILD";
+        const TEST_NAME: &str = "bridge::tests::facade_record_enters_an_attachment_once";
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            facade_record_enters_an_attachment_once_in_child();
+            return;
+        }
+
+        let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, "1")
+            .status()
+            .expect("spawn isolated bridge regression");
+        assert!(
+            status.success(),
+            "isolated bridge regression failed: {status}"
+        );
+    }
+
+    fn facade_record_enters_an_attachment_once_in_child() {
+        let root = tempfile::tempdir().expect("temporary log root");
+        let service = ServiceName::new("bridge-entry-test").expect("service name");
+        let logger = Arc::new(
+            sc_observability::v2::Logger::new(crate::LoggerConfig::default_for(
+                service.clone(),
+                root.path().to_path_buf(),
+            ))
+            .expect("host logger"),
+        );
+        let state = Arc::new(AttachmentState {
+            logger: Arc::clone(&logger),
+            options: crate::BridgeOptions {
+                default_action: crate::ActionName::new("log.record").expect("action name"),
+                parse_bracket_action: false,
+            },
+            policy: Arc::new(Admit),
+            service,
+            identity: ProcessIdentity::default(),
+            last_policy_rejection: Mutex::new(None),
+        });
+        {
+            let mut registry = ATTACHMENT.lock().expect("attachment registry");
+            assert!(
+                registry.state.is_none(),
+                "unit test owns attachment registry"
+            );
+            registry.mode = MODE_ATTACHED;
+            registry.state = Some(Arc::clone(&state));
+            registry.in_flight = 0;
+            registry.abandoned = false;
+        }
+
+        ATTACHMENT_ENTRIES.with(|entries| entries.set(0));
+        let args = format_args!("one attachment entry");
+        let record = log::Record::builder()
+            .args(args)
+            .level(log::Level::Info)
+            .target("bridge.entry.test")
+            .build();
+        log::Log::log(&Bridge, &record);
+        assert_eq!(
+            ATTACHMENT_ENTRIES.with(Cell::get),
+            1,
+            "one facade record must retain its first attachment call"
+        );
+
+        close_attachment(&state, Duration::from_secs(5), false)
+            .expect("all entered calls drain before releasing the host logger");
+        ATTACHMENT.lock().expect("attachment registry").mode = MODE_EMPTY;
+        drop(state);
+        Arc::try_unwrap(logger)
+            .unwrap_or_else(|_| panic!("attachment call releases the host logger"))
+            .shutdown();
+    }
 }

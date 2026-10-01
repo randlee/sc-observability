@@ -2,7 +2,7 @@
 //!
 //! [`init`] installs a `log::Log` implementation that maps every `log` record to
 //! a `sc_observability_types::LogEvent` and writes it through one process-wide
-//! `sc_observability::Logger`. Existing `log::info!` (and friends) call sites keep
+//! `sc_observability::v2::Logger`. Existing `log::info!` (and friends) call sites keep
 //! working unchanged; the tracing-compatible event macros, `#[instrument]` and
 //! [`LogControl::try_log`] write through the same logger.
 //!
@@ -50,7 +50,8 @@
 //!
 //! - **Install once, process-global.** [`init`] succeeds at most once per
 //!   process. The `log` facade has no uninstall API, so after shutdown the
-//!   bridge can be neither reinstalled ([`InitError::AlreadyInitialized`]) nor
+//!   bridge can be neither reinstalled (a configuration error with the
+//!   `SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED` diagnostic) nor
 //!   replaced by another `log::Log`.
 //! - **One lifecycle owner.** [`LogGuard`] is not `Clone`; only
 //!   [`LogGuard::shutdown`] (or, as a fallback, `Drop for LogGuard`) stops the
@@ -74,8 +75,10 @@
 //!   [`LifecyclePhase::Stopped`]. `Stopped` is final.
 //! - **Serializable contracts.** [`BridgeHealthReport`] (versioned by
 //!   [`BRIDGE_HEALTH_SCHEMA_VERSION`]), [`BridgeEvent`] and the native operation
-//!   errors are plain serde data with `snake_case` tagged discriminants and
-//!   stable code / remediation fields.
+//!   reports, events and errors are plain serde data with `snake_case` tagged
+//!   discriminants and stable code / remediation fields. The root operation
+//!   errors retain the released 1.x variants; canonical v2 errors live under
+//!   [`v2`].
 //! - **Field keys.** One sanitizer and one reserved prefix
 //!   (`sc_observability_log.`) for every producer; see `docs/mapping.md`,
 //!   "Field keys", for the per-producer and collision rules.
@@ -92,6 +95,7 @@ pub mod error_codes;
 
 mod bridge;
 mod callsite;
+mod compat;
 mod context;
 mod control;
 mod error;
@@ -112,18 +116,19 @@ pub use bridge::{
     PolicyRejection, attach_logger,
 };
 #[doc(inline)]
-pub use control::{BridgeEvent, EmitOutcome, LogControl};
+pub use compat::LogControl;
 #[doc(inline)]
-pub use error::{
-    ControlError, DropCause, EmitError, FieldKeyError, FlushError, InitError, LifecyclePhase,
-    ShutdownError, WaitError,
-};
+pub use compat::{EmitError, FlushError, InitError, ShutdownError};
+#[doc(inline)]
+pub use control::{BridgeEvent, EmitOutcome};
+#[doc(inline)]
+pub use error::{ControlError, DropCause, FieldKeyError, LifecyclePhase, WaitError};
 #[doc(inline)]
 pub use error::{ShutdownOutcome, ShutdownReport, UnconfirmedShutdown};
 #[doc(inline)]
 pub use health::{BRIDGE_HEALTH_SCHEMA_VERSION, BridgeHealthReport};
 #[doc(inline)]
-pub use sc_observability::LoggerConfig;
+pub use sc_observability::v2::LoggerConfig;
 // Re-exported so consumers need no direct sc-observability-types dependency.
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -150,6 +155,121 @@ pub use sc_observability_types::{
 /// tracing 0.1 compatible event macros and `#[instrument]`; migrating is an import rename.
 #[doc(inline)]
 pub use sc_observability_log_macros::{debug, error, event, info, instrument, trace, warn};
+
+/// Opt-in canonical bridge facade for the compatible 1.x transition.
+///
+/// The bridge and its lifecycle remain single-owner production state; this is
+/// a namespace seam only.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::BridgeEvent;
+    #[doc(inline)]
+    pub use crate::BridgeOptions;
+    #[doc(inline)]
+    pub use crate::bridge::LogAttachment;
+    #[doc(inline)]
+    pub use crate::error::EmitError;
+    #[doc(inline)]
+    pub use sc_observability_types::v2::{EventError, FlushError, InitError, ShutdownError};
+
+    use std::path::Path;
+    use std::time::Duration;
+
+    /// Canonical v2 control with context-preserving operation errors.
+    pub use crate::control::LogControl;
+
+    /// Canonical v2 lifecycle facade over the same process-wide bridge owner.
+    #[must_use = "dropping the guard shuts the logger down"]
+    #[derive(Debug)]
+    pub struct LogGuard {
+        inner: crate::LogGuard,
+    }
+
+    /// Starts the canonical v2 bridge while sharing the released process runtime.
+    ///
+    /// # Errors
+    ///
+    /// Returns the canonical startup error with its diagnostic context and source.
+    pub fn init(
+        config: crate::LoggerConfig,
+        options: crate::BridgeOptions,
+    ) -> Result<LogGuard, InitError> {
+        crate::init_canonical(config, options).map(|inner| LogGuard { inner })
+    }
+
+    impl LogGuard {
+        /// Returns a non-owning control for the installed bridge.
+        #[must_use]
+        pub fn control(&self) -> LogControl {
+            LogControl::new()
+        }
+
+        /// Requests a bounded flush with the canonical operation error.
+        ///
+        /// # Errors
+        ///
+        /// Returns the canonical drain error with its context and source.
+        pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
+            crate::handle::flush_installed(timeout)
+        }
+
+        /// Performs final flush and shutdown, preserving canonical error context.
+        ///
+        /// # Errors
+        ///
+        /// Returns the canonical timeout or drain error with its source context.
+        pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError> {
+            self.inner.shut_down = true;
+            crate::handle::shutdown_sequence(timeout)
+        }
+
+        /// Snapshots the number of events dropped by the bridge.
+        #[must_use]
+        pub fn dropped_events(&self) -> crate::DroppedEvents {
+            self.inner.dropped_events()
+        }
+
+        /// Returns the active log file path captured during initialization.
+        #[must_use]
+        pub fn active_log_path(&self) -> Option<&Path> {
+            self.inner.active_log_path()
+        }
+
+        /// Reads the retained bridge health report.
+        ///
+        /// # Errors
+        ///
+        /// Returns `ControlError::Unavailable` when the report cannot be read.
+        pub fn health(&self) -> Result<crate::BridgeHealthReport, crate::ControlError> {
+            self.inner.health()
+        }
+
+        /// Raises the sole runtime-level owner’s filter.
+        ///
+        /// # Errors
+        ///
+        /// Returns the typed level change failure before or during mutation.
+        pub fn elevate_level(
+            &mut self,
+            level: crate::LevelFilter,
+            source: crate::LevelChangeSource,
+        ) -> Result<crate::LevelChange, crate::LevelChangeError> {
+            self.inner.elevate_level(level, source)
+        }
+
+        /// Restores the configured filter through the sole runtime-level owner.
+        ///
+        /// # Errors
+        ///
+        /// Returns the typed level change failure if reset cannot commit.
+        pub fn reset_level(
+            &mut self,
+            source: crate::LevelChangeSource,
+        ) -> Result<crate::LevelChange, crate::LevelChangeError> {
+            self.inner.reset_level(source)
+        }
+    }
+}
 
 /// tracing-compatible level type (mirrors the `tracing::Level` constants).
 ///
@@ -257,14 +377,16 @@ impl DroppedEvents {
     }
 }
 
-/// Timeout used by `Drop for LogGuard` when `shutdown` was not called.
+/// Timeout used by the implicit drop paths for `LogGuard` and `LogAttachment`.
 ///
-/// `Drop for LogGuard` runs the same flush-and-shutdown sequence as
-/// [`LogGuard::shutdown`], bounded by this timeout, but it has no `Result` to
-/// return to a caller and therefore discards the outcome (`let _ = ..`):
-/// an implicit teardown failure (a timeout, a final-flush error or a lost
-/// helper thread) is silent. Call [`LogGuard::shutdown`] explicitly whenever
-/// that `Result` matters, for example to log or retry on failure.
+/// Dropping the owning [`LogGuard`] runs the same bounded flush-and-shutdown
+/// sequence as [`LogGuard::shutdown`], but it has no `Result` to return and
+/// therefore discards the outcome (`let _ = ..`). Dropping the non-owning
+/// [`LogAttachment`] instead performs a bounded best-effort detach; it does not
+/// shut down the logger or own `LevelOwner` authority. The constant is shared
+/// only for its timeout value, not for shutdown or `LevelOwner` authority.
+/// Call [`LogGuard::shutdown`] explicitly whenever its `Result` matters, for
+/// example to log or retry on failure.
 pub const DEFAULT_DROP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The sole lifecycle owner of the installed bridge; dropping it shuts the logger down.
@@ -290,7 +412,7 @@ impl LogGuard {
     /// cloned freely and may outlive the guard.
     #[must_use]
     pub fn control(&self) -> LogControl {
-        LogControl::new()
+        compat::LogControl::new()
     }
 
     /// Raises the staged core's effective filter.  Only the lifecycle owner
@@ -329,13 +451,11 @@ impl LogGuard {
     ///
     /// # Errors
     ///
-    /// Returns [`FlushError::TimedOut`] when the writer does not acknowledge within
-    /// `timeout` (the helper is detached), [`FlushError::Logger`] when a sink flush
-    /// fails, and [`FlushError::HelperSpawn`] / [`FlushError::HelperLost`] when the
-    /// helper thread cannot start or ends without a result.
-    /// [`FlushError::NotRunning`] cannot occur while the guard is alive.
+    /// Returns the released 1.x flush variants. A timed-out helper is detached
+    /// and retains the logger until it completes. Use [`v2::FlushError`] for the
+    /// canonical context-preserving error form.
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
-        handle::flush_installed(timeout)
+        handle::flush_installed(timeout).map_err(|error| compat::legacy_flush(&error, timeout))
     }
 
     /// The final shutdown: threshold → Off, empty the slot, flush, `Logger::shutdown`.
@@ -345,15 +465,14 @@ impl LogGuard {
     ///
     /// # Errors
     ///
-    /// Returns [`ShutdownError::TimedOut`] when sole ownership, the final flush and
-    /// the writer join do not finish within `timeout` (a detached helper keeps
+    /// Returns [`ShutdownError::TimedOut`] when sole ownership, the final flush
+    /// and the writer join do not finish within `timeout` (a detached helper keeps
     /// going; the lifecycle is `Stopping` until it completes and publishes
-    /// `Stopped`), [`ShutdownError::FinalFlush`] when the final flush fails (the
-    /// logger is still shut down), and [`ShutdownError::HelperSpawn`] /
-    /// [`ShutdownError::HelperLost`] for helper thread failures.
+    /// `Stopped`), or the released final-flush and helper variants. Use
+    /// [`v2::ShutdownError`] to retain canonical diagnostic context and source.
     pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError> {
         self.shut_down = true;
-        handle::shutdown_sequence(timeout)
+        handle::shutdown_sequence(timeout).map_err(|error| compat::legacy_shutdown(error, timeout))
     }
 
     /// Snapshot of the process-wide dropped-event counters.
@@ -394,7 +513,7 @@ impl Drop for LogGuard {
 
 /// Installs the bridge as the process-wide `log` logger; succeeds at most once per process.
 ///
-/// Resolves `config.process_identity` once, builds the `sc_observability::Logger`,
+/// Resolves `config.process_identity` once, builds the `sc_observability::v2::Logger`,
 /// installs the bridge with `log::set_boxed_logger`, and derives the `log` facade
 /// level and the emit threshold from `config.level`. The returned [`LogGuard`] is
 /// the sole lifecycle owner. After it shuts down, the process keeps the stopped
@@ -403,18 +522,30 @@ impl Drop for LogGuard {
 ///
 /// # Errors
 ///
-/// - [`InitError::AlreadyInitialized`] when `init` already succeeded, is running
-///   concurrently, or earlier returned `ForeignLoggerInstalled`.
-/// - [`InitError::ForeignLoggerInstalled`] when another `log::Log` is installed.
-/// - [`InitError::IdentityResolution`] when the configured resolver fails or
-///   automatic hostname discovery cannot produce a hostname (retry allowed).
-/// - [`InitError::Logger`] when `Logger::new` fails (retry allowed).
+/// Returns the released 1.x [`InitError`] variants for install, level,
+/// identity, construction and lifecycle startup failures. Use [`v2::init`] for
+/// canonical `sc_observability_types::v2::InitError` values with their source
+/// contexts intact.
 pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, InitError> {
+    let configured = config.level;
+    let available = ensure_static_level(configured).err().unwrap_or(configured);
+    init_canonical(config, options)
+        .map_err(|error| compat::legacy_init(error, configured, available))
+}
+
+fn init_canonical(
+    config: LoggerConfig,
+    options: BridgeOptions,
+) -> Result<LogGuard, sc_observability_types::v2::InitError> {
     if let Err(available) = ensure_static_level(config.level) {
-        return Err(InitError::UnsupportedLevel {
-            configured: config.level,
-            available,
-        });
+        return Err(error::init_configuration(
+            error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL,
+            format!(
+                "configured level {:?} exceeds available static level {available:?}",
+                config.level
+            ),
+            Remediation::not_recoverable("choose a startup level supported by this executable"),
+        ));
     }
     if INSTALLED
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -422,40 +553,41 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
     {
         // Covers a live guard, a guard already shut down (the facade logger cannot be
         // uninstalled), and an own init running concurrently on another thread.
-        return Err(InitError::AlreadyInitialized);
+        return Err(error::init_configuration(
+            error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED,
+            "sc-observability-log is already initialized in this process",
+            Remediation::not_recoverable(
+                "keep the existing LogGuard; the global facade cannot be replaced",
+            ),
+        ));
     }
     let identity = match mapping::resolve_identity(&config.process_identity) {
         Ok(identity) => identity,
         Err(source) => {
             INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
-            return Err(InitError::IdentityResolution {
-                diagnostic: error::diagnostic_from_info(&source),
+            return Err(sc_observability_types::v2::InitError::Runtime {
+                context: source.into_context(),
             });
         }
     };
     let (service, enable_file_sink) = (config.service_name.clone(), config.enable_file_sink);
-    let (logger, level_owner) = match sc_observability::Logger::new_with_level_owner(config) {
+    let (logger, level_owner) = match sc_observability::v2::Logger::new_with_level_owner(config) {
         Ok(logger) => logger,
         Err(source) => {
             INSTALLED.store(false, Ordering::SeqCst); // recoverable: allow a retry
-            return Err(InitError::Logger {
-                diagnostic: error::diagnostic_from_info(&source),
-            });
+            return Err(source);
         }
     };
     if let Err(source) = handle::reserve_shutdown_coordinator() {
         INSTALLED.store(false, Ordering::SeqCst);
-        return Err(InitError::RuntimeStart {
-            diagnostic: OperationDiagnostic {
-                code: error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED,
-                message: source.to_string(),
-                remediation: Remediation::recoverable(
-                    "retry initialization after restoring thread resources",
-                    std::iter::empty::<String>(),
-                ),
-                at: Timestamp::now_utc(),
-            },
-        });
+        return Err(error::init_runtime(
+            error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED,
+            source.to_string(),
+            Remediation::recoverable(
+                "retry initialization after restoring thread resources",
+                std::iter::empty::<String>(),
+            ),
+        ));
     }
     let initial_report = logger.health();
     let active_log_path = enable_file_sink.then(|| initial_report.active_log_path.clone());
@@ -471,7 +603,11 @@ pub fn init(config: LoggerConfig, options: BridgeOptions) -> Result<LogGuard, In
         // rest of the process, so no retry can succeed. Later calls return
         // AlreadyInitialized without building and tearing down another Logger.
         let _ = handle::shutdown_installed(installed, DEFAULT_DROP_SHUTDOWN_TIMEOUT);
-        return Err(InitError::ForeignLoggerInstalled);
+        return Err(error::init_configuration(
+            error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED,
+            "another log::Log implementation is already installed",
+            Remediation::not_recoverable("choose one application logger before startup"),
+        ));
     }
     // The facade stays at Trace so compiled debug/trace sites survive. The core
     // LevelOwner is the sole runtime filter for direct, facade, and macro paths.
@@ -500,23 +636,7 @@ fn ensure_static_level(level: LevelFilter) -> Result<(), LevelFilter> {
         log::LevelFilter::Debug => LevelFilter::Debug,
         log::LevelFilter::Trace => LevelFilter::Trace,
     };
-    let requested_rank = match level {
-        LevelFilter::Trace => 0,
-        LevelFilter::Debug => 1,
-        LevelFilter::Info => 2,
-        LevelFilter::Warn => 3,
-        LevelFilter::Error => 4,
-        LevelFilter::Off => 5,
-    };
-    let available_rank = match available {
-        LevelFilter::Trace => 0,
-        LevelFilter::Debug => 1,
-        LevelFilter::Info => 2,
-        LevelFilter::Warn => 3,
-        LevelFilter::Error => 4,
-        LevelFilter::Off => 5,
-    };
-    if requested_rank < available_rank {
+    if handle::log_level_rank(level) < handle::log_level_rank(available) {
         Err(available)
     } else {
         Ok(())

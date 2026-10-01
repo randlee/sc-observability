@@ -2,7 +2,6 @@
 //!
 //! R-A4-005 design evidence 3. The lifecycle owner keeps the `LogGuard`; the
 //! consumer code under test (`status::read_status`) sees only a `LogControl`.
-#![deny(deprecated)]
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -67,8 +66,5 @@ fn consumer_reads_health_and_flushes_through_control_only() {
             phase: LifecyclePhase::Stopped,
         })
     ));
-    assert!(matches!(
-        stopped.health,
-        Ok(report) if report.lifecycle == LifecyclePhase::Stopped
-    ));
+    assert_eq!(stopped.health.unwrap().lifecycle, LifecyclePhase::Stopped);
 }

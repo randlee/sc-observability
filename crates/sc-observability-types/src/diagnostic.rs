@@ -138,6 +138,19 @@ pub struct ErrorContext {
     backtrace: Backtrace,
     #[serde(skip)]
     source: Option<Arc<dyn std::error::Error + Send + Sync + 'static>>,
+    #[serde(skip)]
+    failure_classification: Option<crate::v2::FailureClassification>,
+}
+
+impl Clone for ErrorContext {
+    fn clone(&self) -> Self {
+        Self {
+            diagnostic: self.diagnostic.clone(),
+            backtrace: capture_backtrace(),
+            source: self.source.clone(),
+            failure_classification: self.failure_classification,
+        }
+    }
 }
 
 impl PartialEq for ErrorContext {
@@ -164,6 +177,7 @@ impl ErrorContext {
             },
             backtrace: capture_backtrace(),
             source: None,
+            failure_classification: None,
         }
     }
 
@@ -224,6 +238,17 @@ impl ErrorContext {
     ) {
         self.source = Some(Arc::from(source));
     }
+
+    pub(crate) fn set_failure_classification(
+        &mut self,
+        classification: crate::v2::FailureClassification,
+    ) {
+        self.failure_classification = Some(classification);
+    }
+
+    pub(crate) const fn failure_classification(&self) -> Option<crate::v2::FailureClassification> {
+        self.failure_classification
+    }
 }
 
 impl std::fmt::Display for ErrorContext {
@@ -260,7 +285,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    use crate::{IdentityError, error_codes};
+    use crate::error_codes;
+    use crate::errors::IdentityError;
 
     #[test]
     fn remediation_construction_helpers_cover_both_variants() {
@@ -320,6 +346,43 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "operation failed: missing field; caused by: disk full"
+        );
+    }
+
+    #[test]
+    fn private_failure_classification_preserves_clone_equality_and_serde_contracts() {
+        let plain = ErrorContext::new(
+            error_codes::DIAGNOSTIC_INVALID,
+            "operation failed",
+            Remediation::not_recoverable("investigate"),
+        );
+        let serialized = serde_json::to_vec(&plain).expect("context serializes");
+        let mut classified = plain.clone();
+        classified.set_failure_classification(crate::v2::FailureClassification::Internal);
+
+        assert_eq!(
+            classified.failure_classification(),
+            Some(crate::v2::FailureClassification::Internal)
+        );
+        assert_eq!(
+            classified, plain,
+            "classification is not released equality state"
+        );
+        assert_eq!(
+            classified.clone().failure_classification(),
+            classified.failure_classification()
+        );
+        assert_eq!(
+            serde_json::to_vec(&classified).expect("context serializes"),
+            serialized
+        );
+
+        let decoded: ErrorContext =
+            serde_json::from_slice(&serialized).expect("context deserializes");
+        assert_eq!(decoded.failure_classification(), None);
+        assert_eq!(
+            serde_json::to_vec(&decoded).expect("context reserializes"),
+            serialized
         );
     }
 

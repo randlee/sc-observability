@@ -1,18 +1,10 @@
-error: cannot construct `LogControl` with struct literal syntax due to private fields
- --> tests/ui/log_control_not_constructible.rs:3:5
+error[E0624]: associated function `new` is private
+ --> tests/ui/log_control_not_constructible.rs:3:39
   |
-3 |     sc_observability_log::LogControl { _private: () }
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   ------------ private field
+3 |     sc_observability_log::LogControl::new()
+  |                                       ^^^ private associated function
   |
-  = note: ...and other private field `attachment` that was not provided
-help: you might have meant to use an associated function to build this type
+ ::: src/compat/mod.rs
   |
-3 -     sc_observability_log::LogControl { _private: () }
-3 +     sc_observability_log::LogControl::new()
-  |
-3 -     sc_observability_log::LogControl { _private: () }
-3 +     sc_observability_log::LogControl::for_attachment(_)
-  |
-3 -     sc_observability_log::LogControl { _private: () }
-3 +     sc_observability_log::LogControl::stale_attachment()
-  |
+  |     pub(crate) const fn new() -> Self {
+  |     --------------------------------- private associated function defined here
