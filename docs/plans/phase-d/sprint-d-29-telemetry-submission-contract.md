@@ -1135,7 +1135,7 @@ d-33 and d-34 may change only the items listed in their docs.
 
 | File | Item | d-29 change |
 | --- | --- | --- |
-| `src/lifecycle.rs` | `pub(crate) enum SignalKind` | Add `Profiles` (index 3). `LifecycleHealth.dropped_by_signal`/`degraded_by_signal` and the `CoreState` per-signal arrays grow from 3 to 4. `dropped_total()` keeps its meaning. Existing `lifecycle_tests.rs` pass unchanged. |
+| `src/lifecycle.rs` | `pub(crate) enum SignalKind` | Add `Profiles` (index 3). `LifecycleHealth.dropped_by_signal`/`degraded_by_signal` and the `CoreState` per-signal arrays grow from 3 to 4. `dropped_total()` keeps its meaning. Existing lifecycle tests unchanged except a 4th zero Profiles slot (lead `01M3VYE3D296E5M322VBAJKBF0`); SDK helper per-signal return types widen to four under `01M3VYFVM5W64ZWPXCCJ51T9M3`. |
 | `src/contracts.rs` | module list | Two lines: `pub(crate) mod profiles;` and `pub(crate) mod submission;` (additive; d-18 fence, P2). `ExporterSet` is unchanged: it has nine construction sites, some inside the d-18 fence. |
 | `src/contracts/profiles.rs` (new) | `pub(crate) trait ProfileExporter<T>: Send + Sync { fn export_profiles(&self, batch: &[T]) -> Result<(), ExportError>; }` | Same shape as `LogExporter`/`TraceExporter`/`MetricExporter`. d-34 implements it for the sync-http exporter, and `SyncHttpSubmissionExporter::export` dispatches profiles through it. |
 | `src/contracts/submission.rs` (new) | `pub(crate) trait SubmissionExporter: Send + Sync { fn export(&self, signal: Signal, envelopes: &[SubmissionEnvelope]) -> Result<(), SubmissionExportFailure>; }` and `pub(crate) enum SubmissionExportFailure { Retryable(ExportError), Terminal(ExportError) }` | The only call the d-33 drain makes. `Retryable` leaves the row for retry; `Terminal` marks it failed. d-33 tests through a `ScriptedExporter`; d-34 implements the production exporter. |
@@ -1146,6 +1146,17 @@ d-33 and d-34 may change only the items listed in their docs.
 | `src/durable/mod.rs` (staged) | `DurableTelemetryClient::open` | Evaluates `adapter::otel_config_from` and, on success, `exporter_for(SyncHttpConfig::from_otel(..))`, discards both and returns `AdmissionError::StoreUnavailable`, so neither staged function is dead code under `durable-store`. d-33 implements it. |
 | `src/constants.rs` | wave-5 entries | `DRAIN_BATCH_SIZE`, the lease renewal divisor, the store `busy_timeout` (5000 ms) and `PROFILES_EXPORT_PATH = "/v1development/profiles"` (ADR-005). |
 | `src/error_codes.rs` | wave-5 entries | `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, added to the crate's enumerable registry. |
+
+Lead correction (2026-10-01, `01M3VY0G7ABHB7QBG5GBKYJWYA`):
+`SyncHttpConfig::from_otel` was test-gated. D29 changes only that gate to
+`cfg(any(test, feature = "durable-store"))`, preserving its existing body and
+`(SyncHttpConfig, ValidatedTransportBounds)` result; callers destructure it.
+The related imports of `OtelConfig`, `prepared_backend_connection`, and
+`validated_transport_bounds` receive the same gate; `ExporterBackend` and
+`OtlpProtocol` remain test-only (lead `01M3VY4ZQK7NR2NKTV0BHNJ2GG`).
+Finally `config/mod.rs` reexports `validated_transport_bounds` under that gate,
+leaving `validate_config_typed` test-only (lead `01M3VY7JWH90RDXYDQV8GNYT0J`).
+These are the only three gate adjustments; validation bodies are unchanged.
 
 ### Dependency set
 
@@ -1239,14 +1250,16 @@ through `durable-store`, and that `durable-store` includes `sync-http`. The
 `sc-otel-cli` edges are checked by the cargo-tree criteria below.
 
 Boundary allowlists: `types.toml` `allowed_dependents` += `sc-otel-cli`,
-`allowed_dependencies` += `uuid` (optional, `test-double`),
+
 `allowed_test_double_paths` += `crates/sc-observability-types/src/otlp/submission/testing/**`;
 `otlp.toml` `allowed_dependents` += `sc-observability-py`, `sc-otel-cli`;
 `python.toml` `allowed_dependencies` += `sc-observability-otlp`; new
 `boundaries/sc-otel-cli/cli.toml` with `allowed_dependencies` =
-[`sc-observability-types`, `sc-observability-otlp`, `clap`, `serde_json`],
+[`sc-observability-types`, `sc-observability-otlp`],
 `forbidden_edges` = [`sc-observe`, `pyo3`, `agent-team-mail-*`] and
 `allowed_dependents` = [].
+
+Boundary `allowed_dependencies` are first-party only; external pins are enforced by policy rows, the manifest test and cargo-tree checks (lead `01M3VYV0BND025EZH744N0SD9D`).
 
 ### Platform matrix and dependency audit
 
@@ -1400,8 +1413,8 @@ cargo test -p sc-observability-otlp --features durable-store --locked --test con
 cargo test -p sc-observability-otlp --locked --test contract_manifest durable_store_binding
 cargo tree -p sc-otel-cli -e normal --depth 1 --prefix none --format '{p}'
 cargo tree -p sc-otel-cli -e normal,build --all-features --prefix none --format '{p}'
-cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories
-cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features check --config policy/deny-durable-store.toml licenses bans advisories
+cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store --config policy/deny-durable-store.toml check licenses bans advisories
+cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --config policy/deny-durable-store.toml check licenses bans advisories
 bash scripts/ci/validate_repo_boundaries.sh
 bash scripts/ci/validate_dependency_bans.sh
 bash scripts/ci/validate_docs_consistency.sh

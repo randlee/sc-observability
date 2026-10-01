@@ -11,6 +11,9 @@
     reason = "telemetry-facade error behavior is documented centrally in workspace docs, and repeating it on every wrapper method adds low-signal boilerplate"
 )]
 
+#[cfg(feature = "durable-store")]
+pub mod durable;
+
 mod assembly;
 mod compat;
 mod config;

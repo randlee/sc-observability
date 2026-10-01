@@ -6,6 +6,8 @@
 
 /// Full transport-neutral signal payloads.
 pub mod signals;
+/// Shared telemetry submission contracts.
+pub mod submission;
 
 use crate::LogEvent;
 use crate::v2::{Attributes, MetricRecord, SpanEnded, SpanEvent, SpanRecord, TraceFlags};

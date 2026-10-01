@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "logs": [
+    {
+      "correlation_id": "run"
+    }
+  ],
+  "spans": [
+    {
+      "name": "check",
+      "start_time": "1970-01-01T00:00:00.000000000Z",
+      "duration_nanos": 1000000000,
+      "correlation_id": "run"
+    }
+  ]
+}

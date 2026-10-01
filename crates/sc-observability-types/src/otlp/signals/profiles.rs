@@ -57,6 +57,7 @@ pub struct Profile {
     /// Protocol `samples` field.
     pub samples: Vec<Sample>,
     /// Protocol `time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub time: Timestamp,
     /// Protocol `duration_nanos` field.
     pub duration_nanos: u64,

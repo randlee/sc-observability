@@ -23,12 +23,14 @@ pub use types::{
     AuthHeader, ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
     ResourceAttributes, SyncHttpRetryPolicy, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
+#[cfg(test)]
+pub(crate) use validation::validate_config_typed;
+#[cfg(any(test, feature = "durable-store"))]
+pub(crate) use validation::validated_transport_bounds;
 pub(crate) use validation::{
     BackendTransportBounds, ValidatedBackendConnection, ValidatedTransportBounds,
     prepared_backend_connection, validated_released_telemetry_bounds, validated_telemetry_bounds,
 };
-#[cfg(test)]
-pub(crate) use validation::{validate_config_typed, validated_transport_bounds};
 
 #[cfg(feature = "sync-http")]
 pub(crate) use validation::RetryPolicy;

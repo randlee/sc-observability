@@ -65,6 +65,8 @@ default_features = true
 # tonic adds the generated-service router to the reviewed transport pin for the
 # integration collector; it is never a normal dependency feature or backend.
 [dev_dependencies]
+sc-observability-types = { features = ["test-double"], default_features = true }
+tempfile = { features = [], default_features = true }
 sc-observability = { features = [], default_features = true }
 sc-observe = { features = [], default_features = true }
 tokio = { features = ["rt", "rt-multi-thread", "macros", "time", "test-util"], default_features = true }
@@ -100,3 +102,21 @@ serde_json = { features = [], default_features = true }
 tempfile = { features = [], default_features = true }
 tokio = { features = ["macros", "rt", "rt-multi-thread", "time"], default_features = true }
 tonic = { features = ["transport"], default_features = false }
+
+[transport.rusqlite]
+version = "=0.40.2"
+backends = ["durable-store"]
+features = ["bundled"]
+default_features = false
+
+[transport.serde-saphyr]
+version = "=1.3.0"
+backends = ["durable-store"]
+features = ["deserialize"]
+default_features = false
+
+[transport.uuid]
+version = "=1.26.1"
+backends = ["durable-store"]
+features = ["std", "v7"]
+default_features = false

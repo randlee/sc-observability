@@ -29,3 +29,28 @@ pub const OTLP_SEVERITY_MAX: u8 = 24;
 pub const OTLP_EXPONENTIAL_SCALE_MIN: i32 = -10;
 /// Maximum exponential histogram scale.
 pub const OTLP_EXPONENTIAL_SCALE_MAX: i32 = 20;
+
+/// Maximum caller record-key length in UTF-8 bytes.
+pub const TELEMETRY_RECORD_KEY_MAX_BYTES: usize = 256;
+/// Default producer service when no source supplies one.
+pub const TELEMETRY_DEFAULT_SERVICE: &str = "unknown_service";
+/// Default OTLP/HTTP base endpoint.
+pub const TELEMETRY_DEFAULT_ENDPOINT: &str = "http://localhost:4318";
+/// Default per-request export deadline.
+pub const TELEMETRY_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// Default durable-store byte bound (256 MiB).
+pub const TELEMETRY_MAX_STORE_BYTES: u64 = 256 * 1024 * 1024;
+/// Seconds per hour for checked file-config conversion.
+pub const TELEMETRY_SECONDS_PER_HOUR: u64 = 3600;
+/// Default delivered-row retention.
+pub const TELEMETRY_DELIVERED_RETENTION: std::time::Duration =
+    std::time::Duration::from_secs(24 * 3600);
+/// Default local deduplication-key retention.
+pub const TELEMETRY_RECORD_KEY_RETENTION: std::time::Duration =
+    std::time::Duration::from_secs(30 * 24 * 3600);
+/// Default emit-and-flush deadline.
+pub const TELEMETRY_EMIT_FLUSH_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5);
+/// Default explicit flush deadline.
+pub const TELEMETRY_FLUSH_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+/// Default drain lease duration.
+pub const TELEMETRY_LEASE_DURATION: std::time::Duration = std::time::Duration::from_secs(30);

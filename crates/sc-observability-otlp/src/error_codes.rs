@@ -29,6 +29,7 @@ pub const TELEMETRY_SPAN_ASSEMBLY_FAILED: ErrorCode =
 
 /// Enumerable registry of all released `sc-observability-otlp` error codes.
 pub const ALL: &[ErrorCode] = &[
+    SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED,
     TELEMETRY_SHUTDOWN,
     TELEMETRY_INVALID_CONFIG,
     TELEMETRY_INVALID_PROTOCOL,
@@ -55,3 +56,7 @@ pub(crate) use sc_observability_types::error_codes::otlp::{
 
 #[cfg(test)]
 pub(crate) use sc_observability_types::error_codes::otlp::OTLP_RUNTIME_TERMINATED;
+
+/// Submission export is not wired until D34.
+pub const SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED");

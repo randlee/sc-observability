@@ -63,6 +63,26 @@ pub const LEVEL_REVISION_EXHAUSTED: ErrorCode =
 
 /// Enumerable registry of all public `sc-observability-types` error codes.
 pub const ALL: &[ErrorCode] = &[
+    SC_OBSERVABILITY_SUBMIT_INVALID_JSON,
+    SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION,
+    SC_OBSERVABILITY_SUBMIT_EMPTY,
+    SC_OBSERVABILITY_SUBMIT_VALIDATION,
+    SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE,
+    SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT,
+    SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT,
+    SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE,
+    SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE,
+    SC_OBSERVABILITY_ADMIT_DISK_BOUND,
+    SC_OBSERVABILITY_ADMIT_PERSISTENCE,
+    SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW,
+    SC_OBSERVABILITY_ADMIT_CLOSED,
+    SC_OBSERVABILITY_DELIVERY_DEADLINE,
+    SC_OBSERVABILITY_DELIVERY_FAILED,
+    SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE,
+    SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING,
+    SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID,
+    SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED,
+    SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE,
     SIGNAL_VALIDATION,
     SC_METRIC_INVALID_HISTOGRAM,
     SC_METRIC_INVALID_TEMPORALITY,
@@ -254,6 +274,67 @@ pub mod otlp {
 /// Invalid neutral signal. Recovery: correct the reported payload field.
 pub const SIGNAL_VALIDATION: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_TYPES_SIGNAL_VALIDATION");
+
+/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_INVALID_JSON`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_SUBMIT_INVALID_JSON: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_INVALID_JSON");
+/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION");
+/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_EMPTY`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_SUBMIT_EMPTY: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_EMPTY");
+/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_VALIDATION`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_SUBMIT_VALIDATION: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_VALIDATION");
+/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE");
+/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT");
+/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT");
+/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE");
+/// Telemetry failure `SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE");
+/// Telemetry failure `SC_OBSERVABILITY_ADMIT_DISK_BOUND`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_ADMIT_DISK_BOUND: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_DISK_BOUND");
+/// Telemetry failure `SC_OBSERVABILITY_ADMIT_PERSISTENCE`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_ADMIT_PERSISTENCE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_PERSISTENCE");
+/// Telemetry failure `SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW");
+/// Telemetry failure `SC_OBSERVABILITY_ADMIT_CLOSED`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_ADMIT_CLOSED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_CLOSED");
+/// Telemetry failure `SC_OBSERVABILITY_DELIVERY_DEADLINE`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_DELIVERY_DEADLINE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DELIVERY_DEADLINE");
+/// Telemetry failure `SC_OBSERVABILITY_DELIVERY_FAILED`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_DELIVERY_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DELIVERY_FAILED");
+/// Telemetry failure `SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE");
+/// Telemetry failure `SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING");
+/// Telemetry failure `SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID");
+/// Telemetry failure `SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED");
+/// Telemetry failure `SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE`. Recovery: correct the reported cause before retrying.
+pub const SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE");
 
 #[cfg(test)]
 mod tests {

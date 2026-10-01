@@ -1,0 +1,87 @@
+{
+  "logs": [],
+  "metrics": [],
+  "profiles": {
+    "dictionary": {
+      "attribute_table": [
+        {
+          "key_strindex": 0,
+          "unit_strindex": 0,
+          "value": null
+        }
+      ],
+      "function_table": [
+        {
+          "filename_strindex": 0,
+          "name_strindex": 0,
+          "start_line": 0,
+          "system_name_strindex": 0
+        }
+      ],
+      "link_table": [
+        {
+          "span_id": "0000000000000000",
+          "trace_id": "00000000000000000000000000000000"
+        }
+      ],
+      "location_table": [
+        {
+          "address": 0,
+          "attribute_indices": [],
+          "lines": [],
+          "mapping_index": 0
+        }
+      ],
+      "mapping_table": [
+        {
+          "attribute_indices": [],
+          "file_offset": 0,
+          "filename_strindex": 0,
+          "memory_limit": 0,
+          "memory_start": 0
+        }
+      ],
+      "stack_table": [
+        {
+          "location_indices": []
+        }
+      ],
+      "string_table": [
+        ""
+      ]
+    },
+    "profiles": [
+      {
+        "record": {
+          "attribute_indices": [],
+          "dropped_attributes_count": 0,
+          "duration_nanos": 10,
+          "original_payload": [],
+          "original_payload_format": null,
+          "period": 0,
+          "period_type": null,
+          "profile_id": "11111111111111111111111111111111",
+          "sample_type": null,
+          "samples": [],
+          "time": "1970-01-01T00:00:00.000000000Z"
+        },
+        "resource": {
+          "attributes": [],
+          "dropped_attributes_count": 0,
+          "entity_refs": [],
+          "schema_url": null
+        },
+        "scope": {
+          "attributes": [],
+          "dropped_attributes_count": 0,
+          "name": "",
+          "schema_url": null,
+          "version": null
+        }
+      }
+    ]
+  },
+  "record_key": null,
+  "spans": [],
+  "version": 1
+}

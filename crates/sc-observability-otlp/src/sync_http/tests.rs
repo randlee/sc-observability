@@ -1093,9 +1093,9 @@ fn drop_without_shutdown_abandons_pending_admission(entered_tokio: bool) {
     assert_eq!(health.phase, LifecycleState::Shutdown);
     assert_eq!(health.admitted_records, 0);
     assert_eq!(health.admitted_bytes, 0);
-    assert_eq!(health.dropped_by_signal, [1, 0, 0]);
+    assert_eq!(health.dropped_by_signal, [1, 0, 0, 0]);
     // A second retained observation is stable and does not count again.
-    assert_eq!(lifecycle.health().dropped_by_signal, [1, 0, 0]);
+    assert_eq!(lifecycle.health().dropped_by_signal, [1, 0, 0, 0]);
     server.join().expect("join server");
 }
 

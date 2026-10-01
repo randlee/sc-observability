@@ -35,6 +35,18 @@ pub(crate) struct CreditLease {
 }
 
 impl AdmissionCredits {
+    #[expect(
+        dead_code,
+        reason = "staged by d-29; wired by d-33/d-34 under durable-store"
+    )]
+    #[allow(
+        clippy::unused_self,
+        reason = "D33 wires this staged instance method to credit release notifications"
+    )]
+    pub(crate) fn wait_for_release(&self, _timeout: std::time::Duration) -> bool {
+        false
+    }
+
     pub(crate) fn new(bounds: &ValidatedTransportBounds) -> Self {
         Self(Arc::new(Mutex::new(Budget {
             records: bounds.queue_capacity().get(),

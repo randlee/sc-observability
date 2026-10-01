@@ -1,6 +1,8 @@
 //! Crate-private OTLP exporter contracts.
 
 pub(crate) mod credits;
+pub(crate) mod profiles;
+pub(crate) mod submission;
 
 use std::future::Future;
 use std::pin::Pin;

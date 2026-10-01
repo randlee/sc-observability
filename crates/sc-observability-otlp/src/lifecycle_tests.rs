@@ -447,7 +447,7 @@ fn consumed_failure_does_not_poison_later_successful_windows() {
         !core.health().degraded,
         "a recovered signal and successful windows are not currently degraded"
     );
-    assert_eq!(core.health().dropped_by_signal, [1, 0, 0]);
+    assert_eq!(core.health().dropped_by_signal, [1, 0, 0, 0]);
 }
 
 #[test]
@@ -459,7 +459,7 @@ fn signal_recovery_clears_only_that_signal_and_keeps_cumulative_drops() {
             .complete(Err(runtime_terminated()));
     }
     let failing = core.health();
-    assert_eq!(failing.degraded_by_signal, [true, true, false]);
+    assert_eq!(failing.degraded_by_signal, [true, true, false, false]);
     assert!(failing.degraded);
 
     core.admit(SignalKind::Logs, (), 1)
@@ -472,16 +472,16 @@ fn signal_recovery_clears_only_that_signal_and_keeps_cumulative_drops() {
         logs_recovered.degraded,
         "a still-failing signal keeps the core degraded"
     );
-    assert_eq!(logs_recovered.dropped_by_signal, [1, 1, 0]);
+    assert_eq!(logs_recovered.dropped_by_signal, [1, 1, 0, 0]);
     assert_eq!(logs_recovered.last_error, failing.last_error);
 
     core.admit(SignalKind::Traces, (), 1)
         .unwrap()
         .complete(Ok(()));
     let recovered = core.health();
-    assert_eq!(recovered.degraded_by_signal, [false; 3]);
+    assert_eq!(recovered.degraded_by_signal, [false; 4]);
     assert!(!recovered.degraded);
-    assert_eq!(recovered.dropped_by_signal, [1, 1, 0]);
+    assert_eq!(recovered.dropped_by_signal, [1, 1, 0, 0]);
     assert_eq!(recovered.last_error, failing.last_error);
 }
 
@@ -494,7 +494,7 @@ fn failed_operation_degrades_until_a_later_operation_succeeds() {
     assert!(matches!(poll_once(&mut expired), Poll::Ready(Err(_))));
     let timed_out = core.health();
     assert!(timed_out.degraded);
-    assert_eq!(timed_out.degraded_by_signal, [false; 3]);
+    assert_eq!(timed_out.degraded_by_signal, [false; 4]);
 
     released.store(true, Ordering::Release);
     assert!(matches!(
@@ -504,7 +504,7 @@ fn failed_operation_degrades_until_a_later_operation_succeeds() {
     let recovered = core.health();
     assert!(!recovered.degraded);
     assert_eq!(recovered.last_error, timed_out.last_error);
-    assert_eq!(recovered.dropped_by_signal, [0; 3]);
+    assert_eq!(recovered.dropped_by_signal, [0; 4]);
 }
 
 #[test]
@@ -733,9 +733,9 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
         panic!("queue must be full")
     };
     assert_eq!(rejected.code(), crate::error_codes::OTLP_QUEUE_FULL);
-    assert_eq!(core.health().dropped_by_signal, [1, 0, 0]);
+    assert_eq!(core.health().dropped_by_signal, [1, 0, 0, 0]);
     drop(admitted);
-    assert_eq!(core.health().dropped_by_signal, [2, 0, 0]);
+    assert_eq!(core.health().dropped_by_signal, [2, 0, 0, 0]);
     released.store(true, Ordering::Release);
     let mut shutdown = core.shutdown_async();
     assert!(poll_once(&mut shutdown).is_ready());
@@ -747,7 +747,7 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
         sc_observability_types::v2::TelemetryError::Shutdown { .. }
     ));
     assert_eq!(core.health().phase, LifecycleState::Shutdown);
-    assert_eq!(core.health().dropped_by_signal, [3, 0, 0]);
+    assert_eq!(core.health().dropped_by_signal, [3, 0, 0, 0]);
 }
 
 #[test]
@@ -779,14 +779,14 @@ fn byte_capacity_rejects_when_record_capacity_remains() {
         after_rejection.admitted_bytes,
         before_rejection.admitted_bytes
     );
-    assert_eq!(after_rejection.dropped_by_signal, [1, 0, 0]);
+    assert_eq!(after_rejection.dropped_by_signal, [1, 0, 0, 0]);
     assert!(after_rejection.degraded);
 
     admitted.complete(Ok(()));
     let after_completion = core.health();
     assert_eq!(after_completion.admitted_records, 0);
     assert_eq!(after_completion.admitted_bytes, 0);
-    assert_eq!(after_completion.dropped_by_signal, [1, 0, 0]);
+    assert_eq!(after_completion.dropped_by_signal, [1, 0, 0, 0]);
 
     released.store(true, Ordering::Release);
     let mut shutdown = core.shutdown_async();
@@ -807,7 +807,7 @@ fn admission_rejects_a_record_above_the_per_record_limit() {
     let health = core.health();
     assert_eq!(health.admitted_records, 0);
     assert_eq!(health.admitted_bytes, 0);
-    assert_eq!(health.dropped_by_signal, [1, 0, 0]);
+    assert_eq!(health.dropped_by_signal, [1, 0, 0, 0]);
 }
 
 #[test]

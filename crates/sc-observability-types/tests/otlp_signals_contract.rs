@@ -276,3 +276,167 @@ fn profiles_check_nested_value_and_attribute_key_indices() {
     invalid.stack_table[0].location_indices.push(9);
     assert!(invalid.validate_references(&[record]).is_err());
 }
+
+fn null_path<T: std::fmt::Debug>(
+    result: Result<T, sc_observability_types::otlp::signals::SignalValidationError>,
+    expected: &str,
+) {
+    match result.unwrap_err() {
+        sc_observability_types::otlp::signals::SignalValidationError::Validation {
+            path, ..
+        } => assert_eq!(path, expected),
+        _ => panic!("unexpected error variant"),
+    }
+}
+fn round_trip<T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug>(
+    value: &T,
+) {
+    assert_eq!(
+        &serde_json::from_str::<T>(&serde_json::to_string(value).unwrap()).unwrap(),
+        value
+    );
+}
+#[test]
+fn resource_conversion_rejects_null_at_exact_path() {
+    use sc_observability_types::{otlp::OtlpResource, v2::AttributeValue};
+    let mut source = OtlpResource::default();
+    source.attributes.insert("key".into(), AttributeValue::Null);
+    null_path(Resource::try_from(source.clone()), "attributes.key");
+    source
+        .attributes
+        .insert("key".into(), AttributeValue::UInt(u64::MAX));
+    round_trip(&Resource::try_from(source).unwrap());
+}
+#[test]
+fn scope_conversion_rejects_null_at_exact_path() {
+    use sc_observability_types::{otlp::OtlpInstrumentationScope, v2::AttributeValue};
+    let mut source = OtlpInstrumentationScope::default();
+    source.attributes.insert(
+        "key".into(),
+        AttributeValue::Array(vec![AttributeValue::Null]),
+    );
+    null_path(
+        InstrumentationScope::try_from(source.clone()),
+        "attributes.key[0]",
+    );
+    source
+        .attributes
+        .insert("key".into(), AttributeValue::String("ok".into()));
+    round_trip(&InstrumentationScope::try_from(source).unwrap());
+}
+#[test]
+fn metric_conversion_rejects_null_at_exact_path() {
+    use sc_observability_types::{
+        MetricName, ServiceName,
+        otlp::signals::MetricStream,
+        v2::{AttributeValue, FiniteF64, MetricRecord, MetricValue},
+    };
+    let source = MetricRecord::try_new(
+        timestamp(2),
+        ServiceName::new("test").unwrap(),
+        MetricName::new("gauge").unwrap(),
+        MetricValue::Gauge(FiniteF64::new(1.0).unwrap()),
+    )
+    .unwrap();
+    null_path(
+        MetricStream::try_from(
+            source
+                .clone()
+                .with_attributes([("key".into(), AttributeValue::Null)].into()),
+        ),
+        "attributes.key",
+    );
+    round_trip(&MetricStream::try_from(source).unwrap());
+}
+#[test]
+fn span_conversion_rejects_null_at_exact_path() {
+    use sc_observability_types::{
+        ActionName, ServiceName, SpanId, SpanStatus, TraceId,
+        otlp::signals::SpanPoint,
+        v2::{AttributeValue, SpanRecord, TraceContext, TraceFlags},
+    };
+    let make = |attributes| {
+        SpanRecord::new(
+            timestamp(1),
+            ServiceName::new("test").unwrap(),
+            ActionName::new("test").unwrap(),
+            TraceContext::new(
+                TraceId::new("11111111111111111111111111111111").unwrap(),
+                SpanId::new("1111111111111111").unwrap(),
+                TraceFlags::new(1),
+            ),
+            attributes,
+        )
+        .end(SpanStatus::Ok, 10u64.into())
+    };
+    null_path(
+        SpanPoint::try_from(make([("key".into(), AttributeValue::Null)].into())),
+        "attributes.key",
+    );
+    round_trip(&SpanPoint::try_from(make(std::collections::BTreeMap::default())).unwrap());
+}
+#[test]
+fn log_conversion_rejects_null_at_exact_path() {
+    use sc_observability_types::{
+        ActionName, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory,
+        otlp::signals::LogPoint,
+    };
+    let mut source = LogEvent {
+        version: SchemaVersion::new("v1").unwrap(),
+        timestamp: timestamp(1),
+        level: Level::Info,
+        service: ServiceName::new("test").unwrap(),
+        target: TargetCategory::new("test").unwrap(),
+        action: ActionName::new("test").unwrap(),
+        message: Some("complete".into()),
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: None,
+        diagnostic: None,
+        state_transition: None,
+        fields: serde_json::Map::new(),
+    };
+    source.fields.insert("key".into(), serde_json::Value::Null);
+    null_path(LogPoint::try_from(source.clone()), "fields.key");
+    source.fields.insert("key".into(), serde_json::json!(true));
+    round_trip(&LogPoint::try_from(source).unwrap());
+}
+
+#[test]
+fn nonfinite_measurements_survive_exemplars_and_all_double_point_fields() {
+    use sc_observability_types::otlp::signals::Exemplar;
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let number = NumberValue::Double(value.into());
+        round_trip(&number);
+        let exemplar = Exemplar::new(KeyValues::default(), timestamp(1), number, None, None);
+        round_trip(&exemplar);
+        let histogram = HistogramDataPoint::try_new(
+            KeyValues::default(),
+            None,
+            timestamp(2),
+            0,
+            Some(value.into()),
+            vec![0],
+            vec![],
+            vec![exemplar],
+            DataPointFlags::default(),
+            Some(value.into()),
+            Some(value.into()),
+        )
+        .unwrap();
+        round_trip(&histogram);
+        let summary = SummaryDataPoint::try_new(
+            KeyValues::default(),
+            None,
+            timestamp(2),
+            0,
+            value.into(),
+            vec![ValueAtQuantile::try_new(0.5.into(), value.into()).unwrap()],
+            DataPointFlags::default(),
+        )
+        .unwrap();
+        round_trip(&summary);
+    }
+}

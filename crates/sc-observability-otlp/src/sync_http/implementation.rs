@@ -34,10 +34,9 @@ use crate::config::{
     ValidatedTransportBounds,
 };
 #[cfg(test)]
-use crate::config::{
-    ExporterBackend, OtelConfig, OtlpProtocol, prepared_backend_connection,
-    validated_transport_bounds,
-};
+use crate::config::{ExporterBackend, OtlpProtocol};
+#[cfg(any(test, feature = "durable-store"))]
+use crate::config::{OtelConfig, prepared_backend_connection, validated_transport_bounds};
 use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
     LogRecord, MetricExporter, TraceExporter,
@@ -142,7 +141,7 @@ pub(crate) struct SyncHttpConfig {
 
 impl SyncHttpConfig {
     /// Builds a worker configuration from D21's already-validated contract.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "durable-store"))]
     pub(crate) fn from_otel(
         config: &OtelConfig,
     ) -> Result<(Self, ValidatedTransportBounds), ExportError> {

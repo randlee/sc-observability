@@ -48,6 +48,12 @@ pub(crate) enum SignalKind {
     Traces,
     /// Metric records.
     Metrics,
+    /// Profile samples.
+    #[expect(
+        dead_code,
+        reason = "staged by d-29; wired by d-33/d-34 under durable-store"
+    )]
+    Profiles,
 }
 
 impl SignalKind {
@@ -56,6 +62,7 @@ impl SignalKind {
             Self::Logs => 0,
             Self::Traces => 1,
             Self::Metrics => 2,
+            Self::Profiles => 3,
         }
     }
 }
@@ -69,12 +76,12 @@ pub(crate) struct LifecycleHealth {
     pub(crate) admitted_records: usize,
     /// Aggregate bytes not yet terminal.
     pub(crate) admitted_bytes: usize,
-    /// Dropped records by signal: logs, traces, metrics.
-    pub(crate) dropped_by_signal: [u64; 3],
+    /// Dropped records by signal: logs, traces, metrics, profiles.
+    pub(crate) dropped_by_signal: [u64; 4],
     /// Whether a signal or the latest lifecycle operation is currently degraded.
     pub(crate) degraded: bool,
-    /// Current degradation by signal: logs, traces, metrics.
-    pub(crate) degraded_by_signal: [bool; 3],
+    /// Current degradation by signal: logs, traces, metrics, profiles.
+    pub(crate) degraded_by_signal: [bool; 4],
     /// Last diagnostic recorded by the lifecycle core.
     pub(crate) last_error: Option<DiagnosticSummary>,
 }
@@ -172,9 +179,9 @@ struct CoreState {
     active: BTreeMap<u64, AdmissionMeta>,
     #[cfg(not(feature = "sync-http"))]
     active: BTreeSet<u64>,
-    dropped_by_signal: [u64; 3],
+    dropped_by_signal: [u64; 4],
     // Set by a signal's terminal loss; cleared by its next successful export.
-    degraded_by_signal: [bool; 3],
+    degraded_by_signal: [bool; 4],
     // Reflects the most recently completed flush or shutdown.
     operation_degraded: bool,
     last_error: Option<DiagnosticSummary>,
@@ -254,8 +261,8 @@ impl LifecycleCore {
                     active: BTreeMap::new(),
                     #[cfg(not(feature = "sync-http"))]
                     active: BTreeSet::new(),
-                    dropped_by_signal: [0; 3],
-                    degraded_by_signal: [false; 3],
+                    dropped_by_signal: [0; 4],
+                    degraded_by_signal: [false; 4],
                     operation_degraded: false,
                     last_error: None,
                     pending_failure: None,

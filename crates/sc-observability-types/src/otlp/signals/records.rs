@@ -128,8 +128,10 @@ impl InstrumentationScope {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogPoint {
     /// Protocol `time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::optional")]
     pub time: Option<Timestamp>,
     /// Protocol `observed_time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub observed_time: Timestamp,
     /// Protocol `severity_number` field.
     pub severity_number: SeverityNumber,
@@ -206,8 +208,10 @@ pub struct SpanPoint {
     /// Protocol `kind` field.
     pub kind: SpanKindPoint,
     /// Protocol `start_time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub start_time: Timestamp,
     /// Protocol `end_time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub end_time: Timestamp,
     /// Protocol `attributes` field.
     pub attributes: KeyValues,
@@ -321,6 +325,7 @@ impl TryFrom<SpanPointRaw> for SpanPoint {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpanEventPoint {
     /// Protocol `time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub time: Timestamp,
     /// Protocol `name` field.
     pub name: String,
@@ -465,8 +470,10 @@ pub struct NumberPoint {
     /// Protocol `attributes` field.
     pub attributes: KeyValues,
     /// Protocol `start_time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::optional")]
     pub start_time: Option<Timestamp>,
     /// Protocol `time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub time: Timestamp,
     /// Protocol `value` field.
     pub value: NumberValue,
@@ -531,8 +538,10 @@ pub struct HistogramDataPoint {
     /// Protocol `attributes` field.
     pub attributes: KeyValues,
     /// Protocol `start_time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::optional")]
     pub start_time: Option<Timestamp>,
     /// Protocol `time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub time: Timestamp,
     /// Protocol `count` field.
     pub count: u64,
@@ -651,8 +660,10 @@ pub struct ExponentialHistogramDataPoint {
     /// Protocol `attributes` field.
     pub attributes: KeyValues,
     /// Protocol `start_time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::optional")]
     pub start_time: Option<Timestamp>,
     /// Protocol `time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub time: Timestamp,
     /// Protocol `count` field.
     pub count: u64,
@@ -802,8 +813,10 @@ pub struct SummaryDataPoint {
     /// Protocol `attributes` field.
     pub attributes: KeyValues,
     /// Protocol `start_time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::optional")]
     pub start_time: Option<Timestamp>,
     /// Protocol `time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub time: Timestamp,
     /// Protocol `count` field.
     pub count: u64,
@@ -873,6 +886,7 @@ pub struct Exemplar {
     /// Protocol `filtered_attributes` field.
     pub filtered_attributes: KeyValues,
     /// Protocol `time` field.
+    #[serde(serialize_with = "crate::otlp::signals::timestamp::serialize")]
     pub time: Timestamp,
     /// Protocol `value` field.
     pub value: NumberValue,
