@@ -136,7 +136,7 @@ and the OTLP/JSON export is d-34's (wave-5 ruling R20).
    [PHD-013]
 2. Add the neutral signal types in `crates/sc-observability-types/src/otlp/signals/`,
    declared from `src/otlp/mod.rs`, with validating constructors, serde that
-   deserializes through those constructors, and `From` conversions from
+   deserializes through those constructors, and `TryFrom` conversions from
    `LogEvent`, `SpanRecord<SpanEnded>`, v2 `MetricRecord`, `OtlpResource` and
    `OtlpInstrumentationScope`. Add no variant or field to any existing type.
    [PHD-005, PHD-006, PHD-013]
@@ -346,8 +346,8 @@ pub struct InstrumentationScope {
     pub dropped_attributes_count: u32,
     pub schema_url: Option<String>,
 }
-impl From<OtlpResource> for Resource { /* field move */ }
-impl From<OtlpInstrumentationScope> for InstrumentationScope { /* field move */ }
+impl TryFrom<OtlpResource> for Resource { type Error = SignalValidationError; /* checked attribute conversion */ }
+impl TryFrom<OtlpInstrumentationScope> for InstrumentationScope { type Error = SignalValidationError; /* checked attribute conversion */ }
 
 #[non_exhaustive]
 pub struct ResourceRecord<T> { pub resource: Resource, pub scope: InstrumentationScope, pub record: T }
@@ -500,6 +500,13 @@ Outside a profiles payload they fail envelope validation with
 **bytes.** `AnyValue::Bytes` serializes as lowercase hex in the neutral JSON.
 d-34 encodes it as base64 `bytesValue` in OTLP/JSON. Profile IDs, trace IDs
 and span IDs use the existing hex newtypes.
+
+**Conversion amendment (lead ruling 2026-10-01, `01M3VWCCBHT906CNTV50SVGPZ7`).**
+Conversions from `LogEvent`, `SpanRecord<SpanEnded>`, v2 `MetricRecord`,
+`OtlpResource` and `OtlpInstrumentationScope` use `TryFrom` with
+`SignalValidationError::Validation` at the exact offending attribute path.
+Existing null attributes are rejected, never dropped or coerced. Unsigned
+values remain `AnyValue::UInt`; the envelope applies the uint range policy.
 
 ### Input value forms
 
@@ -1284,7 +1291,7 @@ is proven by d-30 through `b4a-python-distributions.yml`.
   deserialization (not only `try_new`); exemplars;
   `ProfilesDictionary::validate_references` accepting a valid set and rejecting
   an out-of-range index, including an out-of-range `StringIndex` and
-  `AttributeKey::Index`; `TraceState` grammar; and `From` conversions from
+  `AttributeKey::Index`; `TraceState` grammar; and `TryFrom` conversions from
   `LogEvent`, `SpanRecord<SpanEnded>`, v2 `MetricRecord`, `OtlpResource` and
   `OtlpInstrumentationScope`.
 - [ ] boundary:BOUNDARY-ScObservabilityTypes (D3, D4):

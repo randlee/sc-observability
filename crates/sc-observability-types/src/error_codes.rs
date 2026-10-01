@@ -63,6 +63,7 @@ pub const LEVEL_REVISION_EXHAUSTED: ErrorCode =
 
 /// Enumerable registry of all public `sc-observability-types` error codes.
 pub const ALL: &[ErrorCode] = &[
+    SIGNAL_VALIDATION,
     SC_METRIC_INVALID_HISTOGRAM,
     SC_METRIC_INVALID_TEMPORALITY,
     SC_METRIC_INVALID_INTERVAL,
@@ -249,6 +250,10 @@ pub mod otlp {
         OTLP_TELEMETRY_SHUTDOWN,
     ];
 }
+
+/// Invalid neutral signal. Recovery: correct the reported payload field.
+pub const SIGNAL_VALIDATION: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TYPES_SIGNAL_VALIDATION");
 
 #[cfg(test)]
 mod tests {
