@@ -955,14 +955,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "otlp-sync-http-example"
-version = "1.5.0"
-dependencies = [
- "sc-observability-otlp",
- "sc-observability-types",
-]
-
-[[package]]
 name = "otlp-sdk-example"
 version = "1.5.0"
 dependencies = [
@@ -970,6 +962,14 @@ dependencies = [
  "sc-observability-types",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "otlp-sync-http-example"
+version = "1.5.0"
+dependencies = [
+ "sc-observability-otlp",
+ "sc-observability-types",
 ]
 
 [[package]]
