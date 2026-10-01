@@ -603,3 +603,58 @@ ADR-020 records the user's current compatible 1.x release decision. PHB-003/004/
 - PHD-002 Current 1.x integration shall retain released wrappers, typed/legacy adapters and classification surfaces where needed for compatibility. Deprecated interfaces shall have functioning replacements, executable migration fixtures and named future removal points. Compare every released package against frozen 1.4.1; no breaking-change approval may turn a 1.x incompatibility into PASS. Removal and a new major baseline require separate 2.0 authorization.
 - PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a caller-owned runtime and a bounded plain-thread legacy HTTP/JSON backend. They shall share crate-private contracts, ordered admission/lifecycle barriers, deadlines and health/drop accounting. Backend/protocol/runtime combinations shall be validated at construction, and enabled transports shall never silently fall back to no-op.
 - PHD-004 Preserve the accepted Phase D canonical OTLP config/default/validation behavior: queue bounds limit record count and aggregate bytes, explicit validated config is not overridden by ambient OTEL_* values, and both backends satisfy OTLP-021. D22 specifies compatibility with released config literals/defaults; D26 supplies minimal adapters without changing backend contracts. Incompatible new configuration owners use the canonical namespace while the released root configuration retains its behavior.
+
+### Phase D wave 5 — Customer telemetry submission
+
+These additive requirements extend the compatible 1.x baseline. Customer field
+mapping remains outside the transport. These requirements cover logs, traces,
+metrics and profiles, including the pinned development-version profile protocol.
+
+- PHD-005 A shared Rust submission API shall accept logs, completed spans and
+  metrics independently or together, preserving original UTC timestamps,
+  structured attributes, resource/scope and supplied valid correlation. Paired
+  logs/spans without IDs receive shared IDs; conflicting supplied IDs or timing
+  return typed errors. Historical records without actual start time are not
+  fabricated spans.
+- PHD-006 Metric submission shall preserve gauge, sum, explicit histogram,
+  exponential histogram and imported summary representations; numeric type,
+  temporality, monotonicity, timestamps, distribution data and supported
+  exemplars shall not be flattened or silently dropped. Profile samples, stacks,
+  dictionaries, units, timestamps and links shall be preserved and references
+  validated against the pinned profile schema. Span events/links/status
+  and structured log bodies shall survive export. New contracts remain additive.
+- PHD-007 Successful durable admission shall mean a versioned record is committed
+  locally before the receipt returns. Pending data shall survive process restart.
+  Capacity exhaustion, invalid payloads and persistence failure shall be explicit
+  errors; pending data shall not be silently evicted. The store shall support
+  bounded retention and coordinated access from Python and CLI processes.
+- PHD-008 Delivery shall track each signal independently and support bounded flush,
+  timeout, shutdown and retry after collector recovery. Admission and remote
+  delivery shall be distinguishable. Document at-least-once delivery and its crash
+  duplication window; stable import keys shall prevent duplicate local admission.
+- PHD-009 Installed Python bindings shall expose shared configuration, submission,
+  receipts, status and flush/shutdown with matching type stubs and typed errors.
+  Existing logging APIs shall retain compatibility. Blocking operations shall
+  release the GIL where appropriate; context exit shall not hide delivery errors.
+- PHD-010 An installable Rust CLI shall expose the same submission contract through
+  structured stdin and log/span/metric options, plus flush and status. Python and
+  CLI shall use the same validation/config precedence. Exit status and machine
+  output shall distinguish invalid input, admission failure and delivery failure.
+- PHD-011 The sanity consumer shall map historical and live LLM/JEV records with
+  configurable team/service/phase and a repository-specific PR URL template.
+  Preserve reviewer identity, tested commit and original UTC timing. Persist
+  source progress only after admission and handle partial lines, rotation,
+  truncation and repeated imports without silent loss. Local time is display only.
+- PHD-012 End-to-end tests shall submit through the installed Python package and
+  actual CLI, then read back records from a pinned otel-viewer for every signal
+  it supports, asserting values, timestamps and correlation. Collector capture
+  shall verify remaining supported wire forms explicitly; it does not substitute
+  for viewer readback or justify claiming unsupported viewer capabilities.
+  Exercise offline recovery, process restart and partial signal delivery.
+
+- PHD-013 Full telemetry support shall be measured against a pinned upstream
+  opentelemetry-proto revision: all four signal families, every payload variant
+  and their fields must be represented through Rust, Python, CLI and the durable
+  format. Serialization/export tests shall exercise the variants and nested
+  non-default fields. Protocol maturity and viewer limitations shall be explicit,
+  not used to silently remove product support. Any exclusion needs a user decision.

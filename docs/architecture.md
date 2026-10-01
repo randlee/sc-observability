@@ -1333,6 +1333,48 @@ was reworded accordingly to describe the remaining validation.
 - **Acceptance**: Old consumers work at default lint settings; opt-in migrated consumers deny deprecated usage. Preserve diagnostic/source information through adapters, and test behavioral compatibility as well as exact released-package semver. No breaking approval entry can waive the 1.x contract. Future removal needs its own major-release decision.
 - **Contracts**: PHB-003–006, PHD-001–004 and the compatible 1.x amendment; D22 establishes usable compiled contracts, facade sprints implement adapters, D27 validates release tooling, and D18 owns the real combined proof alongside D9 collector conformance; both must pass before phase-ending review.
 
+### ADR-021: Shared Customer Telemetry Submission and Durable Admission
+
+- **Status**: Proposed for Phase D wave 5. The user requested shared Python/Rust
+  CLI submission, serialized local records, signal coverage and viewer tests;
+  the storage engine and exact public signatures remain implementation decisions.
+- **Context**: Customer records require mapping to telemetry. Python currently
+  lacks the complete OTLP submission surface. Reimplementing transport or
+  durability in Python and CLI would produce different validation and behavior.
+- **Decision**: Keep transport-neutral signal contracts in
+  `sc-observability-types` and shared submission/configuration, durable admission
+  and export in `sc-observability-otlp`. Python's native binding and the new CLI
+  depend on that API at the application boundary. They do not encode OTLP wire
+  payloads themselves. Customer-specific mapping stays in a small Python consumer.
+  Preserve compatible released interfaces with additive types/namespaces.
+- **Signals**: Logs, completed spans and metric point representations are first
+  class. Events and correlation metadata use those contracts. Support gauge,
+  sum, explicit/exponential histograms and imported summaries with their
+  semantics intact. Existing scalar MetricRecord is insufficient for full
+  distribution import. Profiles are included through a pinned development-version
+  protocol, with samples, stacks, dictionaries and correlation preserved.
+- **Durability**: Commit a versioned serialized envelope before returning an
+  admission receipt. Keep per-signal delivery state and stable caller keys.
+  Delivery is at-least-once, never advertised as exactly-once. Define disk bounds,
+  pending-record retention, migration/rejection of stored versions and concurrency
+  before front ends are implemented. SQLite is a candidate, not a mandated choice.
+- **Dependencies**: No new OTLP edge is added to sc-observe or the core facade.
+  Python telemetry support uses an explicit native-binding feature; shared binding
+  runtime and other bindings do not acquire OTLP transitively by default. Sprint
+  D29 owns necessary workspace/manifests and boundary allowlist changes together.
+  Reuse the landed Phase D sync-http and SDK backends and their runtime ownership.
+- **Configuration**: One shared precedence/validation contract accepts explicit
+  caller settings and telemetry.yaml. Define any environment fallback explicitly;
+  it cannot override explicit validated settings. Credentials are supplied outside
+  checked-in YAML. PR URL templates and source mapping belong to consumer config.
+- **Verification**: D32 proves actual viewer writes by stored-record readback from
+  installed front ends. A successful send is not proof of stored data. Capability
+  gaps are reported by signal, with separate collector capture for unsupported
+  viewer representations. Existing semver/public API checks remain authoritative.
+- **Consequences**: D29 owns shared contracts/store, D30 Python, D31 CLI and D32
+  customer import/viewer proof. No second exporter, general mapping DSL, or
+  generated source-hash gate is introduced. Requirements: PHD-005–013.
+
 ## 8. API-Design Consistency
 
 `api-design.md` matches the corrected layering:
