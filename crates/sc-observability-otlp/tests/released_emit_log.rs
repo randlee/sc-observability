@@ -167,7 +167,7 @@ impl sc_observability_types::v2::LogProjector<u8> for InvalidIdProjector {
 }
 
 #[test]
-fn projector_helpers_forward_to_their_own_admission_mode() {
+fn disabled_projector_helpers_accept_before_entity_check() {
     let observation = Observation::new(service_name(), 1_u8);
 
     let root: ProjectionRegistration<u8> = TelemetryProjectors::new(Arc::new(root_disabled()))

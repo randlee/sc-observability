@@ -86,6 +86,33 @@ fn event(message: &str, fields: serde_json::Map<String, serde_json::Value>) -> B
     }
 }
 
+fn assert_public_stopping_flush(control: &sc_observability_log::LogControl) {
+    let stopping_flush = control
+        .flush(Duration::ZERO)
+        .expect_err("stopping rejects flush");
+    assert!(matches!(
+        stopping_flush,
+        FlushError::NotRunning {
+            phase: LifecyclePhase::Stopping
+        }
+    ));
+    assert_eq!(
+        stopping_flush.to_string(),
+        "the logger is not running: Stopping"
+    );
+    assert_eq!(
+        stopping_flush.code().as_str(),
+        "SC_OBSERVABILITY_LOG_NOT_RUNNING"
+    );
+    assert_eq!(
+        stopping_flush.remediation(),
+        sc_observability_log::Remediation::not_recoverable(
+            "the lifecycle owner has shut the logger down; the final shutdown flushed what was queued",
+        )
+    );
+    assert!(std::error::Error::source(&stopping_flush).is_none());
+}
+
 #[test]
 fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
     let (entered_tx, entered_rx) = sync_channel(1);
@@ -155,12 +182,7 @@ fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
             phase: LifecyclePhase::Stopping,
         })
     ));
-    assert!(matches!(
-        control.flush(Duration::ZERO),
-        Err(FlushError::NotRunning {
-            phase: LifecyclePhase::Stopping,
-        })
-    ));
+    assert_public_stopping_flush(&control);
     assert!(matches!(
         control.wait_stopped(Duration::from_millis(10)),
         Err(WaitError::TimedOut { .. })

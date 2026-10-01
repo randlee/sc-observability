@@ -55,12 +55,44 @@ pub const SC_OBSERVABILITY_BINDING_INTERNAL: &str = "SC_OBSERVABILITY_BINDING_IN
 /// Enter and close each scope once in LIFO order on its originating thread and task.
 pub const SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID: &str =
     "SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID";
+/// Use a canonical base-10 integer with no leading zeros or negative zero.
+pub const SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL: &str =
+    "SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL";
+/// Use a value within the signed 64-bit integer range.
+pub const SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW: &str =
+    "SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW";
+/// Use a value within the unsigned 64-bit integer range.
+pub const SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW: &str =
+    "SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW";
+/// Use a non-negative canonical integer for this counter.
+pub const SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED: &str =
+    "SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED";
 /// Complete ordered binding diagnostic registry.
 pub const REGISTRY: &[ErrorEntry] = &[
     ErrorEntry {
         code: SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID,
         kind: "validation",
         remediation: "Enter and close each scope once in LIFO order on its originating thread and task",
+    },
+    ErrorEntry {
+        code: SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL,
+        kind: "validation",
+        remediation: "Use a canonical base-10 integer with no leading zeros or negative zero",
+    },
+    ErrorEntry {
+        code: SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW,
+        kind: "validation",
+        remediation: "Use a value within the signed 64-bit integer range",
+    },
+    ErrorEntry {
+        code: SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW,
+        kind: "validation",
+        remediation: "Use a value within the unsigned 64-bit integer range",
+    },
+    ErrorEntry {
+        code: SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED,
+        kind: "validation",
+        remediation: "Use a non-negative canonical integer for this counter",
     },
     ErrorEntry {
         code: SC_OBSERVABILITY_BINDING_INVALID_INPUT,

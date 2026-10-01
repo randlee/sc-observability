@@ -219,7 +219,7 @@ pub fn assert_grpc(exports: &super::grpc_collector::Exports, message: &str, rele
 pub fn assert_http(requests: &[super::http_collector::Captured], message: &str, released: bool) {
     fn body(requests: &[super::http_collector::Captured], path: &str) -> serde_json::Value {
         let matching: Vec<_> = requests.iter().filter(|r| r.path == path).collect();
-        assert_eq!(matching.len(), 1, "one real signal export at{path}");
+        assert_eq!(matching.len(), 1, "one real signal export at {path}");
         assert_eq!(matching[0].method, "POST");
         assert!(
             matching[0]

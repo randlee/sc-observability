@@ -89,7 +89,6 @@ obs_test_deps = section_deps(root / "crates/sc-observability/Cargo.toml", "dev-d
 observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
 observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
 otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
-otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
 if obs_runtime_deps != {"serde", "serde_json", "sc-observability-types", "thiserror"}:
     raise SystemExit(
@@ -133,19 +132,6 @@ if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubs
     raise SystemExit(
         "sc-observability-otlp runtime dependency set drifted from allowed baseline: "
         f"{sorted(otlp_runtime_deps)}"
-    )
-
-if otlp_test_deps - {"sc-observe", "tonic"}:
-    raise SystemExit(
-        "sc-observability-otlp test dependency set drifted from allowed baseline: "
-        f"{sorted(otlp_test_deps - {'sc-observe', 'tonic'})}"
-    )
-
-otlp_test_tonic = load_toml(root / "crates/sc-observability-otlp/Cargo.toml")["dev-dependencies"].get("tonic")
-if otlp_test_tonic != {"workspace": True, "features": ["router"]}:
-    raise SystemExit(
-        "sc-observability-otlp may use tonic/router only as the exact hermetic "
-        "collector test dependency"
     )
 
 for path in [

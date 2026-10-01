@@ -705,7 +705,10 @@ pub fn from_logging_health(v: core::LoggingHealthReport) -> LoggingHealthDto {
     }
 }
 /// Projects an independent core logger without inventing bridge state.
-pub fn from_core_health(value: core::LoggingHealthReport, level: core::LevelState) -> LogHealthDto {
+pub fn from_canonical_core_health(
+    value: core::LoggingHealthReport,
+    level: core::LevelState,
+) -> LogHealthDto {
     LogHealthDto {
         schema_version: 1,
         logging: from_logging_health(value),
@@ -777,8 +780,18 @@ pub fn from_level_error(value: core::LevelChangeError) -> Failure {
         },
     }
 }
-/// Decodes an additive output envelope; an unknown remote failure retains its code and tag.
-pub fn decode_envelope<T: DeserializeOwned>(value: Value) -> Result<WireEnvelope<T>, Failure> {
+/// Decodes the shared output envelope after its diagnostic representation is selected.
+///
+/// The two public envelope entrypoints share structural and failure-kind handling,
+/// while each keeps its own diagnostic parser and semantic validation boundary.
+fn decode_envelope_shell<T: DeserializeOwned, D, P>(
+    value: Value,
+    preparse_diagnostic: impl Fn(Value) -> Result<P, Failure>,
+    validate_diagnostic: impl Fn(&P) -> Result<(), Failure>,
+    parse_failure: impl Fn(Value) -> Result<Failure<D>, Failure>,
+    unknown_failure: impl Fn(Value, P, &str) -> Result<Failure<D>, Failure>,
+    validate_failure: impl Fn(&Failure<D>) -> Result<(), Failure>,
+) -> Result<WireEnvelope<T, D>, Failure> {
     let object = value
         .as_object()
         .ok_or_else(|| invalid_input("response", "expected envelope object"))?;
@@ -806,24 +819,23 @@ pub fn decode_envelope<T: DeserializeOwned>(value: Value) -> Result<WireEnvelope
             if object.contains_key("value") {
                 return Err(invalid_input("response", "conflicting envelope payload"));
             }
-            let error = object
+            let raw = object
                 .get("error")
-                .ok_or_else(|| invalid_input("response", "missing error"))?;
-            let diagnostic: Diagnostic =
-                checked(serde_json::from_value(error.clone()), "response")?;
-            validate_diagnostic(&diagnostic, "response.error")?;
-            let tag = error
+                .ok_or_else(|| invalid_input("response", "missing error"))?
+                .clone();
+            let diagnostic = preparse_diagnostic(raw.clone())?;
+            validate_diagnostic(&diagnostic)?;
+            let tag = raw
                 .get("kind")
                 .and_then(Value::as_str)
-                .ok_or_else(|| invalid_input("response", "missing failure kind"))?;
-            let error = if Failure::<Diagnostic>::KNOWN_KINDS.contains(&tag) {
-                checked(serde_json::from_value(error.clone()), "response")?
+                .ok_or_else(|| invalid_input("response", "missing failure kind"))?
+                .to_owned();
+            let error = if Failure::<D>::KNOWN_KINDS.contains(&tag.as_str()) {
+                parse_failure(raw)?
             } else {
-                Failure::UnknownRemote {
-                    diagnostic: Box::new(diagnostic),
-                    remote_kind: tag.into(),
-                }
+                unknown_failure(raw, diagnostic, &tag)?
             };
+            validate_failure(&error)?;
             Ok(WireEnvelope::Error {
                 schema_version: 1,
                 error,
@@ -831,6 +843,23 @@ pub fn decode_envelope<T: DeserializeOwned>(value: Value) -> Result<WireEnvelope
         }
         _ => Err(invalid_input("response", "invalid result kind")),
     }
+}
+
+/// Decodes an additive output envelope; an unknown remote failure retains its code and tag.
+pub fn decode_envelope<T: DeserializeOwned>(value: Value) -> Result<WireEnvelope<T>, Failure> {
+    decode_envelope_shell(
+        value,
+        |value| checked(serde_json::from_value(value), "response"),
+        |diagnostic: &Diagnostic| validate_diagnostic(diagnostic, "response.error"),
+        |value| checked(serde_json::from_value(value), "response"),
+        |_, diagnostic, tag| {
+            Ok(Failure::UnknownRemote {
+                diagnostic: Box::new(diagnostic),
+                remote_kind: tag.into(),
+            })
+        },
+        |_| Ok(()),
+    )
 }
 
 fn strict_keys(value: &Value, allowed: &[&str], field: &str) -> Result<(), Failure> {

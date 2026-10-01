@@ -282,6 +282,11 @@ impl WriterRuntime {
             .as_ref()
             .is_some_and(|tracker| tracker.pass_active())
     }
+
+    #[cfg(test)]
+    pub(crate) fn test_pass_signal(&self) -> Option<&Arc<TestPassDelaySignal>> {
+        self.test_pass_signal.as_ref()
+    }
 }
 
 fn enqueue_nonblocking(
@@ -329,7 +334,9 @@ pub(crate) struct WriterTracker {
     queue_capacity: u64,
     queue_high_water_mark: AtomicU64,
     queue_full_drops_total: AtomicU64,
+    // MUTEX: The writer changes state on failures and shutdown; read-mostly health snapshots use this RwLock without gaining a global snapshot.
     state: RwLock<WriterState>,
+    // MUTEX: Failures replace the latest diagnostic while health snapshots clone it read-mostly; this RwLock covers only this field.
     last_error: RwLock<Option<DiagnosticSummary>>,
     shutdown_timeout_recorded: AtomicBool,
 }
@@ -451,8 +458,11 @@ impl WriterTracker {
 /// updates occur on the writer thread without a single global snapshot lock.
 pub(crate) struct MaintenanceTracker {
     pass_active: AtomicBool,
+    // MUTEX: The writer updates this after each pass and health snapshots read it read-mostly; this lock does not make the whole report atomic.
     last_pass_at: RwLock<Option<Timestamp>>,
+    // MUTEX: Failure writes replace the latest diagnostic while health snapshots clone it read-mostly; this lock covers only this field.
     last_error: RwLock<Option<DiagnosticSummary>>,
+    // MUTEX: Maintenance transitions update this state while health reads it frequently; this RwLock does not make the report atomic.
     state: RwLock<MaintenanceWorkerState>,
     rotated_files_total: AtomicU64,
     pruned_files_total: AtomicU64,
@@ -838,6 +848,7 @@ pub(crate) struct TestPassDelaySignal {
     released: AtomicBool,
     wait_timed_out: AtomicBool,
     shutdown_timeout_recorded: AtomicBool,
+    level_stopping: AtomicBool,
     gate: Mutex<()>,
     changed: Condvar,
 }
@@ -939,6 +950,16 @@ impl TestPassDelaySignal {
 
     pub(crate) fn shutdown_timeout_recorded(&self) -> bool {
         self.shutdown_timeout_recorded.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn record_level_stopping(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
+        self.level_stopping.store(true, Ordering::SeqCst);
+        self.changed.notify_all();
+    }
+
+    pub(crate) fn level_stopping(&self) -> bool {
+        self.level_stopping.load(Ordering::SeqCst)
     }
 
     pub(crate) fn wait_for_state(

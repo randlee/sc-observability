@@ -697,11 +697,12 @@ Important boundary:
 | `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
-| `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
+| `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` and `tonic` with `router` dev-only for integration tests; [ADR-019 amendment](#adr-019-amendment-otlp-hermetic-test-collector)) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 | `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError`/`DetachError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
 | `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
 | `sc-observability-schema` | `sc-observability-dto` (with the `schema-gen` feature) | runtime crates, binding runtimes, and host/framework crates | isolated, unpublished schema-generator crate under `bindings/schema-generator/`; emits schema artifacts from DTO wire types |
 | `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
+| `sc-observability-composition` | dev-dependencies only: `sc-observability`, `sc-observability-log`, `sc-observe`, `sc-observability-otlp`, `sc-observability-types`, `tokio`, `serde_json`, `tempfile`, and `tonic`/`opentelemetry-proto` for loopback collector fixtures | any normal or build dependency; any workspace crate depending on it; `agent-team-mail-*` | unpublished (`publish = false`) test harness at `tests/sc-observability-composition` for the D18 real composition cases; no library surface ([ADR-019/ADR-020 amendment](#adr-019adr-020-amendment-composition-test-harness)) |
 | `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
 
 † This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) follows ADR-011's accepted companion-boundary decision.
@@ -774,6 +775,13 @@ exact remaining pins in Cargo.lock and the existing boundaries manifest at
 implementation review. No wildcard approval covers an unrelated dependency. ADR-019 records this
 amendment to ADR-018; the existing boundary manifest is the single machine
 allowlist and this section is its normative explanation.
+
+The OTLP crate's only dev-dependencies are `sc-observe` and `tonic`, which
+adds the `router` feature to the reviewed transport pin for the hermetic
+integration collector. The `[dev_dependencies]` section of the same policy file
+records them; `router` is never a normal dependency feature, and `tonic` stays
+bound to `otlp-sdk` only
+([ADR-019 amendment](#adr-019-amendment-otlp-hermetic-test-collector)).
 
 ## 6.1 Query/Follow Dependency Order
 
@@ -1407,6 +1415,33 @@ was reworded accordingly to describe the remaining validation.
   exhaustion remain redacted `OTLP_EXPORT_TERMINAL` transport results. D.18
   retains final facade activation and any future SDK-path replacement.
 
+#### ADR-019 amendment: deferred DTO attribute projection
+
+- **Status**: Accepted 2026-09-30 by the Phase D lead, recording Rand's
+  2026-09-27 scope ruling in
+  [Phase D accepted limitations](plans/phase-d/known-limitations.md#dto-attribute-projection).
+  This is accepted scope reduction, not a fix or a QA PASS; the original
+  ADR-019 acceptance is unchanged.
+- **Context**: The staged neutral signal amendment assigns tagged attribute
+  values to D.19's checked projections. DTO-to-native conversion currently
+  feeds generic JSON attribute values into the native tagged `AttributeValue`
+  parser, so a metric or span DTO with nonempty attributes can fail
+  conversion.
+- **Decision**: Nonempty DTO attribute projection is deferred to backlog item
+  `obs-dto-attribute-projection`, outside the Phase D completion gates. D.19's
+  numeric, histogram, temporal, error and schema requirements remain in force;
+  the verified metric DTO path uses empty attributes. The
+  `metric_attributes_round_trip` reproduction in
+  `crates/sc-observability-dto/tests/canonical_contracts.rs` stays ignored and
+  is reported as ignored, not passed. No attribute converter change is part of
+  Phase D.
+- **Consequences**: Round trips of nonempty DTO attributes are not guaranteed
+  in this release, and the staged amendment's DTO tagged-attribute statements
+  describe the deferred target rather than delivered behavior. Native Rust
+  attributes and histograms are unaffected. A future change must implement
+  attribute projection in both directions, including signed/unsigned integer
+  distinctions, and enable the reproduction.
+
 ### ADR-020: Compatible 1.x Adoption Of Phase D
 
 - **Status**: Accepted by the user in the compatibility-planning decision (2026-09-29): release as the next 1.x version, retain deprecated released APIs, and remove them only in a future separately authorized 2.0. This records that decision; it grants no implementation merge or publication authority.
@@ -1417,6 +1452,66 @@ was reworded accordingly to describe the remaining validation.
 - **Retained architecture**: ADR-017's shared canonical diagnostic implementation, ADR-018's two backends/shared lifecycle and ADR-019's pins, registries and boundary constraints remain. Their 2.0-only root replacement/removal and version activation do not govern this release. `sc-observe` remains a dev-only OTLP dependency; this decision introduces no dependency exception.
 - **Acceptance**: Old consumers work at default lint settings; opt-in migrated consumers deny deprecated usage. Preserve diagnostic/source information through adapters, and test behavioral compatibility as well as exact released-package semver. No breaking approval entry can waive the 1.x contract. Future removal needs its own major-release decision.
 - **Contracts**: PHB-003–006, PHD-001–004 and the compatible 1.x amendment; D22 establishes usable compiled contracts, facade sprints implement adapters, D27 validates release tooling, and D18 owns the real combined proof alongside D9 collector conformance; both must pass before phase-ending review.
+
+#### ADR-019/ADR-020 amendment: composition test harness
+
+- **Status**: Accepted 2026-09-30 by the Phase D lead as a new, narrow
+  test-only exception (QA finding obs-d-18-combined-bridge-harness-qa-pr714-f1).
+  No earlier approval covered it.
+- **Context**: D18's real composition cases run the released and canonical
+  stacks against loopback OTLP collectors. Decoding gRPC and protobuf requests
+  needs `tonic` and `opentelemetry-proto`, which ADR-004/ADR-009 otherwise
+  reserve for `sc-observability-otlp`. ADR-020 introduced no dependency
+  exception.
+- **Decision**: The workspace member `sc-observability-composition`
+  (`tests/sc-observability-composition`) sets `publish = false`, has no normal
+  or build dependencies, including target-specific sections, and takes
+  exactly these dev-dependencies: `sc-observability`, `sc-observability-log`,
+  `sc-observe`, `sc-observability-otlp`, `sc-observability-types`, `tokio`,
+  `serde_json`, `tempfile`, `tonic` and `opentelemetry-proto`. No workspace
+  crate may depend on it.
+- **Enforcement**: The `[composition_harness]` section of
+  `policy/otlp-transport.toml` is the machine record.
+  `scripts/ci/otlp_dependencies.py` resolves renamed, path and
+  workspace-inherited declarations and rejects a published harness, any
+  normal or build dependency, any change to the dev-dependency set, and any
+  reverse edge from a workspace member. `validate_repo_boundaries.sh` runs it.
+- **Scope boundary**: This is not a blanket test exception. Production OTLP
+  ownership, the ADR-009 check that `sc-observability-types`,
+  `sc-observability` and `sc-observe` take no OTLP/OpenTelemetry dependency,
+  and the transport table and pins are unchanged. `tonic` and
+  `opentelemetry-proto` must inherit the reviewed workspace pins, which the
+  helper also checks.
+- **Contracts**: ADR-004, ADR-009, ADR-019, ADR-020, LAY-001–007; D18 owns the
+  composition cases.
+
+#### ADR-019 amendment: OTLP hermetic test collector
+
+- **Status**: Accepted 2026-09-30 by the Phase D lead, recording the root
+  test-only authorization for D9 (`01M3SWJRCXVHH4MY8HK1XHF3R6` /
+  `01M3SWJRWPYQEAM706WHN2WTZ5`; QA finding obs-d-9-qa-pr718-f3). The original
+  ADR-019 acceptance and the composition test harness amendment are unchanged.
+- **Context**: D9's hermetic collector serves the three generated OTLP gRPC
+  services in `sc-observability-otlp` integration tests, and tonic's
+  `Server::add_service` requires the `router` feature. ADR-019 and section 6
+  listed `sc-observe` as the only OTLP dev-dependency, and ADR-020 introduced
+  no dependency exception.
+- **Decision**: `sc-observability-otlp` takes exactly two dev-dependencies:
+  `sc-observe` and `tonic = { workspace = true, features = ["router"] }`, whose
+  effective features are `router` and `transport` with default features off.
+  No other manifest, feature, version or production dependency changes.
+- **Enforcement**: The `[dev_dependencies]` section of
+  `policy/otlp-transport.toml` is the machine record, and
+  `scripts/ci/otlp_dependencies.py` is the single validation authority. It
+  rejects any other dev-dependency, including target-specific ones, renamed or
+  non-inherited declarations, and any change in effective features.
+  `validate_dependency_bans.sh` and `validate_repo_boundaries.sh` both run it.
+- **Scope boundary**: Production transport roles are unchanged. `tonic`
+  remains an optional `otlp-sdk`-only transport with the reviewed `transport`
+  feature, the transport table rejects it in `legacy-http-json`, and the SDK
+  lock pins stay as reviewed.
+- **Contracts**: ADR-004, ADR-009, ADR-018, ADR-019, ADR-020, LAY-001–007 and
+  quality-policy RULE-007; D9 owns the collector qualification.
 
 ## 8. API-Design Consistency
 

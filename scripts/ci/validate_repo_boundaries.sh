@@ -59,7 +59,6 @@ obs_deps = package_deps(root / "crates/sc-observability/Cargo.toml")
 observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
 observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
 otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
-otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
 if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
@@ -68,8 +67,9 @@ if "sc-observability-otlp" in observe_runtime_deps:
 required_otlp = {"serde_json", "thiserror", "sc-observability-types"}
 # ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
 sys.path.insert(0, str(root / "scripts/ci"))
-from otlp_dependencies import validate_transport_dependencies
+from otlp_dependencies import validate_composition_harness, validate_transport_dependencies
 transport_names = validate_transport_dependencies(root)
+validate_composition_harness(root)
 allowed_otlp = required_otlp | {"sc-observability"} | transport_names
 if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
@@ -79,10 +79,6 @@ if observe_test_deps - {"serde_json"}:
     raise SystemExit(
         "sc-observe dev-dependencies drifted from allowed baseline: "
         f"{sorted(observe_test_deps - {'serde_json'})}"
-    )
-if otlp_test_deps - {"sc-observe", "tonic"}:
-    raise SystemExit(
-        "sc-observability-otlp dev-dependencies drifted from allowed baseline"
     )
 
 for path in root.rglob("Cargo.toml"):

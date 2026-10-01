@@ -87,6 +87,7 @@ are authorized deltas—not claims about the legacy implementation:
 | capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.21's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
 | `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
 | per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
+| installed ATM/sc-compose dev binaries, app-local canonical/`.otel.jsonl` mirrors, and command-outage behavior | application-owned dev-install environment; retain as D9 provenance only, outside D8 transport behavior and D9 no-atm-core runtime coverage | `changed: application-owned-dev-install-environment` |
 
 The no-redesign rule applies to payload encoding, endpoints, client/auth/CA
 construction, request execution, maximum attempts, and the exponential/cap

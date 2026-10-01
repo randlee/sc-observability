@@ -92,23 +92,25 @@ fn registry_remediation(code: &'static str) -> Remediation {
 }
 
 pub(crate) fn subscriber_closed(message: impl Into<String>) -> native::v2::SubscriberError {
-    native::v2::SubscriberError::Subscriber {
-        context: context(
+    native::v2::SubscriberError::classified_subscriber(
+        context(
             ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_CLOSED),
             message,
             registry_remediation(codes::SC_OBSERVABILITY_BINDING_CLOSED),
         ),
-    }
+        native::v2::FailureClassification::Closed,
+    )
 }
 
 pub(crate) fn subscriber_waiters_full(message: impl Into<String>) -> native::v2::SubscriberError {
-    native::v2::SubscriberError::Subscriber {
-        context: context(
+    native::v2::SubscriberError::classified_subscriber(
+        context(
             ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL),
             message,
             registry_remediation(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL),
         ),
-    }
+        native::v2::FailureClassification::QueueFull,
+    )
 }
 
 pub(crate) fn shutdown_drain(message: impl Into<String>) -> native::v2::ShutdownError {

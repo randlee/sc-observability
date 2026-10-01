@@ -394,10 +394,24 @@ fn canonical_envelope_decodes_each_declared_failure_kind() {
             schema_version: 1,
             error,
         };
-        assert_eq!(
-            decode_canonical_envelope(serde_json::to_value(&expected).unwrap()).unwrap(),
-            expected
-        );
+        let wire = serde_json::to_value(&expected).unwrap();
+        assert_eq!(decode_canonical_envelope(wire.clone()).unwrap(), expected);
+        let legacy =
+            serde_json::to_value(decode_envelope::<AdmissionDto>(wire.clone()).unwrap()).unwrap();
+        for field in [
+            "kind",
+            "field",
+            "requested",
+            "configured",
+            "operation",
+            "received",
+            "remote_kind",
+        ] {
+            assert_eq!(legacy["error"][field], wire["error"][field], "{field}");
+        }
+        for field in ["at", "code", "message", "remediation"] {
+            assert_eq!(legacy["error"][field], wire["error"][field], "{field}");
+        }
     }
 }
 

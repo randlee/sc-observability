@@ -258,9 +258,11 @@ where
 pub(crate) struct LoggerRuntime {
     pub(crate) dropped_events_total: Arc<AtomicU64>,
     pub(crate) flush_errors_total: Arc<AtomicU64>,
+    // MUTEX: Writer and logger paths share this error slot; one exclusive lock keeps its latest-value updates and health reads synchronized.
     pub(crate) last_error: Arc<Mutex<Option<DiagnosticSummary>>>,
     pub(crate) query_health: Arc<QueryHealthTracker>,
     pub(crate) writer: Option<WriterRuntime>,
+    // MUTEX: Shutdown publishes one final snapshot and health calls clone it afterward; this lock protects the slot, not the aggregate report.
     pub(crate) writer_snapshot: Mutex<Option<WriterHealthSnapshot>>,
 }
 
@@ -811,6 +813,15 @@ impl CanonicalLogger<Running> {
     pub fn shutdown(mut self) -> CanonicalLogger<Stopped> {
         self.shutdown.store(true, Ordering::SeqCst);
         self.mark_level_stopping();
+        #[cfg(test)]
+        if let Some(signal) = self
+            .runtime
+            .writer
+            .as_ref()
+            .and_then(WriterRuntime::test_pass_signal)
+        {
+            signal.record_level_stopping();
+        }
         // The owner only has a weak reference to this admission path. Drop the
         // logger's strong reference before joining so it cannot retain sender.
         self.diagnostic_admitter.take();

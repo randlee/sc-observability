@@ -24,25 +24,48 @@ fn options() -> BridgeOptions {
 }
 
 fn run_isolated_init_case(case: &str, test_name: &str) {
-    let status = Command::new(std::env::current_exe().expect("test executable"))
+    let output = Command::new(std::env::current_exe().expect("test executable"))
         .args(["--exact", test_name, "--nocapture", "--test-threads=1"])
         .env(INIT_CASE_ENV, case)
-        .status()
+        .output()
         .expect("spawn isolated public-init regression");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        status.success(),
-        "isolated public-init regression failed: {status}"
+        output.status.success(),
+        "isolated public-init regression failed: {}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        output.status
+    );
+    assert_eq!(
+        stdout
+            .lines()
+            .filter(|line| line.trim() == "running 1 test")
+            .count(),
+        1,
+        "child must execute exactly one test\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert_eq!(
+        stdout
+            .matches("test result: ok. 1 passed; 0 failed;")
+            .count(),
+        1,
+        "child must pass exactly one test\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
 }
 
 fn assert_logger_diagnostic(
     result: Result<sc_observability_log::LogGuard, InitError>,
     message: &str,
+    display: &str,
     remediation: &Remediation,
 ) {
-    let InitError::Logger { diagnostic } =
-        result.expect_err("public init must reject configuration")
-    else {
+    let error = result.expect_err("public init must reject configuration");
+    assert_eq!(error.to_string(), display);
+    assert_eq!(error.code().as_str(), "SC_OBSERVABILITY_LOGGER_INIT_FAILED");
+    assert_eq!(&error.remediation(), remediation);
+    assert!(std::error::Error::source(&error).is_none());
+
+    let InitError::Logger { diagnostic } = error else {
         panic!("public init must preserve the released Logger variant");
     };
     assert_eq!(
@@ -85,6 +108,7 @@ fn released_zero_queue_init_preserves_logger_diagnostic() {
     assert_logger_diagnostic(
         sc_observability_log::init(zero_queue_config(directory.path()), options()),
         "logger queue capacity must be greater than zero",
+        "sc-observability logger construction failed: logger queue capacity must be greater than zero",
         &Remediation::recoverable(
             "set LoggerConfig.queue_capacity to a positive value before constructing the logger",
             ["increase queue_capacity to at least 1"],
@@ -105,6 +129,7 @@ fn released_no_sink_init_preserves_logger_diagnostic() {
     assert_logger_diagnostic(
         sc_observability_log::init(no_sink_config(directory.path()), options()),
         "logger must have at least one registered sink",
+        "sc-observability logger construction failed: logger must have at least one registered sink",
         &Remediation::recoverable(
             "enable a built-in sink or register a sink before building the logger",
             [

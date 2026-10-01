@@ -60,6 +60,14 @@ backends = ["otlp-sdk", "legacy-http-json"]
 features = ["rt", "rt-multi-thread", "macros", "time", "sync"]
 default_features = true
 
+# ADR-019 amendment: OTLP hermetic test collector. These are the only
+# sc-observability-otlp dev-dependencies, with exact effective features.
+# tonic adds the generated-service router to the reviewed transport pin for the
+# integration collector; it is never a normal dependency feature or backend.
+[dev_dependencies]
+sc-observe = { features = [], default_features = true }
+tonic = { features = ["router", "transport"], default_features = false }
+
 # SDK transport implementation pins resolved by the reviewed Cargo.lock.
 [sdk_transport_lock]
 opentelemetry-http = "0.33.0"
@@ -69,3 +77,24 @@ reqwest = "0.13.5"
 tonic = "0.14.6"
 tonic-prost = "0.14.6"
 tonic-types = "0.14.6"
+
+# ADR-019/ADR-020 composition-harness amendment. The unpublished test harness
+# is the only non-OTLP manifest allowed to name tonic and opentelemetry-proto,
+# and only as dev-dependencies for its loopback collector fixtures. It may have
+# no normal or build dependencies, and no workspace member may depend on it.
+# Each dev dependency records its exact effective features and default features.
+[composition_harness]
+manifest = "tests/sc-observability-composition/Cargo.toml"
+package = "sc-observability-composition"
+
+[composition_harness.dev_dependencies]
+opentelemetry-proto = { features = ["gen-tonic", "logs", "metrics", "trace"], default_features = false }
+sc-observability = { features = [], default_features = true }
+sc-observability-log = { features = [], default_features = true }
+sc-observability-otlp = { features = ["legacy-http-json", "otlp-sdk"], default_features = true }
+sc-observability-types = { features = [], default_features = true }
+sc-observe = { features = [], default_features = true }
+serde_json = { features = [], default_features = true }
+tempfile = { features = [], default_features = true }
+tokio = { features = ["macros", "rt", "rt-multi-thread", "time"], default_features = true }
+tonic = { features = ["transport"], default_features = false }

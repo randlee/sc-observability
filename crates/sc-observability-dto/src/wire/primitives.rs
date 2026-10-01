@@ -1,4 +1,5 @@
 //! Explicit wire shapes; input entrypoints apply checked semantic validation.
+use crate::error_codes;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -20,10 +21,10 @@ impl DecimalDtoError {
     /// Stable machine-readable validation code.
     pub const fn code(self) -> &'static str {
         match self {
-            Self::InvalidCanonical => "SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL",
-            Self::SignedOverflow => "SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW",
-            Self::UnsignedOverflow => "SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW",
-            Self::NotUnsigned => "SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED",
+            Self::InvalidCanonical => error_codes::SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL,
+            Self::SignedOverflow => error_codes::SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW,
+            Self::UnsignedOverflow => error_codes::SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW,
+            Self::NotUnsigned => error_codes::SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED,
         }
     }
 }

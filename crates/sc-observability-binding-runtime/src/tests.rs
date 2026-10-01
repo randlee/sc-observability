@@ -902,7 +902,7 @@ fn core_with_sink(
         let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink));
         let (logger, level) = builder.build_with_level_owner().unwrap();
-        let health = dto::from_core_health(logger.health(), logger.level_state());
+        let health = dto::from_canonical_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: arc_swap::ArcSwapOption::from(Some(Arc::new(logger))),
@@ -979,7 +979,7 @@ fn core_sink_and_shutdown() {
         let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink.clone()));
         let (logger, level) = builder.build_with_level_owner().unwrap();
-        let health = dto::from_core_health(logger.health(), logger.level_state());
+        let health = dto::from_canonical_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: arc_swap::ArcSwapOption::from(Some(Arc::new(logger))),
@@ -1133,6 +1133,8 @@ fn bridge_timeout(external: bool) {
     let stdout = std::io::stdout();
     let held = stdout.lock();
     backend.try_log(event(), ProducerOrigin::RustHost).unwrap();
+    let (completed_tx, completed_rx) = mpsc::sync_channel(1);
+    sc_observability_log::notify_next_flush_complete(completed_tx);
     if external {
         assert!(matches!(
             control.flush(Duration::from_millis(1)),
@@ -1151,16 +1153,19 @@ fn bridge_timeout(external: bool) {
         sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS.as_str(),
     );
     drop(held);
-    // These are explicit new host requests; the adapter itself never retries or
-    // retrieves the previous native result. Retry only the documented overlap.
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        let result = backend
-            .start_flush(Duration::from_secs(1))
-            .unwrap()
-            .wait(Duration::from_secs(2));
-        match result{Ok(_)=>break,Err(error)if error.diagnostic().code==sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS.as_str()=>{assert!(Instant::now()<deadline);std::thread::yield_now();},other=>panic!("new bridge barrier: {other:?}")}
-    }
+    // Completion is the native single-flight release, not the observer deadline.
+    // The bound is only a hang watchdog; no new flush is used to poll progress.
+    assert!(
+        completed_rx
+            .recv_timeout(CONTRACT_CASE_DEADLINE)
+            .expect("native flush completion notification"),
+        "native flush completion was notified before its in-flight flag cleared"
+    );
+    backend
+        .start_flush(Duration::from_secs(1))
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .expect("one new flush after native completion");
     drop(backend);
     crate::spawn::wait_live(1);
     host.shutdown(Duration::from_secs(2)).unwrap();
@@ -1322,17 +1327,15 @@ fn d15_callback_fixture() {
         (
             crate::error::subscriber_closed("callback registration is closed"),
             dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
-            crate::conversion::Kind::Closed,
             "closed",
         ),
         (
             crate::error::subscriber_waiters_full("callback registration capacity is occupied"),
             dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
-            crate::conversion::Kind::QueueFull,
             "queue_full",
         ),
     ];
-    for (error, code, kind, wire_kind) in cases {
+    for (error, code, wire_kind) in cases {
         assert_canonical_context(&error, code, 0);
         let registry = dto::error_codes::REGISTRY
             .iter()
@@ -1342,13 +1345,27 @@ fn d15_callback_fixture() {
             error.diagnostic().remediation,
             native::Remediation::recoverable(registry.remediation, std::iter::empty::<String>()),
         );
-        assert_failure(
-            Err::<(), _>(crate::conversion::canonical(&error, kind)),
-            code,
-            wire_kind,
-            None,
+        let dto_projection = dto::CanonicalFailureDto::try_from(&error)
+            .expect("native subscriber error projects into the canonical DTO");
+        let runtime_projection =
+            crate::conversion::canonical(&error, error.failure_classification());
+        assert_eq!(
+            serde_json::to_value(&runtime_projection).expect("runtime projection serializes"),
+            serde_json::to_value(dto_projection).expect("DTO projection serializes"),
+            "runtime conversion delegates the subscriber's native classification to the DTO helper"
         );
+        assert_failure(Err::<(), _>(runtime_projection), code, wire_kind, None);
     }
+
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> = pending(&backend);
+    stop(&owner);
+    assert_failure(
+        operation.subscribe(Box::new(|_| panic!("closed callback was retained"))),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+        "closed",
+        None,
+    );
     callback_bounds();
 }
 

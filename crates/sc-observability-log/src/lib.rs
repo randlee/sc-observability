@@ -139,7 +139,8 @@ pub use sc_observability_types::{
 #[cfg(feature = "test_hooks")]
 #[doc(hidden)]
 pub use handle::{
-    block_next_shutdown_save, fail_next_shutdown_coordinator_reservation, notify_next_wait_stopped,
+    block_next_shutdown_save, fail_next_shutdown_coordinator_reservation,
+    notify_next_flush_complete, notify_next_wait_stopped,
 };
 #[cfg(feature = "test_hooks")]
 #[doc(hidden)]
