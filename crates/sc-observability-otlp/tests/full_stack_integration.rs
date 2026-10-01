@@ -1117,9 +1117,14 @@ fn public_legacy_factory_reports_retry_exhaustion_after_the_configured_attempts(
     let error = telemetry
         .flush_typed()
         .expect_err("retryable collector failures exhaust the configured attempt budget");
-    assert!(
-        format!("{error:?}").contains("attempts were exhausted"),
-        "the lifecycle reports retry exhaustion rather than a successful flush"
+    let export_error = std::error::Error::source(&error)
+        .and_then(std::error::Error::source)
+        .and_then(|source| source.downcast_ref::<sc_observability_types::v2::ExportError>())
+        .expect("the typed flush failure retains its typed export cause");
+    assert_eq!(
+        export_error.code(),
+        sc_observability_types::error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
+        "the retained export cause classifies exhausted legacy retry attempts with the stable error code"
     );
     assert_eq!(telemetry.health().dropped_exports_total, 1);
     collector.join().expect("collector exits");
@@ -1522,9 +1527,14 @@ fn public_sdk_factory_reports_retry_exhaustion_after_the_default_attempts() {
             .flush_async_typed()
             .await
             .expect_err("retryable collector failures exhaust the SDK retry budget");
-        assert!(
-            format!("{error:?}").contains("OTLP log export failed"),
-            "the lifecycle reports the terminal export failure"
+        let export_error = std::error::Error::source(&error)
+            .and_then(std::error::Error::source)
+            .and_then(|source| source.downcast_ref::<sc_observability_types::v2::ExportError>())
+            .expect("the typed flush failure retains its typed export cause");
+        assert_eq!(
+            export_error.code(),
+            sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL,
+            "the retained export cause classifies the SDK terminal export failure with the stable error code"
         );
         for _ in 0..4 {
             tokio::time::timeout(std::time::Duration::from_secs(2), received_attempts.recv())
