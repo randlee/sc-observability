@@ -62,6 +62,9 @@ struct Shared {
     drain_on_flush_only: AtomicBool,
     #[cfg(test)]
     active_flushes: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    stalled_signals:
+        Mutex<std::collections::HashSet<sc_observability_types::otlp::submission::Signal>>,
 }
 impl Shared {
     fn notify(&self) {
@@ -146,6 +149,8 @@ impl DurableTelemetryClient {
             drain_on_flush_only: AtomicBool::new(false),
             #[cfg(test)]
             active_flushes: std::sync::atomic::AtomicUsize::new(0),
+            #[cfg(test)]
+            stalled_signals: Mutex::new(std::collections::HashSet::new()),
         });
         Ok(Self {
             owner: Owner { shared },
@@ -164,6 +169,15 @@ impl DurableTelemetryClient {
         #[cfg(test)]
         let _flush_activity = FlushActivity::new(shared);
         shared.notify();
+        // Unit-test scheduling settles scripted outcomes only after the real snapshot.
+        // Production includes snapshot/drain time in the original deadline.
+        #[cfg(test)]
+        let start = if shared.drain_on_flush_only.load(Ordering::Acquire) {
+            tests::conformance::await_scripted_outcomes(shared, &reader, &scope);
+            Instant::now()
+        } else {
+            start
+        };
         loop {
             let generation = shared.generation();
             let report = query::report(&reader, &scope)?;

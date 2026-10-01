@@ -103,7 +103,7 @@ fn lease(shared: &Shared) -> Result<bool, TelemetryClientError> {
         // An absent lease can still have claims from a cleanly stopped worker.
         tx.execute("UPDATE signal_deliveries SET state='pending',claimed_by=NULL,claim_expires_at_unix_nano=NULL WHERE state='claimed'", []).map_err(persistence)?;
     }
-    tx.execute("INSERT INTO drain_lease VALUES(1,?1,?2,?3) ON CONFLICT(id) DO UPDATE SET holder=excluded.holder,expires_at_unix_nano=excluded.expires_at_unix_nano", params![shared.holder,now,expiry]).map_err(persistence)?;
+    tx.execute("INSERT INTO drain_lease VALUES(1,?1,?2,?3) ON CONFLICT(id) DO UPDATE SET acquired_at_unix_nano=CASE WHEN drain_lease.holder!=excluded.holder OR drain_lease.expires_at_unix_nano<excluded.acquired_at_unix_nano THEN excluded.acquired_at_unix_nano ELSE drain_lease.acquired_at_unix_nano END,holder=excluded.holder,expires_at_unix_nano=excluded.expires_at_unix_nano", params![shared.holder,now,expiry]).map_err(persistence)?;
     tx.execute("UPDATE signal_deliveries SET claim_expires_at_unix_nano=?2 WHERE state='claimed' AND claimed_by=?1", params![shared.holder,expiry]).map_err(persistence)?;
     store::maintain(&tx, &shared.config, now).map_err(persistence)?;
     tx.commit().map_err(persistence)?;

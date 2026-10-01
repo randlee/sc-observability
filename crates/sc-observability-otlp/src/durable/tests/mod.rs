@@ -2,10 +2,7 @@
 use super::*;
 use crate::contracts::submission::SubmissionExportFailure;
 use sc_observability_types::otlp::submission::*;
-use sc_observability_types::{
-    otlp::submission::testing::{DeliveryOutcome, conformance::ConformanceHarness},
-    v2::ExportError,
-};
+use sc_observability_types::{otlp::submission::testing::DeliveryOutcome, v2::ExportError};
 use std::{
     collections::{HashMap, VecDeque},
     io::Write,
@@ -13,6 +10,7 @@ use std::{
 };
 mod backpressure;
 mod capability;
+pub(super) mod conformance;
 mod drain;
 const DEADLINE: Duration = Duration::from_secs(3);
 
@@ -22,6 +20,7 @@ struct ScriptedExporter {
     released: Mutex<bool>,
     gate: Condvar,
     deliveries: PathBuf,
+    conformance_shared: std::sync::Weak<Shared>,
 }
 impl ScriptedExporter {
     fn new(path: &Path) -> Self {
@@ -67,6 +66,10 @@ impl SubmissionExporter for ScriptedExporter {
         match outcome {
             DeliveryOutcome::Fail => return Err(SubmissionExportFailure::Terminal(export_error())),
             DeliveryOutcome::Stall => {
+                if let Some(shared) = self.conformance_shared.upgrade() {
+                    shared.stalled_signals.lock().unwrap().insert(signal);
+                    shared.notify();
+                }
                 let _guard = self
                     .gate
                     .wait_while(self.released.lock().unwrap(), |released| !*released)
@@ -112,47 +115,6 @@ fn wait_until(mut predicate: impl FnMut() -> bool) {
         assert!(start.elapsed() < DEADLINE, "condition did not become true");
         std::thread::sleep(Duration::from_millis(1));
     }
-}
-struct Harness {
-    dirs: Vec<tempfile::TempDir>,
-    exporters: Vec<Arc<ScriptedExporter>>,
-}
-impl Drop for Harness {
-    fn drop(&mut self) {
-        for exporter in &self.exporters {
-            exporter.release();
-        }
-        for exporter in &self.exporters {
-            wait_until(|| Arc::strong_count(exporter) == 1);
-        }
-    }
-}
-impl ConformanceHarness for Harness {
-    type Client = DurableTelemetryClient;
-    fn open(&mut self) -> Self::Client {
-        let dir = tempfile::tempdir().unwrap();
-        let exporter = Arc::new(ScriptedExporter::new(dir.path()));
-        let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
-        client
-            .owner
-            .shared
-            .drain_on_flush_only
-            .store(true, Ordering::Release);
-        worker::start(&client.owner.shared, exporter.clone()).unwrap();
-        self.dirs.push(dir);
-        self.exporters.push(exporter);
-        client
-    }
-    fn set_outcome(&mut self, signal: Signal, outcome: DeliveryOutcome) {
-        self.exporters.last().unwrap().set_outcome(signal, outcome);
-    }
-}
-#[test]
-fn conformance() {
-    sc_observability_types::otlp::submission::testing::conformance::run_all(&mut Harness {
-        dirs: vec![],
-        exporters: vec![],
-    });
 }
 #[test]
 fn duplicate_record_key() {

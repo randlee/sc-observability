@@ -80,6 +80,20 @@ fn lease_expiry_takeover() {
             .logs,
         1
     );
+    let acquired: i64 = client
+        .owner
+        .shared
+        .db
+        .lock()
+        .unwrap()
+        .query_row("SELECT acquired_at_unix_nano FROM drain_lease", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert!(
+        acquired > 1,
+        "takeover records the new holder's acquisition time"
+    );
 }
 #[test]
 fn non_holder_flush_waits_then_acquires() {
