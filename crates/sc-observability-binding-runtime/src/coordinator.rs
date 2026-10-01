@@ -520,14 +520,11 @@ fn core_parts(
                 pid: *pid,
             },
             native::ProcessIdentityPolicy::Resolver(resolver) => {
-                resolver.resolve().map_err(|e| {
-                    #[allow(
-                        deprecated,
-                        reason = "the released resolver returns the legacy wrapper; move its context directly at the compatibility boundary"
-                    )]
-                    let context = e.0;
-                    native::v2::InitError::Configuration { context }
-                })?
+                resolver
+                    .resolve()
+                    .map_err(|e| native::v2::InitError::Configuration {
+                        context: native::typed::IdentityFailure::from(e).into_context(),
+                    })?
             }
         },
     };

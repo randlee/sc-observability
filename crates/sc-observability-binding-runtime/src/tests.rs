@@ -1035,14 +1035,14 @@ fn core_shutdown_timeout_admission_failure() {
                 ["retry after shutdown"],
             ),
         )),
-        native::v2::FailureClassification::timeout("native_operation"),
+        native::v2::FailureClassification::timeout("shutdown"),
     );
 
     assert_failure(
         Err::<(), _>(crate::conversion::core_admission(&error)),
         sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT.as_str(),
         "timeout",
-        Some("native_operation"),
+        Some("shutdown"),
     );
 
     let error = sc_observability_log::v2::EmitError::ShutdownTimedOut {
@@ -1060,7 +1060,7 @@ fn core_shutdown_timeout_admission_failure() {
         Err::<(), _>(crate::conversion::bridge_admission(error)),
         sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT.as_str(),
         "timeout",
-        Some("native_operation"),
+        Some("shutdown"),
     );
 }
 fn admission32(close: bool) {
