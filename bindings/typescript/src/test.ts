@@ -1,4 +1,5 @@
 import {
+  CANONICAL_ERROR_CODES,
   createClient,
   createTauriTransport,
   canonicalErrorCode,
@@ -78,15 +79,52 @@ async function main(): Promise<void> {
     }
   }
 
-  assert(canonicalErrorCode("EventError::Validation") === "SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED",
+  assert(canonicalErrorCode("EventError::Validation") === "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
     "canonical v2 event name did not retain its stable code");
-  assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED") === "EventError::Validation",
-    "canonical v2 code did not resolve to its variant name");
+  assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED") === "IdentityError::Process",
+    "unambiguous canonical code did not resolve to its variant name");
   assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID") === undefined,
     "ambiguous canonical code was falsely resolved to one variant");
+  const expectedCanonicalCatalogue = [
+    ["IdentityError::Process", "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"],
+    ["InitError::Configuration", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["InitError::Runtime", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["EventError::Validation", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["EventError::Routing", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["FlushError::Drain", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["ShutdownError::Timeout", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["ShutdownError::Drain", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["ProjectionError::Projection", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["SubscriberError::Subscriber", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["LogSinkError::Write", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["LogSinkError::Flush", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["ConfigFailure::ZeroDuration", "OTLP_CONFIG_ZERO_DURATION"],
+    ["ConfigFailure::DurationOverflow", "OTLP_CONFIG_DURATION_OVERFLOW"],
+    ["ConfigFailure::InvalidBoundOrdering", "OTLP_CONFIG_BOUND_ORDER"],
+    ["ConfigFailure::InvalidJitterPercent", "OTLP_CONFIG_JITTER_PERCENT"],
+    ["ConfigFailure::InvalidQueueCapacity", "OTLP_CONFIG_QUEUE_CAPACITY"],
+    ["ConfigFailure::InvalidQueueByteCapacity", "OTLP_CONFIG_QUEUE_BYTE_CAPACITY"],
+    ["ConfigFailure::ConfigFieldNotApplicable", "OTLP_CONFIG_FIELD_NOT_APPLICABLE"],
+    ["ConfigFailure::InsecureTransportRejected", "OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED"],
+    ["ConfigFailure::InvalidEndpoint", "OTLP_CONFIG_INVALID_ENDPOINT"],
+    ["ConfigFailure::InvalidHeader", "OTLP_CONFIG_INVALID_HEADER"],
+    ["ConfigFailure::TransportConstructionFailed", "OTLP_TRANSPORT_CONSTRUCTION_FAILED"],
+    ["ConfigFailure::UnsupportedBackend", "OTLP_UNSUPPORTED_BACKEND"],
+    ["ConfigFailure::UnsupportedProtocol", "OTLP_UNSUPPORTED_PROTOCOL"],
+    ["ConfigFailure::TokioRuntimeRequired", "OTLP_TOKIO_RUNTIME_REQUIRED"],
+    ["MetricModelError::InvalidHistogram", "SC_METRIC_INVALID_HISTOGRAM"],
+    ["MetricModelError::InvalidTemporality", "SC_METRIC_INVALID_TEMPORALITY"],
+    ["MetricModelError::InvalidInterval", "SC_METRIC_INVALID_INTERVAL"],
+  ];
+  assert(
+    JSON.stringify(Object.entries(CANONICAL_ERROR_CODES)) === JSON.stringify(expectedCanonicalCatalogue),
+    "generated canonical catalogue key/value order diverged from the native variant contract",
+  );
   const ambiguousNames = canonicalErrorNamesForCode("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID");
-  assert(ambiguousNames.length === 7 && ambiguousNames.includes("InitError::Configuration") &&
+  assert(ambiguousNames.length === 11 && ambiguousNames.includes("InitError::Configuration") &&
     ambiguousNames.includes("InitError::Runtime") && ambiguousNames.includes("EventError::Routing") &&
+    ambiguousNames.includes("EventError::Validation") && ambiguousNames.includes("FlushError::Drain") &&
+    ambiguousNames.includes("ShutdownError::Timeout") && ambiguousNames.includes("ShutdownError::Drain") &&
     ambiguousNames.includes("ProjectionError::Projection") && ambiguousNames.includes("SubscriberError::Subscriber") &&
     ambiguousNames.includes("LogSinkError::Write") && ambiguousNames.includes("LogSinkError::Flush"),
   "ambiguous canonical code did not retain all candidate variants");

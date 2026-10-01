@@ -47,6 +47,11 @@ def generate(schema):
         node=schema['$defs'][reference['$ref'][8:]]
         rendered=ts_type(node).replace(projection['parameter_ref'],'T')
         lines.append(f'export type {projection["name"]}<T> = {rendered};')
+    canonical_error_codes = {
+        entry['name']: entry['code']
+        for entry in schema['x-sc-bindings']['canonical_error_codes']
+    }
+    lines.append('export const CANONICAL_ERROR_CODES = '+json.dumps(canonical_error_codes,ensure_ascii=False,separators=(',',':'))+' as const;')
     lines.append('export const errorRegistry = '+json.dumps(schema['x-sc-error-registry'],ensure_ascii=False,separators=(',',':'))+' as const;')
     for entry in schema['x-sc-error-registry']:lines.append(f'export const {entry["code"]} = {json.dumps(entry["code"])} as const;')
     lines.append('export const schema = '+json.dumps(schema,ensure_ascii=False,separators=(',',':'))+' as const;')

@@ -60,11 +60,12 @@ backends = ["otlp-sdk", "legacy-http-json"]
 features = ["rt", "rt-multi-thread", "macros", "time", "sync"]
 default_features = true
 
-# ADR-019 amendment: OTLP hermetic test collector. These are the only
-# sc-observability-otlp dev-dependencies, with exact effective features.
+# ADR-019 amendments: facade tests and OTLP hermetic test collector. These are
+# the only sc-observability-otlp dev-dependencies, with exact effective features.
 # tonic adds the generated-service router to the reviewed transport pin for the
 # integration collector; it is never a normal dependency feature or backend.
 [dev_dependencies]
+sc-observability = { features = [], default_features = true }
 sc-observe = { features = [], default_features = true }
 tonic = { features = ["router", "transport"], default_features = false }
 

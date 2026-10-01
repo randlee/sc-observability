@@ -467,6 +467,102 @@ fn envelope_failure(wire: Value) -> (String, String, String) {
     }
 }
 
+#[derive(Clone, Copy)]
+enum EnvelopeShellFailure {
+    UnsupportedVersion(u32),
+    InvalidInput,
+}
+
+fn legacy_envelope_failure(wire: Value) -> Failure {
+    decode_envelope::<AdmissionDto>(wire).expect_err("malformed legacy envelope must fail")
+}
+
+fn canonical_envelope_failure(wire: Value) -> Failure {
+    decode_canonical_envelope::<AdmissionDto>(wire)
+        .expect_err("malformed canonical envelope must fail")
+}
+
+fn assert_envelope_shell_failure(decoder: &str, error: Failure, expected: EnvelopeShellFailure) {
+    match (expected, error) {
+        (
+            EnvelopeShellFailure::UnsupportedVersion(received),
+            Failure::UnsupportedVersion {
+                diagnostic,
+                received: actual,
+            },
+        ) => {
+            assert_eq!(
+                diagnostic.code,
+                error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION
+            );
+            assert_eq!(actual, received, "{decoder}");
+        }
+        (EnvelopeShellFailure::InvalidInput, Failure::Validation { diagnostic, field }) => {
+            assert_eq!(
+                diagnostic.code,
+                error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT
+            );
+            assert_eq!(field, "response", "{decoder}");
+        }
+        (_, actual) => panic!("{decoder} returned unexpected envelope failure: {actual:?}"),
+    }
+}
+
+#[test]
+fn envelope_shell_rejects_each_malformed_payload_through_both_public_decoders() {
+    let error = fixture("CanonicalWireEnvelopeAdmissionDto")["error"].clone();
+    let mut error_missing_kind = error.clone();
+    error_missing_kind
+        .as_object_mut()
+        .expect("fixture error is an object")
+        .remove("kind");
+    let cases = [
+        (
+            "unsupported schema version",
+            json!({"schema_version": 2, "kind": "ok", "value": {}}),
+            EnvelopeShellFailure::UnsupportedVersion(2),
+        ),
+        (
+            "ok envelope missing value",
+            json!({"schema_version": 1, "kind": "ok"}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+        (
+            "error envelope missing error payload",
+            json!({"schema_version": 1, "kind": "error"}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+        (
+            "envelope missing kind",
+            json!({"schema_version": 1, "value": {}}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+        (
+            "envelope with conflicting ok and error payloads",
+            json!({"schema_version": 1, "kind": "ok", "value": {}, "error": error}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+        (
+            "error payload missing failure kind",
+            json!({"schema_version": 1, "kind": "error", "error": error_missing_kind}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+    ];
+
+    for (name, wire, expected) in cases {
+        assert_envelope_shell_failure(
+            &format!("legacy {name}"),
+            legacy_envelope_failure(wire.clone()),
+            expected,
+        );
+        assert_envelope_shell_failure(
+            &format!("canonical {name}"),
+            canonical_envelope_failure(wire),
+            expected,
+        );
+    }
+}
+
 #[test]
 fn canonical_envelope_error_arm_follows_binding_contract() {
     // binding-contract.md: malformed envelope -> INVALID_INPUT at `response`;
