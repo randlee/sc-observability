@@ -1,35 +1,44 @@
-# 1.4.1 to 2.0 migration reference
+# Compatible 1.x migration reference
 
-The frozen compatibility baseline is 1.4.1. ADR-017 authorizes only enumerated,
-reviewed breaks; it does not waive arbitrary source or wire changes. This
-reference separates the currently observed DTO signature change from the
-canonical error/config/signal contract whose complete activation is D18 work.
-No publication or final baseline approval is implied.
+The frozen compatibility baseline is 1.4.1, and the current release is the
+next compatible 1.x version under
+[ADR-020](architecture.md#adr-020-compatible-1x-adoption-of-phase-d). It
+retains the released public API and accepts no public API breaks:
+[`release/public-api-major-breaks.toml`](../release/public-api-major-breaks.toml)
+has an empty `breaks` list. Start with
+[Adopting the compatible 1.x release](migration/compatible-1x.md).
 
-## from_core_health returns the health value
+The later sections describe the canonical error, configuration and signal
+contract. Where they say "2.0" or describe removals, they refer to a future,
+separately authorized major release; nothing in them is removed in 1.x. No
+publication or final baseline approval is implied.
 
-`sc_observability_dto::from_core_health` now returns `LogHealthDto` directly,
-instead of `Result<LogHealthDto, Failure>`. It projects already validated
-core health and level state without inventing a possible conversion failure.
+## from_core_health keeps its released signature
+
+`sc_observability_dto::from_core_health` keeps its released 1.4.1 signature
+and returns `Result<LogHealthDto, Failure>`. It is a thin wrapper that always
+returns `Ok` from the canonical projection, so existing callers need no
+change:
 
 ```rust,ignore
-// 1.4.1
+// 1.4.1 and compatible 1.x
 let health = sc_observability_dto::from_core_health(logging, level)?;
-// 2.0
-let health = sc_observability_dto::from_core_health(logging, level);
 ```
 
-Remove `?`, `unwrap`, `expect`, `map_err`, and `Ok`/`Err` matching at this call.
-A caller whose own interface remains fallible can explicitly return
-`Ok(from_core_health(logging, level))`; do not reintroduce a fake conversion
-failure. The DTO still has schema version 1, the actual logging/level state,
-and `bridge: None` for an independent core logger. This signature change alone
-does not change that wire payload or grant a schema-version bump.
+The infallible canonical projection is the new
+`sc_observability_dto::from_canonical_core_health`, which returns
+`LogHealthDto` directly. Call it when you want the projection without a
+`Result`:
 
-The exact old/new public-API signatures and authority are recorded in
-[`release/public-api-major-breaks.toml`](../release/public-api-major-breaks.toml).
-The entry must remain present in the consumed manifest, even after all local
-callers have migrated.
+```rust,ignore
+let health = sc_observability_dto::from_canonical_core_health(logging, level);
+```
+
+Do not wrap it in a fake conversion failure; a caller whose own interface
+remains fallible can return `Ok(from_canonical_core_health(logging, level))`.
+Both functions produce the same DTO: schema version 1, the actual logging and
+level state, and `bridge: None` for an independent core logger. Neither changes
+the wire payload or grants a schema-version bump.
 
 ## Error and custom extension points
 
@@ -39,13 +48,15 @@ migration. Import canonical same-name enums after activation, not permanent
 parallel typed wrappers. Keep open trait implementations and host-owned logger
 lifecycle semantics intact.
 
-## Enumerated public 2.0 removals
+## Removals reserved for a later major release
 
-The D18 manifest records every observed 1.4.1 removal rather than granting a
-crate-wide waiver. `sc-observability-types` retires wrapper structs,
-`ClassifiedError`, `*Failure` conversions, and kind aliases in favor of the
-ADR-017 named enums; `TelemetryError` remains but becomes a non-exhaustive
-canonical 2.0 enum. `sc-observability` and `sc-observe` retire legacy
+None of the removals below happens in 1.x; the compatible 1.x break manifest
+enumerates none, and the released items stay public and deprecated. A future,
+separately authorized major release would enumerate each one rather than
+grant a crate-wide waiver. In that release, `sc-observability-types` retires
+wrapper structs, `ClassifiedError`, `*Failure` conversions, and kind aliases
+in favor of the ADR-017 named enums; `TelemetryError` remains but becomes a
+non-exhaustive canonical 2.0 enum. `sc-observability` and `sc-observe` retire legacy
 logging/routing errors and the duplicate `*_typed` surface; unsuffixed 2.0
 methods use canonical errors where a same-method replacement exists.
 
@@ -103,13 +114,13 @@ change is not proof of wire compatibility.
 
 ## Qualification and rollout
 
-Run the existing public-API semver gate against 1.4.1. It now matches exact
-removed/changed API lines to enumerated manifest entries; a different
-replacement signature, missing entry, or tool failure is an error. New D18
-breaks need individual evidence before being added. No crate-wide or wildcard
-waiver exists. The structural `cargo semver-checks` gate also remains required;
-a manifest entry does not waive its failures, including breaking additions
-that a text diff alone cannot classify.
+Run the existing public-API semver gate against 1.4.1. For a compatible 1.x
+candidate it requires the break manifest to name the 1.4.1 baseline and the
+workspace candidate version and to list no `breaks`; then it runs
+`cargo semver-checks` for each published crate, and for the proc-macro crate a
+`cargo public-api` diff that allows additions but rejects every removal or
+changed signature. A tool failure is an error, and no approval waives a failed
+check.
 
 ```sh
 python3 scripts/ci/validate_public_api_semver.py --crate sc-observability-dto
@@ -117,12 +128,7 @@ python3 scripts/ci/validate_public_api_semver.py
 ```
 
 The first command is scoped evidence only. The second is required for the
-whole release and may still fail on unenumerated changes while D18 is in
-progress. To verify omission enforcement, copy the manifest in a scratch
-checkout, remove the observed `dto-from-core-health-infallible` entry, run the
-same scoped command and require nonzero status with `unlisted API break`;
-restore it and require success. Never generate or approve the final 2.0
-baseline from a scoped pass.
+whole release. Never generate or approve a final baseline from a scoped pass.
 
 Finish with canonical migration fixture execution, real Python/TypeScript/
 Tauri composition, schema checks and all-features workspace tests. Keep the

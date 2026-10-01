@@ -144,7 +144,7 @@ impl Coordinator {
                 return Err(error);
             }
         };
-        let shutdown = Operation::new(&dispatcher, &timer, error::OperationKind::Shutdown);
+        let shutdown = Operation::new(&dispatcher, &timer);
         let shared = Arc::new(Self {
             backend,
             snapshot: ArcSwap::from_pointee(health),
@@ -267,7 +267,7 @@ impl Coordinator {
             ));
         }
         queue.query = true;
-        let operation = Operation::new(&self.dispatcher, &self.timer, error::OperationKind::Query);
+        let operation = Operation::new(&self.dispatcher, &self.timer);
         queue
             .items
             .push_back(Work::Query(Box::new(query), operation.clone()));
@@ -284,7 +284,7 @@ impl Coordinator {
             ));
         }
         queue.flush = true;
-        let operation = Operation::new(&self.dispatcher, &self.timer, error::OperationKind::Flush);
+        let operation = Operation::new(&self.dispatcher, &self.timer);
         queue
             .items
             .push_back(Work::Flush(timeout, operation.clone()));

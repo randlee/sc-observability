@@ -1,13 +1,5 @@
 # OTLP smoke test
 
-<!--
-source: docs/observability/smoke-test-plan-phase-aw.md
-git_blob: 9b284670444143b3b57ecac5fd526ce4c9f5e426
-sha256: 16c12b0a375cb78fc1db9c69dcb8ab2407c8e8e5af09436f9bf2921d98f35b3c
-disposition: translate-current-schema
-allowed_delta: neutral-current-schema
--->
-
 This is the current, repository-local smoke path. It supersedes only the
 historical plan's external operational instructions.
 

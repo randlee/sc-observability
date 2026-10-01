@@ -26,7 +26,10 @@ pub(crate) fn full(code: &str) -> Failure {
 pub(crate) fn waiters_full() -> Failure {
     full(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL)
 }
-pub(crate) fn timeout() -> Failure {
+/// The sole binding-local observation timeout.  Query, flush and shutdown
+/// observers share one wire contract (code, message, remediation and the
+/// `native_operation` disposition), so no caller selects a per-operation form.
+pub(crate) fn observer_timeout() -> Failure {
     Failure::Timeout {
         diagnostic: boundary_diagnostic(
             codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
@@ -35,16 +38,6 @@ pub(crate) fn timeout() -> Failure {
         .into(),
         operation: "native_operation".into(),
     }
-}
-
-/// The native operation represented by an observer.  Observer deadlines are
-/// local to the binding runtime, but their diagnostics retain the canonical
-/// operation family so a flush timeout cannot be mistaken for shutdown.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum OperationKind {
-    Query,
-    Flush,
-    Shutdown,
 }
 
 fn context(
@@ -122,11 +115,6 @@ pub(crate) fn shutdown_drain(message: impl Into<String>) -> native::v2::Shutdown
         ),
         native::v2::FailureClassification::Internal,
     )
-}
-
-pub(crate) fn observer_timeout(kind: OperationKind) -> Failure {
-    let _ = kind;
-    timeout()
 }
 
 pub(crate) fn duration(value: Duration) -> Result<(), Failure> {
