@@ -25,13 +25,15 @@ use std::time::{Duration, Instant, SystemTime};
 // This is a test watchdog, not the production handshake deadline (1 ms).
 const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
 const REQUEST_FIXTURE_WATCHDOG: Duration = Duration::from_secs(2);
-const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 4_000;
-const STALLED_RETRY_REQUEST_TIMEOUT_MS: u64 = 4_000;
-const STALLED_RETRY_BACKOFF_MS: u64 = 2_500;
+const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 8_000;
+// Leave the client-wide timeout much longer than the final attempt's remaining
+// budget so the watchdog catches removal of the per-request timeout.
+const STALLED_RETRY_REQUEST_TIMEOUT_MS: u64 = 7_500;
+const STALLED_RETRY_BACKOFF_MS: u64 = 7_000;
 const STALLED_RETRY_SERVER_WATCHDOG: Duration = Duration::from_secs(20);
 const STALLED_RETRY_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const STALLED_RETRY_STEP_WATCHDOG: Duration = Duration::from_secs(10);
-const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(10);
+const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(5);
 const STALLED_RETRY_CLEANUP_WATCHDOG: Duration = Duration::from_secs(2);
 const CONTROL_ORDERING_WATCHDOG: Duration = Duration::from_secs(2);
 
@@ -1191,7 +1193,7 @@ fn assert_stalled_retry_applied_timeouts(
 }
 
 #[test]
-fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
+fn loopback_stalled_sync_http_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     listener
@@ -1227,7 +1229,7 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
                     .expect("write retryable response");
             } else {
                 stalled_tx.send(()).expect("signal stalled final request");
-                let _ = release_rx.recv_timeout(Duration::from_secs(8));
+                let _ = release_rx.recv_timeout(STALLED_RETRY_SERVER_WATCHDOG);
             }
         }
     });
@@ -1248,7 +1250,7 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
         Some(delay_tx),
         Some(request_timeout_tx),
     )
-    .expect("construct exporter with equal request and sequence bounds");
+    .expect("construct exporter with request timeout below sequence bound");
     let (result_tx, result_rx) = mpsc::channel();
     let export_thread = thread::spawn(move || {
         let result = exporter.send_payload_sync("logs", &logs_payload());

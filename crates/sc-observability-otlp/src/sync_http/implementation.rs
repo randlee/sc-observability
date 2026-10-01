@@ -441,12 +441,12 @@ impl ExporterLifecycle for Worker {
         Box::pin(async move {
             let (tx, rx) = tokio::sync::oneshot::channel();
             thread::Builder::new()
-                .name("sc-otlp-legacy-flush".to_owned())
+                .name("sc-otlp-sync-http-flush".to_owned())
                 .spawn(move || {
                     let _ = tx.send(worker.flush_blocking());
                 })
                 .map_err(|error| {
-                    transport_error_with_source("failed to start legacy flush helper", error)
+                    transport_error_with_source("failed to start sync HTTP flush helper", error)
                 })?;
             rx.await.unwrap_or_else(|_| Err(worker_terminated_error()))
         })
@@ -458,12 +458,12 @@ impl ExporterLifecycle for Worker {
             worker.cancel();
             let (tx, rx) = tokio::sync::oneshot::channel();
             thread::Builder::new()
-                .name("sc-otlp-legacy-shutdown".to_owned())
+                .name("sc-otlp-sync-http-shutdown".to_owned())
                 .spawn(move || {
                     let _ = tx.send(worker.shutdown_blocking());
                 })
                 .map_err(|error| {
-                    transport_error_with_source("failed to start legacy shutdown helper", error)
+                    transport_error_with_source("failed to start sync HTTP shutdown helper", error)
                 })?;
             rx.await.unwrap_or_else(|_| Err(worker_terminated_error()))
         })
@@ -636,16 +636,13 @@ fn send_with_retries(
             return Err(retry_deadline_error());
         }
         let request_timeout = selected_request_timeout(config.request_timeout, remaining);
+        let request_timeout =
+            observed_request_timeout!(config, attempt, request_timeout, remaining);
         let response = client
             .post(endpoint)
             .header(CONTENT_TYPE, "application/json")
             .body(body.to_owned())
-            .timeout(observed_request_timeout!(
-                config,
-                attempt,
-                request_timeout,
-                remaining
-            ))
+            .timeout(request_timeout)
             .send();
         match response {
             Ok(response) if response.status().is_success() => return Ok(()),
