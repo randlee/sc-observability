@@ -276,6 +276,41 @@ fn generated_id_and_plain_attribute_fixtures_reach_their_signal_routes() {
 }
 
 #[test]
+fn logs_are_grouped_by_distinct_resource_and_scope() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind capture listener");
+    let exporter = submission_exporter(
+        format!("http://{}", listener.local_addr().expect("address")),
+        None,
+    );
+    let first = fixture("logs");
+    let mut second_scope = first.clone();
+    second_scope.logs[0].scope.name = "second-scope".to_owned();
+    let mut second_resource = first.clone();
+    second_resource.logs[0].resource.schema_url =
+        Some("https://example.test/second-resource".to_owned());
+    let (captured, server) = capture_server(listener, &[200]);
+
+    exporter
+        .export(Signal::Logs, &[first, second_scope, second_resource])
+        .expect("grouped logs deliver");
+    let (_, request) = captured
+        .recv_timeout(CAPTURE_TIMEOUT)
+        .expect("captured grouped request");
+    assert_eq!(server.join().expect("capture server exits"), 1);
+    let resources = request["resourceLogs"].as_array().expect("resource groups");
+    assert_eq!(resources.len(), 2, "different resources must not coalesce");
+    assert_eq!(
+        resources[0]["scopeLogs"].as_array().map(Vec::len),
+        Some(2),
+        "different scopes within one resource stay distinct"
+    );
+    assert_eq!(
+        resources[1]["resource"]["schemaUrl"],
+        "https://example.test/second-resource"
+    );
+}
+
+#[test]
 fn oversized_multi_envelope_submission_splits_at_encoded_request_limit() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind capture listener");
     let exporter = submission_exporter(
