@@ -20,7 +20,6 @@ cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc
 "$python_bin" scripts/ci/validate_binding_generators.py
 BINDING_PYTHON="$python_bin" bash scripts/ci/validate_binding_python_typing.sh
 "$python_bin" -m unittest discover -s scripts/ci/tests -p test_binding_source_bundle.py
-"$python_bin" scripts/ci/validate_binding_artifacts.py
 binding_bundle_dir="$(mktemp -d -t binding-source-bundle.XXXXXX)/artifact"
 trap 'rm -rf "$(dirname "$binding_bundle_dir")"' EXIT
 "$python_bin" scripts/ci/build_binding_source_bundle.py \

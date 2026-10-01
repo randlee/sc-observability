@@ -13,7 +13,7 @@ on:
       - 'scripts/ci/otlp_dependencies.py'
       - 'scripts/ci/otlp_dev_install_smoke.py'
       - 'scripts/ci/provision_legacy_otlp_provenance.py'
-      - 'scripts/ci/tests/test_generation_provenance.py'
+      - 'scripts/ci/tests/test_legacy_otlp_provenance.py'
       - 'scripts/ci/fixtures/otlp/**'
       - '.github/workflows/otlp-conformance.yml'
   workflow_dispatch:
@@ -53,7 +53,7 @@ jobs:
           --test canonical_ingress --features otlp-sdk,legacy-http-json
       - name: Validate non-Grafana legacy OTLP provenance
         run: >-
-          python3 -m unittest scripts.ci.tests.test_generation_provenance
+          python3 -m unittest scripts.ci.tests.test_legacy_otlp_provenance
 
   desktop-viewer-factory-conformance:
     name: desktop-viewer-factory-conformance (macOS arm64)

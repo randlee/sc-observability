@@ -84,7 +84,7 @@ applicable retained workflows on the candidate ref before publishing and
 verifies successful completion: B.2 for the current six-package release train,
 and B.P2 only when its candidate/baseline authority matches the release plan.
 B.2 runs
-`test_log_staging.py` and `test_generation_provenance.py`; B.P2 runs
+`test_log_staging.py` and `test_legacy_otlp_provenance.py`; B.P2 runs
 `test_validate_runtime_level_qualification_metadata.py`,
 `test_validate_runtime_level_platform_evidence.py`,
 `validate_runtime_level_qualification_metadata.py` and the `rustfmt --check`
@@ -109,10 +109,12 @@ Phase B/C snapshot JSON and their dedicated regression suites are retired.
 The import was accepted and the crates are now maintained here; source edits
 are intentional. The source-revision pin and history prerequisites for binding
 generation are also retired because stack rebases rewrite commits. The
-existing `validate_binding_artifacts.py` remains the one input/output hash
-checker; schema generation, typing, runtime tests and Cargo package checks
-remain functional gates. Tests unrelated to these retired provenance checks
-are unchanged.
+committed generated-binding source/output hash inventory is also retired.
+`validate_binding_generators.py` regenerates and compares the committed schema
+and language bindings, checks determinism, and rejects stale generated output.
+Pinned generator toolchains, typing, runtime tests, public API/semver checks and
+Cargo package integrity checks remain functional gates. Tests unrelated to these
+retired provenance checks are unchanged.
 
 Retired 2026-09-26: `validate_log_import.py`, `_log_metadata_adaptations.py`,
 `_log_release_adaptations.py`, Phase B `import-provenance.json`,

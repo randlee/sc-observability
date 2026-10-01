@@ -998,8 +998,9 @@ owns the shared API, so that check is outdated. The crates are
 published and maintained here; reviewed Phase D changes intentionally evolve
 them. Retire the BTIT import/snapshot comparison jobs and adaptation records.
 Cargo compilation, behavioral tests, package verification and the existing
-single generated-binding input/output content-hash check remain the gates.
-No Git revision or historical blob pin is required for generated bindings.
+generated-binding regeneration and drift checks remain the gates.
+No committed source-hash inventory, Git revision or historical blob pin is required
+for generated bindings.
 
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 
@@ -1288,7 +1289,7 @@ in [the CI policy](ci-policy.md).
   artifacts have producer/consumer handoffs, and backend implementations use
   the common lifecycle. No new boundary-rule framework is authorized. Cargo
   dependency graphs and Rust privacy enforce structural restrictions; existing
-  validators check generated-binding input/output hashes, package integrity
+  validators check generated-binding regeneration and drift, package integrity
   and dependency boundaries.
 - **Contracts**: PHD-001–004, PHB-002/010/013, LOG-004/009/042/046,
   OTLP-011/021/023, SRC-001–004; obs-d-12/13/17/8.

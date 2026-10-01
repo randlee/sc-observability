@@ -28,7 +28,7 @@ jobs:
             --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
           python3 scripts/ci/validate_version_literals.py
           python3 -m unittest discover -s scripts/ci/tests -p 'test_log_staging.py'
-          python3 -m unittest discover -s scripts/ci/tests -p 'test_generation_provenance.py'
+          python3 -m unittest discover -s scripts/ci/tests -p 'test_legacy_otlp_provenance.py'
       - name: Build and verify all six immutable Cargo packages
         run: |
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
