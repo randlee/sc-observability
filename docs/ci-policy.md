@@ -28,6 +28,9 @@ PRs target the layer below them (`sprint/<lower>`), and quick-fix PRs target
 from this workflow. Retire this added base coverage when stacks stop using
 `sprint/*` bases.
 
+Dependency restrictions remain checked by `just lint` through
+`scripts/ci/validate_dependency_bans.sh`.
+
 ## Intermediate PR job inventory
 
 Each row names the existing regression motivating the check, rather than
@@ -38,7 +41,6 @@ on PRs 233–235 are the observed reason for retiring those checks.
 | --- | --- | --- | --- |
 | CI: `fmt`, `clippy` | Rust maintainers; formatting and compiler lint errors | Compiler/lint failures before tests; existing workspace gate | Compiler/build tooling replaces the gate with equivalent coverage |
 | CI: `docs-consistency` | API consumers; normative docs and rustdoc agree | Existing docs consistency regression cases and missing-doc checks | Normative document generation replaces these checks |
-| CI: `dependency-bans` | Lower-layer consumers; neutral dependency graph | Existing forbidden-dependency and binding-runtime boundary checks | Architectural dependency restrictions are retired |
 | CI: `version-literals` | Package consumers; one coherent release train | Existing version and exact macro-pin mismatch rejection | Packages stop using a coordinated release train |
 | CI: `public-api-governance` | Integration reviewer; visible API diffs, report-only for PRs except bases develop/main | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs intermediate API reports |
 | CI: `manifest-validation` | Release maintainer; publish inventory, install contract, retry correctness | `test_release_artifacts`, `test_prepare_release_staged_packages`, `test_publish_retry_idempotency` | Publish/install tooling is replaced and its coverage moves with it |
