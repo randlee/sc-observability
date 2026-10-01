@@ -33,7 +33,10 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
                 .into_iter()
                 .map(|group| {
                     Value::Object(Map::from_iter([
-                        ("resource".to_owned(), resource::resource(&group.resource)),
+                        (
+                            "resource".to_owned(),
+                            Value::Object(resource::resource(&group.resource)),
+                        ),
                         (
                             "scopeMetrics".to_owned(),
                             Value::Array(
@@ -42,7 +45,10 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
                                     .into_iter()
                                     .map(|scope| {
                                         Value::Object(Map::from_iter([
-                                            ("scope".to_owned(), resource::scope(&scope.scope)),
+                                            (
+                                                "scope".to_owned(),
+                                                Value::Object(resource::scope(&scope.scope)),
+                                            ),
                                             ("metrics".to_owned(), Value::Array(scope.records)),
                                         ]))
                                     })
@@ -325,7 +331,7 @@ fn exemplar(value: &Exemplar) -> Value {
 fn number_value(encoded: &mut Map<String, Value>, value: &NumberValue) {
     match value {
         NumberValue::Int(value) => {
-            encoded.insert("asInt".to_owned(), Value::String(value.to_string()));
+            encoded.insert("asInt".to_owned(), values::int64(*value));
         }
         NumberValue::Double(value) => {
             encoded.insert("asDouble".to_owned(), values::double(*value));
@@ -363,7 +369,7 @@ fn temporality_value(value: AggregationTemporality) -> u8 {
 }
 
 fn uint(value: u64) -> Value {
-    Value::String(value.to_string())
+    values::uint64(value)
 }
 
 #[cfg(test)]
@@ -379,11 +385,7 @@ mod tests {
             "metric_exponential_histogram",
             "metric_summary",
         ] {
-            let path = format!(
-                "{}/../sc-observability-types/tests/fixtures/otlp_submission/golden/{fixture}/expected.envelope.json",
-                env!("CARGO_MANIFEST_DIR")
-            );
-            let contents = std::fs::read_to_string(path).expect("canonical metric fixture reads");
+            let contents = super::super::golden_fixture(fixture, "expected.envelope.json");
             let envelope: SubmissionEnvelope =
                 serde_json::from_str(&contents).expect("fixture parses");
             let value = request(&[envelope]);

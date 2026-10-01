@@ -36,7 +36,7 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
                     Value::Object(Map::from_iter([
                         (
                             "resource".to_owned(),
-                            resource::resource(&resource_spans.resource),
+                            Value::Object(resource::resource(&resource_spans.resource)),
                         ),
                         (
                             "scopeSpans".to_owned(),
@@ -48,7 +48,7 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
                                         Value::Object(Map::from_iter([
                                             (
                                                 "scope".to_owned(),
-                                                resource::scope(&scope_spans.scope),
+                                                Value::Object(resource::scope(&scope_spans.scope)),
                                             ),
                                             ("spans".to_owned(), Value::Array(scope_spans.records)),
                                         ]))
@@ -231,8 +231,9 @@ mod tests {
 
     #[test]
     fn encodes_trace_fixture_with_events_links_and_status() {
-        let envelope: SubmissionEnvelope = serde_json::from_str(include_str!(
-            "../../../../sc-observability-types/tests/fixtures/otlp_submission/golden/traces/expected.envelope.json"
+        let envelope: SubmissionEnvelope = serde_json::from_str(&super::super::golden_fixture(
+            "traces",
+            "expected.envelope.json",
         ))
         .expect("canonical trace fixture parses");
         let value = request(&[envelope]);

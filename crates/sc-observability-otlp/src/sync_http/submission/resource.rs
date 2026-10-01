@@ -7,7 +7,7 @@ use sc_observability_types::{
 };
 use serde_json::{Map, Value};
 
-pub(super) fn resource(value: &Resource) -> Value {
+pub(super) fn resource(value: &Resource) -> Map<String, Value> {
     let mut encoded = Map::new();
     encoded.insert(
         "attributes".to_owned(),
@@ -48,10 +48,10 @@ pub(super) fn resource(value: &Resource) -> Value {
         ),
     );
     insert_string(&mut encoded, "schemaUrl", value.schema_url.as_ref());
-    Value::Object(encoded)
+    encoded
 }
 
-pub(super) fn scope(value: &InstrumentationScope) -> Value {
+pub(super) fn scope(value: &InstrumentationScope) -> Map<String, Value> {
     let mut encoded = Map::new();
     encoded.insert("name".to_owned(), Value::String(value.name.clone()));
     insert_string(&mut encoded, "version", value.version.as_ref());
@@ -64,7 +64,7 @@ pub(super) fn scope(value: &InstrumentationScope) -> Value {
         Value::from(value.dropped_attributes_count),
     );
     insert_string(&mut encoded, "schemaUrl", value.schema_url.as_ref());
-    Value::Object(encoded)
+    encoded
 }
 
 pub(super) fn timestamp(value: &Timestamp) -> Value {

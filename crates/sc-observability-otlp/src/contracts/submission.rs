@@ -9,6 +9,12 @@ pub(crate) trait SubmissionExporter: Send + Sync {
         signal: Signal,
         envelopes: &[SubmissionEnvelope],
     ) -> Result<(), SubmissionExportFailure>;
+
+    /// Interrupt an in-flight submission during durable-client shutdown.
+    ///
+    /// This crate-private default preserves the test seam for exporters that
+    /// have no cancellable transport operation.
+    fn cancel(&self) {}
 }
 #[derive(Debug)]
 pub(crate) enum SubmissionExportFailure {

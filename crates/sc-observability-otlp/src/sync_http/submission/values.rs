@@ -39,10 +39,10 @@ pub(super) fn any_value(value: &AnyValue) -> Value {
             encoded.insert("boolValue".to_owned(), Value::Bool(*value));
         }
         AnyValue::Int(value) => {
-            encoded.insert("intValue".to_owned(), Value::String(value.to_string()));
+            encoded.insert("intValue".to_owned(), int64(*value));
         }
         AnyValue::UInt(value) => {
-            encoded.insert("intValue".to_owned(), Value::String(value.to_string()));
+            encoded.insert("intValue".to_owned(), uint64(*value));
         }
         AnyValue::Double(value) => {
             encoded.insert("doubleValue".to_owned(), double(*value));
@@ -76,13 +76,35 @@ pub(super) fn any_value(value: &AnyValue) -> Value {
     Value::Object(encoded)
 }
 
+/// Encodes signed 64-bit values with the protobuf JSON decimal-string rule.
+pub(super) fn int64(value: i64) -> Value {
+    Value::String(value.to_string())
+}
+
+/// Encodes unsigned 64-bit values with the protobuf JSON decimal-string rule.
+pub(super) fn uint64(value: u64) -> Value {
+    Value::String(value.to_string())
+}
+
 /// Uses the protobuf JSON spellings for non-finite IEEE-754 values.
 pub(super) fn double(value: OtlpDouble) -> Value {
-    match value.get() {
-        value if value.is_nan() => Value::String("NaN".to_owned()),
-        f64::INFINITY => Value::String("Infinity".to_owned()),
-        f64::NEG_INFINITY => Value::String("-Infinity".to_owned()),
-        value => Value::Number(Number::from_f64(value).expect("finite f64 is a JSON number")),
+    let value = value.get();
+    if value.is_finite() {
+        return Number::from_f64(value).map_or_else(
+            || Value::String(non_finite_spelling(value).to_owned()),
+            Value::Number,
+        );
+    }
+    Value::String(non_finite_spelling(value).to_owned())
+}
+
+fn non_finite_spelling(value: f64) -> &'static str {
+    if value.is_nan() {
+        "NaN"
+    } else if value.is_sign_positive() {
+        "Infinity"
+    } else {
+        "-Infinity"
     }
 }
 
@@ -118,10 +140,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn base64_encodes_each_padding_width() {
-        assert_eq!(base64(b""), "");
-        assert_eq!(base64(b"f"), "Zg==");
-        assert_eq!(base64(b"fo"), "Zm8=");
-        assert_eq!(base64(b"foo"), "Zm9v");
+    fn base64_encodes_rfc_4648_section_10_vectors() {
+        for (plain, encoded) in [
+            (b"".as_slice(), ""),
+            (b"f".as_slice(), "Zg=="),
+            (b"fo".as_slice(), "Zm8="),
+            (b"foo".as_slice(), "Zm9v"),
+            (b"foob".as_slice(), "Zm9vYg=="),
+            (b"fooba".as_slice(), "Zm9vYmE="),
+            (b"foobar".as_slice(), "Zm9vYmFy"),
+        ] {
+            assert_eq!(base64(plain), encoded);
+        }
     }
 }

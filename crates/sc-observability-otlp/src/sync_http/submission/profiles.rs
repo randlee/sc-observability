@@ -44,10 +44,7 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
                 .into_iter()
                 .map(|group| {
                     let schema_url = group.resource.schema_url.clone();
-                    let mut resource = resource::resource(&group.resource)
-                        .as_object()
-                        .expect("resource encoder returns an object")
-                        .clone();
+                    let mut resource = resource::resource(&group.resource);
                     resource.remove("schemaUrl");
                     Value::Object(Map::from_iter([
                         ("resource".to_owned(), Value::Object(resource)),
@@ -60,10 +57,7 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
                                     .into_iter()
                                     .map(|scope| {
                                         let schema_url = scope.scope.schema_url.clone();
-                                        let mut scope_value = resource::scope(&scope.scope)
-                                            .as_object()
-                                            .expect("scope encoder returns an object")
-                                            .clone();
+                                        let mut scope_value = resource::scope(&scope.scope);
                                         scope_value.remove("schemaUrl");
                                         Value::Object(Map::from_iter([
                                             ("scope".to_owned(), Value::Object(scope_value)),
@@ -161,8 +155,11 @@ fn wire_profile(value: &Profile) -> Value {
             Value::Array(value.samples.iter().map(sample).collect()),
         ),
         ("timeUnixNano".to_owned(), resource::timestamp(&value.time)),
-        ("durationNano".to_owned(), uint(value.duration_nanos)),
-        ("period".to_owned(), int(value.period)),
+        (
+            "durationNano".to_owned(),
+            values::uint64(value.duration_nanos),
+        ),
+        ("period".to_owned(), values::int64(value.period)),
         (
             "profileId".to_owned(),
             Value::String(values::base64(&value.profile_id)),
@@ -326,11 +323,11 @@ fn indices(values: &[i32]) -> Value {
 }
 
 fn uint(value: u64) -> Value {
-    Value::String(value.to_string())
+    values::uint64(value)
 }
 
 fn int(value: i64) -> Value {
-    Value::String(value.to_string())
+    values::int64(value)
 }
 
 fn optional_string(value: Option<String>) -> Value {
@@ -349,8 +346,9 @@ mod tests {
 
     #[test]
     fn encodes_profile_dictionary_and_grouped_profile() {
-        let envelope: SubmissionEnvelope = serde_json::from_str(include_str!(
-            "../../../../sc-observability-types/tests/fixtures/otlp_submission/golden/profiles/expected.envelope.json"
+        let envelope: SubmissionEnvelope = serde_json::from_str(&super::super::golden_fixture(
+            "profiles",
+            "expected.envelope.json",
         ))
         .expect("canonical profile fixture parses");
         let value = request(&[envelope]);

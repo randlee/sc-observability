@@ -7,50 +7,61 @@ mod resource;
 mod tests;
 mod traces;
 mod values;
-use super::implementation::OtlpHttpExporter;
 pub(crate) use super::implementation::SyncHttpConfig;
+use super::implementation::{OtlpHttpExporter, SubmissionRoute};
 use crate::config::ValidatedTransportBounds;
-use crate::constants::PROFILES_EXPORT_PATH;
+use crate::constants::MAX_OTLP_ENCODED_REQUEST_BYTES;
 use crate::contracts::profiles::ProfileExporter;
 use crate::contracts::submission::{SubmissionExportFailure, SubmissionExporter};
+use crate::error_codes::OTLP_EXPORT_TERMINAL;
+use crate::lifecycle::SignalKind;
 use sc_observability_types::{
     ErrorContext, Remediation,
     otlp::submission::{Signal, SubmissionEnvelope},
     v2::ExportError,
 };
-use std::sync::{Arc, Mutex};
+use std::{fmt, sync::Arc};
+
+#[cfg(test)]
+pub(super) fn golden_fixture(name: &str, file: &str) -> String {
+    let path = format!(
+        "{}/../sc-observability-types/tests/fixtures/otlp_submission/golden/{name}/{file}",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    std::fs::read_to_string(path).expect("canonical submission fixture reads")
+}
 
 pub(crate) struct SyncHttpSubmissionExporter {
     config: SyncHttpConfig,
     bounds: ValidatedTransportBounds,
-    exporter: Mutex<Option<Arc<OtlpHttpExporter>>>,
+    exporter: Arc<OtlpHttpExporter>,
+}
+
+impl fmt::Debug for SyncHttpSubmissionExporter {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SyncHttpSubmissionExporter")
+            .field("config", &self.config)
+            .field("bounds", &self.bounds)
+            .field("exporter", &"synchronous HTTP worker")
+            .finish()
+    }
 }
 pub(crate) fn exporter_for(
     config: SyncHttpConfig,
     bounds: ValidatedTransportBounds,
-) -> Arc<dyn SubmissionExporter> {
-    Arc::new(SyncHttpSubmissionExporter {
+) -> Result<Arc<dyn SubmissionExporter>, ExportError> {
+    let exporter = Arc::new(OtlpHttpExporter::from_prepared(config.clone(), &bounds)?);
+    Ok(Arc::new(SyncHttpSubmissionExporter {
         config,
         bounds,
-        exporter: Mutex::new(None),
-    })
+        exporter,
+    }))
 }
 
 impl SyncHttpSubmissionExporter {
-    fn exporter(&self) -> Result<Arc<OtlpHttpExporter>, ExportError> {
-        let mut exporter = self
-            .exporter
-            .lock()
-            .expect("submission exporter initialization lock");
-        if exporter.is_none() {
-            *exporter = Some(Arc::new(OtlpHttpExporter::from_prepared(
-                self.config.clone(),
-                &self.bounds,
-            )?));
-        }
-        Ok(Arc::clone(
-            exporter.as_ref().expect("initialized submission exporter"),
-        ))
+    fn exporter(&self) -> Arc<OtlpHttpExporter> {
+        Arc::clone(&self.exporter)
     }
 }
 
@@ -60,41 +71,94 @@ impl SubmissionExporter for SyncHttpSubmissionExporter {
         signal: Signal,
         envelopes: &[SubmissionEnvelope],
     ) -> Result<(), SubmissionExportFailure> {
-        let (endpoint_signal, payload) = match signal {
-            Signal::Logs => ("logs", logs::request(envelopes)),
-            Signal::Traces => ("traces", traces::request(envelopes)),
-            Signal::Metrics => ("metrics", metrics::request(envelopes)),
+        let (route, payload, encode) = match signal {
+            Signal::Logs => (
+                SubmissionRoute::Signal(SignalKind::Logs),
+                logs::request(envelopes),
+                logs::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
+            ),
+            Signal::Traces => (
+                SubmissionRoute::Signal(SignalKind::Traces),
+                traces::request(envelopes),
+                traces::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
+            ),
+            Signal::Metrics => (
+                SubmissionRoute::Signal(SignalKind::Metrics),
+                metrics::request(envelopes),
+                metrics::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
+            ),
             Signal::Profiles => return self.export_profiles(envelopes).map_err(classify),
             _ => {
                 return Err(SubmissionExportFailure::Terminal(ExportError::Transport {
                     context: Box::new(ErrorContext::new(
-                        crate::error_codes::SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED,
-                        "the requested submission signal encoder is not wired yet",
-                        Remediation::recoverable(
-                            "retry after D34 signal encoder integration",
-                            ["no submission was exported"],
+                        OTLP_EXPORT_TERMINAL,
+                        "this sc-observability-otlp version cannot encode the requested submission signal",
+                        Remediation::not_recoverable(
+                            "upgrade sc-observability-otlp to a version that encodes this signal",
                         ),
                     )),
                 }));
             }
         };
-        self.exporter()
-            .and_then(|exporter| exporter.submit_json_blocking(endpoint_signal, &payload))
-            .map_err(classify)
+        self.submit_encoded(route, envelopes, &payload, encode)
+    }
+
+    fn cancel(&self) {
+        self.exporter.cancel_submission();
+    }
+}
+
+impl SyncHttpSubmissionExporter {
+    fn submit_encoded(
+        &self,
+        route: SubmissionRoute,
+        envelopes: &[SubmissionEnvelope],
+        payload: &serde_json::Value,
+        encode: fn(&[SubmissionEnvelope]) -> serde_json::Value,
+    ) -> Result<(), SubmissionExportFailure> {
+        if payload.to_string().len() <= MAX_OTLP_ENCODED_REQUEST_BYTES || envelopes.len() <= 1 {
+            return self
+                .exporter()
+                .submit_json_blocking(route, payload)
+                .map_err(classify);
+        }
+
+        // Request boundaries must be based on encoded bytes, not the input
+        // envelope count: escaped and base64 values can expand substantially.
+        for envelope in envelopes {
+            self.submit_encoded(
+                route,
+                std::slice::from_ref(envelope),
+                &encode(std::slice::from_ref(envelope)),
+                encode,
+            )?;
+        }
+        Ok(())
     }
 }
 
 impl ProfileExporter<SubmissionEnvelope> for SyncHttpSubmissionExporter {
     fn export_profiles(&self, batch: &[SubmissionEnvelope]) -> Result<(), ExportError> {
-        self.exporter()?
-            .submit_json_path_blocking(PROFILES_EXPORT_PATH, &profiles::request(batch))
+        let exporter = self.exporter();
+        for envelope in batch.iter().filter(|envelope| envelope.profiles.is_some()) {
+            // Profile-table indices are local to one envelope's dictionary. Sending one
+            // request per dictionary preserves every index without flattening tables.
+            exporter.submit_json_blocking(
+                SubmissionRoute::Profiles,
+                &profiles::request(std::slice::from_ref(envelope)),
+            )?;
+        }
+        Ok(())
     }
 }
 
 fn classify(error: ExportError) -> SubmissionExportFailure {
     match error {
         error @ (ExportError::NonRetryableHttpStatus { .. }
-        | ExportError::TerminalExportFailure { .. }) => SubmissionExportFailure::Terminal(error),
+        | ExportError::TerminalExportFailure { .. }
+        // A producer-side deadline has an unknown worker outcome. Retrying
+        // the drained batch could duplicate a request the worker completes.
+        | ExportError::LifecycleTimeout { .. }) => SubmissionExportFailure::Terminal(error),
         error => SubmissionExportFailure::Retryable(error),
     }
 }

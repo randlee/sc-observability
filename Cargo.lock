@@ -1821,6 +1821,7 @@ dependencies = [
 name = "sc-observability-otlp"
 version = "1.5.0"
 dependencies = [
+ "bytes",
  "getrandom 0.4.3",
  "httpdate",
  "opentelemetry",

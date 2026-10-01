@@ -1,7 +1,11 @@
 use serde_json::Value;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+    mpsc,
+};
 use std::thread;
 use std::time::Duration;
 
@@ -50,17 +54,45 @@ pub(super) fn read_request(stream: &mut TcpStream) -> (String, Value) {
     (path, body)
 }
 
+pub(super) struct CaptureServer {
+    completed: mpsc::Receiver<()>,
+    received: Arc<AtomicUsize>,
+    expected: usize,
+    server: thread::JoinHandle<()>,
+}
+
+impl CaptureServer {
+    pub(super) fn join(self) -> Result<usize, String> {
+        self.completed.recv_timeout(CAPTURE_TIMEOUT).map_err(|error| {
+            format!(
+                "capture server did not complete after receiving {} of {} expected requests: {error}",
+                self.received.load(Ordering::Relaxed),
+                self.expected,
+            )
+        })?;
+        self.server
+            .join()
+            .map_err(|_| "capture server panicked".to_owned())?;
+        Ok(self.received.load(Ordering::Relaxed))
+    }
+}
+
 pub(super) fn capture_server(
     listener: TcpListener,
     statuses: &[u16],
-) -> (mpsc::Receiver<(String, Value)>, thread::JoinHandle<()>) {
+) -> (mpsc::Receiver<(String, Value)>, CaptureServer) {
     let (captured_tx, captured_rx) = mpsc::channel();
+    let (completed_tx, completed_rx) = mpsc::channel();
     let statuses = statuses.to_vec();
+    let expected = statuses.len();
+    let received = Arc::new(AtomicUsize::new(0));
+    let received_by_server = Arc::clone(&received);
     let server = thread::spawn(move || {
         for status in statuses {
             let (mut stream, _) = listener.accept().expect("accept submission request");
             let request = read_request(&mut stream);
             captured_tx.send(request).expect("deliver captured request");
+            received_by_server.fetch_add(1, Ordering::Relaxed);
             let reason = if status < 300 {
                 "OK"
             } else if status < 500 {
@@ -74,6 +106,15 @@ pub(super) fn capture_server(
             )
             .expect("write capture response");
         }
+        completed_tx.send(()).expect("report capture completion");
     });
-    (captured_rx, server)
+    (
+        captured_rx,
+        CaptureServer {
+            completed: completed_rx,
+            received,
+            expected,
+            server,
+        },
+    )
 }

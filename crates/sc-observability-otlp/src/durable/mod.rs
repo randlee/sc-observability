@@ -43,12 +43,27 @@ use std::{
 pub struct DurableTelemetryClient {
     owner: Owner,
 }
-#[derive(Debug)]
 struct Owner {
     shared: Arc<Shared>,
+    exporter: Option<Arc<dyn SubmissionExporter>>,
+}
+impl std::fmt::Debug for Owner {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Owner")
+            .field("shared", &self.shared)
+            .field(
+                "exporter",
+                &self.exporter.as_ref().map(|_| "submission exporter"),
+            )
+            .finish()
+    }
 }
 impl Drop for Owner {
     fn drop(&mut self) {
+        if let Some(exporter) = &self.exporter {
+            exporter.cancel();
+        }
         self.shared.stop.store(true, Ordering::Release);
         self.shared.notify();
     }
@@ -219,21 +234,23 @@ impl DurableTelemetryClient {
         config: TelemetryClientConfig,
         exporter: Arc<dyn SubmissionExporter>,
     ) -> Result<Self, TelemetryClientError> {
-        Self::open_with_exporter_factory(config, |_, _| exporter)
+        Self::open_with_exporter_factory(config, |_, _| Ok(exporter))
     }
     fn open_with_exporter_factory(
         config: TelemetryClientConfig,
         build_exporter: impl FnOnce(
             crate::sync_http::submission::SyncHttpConfig,
             crate::config::ValidatedTransportBounds,
-        ) -> Arc<dyn SubmissionExporter>,
+        ) -> Result<Arc<dyn SubmissionExporter>, sc_observability_types::v2::ExportError>,
     ) -> Result<Self, TelemetryClientError> {
         let otel = adapter::otel_config_from(&config)?;
         let (worker_config, bounds) =
             crate::sync_http::submission::SyncHttpConfig::from_otel(&otel)
                 .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
-        let client = Self::prepare_validated(config, &bounds)?;
-        let exporter = build_exporter(worker_config, bounds);
+        let mut client = Self::prepare_validated(config, &bounds)?;
+        let exporter = build_exporter(worker_config, bounds)
+            .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
+        client.owner.exporter = Some(Arc::clone(&exporter));
         worker::start(&client.owner.shared, exporter)?;
         Ok(client)
     }
@@ -263,7 +280,10 @@ impl DurableTelemetryClient {
             stalled_signals: Mutex::new(std::collections::HashSet::new()),
         });
         Ok(Self {
-            owner: Owner { shared },
+            owner: Owner {
+                shared,
+                exporter: None,
+            },
         })
     }
     fn flush_scope(
@@ -353,6 +373,9 @@ impl TelemetryClient for DurableTelemetryClient {
             if shared.closed.swap(true, Ordering::AcqRel) {
                 return Ok(FlushReport::default());
             }
+        }
+        if let Some(exporter) = &self.owner.exporter {
+            exporter.cancel();
         }
         let result = self.flush_scope(None, deadline.saturating_sub(start.elapsed()));
         shared.stop.store(true, Ordering::Release);

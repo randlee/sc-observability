@@ -24,6 +24,12 @@ pub const MAX_OTLP_EVENTS_PER_SPAN: usize = 256;
 pub const MAX_OTLP_BATCH_RECORDS: usize = 512;
 /// Maximum serialized bytes in one backend batch (1 MiB).
 pub const MAX_OTLP_BATCH_BYTES: usize = 1024 * 1024;
+/// Maximum JSON bytes submitted in one synchronous OTLP/HTTP request (1 MiB).
+///
+/// This bound is applied after OTLP/JSON encoding rather than to the source
+/// envelope so that transport requests remain bounded even when JSON expands
+/// IDs, base64 values, or escaped strings.
+pub(crate) const MAX_OTLP_ENCODED_REQUEST_BYTES: usize = 1024 * 1024;
 /// Default maximum number of OTLP export retries.
 pub const DEFAULT_OTLP_MAX_RETRIES: u32 = 3;
 /// Default initial OTLP retry backoff in milliseconds.

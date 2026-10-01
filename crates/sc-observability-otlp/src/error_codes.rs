@@ -29,7 +29,6 @@ pub const TELEMETRY_SPAN_ASSEMBLY_FAILED: ErrorCode =
 
 /// Enumerable registry of all released `sc-observability-otlp` error codes.
 pub const ALL: &[ErrorCode] = &[
-    SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED,
     TELEMETRY_SHUTDOWN,
     TELEMETRY_INVALID_CONFIG,
     TELEMETRY_INVALID_PROTOCOL,
@@ -63,7 +62,6 @@ pub(crate) use sc_observability_types::error_codes::otlp::OTLP_RUNTIME_TERMINATE
 /// completed; it is retained without a deprecation attribute for compatibility.
 pub const SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED");
-
 /// Internal durable-store diagnostic; no new public API.
 #[cfg(feature = "durable-store")]
 pub(crate) const DURABLE_OVERSIZE: ErrorCode =

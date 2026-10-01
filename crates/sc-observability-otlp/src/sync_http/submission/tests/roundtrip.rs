@@ -22,11 +22,7 @@ impl IdSource for Ids {
 }
 
 fn fixture(name: &str) -> SubmissionEnvelope {
-    let path = format!(
-        "{}/../sc-observability-types/tests/fixtures/otlp_submission/golden/{name}/input.json",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let input = std::fs::read_to_string(path).expect("fixture reads");
+    let input = golden_fixture(name, "input.json");
     let envelope = SubmissionEnvelope::from_json(&input, &mut Ids).expect("canonical envelope");
     let canonical = envelope.to_canonical_json();
     serde_json::from_str(&canonical).expect("store envelope parses")
@@ -41,10 +37,14 @@ fn submission_exporter(
     config.endpoint = Some(OtlpEndpoint::new_typed(endpoint).expect("loopback endpoint"));
     config.sync_http_retry = retry;
     let (config, bounds) = SyncHttpConfig::from_otel(&config).expect("valid test exporter");
+    let exporter = Arc::new(
+        OtlpHttpExporter::from_prepared(config.clone(), &bounds)
+            .expect("test exporter constructs eagerly"),
+    );
     SyncHttpSubmissionExporter {
         config,
         bounds,
-        exporter: Mutex::new(None),
+        exporter,
     }
 }
 
@@ -98,7 +98,7 @@ fn submission_exporter_round_trips_every_signal_variant() {
                 .expect("captured request")
         })
         .collect::<Vec<_>>();
-    server.join().expect("capture server exits");
+    assert_eq!(server.join().expect("capture server exits"), 4);
     assert_eq!(
         requests
             .iter()
@@ -156,12 +156,12 @@ fn submission_exporter_classifies_400_as_terminal_and_exhausted_503_as_retryable
         };
         let (captured, server) = capture_server(listener, &statuses);
         let result = exporter.export(Signal::Logs, &[fixture("logs")]);
-        for _ in statuses {
+        for _ in &statuses {
             captured
                 .recv_timeout(CAPTURE_TIMEOUT)
                 .expect("captured request");
         }
-        server.join().expect("capture server exits");
+        assert_eq!(server.join().expect("capture server exits"), statuses.len(),);
         assert_eq!(
             matches!(result, Err(SubmissionExportFailure::Retryable(_))),
             expected_retryable,
@@ -192,6 +192,40 @@ fn submission_exporter_retries_503_then_succeeds() {
     let second = captured
         .recv_timeout(CAPTURE_TIMEOUT)
         .expect("retried request");
-    server.join().expect("capture server exits");
+    assert_eq!(server.join().expect("capture server exits"), 2);
     assert_eq!(first, second, "retry resubmits the same canonical payload");
+}
+
+#[test]
+fn profiles_with_distinct_dictionaries_are_submitted_separately() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let exporter = submission_exporter(
+        format!("http://{}", listener.local_addr().expect("address")),
+        None,
+    );
+    let first = fixture("profiles");
+    let mut second = fixture("profiles");
+    second
+        .profiles
+        .as_mut()
+        .expect("profile fixture contains profiles")
+        .dictionary
+        .string_table[0] = "a distinct dictionary entry".to_owned();
+    let (captured, server) = capture_server(listener, &[200, 200]);
+    exporter
+        .export(Signal::Profiles, &[first, second])
+        .expect("profiles delivery");
+    let first = captured
+        .recv_timeout(CAPTURE_TIMEOUT)
+        .expect("first request");
+    let second = captured
+        .recv_timeout(CAPTURE_TIMEOUT)
+        .expect("second request");
+    assert_eq!(server.join().expect("capture server exits"), 2);
+    assert_eq!(first.0, "/v1development/profiles");
+    assert_eq!(second.0, "/v1development/profiles");
+    assert_ne!(
+        first.1["dictionary"]["stringTable"][0], second.1["dictionary"]["stringTable"][0],
+        "each request retains the dictionary that owns its profile indices"
+    );
 }

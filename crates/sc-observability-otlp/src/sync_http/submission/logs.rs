@@ -33,7 +33,7 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
                     Value::Object(Map::from_iter([
                         (
                             "resource".to_owned(),
-                            resource::resource(&resource_logs.resource),
+                            Value::Object(resource::resource(&resource_logs.resource)),
                         ),
                         (
                             "scopeLogs".to_owned(),
@@ -45,7 +45,7 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
                                         Value::Object(Map::from_iter([
                                             (
                                                 "scope".to_owned(),
-                                                resource::scope(&scope_logs.scope),
+                                                Value::Object(resource::scope(&scope_logs.scope)),
                                             ),
                                             (
                                                 "logRecords".to_owned(),
@@ -132,8 +132,9 @@ mod tests {
 
     #[test]
     fn encodes_log_fixture_with_proto_json_timestamps_and_ids() {
-        let envelope: SubmissionEnvelope = serde_json::from_str(include_str!(
-            "../../../../sc-observability-types/tests/fixtures/otlp_submission/golden/logs/expected.envelope.json"
+        let envelope: SubmissionEnvelope = serde_json::from_str(&super::super::golden_fixture(
+            "logs",
+            "expected.envelope.json",
         ))
         .expect("canonical log fixture parses");
         let value = request(&[envelope]);

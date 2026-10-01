@@ -25,6 +25,7 @@ use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
+use bytes::Bytes;
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
 use serde_json::Value;
@@ -37,6 +38,7 @@ use crate::config::{
 use crate::config::{ExporterBackend, OtlpProtocol};
 #[cfg(any(test, feature = "durable-store"))]
 use crate::config::{OtelConfig, prepared_backend_connection, validated_transport_bounds};
+use crate::constants::PROFILES_EXPORT_PATH;
 use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
     LogRecord, MetricExporter, TraceExporter,
@@ -198,7 +200,7 @@ impl SyncHttpConfig {
 enum DataCommand {
     Export {
         endpoint: String,
-        body: String,
+        body: Bytes,
         complete: Box<dyn FnOnce(Result<(), ExportError>) + Send + 'static>,
     },
 }
@@ -227,6 +229,11 @@ struct WorkerInner {
     terminated: AtomicBool,
     lifecycle_flush_timeout: Duration,
     lifecycle_shutdown_timeout: Duration,
+    /// A submission may spend its full retry sequence in the worker after it
+    /// has left the producer queue. Keep the caller alive through that budget
+    /// plus the independently bounded lifecycle shutdown interval used as its
+    /// queue/dispatch margin.
+    export_result_timeout: Duration,
     #[cfg(test)]
     control_submission_observer: Option<Sender<()>>,
 }
@@ -257,6 +264,10 @@ impl Worker {
         let worker_stop = Arc::clone(&stop);
         let flush_timeout = config.lifecycle_flush_timeout;
         let shutdown_timeout = config.lifecycle_shutdown_timeout;
+        let export_result_timeout = config
+            .retry
+            .sequence_timeout
+            .saturating_add(config.lifecycle_shutdown_timeout);
         let handshake_timeout = config
             .request_timeout
             .min(config.lifecycle_shutdown_timeout);
@@ -302,6 +313,7 @@ impl Worker {
                     terminated: AtomicBool::new(false),
                     lifecycle_flush_timeout: flush_timeout,
                     lifecycle_shutdown_timeout: shutdown_timeout,
+                    export_result_timeout,
                     #[cfg(test)]
                     control_submission_observer,
                 }),
@@ -320,7 +332,7 @@ impl Worker {
     fn enqueue(
         &self,
         endpoint: String,
-        body: String,
+        body: Bytes,
         complete: Box<dyn FnOnce(Result<(), ExportError>) + Send + 'static>,
     ) -> Result<(), ExportError> {
         if self.inner.terminated.load(Ordering::Acquire) {
@@ -350,7 +362,7 @@ impl Worker {
         }
     }
 
-    fn export(&self, endpoint: String, body: String) -> Result<(), ExportError> {
+    fn export(&self, endpoint: String, body: Bytes) -> Result<(), ExportError> {
         let (result_tx, result_rx) = mpsc::channel();
         self.enqueue(
             endpoint,
@@ -359,7 +371,7 @@ impl Worker {
                 let _ = result_tx.send(result);
             }),
         )?;
-        wait_for_control_result(&result_rx, self.inner.lifecycle_shutdown_timeout)
+        wait_for_control_result(&result_rx, self.inner.export_result_timeout)
     }
 
     fn cancel(&self) {
@@ -616,7 +628,7 @@ fn send_with_retries(
     client: &Client,
     config: &SyncHttpConfig,
     endpoint: &str,
-    body: &str,
+    body: &Bytes,
     cancel: &AtomicBool,
 ) -> Result<(), ExportError> {
     let started = Instant::now();
@@ -640,7 +652,7 @@ fn send_with_retries(
         let response = client
             .post(endpoint)
             .header(CONTENT_TYPE, "application/json")
-            .body(body.to_owned())
+            .body(body.clone())
             .timeout(request_timeout)
             .send();
         match response {
@@ -851,6 +863,29 @@ pub(crate) struct OtlpHttpExporter {
     endpoint: String,
 }
 
+/// Crate-private OTLP routes accepted by the synchronous submission path.
+///
+/// Keeping route derivation here prevents test-only helpers and durable
+/// submission from drifting onto different endpoint construction paths.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum SubmissionRoute {
+    Signal(SignalKind),
+    Profiles,
+}
+
+impl SubmissionRoute {
+    fn endpoint(self, endpoint: &str) -> String {
+        match self {
+            Self::Signal(SignalKind::Logs) => normalize_signal_endpoint(endpoint, "logs"),
+            Self::Signal(SignalKind::Traces) => normalize_signal_endpoint(endpoint, "traces"),
+            Self::Signal(SignalKind::Metrics) => normalize_signal_endpoint(endpoint, "metrics"),
+            Self::Signal(SignalKind::Profiles) | Self::Profiles => {
+                format!("{}{PROFILES_EXPORT_PATH}", endpoint.trim_end_matches('/'))
+            }
+        }
+    }
+}
+
 impl OtlpHttpExporter {
     pub(super) fn from_prepared(
         worker_config: SyncHttpConfig,
@@ -1015,7 +1050,7 @@ impl OtlpHttpExporter {
         batch: impl Send + 'static,
         payload: &Value,
     ) -> Result<(), ExportError> {
-        let body = payload.to_string();
+        let body = Bytes::from(payload.to_string());
         let admitted = self
             .backend
             .lifecycle
@@ -1031,32 +1066,22 @@ impl OtlpHttpExporter {
         )
     }
 
-    #[cfg(test)]
-    pub(super) fn send_payload_sync(
-        &self,
-        signal: &str,
-        payload: &Value,
-    ) -> Result<(), ExportError> {
-        let endpoint = normalize_signal_endpoint(&self.endpoint, signal);
-        self.backend.worker.export(endpoint, payload.to_string())
-    }
-
     pub(super) fn submit_json_blocking(
         &self,
-        signal: &str,
+        route: SubmissionRoute,
         payload: &Value,
     ) -> Result<(), ExportError> {
-        let endpoint = normalize_signal_endpoint(&self.endpoint, signal);
-        self.backend.worker.export(endpoint, payload.to_string())
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err(blocking_in_async_error());
+        }
+        let endpoint = route.endpoint(&self.endpoint);
+        self.backend
+            .worker
+            .export(endpoint, Bytes::from(payload.to_string()))
     }
 
-    pub(super) fn submit_json_path_blocking(
-        &self,
-        path: &str,
-        payload: &Value,
-    ) -> Result<(), ExportError> {
-        let endpoint = format!("{}{}", self.endpoint.trim_end_matches('/'), path);
-        self.backend.worker.export(endpoint, payload.to_string())
+    pub(super) fn cancel_submission(&self) {
+        self.backend.worker.cancel();
     }
 
     #[cfg(test)]
