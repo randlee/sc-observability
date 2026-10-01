@@ -1,8 +1,17 @@
 //! Durable submission exporter backed by the synchronous OTLP/HTTP worker.
+#![cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "the durable drain invokes this staged encoder after D34"
+    )
+)]
 mod logs;
 mod metrics;
 mod profiles;
 mod resource;
+#[cfg(test)]
+mod tests;
 mod traces;
 mod values;
 use super::implementation::OtlpHttpExporter;

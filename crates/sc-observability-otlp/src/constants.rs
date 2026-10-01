@@ -68,11 +68,8 @@ pub(crate) const LEASE_RENEWAL_DIVISOR: u32 = 3;
 )]
 pub(crate) const STORE_BUSY_TIMEOUT_MS: u64 = 5_000;
 /// Pinned profiles export route.
-#[cfg_attr(
-    not(feature = "durable-store"),
-    expect(
-        dead_code,
-        reason = "staged by d-29; wired by d-33/d-34 under durable-store"
-    )
+#[allow(
+    dead_code,
+    reason = "staged by d-29; wired by d-33/d-34 under durable-store"
 )]
 pub(crate) const PROFILES_EXPORT_PATH: &str = "/v1development/profiles";
