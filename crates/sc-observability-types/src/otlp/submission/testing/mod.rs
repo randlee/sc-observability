@@ -10,6 +10,7 @@ use super::{
     errors::context,
 };
 use crate::{ErrorCode, Timestamp};
+use sc_lint_attributes::sc_lint;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
@@ -182,6 +183,7 @@ fn admission(kind: AdmissionErrorKind) -> TelemetryClientError {
 impl InMemoryTelemetryClient {
     /// Creates a test client with prescribed admission and delivery outcomes.
     #[must_use]
+    #[sc_lint(boundary.allow("cycle.type_method_self_loop"))]
     pub fn with_script(config: TelemetryClientConfig, script: DoubleScript) -> Self {
         Self {
             config,
@@ -346,6 +348,7 @@ impl InMemoryTelemetryClient {
     }
 }
 impl TelemetryClient for InMemoryTelemetryClient {
+    #[sc_lint(boundary.allow("cycle.type_method_self_loop"))]
     fn open(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
         config.validate()?;
         Ok(Self::with_script(config, DoubleScript::default()))

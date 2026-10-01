@@ -1466,3 +1466,18 @@ by CI-pinned sc-lint `ba2d9bf622c1604e3f017c728040906b90e71bce`.
 The edge prohibits `sc-otel-cli` from depending on `sc-observe`. External
 `pyo3` and `agent-team-mail-*` exclusions remain in dependency policy and
 cargo-deny checks, rather than the first-party boundary table.
+
+### Scoped sc-lint directives (2026-10-01)
+
+Rand’s ruling relayed in `01M3WG0WNAM8Y0667TGQD6X2BY` adds the published
+`sc-lint-attributes = "=0.4.0"` dependency to types and OTLP only.
+`cycle.recursive_value_container` is allowed on `KeyValues` and `AnyValue`
+because OTLP requires their recursive representation; the checker requires
+all owners in this component to carry the directive.
+`cycle.type_method_self_loop` is allowed only on the two client `open` methods
+and the test-double `with_script` constructor, which return `Self`.
+The dependency validators admit this compile-time attribute dependency; the
+workspace and two standalone consumer-example lockfiles include its closure
+so their existing `--locked` checks remain reproducible. Existing cargo-deny
+license rules already cover it and require no change.
+No data shapes or public signatures change.

@@ -2,6 +2,7 @@
 use std::{collections::HashSet, fmt};
 
 use crate::{ErrorCode, ErrorContext, Remediation, constants};
+use sc_lint_attributes::sc_lint;
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
     de::{self, MapAccess, SeqAccess, Visitor},
@@ -173,6 +174,7 @@ impl From<&str> for AttributeKey {
 /// An ordered collection of unique attribute keys.
 #[non_exhaustive]
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[sc_lint(boundary.allow("cycle.recursive_value_container"))]
 pub struct KeyValues(Vec<(AttributeKey, AnyValue)>);
 impl KeyValues {
     /// Retains insertion order and rejects duplicate keys.
@@ -205,6 +207,7 @@ impl KeyValues {
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+#[sc_lint(boundary.allow("cycle.recursive_value_container"))]
 pub enum AnyValue {
     /// UTF-8 text.
     String(String),

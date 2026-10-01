@@ -138,6 +138,7 @@ if observe_test_deps - {"serde_json"}:
     )
 
 required_otlp = {
+    "sc-lint-attributes",
     "serde_json",
     "thiserror",
 }

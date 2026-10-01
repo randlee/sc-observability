@@ -19,6 +19,7 @@ sdk-test-support = ["otlp-sdk"]
 sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:tokio"]
 
 [dependencies]
+sc-lint-attributes = "=0.4.0"
 rusqlite = { workspace = true, optional = true }
 serde-saphyr = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }

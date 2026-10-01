@@ -6,6 +6,7 @@
 mod adapter;
 mod config_file;
 pub use config_file::load_telemetry_file;
+use sc_lint_attributes::sc_lint;
 use sc_observability_types::otlp::submission::{
     AdmissionError, AdmissionReceipt, FlushReport, StatusQuery, StoreStatus, SubmissionEnvelope,
     SubmissionId, TelemetryClient, TelemetryClientConfig, TelemetryClientError, error_codes,
@@ -37,6 +38,7 @@ fn unavailable() -> TelemetryClientError {
     .into()
 }
 impl TelemetryClient for DurableTelemetryClient {
+    #[sc_lint(boundary.allow("cycle.type_method_self_loop"))]
     fn open(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
         if let Ok(otel) = adapter::otel_config_from(&config)
             && let Ok((worker, bounds)) =
