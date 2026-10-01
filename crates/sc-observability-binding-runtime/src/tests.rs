@@ -631,11 +631,7 @@ fn ready<T>(future: impl Future<Output = T>) -> T {
     }
 }
 fn pending<T: Clone + Send + Sync + 'static>(backend: &CoreLoggerBackend) -> Operation<T> {
-    Operation::new(
-        &backend.shared.dispatcher,
-        &crate::timer::shared().unwrap(),
-        crate::error::OperationKind::Query,
-    )
+    Operation::new(&backend.shared.dispatcher, &crate::timer::shared().unwrap())
 }
 fn observer_bounds() {
     let (_root, owner, backend) = core();
@@ -660,9 +656,11 @@ fn observer_bounds() {
     drop(futures);
     assert_eq!(operation.observer_count(), 0);
     assert_eq!(crate::timer::shared().unwrap().entries(), 0);
-    code(
+    assert_failure(
         operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        "timeout",
+        Some("native_operation"),
     );
     code(
         ready(operation.completion(Duration::from_nanos(1))),
@@ -1037,14 +1035,32 @@ fn core_shutdown_timeout_admission_failure() {
                 ["retry after shutdown"],
             ),
         )),
-        native::v2::FailureClassification::timeout("shutdown"),
+        native::v2::FailureClassification::timeout("native_operation"),
     );
 
     assert_failure(
         Err::<(), _>(crate::conversion::core_admission(&error)),
         sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT.as_str(),
         "timeout",
-        Some("shutdown"),
+        Some("native_operation"),
+    );
+
+    let error = sc_observability_log::v2::EmitError::ShutdownTimedOut {
+        diagnostic: native::OperationDiagnostic {
+            code: sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+            message: "writer thread did not stop within 10ms".into(),
+            remediation: native::Remediation::recoverable(
+                "wait for the writer thread to recover",
+                ["retry after shutdown"],
+            ),
+            at: native::Timestamp::now_utc(),
+        },
+    };
+    assert_failure(
+        Err::<(), _>(crate::conversion::bridge_admission(error)),
+        sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT.as_str(),
+        "timeout",
+        Some("native_operation"),
     );
 }
 fn admission32(close: bool) {
@@ -1413,11 +1429,8 @@ fn d15_coordinator_fixture() {
 
 fn d15_operation_fixture() {
     let (_root, owner, backend) = core();
-    let operation: Operation<u32> = Operation::new(
-        &backend.shared.dispatcher,
-        &crate::timer::shared().unwrap(),
-        crate::error::OperationKind::Flush,
-    );
+    let operation: Operation<u32> =
+        Operation::new(&backend.shared.dispatcher, &crate::timer::shared().unwrap());
     assert_failure(
         operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
@@ -1461,11 +1474,8 @@ fn d15_sync_fixture() {
 
 fn d15_timer_fixture() {
     let (_root, owner, backend) = core();
-    let operation: Operation<u32> = Operation::new(
-        &backend.shared.dispatcher,
-        &crate::timer::shared().unwrap(),
-        crate::error::OperationKind::Shutdown,
-    );
+    let operation: Operation<u32> =
+        Operation::new(&backend.shared.dispatcher, &crate::timer::shared().unwrap());
     assert_failure(
         operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
@@ -1632,11 +1642,7 @@ fn bridge_observers_callbacks() {
     let (_root, host) = bridge_host();
     let backend = bridge_backend(host.control()).unwrap();
     let timer = crate::timer::shared().unwrap();
-    let operation: Operation<u32> = Operation::new(
-        &backend.shared.dispatcher,
-        &timer,
-        crate::error::OperationKind::Query,
-    );
+    let operation: Operation<u32> = Operation::new(&backend.shared.dispatcher, &timer);
     let futures: Vec<_> = (0..64)
         .map(|_| operation.completion(Duration::from_secs(60)))
         .collect();

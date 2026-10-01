@@ -144,7 +144,7 @@ impl Coordinator {
                 return Err(error);
             }
         };
-        let shutdown = Operation::new(&dispatcher, &timer, error::OperationKind::Shutdown);
+        let shutdown = Operation::new(&dispatcher, &timer);
         let shared = Arc::new(Self {
             backend,
             snapshot: ArcSwap::from_pointee(health),
@@ -267,7 +267,7 @@ impl Coordinator {
             ));
         }
         queue.query = true;
-        let operation = Operation::new(&self.dispatcher, &self.timer, error::OperationKind::Query);
+        let operation = Operation::new(&self.dispatcher, &self.timer);
         queue
             .items
             .push_back(Work::Query(Box::new(query), operation.clone()));
@@ -284,7 +284,7 @@ impl Coordinator {
             ));
         }
         queue.flush = true;
-        let operation = Operation::new(&self.dispatcher, &self.timer, error::OperationKind::Flush);
+        let operation = Operation::new(&self.dispatcher, &self.timer);
         queue
             .items
             .push_back(Work::Flush(timeout, operation.clone()));
@@ -520,11 +520,14 @@ fn core_parts(
                 pid: *pid,
             },
             native::ProcessIdentityPolicy::Resolver(resolver) => {
-                resolver
-                    .resolve()
-                    .map_err(|e| native::v2::InitError::Configuration {
-                        context: native::typed::IdentityFailure::from(e).into_context(),
-                    })?
+                resolver.resolve().map_err(|e| {
+                    #[allow(
+                        deprecated,
+                        reason = "the released resolver returns the legacy wrapper; move its context directly at the compatibility boundary"
+                    )]
+                    let context = e.0;
+                    native::v2::InitError::Configuration { context }
+                })?
             }
         },
     };

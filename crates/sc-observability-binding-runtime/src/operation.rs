@@ -42,7 +42,6 @@ struct Inner<T> {
     next: AtomicU64,
     dispatcher: Weak<Dispatcher>,
     timer: Arc<TimerService>,
-    kind: error::OperationKind,
 }
 /// Caller-owned saved result; completed values do not own backend helpers.
 pub struct Operation<T> {
@@ -81,11 +80,7 @@ impl Drop for CompletionSubscription {
 }
 
 impl<T: Clone + Send + Sync + 'static> Operation<T> {
-    pub(crate) fn new(
-        dispatcher: &Arc<Dispatcher>,
-        timer: &Arc<TimerService>,
-        kind: error::OperationKind,
-    ) -> Self {
+    pub(crate) fn new(dispatcher: &Arc<Dispatcher>, timer: &Arc<TimerService>) -> Self {
         Self {
             inner: Arc::new(Inner {
                 published: Arc::new(OnceLock::new()),
@@ -94,7 +89,6 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
                 next: AtomicU64::new(1),
                 dispatcher: Arc::downgrade(dispatcher),
                 timer: timer.clone(),
-                kind,
             }),
         }
     }
@@ -117,10 +111,10 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
             return Some(if value.at <= deadline {
                 value.result.clone()
             } else {
-                Err(error::observer_timeout(self.inner.kind))
+                Err(error::observer_timeout())
             });
         }
-        (Instant::now() >= deadline).then(|| Err(error::observer_timeout(self.inner.kind)))
+        (Instant::now() >= deadline).then(|| Err(error::observer_timeout()))
     }
     fn permit(&self) -> Result<ObserverPermit, Failure> {
         self.inner

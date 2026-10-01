@@ -82,7 +82,9 @@ pub(crate) fn bridge_admission(error: bridge::v2::EmitError) -> Failure {
         E::InvalidEvent { diagnostic } => operation(diagnostic, Kind::validation("event")),
         E::QueueFull { diagnostic } => operation(diagnostic, Kind::QueueFull),
         E::WriterDegraded { diagnostic } => operation(diagnostic, Kind::Unavailable),
-        E::ShutdownTimedOut { diagnostic } => operation(diagnostic, Kind::timeout("shutdown")),
+        E::ShutdownTimedOut { diagnostic } => {
+            operation(diagnostic, Kind::timeout("native_operation"))
+        }
         other => {
             let kind = match &other {
                 E::InvalidField { .. } => Kind::validation("event"),

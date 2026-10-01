@@ -37,16 +37,6 @@ pub(crate) fn timeout() -> Failure {
     }
 }
 
-/// The native operation represented by an observer.  Observer deadlines are
-/// local to the binding runtime, but their diagnostics retain the canonical
-/// operation family so a flush timeout cannot be mistaken for shutdown.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum OperationKind {
-    Query,
-    Flush,
-    Shutdown,
-}
-
 fn context(
     code: ErrorCode,
     message: impl Into<String>,
@@ -124,8 +114,7 @@ pub(crate) fn shutdown_drain(message: impl Into<String>) -> native::v2::Shutdown
     )
 }
 
-pub(crate) fn observer_timeout(kind: OperationKind) -> Failure {
-    let _ = kind;
+pub(crate) fn observer_timeout() -> Failure {
     timeout()
 }
 
