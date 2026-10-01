@@ -1,9 +1,11 @@
-//! OTLP-backed telemetry layered on top of `sc-observe`.
+//! OTLP-backed telemetry with test-only integration to `sc-observability` and
+//! `sc-observe`.
 //!
 //! This crate owns telemetry configuration, span assembly, exporter contracts,
 //! and the lifecycle/runtime behavior for OTLP-bound signals. It attaches to
 //! routing through ordinary projector registration and keeps OpenTelemetry
-//! transport concerns out of the lower crates.
+//! transport concerns out of the lower crates. Facade tests use the core
+//! logging and observation crates; production OTLP code does not use them.
 #![expect(
     clippy::missing_errors_doc,
     reason = "telemetry-facade error behavior is documented centrally in workspace docs, and repeating it on every wrapper method adds low-signal boilerplate"

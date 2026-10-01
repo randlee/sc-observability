@@ -4,16 +4,17 @@
 //! while delegating directly to the canonical facade. They own no runtime,
 //! routing, logger, span, or lifecycle state.
 
+#![expect(
+    deprecated,
+    reason = "this module preserves released 1.x compatibility adapters"
+)]
+
 use std::path::PathBuf;
 
 use sc_observability::LogError;
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
 use sc_observability_types::{DiagnosticInfo, DiagnosticSummary, LogEvent, ServiceName, ToolName};
-#[expect(
-    deprecated,
-    reason = "root methods retain the released compatibility error wrappers"
-)]
 use sc_observability_types::{
     FlushError as LegacyFlushError, InitError as LegacyInitError,
     ShutdownError as LegacyShutdownError,
@@ -23,26 +24,14 @@ use crate::{
     Observability, ObservabilityBuilder, ObservabilityConfig, RunningFlushError, RunningLogger,
 };
 
-#[expect(
-    deprecated,
-    reason = "root methods retain the released compatibility error wrappers"
-)]
 fn legacy_init_error(error: InitError) -> LegacyInitError {
     LegacyInitError(error.into_context())
 }
 
-#[expect(
-    deprecated,
-    reason = "root methods retain the released compatibility error wrappers"
-)]
 fn legacy_flush_error(error: FlushError) -> LegacyFlushError {
     LegacyFlushError(error.into_context())
 }
 
-#[expect(
-    deprecated,
-    reason = "root methods retain the released compatibility error wrappers"
-)]
 fn legacy_running_flush_error(error: RunningFlushError) -> LegacyFlushError {
     legacy_flush_error(error.into_canonical())
 }
@@ -57,10 +46,6 @@ fn released_log_error_summary(error: LogError) -> DiagnosticSummary {
 }
 
 impl RunningLogger {
-    #[expect(
-        deprecated,
-        reason = "released admission reports the retained 1.x LogError summary shape"
-    )]
     pub(crate) fn log(&self, event: LogEvent) -> Result<(), DiagnosticSummary> {
         match self {
             Self::Canonical(logger) => logger
@@ -71,10 +56,6 @@ impl RunningLogger {
     }
 }
 
-#[expect(
-    deprecated,
-    reason = "root methods retain the released compatibility error wrappers"
-)]
 fn legacy_shutdown_error(error: ShutdownError) -> LegacyShutdownError {
     LegacyShutdownError(error.into_context())
 }
@@ -97,10 +78,6 @@ impl ObservabilityConfig {
     ///
     /// assert_eq!(config.tool_name.as_str(), "demo-tool");
     /// ```
-    #[expect(
-        deprecated,
-        reason = "root methods retain the released compatibility error wrappers"
-    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use ObservabilityConfig::default_for_typed(); see migrate-error-api.md."
@@ -110,10 +87,6 @@ impl ObservabilityConfig {
     }
 
     /// Derives a service name while retaining the released root failure contract.
-    #[expect(
-        deprecated,
-        reason = "root methods retain the released compatibility error wrappers"
-    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use ObservabilityConfig::service_name_typed(); see migrate-error-api.md."
@@ -135,10 +108,6 @@ impl ObservabilityConfig {
 
 impl Observability {
     /// Constructs the shared runtime with the released root failure contract.
-    #[expect(
-        deprecated,
-        reason = "root methods retain the released compatibility error wrappers"
-    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Observability::new_typed(); see migrate-error-api.md."
@@ -153,10 +122,6 @@ impl Observability {
     ///
     /// Panics if the runtime's internal logger-state mutex is poisoned, including
     /// while waiting for an in-progress shutdown to finish.
-    #[expect(
-        deprecated,
-        reason = "root methods retain the released compatibility error wrappers"
-    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Observability::flush_typed(); see migrate-error-api.md."
@@ -172,10 +137,6 @@ impl Observability {
     /// Panics if the runtime's internal logger-state mutex is poisoned. It also
     /// resumes panics from logger shutdown, including panics from poisoned
     /// writer-snapshot or query-health mutexes.
-    #[expect(
-        deprecated,
-        reason = "root methods retain the released compatibility error wrappers"
-    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Observability::shutdown_typed(); see migrate-error-api.md."
@@ -203,10 +164,6 @@ impl Observability {
 
 impl ObservabilityBuilder {
     /// Finalizes the shared builder with the released root failure contract.
-    #[expect(
-        deprecated,
-        reason = "root methods retain the released compatibility error wrappers"
-    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use ObservabilityBuilder::build_typed(); see migrate-error-api.md."
@@ -222,7 +179,6 @@ impl ObservabilityBuilder {
 }
 
 #[cfg(test)]
-#[expect(deprecated, reason = "tests exercise the released root error wrappers")]
 mod tests {
     use super::*;
     use sc_observability_types::{DiagnosticInfo, ErrorCode, ErrorContext, Remediation};
