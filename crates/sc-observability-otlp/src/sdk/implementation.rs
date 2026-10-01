@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderValue};
 use tokio::runtime::Handle;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, watch};
 use tokio::time::sleep;
 use tonic::Request;
 use tonic::metadata::MetadataValue;
@@ -110,7 +110,8 @@ pub(crate) fn build_exporter_set(
     bounds: &ValidatedTransportBounds,
 ) -> Result<SdkAdapterSet, ExportError> {
     let runtime = CallerRuntime::try_capture().ok_or_else(runtime_required_error)?;
-    let terminal = Arc::new(SdkTerminal::new(connection, bounds)?);
+    let (shutdown_cancel, shutdown) = watch::channel(false);
+    let terminal = Arc::new(SdkTerminal::new(connection, bounds, shutdown)?);
     let lifecycle = LifecycleCore::from_backend(terminal.clone(), bounds)?;
     let backend = Arc::new(SdkBackend {
         runtime,
@@ -129,6 +130,7 @@ pub(crate) fn build_exporter_set(
             metrics: Arc::new(SdkMetricExporter { backend }),
             lifecycle: Arc::new(SdkLifecycle {
                 lifecycle: lifecycle.clone(),
+                shutdown_cancel,
             }),
         },
         lifecycle,
@@ -147,6 +149,7 @@ struct SdkBackend {
 pub(super) struct SdkTerminal {
     transport: SdkTransport,
     retry_deadline: Duration,
+    shutdown: watch::Receiver<bool>,
 }
 
 /// The validated OTLP protocol's wire dispatch. Both variants send the same
@@ -184,6 +187,7 @@ impl SdkTerminal {
     fn new(
         connection: &ValidatedBackendConnection,
         bounds: &ValidatedTransportBounds,
+        shutdown: watch::Receiver<bool>,
     ) -> Result<Self, ExportError> {
         if connection.ca_file().is_some() {
             return Err(transport_error(
@@ -206,6 +210,7 @@ impl SdkTerminal {
         Ok(Self {
             transport,
             retry_deadline: bounds.lifecycle().shutdown().get(),
+            shutdown,
         })
     }
 
@@ -222,6 +227,7 @@ impl SdkTerminal {
                 let client = grpc.logs.lock().await.clone();
                 retry_export(
                     self.retry_deadline,
+                    self.shutdown.clone(),
                     || {
                         let request = grpc.request(request.clone());
                         let mut client = client.clone();
@@ -232,8 +238,14 @@ impl SdkTerminal {
                 .await
             }
             SdkTransport::HttpProtobuf(http) => {
-                http.export(self.retry_deadline, &http.logs_url, &request, message)
-                    .await
+                http.export(
+                    self.retry_deadline,
+                    self.shutdown.clone(),
+                    &http.logs_url,
+                    &request,
+                    message,
+                )
+                .await
             }
         }
     }
@@ -251,6 +263,7 @@ impl SdkTerminal {
                 let client = grpc.traces.lock().await.clone();
                 retry_export(
                     self.retry_deadline,
+                    self.shutdown.clone(),
                     || {
                         let request = grpc.request(request.clone());
                         let mut client = client.clone();
@@ -261,8 +274,14 @@ impl SdkTerminal {
                 .await
             }
             SdkTransport::HttpProtobuf(http) => {
-                http.export(self.retry_deadline, &http.traces_url, &request, message)
-                    .await
+                http.export(
+                    self.retry_deadline,
+                    self.shutdown.clone(),
+                    &http.traces_url,
+                    &request,
+                    message,
+                )
+                .await
             }
         }
     }
@@ -280,6 +299,7 @@ impl SdkTerminal {
                 let client = grpc.metrics.lock().await.clone();
                 retry_export(
                     self.retry_deadline,
+                    self.shutdown.clone(),
                     || {
                         let request = grpc.request(request.clone());
                         let mut client = client.clone();
@@ -290,8 +310,14 @@ impl SdkTerminal {
                 .await
             }
             SdkTransport::HttpProtobuf(http) => {
-                http.export(self.retry_deadline, &http.metrics_url, &request, message)
-                    .await
+                http.export(
+                    self.retry_deadline,
+                    self.shutdown.clone(),
+                    &http.metrics_url,
+                    &request,
+                    message,
+                )
+                .await
             }
         }
     }
@@ -378,6 +404,7 @@ impl HttpProtobufTransport {
     async fn export<M: prost::Message>(
         &self,
         deadline: Duration,
+        shutdown: watch::Receiver<bool>,
         url: &str,
         request: &M,
         message: &'static str,
@@ -385,6 +412,7 @@ impl HttpProtobufTransport {
         let body = request.encode_to_vec();
         retry_export(
             deadline,
+            shutdown,
             || {
                 let mut send = self
                     .client
@@ -569,6 +597,7 @@ fn retry_wait(
 
 pub(super) async fn retry_export<F, Fut, E>(
     deadline: Duration,
+    mut shutdown: watch::Receiver<bool>,
     mut operation: F,
     message: &'static str,
 ) -> Result<(), ExportError>
@@ -581,7 +610,15 @@ where
     let mut attempt = 0;
     let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
     loop {
-        match operation().await {
+        if *shutdown.borrow() {
+            return Err(shutdown_cancelled_error());
+        }
+        let result = tokio::select! {
+            biased;
+            _ = shutdown.changed() => return Err(shutdown_cancelled_error()),
+            result = operation() => result,
+        };
+        match result {
             Ok(()) => return Ok(()),
             Err(failure) => {
                 match retry_wait(
@@ -592,7 +629,14 @@ where
                     delay,
                 ) {
                     Some(wait) => {
-                        sleep(wait).await;
+                        if *shutdown.borrow() {
+                            return Err(shutdown_cancelled_error());
+                        }
+                        tokio::select! {
+                            biased;
+                            _ = shutdown.changed() => return Err(shutdown_cancelled_error()),
+                            () = sleep(wait) => {}
+                        }
                         attempt += 1;
                         delay = delay
                             .saturating_mul(2)
@@ -636,6 +680,7 @@ impl ExporterLifecycle for SdkTerminal {
 
 struct SdkLifecycle {
     lifecycle: LifecycleCore,
+    shutdown_cancel: watch::Sender<bool>,
 }
 
 impl ExporterLifecycle for SdkLifecycle {
@@ -662,7 +707,15 @@ impl ExporterLifecycle for SdkLifecycle {
 
     fn shutdown_async(&self) -> LifecycleFuture {
         let lifecycle = self.lifecycle.clone();
-        Box::pin(async move { lifecycle.shutdown_async().await })
+        let shutdown_cancel = self.shutdown_cancel.clone();
+        Box::pin(async move {
+            // The core waits for admitted work through its shutdown deadline.
+            // Only after it completes (including a timeout) do we interrupt
+            // residual RPCs/backoff, preserving normal drain-first shutdown.
+            let result = lifecycle.shutdown_async().await;
+            shutdown_cancel.send_replace(true);
+            result
+        })
     }
 
     fn flush_blocking(&self) -> Result<(), ExportError> {
@@ -799,6 +852,18 @@ fn transport_context(message: &str) -> ErrorContext {
             [] as [&str; 0],
         ),
     )
+}
+
+fn shutdown_cancelled_error() -> ExportError {
+    ExportError::ShutdownCancelledRetry {
+        context: Box::new(ErrorContext::new(
+            sc_observability_types::error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
+            "OTLP SDK retry was cancelled after shutdown exceeded its drain deadline",
+            Remediation::not_recoverable(
+                "the OTLP SDK exporter is shutting down and cannot retry this batch",
+            ),
+        )),
+    }
 }
 
 fn telemetry_error_to_export_error(error: TelemetryError) -> ExportError {
