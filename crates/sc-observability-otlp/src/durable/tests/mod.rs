@@ -94,6 +94,7 @@ fn config(path: &Path) -> TelemetryClientConfig {
     let mut overrides = ConfigOverrides::default();
     overrides.store_path = Some(path.join("telemetry.db"));
     overrides.lease_duration = Some(Duration::from_millis(300));
+    overrides.request_timeout = Some(Duration::from_millis(100));
     resolve_config(ConfigSources::new(&overrides, None, &|_| None)).unwrap()
 }
 fn log(key: &str) -> SubmissionEnvelope {
