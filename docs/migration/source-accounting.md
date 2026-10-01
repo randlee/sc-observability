@@ -9,11 +9,14 @@ four treatments as defined in
 the declaration that actually serves it in source; it does not count
 registry rows as wrappers.
 
-**Measured revision:** `69174764c6914db254fbea3cefc8de7fe8b6243e`, compared
+**Measured revision:** `87d2a9734e7967bee3b20d2c78eb228cd0793a8c`, compared
 with the released baseline v1.4.1
 `c578912653233c7dc678fefe5af575118dbbaaa1`. This head contains the released
 DTO Result restoration and the seven compatibility-method removal metadata
-corrections. The registry records these counts under
+corrections. Its counted declarations are the same as at the earlier
+measurement `69174764c6914db254fbea3cefc8de7fe8b6243e`; later commits only
+moved the `sc-observe` compatibility methods and `bridge_backend_v2` to the
+lines cited below. The registry records these counts under
 `source_audit.additional_handwritten`.
 
 ## Counting rule
@@ -121,12 +124,12 @@ it already had in 1.4.1. By the rule above, they are existing pairs:
 
 | Row | Declaration |
 | --- | --- |
-| `sc_observe::ObservabilityConfig::default_for` | `crates/sc-observe/src/compat.rs:108` |
-| `sc_observe::ObservabilityConfig::service_name` | `crates/sc-observe/src/compat.rs:121` |
-| `sc_observe::Observability::new` | `crates/sc-observe/src/compat.rs:146` |
-| `sc_observe::Observability::flush` | `crates/sc-observe/src/compat.rs:164` |
-| `sc_observe::Observability::shutdown` | `crates/sc-observe/src/compat.rs:183` |
-| `sc_observe::ObservabilityBuilder::build` | `crates/sc-observe/src/compat.rs:214` |
+| `sc_observe::ObservabilityConfig::default_for` | `crates/sc-observe/src/compat.rs:85` |
+| `sc_observe::ObservabilityConfig::service_name` | `crates/sc-observe/src/compat.rs:94` |
+| `sc_observe::Observability::new` | `crates/sc-observe/src/compat.rs:115` |
+| `sc_observe::Observability::flush` | `crates/sc-observe/src/compat.rs:129` |
+| `sc_observe::Observability::shutdown` | `crates/sc-observe/src/compat.rs:144` |
+| `sc_observe::ObservabilityBuilder::build` | `crates/sc-observe/src/compat.rs:171` |
 | `sc_observability_otlp::SpanAssembler::push` | `crates/sc-observability-otlp/src/compat.rs:701` |
 
 These rows now list their containing `compat` file in `removable_paths`,
@@ -268,12 +271,12 @@ its declaration at the measured revision:
 | added wrapper | type | `sc_observe::v2::Observability` | `crates/sc-observe/src/lib.rs:107` | unregistered |
 | added wrapper | type | `sc_observe::v2::ObservabilityBuilder` | `crates/sc-observe/src/lib.rs:154` | unregistered |
 | added wrapper | type | `sc_observe::v2::ObservabilityConfig` | `crates/sc-observe/src/lib.rs:77` | unregistered |
-| restoration | callable | `sc_observe::Observability::flush_typed` | `crates/sc-observe/src/compat.rs:193` | registry |
-| restoration | callable | `sc_observe::Observability::new_typed` | `crates/sc-observe/src/compat.rs:188` | registry |
-| restoration | callable | `sc_observe::Observability::shutdown_typed` | `crates/sc-observe/src/compat.rs:199` | registry |
-| restoration | callable | `sc_observe::ObservabilityBuilder::build_typed` | `crates/sc-observe/src/compat.rs:219` | registry |
-| restoration | callable | `sc_observe::ObservabilityConfig::default_for_typed` | `crates/sc-observe/src/compat.rs:126` | registry |
-| restoration | callable | `sc_observe::ObservabilityConfig::service_name_typed` | `crates/sc-observe/src/compat.rs:131` | registry |
+| restoration | callable | `sc_observe::Observability::flush_typed` | `crates/sc-observe/src/compat.rs:154` | registry |
+| restoration | callable | `sc_observe::Observability::new_typed` | `crates/sc-observe/src/compat.rs:149` | registry |
+| restoration | callable | `sc_observe::Observability::shutdown_typed` | `crates/sc-observe/src/compat.rs:160` | registry |
+| restoration | callable | `sc_observe::ObservabilityBuilder::build_typed` | `crates/sc-observe/src/compat.rs:176` | registry |
+| restoration | callable | `sc_observe::ObservabilityConfig::default_for_typed` | `crates/sc-observe/src/compat.rs:99` | registry |
+| restoration | callable | `sc_observe::ObservabilityConfig::service_name_typed` | `crates/sc-observe/src/compat.rs:104` | registry |
 
 ### `sc-observability-log`
 
@@ -339,4 +342,4 @@ its declaration at the measured revision:
 
 | Category | Kind | Item | Declaration | Row |
 | --- | --- | --- | --- | --- |
-| added wrapper | callable | `sc_observability_binding_runtime::bridge_backend_v2` | `crates/sc-observability-binding-runtime/src/lib.rs:294` | unregistered |
+| added wrapper | callable | `sc_observability_binding_runtime::bridge_backend_v2` | `crates/sc-observability-binding-runtime/src/lib.rs:313` | unregistered |

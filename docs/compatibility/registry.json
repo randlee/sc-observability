@@ -11,7 +11,7 @@
     "inherent_or_free_callables": 143,
     "trait_slots": 12,
     "additional_handwritten": {
-      "revision": "69174764c6914db254fbea3cefc8de7fe8b6243e",
+      "revision": "87d2a9734e7967bee3b20d2c78eb228cd0793a8c",
       "method": "docs/migration/source-accounting.md",
       "rule": "additional handwritten = restorations + added wrappers with a declaration in compat, the released errors.rs wrappers, an inline v2 module or a canonical twin; aliases, re-exports and existing pairs add none",
       "crates": {

@@ -92,23 +92,28 @@ For consumers that export to OTLP:
 3. Attach OTLP by wrapping projector implementations locally, following the
    pattern used by `examples/atm-adapter-example`.
 
-## Phase D 2.0 error and signal migration
+## Phase D compatible 1.x migration
 
-For migration from frozen 1.4.1, use [the 2.0 release reference](migration.md)
-and [the nine-family error migration](migrate-error-api.md). They cover named
-cause variants, source/remediation retention, custom sinks/projectors, config
-defaults, signal serde and the direct-return `from_core_health` change.
+Phase D ships as the next compatible 1.x release. The released 1.4.1 API is
+retained, so no source change is required; start with
+[Adopting the compatible 1.x release](migration/compatible-1x.md), then use
+[the compatible 1.x migration reference](migration.md) and
+[the nine-family error migration](migrate-error-api.md) for named cause
+variants, source/remediation retention, custom sinks/projectors, config
+defaults and signal serde.
 
-The old Phase B `_typed` adoption recipe is historical 1.x guidance. ADR-017
-replaces wrappers with canonical same-name enums and retires duplicate
-classifiers/adapters in D18. Until D18 qualifies activation, staged `v2`
-definitions and retained compatibility still coexist in this branch; the
-presence of these documents does not certify their removal.
+`sc_observability_dto::from_core_health` keeps its released
+`Result<LogHealthDto, Failure>` signature and always returns `Ok`. The new
+`sc_observability_dto::from_canonical_core_health` is the explicit infallible
+projection that returns `LogHealthDto` directly. Both produce the same DTO.
 
-Before rollout, run the consumed major-break manifest/semver gate against
-1.4.1 and its omitted-entry negative control, the existing canonical migrated
-consumer and intended-old-source rejection, real bindings/schema composition,
-and default/all-features workspace tests. A scoped DTO signature pass does
+Removing deprecated API belongs only to a future, separately authorized major
+release. Until then the released items, their `*_typed` counterparts and the
+opt-in `v2` modules coexist.
+
+Before rollout, run the public-API semver gate against 1.4.1, which accepts
+no enumerated breaks for a compatible 1.x release, plus real bindings/schema
+composition and default/all-features workspace tests. A scoped DTO pass does
 not authorize final baseline generation or publication.
 
 ## Breaking API Renames
