@@ -12,7 +12,6 @@ use sc_observability_dto::{
     constants::{MAX_CONTAINER_DEPTH, MAX_WIRE_PAYLOAD_BYTES},
     decode_event, decode_query, decode_timeout, is_protected_key, normalize_field_key,
 };
-use sc_observability_types::v2;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::{
@@ -145,22 +144,6 @@ fn query_timeout_failure() -> Failure {
         )),
         operation: "query".to_owned(),
     }
-}
-
-/// Projects a canonical event error into the stable Tauri failure envelope.
-pub fn project_canonical_event(error: &v2::EventError) -> Failure {
-    sc_observability_dto::failure_from_classification(
-        error.diagnostic(),
-        error.failure_classification(),
-    )
-}
-
-/// Projects a canonical flush error into the stable Tauri failure envelope.
-pub fn project_canonical_flush(error: &v2::FlushError) -> Failure {
-    sc_observability_dto::failure_from_classification(
-        error.diagnostic(),
-        error.failure_classification(),
-    )
 }
 
 fn envelope<T>(result: Result<T, Failure>) -> WireEnvelope<T> {
@@ -664,157 +647,11 @@ async fn sc_observability_flush<R: tauri::Runtime>(
 mod tests {
     use super::*;
     use sc_observability_binding_runtime::{Operation, ProducerOrigin};
-    use sc_observability_dto::{CompletionDto, Diagnostic as DiagnosticDto, LogQueryDto};
-
-    fn expected_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> DiagnosticDto {
-        DiagnosticDto {
-            at: diagnostic.timestamp.to_string(),
-            code: diagnostic.code.as_str().to_owned(),
-            message: diagnostic.message.clone(),
-            remediation: diagnostic.remediation.clone().into(),
-        }
-    }
-
-    fn assert_event_projection(error: &v2::EventError, expected: &Failure) {
-        let projected = project_canonical_event(error);
-        let native_projection = sc_observability_dto::failure_from_classification(
-            error.diagnostic(),
-            error.failure_classification(),
-        );
-
-        assert_eq!(projected, native_projection);
-        assert_eq!(projected, *expected);
-    }
-
-    fn assert_flush_projection(error: &v2::FlushError, expected: &Failure) {
-        let projected = project_canonical_flush(error);
-        let native_projection = sc_observability_dto::failure_from_classification(
-            error.diagnostic(),
-            error.failure_classification(),
-        );
-
-        assert_eq!(projected, native_projection);
-        assert_eq!(projected, *expected);
-    }
-
-    #[test]
-    fn canonical_event_failures_preserve_native_classification_and_diagnostics() {
-        let validation = v2::EventError::Validation {
-            context: Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::error_codes::VALUE_VALIDATION_FAILED,
-                "invalid event",
-                sc_observability_types::Remediation::recoverable(
-                    "correct the event",
-                    [] as [&str; 0],
-                ),
-            )),
-        };
-        assert_event_projection(
-            &validation,
-            &Failure::Validation {
-                diagnostic: Box::new(expected_diagnostic(validation.diagnostic())),
-                field: "event".to_owned(),
-            },
-        );
-
-        let queue_full = v2::EventError::classified_routing(
-            Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::error_codes::VALUE_VALIDATION_FAILED,
-                "queue full",
-                sc_observability_types::Remediation::recoverable(
-                    "drain the queue",
-                    [] as [&str; 0],
-                ),
-            )),
-            v2::FailureClassification::QueueFull,
-        );
-        assert_event_projection(
-            &queue_full,
-            &Failure::QueueFull {
-                diagnostic: Box::new(expected_diagnostic(queue_full.diagnostic())),
-            },
-        );
-
-        let unavailable = v2::EventError::classified_routing(
-            Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::error_codes::VALUE_VALIDATION_FAILED,
-                "writer is unavailable",
-                sc_observability_types::Remediation::recoverable(
-                    "restart the writer",
-                    [] as [&str; 0],
-                ),
-            )),
-            v2::FailureClassification::Unavailable,
-        );
-        assert_event_projection(
-            &unavailable,
-            &Failure::Unavailable {
-                diagnostic: Box::new(expected_diagnostic(unavailable.diagnostic())),
-            },
-        );
-    }
-
-    #[test]
-    fn canonical_flush_failures_preserve_native_classification_and_diagnostics() {
-        let timeout = v2::FlushError::classified_drain(
-            Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::error_codes::SC_LOG_QUERY_IO,
-                "flush deadline elapsed",
-                sc_observability_types::Remediation::recoverable("retry flush", [] as [&str; 0]),
-            )),
-            v2::FailureClassification::timeout("flush"),
-        );
-        assert_flush_projection(
-            &timeout,
-            &Failure::Timeout {
-                diagnostic: Box::new(expected_diagnostic(timeout.diagnostic())),
-                operation: "flush".to_owned(),
-            },
-        );
-
-        let export_cause = v2::FlushError::Drain {
-            context: Box::new(
-                sc_observability_types::ErrorContext::new(
-                    sc_observability_types::error_codes::SC_LOG_QUERY_IO,
-                    "flush transport queue is full",
-                    sc_observability_types::Remediation::recoverable(
-                        "drain the exporter queue",
-                        [] as [&str; 0],
-                    ),
-                )
-                .source(Box::new(v2::ExportError::QueueFull {
-                    context: Box::new(sc_observability_types::ErrorContext::new(
-                        sc_observability_types::error_codes::SC_LOG_QUERY_IO,
-                        "export queue is full",
-                        sc_observability_types::Remediation::recoverable(
-                            "retry export",
-                            [] as [&str; 0],
-                        ),
-                    )),
-                })),
-            ),
-        };
-        assert_flush_projection(
-            &export_cause,
-            &Failure::QueueFull {
-                diagnostic: Box::new(expected_diagnostic(export_cause.diagnostic())),
-            },
-        );
-
-        let fallback = v2::FlushError::Drain {
-            context: Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::error_codes::SC_LOG_QUERY_IO,
-                "flush failed without a native classification",
-                sc_observability_types::Remediation::recoverable("retry flush", [] as [&str; 0]),
-            )),
-        };
-        assert_flush_projection(
-            &fallback,
-            &Failure::Io {
-                diagnostic: Box::new(expected_diagnostic(fallback.diagnostic())),
-            },
-        );
-    }
+    use sc_observability_dto::{CompletionDto, LogQueryDto};
+    use std::{
+        future::Future,
+        task::{Context, Poll, Waker},
+    };
 
     struct IpcBackend;
 
@@ -851,6 +688,111 @@ mod tests {
                 )),
             })
         }
+    }
+
+    struct FailingBackend {
+        failure: Failure,
+    }
+
+    impl HostLoggingBackend for FailingBackend {
+        fn try_log(&self, _: LogEventDto, _: ProducerOrigin) -> Result<AdmissionDto, Failure> {
+            Err(self.failure.clone())
+        }
+
+        fn start_query(&self, _: LogQueryDto) -> Result<Operation<LogSnapshotDto>, Failure> {
+            Err(self.failure.clone())
+        }
+
+        fn health(&self) -> Result<LogHealthDto, Failure> {
+            Err(self.failure.clone())
+        }
+
+        fn start_flush(&self, _: Duration) -> Result<Operation<CompletionDto>, Failure> {
+            Err(self.failure.clone())
+        }
+    }
+
+    fn ready<F: Future>(future: F) -> F::Output {
+        let mut future = std::pin::pin!(future);
+        let mut context = Context::from_waker(Waker::noop());
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(value) => value,
+            Poll::Pending => panic!("the failing backend returns before awaiting completion"),
+        }
+    }
+
+    fn test_policy() -> AdapterPolicy {
+        AdapterPolicy {
+            allowed_window_labels: BTreeSet::from(["main".to_owned()]),
+            allowed_targets: BTreeSet::from(["app".to_owned()]),
+            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
+            max_depth: MAX_CONTAINER_DEPTH as u32,
+            redacted_field_keys: BTreeSet::new(),
+        }
+    }
+
+    #[test]
+    fn public_adapter_paths_preserve_backend_failure_envelopes() {
+        let event_failure = Failure::QueueFull {
+            diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                "event queue is full",
+            )),
+        };
+        let event_adapter = Adapter::new(
+            Arc::new(FailingBackend {
+                failure: event_failure.clone(),
+            }),
+            test_policy(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            event_adapter.try_log(
+                "main",
+                serde_json::json!({
+                    "schema_version": 1,
+                    "event": {
+                        "schema_version": 1,
+                        "level": "info",
+                        "target": "app",
+                        "action": "test",
+                        "message": "test",
+                        "fields": {}
+                    }
+                }),
+            ),
+            WireEnvelope::Error {
+                schema_version: SCHEMA_VERSION,
+                error: event_failure,
+            }
+        );
+
+        let flush_failure = Failure::Timeout {
+            diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+                "flush deadline elapsed",
+            )),
+            operation: "flush".to_owned(),
+        };
+        let flush_adapter = Adapter::new(
+            Arc::new(FailingBackend {
+                failure: flush_failure.clone(),
+            }),
+            test_policy(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            ready(flush_adapter.flush(
+                "main",
+                serde_json::json!({"schema_version": 1, "timeout_ms": 1}),
+            )),
+            WireEnvelope::Error {
+                schema_version: SCHEMA_VERSION,
+                error: flush_failure,
+            }
+        );
     }
 
     #[test]
