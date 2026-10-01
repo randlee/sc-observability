@@ -87,10 +87,10 @@ fn sdk_backend_rejects_http_json_protocol_instead_of_switching_backend() {
 }
 
 #[test]
-fn legacy_backend_rejects_grpc_protocol_instead_of_switching_backend() {
+fn sync_http_backend_rejects_grpc_protocol_instead_of_switching_backend() {
     let mut transport = OtelConfig::default();
     transport.enabled = true;
-    transport.backend = ExporterBackend::LegacyHttpJson;
+    transport.backend = ExporterBackend::SyncHttp;
     transport.protocol = OtlpProtocol::Grpc;
     transport.endpoint =
         Some(OtlpEndpoint::new_typed("https://otel.example.internal").expect("endpoint"));

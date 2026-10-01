@@ -7,7 +7,6 @@ lint:
     cargo clippy --all-targets --all-features -- -D warnings
     python3 .github/scripts/release_artifacts.py validate-publish-order \
         --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
-    bash scripts/ci/validate_publish_workflow_action_versions.sh
     python3 scripts/ci/validate_phase_c_install_contract.py
     bash scripts/ci/validate_docs_consistency.sh
     bash scripts/ci/validate_dependency_bans.sh

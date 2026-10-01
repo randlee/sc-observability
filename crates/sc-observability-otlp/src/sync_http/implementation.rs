@@ -1,6 +1,6 @@
-//! Blocking legacy OTLP/HTTP JSON transport.
+//! Blocking synchronous HTTP OTLP/HTTP JSON transport.
 //!
-//! This module retains the immutable legacy request and payload behavior while
+//! This module retains the immutable synchronous HTTP request and payload behavior while
 //! applying only the four authorized safety deltas: retry classification,
 //! bounded server pacing/jitter, cancellation-aware retry waits, and an
 //! overall retry-sequence deadline. The blocking client is owned exclusively
@@ -10,7 +10,7 @@
     not(test),
     expect(
         dead_code,
-        reason = "D.18 wires this staged legacy backend into the facade after D.8"
+        reason = "D.18 wires this staged synchronous HTTP backend into the facade after D.8"
     )
 )]
 
@@ -45,6 +45,17 @@ use crate::contracts::{
 use crate::lifecycle::{LifecycleCore, LifecycleState, SignalKind};
 use sc_observability_types::v2::{ExportError, MetricRecord, TelemetryError};
 use sc_observability_types::{ErrorContext, LogEvent, Remediation, error_codes};
+
+macro_rules! observed_request_timeout {
+    ($config:expr, $attempt:expr, $timeout:expr, $remaining:expr) => {{
+        let timeout = $timeout;
+        #[cfg(test)]
+        if let Some(observer) = &$config.request_timeout_observer {
+            let _ = observer.send(($attempt, timeout, $remaining));
+        }
+        timeout
+    }};
+}
 
 // Preserve the existing sibling-test paths while sharing the payload module
 // with transport submission; no public or crate-private exporter API changes.
@@ -107,9 +118,9 @@ impl RetrySettings {
     }
 }
 
-/// Validated inputs needed by the legacy worker.
+/// Validated inputs needed by the synchronous HTTP worker.
 #[derive(Debug, Clone)]
-pub(crate) struct LegacyHttpJsonConfig {
+pub(crate) struct SyncHttpConfig {
     endpoint: String,
     auth_header: Option<String>,
     ca_file: Option<PathBuf>,
@@ -122,10 +133,14 @@ pub(crate) struct LegacyHttpJsonConfig {
     #[cfg(test)]
     retry_delay_observer: Option<Sender<Duration>>,
     #[cfg(test)]
+    request_timeout_observer: Option<Sender<(u32, Duration, Duration)>>,
+    #[cfg(test)]
+    control_submission_observer: Option<Sender<()>>,
+    #[cfg(test)]
     startup_hooks: Option<Arc<StartupTestHooks>>,
 }
 
-impl LegacyHttpJsonConfig {
+impl SyncHttpConfig {
     /// Builds a worker configuration from D21's already-validated contract.
     #[cfg(test)]
     pub(crate) fn from_otel(
@@ -147,9 +162,9 @@ impl LegacyHttpJsonConfig {
         connection: &ValidatedBackendConnection,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
-        let BackendTransportBounds::Legacy(policy) = bounds.backend() else {
+        let BackendTransportBounds::SyncHttp(policy) = bounds.backend() else {
             return Err(transport_error(
-                "prepared transport is not the legacy backend",
+                "prepared transport is not the synchronous HTTP backend",
             ));
         };
         Ok(Self {
@@ -171,6 +186,10 @@ impl LegacyHttpJsonConfig {
             jitter_seed: seed_from_os(),
             #[cfg(test)]
             retry_delay_observer: None,
+            #[cfg(test)]
+            request_timeout_observer: None,
+            #[cfg(test)]
+            control_submission_observer: None,
             #[cfg(test)]
             startup_hooks: None,
         })
@@ -197,12 +216,20 @@ enum ControlCommand {
 struct WorkerInner {
     data_tx: SyncSender<DataCommand>,
     control_tx: SyncSender<ControlCommand>,
+    /// Serializes producer admission with a control command's first submission.
+    ///
+    /// The lock is released before waiting for either a control slot or the
+    /// worker reply, so producers never inherit a lifecycle wait timeout.
     send_lock: Mutex<()>,
+    /// Coordinates only control submitters when the capacity-one slot is full.
+    control_submission_lock: Mutex<()>,
     cancel: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     terminated: AtomicBool,
     lifecycle_flush_timeout: Duration,
     lifecycle_shutdown_timeout: Duration,
+    #[cfg(test)]
+    control_submission_observer: Option<Sender<()>>,
 }
 
 impl Drop for WorkerInner {
@@ -221,7 +248,7 @@ struct Worker {
 }
 
 impl Worker {
-    fn start(config: LegacyHttpJsonConfig) -> Result<Self, ExportError> {
+    fn start(config: SyncHttpConfig) -> Result<Self, ExportError> {
         let (data_tx, data_rx) = mpsc::sync_channel(64);
         let (control_tx, control_rx) = mpsc::sync_channel(1);
         let (ready_tx, ready_rx) = mpsc::channel();
@@ -235,9 +262,11 @@ impl Worker {
             .request_timeout
             .min(config.lifecycle_shutdown_timeout);
         #[cfg(test)]
+        let control_submission_observer = config.control_submission_observer.clone();
+        #[cfg(test)]
         let startup_hooks = config.startup_hooks.clone();
         thread::Builder::new()
-            .name("sc-otlp-legacy-http".to_owned())
+            .name("sc-otlp-sync-http".to_owned())
             .spawn(move || {
                 #[cfg(test)]
                 let hooks = config.startup_hooks.clone();
@@ -255,7 +284,9 @@ impl Worker {
                     let _ = hooks.exited.send(worker_cancel.load(Ordering::Acquire));
                 }
             })
-            .map_err(|error| transport_error_with_source("failed to start legacy worker", error))?;
+            .map_err(|error| {
+                transport_error_with_source("failed to start synchronous HTTP worker", error)
+            })?;
         #[cfg(test)]
         if let Some(hooks) = startup_hooks {
             StartupTestHooks::wait(&hooks.receive);
@@ -266,18 +297,21 @@ impl Worker {
                     data_tx,
                     control_tx,
                     send_lock: Mutex::new(()),
+                    control_submission_lock: Mutex::new(()),
                     cancel,
                     stop,
                     terminated: AtomicBool::new(false),
                     lifecycle_flush_timeout: flush_timeout,
                     lifecycle_shutdown_timeout: shutdown_timeout,
+                    #[cfg(test)]
+                    control_submission_observer,
                 }),
             }),
             Ok(Err(error)) => Err(error),
             Err(RecvTimeoutError::Timeout) => {
                 cancel.store(true, Ordering::Release);
                 Err(transport_error(
-                    "legacy worker construction handshake exceeded its finite deadline",
+                    "synchronous HTTP worker construction handshake exceeded its finite deadline",
                 ))
             }
             Err(RecvTimeoutError::Disconnected) => Err(worker_terminated_error()),
@@ -298,7 +332,7 @@ impl Worker {
             .inner
             .send_lock
             .lock()
-            .expect("legacy worker send lock");
+            .expect("synchronous HTTP worker send lock");
         match self.inner.data_tx.try_send(DataCommand::Export {
             endpoint,
             body,
@@ -326,9 +360,7 @@ impl Worker {
                 let _ = result_tx.send(result);
             }),
         )?;
-        result_rx
-            .recv_timeout(self.inner.lifecycle_shutdown_timeout)
-            .unwrap_or_else(|_| Err(worker_terminated_error()))
+        wait_for_control_result(&result_rx, self.inner.lifecycle_shutdown_timeout)
     }
 
     fn cancel(&self) {
@@ -340,35 +372,58 @@ impl Worker {
         self.inner.stop.store(true, Ordering::Release);
     }
 
-    fn flush_blocking(&self) -> Result<(), ExportError> {
-        let _guard = self
+    fn submit_control(&self, command: ControlCommand) -> Result<(), ExportError> {
+        let _control_guard = self
             .inner
-            .send_lock
+            .control_submission_lock
             .lock()
-            .expect("legacy worker control lock");
+            .expect("synchronous HTTP worker control lock");
+
+        let pending_command = {
+            let _send_guard = self
+                .inner
+                .send_lock
+                .lock()
+                .expect("synchronous HTTP worker control lock");
+            match self.inner.control_tx.try_send(command) {
+                Ok(()) => None,
+                Err(TrySendError::Full(command)) => Some(command),
+                Err(TrySendError::Disconnected(_)) => return Err(worker_terminated_error()),
+            }
+        };
+
+        // The control channel is deliberately bounded to one pending command.
+        // If an older command owns that slot, wait only under the control-only
+        // mutex; producer admission keeps using `send_lock` independently.
+        if let Some(command) = pending_command {
+            self.inner
+                .control_tx
+                .send(command)
+                .map_err(|_| worker_terminated_error())?;
+        }
+        #[cfg(test)]
+        self.notify_control_submission();
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn notify_control_submission(&self) {
+        if let Some(observer) = &self.inner.control_submission_observer {
+            let _ = observer.send(());
+        }
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
         let (tx, rx) = mpsc::channel();
-        self.inner
-            .control_tx
-            .send(ControlCommand::Flush { result: tx })
-            .map_err(|_| worker_terminated_error())?;
-        rx.recv_timeout(self.inner.lifecycle_flush_timeout)
-            .unwrap_or_else(|_| Err(worker_terminated_error()))
+        self.submit_control(ControlCommand::Flush { result: tx })?;
+        wait_for_control_result(&rx, self.inner.lifecycle_flush_timeout)
     }
 
     fn shutdown_blocking(&self) -> Result<(), ExportError> {
         self.inner.cancel.store(true, Ordering::Release);
-        let _guard = self
-            .inner
-            .send_lock
-            .lock()
-            .expect("legacy worker control lock");
         let (tx, rx) = mpsc::channel();
-        self.inner
-            .control_tx
-            .send(ControlCommand::Shutdown { result: Some(tx) })
-            .map_err(|_| worker_terminated_error())?;
-        rx.recv_timeout(self.inner.lifecycle_shutdown_timeout)
-            .unwrap_or_else(|_| Err(worker_terminated_error()))
+        self.submit_control(ControlCommand::Shutdown { result: Some(tx) })?;
+        wait_for_control_result(&rx, self.inner.lifecycle_shutdown_timeout)
     }
 }
 
@@ -385,9 +440,14 @@ impl ExporterLifecycle for Worker {
         let worker = self.clone();
         Box::pin(async move {
             let (tx, rx) = tokio::sync::oneshot::channel();
-            thread::spawn(move || {
-                let _ = tx.send(worker.flush_blocking());
-            });
+            thread::Builder::new()
+                .name("sc-otlp-sync-http-flush".to_owned())
+                .spawn(move || {
+                    let _ = tx.send(worker.flush_blocking());
+                })
+                .map_err(|error| {
+                    transport_error_with_source("failed to start sync HTTP flush helper", error)
+                })?;
             rx.await.unwrap_or_else(|_| Err(worker_terminated_error()))
         })
     }
@@ -397,9 +457,14 @@ impl ExporterLifecycle for Worker {
         Box::pin(async move {
             worker.cancel();
             let (tx, rx) = tokio::sync::oneshot::channel();
-            thread::spawn(move || {
-                let _ = tx.send(worker.shutdown_blocking());
-            });
+            thread::Builder::new()
+                .name("sc-otlp-sync-http-shutdown".to_owned())
+                .spawn(move || {
+                    let _ = tx.send(worker.shutdown_blocking());
+                })
+                .map_err(|error| {
+                    transport_error_with_source("failed to start sync HTTP shutdown helper", error)
+                })?;
             rx.await.unwrap_or_else(|_| Err(worker_terminated_error()))
         })
     }
@@ -418,7 +483,7 @@ impl ExporterLifecycle for Worker {
     reason = "the dedicated worker takes ownership of its channels and validated config"
 )]
 fn worker_main(
-    config: LegacyHttpJsonConfig,
+    config: SyncHttpConfig,
     data_rx: Receiver<DataCommand>,
     control_rx: Receiver<ControlCommand>,
     ready_tx: mpsc::Sender<Result<(), ExportError>>,
@@ -479,7 +544,7 @@ fn worker_main(
 
 fn drain_data(
     client: &Client,
-    config: &LegacyHttpJsonConfig,
+    config: &SyncHttpConfig,
     data_rx: &Receiver<DataCommand>,
     cancel: &AtomicBool,
 ) {
@@ -510,7 +575,7 @@ fn handle_control(command: ControlCommand, cancel: &AtomicBool) -> bool {
     }
 }
 
-fn build_client(config: &LegacyHttpJsonConfig) -> Result<Client, ExportError> {
+fn build_client(config: &SyncHttpConfig) -> Result<Client, ExportError> {
     let mut builder = ClientBuilder::new().timeout(config.request_timeout);
     if config.insecure_skip_verify {
         builder = builder.danger_accept_invalid_certs(true);
@@ -550,7 +615,7 @@ fn parse_auth_header(raw: &str) -> Result<(HeaderName, HeaderValue), ExportError
 
 fn send_with_retries(
     client: &Client,
-    config: &LegacyHttpJsonConfig,
+    config: &SyncHttpConfig,
     endpoint: &str,
     body: &str,
     cancel: &AtomicBool,
@@ -571,6 +636,8 @@ fn send_with_retries(
             return Err(retry_deadline_error());
         }
         let request_timeout = selected_request_timeout(config.request_timeout, remaining);
+        let request_timeout =
+            observed_request_timeout!(config, attempt, request_timeout, remaining);
         let response = client
             .post(endpoint)
             .header(CONTENT_TYPE, "application/json")
@@ -622,7 +689,7 @@ fn send_with_retries(
 
 fn retry_wait_delay(
     delay: Duration,
-    config: &LegacyHttpJsonConfig,
+    config: &SyncHttpConfig,
     started: Instant,
     cancel: &AtomicBool,
     rng: &mut u64,
@@ -666,7 +733,7 @@ pub(super) fn wait_cancelable(duration: Duration, cancel: &AtomicBool) -> bool {
     wait_cancelable_with_observer(duration, cancel, None)
 }
 
-fn wait_for_retry(config: &LegacyHttpJsonConfig, duration: Duration, cancel: &AtomicBool) -> bool {
+fn wait_for_retry(config: &SyncHttpConfig, duration: Duration, cancel: &AtomicBool) -> bool {
     #[cfg(test)]
     let observer = config.retry_delay_observer.as_ref();
     #[cfg(not(test))]
@@ -740,19 +807,19 @@ fn seed_from_os() -> u64 {
     0xa5a5_5a5a_1234_5678
 }
 
-/// Legacy terminal backend shared by all three OTLP signal families.
+/// Synchronous HTTP terminal backend shared by all three OTLP signal families.
 ///
 /// `Worker` is the terminal transport and `LifecycleCore` is the only
 /// admission/barrier owner. Signal adapters retain this pair through one
 /// `Arc`, so the HTTP worker never grows a competing lifecycle state machine.
-struct LegacyBackend {
+struct SyncHttpBackend {
     worker: Worker,
     lifecycle: LifecycleCore,
 }
 
-impl LegacyBackend {
+impl SyncHttpBackend {
     fn new(
-        worker_config: LegacyHttpJsonConfig,
+        worker_config: SyncHttpConfig,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Arc<Self>, ExportError> {
         let worker = Worker::start(worker_config)?;
@@ -762,7 +829,7 @@ impl LegacyBackend {
     }
 }
 
-impl Drop for LegacyBackend {
+impl Drop for SyncHttpBackend {
     fn drop(&mut self) {
         // The lifecycle core retains a Worker clone, so WorkerInner::drop is
         // not the final-handle boundary. Abandon shared admissions first,
@@ -779,20 +846,20 @@ impl Drop for LegacyBackend {
     }
 }
 
-/// Legacy exporter shared by all three OTLP signal families.
+/// Synchronous HTTP exporter shared by all three OTLP signal families.
 pub(crate) struct OtlpHttpExporter {
-    backend: Arc<LegacyBackend>,
+    backend: Arc<SyncHttpBackend>,
     endpoint: String,
 }
 
 impl OtlpHttpExporter {
     fn from_prepared(
-        worker_config: LegacyHttpJsonConfig,
+        worker_config: SyncHttpConfig,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
         let endpoint = worker_config.endpoint.clone();
         Ok(Self {
-            backend: LegacyBackend::new(worker_config, bounds)?,
+            backend: SyncHttpBackend::new(worker_config, bounds)?,
             endpoint,
         })
     }
@@ -803,7 +870,7 @@ impl OtlpHttpExporter {
         bounds: &ValidatedTransportBounds,
         observer: Sender<Duration>,
     ) -> Result<Self, ExportError> {
-        let mut worker_config = LegacyHttpJsonConfig::from_prepared(connection, bounds)?;
+        let mut worker_config = SyncHttpConfig::from_prepared(connection, bounds)?;
         worker_config.retry_delay_observer = Some(observer);
         Self::from_prepared(worker_config, bounds)
     }
@@ -813,10 +880,29 @@ impl OtlpHttpExporter {
         Self::for_test_config(endpoint, None, None)
     }
 
+    #[cfg(test)]
+    pub(super) fn for_control_ordering_test(
+        endpoint: String,
+        control_submission_observer: Sender<()>,
+    ) -> Result<Self, ExportError> {
+        let mut config = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
+        config.enabled = true;
+        config.endpoint = Some(
+            crate::config::OtlpEndpoint::new_typed(endpoint.clone())
+                .expect("loopback test endpoint is valid"),
+        );
+        let (mut worker_config, bounds) = SyncHttpConfig::from_otel(&config)?;
+        worker_config.control_submission_observer = Some(control_submission_observer);
+        Ok(Self {
+            backend: SyncHttpBackend::new(worker_config, &bounds)?,
+            endpoint,
+        })
+    }
+
     /// Exercises real client construction and `Worker::start` with ordered gates.
     #[cfg(test)]
     pub(super) fn for_startup_test(hooks: Arc<StartupTestHooks>) -> Result<Self, ExportError> {
-        let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
+        let mut config = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
         config.enabled = true;
         config.endpoint = Some(
             crate::config::OtlpEndpoint::new_typed("http://127.0.0.1:1")
@@ -825,11 +911,11 @@ impl OtlpHttpExporter {
         // A queued readiness message wins even at this short boundary. The
         // gates keep both cases independent of worker scheduling speed.
         config.timeout_ms = Some(1_u64.into());
-        let (mut worker_config, bounds) = LegacyHttpJsonConfig::from_otel(&config)?;
+        let (mut worker_config, bounds) = SyncHttpConfig::from_otel(&config)?;
         worker_config.startup_hooks = Some(hooks);
         let endpoint = worker_config.endpoint.clone();
         Ok(Self {
-            backend: LegacyBackend::new(worker_config, &bounds)?,
+            backend: SyncHttpBackend::new(worker_config, &bounds)?,
             endpoint,
         })
     }
@@ -843,7 +929,7 @@ impl OtlpHttpExporter {
         auth_header: Option<&str>,
         ca_file: Option<PathBuf>,
     ) -> Result<Self, ExportError> {
-        let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
+        let mut config = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
         config.enabled = true;
         config.endpoint = Some(
             crate::config::OtlpEndpoint::new_typed(endpoint.clone())
@@ -853,9 +939,9 @@ impl OtlpHttpExporter {
             AuthHeader::new_typed(header).expect("test authorization header is valid")
         });
         config.ca_file = ca_file;
-        let (worker_config, bounds) = LegacyHttpJsonConfig::from_otel(&config)?;
+        let (worker_config, bounds) = SyncHttpConfig::from_otel(&config)?;
         Ok(Self {
-            backend: LegacyBackend::new(worker_config, &bounds)?,
+            backend: SyncHttpBackend::new(worker_config, &bounds)?,
             endpoint,
         })
     }
@@ -863,7 +949,7 @@ impl OtlpHttpExporter {
     #[cfg(test)]
     pub(super) fn for_endpoint_with_retry(
         endpoint: String,
-        retry: crate::config::LegacyRetryPolicy,
+        retry: crate::config::SyncHttpRetryPolicy,
         jitter_seed: u64,
         retry_delay_observer: Option<Sender<Duration>>,
     ) -> Result<Self, ExportError> {
@@ -881,24 +967,44 @@ impl OtlpHttpExporter {
     #[cfg(test)]
     pub(super) fn for_endpoint_with_retry_timeout(
         endpoint: String,
-        retry: crate::config::LegacyRetryPolicy,
+        retry: crate::config::SyncHttpRetryPolicy,
         request_timeout_ms: u64,
         jitter_seed: u64,
         retry_delay_observer: Option<Sender<Duration>>,
     ) -> Result<Self, ExportError> {
-        let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
+        Self::for_endpoint_with_retry_timeout_observing_request_timeout(
+            endpoint,
+            retry,
+            request_timeout_ms,
+            jitter_seed,
+            retry_delay_observer,
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn for_endpoint_with_retry_timeout_observing_request_timeout(
+        endpoint: String,
+        retry: crate::config::SyncHttpRetryPolicy,
+        request_timeout_ms: u64,
+        jitter_seed: u64,
+        retry_delay_observer: Option<Sender<Duration>>,
+        request_timeout_observer: Option<Sender<(u32, Duration, Duration)>>,
+    ) -> Result<Self, ExportError> {
+        let mut config = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
         config.enabled = true;
         config.timeout_ms = Some(request_timeout_ms.into());
         config.endpoint = Some(
             crate::config::OtlpEndpoint::new_typed(endpoint.clone())
                 .expect("loopback test endpoint is valid"),
         );
-        config.legacy_retry = Some(retry);
-        let (mut worker_config, bounds) = LegacyHttpJsonConfig::from_otel(&config)?;
+        config.sync_http_retry = Some(retry);
+        let (mut worker_config, bounds) = SyncHttpConfig::from_otel(&config)?;
         worker_config.jitter_seed = jitter_seed;
         worker_config.retry_delay_observer = retry_delay_observer;
+        worker_config.request_timeout_observer = request_timeout_observer;
         Ok(Self {
-            backend: LegacyBackend::new(worker_config, &bounds)?,
+            backend: SyncHttpBackend::new(worker_config, &bounds)?,
             endpoint,
         })
     }
@@ -939,6 +1045,21 @@ impl OtlpHttpExporter {
     #[cfg(test)]
     pub(super) fn lifecycle_for_test(&self) -> LifecycleCore {
         self.backend.lifecycle.clone()
+    }
+
+    #[cfg(test)]
+    pub(super) fn flush_worker_for_test(
+        &self,
+    ) -> (Receiver<Result<(), ExportError>>, thread::JoinHandle<()>) {
+        let worker = self.backend.worker.clone();
+        let (result_tx, result_rx) = mpsc::channel();
+        let thread = thread::Builder::new()
+            .name("sc-otlp-test-flush".to_owned())
+            .spawn(move || {
+                let _ = result_tx.send(worker.flush_blocking());
+            })
+            .expect("spawn control ordering test helper");
+        (result_rx, thread)
     }
 }
 
@@ -1065,7 +1186,7 @@ pub(crate) fn build_exporter_set(
     connection: &ValidatedBackendConnection,
     bounds: &ValidatedTransportBounds,
 ) -> Result<ExporterSet, ExportError> {
-    let worker_config = LegacyHttpJsonConfig::from_prepared(connection, bounds)?;
+    let worker_config = SyncHttpConfig::from_prepared(connection, bounds)?;
     let exporter = Arc::new(OtlpHttpExporter::from_prepared(worker_config, bounds)?);
     Ok(ExporterSet {
         logs: exporter.clone(),
@@ -1096,7 +1217,10 @@ fn telemetry_error_to_export_error(error: TelemetryError) -> ExportError {
         _ => ExportError::TerminalExportFailure {
             context: Box::new(error_with_code(
                 error_codes::otlp::OTLP_EXPORT_TERMINAL,
-                "legacy admission returned an unknown telemetry error",
+                "synchronous HTTP admission returned an unknown telemetry error",
+                Remediation::not_recoverable(
+                    "inspect the synchronous HTTP admission failure before submitting a new batch",
+                ),
             )),
         },
     }
@@ -1154,46 +1278,81 @@ fn transport_error_with_source(
     }
 }
 
-fn error_with_code(code: sc_observability_types::ErrorCode, message: &str) -> ErrorContext {
-    ErrorContext::new(
-        code,
-        message,
-        Remediation::recoverable("inspect telemetry health and retry", [] as [&str; 0]),
-    )
+fn error_with_code(
+    code: sc_observability_types::ErrorCode,
+    message: &str,
+    remediation: Remediation,
+) -> ErrorContext {
+    ErrorContext::new(code, message, remediation)
 }
 
-fn worker_terminated_error() -> ExportError {
+pub(super) fn worker_terminated_error() -> ExportError {
     ExportError::WorkerTerminated {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_WORKER_TERMINATED,
-            "legacy HTTP worker terminated",
+            "synchronous HTTP worker terminated",
+            Remediation::recoverable(
+                "restart the synchronous HTTP exporter",
+                ["resubmit any batch that was not acknowledged"],
+            ),
         )),
     }
 }
 
-fn queue_full_error() -> ExportError {
+pub(super) fn wait_for_control_result(
+    receiver: &Receiver<Result<(), ExportError>>,
+    timeout: Duration,
+) -> Result<(), ExportError> {
+    match receiver.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(RecvTimeoutError::Timeout) => Err(ExportError::LifecycleTimeout {
+            context: Box::new(error_with_code(
+                error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT,
+                "synchronous HTTP lifecycle control exceeded its finite deadline",
+                Remediation::recoverable(
+                    "inspect exporter health and keep the runtime alive through lifecycle completion",
+                    [] as [&str; 0],
+                ),
+            )),
+        }),
+        Err(RecvTimeoutError::Disconnected) => Err(worker_terminated_error()),
+    }
+}
+
+pub(super) fn queue_full_error() -> ExportError {
     ExportError::QueueFull {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_QUEUE_FULL,
-            "legacy HTTP worker admission is full",
+            "synchronous HTTP worker admission is full",
+            Remediation::recoverable(
+                "wait for synchronous HTTP worker capacity",
+                ["retry the export after capacity is available"],
+            ),
         )),
     }
 }
 
-fn shutdown_cancelled_error() -> ExportError {
+pub(super) fn shutdown_cancelled_error() -> ExportError {
     ExportError::ShutdownCancelledRetry {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
-            "legacy retry was cancelled by shutdown",
+            "synchronous HTTP retry was cancelled by shutdown",
+            Remediation::not_recoverable(
+                "the synchronous HTTP exporter is shutting down and cannot retry this batch",
+            ),
         )),
     }
 }
 
-fn retry_deadline_error() -> ExportError {
+pub(super) fn retry_deadline_error() -> ExportError {
     ExportError::RetryDeadlineExhausted {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED,
-            "legacy retry sequence exceeded its deadline",
+            "synchronous HTTP retry sequence exceeded its deadline",
+            Remediation::recoverable(
+                "restore collector availability before retrying the export",
+                ["increase the retry sequence deadline only when the delivery budget permits"],
+            ),
         )),
     }
 }
@@ -1203,7 +1362,11 @@ fn retry_attempts_exhausted_error(status: u16) -> ExportError {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
             &format!(
-                "legacy collector returned retryable HTTP status {status} until attempts were exhausted"
+                "synchronous HTTP collector returned retryable HTTP status {status} until attempts were exhausted"
+            ),
+            Remediation::recoverable(
+                "wait for the collector to recover before retrying the export",
+                [] as [&str; 0],
             ),
         )),
     }
@@ -1214,18 +1377,25 @@ fn retry_attempts_exhausted_with_source(error: reqwest::Error) -> ExportError {
         context: Box::new(
             error_with_code(
                 error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
-                "legacy transport retries were exhausted",
+                "synchronous HTTP transport retries were exhausted",
+                Remediation::recoverable(
+                    "restore collector connectivity before retrying the export",
+                    [] as [&str; 0],
+                ),
             )
             .source(Box::new(error)),
         ),
     }
 }
 
-fn non_retryable_status_error(status: u16) -> ExportError {
+pub(super) fn non_retryable_status_error(status: u16) -> ExportError {
     ExportError::NonRetryableHttpStatus {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL,
-            &format!("legacy collector returned terminal HTTP status {status}"),
+            &format!("synchronous HTTP collector returned terminal HTTP status {status}"),
+            Remediation::not_recoverable(
+                "correct the collector request, credentials, or endpoint before submitting a new batch",
+            ),
         )),
     }
 }
@@ -1234,7 +1404,10 @@ fn blocking_in_async_error() -> ExportError {
     ExportError::BlockingBackendInAsyncContext {
         context: Box::new(error_with_code(
             error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT,
-            "blocking legacy lifecycle cannot run from an entered Tokio runtime",
+            "blocking synchronous HTTP lifecycle cannot run from an entered Tokio runtime",
+            Remediation::not_recoverable(
+                "use the asynchronous SDK lifecycle API from an entered Tokio runtime",
+            ),
         )),
     }
 }

@@ -5,6 +5,8 @@ use serde::de::{self, DeserializeSeed, MapAccess, Visitor};
 use serde_json::{Value, json};
 use std::{cell::RefCell, fmt};
 
+// serde's unknown_variant callback has no return channel, so interior mutability
+// captures its expected variants; thread_local keeps parallel tests isolated.
 thread_local! {
     static SERDE_UNKNOWN_VARIANT_EXPECTED: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
 }
@@ -458,12 +460,111 @@ fn nested_export_timeout_keeps_lifecycle_category_and_code() {
     assert_eq!(wire.diagnostic().diagnostic.code, code.as_str());
 }
 
-fn envelope_failure(wire: Value) -> (String, String, String) {
+fn envelope_failure(wire: Value) -> (String, String, String, RemediationDto) {
     match decode_canonical_envelope::<AdmissionDto>(wire) {
-        Err(Failure::Validation { diagnostic, field }) => {
-            (diagnostic.code, field, diagnostic.message)
-        }
+        Err(Failure::Validation { diagnostic, field }) => (
+            diagnostic.code,
+            field,
+            diagnostic.message,
+            diagnostic.remediation,
+        ),
         other => panic!("expected validation failure, got {other:?}"),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum EnvelopeShellFailure {
+    UnsupportedVersion(u32),
+    InvalidInput,
+}
+
+fn legacy_envelope_failure(wire: Value) -> Failure {
+    decode_envelope::<AdmissionDto>(wire).expect_err("malformed legacy envelope must fail")
+}
+
+fn canonical_envelope_failure(wire: Value) -> Failure {
+    decode_canonical_envelope::<AdmissionDto>(wire)
+        .expect_err("malformed canonical envelope must fail")
+}
+
+fn assert_envelope_shell_failure(decoder: &str, error: Failure, expected: EnvelopeShellFailure) {
+    match (expected, error) {
+        (
+            EnvelopeShellFailure::UnsupportedVersion(received),
+            Failure::UnsupportedVersion {
+                diagnostic,
+                received: actual,
+            },
+        ) => {
+            assert_eq!(
+                diagnostic.code,
+                error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION
+            );
+            assert_eq!(actual, received, "{decoder}");
+        }
+        (EnvelopeShellFailure::InvalidInput, Failure::Validation { diagnostic, field }) => {
+            assert_eq!(
+                diagnostic.code,
+                error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT
+            );
+            assert_eq!(field, "response", "{decoder}");
+        }
+        (_, actual) => panic!("{decoder} returned unexpected envelope failure: {actual:?}"),
+    }
+}
+
+#[test]
+fn envelope_shell_rejects_each_malformed_payload_through_both_public_decoders() {
+    let error = fixture("CanonicalWireEnvelopeAdmissionDto")["error"].clone();
+    let mut error_missing_kind = error.clone();
+    error_missing_kind
+        .as_object_mut()
+        .expect("fixture error is an object")
+        .remove("kind");
+    let cases = [
+        (
+            "unsupported schema version",
+            json!({"schema_version": 2, "kind": "ok", "value": {}}),
+            EnvelopeShellFailure::UnsupportedVersion(2),
+        ),
+        (
+            "ok envelope missing value",
+            json!({"schema_version": 1, "kind": "ok"}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+        (
+            "error envelope missing error payload",
+            json!({"schema_version": 1, "kind": "error"}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+        (
+            "envelope missing kind",
+            json!({"schema_version": 1, "value": {}}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+        (
+            "envelope with conflicting ok and error payloads",
+            json!({"schema_version": 1, "kind": "ok", "value": {}, "error": error}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+        (
+            "error payload missing failure kind",
+            json!({"schema_version": 1, "kind": "error", "error": error_missing_kind}),
+            EnvelopeShellFailure::InvalidInput,
+        ),
+    ];
+
+    for (name, wire, expected) in cases {
+        assert_envelope_shell_failure(
+            &format!("legacy {name}"),
+            legacy_envelope_failure(wire.clone()),
+            expected,
+        );
+        assert_envelope_shell_failure(
+            &format!("canonical {name}"),
+            canonical_envelope_failure(wire),
+            expected,
+        );
     }
 }
 
@@ -487,15 +588,24 @@ fn canonical_envelope_error_arm_follows_binding_contract() {
             e["at"] = json!("not-a-time");
         },
     ] {
-        let (code, field, _) = with(edit);
+        let (code, field, _, remediation) = with(edit);
         assert_eq!(
             (code.as_str(), field.as_str()),
             (too_large, "response.error")
         );
+        assert_eq!(
+            remediation,
+            RemediationDto::Recoverable {
+                steps: vec![
+                    "Reduce remote diagnostic text or remediation steps to the documented bounds"
+                        .into()
+                ]
+            }
+        );
     }
-    let (code, field, _) = with(&|e| e["at"] = json!("not-a-time"));
+    let (code, field, _, _) = with(&|e| e["at"] = json!("not-a-time"));
     assert_eq!((code.as_str(), field.as_str()), (invalid, "response.error"));
-    let (code, field, message) = with(&|e| {
+    let (code, field, message, _) = with(&|e| {
         e["at"] = json!("not-a-time");
         e["details"] = json!({"k": {"kind": "nope"}});
     });
@@ -509,7 +619,7 @@ fn canonical_envelope_error_arm_follows_binding_contract() {
             e.as_object_mut().unwrap().remove("field");
         },
     ] {
-        let (code, field, _) = with(edit);
+        let (code, field, _, _) = with(edit);
         assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
     }
     // Canonical contract mapping, not base parity: these malformed-envelope
@@ -528,14 +638,14 @@ fn canonical_envelope_error_arm_follows_binding_contract() {
             "request exceeds",
         ),
     ] {
-        let (code, field, message) = with(edit);
+        let (code, field, message, _) = with(edit);
         assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
         assert!(message.contains(needle), "{message}");
     }
     for error in [Value::Null, json!("x")] {
         let mut w = wire.clone();
         w["error"] = error;
-        let (code, field, message) = envelope_failure(w);
+        let (code, field, message, _) = envelope_failure(w);
         assert_eq!((code.as_str(), field.as_str()), (invalid, "response"));
         assert!(message.contains("expected struct Diagnostic"), "{message}");
     }

@@ -8,7 +8,6 @@ on:
       - 'Cargo.*'
       - 'rust-toolchain.toml'
       - 'crates/sc-observability*/**'
-      - 'bindings/generation-*'
       - '.github/workflows/binding-runtime.yml'
   push:
     branches: [develop, main, 'integrate/*']

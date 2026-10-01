@@ -19,9 +19,16 @@ use sc_observability_types::{
     ActionName, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion, ServiceName, SpanId,
     TargetCategory, Timestamp, TraceContext, TraceId,
 };
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::watch;
 use tonic::Code;
+
+fn never_cancelled_shutdown() -> (watch::Sender<bool>, watch::Receiver<bool>) {
+    watch::channel(false)
+}
 
 #[test]
 fn sdk_adapter_requires_an_entered_caller_runtime() {
@@ -142,8 +149,10 @@ where
     let admitted = lifecycle_core
         .admit(SignalKind::Logs, (), 1_024)
         .expect("retry admission");
+    let (_shutdown, shutdown_rx) = never_cancelled_shutdown();
     let result = super::implementation::retry_export(
         deadline,
+        shutdown_rx,
         move || {
             let outcome = outcomes
                 .get(next)
@@ -321,8 +330,10 @@ fn find_source<'a, T: std::error::Error + 'static>(
 
 #[tokio::test(flavor = "current_thread")]
 async fn sdk_terminal_grpc_failure_keeps_the_tonic_status_as_source() {
+    let (_shutdown, shutdown_rx) = never_cancelled_shutdown();
     let error = super::implementation::retry_export(
         Duration::from_secs(30),
+        shutdown_rx,
         || async { Err::<(), _>(tonic::Status::new(Code::Internal, "collector rejected")) },
         "OTLP log export failed",
     )
@@ -338,8 +349,10 @@ async fn sdk_terminal_grpc_failure_keeps_the_tonic_status_as_source() {
 #[tokio::test(flavor = "current_thread")]
 async fn sdk_terminal_http_failure_keeps_the_client_error_as_source() {
     let client = reqwest::Client::new();
+    let (_shutdown, shutdown_rx) = never_cancelled_shutdown();
     let error = super::implementation::retry_export(
         Duration::from_millis(100),
+        shutdown_rx,
         || {
             let send = client.post("http://127.0.0.1:1/v1/logs").send();
             async move { send.await.map(|_| ()).map_err(HttpError::Client) }
@@ -354,8 +367,10 @@ async fn sdk_terminal_http_failure_keeps_the_client_error_as_source() {
     let client_error = find_source::<reqwest::Error>(&error).expect("reqwest error source");
     assert!(client_error.is_connect());
 
+    let (_shutdown, shutdown_rx) = never_cancelled_shutdown();
     let status = super::implementation::retry_export(
         Duration::from_secs(30),
+        shutdown_rx,
         || async { Err::<(), _>(HttpError::Status(400)) },
         "OTLP log export failed",
     )
@@ -365,6 +380,82 @@ async fn sdk_terminal_http_failure_keeps_the_client_error_as_source() {
         find_source::<HttpError>(&status),
         Some(HttpError::Status(400))
     ));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn sdk_retry_shutdown_interrupts_an_in_flight_rpc() {
+    let (shutdown, shutdown_rx) = watch::channel(false);
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let mut started_tx = Some(started_tx);
+    let retry = tokio::spawn(super::implementation::retry_export(
+        Duration::from_secs(30),
+        shutdown_rx,
+        move || {
+            let started_tx = started_tx.take();
+            async move {
+                if let Some(started_tx) = started_tx {
+                    let _ = started_tx.send(());
+                }
+                std::future::pending::<Result<(), tonic::Status>>().await
+            }
+        },
+        "scripted in-flight RPC",
+    ));
+
+    started_rx.await.expect("RPC started");
+    shutdown.send_replace(true);
+    let error = retry
+        .await
+        .expect("retry task")
+        .expect_err("shutdown cancels RPC");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::ExportError::ShutdownCancelledRetry { .. }
+    ));
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn sdk_retry_shutdown_interrupts_backoff_sleep() {
+    let (shutdown, shutdown_rx) = watch::channel(false);
+    let (attempt_tx, attempt_rx) = tokio::sync::oneshot::channel();
+    let mut attempt_tx = Some(attempt_tx);
+    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let observed_attempts = Arc::clone(&attempts);
+    let retry = tokio::spawn(super::implementation::retry_export(
+        Duration::from_secs(30),
+        shutdown_rx,
+        move || -> Pin<Box<dyn Future<Output = Result<(), tonic::Status>> + Send>> {
+            observed_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if let Some(attempt_tx) = attempt_tx.take() {
+                Box::pin(async move {
+                    let _ = attempt_tx.send(());
+                    Err(tonic::Status::new(Code::Unavailable, "retry fixture"))
+                })
+            } else {
+                Box::pin(async { Err(tonic::Status::new(Code::Internal, "unexpected retry")) })
+            }
+        },
+        "scripted retry backoff",
+    ));
+
+    attempt_rx.await.expect("first attempt started");
+    tokio::task::yield_now().await;
+    assert!(
+        !retry.is_finished(),
+        "retry is waiting in its backoff sleep"
+    );
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    shutdown.send_replace(true);
+    let error = retry
+        .await
+        .expect("retry task")
+        .expect_err("shutdown cancels backoff");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::ExportError::ShutdownCancelledRetry { .. }
+    ));
+    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
 
 /// gRPC logs collector whose every export waits (bounded) for a second export

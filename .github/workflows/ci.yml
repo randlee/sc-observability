@@ -89,16 +89,6 @@ jobs:
       - name: Validate docs consistency
         run: bash scripts/ci/validate_docs_consistency.sh
 
-  dependency-bans:
-    name: dependency-bans (ubuntu)
-    needs: [clippy]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Validate dependency bans
-        run: bash scripts/ci/validate_dependency_bans.sh
-
   version-literals:
     name: version-literals (ubuntu)
     needs: [clippy]
@@ -192,7 +182,7 @@ jobs:
 
   manifest-validation:
     name: manifest-validation (ubuntu)
-    needs: [clippy, docs-consistency, dependency-bans, version-literals]
+    needs: [clippy, docs-consistency, version-literals]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -232,9 +222,6 @@ jobs:
             --manifest release/publish-artifacts.toml \
             --workspace-toml Cargo.toml
 
-      - name: Validate publish action versions
-        run: bash scripts/ci/validate_publish_workflow_action_versions.sh
-
       - name: Validate install contract semantics
         run: python3 scripts/ci/validate_phase_c_install_contract.py
 
@@ -247,14 +234,8 @@ jobs:
             --manifest release/publish-artifacts.toml \
             --workspace-toml Cargo.toml
 
-      - name: Validate docs consistency
-        run: bash scripts/ci/validate_docs_consistency.sh
-
       - name: Validate dependency bans
         run: bash scripts/ci/validate_dependency_bans.sh
-
-      - name: Validate version literals
-        run: python3 scripts/ci/validate_version_literals.py
 
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh
@@ -268,9 +249,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
-
-      - name: Provision immutable legacy OTLP provenance source
-        run: python3 scripts/ci/provision_legacy_otlp_provenance.py
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

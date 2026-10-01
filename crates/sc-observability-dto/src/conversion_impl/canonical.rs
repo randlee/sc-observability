@@ -47,48 +47,14 @@ pub fn from_canonical_diagnostic(
     Ok(result)
 }
 
-/// Builds the canonical wire failure from the single native classification authority.
-fn canonical_failure(
-    diagnostic: Box<CanonicalDiagnosticDto>,
-    classification: core::v2::FailureClassification,
-) -> CanonicalFailureDto {
-    match classification {
-        core::v2::FailureClassification::Validation { field } => CanonicalFailureDto::Validation {
-            diagnostic,
-            field: field.into(),
-        },
-        core::v2::FailureClassification::QueueFull => CanonicalFailureDto::QueueFull { diagnostic },
-        core::v2::FailureClassification::Closed => CanonicalFailureDto::Closed { diagnostic },
-        core::v2::FailureClassification::Unavailable => {
-            CanonicalFailureDto::Unavailable { diagnostic }
-        }
-        core::v2::FailureClassification::Io => CanonicalFailureDto::Io { diagnostic },
-        core::v2::FailureClassification::Timeout { operation } => CanonicalFailureDto::Timeout {
-            diagnostic,
-            operation: operation.into(),
-        },
-        core::v2::FailureClassification::Cancelled { operation } => {
-            CanonicalFailureDto::Cancelled {
-                diagnostic,
-                operation: operation.into(),
-            }
-        }
-        core::v2::FailureClassification::Internal => CanonicalFailureDto::Internal { diagnostic },
-    }
-}
-
-/// Builds the legacy wire failure from the single native classification authority.
+/// Builds either wire failure representation from the single native classification authority.
 ///
-/// The legacy and canonical representations intentionally remain distinct so
-/// their JSON shapes stay lossless and backwards compatible.
-pub fn failure_from_diagnostic(
-    diagnostic: Diagnostic,
+/// The generic diagnostic keeps the retained and canonical wire shapes distinct while
+/// ensuring their native classification mapping cannot drift.
+fn classified_failure<D>(
+    diagnostic: Box<D>,
     classification: core::v2::FailureClassification,
-) -> Failure {
-    if let Err(error) = validate_diagnostic(&diagnostic, "response.error") {
-        return error;
-    }
-    let diagnostic = Box::new(diagnostic);
+) -> Failure<D> {
     match classification {
         core::v2::FailureClassification::Validation { field } => Failure::Validation {
             diagnostic,
@@ -108,6 +74,29 @@ pub fn failure_from_diagnostic(
         },
         core::v2::FailureClassification::Internal => Failure::Internal { diagnostic },
     }
+}
+
+/// Builds the canonical wire failure from the single native classification authority.
+fn canonical_failure(
+    diagnostic: Box<CanonicalDiagnosticDto>,
+    classification: core::v2::FailureClassification,
+) -> CanonicalFailureDto {
+    classified_failure(diagnostic, classification)
+}
+
+/// Builds the legacy wire failure from the single native classification authority.
+///
+/// The legacy and canonical representations intentionally remain distinct so
+/// their JSON shapes stay lossless and backwards compatible.
+/// Returns `validate_diagnostic`'s validation failure when the diagnostic is invalid or oversized.
+pub fn failure_from_diagnostic(
+    diagnostic: Diagnostic,
+    classification: core::v2::FailureClassification,
+) -> Failure {
+    if let Err(error) = validate_diagnostic(&diagnostic, "response.error") {
+        return error;
+    }
+    classified_failure(Box::new(diagnostic), classification)
 }
 
 /// Projects a native diagnostic through its native-owned wire classification.
@@ -163,7 +152,7 @@ impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
             }),
             _ => Ok(canonical_failure(
                 Box::new(from_canonical_diagnostic(value.diagnostic())?),
-                core::v2::FailureClassification::Internal,
+                value.failure_classification(),
             )),
         }
     }
@@ -172,6 +161,117 @@ impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
 #[cfg(test)]
 mod export_projection_tests {
     use super::*;
+
+    fn diagnostic() -> Diagnostic {
+        Diagnostic {
+            at: "2024-01-01T00:00:00Z".into(),
+            code: "TEST_FAILURE".into(),
+            message: "test failure".into(),
+            remediation: RemediationDto::Recoverable {
+                steps: vec!["retry".into()],
+            },
+        }
+    }
+
+    #[test]
+    fn classification_constructor_preserves_all_native_categories_and_wire_shapes() {
+        for (classification, kind, field, operation) in [
+            (
+                core::v2::FailureClassification::validation("request.payload"),
+                "validation",
+                Some("request.payload"),
+                None,
+            ),
+            (
+                core::v2::FailureClassification::QueueFull,
+                "queue_full",
+                None,
+                None,
+            ),
+            (
+                core::v2::FailureClassification::Closed,
+                "closed",
+                None,
+                None,
+            ),
+            (
+                core::v2::FailureClassification::Unavailable,
+                "unavailable",
+                None,
+                None,
+            ),
+            (core::v2::FailureClassification::Io, "io", None, None),
+            (
+                core::v2::FailureClassification::timeout("flush"),
+                "timeout",
+                None,
+                Some("flush"),
+            ),
+            (
+                core::v2::FailureClassification::Cancelled {
+                    operation: "shutdown",
+                },
+                "cancelled",
+                None,
+                Some("shutdown"),
+            ),
+            (
+                core::v2::FailureClassification::Internal,
+                "internal",
+                None,
+                None,
+            ),
+        ] {
+            let legacy = failure_from_diagnostic(diagnostic(), classification);
+            let canonical = canonical_failure(
+                Box::new(CanonicalDiagnosticDto {
+                    diagnostic: diagnostic(),
+                    cause: Some("canonical-only cause".into()),
+                    docs: None,
+                    details: std::collections::BTreeMap::new(),
+                }),
+                classification,
+            );
+            let legacy_wire = serde_json::to_value(legacy).expect("legacy serializes");
+            let canonical_wire = serde_json::to_value(canonical).expect("canonical serializes");
+
+            assert_eq!(legacy_wire["kind"], kind);
+            assert_eq!(canonical_wire["kind"], kind);
+            assert_eq!(legacy_wire["field"].as_str(), field);
+            assert_eq!(canonical_wire["field"].as_str(), field);
+            assert_eq!(legacy_wire["operation"].as_str(), operation);
+            assert_eq!(canonical_wire["operation"].as_str(), operation);
+            assert_eq!(legacy_wire["code"], canonical_wire["code"]);
+            assert_eq!(legacy_wire.get("cause"), None);
+            assert_eq!(canonical_wire["cause"], "canonical-only cause");
+        }
+    }
+
+    #[test]
+    fn failure_from_diagnostic_rejects_oversized_diagnostic() {
+        let mut oversized = diagnostic();
+        oversized.message = "x".repeat(MAX_DIAGNOSTIC_FIELD_BYTES + 1);
+
+        let failure = failure_from_diagnostic(oversized, core::v2::FailureClassification::Internal);
+
+        let Failure::Validation { diagnostic, field } = failure else {
+            panic!("oversized diagnostic should return a validation failure");
+        };
+        assert_eq!(
+            diagnostic.code,
+            error_codes::SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE
+        );
+        assert_eq!(field, "response.error");
+        assert_eq!(
+            diagnostic.remediation,
+            RemediationDto::Recoverable {
+                steps: vec![
+                    "Reduce remote diagnostic text or remediation steps to the documented bounds"
+                        .into()
+                ]
+            }
+        );
+    }
 
     #[test]
     fn queue_full_projects_to_queue_full_with_its_diagnostic() {

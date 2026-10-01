@@ -15,12 +15,11 @@ otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otl
 # Unstable, non-default support for the D.7 external consumer fixture. This
 # deliberately does not activate the production Telemetry factory (D.18).
 sdk-test-support = ["otlp-sdk"]
-legacy-http-json = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:tokio"]
+sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:tokio"]
 
 [dependencies]
 serde_json.workspace = true
 thiserror.workspace = true
-sc-observability.workspace = true
 sc-observability-types.workspace = true
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
@@ -34,7 +33,9 @@ getrandom = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [dev-dependencies]
+sc-observability.workspace = true
 sc-observe.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 # The hermetic conformance collector routes the three generated OTLP services
 # in integration tests only; production SDK transport keeps its pinned features.
 tonic = { workspace = true, features = ["router"] }

@@ -74,7 +74,6 @@ are accounted for as follows; none expands D.21's owned-path fence:
 
 | Path | Governing owner or ruling |
 | --- | --- |
-| `bindings/generation-manifest.json` | `obs-d-19` owns the generated binding manifest and its source/output digests. |
 | `examples/atm-adapter-example/src/main.rs` | `obs-d-17` owns the ATM consumer example source; `obs-d-18` receives it after D.17 closes. |
 | `examples/atm-adapter-example/Cargo.lock` | Generated lockfile consumed by D.17's locked ATM-example check; it is handed off with that example and is not an independent D.21 contract artifact. |
 | `examples/otlp-legacy/src/main.rs` | D.21 deliverable 2 creates declared OTLP placeholders next to the D.21-owned example manifest; implementation remains with the later OTLP consumer owner. |

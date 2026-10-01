@@ -205,6 +205,7 @@ fn child_diagnostics(run: &ChildRun) -> String {
 }
 
 pub(crate) struct Gate {
+    // MUTEX: updates arrivals and the release predicate together for Condvar waiters.
     state: Mutex<(usize, bool)>,
     changed: Condvar,
 }
@@ -595,6 +596,7 @@ fn concurrent_timer() {
     assert_eq!(crate::timer::shared().unwrap().entries(), 0);
 }
 struct Notify {
+    // MUTEX: couples the wake predicate to Condvar sleep/reset to avoid lost test-waker notifications.
     state: Mutex<bool>,
     changed: Condvar,
 }

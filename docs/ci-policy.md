@@ -28,6 +28,9 @@ PRs target the layer below them (`sprint/<lower>`), and quick-fix PRs target
 from this workflow. Retire this added base coverage when stacks stop using
 `sprint/*` bases.
 
+Dependency restrictions remain checked by `just lint` through
+`scripts/ci/validate_dependency_bans.sh`.
+
 ## Intermediate PR job inventory
 
 Each row names the existing regression motivating the check, rather than
@@ -37,8 +40,7 @@ on PRs 233–235 are the observed reason for retiring those checks.
 | Jobs | Consumer and gate | Observed defect / existing regression | Retirement condition |
 | --- | --- | --- | --- |
 | CI: `fmt`, `clippy` | Rust maintainers; formatting and compiler lint errors | Compiler/lint failures before tests; existing workspace gate | Compiler/build tooling replaces the gate with equivalent coverage |
-| CI: `docs-consistency` | API consumers; normative docs and rustdoc agree | Existing docs consistency regression cases and missing-doc checks | Normative document generation replaces these checks |
-| CI: `dependency-bans` | Lower-layer consumers; neutral dependency graph | Existing forbidden-dependency and binding-runtime boundary checks | Architectural dependency restrictions are retired |
+| CI: `docs-consistency` | API consumers; public Rust API documentation | Rustdoc missing-doc checks | Equivalent public API documentation validation replaces the check |
 | CI: `version-literals` | Package consumers; one coherent release train | Existing version and exact macro-pin mismatch rejection | Packages stop using a coordinated release train |
 | CI: `public-api-governance` | Integration reviewer; visible API diffs, report-only for PRs except bases develop/main | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs intermediate API reports |
 | CI: `manifest-validation` | Release maintainer; publish inventory, install contract, retry correctness | `test_release_artifacts`, `test_prepare_release_staged_packages`, `test_publish_retry_idempotency` | Publish/install tooling is replaced and its coverage moves with it |
@@ -82,7 +84,7 @@ applicable retained workflows on the candidate ref before publishing and
 verifies successful completion: B.2 for the current six-package release train,
 and B.P2 only when its candidate/baseline authority matches the release plan.
 B.2 runs
-`test_log_staging.py` and `test_generation_provenance.py`; B.P2 runs
+`test_log_staging.py`; B.P2 runs
 `test_validate_runtime_level_qualification_metadata.py`,
 `test_validate_runtime_level_platform_evidence.py`,
 `validate_runtime_level_qualification_metadata.py` and the `rustfmt --check`
@@ -107,16 +109,18 @@ Phase B/C snapshot JSON and their dedicated regression suites are retired.
 The import was accepted and the crates are now maintained here; source edits
 are intentional. The source-revision pin and history prerequisites for binding
 generation are also retired because stack rebases rewrite commits. The
-existing `validate_binding_artifacts.py` remains the one input/output hash
-checker; schema generation, typing, runtime tests and Cargo package checks
-remain functional gates. Tests unrelated to these retired provenance checks
-are unchanged.
+committed generated-binding source/output hash inventory is also retired.
+`validate_binding_generators.py` regenerates and compares the committed schema
+and language bindings, checks determinism, and rejects stale generated output.
+Pinned generator toolchains, typing, runtime tests, public API/semver checks and
+Cargo package integrity checks remain functional gates. Tests unrelated to these
+retired provenance checks are unchanged.
 
 Retired 2026-09-26: `validate_log_import.py`, `_log_metadata_adaptations.py`,
 `_log_release_adaptations.py`, Phase B `import-provenance.json`,
 `post-import-adaptations.json`, `release-adaptations-b-2.json` and Phase C
 `manifest-metadata-adaptations.json`. References in historical sprint plans,
 approvals and architecture records describe the acceptance gates at that time;
-they do not require restoring these retired gates. OTLP-023 is now enforced by
-D8 adapter tests using the retained Phase D `legacy-otlp-provenance.json` as
-source authority.
+they do not require restoring these retired gates. The Phase D OTLP
+transplant provenance manifest and its validator were retired with the
+`sync-http` rename; OTLP-023 no longer requires them.

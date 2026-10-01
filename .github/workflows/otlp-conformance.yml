@@ -3,13 +3,14 @@ name: OTLP conformance
 on:
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'crates/sc-observability-otlp/**'
       - 'crates/sc-observability-types/**'
       - 'docs/observability/otlp/**'
-      - 'docs/plans/phase-d/legacy-otlp-provenance.json'
+      - 'policy/otlp-transport.toml'
+      - 'scripts/ci/otlp_dependencies.py'
       - 'scripts/ci/otlp_dev_install_smoke.py'
-      - 'scripts/ci/provision_legacy_otlp_provenance.py'
-      - 'scripts/ci/tests/test_generation_provenance.py'
       - 'scripts/ci/fixtures/otlp/**'
       - '.github/workflows/otlp-conformance.yml'
   workflow_dispatch:
@@ -17,16 +18,17 @@ on:
 jobs:
   collector-conformance:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         features:
           - otlp-sdk
-          - legacy-http-json
-          - otlp-sdk,legacy-http-json
+          - sync-http
+          - otlp-sdk,sync-http
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: '1.94.1'
       - name: Run hermetic collector conformance (${{ matrix.features }})
@@ -34,29 +36,23 @@ jobs:
           cargo test --locked -p sc-observability-otlp
           --test full_stack_integration --features ${{ matrix.features }}
 
-  canonical-ingress-conformance:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: '1.94.1'
       - name: Run the canonical span and histogram corpus through both production backends
+        if: matrix.features == 'otlp-sdk,sync-http'
         run: >-
           cargo test --locked -p sc-observability-otlp
-          --test canonical_ingress --features otlp-sdk,legacy-http-json
-      - name: Validate non-Grafana legacy OTLP provenance
-        run: >-
-          python3 -m unittest scripts.ci.tests.test_generation_provenance
+          --test canonical_ingress --features otlp-sdk,sync-http
 
   desktop-viewer-factory-conformance:
     name: desktop-viewer-factory-conformance (macOS arm64)
     runs-on: macos-14
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: '1.94.1'
+      - name: Define owned desktop viewer state
+        run: echo "VIEWER_STATE_DIR=$RUNNER_TEMP/sc-observability-d9-viewer" >> "$GITHUB_ENV"
       - name: Read pinned viewer manifest
         run: |
           python3 - <<'PY'
@@ -98,25 +94,23 @@ jobs:
           PY
       - name: Start an owned isolated desktop viewer
         run: |
-          viewer_state="$RUNNER_TEMP/sc-observability-d9-viewer"
-          echo "VIEWER_STATE_DIR=$viewer_state" >> "$GITHUB_ENV"
           python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py start \
             --binary "$RUNNER_TEMP/otel-desktop-viewer" \
             --version "$VIEWER_VERSION" \
             --binary-sha256 "$VIEWER_BINARY_SHA256" \
-            --state-dir "$viewer_state" \
+            --state-dir "$VIEWER_STATE_DIR" \
             --host 127.0.0.1 --http "$D9_VIEWER_HTTP" \
             --grpc "$D9_VIEWER_GRPC" --ui "$D9_VIEWER_UI"
-      - name: Run legacy public factory against the pinned viewer
+      - name: Run sync-http public factory against the pinned viewer
         run: >-
-          D9_VIEWER_LEGACY_ADDRESS=127.0.0.1:$D9_VIEWER_HTTP
+          D9_VIEWER_SYNC_HTTP_ADDRESS=127.0.0.1:$D9_VIEWER_HTTP
           cargo test --locked -p sc-observability-otlp
-          --test full_stack_integration --features legacy-http-json
-          -- --ignored public_legacy_factory_exports_three_signals_to_the_pinned_desktop_viewer
-      - name: Query legacy public-factory output in the pinned viewer
+          --test full_stack_integration --features sync-http
+          -- --ignored public_sync_http_factory_exports_three_signals_to_the_pinned_desktop_viewer
+      - name: Query sync-http public-factory output in the pinned viewer
         run: >-
           python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py assert-production
-          --state-dir "$VIEWER_STATE_DIR" --backend legacy
+          --state-dir "$VIEWER_STATE_DIR" --backend sync-http
       - name: Run SDK public factory against the pinned viewer
         run: >-
           D9_VIEWER_SDK_ADDRESS=127.0.0.1:$D9_VIEWER_GRPC
@@ -129,6 +123,8 @@ jobs:
           --state-dir "$VIEWER_STATE_DIR" --backend sdk
       - name: Remove the owned desktop viewer state
         if: always()
-        run: >-
-          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py stop
-          --state-dir "$VIEWER_STATE_DIR" --remove-state
+        run: |
+          if [ -d "$VIEWER_STATE_DIR" ]; then
+            python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py stop \
+              --state-dir "$VIEWER_STATE_DIR" --remove-state
+          fi

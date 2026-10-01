@@ -20,9 +20,8 @@ mod types;
 mod validation;
 
 pub use types::{
-    AuthHeader, ExporterBackend, LegacyRetryPolicy, LogsConfig, MetricsConfig, OtelConfig,
-    OtlpEndpoint, OtlpProtocol, ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder,
-    TracesConfig,
+    AuthHeader, ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
+    ResourceAttributes, SyncHttpRetryPolicy, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
 pub(crate) use validation::{
     BackendTransportBounds, ValidatedBackendConnection, ValidatedTransportBounds,
@@ -31,7 +30,7 @@ pub(crate) use validation::{
 #[cfg(test)]
 pub(crate) use validation::{validate_config_typed, validated_transport_bounds};
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 pub(crate) use validation::RetryPolicy;
 #[cfg(any(feature = "sdk-test-support", all(test, feature = "otlp-sdk")))]
 pub(crate) use validation::validated_backend_connection;
@@ -253,11 +252,11 @@ mod tests {
         let inverted_backoff =
             TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
                 .with_transport(OtelConfig {
-                    backend: ExporterBackend::LegacyHttpJson,
-                    legacy_retry: Some(LegacyRetryPolicy {
+                    backend: ExporterBackend::SyncHttp,
+                    sync_http_retry: Some(SyncHttpRetryPolicy {
                         initial_backoff_ms: Some(2_000_u64.into()),
                         max_backoff_ms: Some(1_000_u64.into()),
-                        ..LegacyRetryPolicy::default()
+                        ..SyncHttpRetryPolicy::default()
                     }),
                     ..transport()
                 })
@@ -358,11 +357,11 @@ mod tests {
             service_name,
             resource: ResourceAttributes::default(),
             transport: OtelConfig {
-                backend: ExporterBackend::LegacyHttpJson,
-                legacy_retry: Some(LegacyRetryPolicy {
+                backend: ExporterBackend::SyncHttp,
+                sync_http_retry: Some(SyncHttpRetryPolicy {
                     initial_backoff_ms: Some(2000_u64.into()),
                     max_backoff_ms: Some(1000_u64.into()),
-                    ..LegacyRetryPolicy::default()
+                    ..SyncHttpRetryPolicy::default()
                 }),
                 ..OtelConfig::default()
             },
@@ -374,7 +373,7 @@ mod tests {
         let failure = validate_config_typed(&config).expect_err("backoff inversion");
         assert_eq!(
             failure.diagnostic().details["field"].as_str(),
-            Some("legacy_retry.initial_backoff_ms")
+            Some("sync_http_retry.initial_backoff_ms")
         );
     }
 

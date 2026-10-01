@@ -18,8 +18,6 @@ use crate::contracts::{
     self, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, LogRecord,
     MetricExporter, TraceExporter,
 };
-#[cfg(feature = "legacy-http-json")]
-use crate::legacy_http_json;
 #[allow(
     unused_imports,
     reason = "transport construction failures are mapped only by enabled backends"
@@ -27,6 +25,8 @@ use crate::legacy_http_json;
 use crate::legacy_projection::transport_construction_failure;
 #[cfg(feature = "otlp-sdk")]
 use crate::sdk;
+#[cfg(feature = "sync-http")]
+use crate::sync_http;
 
 /// Explicit disabled-transport exporters. They are never selected for an
 /// enabled backend; the factory rejects enabled selections until D.6-D.8
@@ -119,9 +119,9 @@ pub(crate) fn exporter_factory_prepared(
             let connection = prepared_backend_connection(&config.transport, bounds)?;
             sdk_exporter_factory(config, bounds, &connection)
         }
-        BackendTransportBounds::Legacy(_) => {
+        BackendTransportBounds::SyncHttp(_) => {
             let connection = prepared_backend_connection(&config.transport, bounds)?;
-            legacy_exporter_factory(config, bounds, &connection)
+            sync_http_exporter_factory(config, bounds, &connection)
         }
     }
 }
@@ -183,30 +183,29 @@ fn sdk_exporter_factory(
 }
 
 #[allow(unused_variables)]
-fn legacy_exporter_factory(
+fn sync_http_exporter_factory(
     config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
     if bounds.protocol() != config::OtlpProtocol::HttpJson {
         return Err(unsupported_protocol(
-            config::ExporterBackend::LegacyHttpJson,
+            config::ExporterBackend::SyncHttp,
             bounds.protocol(),
             "HttpJson",
         ));
     }
 
-    #[cfg(feature = "legacy-http-json")]
+    #[cfg(feature = "sync-http")]
     {
-        legacy_http_json::build_exporter_set(connection, bounds)
-            .map_err(transport_construction_failure)
+        sync_http::build_exporter_set(connection, bounds).map_err(transport_construction_failure)
     }
 
-    #[cfg(not(feature = "legacy-http-json"))]
+    #[cfg(not(feature = "sync-http"))]
     Err(unsupported_backend(
-        config::ExporterBackend::LegacyHttpJson,
-        "legacy-http-json",
-        "the legacy-http-json feature is disabled",
+        config::ExporterBackend::SyncHttp,
+        "sync-http",
+        "the sync-http feature is disabled",
     ))
 }
 
@@ -236,7 +235,7 @@ fn unsupported_protocol(
     }
 }
 
-#[cfg(any(not(feature = "otlp-sdk"), not(feature = "legacy-http-json")))]
+#[cfg(any(not(feature = "otlp-sdk"), not(feature = "sync-http")))]
 fn unsupported_backend(
     backend: config::ExporterBackend,
     feature: &str,

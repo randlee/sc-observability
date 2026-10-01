@@ -452,9 +452,9 @@ def assert_production(args: argparse.Namespace) -> None:
     _, metadata = _owned(Path(args.state_dir).expanduser().resolve())
     base = f"http://{metadata['host']}:{metadata['ui']}"
     low, high = "-1000000000", "1893456000000000000"
-    if args.backend == "legacy":
+    if args.backend == "sync-http":
         expected = {
-            "body": "d9-viewer-legacy-factory", "trace": "0123456789abcdef0123456789abcdef",
+            "body": "d9-viewer-sync-http-factory", "trace": "0123456789abcdef0123456789abcdef",
             "parent": "fedcba9876543210", "kind": "Internal", "status": "Ok", "flags": 0,
             "event_attributes": {"corpus.phase": "decoded"}, "links": [],
             "metrics": {"agent.events_total": ("Sum", {"doubleValue": 7.0}), "agent.queue_depth": ("Gauge", {"doubleValue": 3.0})},
@@ -603,7 +603,7 @@ def parser() -> argparse.ArgumentParser:
     production = commands.add_parser("assert-production",
                                      help="query actual public-factory viewer output without sending data")
     production.add_argument("--state-dir", required=True)
-    production.add_argument("--backend", choices=("legacy", "sdk"), required=True)
+    production.add_argument("--backend", choices=("sync-http", "sdk"), required=True)
     production.set_defaults(func=assert_production)
     ci = commands.add_parser("ci", help="run an isolated probe and always clean up its instance")
     ci.add_argument("--binary", required=True)

@@ -60,6 +60,7 @@ pub(crate) fn fail_at(at: usize) {
 }
 
 #[cfg(test)]
+// MUTEX: coordinates the LIVE count predicate with Condvar notifications so wait_live cannot miss a transition.
 static LIVE_GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[cfg(test)]
 static LIVE_CHANGED: std::sync::Condvar = std::sync::Condvar::new();

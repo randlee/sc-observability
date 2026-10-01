@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use super::types::{
-    AuthHeader, ExporterBackend, LegacyRetryPolicy, OtelConfig, OtlpEndpoint, OtlpProtocol,
+    AuthHeader, ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, SyncHttpRetryPolicy,
     TelemetryConfig,
 };
 use crate::{constants, error_codes};
@@ -29,17 +29,17 @@ pub(crate) enum OtlpConfigField {
     QueueCapacity,
     /// Aggregate byte admission capacity.
     QueueByteCapacity,
-    /// Legacy maximum retries.
+    /// Synchronous HTTP maximum retries.
     MaxRetries,
-    /// Legacy initial retry backoff.
+    /// Synchronous HTTP initial retry backoff.
     InitialBackoff,
-    /// Legacy maximum retry backoff.
+    /// Synchronous HTTP maximum retry backoff.
     MaxBackoff,
-    /// Legacy complete retry-sequence timeout.
+    /// Synchronous HTTP complete retry-sequence timeout.
     RetrySequenceTimeout,
-    /// Legacy Retry-After cap.
+    /// Synchronous HTTP Retry-After cap.
     RetryAfterCap,
-    /// Legacy jitter percentage.
+    /// Synchronous HTTP jitter percentage.
     RetryJitterPercent,
     /// TLS certificate-verification override.
     InsecureSkipVerify,
@@ -55,12 +55,12 @@ impl OtlpConfigField {
             Self::LifecycleShutdownTimeout => "lifecycle_shutdown_timeout_ms",
             Self::QueueCapacity => "queue_capacity",
             Self::QueueByteCapacity => "queue_byte_capacity",
-            Self::MaxRetries => "legacy_retry.max_retries",
-            Self::InitialBackoff => "legacy_retry.initial_backoff_ms",
-            Self::MaxBackoff => "legacy_retry.max_backoff_ms",
-            Self::RetrySequenceTimeout => "legacy_retry.retry_sequence_timeout_ms",
-            Self::RetryAfterCap => "legacy_retry.retry_after_cap_ms",
-            Self::RetryJitterPercent => "legacy_retry.retry_jitter_percent",
+            Self::MaxRetries => "sync_http_retry.max_retries",
+            Self::InitialBackoff => "sync_http_retry.initial_backoff_ms",
+            Self::MaxBackoff => "sync_http_retry.max_backoff_ms",
+            Self::RetrySequenceTimeout => "sync_http_retry.retry_sequence_timeout_ms",
+            Self::RetryAfterCap => "sync_http_retry.retry_after_cap_ms",
+            Self::RetryJitterPercent => "sync_http_retry.retry_jitter_percent",
             Self::InsecureSkipVerify => "insecure_skip_verify",
         }
     }
@@ -189,10 +189,7 @@ pub(crate) struct PositiveDuration(Duration);
 
 impl PositiveDuration {
     #[cfg_attr(
-        all(
-            not(test),
-            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
-        ),
+        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
         expect(
             dead_code,
             reason = "validated durations are retained for configuration precedence without a compiled backend reader"
@@ -228,7 +225,7 @@ impl QueueByteCapacity {
 pub(crate) struct BoundedPercent(u8);
 
 #[cfg_attr(
-    all(not(test), not(feature = "legacy-http-json")),
+    all(not(test), not(feature = "sync-http")),
     expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl BoundedPercent {
@@ -246,10 +243,7 @@ pub(crate) struct LifecycleBounds {
 
 impl LifecycleBounds {
     #[cfg_attr(
-        all(
-            not(test),
-            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
-        ),
+        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
         expect(
             dead_code,
             reason = "validated lifecycle deadline accessor is consumed by compiled backend paths"
@@ -259,10 +253,7 @@ impl LifecycleBounds {
         self.flush
     }
     #[cfg_attr(
-        all(
-            not(test),
-            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
-        ),
+        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
         expect(
             dead_code,
             reason = "validated lifecycle deadline accessor is consumed by compiled backend paths"
@@ -290,7 +281,7 @@ pub(crate) struct ValidatedTransportBounds {
 #[derive(Debug, Clone)]
 pub(crate) struct ValidatedBackendConnection {
     #[cfg_attr(
-        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        not(any(feature = "sync-http", feature = "otlp-sdk")),
         allow(
             dead_code,
             reason = "D.21 connection endpoint is consumed by enabled backends"
@@ -298,7 +289,7 @@ pub(crate) struct ValidatedBackendConnection {
     )]
     endpoint: OtlpEndpoint,
     #[cfg_attr(
-        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        not(any(feature = "sync-http", feature = "otlp-sdk")),
         allow(
             dead_code,
             reason = "D.21 connection auth is consumed by enabled backends"
@@ -306,7 +297,7 @@ pub(crate) struct ValidatedBackendConnection {
     )]
     auth_header: Option<AuthHeader>,
     #[cfg_attr(
-        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        not(any(feature = "sync-http", feature = "otlp-sdk")),
         allow(
             dead_code,
             reason = "D.21 connection CA is consumed by enabled backends"
@@ -317,7 +308,7 @@ pub(crate) struct ValidatedBackendConnection {
 
 impl ValidatedBackendConnection {
     #[cfg_attr(
-        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        not(any(feature = "sync-http", feature = "otlp-sdk")),
         allow(
             dead_code,
             reason = "D.21 endpoint view is consumed by enabled backends"
@@ -328,7 +319,7 @@ impl ValidatedBackendConnection {
     }
 
     #[cfg_attr(
-        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        not(any(feature = "sync-http", feature = "otlp-sdk")),
         allow(dead_code, reason = "D.21 auth view is consumed by enabled backends")
     )]
     pub(crate) fn auth_header(&self) -> Option<&AuthHeader> {
@@ -336,7 +327,7 @@ impl ValidatedBackendConnection {
     }
 
     #[cfg_attr(
-        not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+        not(any(feature = "sync-http", feature = "otlp-sdk")),
         allow(dead_code, reason = "D.21 CA view is consumed by enabled backends")
     )]
     pub(crate) fn ca_file(&self) -> Option<&PathBuf> {
@@ -355,10 +346,7 @@ impl ValidatedTransportBounds {
         self.queue_byte_capacity
     }
     #[cfg_attr(
-        all(
-            not(test),
-            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
-        ),
+        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
         allow(
             dead_code,
             reason = "D.21 request timeout is consumed by enabled backends"
@@ -368,10 +356,7 @@ impl ValidatedTransportBounds {
         self.request_timeout
     }
     #[cfg_attr(
-        all(
-            not(test),
-            not(any(feature = "legacy-http-json", feature = "otlp-sdk"))
-        ),
+        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
         expect(
             dead_code,
             reason = "validated lifecycle bounds accessor is consumed by compiled backend paths"
@@ -387,20 +372,20 @@ impl ValidatedTransportBounds {
 
 /// Backend-specific state; SDK and disabled transports cannot carry retry policy.
 #[cfg_attr(
-    all(not(test), not(feature = "legacy-http-json")),
+    all(not(test), not(feature = "sync-http")),
     allow(
         dead_code,
-        reason = "D.21 legacy retry state is consumed by the legacy backend"
+        reason = "D.21 synchronous HTTP retry state is consumed by the synchronous HTTP backend"
     )
 )]
 #[derive(Debug)]
 pub(crate) enum BackendTransportBounds {
     Disabled,
     Sdk,
-    Legacy(RetryPolicy),
+    SyncHttp(RetryPolicy),
 }
 
-/// Checked legacy retry policy produced only by ordered config validation.
+/// Checked synchronous HTTP retry policy produced only by ordered config validation.
 #[derive(Debug)]
 pub(crate) struct RetryPolicy {
     max_retries: u32,
@@ -412,7 +397,7 @@ pub(crate) struct RetryPolicy {
 }
 
 #[cfg_attr(
-    not(feature = "legacy-http-json"),
+    not(feature = "sync-http"),
     allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl RetryPolicy {
@@ -445,7 +430,7 @@ pub(crate) enum RetryDelay {
 }
 
 impl RetryDelay {
-    #[cfg(any(test, feature = "legacy-http-json"))]
+    #[cfg(any(test, feature = "sync-http"))]
     pub(crate) const fn get(self) -> Duration {
         match self {
             Self::Immediate => Duration::ZERO,
@@ -470,7 +455,7 @@ fn validated_transport_bounds_with_delays(
     config: &OtelConfig,
     immediate: bool,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
-    let legacy_retry_field = first_legacy_retry_field(config);
+    let sync_http_retry_field = first_sync_http_retry_field(config);
     let timeout = resolve_duration(
         OtlpConfigField::Timeout,
         config.timeout_ms,
@@ -508,23 +493,22 @@ fn validated_transport_bounds_with_delays(
     if flush.value < timeout.value {
         return Err(invalid_bound(&timeout, &flush));
     }
-    let legacy_retry =
-        if config.enabled && matches!(config.backend, ExporterBackend::LegacyHttpJson) {
-            Some(resolve_retry(
-                config.legacy_retry.as_ref(),
-                &timeout,
-                immediate,
-            )?)
-        } else {
-            None
-        };
+    let sync_http_retry = if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
+        Some(resolve_retry(
+            config.sync_http_retry.as_ref(),
+            &timeout,
+            immediate,
+        )?)
+    } else {
+        None
+    };
     let (queue_capacity, queue_byte_capacity) =
         checked_queue_bounds(&queue_capacity, &queue_byte_capacity)?;
 
     let backend = if config.enabled {
         match config.backend {
             ExporterBackend::OpenTelemetrySdk => {
-                if let Some(field) = legacy_retry_field {
+                if let Some(field) = sync_http_retry_field {
                     return Err(not_applicable(
                         field,
                         OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk),
@@ -532,12 +516,12 @@ fn validated_transport_bounds_with_delays(
                 }
                 BackendTransportBounds::Sdk
             }
-            ExporterBackend::LegacyHttpJson => BackendTransportBounds::Legacy(
-                legacy_retry.expect("legacy backend resolves its retry policy"),
+            ExporterBackend::SyncHttp => BackendTransportBounds::SyncHttp(
+                sync_http_retry.expect("synchronous HTTP backend resolves its retry policy"),
             ),
         }
     } else {
-        if let Some(field) = legacy_retry_field {
+        if let Some(field) = sync_http_retry_field {
             return Err(not_applicable(field, OtlpConfigTarget::Disabled));
         }
         BackendTransportBounds::Disabled
@@ -625,11 +609,11 @@ pub(crate) fn prepared_backend_connection(
     })
 }
 
-/// Returns the first legacy-only retry setting supplied by the caller.
+/// Returns the first sync-http-only retry setting supplied by the caller.
 ///
 /// The order is part of the deterministic validation contract.
-fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
-    let retry = config.legacy_retry.as_ref();
+fn first_sync_http_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
+    let retry = config.sync_http_retry.as_ref();
     if retry.is_some_and(|value| value.max_retries.is_some()) {
         return Some(OtlpConfigField::MaxRetries);
     }
@@ -650,9 +634,9 @@ fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
     }
 
     // An explicitly supplied but empty compatibility block is still
-    // inapplicable outside the legacy backend; retain the original field.
+    // inapplicable outside the synchronous HTTP backend; retain the original field.
     config
-        .legacy_retry
+        .sync_http_retry
         .as_ref()
         .map(|_| OtlpConfigField::MaxRetries)
 }
@@ -703,7 +687,7 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<PositiveDuration, Conf
 }
 
 fn resolve_retry(
-    raw: Option<&LegacyRetryPolicy>,
+    raw: Option<&SyncHttpRetryPolicy>,
     timeout: &ResolvedField<u64>,
     immediate: bool,
 ) -> Result<RetryPolicy, ConfigFailure> {

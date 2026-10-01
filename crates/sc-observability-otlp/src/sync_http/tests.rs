@@ -1,12 +1,12 @@
 use super::implementation::{
     OtlpHttpExporter, build_logs_payload, normalize_logs_endpoint, parse_retry_after,
 };
-use crate::config::LegacyRetryPolicy;
+use crate::config::SyncHttpRetryPolicy;
 use crate::contracts::{ExporterLifecycle, LogExporter};
 use crate::lifecycle::LifecycleState;
 use sc_observability_types::{
-    ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName,
-    TargetCategory, Timestamp,
+    ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, Remediation, SchemaVersion,
+    ServiceName, TargetCategory, Timestamp,
 };
 use serde_json::Value;
 use std::collections::VecDeque;
@@ -25,14 +25,88 @@ use std::time::{Duration, Instant, SystemTime};
 // This is a test watchdog, not the production handshake deadline (1 ms).
 const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
 const REQUEST_FIXTURE_WATCHDOG: Duration = Duration::from_secs(2);
-const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 4_000;
-const STALLED_RETRY_REQUEST_TIMEOUT_MS: u64 = 4_000;
-const STALLED_RETRY_BACKOFF_MS: u64 = 2_500;
-const STALLED_RETRY_SERVER_WATCHDOG: Duration = Duration::from_secs(8);
+const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 8_000;
+// Leave the client-wide timeout much longer than the final attempt's remaining
+// budget so the watchdog catches removal of the per-request timeout.
+const STALLED_RETRY_REQUEST_TIMEOUT_MS: u64 = 7_500;
+const STALLED_RETRY_BACKOFF_MS: u64 = 7_000;
+const STALLED_RETRY_SERVER_WATCHDOG: Duration = Duration::from_secs(20);
 const STALLED_RETRY_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
-const STALLED_RETRY_STEP_WATCHDOG: Duration = Duration::from_secs(4);
-const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(3);
+const STALLED_RETRY_STEP_WATCHDOG: Duration = Duration::from_secs(10);
+const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(5);
 const STALLED_RETRY_CLEANUP_WATCHDOG: Duration = Duration::from_secs(2);
+const CONTROL_ORDERING_WATCHDOG: Duration = Duration::from_secs(2);
+
+#[test]
+fn sync_http_error_remediations_preserve_diagnostics_and_match_failure_semantics() {
+    let cases = [
+        (
+            super::implementation::worker_terminated_error(),
+            sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED,
+            "synchronous HTTP worker terminated",
+            Remediation::recoverable(
+                "restart the synchronous HTTP exporter",
+                ["resubmit any batch that was not acknowledged"],
+            ),
+        ),
+        (
+            super::implementation::queue_full_error(),
+            sc_observability_types::error_codes::otlp::OTLP_QUEUE_FULL,
+            "synchronous HTTP worker admission is full",
+            Remediation::recoverable(
+                "wait for synchronous HTTP worker capacity",
+                ["retry the export after capacity is available"],
+            ),
+        ),
+        (
+            super::implementation::shutdown_cancelled_error(),
+            sc_observability_types::error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
+            "synchronous HTTP retry was cancelled by shutdown",
+            Remediation::not_recoverable(
+                "the synchronous HTTP exporter is shutting down and cannot retry this batch",
+            ),
+        ),
+        (
+            super::implementation::retry_deadline_error(),
+            sc_observability_types::error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED,
+            "synchronous HTTP retry sequence exceeded its deadline",
+            Remediation::recoverable(
+                "restore collector availability before retrying the export",
+                ["increase the retry sequence deadline only when the delivery budget permits"],
+            ),
+        ),
+        (
+            super::implementation::non_retryable_status_error(400),
+            sc_observability_types::error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL,
+            "synchronous HTTP collector returned terminal HTTP status 400",
+            Remediation::not_recoverable(
+                "correct the collector request, credentials, or endpoint before submitting a new batch",
+            ),
+        ),
+    ];
+
+    for (error, code, message, remediation) in cases {
+        assert_eq!(error.diagnostic().code, code);
+        assert_eq!(error.diagnostic().message, message);
+        assert_eq!(error.diagnostic().remediation, remediation);
+    }
+}
+
+#[test]
+fn control_reply_timeout_and_disconnect_have_distinct_typed_errors() {
+    let (_sender, receiver) = mpsc::channel();
+    assert!(matches!(
+        super::implementation::wait_for_control_result(&receiver, Duration::ZERO),
+        Err(sc_observability_types::v2::ExportError::LifecycleTimeout { .. })
+    ));
+
+    let (sender, receiver) = mpsc::channel();
+    drop(sender);
+    assert!(matches!(
+        super::implementation::wait_for_control_result(&receiver, CONTROL_ORDERING_WATCHDOG),
+        Err(sc_observability_types::v2::ExportError::WorkerTerminated { .. })
+    ));
+}
 
 struct StartupFixture {
     initialize: mpsc::Sender<()>,
@@ -159,8 +233,8 @@ fn sample_log() -> LogEvent {
         version: SchemaVersion::new("v1").expect("schema version"),
         timestamp: Timestamp::UNIX_EPOCH,
         level: Level::Info,
-        service: ServiceName::new("legacy-test").expect("service"),
-        target: TargetCategory::new("legacy.http").expect("target"),
+        service: ServiceName::new("sync-http-test").expect("service"),
+        target: TargetCategory::new("sync-http.http").expect("target"),
         action: ActionName::new("export").expect("action"),
         message: Some("hello".to_owned()),
         identity: ProcessIdentity::default(),
@@ -498,8 +572,8 @@ fn retry_policy(
     retry_sequence_timeout_ms: u64,
     retry_after_cap_ms: u64,
     retry_jitter_percent: u8,
-) -> LegacyRetryPolicy {
-    LegacyRetryPolicy {
+) -> SyncHttpRetryPolicy {
+    SyncHttpRetryPolicy {
         max_retries: Some(max_retries),
         initial_backoff_ms: Some(initial_backoff_ms.into()),
         max_backoff_ms: Some(max_backoff_ms.into()),
@@ -588,180 +662,6 @@ fn safety_delta_shutdown_cancels_retry_wait() {
     ));
 }
 
-fn verify_provenance_source(
-    repo: &std::path::Path,
-    source_commit: &str,
-    entry: &Value,
-) -> Result<(), String> {
-    let source = entry["source"].as_str().expect("manifest source path");
-    let pinned_blob = Command::new("git")
-        .args(["-C", repo.to_str().expect("repo path"), "rev-parse"])
-        .arg(format!("{source_commit}:{source}"))
-        .output()
-        .expect("run git rev-parse");
-    assert!(
-        pinned_blob.status.success(),
-        "pinned source exists: {source}"
-    );
-    if String::from_utf8(pinned_blob.stdout)
-        .expect("blob id is utf8")
-        .trim()
-        != entry["git_blob"].as_str().expect("manifest git blob")
-    {
-        return Err(format!(
-            "manifest git_blob does not identify pinned source {source}"
-        ));
-    }
-    let source_bytes = Command::new("git")
-        .args(["-C", repo.to_str().expect("repo path"), "show"])
-        .arg(format!("{source_commit}:{source}"))
-        .output()
-        .expect("read pinned source");
-    assert!(
-        source_bytes.status.success(),
-        "read pinned source: {source}"
-    );
-    let mut hash = Command::new("shasum")
-        .args(["-a", "256"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("shasum is available");
-    hash.stdin
-        .take()
-        .expect("hash stdin")
-        .write_all(&source_bytes.stdout)
-        .expect("hash source bytes");
-    let sha256 = hash.wait_with_output().expect("finish sha256");
-    assert!(sha256.status.success(), "hash pinned source: {source}");
-    if String::from_utf8(sha256.stdout)
-        .expect("sha256 is utf8")
-        .split_whitespace()
-        .next()
-        .expect("sha256 digest")
-        != entry["sha256"].as_str().expect("manifest sha256")
-    {
-        return Err(format!(
-            "manifest sha256 does not identify pinned source {source}"
-        ));
-    }
-    Ok(())
-}
-
-#[test]
-fn provenance_rejects_tampered_hashes_for_every_manifest_entry() {
-    let manifest: Value = serde_json::from_str(include_str!(
-        "../../../../docs/plans/phase-d/legacy-otlp-provenance.json"
-    ))
-    .expect("valid provenance manifest");
-    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let source_commit = manifest["source_commit"].as_str().expect("source commit");
-    let entries = manifest["entries"].as_array().expect("manifest entries");
-    assert!(!entries.is_empty());
-    for entry in entries {
-        let source = entry["source"].as_str().expect("source path");
-        for field in ["git_blob", "sha256"] {
-            let mut tampered = entry.clone();
-            let original = entry[field].as_str().expect("source hash");
-            tampered[field] = Value::String("0".repeat(original.len()));
-            assert_eq!(
-                verify_provenance_source(&repo, source_commit, &tampered),
-                Err(format!(
-                    "manifest {field} does not identify pinned source {source}"
-                )),
-                "must reject a tampered {field} for {source}",
-            );
-        }
-    }
-}
-
-#[test]
-fn provenance_pin_and_destination_disposition_are_present() {
-    let manifest = include_str!("../../../../docs/plans/phase-d/legacy-otlp-provenance.json");
-    let sprint =
-        include_str!("../../../../docs/plans/phase-d/sprint-d-8-otlp-http-json-transplant.md");
-    let manifest: Value = serde_json::from_str(manifest).expect("valid provenance manifest");
-    assert_eq!(
-        manifest["source_commit"],
-        "7b39f4e7f72b6845edec4eab4cd671611661445f"
-    );
-
-    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let entries = manifest["entries"].as_array().expect("manifest entries");
-    assert!(
-        !entries.is_empty(),
-        "provenance must contain source entries"
-    );
-    let source_commit = manifest["source_commit"].as_str().expect("source commit");
-    // Source identity applies to the entire manifest, including D9 scripts and
-    // reference/translation entries. Do not derive coverage from D8's owned
-    // destination list below: adapted destinations need not equal source bytes.
-    for entry in entries {
-        verify_provenance_source(&repo, source_commit, entry)
-            .unwrap_or_else(|error| panic!("{error}"));
-        assert!(
-            matches!(
-                entry["disposition"].as_str(),
-                Some(
-                    "transplant-and-adapt"
-                        | "dependency-reference-only"
-                        | "translate-current-schema"
-                        | "reference-and-disposition-only"
-                )
-            ),
-            "unauthorized provenance disposition: {entry}"
-        );
-    }
-
-    // These destination existence/adaptation assertions belong to D8. D9's
-    // planned destinations are separate deliverables; their source pins above
-    // are still verified even before those destinations have been delivered.
-    let destinations = [
-        (
-            "crates/sc-observability-otlp/src/lib.rs",
-            "crates/sc-observability-otlp/src/legacy_http_json/implementation.rs",
-            "transplant-and-adapt",
-        ),
-        (
-            "crates/sc-observability-otlp/Cargo.toml",
-            "crates/sc-observability-otlp/Cargo.toml",
-            "dependency-reference-only",
-        ),
-        (
-            "crates/sc-observability-otlp/tests/timestamp_export_integration.rs",
-            "crates/sc-observability-otlp/src/legacy_http_json/tests.rs",
-            "transplant-and-adapt",
-        ),
-    ];
-    for (source, destination, disposition) in destinations {
-        let entry = manifest["entries"]
-            .as_array()
-            .expect("manifest entries")
-            .iter()
-            .find(|entry| entry["source"] == source)
-            .unwrap_or_else(|| panic!("missing provenance source {source}"));
-        assert_eq!(entry["destination"], destination);
-        assert_eq!(entry["disposition"], disposition);
-        if disposition == "transplant-and-adapt" {
-            for delta in [
-                "retry classification",
-                "server pacing/jitter and independent caps",
-                "shutdown cancellation",
-                "retry deadline",
-            ] {
-                assert!(
-                    sprint.contains(delta),
-                    "sprint doc names authorized adaptation: {delta}"
-                );
-            }
-        }
-        assert!(
-            repo.join(destination).is_file(),
-            "missing provenance destination {destination}"
-        );
-    }
-}
-
 #[test]
 fn log_payload_preserves_service_correlation_timestamp_severity_and_body() {
     let mut event = sample_log();
@@ -776,7 +676,7 @@ fn log_payload_preserves_service_correlation_timestamp_severity_and_body() {
     );
     assert_eq!(
         resource_logs["resource"]["attributes"][0]["value"]["stringValue"],
-        "legacy-test"
+        "sync-http-test"
     );
     assert!(
         log["attributes"]
@@ -1266,8 +1166,34 @@ fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests()
     assert!(calls.load(Ordering::Relaxed) >= 2);
 }
 
+fn assert_stalled_retry_applied_timeouts(
+    first: Result<(u32, Duration, Duration), mpsc::RecvTimeoutError>,
+    second: Result<(u32, Duration, Duration), mpsc::TryRecvError>,
+) {
+    let configured_timeout = Duration::from_millis(STALLED_RETRY_REQUEST_TIMEOUT_MS);
+    let first = first.expect("first request timeout is observed");
+    assert_eq!(first.0, 0, "first request is attempt zero");
+    assert_eq!(
+        first.1,
+        configured_timeout.min(first.2),
+        "first request applies the minimum of configured and remaining timeout"
+    );
+
+    let second = second.expect("second request timeout is observed");
+    assert_eq!(second.0, 1, "stalled request is retry attempt one");
+    assert!(
+        second.2 < configured_timeout,
+        "retry has less sequence time remaining than the configured request timeout"
+    );
+    assert_eq!(
+        second.1,
+        configured_timeout.min(second.2),
+        "second request applies its same-attempt remaining timeout"
+    );
+}
+
 #[test]
-fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
+fn loopback_stalled_sync_http_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     listener
@@ -1303,12 +1229,13 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
                     .expect("write retryable response");
             } else {
                 stalled_tx.send(()).expect("signal stalled final request");
-                let _ = release_rx.recv_timeout(Duration::from_secs(8));
+                let _ = release_rx.recv_timeout(STALLED_RETRY_SERVER_WATCHDOG);
             }
         }
     });
     let (delay_tx, delay_rx) = mpsc::channel();
-    let exporter = OtlpHttpExporter::for_endpoint_with_retry_timeout(
+    let (request_timeout_tx, request_timeout_rx) = mpsc::channel();
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry_timeout_observing_request_timeout(
         format!("http://{address}"),
         retry_policy(
             1,
@@ -1321,26 +1248,24 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
         STALLED_RETRY_REQUEST_TIMEOUT_MS,
         1,
         Some(delay_tx),
+        Some(request_timeout_tx),
     )
-    .expect("construct exporter with equal request and sequence bounds");
+    .expect("construct exporter with request timeout below sequence bound");
     let (result_tx, result_rx) = mpsc::channel();
     let export_thread = thread::spawn(move || {
         let result = exporter.send_payload_sync("logs", &logs_payload());
         let _ = result_tx.send(result);
     });
 
-    assert_eq!(
-        delay_rx
-            .recv_timeout(STALLED_RETRY_STEP_WATCHDOG)
-            .expect("first retry enters the configured backoff"),
-        Duration::from_millis(STALLED_RETRY_BACKOFF_MS)
-    );
-    stalled_rx
-        .recv_timeout(STALLED_RETRY_STEP_WATCHDOG)
-        .expect("second request reaches the stalled collector");
+    let first_timeout = request_timeout_rx.recv_timeout(STALLED_RETRY_STEP_WATCHDOG);
+    let delay = delay_rx.recv_timeout(STALLED_RETRY_STEP_WATCHDOG);
+    let stalled_request = stalled_rx.recv_timeout(STALLED_RETRY_STEP_WATCHDOG);
+    // The server cannot observe this request until the actual timeout argument
+    // has been evaluated and sent through the exporter-local observer.
+    let second_timeout = request_timeout_rx.try_recv();
 
-    // This is a hang watchdog with room for the remaining sequence budget;
-    // the selected timeout is checked deterministically above.
+    // This watchdog only detects a hung export. The timeout policy assertion
+    // below observes the value passed at the real request application site.
     let timely_result = result_rx.recv_timeout(STALLED_RETRY_EXPORT_WATCHDOG);
     let _ = release_tx.send(());
     server
@@ -1358,9 +1283,15 @@ fn loopback_stalled_retry_attempt_is_bounded_by_remaining_sequence_deadline() {
     };
     export_thread.join().expect("join export worker");
 
+    assert_stalled_retry_applied_timeouts(first_timeout, second_timeout);
+    assert_eq!(
+        delay.expect("first retry enters the configured backoff"),
+        Duration::from_millis(STALLED_RETRY_BACKOFF_MS)
+    );
+    stalled_request.expect("second request reaches the stalled collector");
     assert!(
         completed_before_watchdog,
-        "stalled attempt must use the remaining sequence deadline, not the full request timeout"
+        "stalled export must complete before the hang watchdog"
     );
     assert!(matches!(
         result,
@@ -1678,6 +1609,82 @@ fn async_shutdown_stays_responsive_during_an_in_flight_request() {
 }
 
 #[test]
+fn flush_control_does_not_hold_producer_admission_while_its_reply_is_withheld() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let (first_request_tx, first_request_rx) = mpsc::channel();
+    let (release_first_tx, release_first_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut first, _) = listener.accept().expect("accept first request");
+        assert!(read_request(&mut first).contains("\"hello\""));
+        first_request_tx
+            .send(())
+            .expect("signal first request before releasing it");
+        release_first_rx
+            .recv()
+            .expect("release first request after producer progress");
+        first
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("complete first response");
+
+        let (mut second, _) = listener.accept().expect("accept producer request");
+        assert!(read_request(&mut second).contains("\"hello\""));
+        second
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("complete producer response");
+    });
+    let (control_submitted_tx, control_submitted_rx) = mpsc::channel();
+    let exporter = Arc::new(
+        OtlpHttpExporter::for_control_ordering_test(
+            format!("http://{address}"),
+            control_submitted_tx,
+        )
+        .expect("construct exporter"),
+    );
+
+    <OtlpHttpExporter as LogExporter<LogEvent>>::export_logs(&*exporter, &[sample_log()])
+        .expect("admit first request");
+    first_request_rx
+        .recv_timeout(CONTROL_ORDERING_WATCHDOG)
+        .expect("worker enters the held first request");
+
+    let (flush_result_rx, flush_thread) = exporter.flush_worker_for_test();
+    control_submitted_rx
+        .recv_timeout(CONTROL_ORDERING_WATCHDOG)
+        .expect("flush command enters the bounded control channel");
+
+    let producer = Arc::clone(&exporter);
+    let (producer_result_tx, producer_result_rx) = mpsc::channel();
+    let producer_thread = thread::spawn(move || {
+        let result =
+            <OtlpHttpExporter as LogExporter<LogEvent>>::export_logs(&*producer, &[sample_log()]);
+        let _ = producer_result_tx.send(result);
+    });
+    let producer_result = match producer_result_rx.recv_timeout(CONTROL_ORDERING_WATCHDOG) {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = release_first_tx.send(());
+            panic!("producer admission waited for the flush reply: {error:?}");
+        }
+    };
+    producer_result.expect("producer admission progresses while flush reply is withheld");
+
+    release_first_tx
+        .send(())
+        .expect("release held first response");
+    flush_result_rx
+        .recv_timeout(CONTROL_ORDERING_WATCHDOG)
+        .expect("flush completes after the worker handles its command")
+        .expect("flush preserves the successful drain");
+    flush_thread.join().expect("join flush worker");
+    producer_thread.join().expect("join producer");
+    server.join().expect("join server");
+    exporter
+        .shutdown_blocking()
+        .expect("shutdown the live worker");
+}
+
+#[test]
 fn blocking_lifecycle_is_rejected_from_entered_tokio() {
     let exporter = OtlpHttpExporter::for_endpoint("http://127.0.0.1:4318".to_owned())
         .expect("construct exporter");
@@ -1728,12 +1735,12 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
     });
     let transport = crate::config::OtelConfig {
         enabled: true,
-        backend: crate::config::ExporterBackend::LegacyHttpJson,
+        backend: crate::config::ExporterBackend::SyncHttp,
         protocol: crate::config::OtlpProtocol::HttpJson,
         endpoint: Some(
             crate::config::OtlpEndpoint::new_typed(format!("http://{address}")).unwrap(),
         ),
-        legacy_retry: Some(retry_policy(1, 0, 0, 30_000, 20, 0)),
+        sync_http_retry: Some(retry_policy(1, 0, 0, 30_000, 20, 0)),
         ..crate::config::OtelConfig::default()
     };
     assert!(crate::config::validated_transport_bounds(&transport).is_err());

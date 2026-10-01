@@ -48,7 +48,7 @@ pub(crate) use sc_observability_types::error_codes::otlp::{
     OTLP_TRANSPORT_CONSTRUCTION_FAILED,
 };
 
-#[cfg(any(test, feature = "legacy-http-json", feature = "otlp-sdk"))]
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 pub(crate) use sc_observability_types::error_codes::otlp::{
     OTLP_LIFECYCLE_TIMEOUT, OTLP_QUEUE_FULL,
 };

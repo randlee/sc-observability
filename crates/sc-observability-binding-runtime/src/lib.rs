@@ -13,6 +13,10 @@ mod sync;
 #[cfg(test)]
 mod tests;
 mod timer;
+pub use constants::{
+    CALLBACK_REGISTRATION_CAPACITY, OPERATION_OBSERVER_CAPACITY, TAURI_DEFAULT_QUERY_TIMEOUT_MS,
+    TAURI_MAX_QUERY_TARGETS, TAURI_REDACTED_VALUE,
+};
 use coordinator::Coordinator;
 pub use operation::{CompletionSubscription, Operation, OperationState};
 use sc_observability_dto::{
@@ -172,28 +176,43 @@ pub fn create_core_backend(
 #[cfg(feature = "test-hooks")]
 #[derive(Debug)]
 pub struct TestWriterGate {
-    state: StdMutex<(bool, bool)>,
+    // MUTEX: keeps the entered/released Condvar predicates together; reads
+    // report poison as false, release is a no-op on poison, and the sink recovers.
+    state: StdMutex<TestWriterGateState>,
     changed: Condvar,
+}
+
+#[cfg(feature = "test-hooks")]
+#[derive(Debug)]
+struct TestWriterGateState {
+    entered: bool,
+    released: bool,
 }
 
 #[cfg(feature = "test-hooks")]
 impl TestWriterGate {
     fn new() -> Arc<Self> {
         Arc::new(Self {
-            state: StdMutex::new((false, false)),
+            state: StdMutex::new(TestWriterGateState {
+                entered: false,
+                released: false,
+            }),
             changed: Condvar::new(),
         })
     }
 
     /// Returns whether the real sink writer entered its held write.
     pub fn entered(&self) -> bool {
-        self.state.lock().map(|state| state.0).unwrap_or(false)
+        self.state
+            .lock()
+            .map(|state| state.entered)
+            .unwrap_or(false)
     }
 
     /// Releases the real sink writer after another binding operation has run.
     pub fn release(&self) {
         if let Ok(mut state) = self.state.lock() {
-            state.1 = true;
+            state.released = true;
             self.changed.notify_all();
         }
     }
@@ -219,9 +238,9 @@ impl sc_observability::LogSink for TestBlockingSink {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.0 = true;
+        state.entered = true;
         self.gate.changed.notify_all();
-        while !state.1 {
+        while !state.released {
             state = self
                 .gate
                 .changed

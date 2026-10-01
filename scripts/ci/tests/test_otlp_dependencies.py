@@ -12,6 +12,7 @@ from scripts.ci.otlp_dependencies import validate_composition_harness, validate_
 
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = "crates/sc-observability-otlp/Cargo.toml"
+CORE_BOUNDARY_MANIFEST = "boundaries/sc-observability/observability.toml"
 HARNESS = "tests/sc-observability-composition/Cargo.toml"
 SHELL_GATES = ("scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh")
 # validate_dependency_bans.sh runs this module; its child run skips the shell
@@ -71,9 +72,9 @@ class TransportPolicyTests(unittest.TestCase):
         self.replace(MANIFEST, 'tonic = { workspace = true, optional = true }', 'tonic = { workspace = true, optional = true, features = ["router"] }')
         self.rejects("tonic: effective dependency features differ")
 
-    def test_tonic_rejected_in_legacy_runtime(self):
-        self.replace(MANIFEST, 'legacy-http-json = ["dep:reqwest",', 'legacy-http-json = ["dep:tonic", "dep:reqwest",')
-        self.rejects("tonic: incorrect binding to legacy-http-json")
+    def test_tonic_rejected_in_sync_http_runtime(self):
+        self.replace(MANIFEST, 'sync-http = ["dep:reqwest",', 'sync-http = ["dep:tonic", "dep:reqwest",')
+        self.rejects("tonic: incorrect binding to sync-http")
 
     def test_nonoptional_transport(self):
         self.replace(MANIFEST, 'reqwest = { workspace = true, optional = true }', 'reqwest.workspace = true')
@@ -83,16 +84,16 @@ class TransportPolicyTests(unittest.TestCase):
         self.replace(MANIFEST, '"dep:opentelemetry", ', '')
         self.rejects("opentelemetry: incorrect binding")
 
-    def test_legacy_pulls_sdk_through_feature_alias(self):
-        self.replace(MANIFEST, 'legacy-http-json = [', 'bridge = ["otlp-sdk"]\nlegacy-http-json = ["bridge", ')
-        self.rejects("incorrect binding to legacy-http-json")
+    def test_sync_http_pulls_sdk_through_feature_alias(self):
+        self.replace(MANIFEST, 'sync-http = [', 'bridge = ["otlp-sdk"]\nsync-http = ["bridge", ')
+        self.rejects("incorrect binding to sync-http")
 
     def test_dependency_feature_implicitly_enables_sdk(self):
-        self.replace(MANIFEST, 'legacy-http-json = [', 'legacy-http-json = ["opentelemetry/trace", ')
-        self.rejects("incorrect binding to legacy-http-json")
+        self.replace(MANIFEST, 'sync-http = [', 'sync-http = ["opentelemetry/trace", ')
+        self.rejects("incorrect binding to sync-http")
 
     def test_weak_feature_does_not_enable_dependency(self):
-        self.replace(MANIFEST, 'legacy-http-json = [', 'legacy-http-json = ["opentelemetry?/trace", ')
+        self.replace(MANIFEST, 'sync-http = [', 'sync-http = ["opentelemetry?/trace", ')
         validate_transport_dependencies(self.root)
 
     def test_default_backend(self):
@@ -193,7 +194,7 @@ class CompositionHarnessTests(unittest.TestCase):
         self.rejects("tonic effective features differ from policy")
 
     def test_otlp_backend_feature_removed(self):
-        self.replace(HARNESS, 'features = ["otlp-sdk", "legacy-http-json"]', 'features = ["otlp-sdk"]')
+        self.replace(HARNESS, 'features = ["otlp-sdk", "sync-http"]', 'features = ["otlp-sdk"]')
         self.rejects("sc-observability-otlp effective features differ from policy")
 
     def test_unreviewed_dev_dependency(self):
@@ -229,13 +230,24 @@ class ShellGateIntegrationTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(cls.root)], check=True, timeout=60)
         (cls.root / ".git/objects/info/alternates").write_text(objects + "\n")
         cls.manifest = (cls.root / MANIFEST).read_text()
+        cls.core_boundary_manifest = (cls.root / CORE_BOUNDARY_MANIFEST).read_text()
 
     def setUp(self):
         self.addCleanup((self.root / MANIFEST).write_text, self.manifest)
+        self.addCleanup(
+            (self.root / CORE_BOUNDARY_MANIFEST).write_text,
+            self.core_boundary_manifest,
+        )
 
     def replace_manifest(self, before, after):
         self.assertIn(before, self.manifest)
         (self.root / MANIFEST).write_text(self.manifest.replace(before, after))
+
+    def replace_core_boundary_manifest(self, before, after):
+        self.assertIn(before, self.core_boundary_manifest)
+        (self.root / CORE_BOUNDARY_MANIFEST).write_text(
+            self.core_boundary_manifest.replace(before, after)
+        )
 
     def run_gate(self, script):
         env = {
@@ -282,6 +294,16 @@ class ShellGateIntegrationTests(unittest.TestCase):
     def test_collector_server_feature_fails_both_gates(self):
         self.replace_manifest('features = ["router"] }', 'features = ["router", "server"] }')
         self.rejects("OTLP dev-dependency tonic: effective features differ from policy")
+
+    def test_core_dependency_policy_is_loaded_from_its_boundary_manifest(self):
+        self.replace_core_boundary_manifest(
+            'allowed_dependencies = ["sc-observability-types"]',
+            "allowed_dependencies = []",
+        )
+        self.rejects(
+            "sc-observability first-party dependency drift: expected [], "
+            "found ['sc-observability-types']"
+        )
 
 
 if __name__ == "__main__":

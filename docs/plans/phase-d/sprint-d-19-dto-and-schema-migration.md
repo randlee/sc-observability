@@ -20,8 +20,6 @@ Generated projection of `obs-d-19`; the bead is authoritative.
 - Owned paths (metadata projection):
   - `bindings/conformance/v1/conversion-cases.json`
   - `bindings/conformance/v1/schema-cases.json`
-  - `bindings/generation-manifest.json`
-  - `bindings/generation-toolchain.toml`
   - `bindings/python/sc-observability-py/python/sc_observability/generated/__init__.py`
   - `bindings/python/sc-observability-py/python/sc_observability/generated/__init__.pyi`
   - `bindings/python/sc-observability-py/python/sc_observability/generated/py.typed`

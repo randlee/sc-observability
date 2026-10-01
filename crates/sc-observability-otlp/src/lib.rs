@@ -1,9 +1,11 @@
-//! OTLP-backed telemetry layered on top of `sc-observe`.
+//! OTLP-backed telemetry with test-only integration to `sc-observability` and
+//! `sc-observe`.
 //!
 //! This crate owns telemetry configuration, span assembly, exporter contracts,
 //! and the lifecycle/runtime behavior for OTLP-bound signals. It attaches to
 //! routing through ordinary projector registration and keeps OpenTelemetry
-//! transport concerns out of the lower crates.
+//! transport concerns out of the lower crates. Facade tests use the core
+//! logging and observation crates; production OTLP code does not use them.
 #![expect(
     clippy::missing_errors_doc,
     reason = "telemetry-facade error behavior is documented centrally in workspace docs, and repeating it on every wrapper method adds low-signal boilerplate"
@@ -31,10 +33,10 @@ mod projectors;
 mod runtime;
 mod testing;
 
-#[cfg(feature = "legacy-http-json")]
-mod legacy_http_json;
 #[cfg(feature = "otlp-sdk")]
 mod sdk;
+#[cfg(feature = "sync-http")]
+mod sync_http;
 
 pub mod constants;
 pub mod error_codes;
@@ -75,7 +77,8 @@ pub use compat::{
 };
 #[doc(inline)]
 pub use config::{
-    ExporterBackend, LegacyRetryPolicy, LogsConfig, MetricsConfig, ResourceAttributes, TracesConfig,
+    ExporterBackend, LogsConfig, MetricsConfig, ResourceAttributes, SyncHttpRetryPolicy,
+    TracesConfig,
 };
 #[doc(inline)]
 pub use projectors::V2TelemetryProjectors;
@@ -97,7 +100,7 @@ pub mod v2 {
         ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
     };
     #[doc(inline)]
-    pub use crate::{ExporterBackend, LegacyRetryPolicy};
+    pub use crate::{ExporterBackend, SyncHttpRetryPolicy};
     #[doc(inline)]
     pub use sc_observability_types::v2::{
         ConfigFailure, EventError, FlushError, InitError, ShutdownError, TelemetryError,

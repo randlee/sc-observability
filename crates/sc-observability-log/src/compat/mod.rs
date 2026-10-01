@@ -639,7 +639,6 @@ mod tests {
 
     #[test]
     fn detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running() {
-        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_DETACHED_ATTACHMENT_CHILD";
         struct Admit;
 
         impl crate::BridgeEventPolicy for Admit {
@@ -656,41 +655,9 @@ mod tests {
             }
         }
 
-        if std::env::var_os(CHILD_ENV).is_none() {
-            let output = std::process::Command::new(
-                std::env::current_exe().expect("test executable"),
-            )
-            .args([
-                "--exact",
-                "compat::tests::detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running",
-                "--nocapture",
-                "--test-threads=1",
-            ])
-            .env(CHILD_ENV, "1")
-            .output()
-            .expect("spawn isolated compatibility regression");
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(
-                output.status.success(),
-                "isolated compatibility regression failed: {}\nstdout:\n{stdout}\nstderr:\n{stderr}",
-                output.status
-            );
-            assert_eq!(
-                stdout
-                    .lines()
-                    .filter(|line| line.trim() == "running 1 test")
-                    .count(),
-                1,
-                "isolated compatibility regression must execute exactly one test:\n{stdout}"
-            );
-            assert_eq!(
-                stdout
-                    .matches("test result: ok. 1 passed; 0 failed;")
-                    .count(),
-                1,
-                "isolated compatibility regression must report one passing test:\n{stdout}"
-            );
+        if !crate::handle::is_isolated_test_child(
+            "compat::tests::detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running",
+        ) {
             return;
         }
 
@@ -774,6 +741,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the released init conversion matrix keeps all variant and root-contract rows adjacent"
+    )]
     fn legacy_init_table_preserves_released_variants_and_contracts() {
         let logger_remediation = Remediation::recoverable("repair logger configuration", ["retry"]);
         let runtime_remediation = Remediation::recoverable("restore runtime", ["retry"]);
@@ -793,6 +764,21 @@ mod tests {
                 ),
                 "SC_OBSERVABILITY_LOGGER_QUEUE_CAPACITY_INVALID",
                 logger_remediation.clone(),
+            ),
+            (
+                "configuration runtime-start code remains logger",
+                legacy_init(
+                    sc_observability_types::v2::InitError::Configuration {
+                        context: Box::new(context(
+                            "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED",
+                            runtime_remediation.clone(),
+                        )),
+                    },
+                    LevelFilter::Info,
+                    LevelFilter::Trace,
+                ),
+                "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED",
+                runtime_remediation.clone(),
             ),
             (
                 "runtime logger",
@@ -846,7 +832,9 @@ mod tests {
 
         for (name, error, code, remediation) in cases {
             match name {
-                "configuration logger" | "runtime logger" => {
+                "configuration logger"
+                | "configuration runtime-start code remains logger"
+                | "runtime logger" => {
                     assert!(matches!(error, InitError::Logger { .. }));
                 }
                 "runtime start" => assert!(matches!(error, InitError::RuntimeStart { .. })),
@@ -858,6 +846,9 @@ mod tests {
             let expected_display = match name {
                 "configuration logger" => {
                     "sc-observability logger construction failed: SC_OBSERVABILITY_LOGGER_QUEUE_CAPACITY_INVALID fixture"
+                }
+                "configuration runtime-start code remains logger" => {
+                    "sc-observability logger construction failed: SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED fixture"
                 }
                 "runtime logger" => {
                     "sc-observability logger construction failed: SC_OBSERVABILITY_LOGGER_RUNTIME_UNAVAILABLE fixture"

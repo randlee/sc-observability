@@ -6,11 +6,11 @@ use sc_observability_otlp::v2::{
 use sc_observability_types::ServiceName;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut transport = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
+    let mut transport = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
     transport.enabled = true;
     transport.endpoint = Some(OtlpEndpoint::new_typed("http://127.0.0.1:4318")?);
 
-    let config = TelemetryConfigBuilder::new(ServiceName::new("otlp-legacy-example")?)
+    let config = TelemetryConfigBuilder::new(ServiceName::new("otlp-sync-http-example")?)
         .with_transport(transport)
         .enable_logs(LogsConfig::default())
         .build_typed()?;

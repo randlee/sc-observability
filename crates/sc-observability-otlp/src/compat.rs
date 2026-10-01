@@ -19,7 +19,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::config::{ExporterBackend, LegacyRetryPolicy, TelemetryConfig as RuntimeConfig};
+use crate::config::{ExporterBackend, SyncHttpRetryPolicy, TelemetryConfig as RuntimeConfig};
 use crate::projectors::{
     AttachedLogProjector, AttachedMetricProjector, AttachedSpanProjector, ProjectorSet,
     TelemetryEmit,
@@ -212,21 +212,21 @@ impl OtelConfig {
     fn into_runtime(self) -> crate::config::OtelConfig {
         let backend = match self.protocol {
             OtlpProtocol::HttpBinary | OtlpProtocol::Grpc => ExporterBackend::OpenTelemetrySdk,
-            OtlpProtocol::HttpJson => ExporterBackend::LegacyHttpJson,
+            OtlpProtocol::HttpJson => ExporterBackend::SyncHttp,
         };
         let budget = DurationMs::from(
             u64::from(self.timeout_ms).max(constants::RELEASED_OTLP_BUDGET_FLOOR_MS),
         );
-        let retry = LegacyRetryPolicy {
+        let retry = SyncHttpRetryPolicy {
             max_retries: Some(self.max_retries),
             initial_backoff_ms: Some(self.initial_backoff_ms),
             max_backoff_ms: Some(self.max_backoff_ms),
             retry_sequence_timeout_ms: Some(budget),
-            ..LegacyRetryPolicy::default()
+            ..SyncHttpRetryPolicy::default()
         };
-        let legacy_retry =
-            (self.enabled && backend == ExporterBackend::LegacyHttpJson).then_some(retry);
-        // Canonical retry values apply only to the enabled HTTP/JSON legacy
+        let sync_http_retry =
+            (self.enabled && backend == ExporterBackend::SyncHttp).then_some(retry);
+        // Canonical retry values apply only to the enabled HTTP/JSON synchronous
         // backend. Released retry bounds are validated before this projection,
         // for every protocol and enabled state, as required by 1.4.1.
         crate::config::OtelConfig {
@@ -244,7 +244,7 @@ impl OtelConfig {
             lifecycle_flush_timeout_ms: Some(budget),
             lifecycle_shutdown_timeout_ms: Some(budget),
             debug_local_export: self.debug_local_export,
-            legacy_retry,
+            sync_http_retry,
             ..crate::config::OtelConfig::default()
         }
     }
@@ -733,24 +733,24 @@ mod tests {
     }
 
     // These private value-level guards check selected backend, timeout, and retry/backoff
-    // projection: `released_http_json_uses_the_nested_legacy_retry_policy` and
-    // `released_sdk_and_disabled_transports_discard_legacy_retry_settings`. The external
+    // projection: `released_http_json_uses_the_nested_sync_http_retry_policy` and
+    // `released_sdk_and_disabled_transports_discard_sync_http_retry_settings`. The external
     // `released_config_translation` tests cover released-bound validation, not direct
     // inspection of this private projection or live collector/runtime behavior.
     #[test]
-    fn released_http_json_uses_the_nested_legacy_retry_policy() {
+    fn released_http_json_uses_the_nested_sync_http_retry_policy() {
         let runtime = released_transport(OtlpProtocol::HttpJson, true).into_runtime();
 
-        assert_eq!(runtime.backend, ExporterBackend::LegacyHttpJson);
+        assert_eq!(runtime.backend, ExporterBackend::SyncHttp);
         assert_eq!(runtime.timeout_ms, Some(DurationMs::from(750)));
         assert_eq!(
-            runtime.legacy_retry,
-            Some(LegacyRetryPolicy {
+            runtime.sync_http_retry,
+            Some(SyncHttpRetryPolicy {
                 max_retries: Some(7),
                 initial_backoff_ms: Some(DurationMs::from(125)),
                 max_backoff_ms: Some(DurationMs::from(875)),
                 retry_sequence_timeout_ms: Some(DurationMs::from(30_000)),
-                ..LegacyRetryPolicy::default()
+                ..SyncHttpRetryPolicy::default()
             })
         );
     }
@@ -775,7 +775,7 @@ mod tests {
             .into_runtime();
             assert!(!runtime.transport.insecure_skip_verify);
             let bounds = crate::config::validated_released_telemetry_bounds(&runtime).unwrap();
-            let crate::config::BackendTransportBounds::Legacy(retry) = bounds.backend() else {
+            let crate::config::BackendTransportBounds::SyncHttp(retry) = bounds.backend() else {
                 panic!("enabled released HttpJson has retry bounds");
             };
             let budget = std::time::Duration::from_millis(
@@ -795,7 +795,7 @@ mod tests {
     }
 
     #[test]
-    fn released_sdk_and_disabled_transports_discard_legacy_retry_settings() {
+    fn released_sdk_and_disabled_transports_discard_sync_http_retry_settings() {
         for (transport, backend) in [
             (
                 released_transport(OtlpProtocol::HttpBinary, true),
@@ -807,14 +807,14 @@ mod tests {
             ),
             (
                 released_transport(OtlpProtocol::HttpJson, false),
-                ExporterBackend::LegacyHttpJson,
+                ExporterBackend::SyncHttp,
             ),
         ] {
             let runtime = transport.into_runtime();
 
             assert_eq!(runtime.backend, backend);
             assert_eq!(runtime.timeout_ms, Some(DurationMs::from(750)));
-            assert_eq!(runtime.legacy_retry, None);
+            assert_eq!(runtime.sync_http_retry, None);
         }
     }
 
@@ -918,6 +918,6 @@ mod tests {
 
         assert_eq!(runtime.backend, ExporterBackend::OpenTelemetrySdk);
         assert_eq!(runtime.protocol, crate::config::OtlpProtocol::Grpc);
-        assert!(runtime.legacy_retry.is_none());
+        assert!(runtime.sync_http_retry.is_none());
     }
 }

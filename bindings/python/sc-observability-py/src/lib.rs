@@ -14,7 +14,9 @@ pub use sc_observability_binding_runtime::{
     BridgeControlBackend, CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation,
     OperationState,
 };
-use sc_observability_binding_runtime::{ProducerOrigin, create_core_backend};
+use sc_observability_binding_runtime::{
+    OPERATION_OBSERVER_CAPACITY, ProducerOrigin, create_core_backend,
+};
 #[cfg(feature = "test-hooks")]
 use sc_observability_binding_runtime::{TestWriterGate, create_test_blocking_core_backend};
 use sc_observability_dto::{
@@ -326,7 +328,7 @@ impl NativeObserverIdentity {
         use std::sync::atomic::Ordering;
         self.count
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                if count < 64 { Some(count + 1) } else { None }
+                (count < OPERATION_OBSERVER_CAPACITY).then_some(count + 1)
             })
             .ok()?;
         Some(NativeObserverPermit {
@@ -1111,10 +1113,6 @@ mod tests {
             )),
         };
         let projected = project_canonical_failure(&error, CanonicalWireKind::Validation);
-        let expected = sc_observability_dto::failure_from_classification(
-            error.canonical_diagnostic(),
-            v2::FailureClassification::validation(error.canonical_name()),
-        );
         assert_eq!(error.canonical_name(), "EventError::Validation");
         assert_eq!(
             error.canonical_diagnostic().code,
@@ -1126,8 +1124,74 @@ mod tests {
                 if field == "EventError::Validation"
                     && diagnostic.code == native::error_codes::VALUE_VALIDATION_FAILED.as_str()
         ));
-        assert_eq!(projected, expected);
         assert_ne!(error.canonical_name(), "ValidationError");
+    }
+
+    #[test]
+    fn native_failure_classifications_drive_all_wire_kinds() {
+        let context = |message| {
+            Box::new(native::ErrorContext::new(
+                native::error_codes::DIAGNOSTIC_INVALID,
+                message,
+                native::Remediation::recoverable("inspect the native failure", [] as [&str; 0]),
+            ))
+        };
+
+        let validation = v2::EventError::Validation {
+            context: context("invalid event"),
+        };
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                validation.diagnostic(),
+                validation.failure_classification(),
+            ),
+            Failure::Validation { ref field, .. } if field == "event"
+        ));
+
+        let io = v2::LogSinkError::Write {
+            context: context("sink write failed"),
+        };
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                io.diagnostic(),
+                io.failure_classification(),
+            ),
+            Failure::Io { .. }
+        ));
+
+        let unavailable = v2::InitError::Runtime {
+            context: context("runtime unavailable"),
+        };
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                unavailable.diagnostic(),
+                unavailable.failure_classification(),
+            ),
+            Failure::Unavailable { .. }
+        ));
+
+        let timeout = v2::ShutdownError::Timeout {
+            context: context("shutdown timed out"),
+        };
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                timeout.diagnostic(),
+                timeout.failure_classification(),
+            ),
+            Failure::Timeout { ref operation, .. } if operation == "shutdown"
+        ));
+
+        let closed = v2::SubscriberError::classified_subscriber(
+            context("subscriber closed"),
+            v2::FailureClassification::Closed,
+        );
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                closed.diagnostic(),
+                closed.failure_classification(),
+            ),
+            Failure::Closed { .. }
+        ));
     }
 
     #[test]

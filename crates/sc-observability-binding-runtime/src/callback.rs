@@ -1,5 +1,5 @@
 //! Bounded callback reservations outlive native operation slots.
-use crate::{error, sync::lock};
+use crate::{constants::CALLBACK_REGISTRATION_CAPACITY, error, sync::lock};
 use sc_observability_types::v2::SubscriberError;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -43,7 +43,7 @@ pub(crate) struct Job {
 impl Dispatcher {
     pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self {
-            queue: Mutex::new(VecDeque::with_capacity(128)),
+            queue: Mutex::new(VecDeque::with_capacity(CALLBACK_REGISTRATION_CAPACITY)),
             changed: Condvar::new(),
             reserved: AtomicUsize::new(0),
             closed: AtomicBool::new(false),
@@ -62,7 +62,7 @@ impl Dispatcher {
         }
         self.reserved
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                (count < 128).then_some(count + 1)
+                (count < CALLBACK_REGISTRATION_CAPACITY).then_some(count + 1)
             })
             .map_err(|_| {
                 error::subscriber_waiters_full("callback registration capacity is occupied")

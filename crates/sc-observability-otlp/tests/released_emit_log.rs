@@ -4,7 +4,7 @@
 //! feature and a live endpoint, so the buffered-state assertions live next to
 //! the private exporter injection seam in `src/facade_tests.rs`. This file
 //! covers every state reachable through public entry points. The entity
-//! rejection cause check composes a legacy HTTP/JSON runtime that rejects
+//! rejection cause check composes a synchronous HTTP/JSON runtime that rejects
 //! every event before buffering, so it never exports.
 #![allow(
     deprecated,
@@ -192,7 +192,7 @@ fn disabled_projector_helpers_accept_before_entity_check() {
     assert_eq!(events.len(), 1);
 }
 
-#[cfg(feature = "legacy-http-json")]
+#[cfg(feature = "sync-http")]
 mod entity_rejection_cause {
     use sc_observability::error_codes::LOGGER_INVALID_EVENT;
     use sc_observability_otlp::LogsConfig;
@@ -206,10 +206,10 @@ mod entity_rejection_cause {
 
     use super::{INVALID_ID, event_with_id, service_name};
 
-    fn enabled_legacy() -> V2Telemetry {
+    fn enabled_sync_http() -> V2Telemetry {
         let mut transport = OtelConfig::default();
         transport.enabled = true;
-        transport.backend = ExporterBackend::LegacyHttpJson;
+        transport.backend = ExporterBackend::SyncHttp;
         transport.protocol = OtlpProtocol::HttpJson;
         transport.endpoint =
             Some(OtlpEndpoint::new_typed("http://127.0.0.1:4318").expect("endpoint"));
@@ -217,8 +217,8 @@ mod entity_rejection_cause {
             .enable_logs(LogsConfig::default())
             .with_transport(transport)
             .build_typed()
-            .expect("enabled legacy config");
-        V2Telemetry::new(config).expect("enabled legacy telemetry")
+            .expect("enabled sync-http config");
+        V2Telemetry::new(config).expect("enabled sync-http telemetry")
     }
 
     fn retained_validation_cause(error: &V2TelemetryError) -> &ValueValidationError {
@@ -234,7 +234,7 @@ mod entity_rejection_cause {
 
     #[test]
     fn v2_entity_rejection_retains_the_distinct_validation_cause() {
-        let telemetry = enabled_legacy();
+        let telemetry = enabled_sync_http();
         let empty = telemetry
             .emit_log(&event_with_id(""))
             .expect_err("empty entity_id");

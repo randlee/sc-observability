@@ -4,7 +4,7 @@ This unpublished workspace crate exercises public APIs without adding dependency
 
 Run `cargo test -p sc-observability-composition` and `cargo clippy -p sc-observability-composition --all-targets --all-features -- -D warnings`.
 
-The released and canonical consumers each use a real loopback SDK gRPC collector and a real legacy HTTP JSON collector. Collector plumbing is adapted from the separately owned `compatible_stack.rs` package-consumer tests; this harness adds the public log attachment and core writer before observation/projector/export delivery. SDK construction and async flush/shutdown occur inside a caller-owned Tokio runtime. The test does not decide SDK construction outside a runtime.
+The released and canonical consumers each use a real loopback SDK gRPC collector and a real synchronous HTTP JSON collector. Collector plumbing is adapted from the separately owned `compatible_stack.rs` package-consumer tests; this harness adds the public log attachment and core writer before observation/projector/export delivery. SDK construction and async flush/shutdown occur inside a caller-owned Tokio runtime. The test does not decide SDK construction outside a runtime.
 
 Each bridge case runs in a fresh subprocess, with a 45-second kill-and-reap bound. Collectors have bounded startup, socket I/O and watchdogs; their threads are joined and temporary log roots are owned by guards. No external collector installation or Grafana is required.
 

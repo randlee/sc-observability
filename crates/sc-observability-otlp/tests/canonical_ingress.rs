@@ -2,10 +2,10 @@
 //!
 //! `v2::Telemetry::emit_span` and `emit_metric` receive canonical models and
 //! deliver them through the default SDK backend (OTLP/HTTP protobuf) and the
-//! legacy HTTP JSON backend to a caller-owned loopback collector. Each test
+//! synchronous HTTP JSON backend to a caller-owned loopback collector. Each test
 //! decodes the bytes that crossed the socket and checks every canonical span
 //! field and histogram bucket.
-#![cfg(all(feature = "otlp-sdk", feature = "legacy-http-json"))]
+#![cfg(all(feature = "otlp-sdk", feature = "sync-http"))]
 
 mod http_collector {
     //! Caller-owned loopback HTTP/1.1 collector with scripted responses.
@@ -519,16 +519,16 @@ fn canonical_ingress_exports_every_field_over_the_sdk_backend() {
 }
 
 #[test]
-fn canonical_ingress_exports_every_field_over_the_legacy_backend() {
+fn canonical_ingress_exports_every_field_over_the_sync_http_backend() {
     let collector = Collector::start(&[]);
     let telemetry = Telemetry::new_typed(config(transport(
         &collector.endpoint(),
-        ExporterBackend::LegacyHttpJson,
+        ExporterBackend::SyncHttp,
         OtlpProtocol::HttpJson,
     )))
-    .expect("legacy telemetry");
+    .expect("sync-http telemetry");
     emit_canonical(&telemetry);
-    telemetry.flush_typed().expect("legacy export completes");
+    telemetry.flush_typed().expect("sync-http export completes");
     assert_healthy(&telemetry);
     telemetry.shutdown_typed().expect("shutdown completes");
     let captured = collector.finish();

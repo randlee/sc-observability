@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::lifecycle::LifecycleHealth;
 #[cfg_attr(
-    not(any(feature = "legacy-http-json", feature = "otlp-sdk")),
+    not(any(feature = "sync-http", feature = "otlp-sdk")),
     allow(
         unused_imports,
         reason = "D.21 contracts are consumed by enabled backends"
