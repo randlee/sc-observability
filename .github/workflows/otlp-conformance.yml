@@ -60,6 +60,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+      - name: Define owned desktop viewer state
+        run: echo "VIEWER_STATE_DIR=$RUNNER_TEMP/sc-observability-d9-viewer" >> "$GITHUB_ENV"
       - name: Read pinned viewer manifest
         run: |
           python3 - <<'PY'
@@ -101,13 +103,11 @@ jobs:
           PY
       - name: Start an owned isolated desktop viewer
         run: |
-          viewer_state="$RUNNER_TEMP/sc-observability-d9-viewer"
-          echo "VIEWER_STATE_DIR=$viewer_state" >> "$GITHUB_ENV"
           python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py start \
             --binary "$RUNNER_TEMP/otel-desktop-viewer" \
             --version "$VIEWER_VERSION" \
             --binary-sha256 "$VIEWER_BINARY_SHA256" \
-            --state-dir "$viewer_state" \
+            --state-dir "$VIEWER_STATE_DIR" \
             --host 127.0.0.1 --http "$D9_VIEWER_HTTP" \
             --grpc "$D9_VIEWER_GRPC" --ui "$D9_VIEWER_UI"
       - name: Run legacy public factory against the pinned viewer
@@ -132,6 +132,8 @@ jobs:
           --state-dir "$VIEWER_STATE_DIR" --backend sdk
       - name: Remove the owned desktop viewer state
         if: always()
-        run: >-
-          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py stop
-          --state-dir "$VIEWER_STATE_DIR" --remove-state
+        run: |
+          if [ -d "$VIEWER_STATE_DIR" ]; then
+            python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py stop \
+              --state-dir "$VIEWER_STATE_DIR" --remove-state
+          fi
