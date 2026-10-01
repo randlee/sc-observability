@@ -252,7 +252,7 @@ impl Worker {
         #[cfg(test)]
         let startup_hooks = config.startup_hooks.clone();
         thread::Builder::new()
-            .name("sc-otlp-sync-http-http".to_owned())
+            .name("sc-otlp-sync-http".to_owned())
             .spawn(move || {
                 #[cfg(test)]
                 let hooks = config.startup_hooks.clone();
@@ -762,7 +762,7 @@ fn seed_from_os() -> u64 {
     0xa5a5_5a5a_1234_5678
 }
 
-/// synchronous HTTP terminal backend shared by all three OTLP signal families.
+/// Synchronous HTTP terminal backend shared by all three OTLP signal families.
 ///
 /// `Worker` is the terminal transport and `LifecycleCore` is the only
 /// admission/barrier owner. Signal adapters retain this pair through one
@@ -801,7 +801,7 @@ impl Drop for SyncHttpBackend {
     }
 }
 
-/// synchronous HTTP exporter shared by all three OTLP signal families.
+/// Synchronous HTTP exporter shared by all three OTLP signal families.
 pub(crate) struct OtlpHttpExporter {
     backend: Arc<SyncHttpBackend>,
     endpoint: String,
@@ -1307,7 +1307,7 @@ fn blocking_in_async_error() -> ExportError {
             error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT,
             "blocking synchronous HTTP lifecycle cannot run from an entered Tokio runtime",
             Remediation::not_recoverable(
-                "use the asynchronous synchronous HTTP lifecycle API from an entered Tokio runtime",
+                "use the asynchronous SDK lifecycle API from an entered Tokio runtime",
             ),
         )),
     }

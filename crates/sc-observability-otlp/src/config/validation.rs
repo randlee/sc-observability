@@ -29,17 +29,17 @@ pub(crate) enum OtlpConfigField {
     QueueCapacity,
     /// Aggregate byte admission capacity.
     QueueByteCapacity,
-    /// synchronous HTTP maximum retries.
+    /// Synchronous HTTP maximum retries.
     MaxRetries,
-    /// synchronous HTTP initial retry backoff.
+    /// Synchronous HTTP initial retry backoff.
     InitialBackoff,
-    /// synchronous HTTP maximum retry backoff.
+    /// Synchronous HTTP maximum retry backoff.
     MaxBackoff,
-    /// synchronous HTTP complete retry-sequence timeout.
+    /// Synchronous HTTP complete retry-sequence timeout.
     RetrySequenceTimeout,
-    /// synchronous HTTP Retry-After cap.
+    /// Synchronous HTTP Retry-After cap.
     RetryAfterCap,
-    /// synchronous HTTP jitter percentage.
+    /// Synchronous HTTP jitter percentage.
     RetryJitterPercent,
     /// TLS certificate-verification override.
     InsecureSkipVerify,
