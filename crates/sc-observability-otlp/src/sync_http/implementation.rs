@@ -157,7 +157,7 @@ impl SyncHttpConfig {
         Ok((Self::from_prepared(&connection, &bounds)?, bounds))
     }
 
-    fn from_prepared(
+    pub(super) fn from_prepared(
         connection: &ValidatedBackendConnection,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
@@ -852,7 +852,7 @@ pub(crate) struct OtlpHttpExporter {
 }
 
 impl OtlpHttpExporter {
-    fn from_prepared(
+    pub(super) fn from_prepared(
         worker_config: SyncHttpConfig,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, ExportError> {
@@ -1038,6 +1038,24 @@ impl OtlpHttpExporter {
         payload: &Value,
     ) -> Result<(), ExportError> {
         let endpoint = normalize_signal_endpoint(&self.endpoint, signal);
+        self.backend.worker.export(endpoint, payload.to_string())
+    }
+
+    pub(super) fn submit_json_blocking(
+        &self,
+        signal: &str,
+        payload: &Value,
+    ) -> Result<(), ExportError> {
+        let endpoint = normalize_signal_endpoint(&self.endpoint, signal);
+        self.backend.worker.export(endpoint, payload.to_string())
+    }
+
+    pub(super) fn submit_json_path_blocking(
+        &self,
+        path: &str,
+        payload: &Value,
+    ) -> Result<(), ExportError> {
+        let endpoint = format!("{}{}", self.endpoint.trim_end_matches('/'), path);
         self.backend.worker.export(endpoint, payload.to_string())
     }
 
