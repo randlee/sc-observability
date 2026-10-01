@@ -1,9 +1,27 @@
 //! Maps shared client failures to the stable CLI exit contract.
 
-use crate::{constants, error::CliError};
+use crate::{
+    constants::{self, OutcomeState},
+    error::CliError,
+};
 use sc_observability_types::otlp::submission::{DeliveryError, TelemetryClientError};
 
-pub(crate) fn exit_code(error: &CliError) -> u8 {
+pub(crate) struct Classification {
+    pub(crate) exit_code: u8,
+    pub(crate) state: OutcomeState,
+}
+
+pub(crate) fn classify(error: &CliError) -> Classification {
+    let exit_code = exit_code(error);
+    let state = match exit_code {
+        constants::EXIT_DELIVERY_PENDING => OutcomeState::AdmittedPending,
+        constants::EXIT_DELIVERY_FAILED => OutcomeState::AdmittedFailed,
+        _ => OutcomeState::Rejected,
+    };
+    Classification { exit_code, state }
+}
+
+fn exit_code(error: &CliError) -> u8 {
     match error {
         CliError::Input(_) => constants::EXIT_INVALID_INPUT,
         CliError::Internal(_) => constants::EXIT_INTERNAL,

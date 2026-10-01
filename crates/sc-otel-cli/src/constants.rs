@@ -13,13 +13,43 @@ pub(crate) const ERROR_INVALID_JSON: &str = "SC_OBSERVABILITY_SUBMIT_INVALID_JSO
 pub(crate) const ERROR_INTERNAL: &str = "SC_OBSERVABILITY_CLI_INTERNAL";
 #[cfg(feature = "test-double")]
 pub(crate) const TEST_DOUBLE_ENV: &str = "SC_OTEL_TEST_DOUBLE";
-pub(crate) const COMMAND_VALIDATE: &str = "validate";
-pub(crate) const COMMAND_EMIT: &str = "emit";
-pub(crate) const COMMAND_FLUSH: &str = "flush";
-pub(crate) const COMMAND_STATUS: &str = "status";
-pub(crate) const STATE_VALIDATED: &str = "validated";
-pub(crate) const STATE_STATUS: &str = "status";
-pub(crate) const STATE_REJECTED: &str = "rejected";
-pub(crate) const STATE_ADMITTED_PENDING: &str = "admitted_pending";
-pub(crate) const STATE_ADMITTED_DELIVERED: &str = "admitted_delivered";
-pub(crate) const STATE_ADMITTED_FAILED: &str = "admitted_failed";
+
+#[derive(Clone, Copy)]
+pub(crate) enum CommandName {
+    Validate,
+    Emit,
+    Flush,
+    Status,
+}
+impl CommandName {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Validate => "validate",
+            Self::Emit => "emit",
+            Self::Flush => "flush",
+            Self::Status => "status",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum OutcomeState {
+    Validated,
+    Status,
+    Rejected,
+    AdmittedPending,
+    AdmittedDelivered,
+    AdmittedFailed,
+}
+impl OutcomeState {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Validated => "validated",
+            Self::Status => "status",
+            Self::Rejected => "rejected",
+            Self::AdmittedPending => "admitted_pending",
+            Self::AdmittedDelivered => "admitted_delivered",
+            Self::AdmittedFailed => "admitted_failed",
+        }
+    }
+}

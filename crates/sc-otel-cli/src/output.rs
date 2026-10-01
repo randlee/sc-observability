@@ -1,6 +1,10 @@
 //! Renders the stable machine-readable and compact text result forms.
 
-use crate::{cli::OutputFormat, constants, error::CliError};
+use crate::{
+    cli::OutputFormat,
+    constants::{self, CommandName, OutcomeState},
+    error::CliError,
+};
 use sc_observability_types::otlp::submission::{
     AdmissionReceipt, FlushReport, StoreStatus, TelemetryClientError,
 };
@@ -8,9 +12,9 @@ use serde_json::{Value, json};
 use std::{error::Error, fmt::Write};
 
 pub(crate) struct Outcome {
-    pub(crate) command: &'static str,
+    pub(crate) command: CommandName,
     pub(crate) exit_code: u8,
-    pub(crate) state: &'static str,
+    pub(crate) state: OutcomeState,
     pub(crate) receipt: Option<AdmissionReceipt>,
     pub(crate) flush: Option<FlushReport>,
     pub(crate) status: Option<StoreStatus>,
@@ -19,7 +23,7 @@ pub(crate) struct Outcome {
 }
 
 impl Outcome {
-    pub(crate) fn success(command: &'static str, state: &'static str) -> Self {
+    pub(crate) fn success(command: CommandName, state: OutcomeState) -> Self {
         Self {
             command,
             exit_code: constants::EXIT_OK,
@@ -32,8 +36,8 @@ impl Outcome {
         }
     }
 
-    pub(crate) fn failure(command: &'static str, error: CliError) -> Self {
-        let exit_code = crate::exit::exit_code(&error);
+    pub(crate) fn failure(command: CommandName, error: CliError) -> Self {
+        let classification = crate::exit::classify(&error);
         let flush = match error.telemetry() {
             Some(TelemetryClientError::Delivery(
                 sc_observability_types::otlp::submission::DeliveryError::DeadlineExceeded {
@@ -49,14 +53,8 @@ impl Outcome {
         };
         Self {
             command,
-            exit_code,
-            state: if exit_code == constants::EXIT_DELIVERY_PENDING {
-                constants::STATE_ADMITTED_PENDING
-            } else if exit_code == constants::EXIT_DELIVERY_FAILED {
-                constants::STATE_ADMITTED_FAILED
-            } else {
-                constants::STATE_REJECTED
-            },
+            exit_code: classification.exit_code,
+            state: classification.state,
             receipt: None,
             flush,
             status: None,
@@ -74,7 +72,7 @@ pub(crate) fn print(format: OutputFormat, outcome: &Outcome) {
 }
 
 fn print_text(outcome: &Outcome) {
-    let mut text = format!("{} exit={}", outcome.state, outcome.exit_code);
+    let mut text = format!("{} exit={}", outcome.state.as_str(), outcome.exit_code);
     if let Some(receipt) = &outcome.receipt {
         write!(text, " submission={}", receipt.submission_id)
             .expect("writing to a String cannot fail");
@@ -97,9 +95,9 @@ fn as_json(outcome: &Outcome) -> Value {
     });
     json!({
         "schema": constants::RESULT_SCHEMA,
-        "command": outcome.command,
+        "command": outcome.command.as_str(),
         "exit_code": outcome.exit_code,
-        "state": outcome.state,
+        "state": outcome.state.as_str(),
         "receipt": outcome.receipt,
         "flush": outcome.flush,
         "status": outcome.status,
