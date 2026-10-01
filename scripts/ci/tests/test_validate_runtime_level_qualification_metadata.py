@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -15,6 +16,7 @@ from validate_runtime_level_qualification_metadata import (  # noqa: E402
     validate_version_declarations,
     validate_workspace_member_roster,
 )
+import validate_runtime_level_qualification_metadata as qualification_metadata  # noqa: E402
 
 
 STAGED_PACKAGES = ("sc-observability-types", "sc-observability", "sc-observe", "sc-observability-otlp")
@@ -27,6 +29,10 @@ COMPANION_MEMBERS = (
     "crates/sc-observability-binding-runtime",
     "bindings/python/sc-observability-py",
     "examples/rust-python-logging",
+    "examples/otlp-legacy",
+    "examples/otlp-sdk",
+    "examples/log-settings",
+    "tests/sc-observability-composition",
 )
 
 
@@ -36,6 +42,36 @@ class WorkspaceMemberRosterTests(unittest.TestCase):
 
     def test_accepts_companions_interleaved_after_staged_order_preserved(self) -> None:
         validate_workspace_member_roster(STAGED_MEMBERS + COMPANION_MEMBERS, STAGED_PACKAGES)
+
+    def test_accepts_actual_workspace_members(self) -> None:
+        workspace = qualification_metadata.tomllib.loads(
+            (qualification_metadata.ROOT / "Cargo.toml").read_text(encoding="utf-8")
+        )
+        validate_workspace_member_roster(tuple(workspace["workspace"]["members"]), STAGED_PACKAGES)
+
+    def test_accepts_forthcoming_composition_harness_member(self) -> None:
+        workspace = qualification_metadata.tomllib.loads(
+            (qualification_metadata.ROOT / "Cargo.toml").read_text(encoding="utf-8")
+        )
+        members = tuple(workspace["workspace"]["members"]) + ("tests/sc-observability-composition",)
+        validate_workspace_member_roster(members, STAGED_PACKAGES)
+
+    def test_rejects_actual_member_if_its_companion_allowance_is_removed(self) -> None:
+        workspace = qualification_metadata.tomllib.loads(
+            (qualification_metadata.ROOT / "Cargo.toml").read_text(encoding="utf-8")
+        )
+        without_otlp_legacy = tuple(
+            member
+            for member in qualification_metadata.UNPUBLISHED_COMPANION_MEMBERS
+            if member != "examples/otlp-legacy"
+        )
+        with mock.patch.object(
+            qualification_metadata,
+            "UNPUBLISHED_COMPANION_MEMBERS",
+            without_otlp_legacy,
+        ):
+            with self.assertRaisesRegex(SystemExit, "unrecognized members"):
+                validate_workspace_member_roster(tuple(workspace["workspace"]["members"]), STAGED_PACKAGES)
 
     def test_rejects_staged_members_out_of_order(self) -> None:
         reordered = (STAGED_MEMBERS[1], STAGED_MEMBERS[0]) + STAGED_MEMBERS[2:] + COMPANION_MEMBERS
