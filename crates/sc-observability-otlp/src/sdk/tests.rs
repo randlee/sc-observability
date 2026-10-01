@@ -414,7 +414,7 @@ async fn sdk_retry_shutdown_interrupts_an_in_flight_rpc() {
     ));
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn sdk_retry_shutdown_interrupts_backoff_sleep() {
     let (shutdown, shutdown_rx) = watch::channel(false);
     let (attempt_tx, attempt_rx) = tokio::sync::oneshot::channel();

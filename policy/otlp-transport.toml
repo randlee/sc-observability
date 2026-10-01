@@ -67,6 +67,7 @@ default_features = true
 [dev_dependencies]
 sc-observability = { features = [], default_features = true }
 sc-observe = { features = [], default_features = true }
+tokio = { features = ["rt", "rt-multi-thread", "macros", "time", "test-util"], default_features = true }
 tonic = { features = ["router", "transport"], default_features = false }
 
 # SDK transport implementation pins resolved by the reviewed Cargo.lock.
