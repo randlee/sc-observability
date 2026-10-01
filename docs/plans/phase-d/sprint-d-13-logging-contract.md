@@ -330,7 +330,7 @@ Handoff to obs-d-17: the canonical sink contract is consumed by the log-consumer
 
 ## Acceptance criteria
 
-- [ ] `cargo test -p sc-observability --test log_contracts --locked` runs nonzero settings_serde_defaults, log_root_validation, private_sink_contract_object_safety and registration_error_payloads contract cases (#1/#3).
+- [ ] `cargo test -p sc-observability --test log_contracts --locked` runs nonzero settings_serde_defaults, log_root_precedence, private_sink_contract_object_safety and registration_error_payloads contract cases (#1/#3).
 - [ ] `cargo test -p sc-observability-log --test attachment_contracts --locked` runs detach_retry_after_timeout, stale_control_not_installed and foreign_logger_rejected against the owned contract fixture; compile-fail examples deny owner authority (#2).
 - [ ] The private contract harness preserves supplied code/remediation/source without new classification. #4: cargo test -p sc-observability --test log_contracts --locked runs contract_harness_preserves_context; git diff of log_contracts.rs plus rg -n "impl_legacy_classification!|impl .*Failure" over newly added harness blocks yields no new obsolete classifiers. Existing compatibility code is not a failure here; obs-d-18 checks actual deletion after activation. No standing inventory file is created.
 - [ ] Contract checks use only owned test targets, without wildcard cargo test names or D.1/D.2/D.3 implementation fixtures. PHB-003/005 historical 1.x rules are not asserted as the new 2.0 compatibility gate.

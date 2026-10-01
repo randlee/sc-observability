@@ -9094,6 +9094,124 @@
   "$id": "https://sc-observability.dev/bindings/v1.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "x-sc-bindings": {
+    "canonical_error_codes": [
+      {
+        "code": "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED",
+        "name": "IdentityError::Process"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "InitError::Configuration"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "InitError::Runtime"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "EventError::Validation"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "EventError::Routing"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "FlushError::Drain"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "ShutdownError::Timeout"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "ShutdownError::Drain"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "ProjectionError::Projection"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "SubscriberError::Subscriber"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "LogSinkError::Write"
+      },
+      {
+        "code": "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+        "name": "LogSinkError::Flush"
+      },
+      {
+        "code": "OTLP_CONFIG_ZERO_DURATION",
+        "name": "ConfigFailure::ZeroDuration"
+      },
+      {
+        "code": "OTLP_CONFIG_DURATION_OVERFLOW",
+        "name": "ConfigFailure::DurationOverflow"
+      },
+      {
+        "code": "OTLP_CONFIG_BOUND_ORDER",
+        "name": "ConfigFailure::InvalidBoundOrdering"
+      },
+      {
+        "code": "OTLP_CONFIG_JITTER_PERCENT",
+        "name": "ConfigFailure::InvalidJitterPercent"
+      },
+      {
+        "code": "OTLP_CONFIG_QUEUE_CAPACITY",
+        "name": "ConfigFailure::InvalidQueueCapacity"
+      },
+      {
+        "code": "OTLP_CONFIG_QUEUE_BYTE_CAPACITY",
+        "name": "ConfigFailure::InvalidQueueByteCapacity"
+      },
+      {
+        "code": "OTLP_CONFIG_FIELD_NOT_APPLICABLE",
+        "name": "ConfigFailure::ConfigFieldNotApplicable"
+      },
+      {
+        "code": "OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED",
+        "name": "ConfigFailure::InsecureTransportRejected"
+      },
+      {
+        "code": "OTLP_CONFIG_INVALID_ENDPOINT",
+        "name": "ConfigFailure::InvalidEndpoint"
+      },
+      {
+        "code": "OTLP_CONFIG_INVALID_HEADER",
+        "name": "ConfigFailure::InvalidHeader"
+      },
+      {
+        "code": "OTLP_TRANSPORT_CONSTRUCTION_FAILED",
+        "name": "ConfigFailure::TransportConstructionFailed"
+      },
+      {
+        "code": "OTLP_UNSUPPORTED_BACKEND",
+        "name": "ConfigFailure::UnsupportedBackend"
+      },
+      {
+        "code": "OTLP_UNSUPPORTED_PROTOCOL",
+        "name": "ConfigFailure::UnsupportedProtocol"
+      },
+      {
+        "code": "OTLP_TOKIO_RUNTIME_REQUIRED",
+        "name": "ConfigFailure::TokioRuntimeRequired"
+      },
+      {
+        "code": "SC_METRIC_INVALID_HISTOGRAM",
+        "name": "MetricModelError::InvalidHistogram"
+      },
+      {
+        "code": "SC_METRIC_INVALID_TEMPORALITY",
+        "name": "MetricModelError::InvalidTemporality"
+      },
+      {
+        "code": "SC_METRIC_INVALID_INTERVAL",
+        "name": "MetricModelError::InvalidInterval"
+      }
+    ],
     "defaults": {
       "query_limit": 100,
       "query_order": "oldest_first"
