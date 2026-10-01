@@ -1135,8 +1135,9 @@ in [the CI policy](ci-policy.md).
   for the sprint that installs the shared package. Likewise, a `../sc-publish`
   revision with action-runtime pins at or above this repository's current
   floor (`actions/checkout>=v5`, `actions/setup-python>=v6`) is a named
-  execution prerequisite, verified by an added workflow action-runtime
-  validation gate, not an accepted regression. If either upstream capability
+  execution prerequisite, verified when adopting the reviewed upstream
+  revision, not an accepted regression. The permanent repository action-version
+  floor gate is retired; the adoption prerequisite remains. If either upstream capability
   cannot land before Phase C needs to execute, Phase C stops and requests an
   explicit owner decision (delay execution, or accept a documented,
   owner-signed-off temporary gap) rather than treating a local substitute as

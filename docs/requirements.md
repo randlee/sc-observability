@@ -401,7 +401,7 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - NFR-007 Backend sink/export failures shall be fail-open.
 - NFR-008 Each crate section in this document shall remain readable in isolation without requiring upward-layer concepts to understand lower-layer behavior.
 - NFR-009 The workspace shall enforce layering and repo-boundary rules in CI, including dependency bans against `agent-team-mail-*` and banned crate edges that violate the approved stack.
-- NFR-010 The workspace shall enforce basic docs consistency checks in CI so the approved crate layering does not drift out of sync across requirements, architecture, and API design documents.
+- NFR-010 Changes to approved crate layering shall be reviewed for consistency across requirements, architecture, and API design documents. CI shall enforce missing-doc checks for the public Rust API; literal documentation phrases are not a CI contract.
 - NFR-011 The workspace shall enforce version-literal consistency in CI for the
   maintained files covered by the validation script: Cargo package tables,
   internal workspace dependency version pins that reference local crate paths,
