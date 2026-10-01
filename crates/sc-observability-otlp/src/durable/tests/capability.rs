@@ -42,3 +42,51 @@ fn every_matrix_row_delivers_and_sdk_is_rejected() {
     ));
     assert!(!dir.path().join("telemetry.db").exists());
 }
+
+#[test]
+fn metric_exemplar_row_is_preserved() {
+    use sc_observability_types::otlp::signals::{Exemplar, KeyValues, MetricData, NumberValue};
+    let dir = tempfile::tempdir().unwrap();
+    let mut envelope = fixture("metric_gauge");
+    let MetricData::Gauge { points } = &mut envelope.metrics[0].record.data else {
+        panic!("gauge fixture")
+    };
+    points[0].exemplars.push(Exemplar::new(
+        KeyValues::default(),
+        sc_observability_types::Timestamp::UNIX_EPOCH,
+        NumberValue::Int(7),
+        None,
+        None,
+    ));
+    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let receipt = client.emit(envelope.clone()).unwrap();
+    let stored: Vec<u8> = client
+        .owner
+        .shared
+        .db
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT envelope FROM submissions WHERE submission_id=?1",
+            [receipt.submission_id.to_string()],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<SubmissionEnvelope>(&stored).unwrap(),
+        envelope
+    );
+    worker::start(
+        &client.owner.shared,
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
+    assert_eq!(
+        client
+            .flush_submission(&receipt.submission_id, DEADLINE)
+            .unwrap()
+            .delivered
+            .metrics,
+        1
+    );
+}

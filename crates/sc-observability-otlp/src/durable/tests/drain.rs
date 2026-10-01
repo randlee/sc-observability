@@ -205,9 +205,10 @@ fn receipt_after_commit() {
     let mut process = child(dir.path(), "receipt");
     wait_until(|| {
         dir.path().join("receipt.json").exists()
-            && !std::fs::read(dir.path().join("receipt.json"))
-                .unwrap()
-                .is_empty()
+            && serde_json::from_slice::<AdmissionReceipt>(
+                &std::fs::read(dir.path().join("receipt.json")).unwrap(),
+            )
+            .is_ok()
     });
     process.0.kill().unwrap();
     process.0.wait().unwrap();
@@ -234,17 +235,29 @@ fn receipt_after_commit() {
 fn seed(path: &Path, amount: usize) -> Vec<AdmissionReceipt> {
     let config = config(path);
     let mut db = store::open(&config.store_path).unwrap();
+    let mut envelope = fixture("logs");
+    envelope.spans = fixture("traces").spans;
+    envelope.metrics = fixture("metric_gauge").metrics;
+    envelope.profiles = fixture("profiles").profiles;
     (0..amount)
-        .map(|n| store::admit(&mut db, &config, &log(&format!("record-{n}"))).unwrap())
+        .map(|n| {
+            envelope.record_key = Some(format!("record-{n}").parse().unwrap());
+            store::admit(&mut db, &config, &envelope).unwrap()
+        })
         .collect()
 }
+
 fn delivery_counts(path: &Path) -> HashMap<String, usize> {
     let text = std::fs::read_to_string(path.join("deliveries.jsonl")).unwrap();
     let mut counts = HashMap::new();
     for line in text.lines() {
         let value: serde_json::Value = serde_json::from_str(line).unwrap();
         *counts
-            .entry(value["key"].as_str().unwrap().to_owned())
+            .entry(format!(
+                "{}:{}",
+                value["signal"].as_str().unwrap(),
+                value["key"].as_str().unwrap()
+            ))
             .or_default() += 1;
     }
     counts
@@ -258,7 +271,7 @@ fn two_process_drainers_no_loss() {
     assert!(first.0.wait().unwrap().success());
     assert!(second.0.wait().unwrap().success());
     let counts = delivery_counts(dir.path());
-    assert_eq!(counts.len(), receipts.len());
+    assert_eq!(counts.len(), receipts.len() * 4);
     assert!(
         counts.values().all(|count| *count == 1),
         "no takeover occurred: {counts:?}"
@@ -275,7 +288,51 @@ fn crash_mid_drain_resumes() {
     let mut replacement = child(dir.path(), "drain");
     assert!(replacement.0.wait().unwrap().success());
     let counts = delivery_counts(dir.path());
-    assert_eq!(counts.len(), receipts.len());
+    assert_eq!(counts.len(), receipts.len() * 4);
     assert!(counts.values().all(|count| *count >= 1));
-    assert!(counts.values().sum::<usize>() - receipts.len() <= crate::constants::DRAIN_BATCH_SIZE);
+    assert!(
+        counts.values().sum::<usize>() - receipts.len() * 4
+            <= crate::constants::DRAIN_BATCH_SIZE * 4
+    );
+}
+
+#[test]
+fn flush_deadline_does_not_wait_for_the_writer_mutex() {
+    let dir = tempfile::tempdir().unwrap();
+    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    client.emit(log("pending")).unwrap();
+    let locked = client.owner.shared.db.lock().unwrap();
+    let start = Instant::now();
+    assert!(client.flush(Duration::from_millis(10)).is_err());
+    assert!(start.elapsed() < Duration::from_millis(500));
+    assert!(client.shutdown(Duration::ZERO).is_err());
+    drop(locked);
+}
+
+#[test]
+fn retry_budget_exhaustion_is_terminal() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(dir.path());
+    let mut retry = SyncHttpRetryPolicyDto::default();
+    retry.max_retries = Some(1);
+    cfg.sync_http_retry = Some(retry);
+    let exporter = Arc::new(RetryExporter {
+        inner: ScriptedExporter::new(dir.path()),
+        remaining: Mutex::new(u32::MAX),
+    });
+    let client = DurableTelemetryClient::open_with_exporter(cfg, exporter).unwrap();
+    let receipt = client.emit(log("exhausted")).unwrap();
+    assert!(matches!(
+        client.flush_submission(&receipt.submission_id, DEADLINE),
+        Err(TelemetryClientError::Delivery(
+            DeliveryError::TerminalFailure { .. }
+        ))
+    ));
+    let status = client
+        .status(StatusQuery::Submissions(vec![receipt.submission_id]))
+        .unwrap();
+    assert!(matches!(
+        status.submissions[0].signals[0].1,
+        DeliveryState::Failed { attempts: 2, .. }
+    ));
 }

@@ -15,11 +15,15 @@ pub(crate) trait SubmissionExporter: Send + Sync {
     ) -> Result<(), SubmissionExportFailure>;
 }
 #[derive(Debug)]
-#[expect(
-    dead_code,
-    reason = "staged by d-29; wired by d-33/d-34 under durable-store"
+#[cfg_attr(
+    not(feature = "durable-store"),
+    expect(dead_code, reason = "used by durable-store")
 )]
 pub(crate) enum SubmissionExportFailure {
+    #[cfg_attr(
+        all(feature = "durable-store", not(test)),
+        expect(dead_code, reason = "d-34 constructs production retry failures")
+    )]
     Retryable(ExportError),
     Terminal(ExportError),
 }

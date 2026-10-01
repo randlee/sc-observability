@@ -122,6 +122,9 @@ impl Drop for Harness {
         for exporter in &self.exporters {
             exporter.release();
         }
+        for exporter in &self.exporters {
+            wait_until(|| Arc::strong_count(exporter) == 1);
+        }
     }
 }
 impl ConformanceHarness for Harness {
@@ -129,14 +132,13 @@ impl ConformanceHarness for Harness {
     fn open(&mut self) -> Self::Client {
         let dir = tempfile::tempdir().unwrap();
         let exporter = Arc::new(ScriptedExporter::new(dir.path()));
-        let client =
-            DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone())
-                .unwrap();
+        let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
         client
             .owner
             .shared
             .drain_on_flush_only
             .store(true, Ordering::Release);
+        worker::start(&client.owner.shared, exporter.clone()).unwrap();
         self.dirs.push(dir);
         self.exporters.push(exporter);
         client

@@ -53,6 +53,10 @@ fn check_version(db: &Connection) -> Result<u32, TelemetryClientError> {
     }
     Ok(found)
 }
+pub(super) fn reader(path: &Path) -> Result<Connection, TelemetryClientError> {
+    Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(persistence)
+}
 pub(super) fn open(path: &Path) -> Result<Connection, TelemetryClientError> {
     // Inspect existing files read-only before any journal/schema changes.
     if path.exists() {

@@ -59,12 +59,17 @@ pub(super) fn start(
     Ok(())
 }
 pub(super) fn release(shared: &Shared) {
-    if let Ok(db) = shared.db.lock() {
+    if let Ok(db) = shared.db.try_lock() {
+        // Best effort under the caller's deadline; a busy lease expires naturally.
         // The fencing predicate prevents an old holder deleting a successor's lease.
+        let _ = db.busy_timeout(Duration::ZERO);
         let _ = db.execute(
             "DELETE FROM drain_lease WHERE id=1 AND holder=?1",
             [&shared.holder],
         );
+        let _ = db.busy_timeout(Duration::from_millis(
+            crate::constants::STORE_BUSY_TIMEOUT_MS,
+        ));
     }
 }
 fn lease(shared: &Shared) -> Result<bool, TelemetryClientError> {
@@ -175,12 +180,11 @@ fn drain(
             if let Ok(credit) = shared.credits.reserve(row.bytes) {
                 credits.push(credit);
                 break;
-            } else {
-                if !credits.is_empty() {
-                    break 'reserve;
-                }
-                shared.credits.wait_for_release(shared.poll_interval());
             }
+            if !credits.is_empty() {
+                break 'reserve;
+            }
+            shared.credits.wait_for_release(shared.poll_interval());
         }
     }
     // Never wait for credits held by this same batch. Return its unreserved tail

@@ -125,6 +125,11 @@ impl DurableTelemetryClient {
         config: TelemetryClientConfig,
         exporter: Arc<dyn SubmissionExporter>,
     ) -> Result<Self, TelemetryClientError> {
+        let client = Self::prepare(config)?;
+        worker::start(&client.owner.shared, exporter)?;
+        Ok(client)
+    }
+    fn prepare(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
         let otel = adapter::otel_config_from(&config)?;
         let bounds = crate::config::validated_transport_bounds(&otel)
             .map_err(|_| adapter::invalid("otlp"))?;
@@ -142,11 +147,9 @@ impl DurableTelemetryClient {
             #[cfg(test)]
             active_flushes: std::sync::atomic::AtomicUsize::new(0),
         });
-        let client = Self {
+        Ok(Self {
             owner: Owner { shared },
-        };
-        worker::start(&client.owner.shared, exporter)?;
-        Ok(client)
+        })
     }
     fn flush_scope(
         &self,
@@ -155,13 +158,15 @@ impl DurableTelemetryClient {
     ) -> Result<FlushReport, TelemetryClientError> {
         let shared = &self.owner.shared;
         let start = Instant::now();
-        let scope = query::snapshot(&*shared.db.lock().map_err(persistence)?, id)?;
+        // A WAL reader must not queue behind an admission waiting for a write lock.
+        let reader = store::reader(&shared.config.store_path)?;
+        let scope = query::snapshot(&reader, id)?;
         #[cfg(test)]
         let _flush_activity = FlushActivity::new(shared);
         shared.notify();
         loop {
             let generation = shared.generation();
-            let report = query::report(&*shared.db.lock().map_err(persistence)?, &scope)?;
+            let report = query::report(&reader, &scope)?;
             if report.still_pending.total() == 0 || start.elapsed() >= timeout {
                 return report.into_result();
             }
@@ -209,11 +214,8 @@ impl TelemetryClient for DurableTelemetryClient {
     }
     fn shutdown(&self, deadline: Duration) -> Result<FlushReport, TelemetryClientError> {
         let shared = &self.owner.shared;
-        {
-            let _db = shared.db.lock().map_err(persistence)?;
-            if shared.closed.swap(true, Ordering::AcqRel) {
-                return Ok(FlushReport::default());
-            }
+        if shared.closed.swap(true, Ordering::AcqRel) {
+            return Ok(FlushReport::default());
         }
         let result = self.flush_scope(None, deadline);
         shared.stop.store(true, Ordering::Release);
