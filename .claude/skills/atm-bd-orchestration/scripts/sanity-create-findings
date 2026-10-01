@@ -135,6 +135,11 @@ def main() -> int:
     args = parser.parse_args()
     try:
         report = load_vars(args.vars, args.task, args.bead)
+        if report.get("run_id"):
+            if report.get("reviewer") != report.get("operational_reviewer"):
+                raise HandoffError("comparison-only reviewer cannot create finding children")
+            if args.reviewer != f"sc-{report.get('reviewer')}":
+                raise HandoffError("reviewer does not match report provenance")
         findings = undone_findings(report["findings"])
         selectors = {finding_key(finding): finding for finding in findings}
         if len(selectors) != len(findings):

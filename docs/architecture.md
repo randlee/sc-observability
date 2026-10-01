@@ -694,7 +694,7 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts; Phase D wave 5 (ADR-021): the `otlp::signals` neutral signal types and the `otlp::submission` contracts (envelope, receipts, status, error codes, config and precedence, the `TelemetryClient` trait), with `InMemoryTelemetryClient`, `DoubleScript` and the conformance suite behind the `test-double` feature (optional `uuid`) |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
@@ -702,6 +702,7 @@ Important boundary:
 | `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
 | `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
 | `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
+| `sc-otel-cli` | `sc-observability-types`, `sc-observability-otlp` (feature `durable-store`) | `sc-observe`, PyO3, `agent-team-mail-*` | Phase D wave 5 (ADR-021): the `sc-otel` binary (`emit`, `validate`, `flush`, `status`) at `crates/sc-otel-cli`; workspace member, `publish = false` this phase |
 
 † This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) is provisional pending ADR-011's formal acceptance — see ADR-011's own Status line below.
 
@@ -754,14 +755,23 @@ graph TD
   Python --> DTO
   Python --> Types
   Python -. "LoggerConfig construction only, no shutdown ownership" .-> Core
+  Python -. "feature otlp-telemetry only (ADR-021)" .-> OTLP[sc-observability-otlp]
 ```
+
+Phase D wave 5 adds one feature-gated edge (ADR-021): with the
+`otlp-telemetry` Cargo feature, `sc-observability-py` depends on
+`sc-observability-otlp` (feature `durable-store`). The submission contract it
+uses lives in `sc_observability_types::otlp::submission`, over the existing
+`Python --> Types` edge. Release wheels enable that feature through
+`[tool.maturin] features`. The binding runtime, Tauri and DTO crates gain no
+OTLP edge, and the Python crate without the feature has none.
 
 ### Phase D transport allowlist
 
 The OTLP dependency allowlist explicitly permits the feature-gated
-`legacy-http-json` feature and its reviewed `reqwest`, `httpdate`, `getrandom`,
+`sync-http` feature and its reviewed `reqwest`, `httpdate`, `getrandom`,
 and Tokio `rt`/`sync` dependencies; obs-d-21 owns this normative declaration.
-The legacy transport uses `reqwest =0.12.28` with `blocking`, `json`,
+The synchronous HTTP transport uses `reqwest =0.12.28` with `blocking`, `json`,
 `rustls-tls` and default features off, and `httpdate =1.0.3`; its transitive
 Tokio use does not impose a caller-owned runtime. The separate `otlp-sdk`
 feature admits the reviewed `opentelemetry*` SDK family and its explicitly
@@ -1332,6 +1342,112 @@ was reworded accordingly to describe the remaining validation.
 - **Retained architecture**: ADR-017's shared canonical diagnostic implementation, ADR-018's two backends/shared lifecycle and ADR-019's pins, registries and boundary constraints remain. Their 2.0-only root replacement/removal and version activation do not govern this release. `sc-observe` remains a dev-only OTLP dependency; this decision introduces no dependency exception.
 - **Acceptance**: Old consumers work at default lint settings; opt-in migrated consumers deny deprecated usage. Preserve diagnostic/source information through adapters, and test behavioral compatibility as well as exact released-package semver. No breaking approval entry can waive the 1.x contract. Future removal needs its own major-release decision.
 - **Contracts**: PHB-003–006, PHD-001–004 and the compatible 1.x amendment; D22 establishes usable compiled contracts, facade sprints implement adapters, D27 validates release tooling, and D18 owns the real combined proof alongside D9 collector conformance; both must pass before phase-ending review.
+
+### ADR-021: Shared Customer Telemetry Submission and Durable Admission
+
+- **Status**: Accepted (lead decision 2026-10-01) for Phase D wave 5
+  (d-29 contract, d-33 store and drain, d-34 OTLP/JSON encoders, d-30
+  Python, d-31 CLI, d-35 sanity importer, d-32 integration).
+  The plan is the "Wave 5" section of `docs/plans/phase-d/plan-phase-d.md`; normative signatures are in
+  `docs/plans/phase-d/sprint-d-29-telemetry-submission-contract.md`.
+- **Context**: Customer records must be mapped to telemetry. Python lacks a
+  complete OTLP submission surface. Reimplementing transport or durability in
+  Python and in a CLI would produce different validation and behavior.
+- **Decision**: Proto-shaped neutral signal records live in
+  `sc_observability_types::otlp::signals`, pinned to opentelemetry-proto
+  v1.10.0 (Rust `opentelemetry-proto =0.33.0`). Shared submission contracts
+  live beside them in `sc_observability_types::otlp::submission`, the landed
+  interim home for shared OTLP structs (user ruling 2026-09-27). No new crate
+  is added (lead ruling 2026-10-01). Those contracts are the versioned envelope, receipt, delivery status, error enums
+  with codes, config DTO and precedence, and the `TelemetryClient` trait. The
+  store, drain and export live in `sc-observability-otlp` behind the
+  `durable-store` feature (`DurableTelemetryClient`). Python
+  (`otlp-telemetry` feature) and the `sc-otel` CLI (`sc-otel-cli`) depend on
+  `sc-observability-types` and `sc-observability-otlp` and never encode OTLP
+  themselves. The Python surface returns tagged results for expected
+  failures and raises only for programmer errors (ADR-014). Customer-specific mapping
+  stays in the consumer. New surface is added through new `#[non_exhaustive]`
+  types; no released exhaustive enum gains a variant.
+- **Signals**: Logs, completed spans, metrics and profiles are all
+  first-class submission signals. Profiles use the versioned development
+  protocol `profiles.v1development`. Full payload support covers every
+  pinned field, including the profiles string-index forms
+  (`string_value_strindex`, `key_strindex`) and non-finite doubles in
+  proto-JSON form (`"NaN"`, `"Infinity"`, `"-Infinity"`). Only `tracez.proto`
+  is excluded: it is zPages, not an OTLP payload. Every metric point form is supported:
+  gauge, sum (with monotonicity and temporality), explicit histogram,
+  exponential histogram and summary, with exemplars. Events use log
+  `event_name` or span events. Correlation, resource and scope are metadata.
+  Baggage is not a signal.
+- **Capability matrix** (backend × signal × representation). "Typed error"
+  means `TelemetryConfigError::UnsupportedCombination` at construction, never
+  silent omission.
+
+  | Signal / representation | sync-http (durable-store drain) | SDK/Tokio (`RuntimeTelemetry`) |
+  | --- | --- | --- |
+  | Logs (`LogPoint`, all fields) | supported, `/v1/logs` | existing `LogEvent` scope only; `DurableTelemetryClient` over SDK → typed error |
+  | Spans (`SpanPoint`, trace_state, events, links, dropped counts) | supported, `/v1/traces` | existing `SpanRecord` scope only; durable over SDK → typed error |
+  | Gauge / Sum / explicit Histogram | supported, `/v1/metrics` | existing v2 `MetricValue` scope (instrument-based) |
+  | Exponential histogram | supported | typed error (not representable on the SDK path) |
+  | Summary | supported | typed error |
+  | Exemplars | supported | typed error |
+  | Profiles | supported, `/v1development/profiles` | typed error |
+
+- **Durability and layering**: SQLite via `rusqlite =0.40.2` (`bundled`)
+  behind `durable-store`. `emit` commits a versioned envelope plus per-signal
+  delivery rows (WAL, `synchronous=FULL`) before returning an
+  `AdmissionReceipt`. The layering is store → drain worker → the sync-http
+  bounded admission (record and byte credits). When the backend queue is
+  full, the drain pauses; the store never evicts because of it.
+  - Disk bound: the default `max_store_bytes` is 256 MiB. Policy `RejectNew`
+    (default) returns `AdmissionError::DiskBoundExceeded`. Opt-in
+    `EvictOldest` evicts the oldest unexported submissions. Both are counted
+    in `StoreStatus`.
+  - Retention: delivered rows are kept 24 h and record keys 30 days. Pending
+    rows never expire by age.
+  - Schema versioning: `PRAGMA user_version`. A store with a newer schema is
+    rejected (`SchemaTooNew`) and left unmodified. Older schemas migrate
+    forward in one transaction. Rows with newer envelopes are skipped and
+    counted, never deleted.
+- **Multi-process ownership**: One drain lease row with expiry (default
+  30 s, renewed every 10 s). Only the holder claims rows, and claims expire
+  with the lease. A non-holder `flush` waits for rows admitted before the
+  call, or acquires a free or expired lease. Delivery is at least once. The
+  duplicate window is at most one in-flight batch per signal per lease
+  takeover. Stable `RecordKey`s prevent duplicate local admission, not
+  collector-side duplicates.
+- **Runtime**: The durable drain uses sync-http only, so neither Python nor
+  the CLI needs a Tokio runtime. The SDK/Tokio path keeps its existing
+  instrument-based scope and caller-owned runtime (PHD-003).
+- **Dependencies and platforms**: No OTLP edge is added to sc-observe or the
+  core facade. Python gains `sc-observability-otlp` only under
+  `otlp-telemetry`, which release wheels enable. The `.sc/telemetry.yaml`
+  parser is `serde-saphyr =1.3.0`, used only by
+  `sc-observability-otlp` under `durable-store`; `sc-observability-types`
+  gains no YAML dependency. `SubmissionId` and the drain lease holder ID
+  (`<pid>:<uuid>`) use `uuid =1.26.1` (v7), optional in both crates. The
+  `sc-otel` CLI parses arguments with `clap =4.6.7`. The full pin set is in
+  the d-29 sprint doc. The license and advisory audit is cargo-deny with
+  `policy/deny-durable-store.toml`. The platform matrix is linux
+  x86_64/aarch64, macOS x86_64/arm64, windows x86_64/arm64 and abi3-py310
+  wheels on each. It is proven by the dispatched `telemetry-platforms.yml`
+  run (d-33, re-run by d-32) and the dispatched `b4a-python-distributions.yml`
+  run (d-30).
+- **Configuration**: One precedence contract applies per field: explicit
+  value > telemetry.yaml > environment (`OTEL_EXPORTER_OTLP_ENDPOINT`,
+  `OTEL_SERVICE_NAME`, `SC_OTEL_AUTH_HEADER`) > default. Credentials come
+  only from explicit input or the environment. PR URL templates and source
+  mapping are consumer configuration, which the core ignores.
+- **Verification**: d-34 proves each per-variant encoding by loopback
+  capture. d-30 and d-31 assert against the d-29 golden fixtures. d-32 proves
+  stored-record readback from the installed front ends in the pinned
+  `otel-desktop-viewer` v0.5.0, for logs, spans, gauge, sum and explicit
+  histogram. Collector capture covers the remaining forms and is labeled as
+  such. d-32 re-runs the D18 semver/compat and D9 conformance gates over the
+  wave-5 surface. A successful send is not proof of stored data.
+- **Consequences**: There is no second exporter: the sync-http encoders are
+  extended in place. No general mapping DSL and no generated source-hash gate
+  are added. Requirements: PHD-005–013.
 
 ## 8. API-Design Consistency
 
