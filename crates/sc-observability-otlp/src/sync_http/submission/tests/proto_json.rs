@@ -69,12 +69,12 @@ fn non_finite(value: &Value) -> Option<NonFiniteDouble> {
 }
 
 fn decode_base64(value: &str) -> Result<Vec<u8>, String> {
-    if value.len() % 4 != 0 {
+    if !value.len().is_multiple_of(4) {
         return Err("base64 length is not divisible by four".to_owned());
     }
     let mut bytes = Vec::with_capacity(value.len() / 4 * 3);
     for (offset, chunk) in value.as_bytes().chunks(4).enumerate() {
-        let padding = chunk.iter().filter(|byte| **byte == b'=').count();
+        let padding = usize::from(chunk[2] == b'=') + usize::from(chunk[3] == b'=');
         if padding > 2 || (padding > 0 && offset + 1 != value.len() / 4) {
             return Err("invalid base64 padding".to_owned());
         }
