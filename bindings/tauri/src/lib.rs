@@ -666,9 +666,7 @@ mod tests {
     use sc_observability_binding_runtime::{Operation, ProducerOrigin};
     use sc_observability_dto::{CompletionDto, Diagnostic as DiagnosticDto, LogQueryDto};
 
-    fn expected_diagnostic(
-        diagnostic: &sc_observability_types::Diagnostic,
-    ) -> DiagnosticDto {
+    fn expected_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> DiagnosticDto {
         DiagnosticDto {
             at: diagnostic.timestamp.to_string(),
             code: diagnostic.code.as_str().to_owned(),
@@ -723,7 +721,10 @@ mod tests {
             Box::new(sc_observability_types::ErrorContext::new(
                 sc_observability_types::error_codes::VALUE_VALIDATION_FAILED,
                 "queue full",
-                sc_observability_types::Remediation::recoverable("drain the queue", [] as [&str; 0]),
+                sc_observability_types::Remediation::recoverable(
+                    "drain the queue",
+                    [] as [&str; 0],
+                ),
             )),
             v2::FailureClassification::QueueFull,
         );
@@ -751,7 +752,6 @@ mod tests {
                 diagnostic: Box::new(expected_diagnostic(unavailable.diagnostic())),
             },
         );
-
     }
 
     #[test]
@@ -760,10 +760,7 @@ mod tests {
             Box::new(sc_observability_types::ErrorContext::new(
                 sc_observability_types::error_codes::SC_LOG_QUERY_IO,
                 "flush deadline elapsed",
-                sc_observability_types::Remediation::recoverable(
-                    "retry flush",
-                    [] as [&str; 0],
-                ),
+                sc_observability_types::Remediation::recoverable("retry flush", [] as [&str; 0]),
             )),
             v2::FailureClassification::timeout("flush"),
         );
@@ -808,10 +805,7 @@ mod tests {
             context: Box::new(sc_observability_types::ErrorContext::new(
                 sc_observability_types::error_codes::SC_LOG_QUERY_IO,
                 "flush failed without a native classification",
-                sc_observability_types::Remediation::recoverable(
-                    "retry flush",
-                    [] as [&str; 0],
-                ),
+                sc_observability_types::Remediation::recoverable("retry flush", [] as [&str; 0]),
             )),
         };
         assert_flush_projection(
