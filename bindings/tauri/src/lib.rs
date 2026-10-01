@@ -852,6 +852,139 @@ mod tests {
             })
         }
     }
+
+    #[derive(Clone)]
+    struct NativeProjectionBackend {
+        event_failure: Failure,
+        flush_failure: Failure,
+    }
+
+    impl HostLoggingBackend for NativeProjectionBackend {
+        fn try_log(&self, _: LogEventDto, _: ProducerOrigin) -> Result<AdmissionDto, Failure> {
+            Err(self.event_failure.clone())
+        }
+
+        fn start_query(&self, _: LogQueryDto) -> Result<Operation<LogSnapshotDto>, Failure> {
+            Err(self.event_failure.clone())
+        }
+
+        fn health(&self) -> Result<LogHealthDto, Failure> {
+            Err(self.event_failure.clone())
+        }
+
+        fn start_flush(&self, _: Duration) -> Result<Operation<CompletionDto>, Failure> {
+            Err(self.flush_failure.clone())
+        }
+    }
+
+    fn policy() -> AdapterPolicy {
+        AdapterPolicy {
+            allowed_window_labels: BTreeSet::from(["main".to_owned()]),
+            allowed_targets: BTreeSet::from(["app".to_owned()]),
+            max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                .expect("wire payload limit fits in u32"),
+            max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                .expect("container depth limit fits in u32"),
+            redacted_field_keys: BTreeSet::new(),
+        }
+    }
+
+    fn event_request() -> Value {
+        serde_json::json!({
+            "schema_version": 1,
+            "event": {
+                "schema_version": 1,
+                "level": "info",
+                "target": "app",
+                "action": "test.emit"
+            }
+        })
+    }
+
+    fn flush_request() -> Value {
+        serde_json::json!({"schema_version": 1, "timeout_ms": 1})
+    }
+
+    #[test]
+    fn adapter_try_log_preserves_native_event_projection_through_the_public_envelope() {
+        let native = v2::EventError::classified_routing(
+            Box::new(sc_observability_types::ErrorContext::new(
+                sc_observability_types::error_codes::VALUE_VALIDATION_FAILED,
+                "native queue is full",
+                sc_observability_types::Remediation::recoverable(
+                    "drain the queue",
+                    [] as [&str; 0],
+                ),
+            )),
+            v2::FailureClassification::QueueFull,
+        );
+        let expected = sc_observability_dto::failure_from_classification(
+            native.diagnostic(),
+            native.failure_classification(),
+        );
+        let adapter = Adapter::new(
+            Arc::new(NativeProjectionBackend {
+                event_failure: expected.clone(),
+                flush_failure: Failure::Internal {
+                    diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                        sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                        "unused flush failure",
+                    )),
+                },
+            }),
+            policy(),
+        )
+        .expect("valid adapter policy");
+
+        assert_eq!(
+            adapter.try_log("main", event_request()),
+            WireEnvelope::Error {
+                schema_version: SCHEMA_VERSION,
+                error: expected,
+            }
+        );
+    }
+
+    #[cfg(feature = "tauri")]
+    #[test]
+    fn adapter_flush_preserves_native_flush_projection_through_the_public_envelope() {
+        let native = v2::FlushError::classified_drain(
+            Box::new(sc_observability_types::ErrorContext::new(
+                sc_observability_types::error_codes::SC_LOG_QUERY_IO,
+                "native flush deadline elapsed",
+                sc_observability_types::Remediation::recoverable(
+                    "retry flush",
+                    [] as [&str; 0],
+                ),
+            )),
+            v2::FailureClassification::timeout("flush"),
+        );
+        let expected = sc_observability_dto::failure_from_classification(
+            native.diagnostic(),
+            native.failure_classification(),
+        );
+        let adapter = Adapter::new(
+            Arc::new(NativeProjectionBackend {
+                event_failure: Failure::Internal {
+                    diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                        sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                        "unused event failure",
+                    )),
+                },
+                flush_failure: expected.clone(),
+            }),
+            policy(),
+        )
+        .expect("valid adapter policy");
+
+        assert_eq!(
+            tauri::async_runtime::block_on(adapter.flush("main", flush_request())),
+            WireEnvelope::Error {
+                schema_version: SCHEMA_VERSION,
+                error: expected,
+            }
+        );
+    }
     #[test]
     fn policy_rejects_bad_limits_and_provenance() {
         let policy = AdapterPolicy {
