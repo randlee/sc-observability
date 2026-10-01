@@ -71,12 +71,16 @@ pub(super) fn scope(value: &InstrumentationScope) -> Map<String, Value> {
 ///
 /// Signal encoders supply their record wrapper and encoder only; this keeps
 /// the grouping semantics identical for logs, traces, metrics, and profiles.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the four signal encoders supply their distinct group and scope wrappers"
+)]
 pub(super) fn resource_scope_group<'a, G, S>(
     groups: &'a mut Vec<G>,
     resource: &Resource,
     scope: &InstrumentationScope,
     resource_of: impl Fn(&G) -> &Resource,
-    scopes_of: impl Fn(&mut G) -> &mut Vec<S>,
+    scopes: impl Fn(&mut G) -> &mut Vec<S>,
     scope_of: impl Fn(&S) -> &InstrumentationScope,
     new_resource_group: impl FnOnce(Resource) -> G,
     new_scope_group: impl FnOnce(InstrumentationScope) -> S,
@@ -88,15 +92,15 @@ pub(super) fn resource_scope_group<'a, G, S>(
             groups.push(new_resource_group(resource.clone()));
             groups.len() - 1
         });
-    let scopes = scopes_of(&mut groups[resource_index]);
-    let scope_index = scopes
+    let scoped_groups = scopes(&mut groups[resource_index]);
+    let scope_index = scoped_groups
         .iter()
         .position(|group| scope_of(group) == scope)
         .unwrap_or_else(|| {
-            scopes.push(new_scope_group(scope.clone()));
-            scopes.len() - 1
+            scoped_groups.push(new_scope_group(scope.clone()));
+            scoped_groups.len() - 1
         });
-    &mut scopes[scope_index]
+    &mut scoped_groups[scope_index]
 }
 
 pub(super) fn timestamp(value: &Timestamp) -> Value {
