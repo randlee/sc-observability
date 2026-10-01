@@ -4,7 +4,7 @@
 
 - Wave: 5.2 (wave-5 layer)
 - Layer: 2 of the wave-5 stack (d-29 → d-33 → d-30 → d-31 → d-32)
-- Assignee / model: cobs / terra (difficulty: normal)
+- Assignee / model: aobs / astra (difficulty: hard)
 - Closure: `boundary` (implementer)
 - Target boundary: `BOUNDARY-ScObservabilityOtlp`
 - Branch: `sprint/d-33-durable-store-and-export`
@@ -14,7 +14,7 @@
 - Requirements: PHD-003, PHD-004, PHD-006, PHD-007, PHD-008, PHD-013
 - ADRs: ADR-018, ADR-019, ADR-021
 - Owned paths:
-  - `crates/sc-observability-otlp/src/durable/**` (except `durable/schema.sql`, which is read-only)
+  - `crates/sc-observability-otlp/src/durable/**` (except `durable/schema.sql` and `durable/config_file.rs`, which are d-29's and read-only)
   - `crates/sc-observability-otlp/src/sync_http/**`
   - `crates/sc-observability-otlp/tests/durable_*.rs`
   - `crates/sc-observability-otlp/tests/submission_*.rs`
@@ -25,8 +25,8 @@
 - `must_follow` d-29: consumes the `TelemetryClient` trait,
   `SubmissionEnvelope`, `AdmissionReceipt`, `DeliveryState`, `StoreStatus`,
   the error enums and their codes, `TelemetryClientConfig`, `schema.sql`, the
-  staged `durable/mod.rs` and `testing::conformance` in
-  `sc-observability-otlp-types`.
+  staged `durable/mod.rs`, and `otlp::submission::testing::conformance` in
+  `sc-observability-types` (feature `test-double`).
 - `parallel_safe` with d-30 and d-31: the owned paths are disjoint, and all
   three consume only d-29 artifacts.
 - None of the owned paths are in the d-18 fence. d-18 owns
@@ -61,7 +61,10 @@ sync-http export for every signal and point form, including profiles.
    (`ExportProfilesServiceRequest` with `dictionary`) to
    `/v1development/profiles`. Logs, traces and metrics go to `/v1/{signal}`.
    Encode `AnyValue::Bytes` as base64 with a private RFC 4648 encoder, adding
-   no new dependency. [PHD-006, PHD-013]
+   no new dependency. Encode non-finite `OtlpDouble` values as the proto-JSON
+   strings `"NaN"`, `"Infinity"` and `"-Infinity"`. Encode
+   `AnyValue::StringIndex` as `stringValueStrindex` and `AttributeKey::Index`
+   as `keyStrindex`. [PHD-006, PHD-013]
 5. Enforce the ADR-021 capability matrix at construction.
    `DurableTelemetryClient::open` with a non-`SyncHttp` backend returns
    `TelemetryConfigError::UnsupportedCombination`. No combination silently
@@ -129,7 +132,7 @@ The signatures are in the d-29 doc and are not restated here.
 
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D1):
   `cargo test -p sc-observability-otlp --features durable-store --test durable_store --locked`
-  calls `sc_observability_otlp_types::testing::conformance::run_all` against
+  calls `sc_observability_types::otlp::submission::testing::conformance::run_all` against
   `DurableTelemetryClient`. These are the same cases the d-29 test double
   passes. The following cases also pass:
   - `receipt_after_commit`: kill the child process after the receipt; on
@@ -158,7 +161,8 @@ The signatures are in the d-29 doc and are not restated here.
   and point form, serialize → store → read → encode → loopback HTTP capture
   → decode with `opentelemetry-proto =0.33.0` serde JSON types. It asserts
   field equality with the input, including exemplars, profile dictionary
-  tables, bytes, `trace_state`, `event_name`, observed timestamp and dropped
+  tables, `stringValueStrindex`/`keyStrindex`, NaN/`Infinity`/`-Infinity`
+  doubles (bitwise equality), bytes, `trace_state`, `event_name`, observed timestamp and dropped
   counts. Profiles are captured at `/v1development/profiles`.
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D5):
   `--test submission_capability` asserts one case per ADR-021 matrix row.

@@ -661,3 +661,6 @@ metrics and profiles, including the pinned development-version profile protocol.
   format. Serialization/export tests shall exercise the variants and nested
   non-default fields. Protocol maturity and viewer limitations shall be explicit,
   not used to silently remove product support. Any exclusion needs a user decision.
+  Payload fields include the profile string-index forms and non-finite doubles
+  (proto-JSON `"NaN"`, `"Infinity"`, `"-Infinity"`). `tracez.proto` (zPages) is
+  not an OTLP payload and is outside this scope.

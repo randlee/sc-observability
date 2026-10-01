@@ -30,8 +30,9 @@
 ## Relations
 
 - `must_follow` d-29: consumes the `otlp-telemetry` Cargo feature,
-  `SubmissionEnvelope::from_json`, `TelemetryClient`, `resolve_config`, the
-  error codes, `InMemoryTelemetryClient` (feature `test-double`), the golden
+  `SubmissionEnvelope::from_json`, `TelemetryClient`, `resolve_config` and
+  `load_telemetry_file`, the error codes, `InMemoryTelemetryClient`
+  (`sc-observability-types` feature `test-double`), the golden
   fixtures and the list of GIL-releasing calls.
 - `parallel_safe` with d-33 and d-31: the owned paths are disjoint.
 - Landed predecessors: d-20 (Python package, `src/lib.rs`, `pyproject.toml`

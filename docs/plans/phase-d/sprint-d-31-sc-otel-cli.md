@@ -4,7 +4,7 @@
 
 - Wave: 5.2 (wave-5 layer)
 - Layer: 4 of the wave-5 stack (d-29 → d-33 → d-30 → d-31 → d-32)
-- Assignee / model: lobs / luna (difficulty: fast)
+- Assignee / model: cobs / terra (difficulty: normal)
 - Closure: `boundary` (consumer)
 - Target boundary: `BOUNDARY-ScOtelCli`
 - Branch: `sprint/d-31-sc-otel-cli`
@@ -24,6 +24,7 @@
 
 - `must_follow` d-29: consumes the `sc-otel-cli` skeleton and manifest, the
   `TelemetryClient` trait, `SubmissionEnvelope::from_json`, `resolve_config`,
+  `load_telemetry_file` (for `--config`),
   `TelemetryClientError::exit_code`, the exit-code table, the
   `sc-otel.result/v1` schema, `InMemoryTelemetryClient` and the golden
   fixtures.
@@ -50,7 +51,8 @@ Ship the `sc-otel` binary as a thin consumer of the d-29 contract.
    output and error path. [PHD-008, PHD-010]
 4. Make the client backend injectable. Production opens
    `DurableTelemetryClient`; tests build the binary with the dev-only
-   `test-double` wiring, which opens `InMemoryTelemetryClient` with a scripted
+   `test-double` feature (declared by d-29 as
+   `test-double = ["sc-observability-types/test-double"]`), which opens `InMemoryTelemetryClient` with a scripted
    outcome file passed through `SC_OTEL_TEST_DOUBLE`. That variable is read
    only in the `cfg(test-double)` build, never in release. [PHD-010]
 

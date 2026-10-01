@@ -18,7 +18,6 @@
   - e2e proof (PHD-012/013): `tests/telemetry-e2e/**`, `.github/workflows/telemetry-e2e.yml`
   - shared consumer config: `.sc/telemetry.yaml`
   - user docs: `docs/telemetry-submission.md`
-  - release: `release/publish-artifacts.toml` (one `sc-observability-otlp-types` row only) and `docs/api-approvals/phase-d-wave5-telemetry-submission.json` (new file)
   - `docs/plans/phase-d/sprint-d-32-sanity-telemetry-e2e.md`
 
 ## Relations
@@ -33,10 +32,10 @@
   `integrate/phase-d` before wave 5 (R1). The viewer harness under
   `scripts/ci/fixtures/otlp/desktop-viewer/` and the
   `otlp-conformance.yml` jobs are d-9's, consumed read-only.
-- Shared files with d-18: `release/**` and `docs/api-approvals/**` match the
-  d-18 fence. d-32 adds one row and one new file. If d-18 is unmerged, d-32
-  merges forward d-18's pushed head before each round. No DAG edge is added
-  (R9).
+- No shared files with d-18: d-32 edits nothing under `release/**` or
+  `docs/api-approvals/**`. No crate is added (lead ruling P1), so there is no
+  new publish row, and the approval record is d-29's closeout gate (lead
+  ruling P6). No DAG edge is added (R9).
 
 ## Goal
 
@@ -49,7 +48,8 @@ the wave-5 additions.
 Importer (root `scripts/sanity-telemetry/`):
 
 1. Add `scripts/sanity-telemetry/import_sanity.py`. It reads
-   `.sc/telemetry.yaml` `sources[]` and maps each row to a submission through
+   `.sc/telemetry.yaml` `sources[]` (parsed with the repository's existing
+   PyYAML `yaml.safe_load`; no new parser) and maps each row to a submission through
    the installed `sc_observability.telemetry` API, per the mapping tables
    below. It sets `service` and `team` as resource attributes and builds
    `pr.url` from `github.pr_url_template`. [PHD-011]
@@ -85,9 +85,8 @@ End-to-end proof (root `tests/telemetry-e2e/`, CI job `telemetry-e2e`):
    pin is darwin_arm64 only), running deliverables 4–7 and the importer tests
    on each PR to `integrate/phase-d` that touches wave-5 paths. [PHD-012]
 9. Run the D18 and D9 gates over wave 5: the public-API semver/compat checks
-   and the `otlp-conformance.yml` jobs. Add the `sc-observability-otlp-types`
-   publish row (`publish_order` before `sc-observability-otlp`) and prepare
-   the approval record for the user to sign. [PHD-002, PHD-013]
+   and the `otlp-conformance.yml` jobs, checked against the approval record
+   the user signed at d-29 closeout. [PHD-002, PHD-013]
 10. Add the user docs `docs/telemetry-submission.md`: Python and CLI usage,
     config precedence, exit codes, the at-least-once note and the capability
     matrix link. [PHD-009, PHD-010]
@@ -228,7 +227,8 @@ End-to-end (PHD-012/013):
 - [ ] req:PHD-002, req:PHD-013 (D9), D18 gate re-run: `just public-api`
   (including `python3 scripts/ci/validate_public_api_semver.py` against the
   1.4.1 baseline) and `python3 scripts/ci/validate_error_migration.py` pass
-  with the wave-5 surface. The approval record lists every wave-5 public item.
+  with the wave-5 surface, and every reported wave-5 public item is listed
+  in the signed `docs/api-approvals/phase-d-wave5-telemetry-submission.json`.
 - [ ] req:PHD-012 (D9), D9 gate re-run: the `otlp-conformance.yml` jobs
   (hermetic collector matrix and `desktop-viewer-factory-conformance`) pass on
   the d-32 PR head, and the `telemetry-e2e` job passes in CI.

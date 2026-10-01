@@ -38,9 +38,9 @@ What wave 5 consumes from the `integrate/phase-d` tree:
   bytes variant), `TraceContext` (no `trace_state`), `SpanKind`, `SpanLink`,
   `TraceFlags`, `FiniteF64`, and the `sc_observability_types::otlp` module with
   `OtlpResource`, `OtlpInstrumentationScope` and `OtlpRecord<T>`. This module
-  is the interim home for shared OTLP structs (user ruling 2026-09-27). The
-  `sc-observability-otlp-types` crate does not exist on `integrate/phase-d`
-  yet; d-29 creates it.
+  is the interim home for shared OTLP structs (user ruling 2026-09-27). No
+  `sc-observability-otlp-types` crate exists on any branch, and wave 5 adds
+  none (lead ruling P1): the submission contract goes into this module.
 - `sc-observability-otlp`: `RuntimeTelemetry` (`v2::Telemetry`), `OtelConfig`
   with `sync_http_retry: Option<SyncHttpRetryPolicy>`, and
   `ExporterBackend::{OpenTelemetrySdk, SyncHttp}`. It also has the `sync-http`
@@ -61,7 +61,7 @@ What wave 5 consumes from the `integrate/phase-d` tree:
 - **One contract, two front ends.** The front ends do not encode OTLP. They
   convert caller input (a Python dict or CLI JSON/flags) into
   `SubmissionInput`. Shared Rust (`SubmissionEnvelope::from_input` in
-  `sc-observability-otlp-types`) validates, correlates and canonicalizes it.
+  `sc_observability_types::otlp::submission`) validates, correlates and canonicalizes it.
   So Python and the CLI cannot diverge on validation.
 - **Proto-shaped neutral records.** New neutral record types in
   `sc_observability_types::otlp::signals` mirror the pinned
@@ -87,11 +87,10 @@ What wave 5 consumes from the `integrate/phase-d` tree:
 
 | Crate / manifest | Contract delta | `allowed_dependencies` / `allowed_dependents` edits |
 | --- | --- | --- |
-| `sc-observability-types` (`boundaries/sc-observability-types/types.toml`) | New module `otlp::signals`: `AnyValue` (with bytes), `KeyValues`, `Resource`, `InstrumentationScope`, `ResourceRecord<T>`, `TraceState`, `LogPoint`, `SpanPoint`, `MetricStream`/`MetricData` and the five point forms, `Exemplar`, profile dictionary and `Profile`; `From` conversions from existing types. Declared in `src/otlp/mod.rs`, not `src/lib.rs`. | `allowed_dependents` += `sc-observability-otlp-types` |
-| `sc-observability-otlp-types` (new; `boundaries/sc-observability-otlp-types/otlp-types.toml`) | `SubmissionInput`, `SubmissionEnvelope` (with `version`), `RecordKey`, `SubmissionId`, `AdmissionReceipt`, `DeliveryStatus`, `StoreStatus`, `FlushReport`, the error enums and their codes, `TelemetryClientConfig` plus precedence resolver, the `TelemetryClient` trait, the capability matrix types, the `InMemoryTelemetryClient` test double (feature `test-double`) and the golden fixtures. Published crate. | `allowed_dependencies` = [`sc-observability-types`]; `allowed_dependents` = [`sc-observability-otlp`, `sc-observability-py`, `sc-otel-cli`] |
-| `sc-observability-otlp` (`boundaries/sc-observability-otlp/otlp.toml`) | New feature `durable-store` = [`sync-http`, `dep:rusqlite`, `dep:sc-observability-otlp-types`]. New public module `durable` (`DurableTelemetryClient`, which implements `TelemetryClient`). The store schema DDL, the drain worker, and sync-http encoders for the new point forms and `/v1development/profiles`. | `allowed_dependencies` += `sc-observability-otlp-types`; `allowed_dependents` += `sc-observability-py`, `sc-otel-cli`; `policy/otlp-transport.toml` += `[transport.rusqlite]` (`=0.40.2`, features `["bundled"]`, default features off, backend `durable-store`) |
-| `sc-observability-py` (`boundaries/sc-observability-py/python.toml`) | New `otlp-telemetry` Cargo feature = [`dep:sc-observability-otlp`, `dep:sc-observability-otlp-types`, `sc-observability-otlp/durable-store`]. New Python `sc_observability.telemetry` module. Release wheels enable the feature through `[tool.maturin] features`. | `allowed_dependencies` += `sc-observability-otlp`, `sc-observability-otlp-types` |
-| `sc-otel-cli` (new; `boundaries/sc-otel-cli/cli.toml`) | Binary `sc-otel`: `emit`, `validate`, `flush`, `status`. Exit-code table and JSON output schema `sc-otel.result/v1`. Workspace member with `publish = false`. | `allowed_dependencies` = [`sc-observability-otlp-types`, `sc-observability-otlp`]; `forbidden_edges` = [`sc-observe`, `pyo3`, `agent-team-mail-*`]; `allowed_dependents` = [] |
+| `sc-observability-types` (`boundaries/sc-observability-types/types.toml`) | New module `otlp::signals`: `AnyValue` (with bytes and `StringIndex`), `AttributeKey`, `KeyValues`, `OtlpDouble` (NaN/±Inf), `Resource`, `InstrumentationScope`, `ResourceRecord<T>`, `TraceState`, `LogPoint`, `SpanPoint`, `MetricStream`/`MetricData` and the five point forms, `Exemplar`, profile dictionary and `Profile`; `From` conversions from existing types. New module `otlp::submission`: `SubmissionInput`, `SubmissionEnvelope` (with `version`), `RecordKey`, `SubmissionId`, `AdmissionReceipt`, `DeliveryStatus`, `StoreStatus`, `FlushReport`, the error enums and their codes, `TelemetryClientConfig`, `TelemetryFileConfig` and the precedence resolver, the `TelemetryClient` trait, the capability matrix types, and `InMemoryTelemetryClient` plus the conformance suite (new feature `test-double`). Both modules are declared in `src/otlp/mod.rs`, not `src/lib.rs`. No new dependency. | `allowed_dependents` += `sc-otel-cli`; `allowed_test_double_paths` += `crates/sc-observability-types/src/otlp/submission/testing/**` |
+| `sc-observability-otlp` (`boundaries/sc-observability-otlp/otlp.toml`) | New feature `durable-store` = [`sync-http`, `dep:rusqlite`, `dep:serde-saphyr`]. New public module `durable` (`DurableTelemetryClient`, which implements `TelemetryClient`, and `load_telemetry_file`). The store schema DDL, the drain worker, and sync-http encoders for the new point forms and `/v1development/profiles`. | `allowed_dependents` += `sc-observability-py`, `sc-otel-cli`; `policy/otlp-transport.toml` += `[transport.rusqlite]` (`=0.40.2`, features `["bundled"]`, default features off, backend `durable-store`); `serde-saphyr =1.3.0` under `durable-store` |
+| `sc-observability-py` (`boundaries/sc-observability-py/python.toml`) | New `otlp-telemetry` Cargo feature = [`dep:sc-observability-otlp`, `sc-observability-otlp/durable-store`]; `test-hooks` += `sc-observability-types/test-double`. New Python `sc_observability.telemetry` module. Release wheels enable the feature through `[tool.maturin] features`. | `allowed_dependencies` += `sc-observability-otlp` |
+| `sc-otel-cli` (new; `boundaries/sc-otel-cli/cli.toml`) | Binary `sc-otel`: `emit`, `validate`, `flush`, `status`. Exit-code table and JSON output schema `sc-otel.result/v1`. Workspace member with `publish = false`; feature `test-double`. | `allowed_dependencies` = [`sc-observability-types`, `sc-observability-otlp`]; `forbidden_edges` = [`sc-observe`, `pyo3`, `agent-team-mail-*`]; `allowed_dependents` = [] |
 | `scripts/sanity-telemetry/` (not a crate) | Python importer that consumes the installed `sc_observability.telemetry` API. | none (Python package dependency only) |
 
 ## Wave table
@@ -100,20 +99,21 @@ One track; the wave-5 stack is ordered d-29 → d-33 → d-30 → d-31 → d-32.
 
 | Wave | Sprint | Closure | Target boundary | Owned paths (summary; sprint doc is authoritative) |
 | --- | --- | --- | --- | --- |
-| 5.1 | d-29 | contract | `BOUNDARY-ScObservabilityOtlpTypes` (wave-5 contract) | `crates/sc-observability-otlp-types/**`, `crates/sc-observability-types/src/otlp/**`, `crates/sc-otel-cli/Cargo.toml`, stubbed `crates/sc-otel-cli/src/main.rs`, manifests, `Cargo.toml`, `Cargo.lock`, `policy/otlp-transport.toml`, `boundaries/**` wave-5 rows, `crates/sc-observability-otlp/Cargo.toml`, `crates/sc-observability-otlp/src/lib.rs` (one registration hunk), the staged `durable/` stub and `schema.sql`, `bindings/python/sc-observability-py/Cargo.toml`, ADR-021/PHD text |
+| 5.1 | d-29 | contract | `BOUNDARY-ScObservabilityTypes` (wave-5 contract in `sc_observability_types::otlp`) | `crates/sc-observability-types/src/otlp/**`, `crates/sc-observability-types/Cargo.toml` (feature only), its `otlp_*` tests and fixtures, `crates/sc-otel-cli/Cargo.toml`, stubbed `crates/sc-otel-cli/src/main.rs`, `Cargo.toml`, `Cargo.lock`, `policy/otlp-transport.toml`, `boundaries/**` wave-5 rows, `crates/sc-observability-otlp/Cargo.toml`, `crates/sc-observability-otlp/src/lib.rs` (one registration hunk), the staged `durable/` stub, `schema.sql` and `config_file.rs`, `bindings/python/sc-observability-py/Cargo.toml`, ADR-021/PHD text, the new API approval record |
 | 5.2 | d-33 | boundary (implementer) | `BOUNDARY-ScObservabilityOtlp` | `crates/sc-observability-otlp/src/durable/**` except `schema.sql`, `crates/sc-observability-otlp/src/sync_http/**`, `crates/sc-observability-otlp/tests/durable_*.rs`, `crates/sc-observability-otlp/tests/submission_*.rs` |
 | 5.2 | d-30 | boundary (consumer) | `BOUNDARY-ScObservabilityPy` | `bindings/python/sc-observability-py/**` except `Cargo.toml` and `python/sc_observability/generated/**` |
 | 5.2 | d-31 | boundary (consumer) | `BOUNDARY-ScOtelCli` | `crates/sc-otel-cli/src/**`, `crates/sc-otel-cli/tests/**` |
-| 5.3 | d-32 | integration | wave-5 composition | `scripts/sanity-telemetry/**`, `tests/telemetry-e2e/**`, `.github/workflows/telemetry-e2e.yml`, `.sc/telemetry.yaml`, `docs/telemetry-submission.md`, release-inventory row and approval record (see d-32) |
+| 5.3 | d-32 | integration | wave-5 composition | `scripts/sanity-telemetry/**`, `tests/telemetry-e2e/**`, `.github/workflows/telemetry-e2e.yml`, `.sc/telemetry.yaml`, `docs/telemetry-submission.md` |
 
 - Tracks: 1. Waves: 3. Critical path: 3 (d-29 → d-33 → d-32, or through
   d-30 or d-31). Width: 3 (d-33 ∥ d-30 ∥ d-31). Sprint count: 5.
 - Edges: d-29 ← {d-26, d-28}; {d-33, d-30, d-31} ← d-29;
   d-32 ← {d-30, d-31, d-33}. All wave-5.2 pairs are `parallel_safe`, because
   their owned paths are disjoint.
-- Recommended agents: d-29 aobs/astra (hard: contract breadth). d-33
-  cobs/terra (normal). d-30 cobs/terra (normal). d-31 lobs/luna (fast:
-  thin consumer over a fixed contract). d-32 cobs/terra (normal).
+- Difficulty (`docs/plans/phase-d/difficulty.csv`): d-29 hard, d-33 hard,
+  d-30 normal, d-31 normal, d-32 normal. Recommended agents: d-29 aobs/astra
+  (contract breadth), d-33 aobs/astra (store, lease and every encoder),
+  d-30, d-31 and d-32 cobs/terra.
 
 ## Lead rulings (2026-10-01)
 
@@ -130,9 +130,10 @@ These are lead decisions dated 2026-10-01 and are binding on the sprint docs.
   integration (wave 5.3). sprints.jsonl: d-29 keeps `["d-26","d-28"]`;
   d-30, d-31 and d-33 depend on `["d-29"]`; d-32 depends on
   `["d-30","d-31","d-33"]`.
-- **R3 Contract placement.** Shared submission contracts live in
-  `sc-observability-otlp-types`. Store, drain and export live in
-  `sc-observability-otlp` behind the `durable-store` feature.
+- **R3 Contract placement.** Superseded by P1 below: shared submission
+  contracts live in `sc_observability_types::otlp::submission`. Store, drain
+  and export live in `sc-observability-otlp` behind the `durable-store`
+  feature.
 - **R4 Backend.** The durable-store drain uses sync-http only. The SDK/Tokio
   path keeps its instrument-based scope. ADR-021 carries the backend × signal
   × representation matrix. Unsupported combinations are typed
@@ -159,36 +160,46 @@ These are lead decisions dated 2026-10-01 and are binding on the sprint docs.
   separate PHD-011 deliverables, a field mapping table and a checkpoint path.
   Direct CLI emission is a named d-31 acceptance criterion.
 
-### Provisional choices needing user decision
+### Lead rulings on the provisional choices (2026-10-01)
 
-1. **`sc-observability-otlp-types` does not exist on `integrate/phase-d`.**
-   R3 assumes it does. Provisional choice: d-29 creates the crate holding only
-   the new submission contracts. The existing interim
-   `sc_observability_types::otlp` module stays where it is, and its later
-   extraction remains the separate mechanical refactor from the 2026-09-27
-   ruling. Because `sc-observability-otlp` (published) gains an optional
-   dependency on it, the new crate must be published with the next release.
-   d-32 adds its `release/publish-artifacts.toml` row.
-2. **Shared files with in-flight d-18.** d-18's fence includes
-   `crates/sc-observability-otlp/src/lib.rs`, `release/**` and
-   `docs/api-approvals/**`. Wave 5 touches them only additively: d-29 adds one
-   `#[cfg(feature = "durable-store")] pub mod durable;` hunk to `lib.rs`; d-32
-   adds one publish row and one new approval record file. If d-18 is still
-   open when those sprints run, they merge forward d-18's pushed head before
-   each round. No DAG edge is added (R9).
-3. **Disk-bound policy default.** `DiskBoundPolicy::RejectNew` is the default:
-   `emit` returns `AdmissionError::DiskBoundExceeded`. `EvictOldest` is
-   opt-in, counted and shown in status. This keeps PHD-007 ("no silent
-   eviction") while allowing the R5 bounded-eviction mode.
-4. **YAML parser.** `serde_yaml` is deprecated upstream. d-29 pins a
-   maintained parser (candidate `serde-saphyr`) that passes `cargo deny check`.
-5. **Proto exclusions.** The d-29 inventory marks a short list of fields
-   "excluded — needs user approval" (non-finite doubles, `*_strindex`
-   encodings, `tracez.proto`). Until approved, those inputs are rejected with
-   typed errors rather than silently dropped.
-6. **Public API approval record.** The wave-5 public additions need a
-   `docs/api-approvals/` record with an actual reviewer. d-32 prepares it, and
-   the user signs it.
+These are lead decisions dated 2026-10-01. They replace the earlier list of
+provisional choices.
+
+- **P1 No new crate.** No `sc-observability-otlp-types` crate exists; the
+  landed D22 types live in `crates/sc-observability-types/src/otlp/`. This
+  overrides R3. The shared submission contracts (envelope, receipt, delivery
+  status, error codes, config DTO and the `TelemetryClient` trait) go in
+  `sc_observability_types::otlp::submission`. The CLI depends on
+  `sc-observability-types` plus `sc-observability-otlp` (feature
+  `durable-store`). No crate is added to the release inventory.
+- **P2 Shared files with in-flight d-18.** Accepted. d-18's fence includes
+  `crates/sc-observability-otlp/src/lib.rs` and `docs/api-approvals/**`.
+  d-29 touches them only additively: one
+  `#[cfg(feature = "durable-store")] pub mod durable;` hunk and one new
+  approval file. If d-18 is still open, d-29 merges forward d-18's pushed
+  head before each round. No DAG edge is added (R9). Wave 5 edits nothing
+  under `release/**`.
+- **P3 Disk-bound default.** Accepted: `DiskBoundPolicy::RejectNew`, which
+  returns `AdmissionError::DiskBoundExceeded`, is counted in
+  `rejected_by_disk_bound` and is shown in `StoreStatus`. `EvictOldest` is
+  opt-in and also counted.
+- **P4 YAML parser.** `feat/qa-sanity-telemetry-config` adds
+  `.sc/telemetry.yaml` but no parser for it. The d-32 importer is Python and
+  uses the repository's existing PyYAML. The Rust config loader
+  (`load_telemetry_file`, used by the CLI `--config` flag and Python
+  `Telemetry(config=...)`) uses `serde-saphyr =1.3.0` under `durable-store`,
+  recorded in the d-29 dependency audit. `sc-observability-types` gets no
+  YAML dependency.
+- **P5 Full payload support.** Every pinned v1.10.0 field is supported,
+  including `string_value_strindex` and `key_strindex` (the profile
+  dictionary forms) and non-finite doubles in the proto-JSON
+  `"NaN"`/`"Infinity"`/`"-Infinity"` encoding, with round-trip tests in d-29
+  and d-33. `tracez.proto` is excluded as out of scope: it is zPages, not an
+  OTLP payload.
+- **P6 Public API approval record.** d-29 prepares
+  `docs/api-approvals/phase-d-wave5-telemetry-submission.json`, and the user
+  signs it as a d-29 closeout gate. It does not block the plan or the start
+  of wave 5.2.
 
 References: [signals](https://opentelemetry.io/docs/concepts/signals/),
 [metric data model](https://opentelemetry.io/docs/specs/otel/metrics/data-model/),
