@@ -33,6 +33,7 @@ const STALLED_RETRY_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const STALLED_RETRY_STEP_WATCHDOG: Duration = Duration::from_secs(10);
 const STALLED_RETRY_EXPORT_WATCHDOG: Duration = Duration::from_secs(10);
 const STALLED_RETRY_CLEANUP_WATCHDOG: Duration = Duration::from_secs(2);
+const CONTROL_ORDERING_WATCHDOG: Duration = Duration::from_secs(2);
 
 #[test]
 fn sync_http_error_remediations_preserve_diagnostics_and_match_failure_semantics() {
@@ -87,6 +88,22 @@ fn sync_http_error_remediations_preserve_diagnostics_and_match_failure_semantics
         assert_eq!(error.diagnostic().message, message);
         assert_eq!(error.diagnostic().remediation, remediation);
     }
+}
+
+#[test]
+fn control_reply_timeout_and_disconnect_have_distinct_typed_errors() {
+    let (_sender, receiver) = mpsc::channel();
+    assert!(matches!(
+        super::implementation::wait_for_control_result(&receiver, Duration::ZERO),
+        Err(sc_observability_types::v2::ExportError::LifecycleTimeout { .. })
+    ));
+
+    let (sender, receiver) = mpsc::channel();
+    drop(sender);
+    assert!(matches!(
+        super::implementation::wait_for_control_result(&receiver, CONTROL_ORDERING_WATCHDOG),
+        Err(sc_observability_types::v2::ExportError::WorkerTerminated { .. })
+    ));
 }
 
 struct StartupFixture {
@@ -1587,6 +1604,82 @@ fn async_shutdown_stays_responsive_during_an_in_flight_request() {
         sc_observability_types::v2::ExportError::ShutdownCancelledRetry { .. }
     ));
     server.join().expect("join server");
+}
+
+#[test]
+fn flush_control_does_not_hold_producer_admission_while_its_reply_is_withheld() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let (first_request_tx, first_request_rx) = mpsc::channel();
+    let (release_first_tx, release_first_rx) = mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut first, _) = listener.accept().expect("accept first request");
+        assert!(read_request(&mut first).contains("\"hello\""));
+        first_request_tx
+            .send(())
+            .expect("signal first request before releasing it");
+        release_first_rx
+            .recv()
+            .expect("release first request after producer progress");
+        first
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("complete first response");
+
+        let (mut second, _) = listener.accept().expect("accept producer request");
+        assert!(read_request(&mut second).contains("\"hello\""));
+        second
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("complete producer response");
+    });
+    let (control_submitted_tx, control_submitted_rx) = mpsc::channel();
+    let exporter = Arc::new(
+        OtlpHttpExporter::for_control_ordering_test(
+            format!("http://{address}"),
+            control_submitted_tx,
+        )
+        .expect("construct exporter"),
+    );
+
+    <OtlpHttpExporter as LogExporter<LogEvent>>::export_logs(&*exporter, &[sample_log()])
+        .expect("admit first request");
+    first_request_rx
+        .recv_timeout(CONTROL_ORDERING_WATCHDOG)
+        .expect("worker enters the held first request");
+
+    let (flush_result_rx, flush_thread) = exporter.flush_worker_for_test();
+    control_submitted_rx
+        .recv_timeout(CONTROL_ORDERING_WATCHDOG)
+        .expect("flush command enters the bounded control channel");
+
+    let producer = Arc::clone(&exporter);
+    let (producer_result_tx, producer_result_rx) = mpsc::channel();
+    let producer_thread = thread::spawn(move || {
+        let result =
+            <OtlpHttpExporter as LogExporter<LogEvent>>::export_logs(&*producer, &[sample_log()]);
+        let _ = producer_result_tx.send(result);
+    });
+    let producer_result = match producer_result_rx.recv_timeout(CONTROL_ORDERING_WATCHDOG) {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = release_first_tx.send(());
+            panic!("producer admission waited for the flush reply: {error:?}");
+        }
+    };
+    producer_result.expect("producer admission progresses while flush reply is withheld");
+
+    release_first_tx
+        .send(())
+        .expect("release held first response");
+    flush_result_rx
+        .recv_timeout(CONTROL_ORDERING_WATCHDOG)
+        .expect("flush completes after the worker handles its command")
+        .expect("flush preserves the successful drain");
+    flush_thread.join().expect("join flush worker");
+    producer_thread.join().expect("join producer");
+    server.join().expect("join server");
+    exporter
+        .shutdown_blocking()
+        .expect("shutdown the live worker");
 }
 
 #[test]

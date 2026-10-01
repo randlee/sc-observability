@@ -135,6 +135,8 @@ pub(crate) struct SyncHttpConfig {
     #[cfg(test)]
     request_timeout_observer: Option<Sender<(u32, Duration, Duration)>>,
     #[cfg(test)]
+    control_submission_observer: Option<Sender<()>>,
+    #[cfg(test)]
     startup_hooks: Option<Arc<StartupTestHooks>>,
 }
 
@@ -187,6 +189,8 @@ impl SyncHttpConfig {
             #[cfg(test)]
             request_timeout_observer: None,
             #[cfg(test)]
+            control_submission_observer: None,
+            #[cfg(test)]
             startup_hooks: None,
         })
     }
@@ -212,12 +216,20 @@ enum ControlCommand {
 struct WorkerInner {
     data_tx: SyncSender<DataCommand>,
     control_tx: SyncSender<ControlCommand>,
+    /// Serializes producer admission with a control command's first submission.
+    ///
+    /// The lock is released before waiting for either a control slot or the
+    /// worker reply, so producers never inherit a lifecycle wait timeout.
     send_lock: Mutex<()>,
+    /// Coordinates only control submitters when the capacity-one slot is full.
+    control_submission_lock: Mutex<()>,
     cancel: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     terminated: AtomicBool,
     lifecycle_flush_timeout: Duration,
     lifecycle_shutdown_timeout: Duration,
+    #[cfg(test)]
+    control_submission_observer: Option<Sender<()>>,
 }
 
 impl Drop for WorkerInner {
@@ -249,6 +261,8 @@ impl Worker {
         let handshake_timeout = config
             .request_timeout
             .min(config.lifecycle_shutdown_timeout);
+        #[cfg(test)]
+        let control_submission_observer = config.control_submission_observer.clone();
         #[cfg(test)]
         let startup_hooks = config.startup_hooks.clone();
         thread::Builder::new()
@@ -283,11 +297,14 @@ impl Worker {
                     data_tx,
                     control_tx,
                     send_lock: Mutex::new(()),
+                    control_submission_lock: Mutex::new(()),
                     cancel,
                     stop,
                     terminated: AtomicBool::new(false),
                     lifecycle_flush_timeout: flush_timeout,
                     lifecycle_shutdown_timeout: shutdown_timeout,
+                    #[cfg(test)]
+                    control_submission_observer,
                 }),
             }),
             Ok(Err(error)) => Err(error),
@@ -343,9 +360,7 @@ impl Worker {
                 let _ = result_tx.send(result);
             }),
         )?;
-        result_rx
-            .recv_timeout(self.inner.lifecycle_shutdown_timeout)
-            .unwrap_or_else(|_| Err(worker_terminated_error()))
+        wait_for_control_result(&result_rx, self.inner.lifecycle_shutdown_timeout)
     }
 
     fn cancel(&self) {
@@ -357,35 +372,58 @@ impl Worker {
         self.inner.stop.store(true, Ordering::Release);
     }
 
-    fn flush_blocking(&self) -> Result<(), ExportError> {
-        let _guard = self
+    fn submit_control(&self, command: ControlCommand) -> Result<(), ExportError> {
+        let _control_guard = self
             .inner
-            .send_lock
+            .control_submission_lock
             .lock()
             .expect("synchronous HTTP worker control lock");
+
+        let pending_command = {
+            let _send_guard = self
+                .inner
+                .send_lock
+                .lock()
+                .expect("synchronous HTTP worker control lock");
+            match self.inner.control_tx.try_send(command) {
+                Ok(()) => None,
+                Err(TrySendError::Full(command)) => Some(command),
+                Err(TrySendError::Disconnected(_)) => return Err(worker_terminated_error()),
+            }
+        };
+
+        // The control channel is deliberately bounded to one pending command.
+        // If an older command owns that slot, wait only under the control-only
+        // mutex; producer admission keeps using `send_lock` independently.
+        if let Some(command) = pending_command {
+            self.inner
+                .control_tx
+                .send(command)
+                .map_err(|_| worker_terminated_error())?;
+        }
+        #[cfg(test)]
+        self.notify_control_submission();
+        Ok(())
+    }
+
+    #[cfg(test)]
+    fn notify_control_submission(&self) {
+        if let Some(observer) = &self.inner.control_submission_observer {
+            let _ = observer.send(());
+        }
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
         let (tx, rx) = mpsc::channel();
-        self.inner
-            .control_tx
-            .send(ControlCommand::Flush { result: tx })
-            .map_err(|_| worker_terminated_error())?;
-        rx.recv_timeout(self.inner.lifecycle_flush_timeout)
-            .unwrap_or_else(|_| Err(worker_terminated_error()))
+        self.submit_control(ControlCommand::Flush { result: tx })?;
+        wait_for_control_result(&rx, self.inner.lifecycle_flush_timeout)
     }
 
     fn shutdown_blocking(&self) -> Result<(), ExportError> {
         self.inner.cancel.store(true, Ordering::Release);
-        let _guard = self
-            .inner
-            .send_lock
-            .lock()
-            .expect("synchronous HTTP worker control lock");
         let (tx, rx) = mpsc::channel();
-        self.inner
-            .control_tx
-            .send(ControlCommand::Shutdown { result: Some(tx) })
-            .map_err(|_| worker_terminated_error())?;
-        rx.recv_timeout(self.inner.lifecycle_shutdown_timeout)
-            .unwrap_or_else(|_| Err(worker_terminated_error()))
+        self.submit_control(ControlCommand::Shutdown { result: Some(tx) })?;
+        wait_for_control_result(&rx, self.inner.lifecycle_shutdown_timeout)
     }
 }
 
@@ -402,9 +440,14 @@ impl ExporterLifecycle for Worker {
         let worker = self.clone();
         Box::pin(async move {
             let (tx, rx) = tokio::sync::oneshot::channel();
-            thread::spawn(move || {
-                let _ = tx.send(worker.flush_blocking());
-            });
+            thread::Builder::new()
+                .name("sc-otlp-legacy-flush".to_owned())
+                .spawn(move || {
+                    let _ = tx.send(worker.flush_blocking());
+                })
+                .map_err(|error| {
+                    transport_error_with_source("failed to start legacy flush helper", error)
+                })?;
             rx.await.unwrap_or_else(|_| Err(worker_terminated_error()))
         })
     }
@@ -414,9 +457,14 @@ impl ExporterLifecycle for Worker {
         Box::pin(async move {
             worker.cancel();
             let (tx, rx) = tokio::sync::oneshot::channel();
-            thread::spawn(move || {
-                let _ = tx.send(worker.shutdown_blocking());
-            });
+            thread::Builder::new()
+                .name("sc-otlp-legacy-shutdown".to_owned())
+                .spawn(move || {
+                    let _ = tx.send(worker.shutdown_blocking());
+                })
+                .map_err(|error| {
+                    transport_error_with_source("failed to start legacy shutdown helper", error)
+                })?;
             rx.await.unwrap_or_else(|_| Err(worker_terminated_error()))
         })
     }
@@ -835,6 +883,25 @@ impl OtlpHttpExporter {
         Self::for_test_config(endpoint, None, None)
     }
 
+    #[cfg(test)]
+    pub(super) fn for_control_ordering_test(
+        endpoint: String,
+        control_submission_observer: Sender<()>,
+    ) -> Result<Self, ExportError> {
+        let mut config = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
+        config.enabled = true;
+        config.endpoint = Some(
+            crate::config::OtlpEndpoint::new_typed(endpoint.clone())
+                .expect("loopback test endpoint is valid"),
+        );
+        let (mut worker_config, bounds) = SyncHttpConfig::from_otel(&config)?;
+        worker_config.control_submission_observer = Some(control_submission_observer);
+        Ok(Self {
+            backend: SyncHttpBackend::new(worker_config, &bounds)?,
+            endpoint,
+        })
+    }
+
     /// Exercises real client construction and `Worker::start` with ordered gates.
     #[cfg(test)]
     pub(super) fn for_startup_test(hooks: Arc<StartupTestHooks>) -> Result<Self, ExportError> {
@@ -981,6 +1048,21 @@ impl OtlpHttpExporter {
     #[cfg(test)]
     pub(super) fn lifecycle_for_test(&self) -> LifecycleCore {
         self.backend.lifecycle.clone()
+    }
+
+    #[cfg(test)]
+    pub(super) fn flush_worker_for_test(
+        &self,
+    ) -> (Receiver<Result<(), ExportError>>, thread::JoinHandle<()>) {
+        let worker = self.backend.worker.clone();
+        let (result_tx, result_rx) = mpsc::channel();
+        let thread = thread::Builder::new()
+            .name("sc-otlp-test-flush".to_owned())
+            .spawn(move || {
+                let _ = result_tx.send(worker.flush_blocking());
+            })
+            .expect("spawn control ordering test helper");
+        (result_rx, thread)
     }
 }
 
@@ -1217,6 +1299,26 @@ pub(super) fn worker_terminated_error() -> ExportError {
                 ["resubmit any batch that was not acknowledged"],
             ),
         )),
+    }
+}
+
+pub(super) fn wait_for_control_result(
+    receiver: &Receiver<Result<(), ExportError>>,
+    timeout: Duration,
+) -> Result<(), ExportError> {
+    match receiver.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(RecvTimeoutError::Timeout) => Err(ExportError::LifecycleTimeout {
+            context: Box::new(error_with_code(
+                error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT,
+                "synchronous HTTP lifecycle control exceeded its finite deadline",
+                Remediation::recoverable(
+                    "inspect exporter health and keep the runtime alive through lifecycle completion",
+                    [] as [&str; 0],
+                ),
+            )),
+        }),
+        Err(RecvTimeoutError::Disconnected) => Err(worker_terminated_error()),
     }
 }
 
