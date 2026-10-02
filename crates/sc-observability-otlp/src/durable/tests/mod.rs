@@ -246,6 +246,15 @@ impl FrozenClock {
         FROZEN_NOW.set(Some(now));
         Self
     }
+
+    #[allow(clippy::unused_self)]
+    fn advance(&self, duration: Duration) {
+        FROZEN_NOW.set(Some(
+            frozen_now()
+                .expect("frozen clock set")
+                .saturating_add(store::nanos(duration)),
+        ));
+    }
 }
 impl Drop for FrozenClock {
     fn drop(&mut self) {

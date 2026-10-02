@@ -35,12 +35,30 @@ impl SubmissionExporter for RetryExporter {
 #[test]
 fn retryable_then_delivered() {
     let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(dir.path());
+    let mut retry = SyncHttpRetryPolicyDto::default();
+    retry.max_retries = Some(1);
+    retry.initial_backoff_ms = Some(1);
+    retry.max_backoff_ms = Some(1);
+    cfg.sync_http_retry = Some(retry);
     let exporter = Arc::new(RetryExporter {
         inner: ScriptedExporter::new(dir.path()),
         remaining: Mutex::new(1),
     });
-    let client = DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter).unwrap();
+    let client = conformance::open_gated_with(cfg, exporter.clone());
     let receipt = client.emit(log("retry")).unwrap();
+    let clock = FrozenClock::new();
+    assert!(drain_once_bounded(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs,
+    ));
+    clock.advance(Duration::from_millis(1));
+    assert!(drain_once_bounded(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs,
+    ));
     assert_eq!(
         client
             .flush_submission(&receipt.submission_id, DEADLINE)
@@ -498,13 +516,27 @@ fn retry_budget_exhaustion_is_terminal() {
     let mut cfg = config(dir.path());
     let mut retry = SyncHttpRetryPolicyDto::default();
     retry.max_retries = Some(1);
+    retry.initial_backoff_ms = Some(1);
+    retry.max_backoff_ms = Some(1);
     cfg.sync_http_retry = Some(retry);
     let exporter = Arc::new(RetryExporter {
         inner: ScriptedExporter::new(dir.path()),
         remaining: Mutex::new(u32::MAX),
     });
-    let client = DurableTelemetryClient::open_with_exporter(cfg, exporter).unwrap();
+    let client = conformance::open_gated_with(cfg, exporter.clone());
     let receipt = client.emit(log("exhausted")).unwrap();
+    let clock = FrozenClock::new();
+    assert!(drain_once_bounded(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs,
+    ));
+    clock.advance(Duration::from_millis(1));
+    assert!(drain_once_bounded(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs,
+    ));
     assert!(matches!(
         client.flush_submission(&receipt.submission_id, DEADLINE),
         Err(TelemetryClientError::Delivery(
