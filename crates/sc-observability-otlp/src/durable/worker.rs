@@ -464,6 +464,23 @@ mod regression_tests {
     };
 
     #[test]
+    fn all_four_signals_map_to_their_lifecycle_accounting_slots() {
+        let mut accounted = crate::lifecycle::SignalArray::new([0; 4]);
+        for signal in [
+            Signal::Logs,
+            Signal::Traces,
+            Signal::Metrics,
+            Signal::Profiles,
+        ] {
+            *accounted
+                .get_mut(signal)
+                .expect("each supported signal has an accounting slot") += 1;
+        }
+
+        assert_eq!(accounted, [1; 4], "each signal accounts in its own slot");
+    }
+
+    #[test]
     fn idle_claim_does_not_write_and_batches_obey_byte_budget() {
         let dir = tempfile::tempdir().unwrap();
         let mut overrides = ConfigOverrides::default();

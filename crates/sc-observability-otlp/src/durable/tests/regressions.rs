@@ -249,6 +249,47 @@ fn database_lock_timeout_is_typed_and_drop_releases() {
 }
 
 #[test]
+fn invalid_envelope_is_rejected_before_any_rows_are_inserted() {
+    let dir = tempfile::tempdir().unwrap();
+    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let mut input = SubmissionInput::new();
+    let mut span = sc_observability_types::otlp::submission::SpanInput::new(
+        "invalid-after-mutation".into(),
+        sc_observability_types::Timestamp::now_utc(),
+    );
+    span.duration_nanos = Some(1);
+    input.spans.push(span);
+    let mut envelope = SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap();
+    envelope.spans[0].record.end_time = sc_observability_types::Timestamp::UNIX_EPOCH;
+    let db = client.owner.shared.db.lock().unwrap();
+    let before_submissions: i64 = db
+        .query_row("SELECT count(*) FROM submissions", [], |row| row.get(0))
+        .unwrap();
+    let before_deliveries: i64 = db
+        .query_row("SELECT count(*) FROM signal_deliveries", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    drop(db);
+
+    assert!(client.emit(envelope).is_err());
+
+    let db = client.owner.shared.db.lock().unwrap();
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM submissions", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        before_submissions
+    );
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM signal_deliveries", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        before_deliveries
+    );
+}
+
+#[test]
 fn worker_database_errors_are_retained_and_poisoned_wake_is_recoverable() {
     let dir = tempfile::tempdir().unwrap();
     let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();

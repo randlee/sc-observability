@@ -210,6 +210,11 @@ impl<'a> ConfigSources<'a> {
     }
 }
 /// Resolves only each field's allowed sources: explicit, file, environment, then default.
+///
+/// When no submission request timeout is supplied, this entry point uses the
+/// 10-second `TELEMETRY_REQUEST_TIMEOUT` default. The released facade's
+/// `OtelConfig` default remains 3 seconds; choosing one entry point does not
+/// change the other's default.
 /// # Errors
 /// Rejects missing store paths, zero bounds/deadlines, malformed endpoint/auth, and overflow.
 pub fn resolve_config(

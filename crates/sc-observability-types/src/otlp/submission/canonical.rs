@@ -439,10 +439,14 @@ impl SubmissionEnvelope {
 #[cfg(test)]
 mod tests {
     use super::{IdSource, SystemIds};
-    use crate::otlp::submission::{
-        LogInput, SpanInput, SubmissionEnvelope, SubmissionError, SubmissionInput,
+    use crate::otlp::signals::{
+        AggregationTemporality, KeyValues, MetricData, MetricStream, Profile, ProfilesDictionary,
     };
-    use crate::{SpanId, Timestamp, TraceId, constants, error_codes};
+    use crate::otlp::submission::{
+        LogInput, MetricInput, ProfilesInput, SpanInput, SubmissionEnvelope, SubmissionError,
+        SubmissionInput,
+    };
+    use crate::{MetricName, SpanId, Timestamp, TraceId, constants, error_codes};
 
     #[test]
     fn system_ids_are_always_valid_without_panicking() {
@@ -563,5 +567,85 @@ mod tests {
         assert_eq!(path, "trace_state");
         let source = std::error::Error::source(context.as_ref()).expect("signal error source");
         assert!(source.to_string().contains("invalid tracestate member"));
+    }
+
+    #[test]
+    fn validate_rejects_mutated_span_end_before_start() {
+        let mut span = SpanInput::new(
+            "span".into(),
+            Timestamp::UNIX_EPOCH + time::Duration::seconds(1),
+        );
+        span.duration_nanos = Some(1);
+        let mut input = SubmissionInput::new();
+        input.spans.push(span);
+        let mut envelope = SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap();
+
+        envelope.spans[0].record.end_time = Timestamp::UNIX_EPOCH;
+
+        assert!(matches!(
+            envelope.validate(),
+            Err(SubmissionError::Validation { ref path, .. }) if path == "end_time"
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_mutated_invalid_metric_aggregate() {
+        let stream = MetricStream::try_new(
+            MetricName::new("requests").unwrap(),
+            None,
+            None,
+            KeyValues::default(),
+            MetricData::Sum {
+                points: vec![],
+                temporality: AggregationTemporality::Delta,
+                monotonic: false,
+            },
+        )
+        .unwrap();
+        let mut input = SubmissionInput::new();
+        input.metrics.push(MetricInput::new(stream));
+        let mut envelope = SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap();
+
+        let MetricData::Sum { temporality, .. } = &mut envelope.metrics[0].record.data else {
+            panic!("constructed metric should be a sum");
+        };
+        *temporality = AggregationTemporality::Unspecified;
+
+        assert!(matches!(
+            envelope.validate(),
+            Err(SubmissionError::Validation { ref path, .. }) if path == "temporality"
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_mutated_profile_dictionary_reference() {
+        let profile = Profile::new(
+            None,
+            vec![],
+            Timestamp::UNIX_EPOCH,
+            0,
+            None,
+            0,
+            [0; 16],
+            0,
+            None,
+            vec![],
+            vec![],
+        );
+        let mut input = SubmissionInput::new();
+        input.profiles = Some(ProfilesInput::new(
+            ProfilesDictionary::default(),
+            vec![profile],
+        ));
+        let mut envelope = SubmissionEnvelope::from_input(input, &mut SystemIds::new()).unwrap();
+        envelope.profiles.as_mut().unwrap().profiles[0]
+            .record
+            .attribute_indices = vec![1];
+
+        assert!(matches!(
+            envelope.validate(),
+            Err(SubmissionError::DictionaryReference { ref path, .. })
+                if path.contains("attribute_index")
+        ));
     }
 }

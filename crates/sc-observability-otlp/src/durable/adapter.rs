@@ -116,4 +116,32 @@ mod tests {
             })
         ));
     }
+
+    #[test]
+    fn rejects_each_other_known_backend() {
+        let backend = ExporterBackendId::OpenTelemetrySdk;
+        let mut overrides = ConfigOverrides::default();
+        overrides.store_path = Some("adapter.db".into());
+        overrides.backend = Some(backend);
+        let config = resolve_config(ConfigSources::new(&overrides, None, &|_| None)).unwrap();
+
+        assert!(matches!(
+            otel_config_from(&config),
+            Err(TelemetryConfigError::UnsupportedCombination { backend: actual, .. })
+                if actual == backend
+        ));
+    }
+
+    #[test]
+    fn submission_and_released_facade_keep_their_entry_point_defaults() {
+        let mut overrides = ConfigOverrides::default();
+        overrides.store_path = Some("adapter.db".into());
+        let config = resolve_config(ConfigSources::new(&overrides, None, &|_| None)).unwrap();
+        let mapped = otel_config_from(&config).unwrap();
+        let facade = crate::config::validated_transport_bounds(&OtelConfig::default()).unwrap();
+
+        assert_eq!(config.request_timeout, Duration::from_secs(10));
+        assert_eq!(mapped.timeout_ms.unwrap().as_u64(), 10_000);
+        assert_eq!(facade.request_timeout().get(), Duration::from_secs(3));
+    }
 }

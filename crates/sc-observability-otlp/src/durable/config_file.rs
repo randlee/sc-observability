@@ -4,6 +4,10 @@ use sc_observability_types::otlp::submission::{
 };
 use std::{io::Read, path::Path};
 /// Loads core telemetry settings and records the directory for relative store paths.
+///
+/// An omitted `otlp.timeout_ms` remains unset here. Resolving that file through
+/// `resolve_config` applies the submission entry point's 10-second default;
+/// the released `OtelConfig` facade continues to default to 3 seconds.
 /// # Errors
 /// Returns `ConfigFile` for an unreadable file or invalid YAML, without logging its contents.
 pub fn load_telemetry_file(path: &Path) -> Result<TelemetryFileConfig, TelemetryConfigError> {
