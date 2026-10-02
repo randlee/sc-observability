@@ -117,30 +117,32 @@ pub(super) fn group_by_resource_scope<'a, T: 'a>(
     groups
         .into_iter()
         .map(|group| {
-            Ok(Value::Object(Map::from_iter([
-                (
-                    "resource".to_owned(),
-                    Value::Object(resource(&group.resource)?),
+            let mut encoded = Map::new();
+            let mut resource = resource(&group.resource)?;
+            if let Some(schema_url) = resource.remove("schemaUrl") {
+                encoded.insert("schemaUrl".to_owned(), schema_url);
+            }
+            encoded.insert("resource".to_owned(), Value::Object(resource));
+            encoded.insert(
+                scopes_key.to_owned(),
+                Value::Array(
+                    group
+                        .scopes
+                        .into_iter()
+                        .map(|scope| {
+                            let mut encoded = Map::new();
+                            let mut scope_value = self::scope(&scope.scope)?;
+                            if let Some(schema_url) = scope_value.remove("schemaUrl") {
+                                encoded.insert("schemaUrl".to_owned(), schema_url);
+                            }
+                            encoded.insert("scope".to_owned(), Value::Object(scope_value));
+                            encoded.insert(records_key.to_owned(), Value::Array(scope.records));
+                            Ok(Value::Object(encoded))
+                        })
+                        .collect::<Result<Vec<_>, ExportError>>()?,
                 ),
-                (
-                    scopes_key.to_owned(),
-                    Value::Array(
-                        group
-                            .scopes
-                            .into_iter()
-                            .map(|scope| {
-                                Ok(Value::Object(Map::from_iter([
-                                    (
-                                        "scope".to_owned(),
-                                        Value::Object(self::scope(&scope.scope)?),
-                                    ),
-                                    (records_key.to_owned(), Value::Array(scope.records)),
-                                ])))
-                            })
-                            .collect::<Result<Vec<_>, ExportError>>()?,
-                    ),
-                ),
-            ])))
+            );
+            Ok(Value::Object(encoded))
         })
         .collect()
 }

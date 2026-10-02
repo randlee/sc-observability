@@ -9,6 +9,9 @@ use crate::config::{
     validated_released_telemetry_bounds,
 };
 use crate::constants::MAX_OTLP_ENCODED_REQUEST_BYTES;
+use opentelemetry_proto::tonic::{
+    logs::v1::ResourceLogs, metrics::v1::ResourceMetrics, trace::v1::ResourceSpans,
+};
 use sc_observability_types::{
     ServiceName, SpanId, Timestamp, TraceId,
     otlp::{
@@ -1472,6 +1475,7 @@ fn logs_are_grouped_by_distinct_resource_and_scope() {
     let first = fixture("logs");
     let mut second_scope = first.clone();
     second_scope.logs[0].scope.name = "second-scope".to_owned();
+    second_scope.logs[0].scope.schema_url = Some("https://example.test/second-scope".to_owned());
     let mut second_resource = first.clone();
     second_resource.logs[0].resource.schema_url =
         Some("https://example.test/second-resource".to_owned());
@@ -1491,9 +1495,28 @@ fn logs_are_grouped_by_distinct_resource_and_scope() {
         Some(2),
         "different scopes within one resource stay distinct"
     );
+    let resource: ResourceLogs =
+        serde_json::from_value(resources[1].clone()).expect("logs group is protocol-shaped");
+    assert_eq!(resource.schema_url, "https://example.test/second-resource");
+    assert!(
+        resource
+            .resource
+            .expect("resource is present")
+            .schema_url
+            .is_empty()
+    );
+    let scope: ResourceLogs =
+        serde_json::from_value(resources[0].clone()).expect("logs group is protocol-shaped");
     assert_eq!(
-        resources[1]["resource"]["schemaUrl"],
-        "https://example.test/second-resource"
+        scope.scope_logs[1].schema_url,
+        "https://example.test/second-scope"
+    );
+    assert!(
+        scope.scope_logs[1]
+            .scope
+            .expect("scope is present")
+            .schema_url
+            .is_empty()
     );
 }
 
@@ -1543,6 +1566,7 @@ fn grouped_profile_records() -> SubmissionEnvelope {
     let first = profiles.profiles[0].clone();
     let mut second_scope = first.clone();
     second_scope.scope.name = "second-scope".to_owned();
+    second_scope.scope.schema_url = Some("https://example.test/second-scope".to_owned());
     let mut second_resource = first;
     second_resource.resource.schema_url = Some("https://example.test/second-resource".to_owned());
     profiles.profiles.push(second_scope);
@@ -1556,11 +1580,15 @@ fn grouped_envelopes(first: SubmissionEnvelope, signal: Signal) -> [SubmissionEn
     match signal {
         Signal::Traces => {
             second_scope.spans[0].scope.name = "second-scope".to_owned();
+            second_scope.spans[0].scope.schema_url =
+                Some("https://example.test/second-scope".to_owned());
             second_resource.spans[0].resource.schema_url =
                 Some("https://example.test/second-resource".to_owned());
         }
         Signal::Metrics => {
             second_scope.metrics[0].scope.name = "second-scope".to_owned();
+            second_scope.metrics[0].scope.schema_url =
+                Some("https://example.test/second-scope".to_owned());
             second_resource.metrics[0].resource.schema_url =
                 Some("https://example.test/second-resource".to_owned());
         }
@@ -1578,12 +1606,71 @@ fn assert_grouping(captured: &Value, resource_key: &str, scope_key: &str) {
         Some(2),
         "distinct scopes within one resource stay distinct"
     );
-    let schema_url = if resource_key == "resourceProfiles" {
-        &resources[1]["schemaUrl"]
-    } else {
-        &resources[1]["resource"]["schemaUrl"]
-    };
-    assert_eq!(schema_url, "https://example.test/second-resource");
+    match resource_key {
+        "resourceSpans" => {
+            let resource: ResourceSpans = serde_json::from_value(resources[1].clone())
+                .expect("trace resource group is shaped by the pinned protocol");
+            assert_eq!(resource.schema_url, "https://example.test/second-resource");
+            assert!(
+                resource
+                    .resource
+                    .expect("resource is present")
+                    .schema_url
+                    .is_empty()
+            );
+            let scope: ResourceSpans = serde_json::from_value(resources[0].clone())
+                .expect("trace scope group is shaped by the pinned protocol");
+            assert_eq!(
+                scope.scope_spans[1].schema_url,
+                "https://example.test/second-scope"
+            );
+            assert!(
+                scope.scope_spans[1]
+                    .scope
+                    .expect("scope is present")
+                    .schema_url
+                    .is_empty()
+            );
+        }
+        "resourceMetrics" => {
+            let resource: ResourceMetrics = serde_json::from_value(resources[1].clone())
+                .expect("metric resource group is shaped by the pinned protocol");
+            assert_eq!(resource.schema_url, "https://example.test/second-resource");
+            assert!(
+                resource
+                    .resource
+                    .expect("resource is present")
+                    .schema_url
+                    .is_empty()
+            );
+            let scope: ResourceMetrics = serde_json::from_value(resources[0].clone())
+                .expect("metric scope group is shaped by the pinned protocol");
+            assert_eq!(
+                scope.scope_metrics[1].schema_url,
+                "https://example.test/second-scope"
+            );
+            assert!(
+                scope.scope_metrics[1]
+                    .scope
+                    .expect("scope is present")
+                    .schema_url
+                    .is_empty()
+            );
+        }
+        "resourceProfiles" => {
+            assert_eq!(
+                resources[1]["schemaUrl"],
+                "https://example.test/second-resource"
+            );
+            assert!(resources[1]["resource"]["schemaUrl"].is_null());
+            assert_eq!(
+                resources[0][scope_key][1]["schemaUrl"],
+                "https://example.test/second-scope"
+            );
+            assert!(resources[0][scope_key][1]["scope"]["schemaUrl"].is_null());
+        }
+        _ => unreachable!("only grouped signal requests are asserted"),
+    }
 }
 
 fn unsupported_after_split(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {

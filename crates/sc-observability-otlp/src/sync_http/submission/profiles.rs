@@ -26,26 +26,6 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportE
         "scopeProfiles",
         "profiles",
     )?;
-    let mut groups = groups;
-    for group in &mut groups {
-        if let Some(group) = group.as_object_mut() {
-            if let Some(resource) = group.get_mut("resource").and_then(Value::as_object_mut) {
-                let schema_url = resource.remove("schemaUrl").unwrap_or(Value::Null);
-                group.insert("schemaUrl".to_owned(), schema_url);
-            }
-            if let Some(scopes) = group.get_mut("scopeProfiles").and_then(Value::as_array_mut) {
-                for scope in scopes {
-                    if let Some(scope) = scope.as_object_mut()
-                        && let Some(scope_value) =
-                            scope.get_mut("scope").and_then(Value::as_object_mut)
-                    {
-                        let schema_url = scope_value.remove("schemaUrl").unwrap_or(Value::Null);
-                        scope.insert("schemaUrl".to_owned(), schema_url);
-                    }
-                }
-            }
-        }
-    }
     let mut encoded = Map::new();
     if let Some(dictionary) = dictionary {
         encoded.insert("dictionary".to_owned(), dictionary);
