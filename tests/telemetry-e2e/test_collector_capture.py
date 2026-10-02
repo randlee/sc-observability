@@ -36,6 +36,28 @@ def _config_with_store(config: Path, store: str) -> Path:
     return result
 
 
+def _assert_wire_form(fixture: str, request: dict[str, object]) -> None:
+    """Assert concrete OTLP/JSON fields, rather than merely a successful POST."""
+    if fixture == "profiles":
+        dictionary = request["dictionary"]
+        profile = request["resourceProfiles"][0]["scopeProfiles"][0]["profiles"][0]
+        assert dictionary["linkTable"][0]["traceId"] == "AAAAAAAAAAAAAAAAAAAAAA=="
+        assert profile["profileId"] == "EREREREREREREREREREREQ=="
+        return
+    metric = request["resourceMetrics"][0]["scopeMetrics"][0]["metrics"][0]
+    if fixture == "metric_exponential_histogram":
+        point = metric["exponentialHistogram"]["dataPoints"][0]
+        assert point["scale"] == 0
+        assert point["zeroCount"] == "1"
+        assert point["positive"]["bucketCounts"] == ["1"]
+        assert point["negative"]["bucketCounts"] == ["1"]
+    elif fixture == "metric_summary":
+        point = metric["summary"]["dataPoints"][0]
+        assert point["count"] == "2"
+        assert point["sum"] == 4.0
+        assert point["quantileValues"] == [{"quantile": 0.5, "value": "NaN"}]
+
+
 def test_installed_frontends_export_viewer_unsupported_representations(
     installed_artifacts: dict[str, Path], telemetry_config: Path, collector: object, tmp_path: Path,
 ) -> None:
@@ -59,6 +81,7 @@ def test_installed_frontends_export_viewer_unsupported_representations(
         assert python.returncode == 0, python.stderr
         python_records = collector.wait_for(path)
         assert all(record for record in python_records), fixture
+        _assert_wire_form(fixture, python_records[-1])
 
         collector.clear()
         # Independent installed front ends need independent stores: the same
@@ -68,3 +91,4 @@ def test_installed_frontends_export_viewer_unsupported_representations(
         assert cli.returncode == 0, cli.stdout + cli.stderr
         cli_records = collector.wait_for(path)
         assert all(record for record in cli_records), fixture
+        _assert_wire_form(fixture, cli_records[-1])
