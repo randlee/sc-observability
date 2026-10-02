@@ -1,0 +1,11 @@
+# Check out and commit text as LF on every platform so generated-artifact
+# drift checks compare the same bytes on Windows.
+* text=auto eol=lf
+
+# Hash-pinned Windows evidence committed with CRLF; bytes must not change.
+docs/plans/phase-b/evidence/b2-final/platforms/windows.json -text
+docs/plans/phase-b/evidence/b2-final/platforms/windows.log -text
+docs/plans/phase-b/evidence/b2-qualification/platforms/windows.json -text
+docs/plans/phase-b/evidence/b2-qualification/platforms/windows.log -text
+docs/plans/phase-c/evidence/final-audit/sc-lint-historical-41-windows-2022.txt -text
+docs/plans/phase-c/evidence/final-audit/sc-lint-receipt-windows-2022.json -text
