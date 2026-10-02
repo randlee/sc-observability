@@ -264,10 +264,7 @@ impl Worker {
         let worker_stop = Arc::clone(&stop);
         let flush_timeout = config.lifecycle_flush_timeout;
         let shutdown_timeout = config.lifecycle_shutdown_timeout;
-        let export_result_timeout = export_result_timeout(
-            config.retry.sequence_timeout,
-            config.lifecycle_shutdown_timeout,
-        );
+        let export_result_timeout = export_result_timeout(config.retry.sequence_timeout);
         let handshake_timeout = config
             .request_timeout
             .min(config.lifecycle_shutdown_timeout);
@@ -441,11 +438,8 @@ impl Worker {
 /// Bounds a synchronous submission by the worker's complete retry budget plus
 /// its finite dispatch margin. The lifecycle shutdown deadline alone is not a
 /// submission deadline: it may be intentionally shorter than a retry sequence.
-pub(super) fn export_result_timeout(
-    retry_sequence_timeout: Duration,
-    lifecycle_shutdown_timeout: Duration,
-) -> Duration {
-    retry_sequence_timeout.saturating_add(lifecycle_shutdown_timeout)
+pub(super) fn export_result_timeout(retry_sequence_timeout: Duration) -> Duration {
+    retry_sequence_timeout.saturating_add(crate::constants::SUBMISSION_DISPATCH_MARGIN)
 }
 
 impl ExporterLifecycle for Worker {
@@ -890,7 +884,7 @@ impl SubmissionRoute {
             Self::Signal(Signal::Traces) => normalize_signal_endpoint(endpoint, "traces"),
             Self::Signal(Signal::Metrics) => normalize_signal_endpoint(endpoint, "metrics"),
             Self::Signal(Signal::Profiles) | Self::Profiles => {
-                format!("{}{PROFILES_EXPORT_PATH}", endpoint.trim_end_matches('/'))
+                normalize_endpoint_path(endpoint, PROFILES_EXPORT_PATH)
             }
             Self::Signal(_) => endpoint.to_owned(),
         }
@@ -1057,7 +1051,6 @@ impl OtlpHttpExporter {
     fn send_payload(
         &self,
         signal: Signal,
-        endpoint_signal: &str,
         batch: impl Send + 'static,
         payload: &Value,
     ) -> Result<(), ExportError> {
@@ -1067,7 +1060,7 @@ impl OtlpHttpExporter {
             .lifecycle
             .admit(signal, batch, body.len())
             .map_err(telemetry_error_to_export_error)?;
-        let endpoint = normalize_signal_endpoint(&self.endpoint, endpoint_signal);
+        let endpoint = SubmissionRoute::Signal(signal).endpoint(&self.endpoint);
         self.backend.worker.enqueue(
             endpoint,
             body,
@@ -1089,6 +1082,11 @@ impl OtlpHttpExporter {
         self.backend
             .worker
             .export(endpoint, Bytes::from(payload.to_string()))
+    }
+
+    #[cfg(test)]
+    pub(super) fn submission_wait_budget(&self) -> Duration {
+        self.backend.worker.inner.export_result_timeout
     }
 
     pub(super) fn cancel_submission(&self) {
@@ -1119,23 +1117,13 @@ impl OtlpHttpExporter {
 impl LogExporter<LogEvent> for OtlpHttpExporter {
     fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
         let records = batch.iter().map(log_record).collect::<Vec<_>>();
-        self.send_payload(
-            Signal::Logs,
-            "logs",
-            batch.to_vec(),
-            &build_logs_payload(&records),
-        )
+        self.send_payload(Signal::Logs, batch.to_vec(), &build_logs_payload(&records))
     }
 }
 
 impl LogExporter<ExportRecord<LogRecord>> for OtlpHttpExporter {
     fn export_logs(&self, batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
-        self.send_payload(
-            Signal::Logs,
-            "logs",
-            batch.to_vec(),
-            &build_logs_payload(batch),
-        )
+        self.send_payload(Signal::Logs, batch.to_vec(), &build_logs_payload(batch))
     }
 }
 
@@ -1144,7 +1132,6 @@ impl TraceExporter<CompleteSpan> for OtlpHttpExporter {
         let records = batch.iter().map(span_record).collect::<Vec<_>>();
         self.send_payload(
             Signal::Traces,
-            "traces",
             batch.to_vec(),
             &build_traces_payload(&records),
         )
@@ -1153,12 +1140,7 @@ impl TraceExporter<CompleteSpan> for OtlpHttpExporter {
 
 impl TraceExporter<ExportRecord<CompleteSpan>> for OtlpHttpExporter {
     fn export_spans(&self, batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
-        self.send_payload(
-            Signal::Traces,
-            "traces",
-            batch.to_vec(),
-            &build_traces_payload(batch),
-        )
+        self.send_payload(Signal::Traces, batch.to_vec(), &build_traces_payload(batch))
     }
 }
 
@@ -1167,7 +1149,6 @@ impl MetricExporter<MetricRecord> for OtlpHttpExporter {
         let records = batch.iter().map(metric_record).collect::<Vec<_>>();
         self.send_payload(
             Signal::Metrics,
-            "metrics",
             batch.to_vec(),
             &build_metrics_payload(&records),
         )
@@ -1178,7 +1159,6 @@ impl MetricExporter<ExportRecord<MetricRecord>> for OtlpHttpExporter {
     fn export_metrics(&self, batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
         self.send_payload(
             Signal::Metrics,
-            "metrics",
             batch.to_vec(),
             &build_metrics_payload(batch),
         )
@@ -1250,13 +1230,16 @@ pub(crate) fn build_exporter_set(
 }
 
 pub(super) fn normalize_logs_endpoint(endpoint: &str) -> String {
-    normalize_signal_endpoint(endpoint, "logs")
+    SubmissionRoute::Signal(Signal::Logs).endpoint(endpoint)
 }
 
 fn normalize_signal_endpoint(endpoint: &str, signal: &str) -> String {
+    normalize_endpoint_path(endpoint, &format!("/v1/{signal}"))
+}
+
+fn normalize_endpoint_path(endpoint: &str, suffix: &str) -> String {
     let endpoint = endpoint.trim_end_matches('/');
-    let suffix = format!("/v1/{signal}");
-    if endpoint.ends_with(&suffix) {
+    if endpoint.ends_with(suffix) {
         endpoint.to_owned()
     } else {
         format!("{endpoint}{suffix}")

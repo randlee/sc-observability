@@ -361,3 +361,32 @@ fn worker_database_errors_are_retained_and_poisoned_wake_is_recoverable() {
     client.owner.shared.notify();
     drop(client);
 }
+
+#[test]
+fn runtime_invalid_ca_fails_open_without_consuming_pending_attempts() {
+    use crate::config::{ExporterBackend, OtelConfig, OtlpProtocol};
+    use crate::sync_http::submission::{SyncHttpConfig, exporter_for};
+    let dir = tempfile::tempdir().unwrap();
+    let config = config(dir.path());
+    let mut db = store::open(&config.store_path).unwrap();
+    store::admit(&mut db, &config, &log("ca-open")).unwrap();
+    drop(db);
+    // The frozen durable config has no CA field. Inject only that prepared
+    // input at the existing factory seam; exporter construction is production.
+    let result = DurableTelemetryClient::open_with_exporter_factory(config.clone(), |_, _| {
+        let mut otel = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
+        otel.enabled = true;
+        otel.ca_file = Some(dir.path().join("absent-ca.pem"));
+        let (worker, bounds) = SyncHttpConfig::from_otel(&otel)?;
+        exporter_for(worker, bounds)
+    });
+    assert!(matches!(result, Err(TelemetryClientError::Config(_))));
+    let db = store::reader(&config.store_path).unwrap();
+    let (state, attempts): (String, u32) = db
+        .query_row("SELECT state,attempts FROM signal_deliveries", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(state, "pending");
+    assert_eq!(attempts, 0);
+}

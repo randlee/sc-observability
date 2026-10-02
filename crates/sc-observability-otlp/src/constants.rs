@@ -29,6 +29,7 @@ pub const MAX_OTLP_BATCH_BYTES: usize = 1024 * 1024;
 /// This bound is applied after OTLP/JSON encoding rather than to the source
 /// envelope so that transport requests remain bounded even when JSON expands
 /// IDs, base64 values, or escaped strings.
+#[cfg(feature = "sync-http")]
 pub(crate) const MAX_OTLP_ENCODED_REQUEST_BYTES: usize = 1024 * 1024;
 /// Default maximum number of OTLP export retries.
 pub const DEFAULT_OTLP_MAX_RETRIES: u32 = 3;
@@ -97,3 +98,8 @@ pub(crate) const SDK_RETRY_JITTER_MS: u64 = 100;
 /// Protobuf Duration's maximum valid seconds magnitude.
 #[cfg(feature = "otlp-sdk")]
 pub(crate) const PROTO_DURATION_MAX_SECONDS: i64 = 315_576_000_000;
+
+/// Fixed dispatch margin beyond a complete synchronous submission retry sequence.
+#[cfg(feature = "sync-http")]
+pub(crate) const SUBMISSION_DISPATCH_MARGIN: std::time::Duration =
+    std::time::Duration::from_secs(1);

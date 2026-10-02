@@ -44,8 +44,21 @@ fn submission_exporter(
     endpoint: String,
     retry: Option<SyncHttpRetryPolicy>,
 ) -> SyncHttpSubmissionExporter {
+    submission_exporter_with_shutdown(endpoint, retry, None)
+}
+
+fn submission_exporter_with_shutdown(
+    endpoint: String,
+    retry: Option<SyncHttpRetryPolicy>,
+    shutdown_ms: Option<u64>,
+) -> SyncHttpSubmissionExporter {
     let mut config = OtelConfig::new(ExporterBackend::SyncHttp, OtlpProtocol::HttpJson);
     config.enabled = true;
+    config.lifecycle_shutdown_timeout_ms = shutdown_ms.map(Into::into);
+    if let Some(shutdown) = shutdown_ms {
+        config.timeout_ms = Some(shutdown.into());
+        config.lifecycle_flush_timeout_ms = Some(shutdown.into());
+    }
     config.endpoint = Some(OtlpEndpoint::new_typed(endpoint).expect("loopback endpoint"));
     config.sync_http_retry = retry;
     let telemetry = TelemetryConfig {
@@ -520,4 +533,66 @@ fn oversized_multi_envelope_submission_splits_at_encoded_request_limit() {
         [Some(first_body.as_str()), Some(second_body.as_str())],
         "the split retains each original envelope exactly once"
     );
+}
+
+#[test]
+fn runtime_short_shutdown_does_not_requeue_submission() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let exporter = submission_exporter_with_shutdown(
+        format!("http://{}", listener.local_addr().unwrap()),
+        Some(retry_policy(1)),
+        Some(500),
+    );
+    assert_eq!(
+        exporter.exporter.submission_wait_budget(),
+        std::time::Duration::from_millis(3000) + crate::constants::SUBMISSION_DISPATCH_MARGIN
+    );
+    // Zero backoff and explicit responses exercise the worker's result without
+    // sleeping or asserting scheduler-dependent elapsed time.
+    let (captured, server) = capture_server(listener, &[503, 200]);
+    exporter.export(Signal::Logs, &[fixture("logs")]).unwrap();
+    for _ in 0..2 {
+        captured.recv_timeout(CAPTURE_TIMEOUT).unwrap();
+    }
+    assert_eq!(server.join().unwrap(), 2);
+}
+
+#[test]
+fn runtime_routes_preserve_existing_endpoint_suffixes() {
+    for (signal, name, suffix) in [
+        (Signal::Logs, "logs", "/v1/logs"),
+        (Signal::Traces, "traces", "/v1/traces"),
+        (Signal::Metrics, "metric_gauge", "/v1/metrics"),
+        (Signal::Profiles, "profiles", "/v1development/profiles"),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let exporter = submission_exporter(
+            format!("http://{}{suffix}/", listener.local_addr().unwrap()),
+            None,
+        );
+        let (captured, server) = capture_server(listener, &[200]);
+        exporter.export(signal, &[fixture(name)]).unwrap();
+        assert_eq!(captured.recv_timeout(CAPTURE_TIMEOUT).unwrap().0, suffix);
+        assert_eq!(server.join().unwrap(), 1);
+    }
+}
+
+#[test]
+fn runtime_submission_rejects_blocking_calls_inside_tokio() {
+    let exporter = submission_exporter("http://127.0.0.1:1".into(), None);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        for (signal, name) in [(Signal::Logs, "logs"), (Signal::Profiles, "profiles")] {
+            let error = exporter.export(signal, &[fixture(name)]).unwrap_err();
+            assert!(matches!(
+                error,
+                SubmissionExportFailure::Retryable(
+                    ExportError::BlockingBackendInAsyncContext { .. }
+                )
+            ));
+        }
+    });
 }
