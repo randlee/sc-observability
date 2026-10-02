@@ -37,12 +37,20 @@ jobs:
         run: python3 -m pip install pytest && python3 -m pytest -q tests/telemetry-e2e
       - name: Capture public API and error migration evidence
         run: |
-          set -o pipefail
           mkdir -p target/telemetry-e2e/evidence
-          { just public-api; printf 'exit=%s\\n' "$?"; } > target/telemetry-e2e/evidence/public-api.log 2>&1
-          { python3 scripts/ci/validate_error_migration.py; printf 'exit=%s\\n' "$?"; } > target/telemetry-e2e/evidence/error-migration.log 2>&1
-          { cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories; printf 'exit=%s\\n' "$?"; } > target/telemetry-e2e/evidence/cargo-deny.log 2>&1
+          set +e
+          just public-api > target/telemetry-e2e/evidence/public-api.log 2>&1
+          public_api=$?
+          printf 'exit=%s\\n' "$public_api" >> target/telemetry-e2e/evidence/public-api.log
+          python3 scripts/ci/validate_error_migration.py > target/telemetry-e2e/evidence/error-migration.log 2>&1
+          error_migration=$?
+          printf 'exit=%s\\n' "$error_migration" >> target/telemetry-e2e/evidence/error-migration.log
+          cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories > target/telemetry-e2e/evidence/cargo-deny.log 2>&1
+          deny_otlp=$?
+          printf 'exit=%s\\n' "$deny_otlp" >> target/telemetry-e2e/evidence/cargo-deny.log
           cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features check --config policy/deny-durable-store.toml licenses bans advisories >> target/telemetry-e2e/evidence/cargo-deny.log 2>&1
-          printf 'exit=%s\\n' "$?" >> target/telemetry-e2e/evidence/cargo-deny.log
+          deny_cli=$?
+          printf 'exit=%s\\n' "$deny_cli" >> target/telemetry-e2e/evidence/cargo-deny.log
+          test "$public_api" -eq 0 -a "$error_migration" -eq 0 -a "$deny_otlp" -eq 0 -a "$deny_cli" -eq 0
       - name: Check user documentation links
         run: bash scripts/ci/validate_docs_consistency.sh
