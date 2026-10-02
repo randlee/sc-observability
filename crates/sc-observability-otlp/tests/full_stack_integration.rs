@@ -176,8 +176,8 @@ impl LogsService for RejectingLogsService {
 }
 
 #[cfg(feature = "otlp-sdk")]
-struct UnavailableLogsService {
-    attempts: tokio::sync::mpsc::Sender<()>,
+struct TerminalLogsService {
+    attempts: Arc<AtomicUsize>,
 }
 
 #[cfg(feature = "otlp-sdk")]
@@ -204,18 +204,13 @@ impl LogsService for RecoveringLogsService {
 
 #[cfg(feature = "otlp-sdk")]
 #[tonic::async_trait]
-impl LogsService for UnavailableLogsService {
+impl LogsService for TerminalLogsService {
     async fn export(
         &self,
         _request: tonic::Request<ExportLogsServiceRequest>,
     ) -> Result<tonic::Response<ExportLogsServiceResponse>, tonic::Status> {
-        self.attempts
-            .send(())
-            .await
-            .map_err(|_| tonic::Status::unavailable("collector receiver closed"))?;
-        Err(tonic::Status::unavailable(
-            "collector is temporarily unavailable",
-        ))
+        self.attempts.fetch_add(1, Ordering::SeqCst);
+        Err(tonic::Status::internal("collector rejects the log"))
     }
 }
 
@@ -1497,57 +1492,56 @@ fn public_sdk_factory_redacts_rejected_authorization_from_diagnostics_and_health
 }
 
 #[cfg(feature = "otlp-sdk")]
-#[test]
-fn public_sdk_factory_reports_retry_exhaustion_after_the_default_attempts() {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("caller runtime");
-    runtime.block_on(async {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn public_sdk_factory_reports_terminal_export_failure_once() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind gRPC collector");
+    let address = listener.local_addr().expect("collector address");
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let collector_attempts = Arc::clone(&attempts);
+    let collector = tokio::spawn(async move {
+        tonic::transport::Server::builder()
+            .serve_with_incoming(
+                LogsServiceServer::new(TerminalLogsService {
+                    attempts: collector_attempts,
+                }),
+                tonic::codegen::tokio_stream::wrappers::TcpListenerStream::new(listener),
+            )
             .await
-            .expect("bind gRPC collector");
-        let address = listener.local_addr().expect("collector address");
-        let (attempts, mut received_attempts) = tokio::sync::mpsc::channel(4);
-        let collector = tokio::spawn(async move {
-            tonic::transport::Server::builder()
-                .serve_with_incoming(
-                    LogsServiceServer::new(UnavailableLogsService { attempts }),
-                    tonic::codegen::tokio_stream::wrappers::TcpListenerStream::new(listener),
-                )
-                .await
-                .expect("gRPC collector serves until aborted");
-        });
-
-        let telemetry = V2Telemetry::new_typed(enabled_sdk_grpc_config(address))
-            .expect("public SDK factory constructs");
-        telemetry
-            .emit_log(&log_event(service_name(), "retry exhaustion"))
-            .expect("SDK factory admits log before export");
-        let error = telemetry
-            .flush_async_typed()
-            .await
-            .expect_err("retryable collector failures exhaust the SDK retry budget");
-        let export_error = std::error::Error::source(&error)
-            .and_then(std::error::Error::source)
-            .and_then(|source| source.downcast_ref::<sc_observability_types::v2::ExportError>())
-            .expect("the typed flush failure retains its typed export cause");
-        assert_eq!(
-            export_error.code(),
-            sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL,
-            "the retained export cause classifies the SDK terminal export failure with the stable error code"
-        );
-        for _ in 0..4 {
-            tokio::time::timeout(std::time::Duration::from_secs(2), received_attempts.recv())
-                .await
-                .expect("collector receives each SDK retry before deadline")
-                .expect("retry-attempt channel remains open");
-        }
-        assert_eq!(telemetry.health().dropped_exports_total, 1);
-
-        collector.abort();
-        let _ = collector.await;
+            .expect("gRPC collector serves until aborted");
     });
+    let clock_guard = tokio::spawn(async {
+        loop {
+            tokio::task::yield_now().await;
+        }
+    });
+
+    let telemetry = V2Telemetry::new_typed(enabled_sdk_grpc_config(address))
+        .expect("public SDK factory constructs");
+    telemetry
+        .emit_log(&log_event(service_name(), "terminal export failure"))
+        .expect("SDK factory admits log before export");
+    let error = telemetry
+        .flush_async_typed()
+        .await
+        .expect_err("terminal collector failure reaches the awaited lifecycle barrier");
+    let export_error = std::error::Error::source(&error)
+        .and_then(std::error::Error::source)
+        .and_then(|source| source.downcast_ref::<sc_observability_types::v2::ExportError>())
+        .expect("the typed flush failure retains its typed export cause");
+    assert_eq!(
+        export_error.code(),
+        sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL,
+        "the retained export cause classifies the SDK terminal export failure with the stable error code"
+    );
+    assert_eq!(telemetry.health().dropped_exports_total, 1);
+    assert_eq!(attempts.load(Ordering::SeqCst), 1);
+
+    collector.abort();
+    let _ = collector.await;
+    clock_guard.abort();
+    let _ = clock_guard.await;
 }
 
 #[cfg(feature = "otlp-sdk")]
@@ -1875,96 +1869,97 @@ fn enabled_configuration_rejects_unavailable_backend() {
 }
 
 #[cfg(feature = "otlp-sdk")]
-#[test]
-fn public_sdk_factory_recovers_a_partial_log_export_failure() {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("caller runtime");
-    runtime.block_on(async {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn public_sdk_factory_recovers_a_partial_log_export_failure() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind gRPC collector");
+    let address = listener.local_addr().expect("collector address");
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let recovering_attempts = Arc::clone(&attempts);
+    let (metric_sender, mut metrics) = tokio::sync::mpsc::channel(1);
+    let (shutdown_sender, shutdown) = tokio::sync::oneshot::channel();
+    let collector = tokio::spawn(async move {
+        tonic::transport::Server::builder()
+            .add_service(LogsServiceServer::new(RecoveringLogsService {
+                attempts: recovering_attempts,
+            }))
+            .add_service(MetricsServiceServer::new(CapturingMetricsService {
+                sender: metric_sender,
+            }))
+            .serve_with_incoming_shutdown(
+                tonic::codegen::tokio_stream::wrappers::TcpListenerStream::new(listener),
+                async {
+                    let _ = shutdown.await;
+                },
+            )
             .await
-            .expect("bind gRPC collector");
-        let address = listener.local_addr().expect("collector address");
-        let attempts = Arc::new(AtomicUsize::new(0));
-        let recovering_attempts = Arc::clone(&attempts);
-        let (metric_sender, mut metrics) = tokio::sync::mpsc::channel(1);
-        let (shutdown_sender, shutdown) = tokio::sync::oneshot::channel();
-        let collector = tokio::spawn(async move {
-            tonic::transport::Server::builder()
-                .add_service(LogsServiceServer::new(RecoveringLogsService {
-                    attempts: recovering_attempts,
-                }))
-                .add_service(MetricsServiceServer::new(CapturingMetricsService {
-                    sender: metric_sender,
-                }))
-                .serve_with_incoming_shutdown(
-                    tonic::codegen::tokio_stream::wrappers::TcpListenerStream::new(listener),
-                    async {
-                        let _ = shutdown.await;
-                    },
-                )
-                .await
-                .expect("gRPC collector stops cleanly");
-        });
-
-        let telemetry = V2Telemetry::new_typed(enabled_sdk_grpc_config(address))
-            .expect("public SDK factory constructs");
-        let canonical_gauge = canonical_metrics()
-            .into_iter()
-            .nth(1)
-            .expect("canonical gauge fixture");
-        telemetry
-            .emit_metric(&canonical_gauge)
-            .expect("SDK factory admits healthy sibling metric");
-        telemetry
-            .flush_async_typed()
-            .await
-            .expect("metric export succeeds before the partial failure");
-        let _metric = tokio::time::timeout(std::time::Duration::from_secs(2), metrics.recv())
-            .await
-            .expect("collector receives healthy metric")
-            .expect("metric collector channel remains open");
-
-        telemetry
-            .emit_log(&log_event(service_name(), "partial SDK failure"))
-            .expect("SDK factory admits failing log");
-        telemetry
-            .flush_async_typed()
-            .await
-            .expect_err("terminal log failure reaches the awaited lifecycle barrier");
-        let failed = telemetry.health();
-        assert_eq!(failed.state, TelemetryHealthState::Degraded);
-        assert_eq!(
-            failed.exporter_statuses[0].state,
-            sc_observability_otlp::ExporterHealthState::Degraded
-        );
-        assert_eq!(
-            failed.exporter_statuses[2].state,
-            sc_observability_otlp::ExporterHealthState::Healthy,
-            "the independent metric exporter remains healthy during the log failure"
-        );
-
-        telemetry
-            .emit_log(&log_event(service_name(), "partial SDK recovery"))
-            .expect("SDK factory admits recovery log");
-        telemetry
-            .flush_async_typed()
-            .await
-            .expect("next log export recovers the affected exporter");
-        assert_eq!(
-            telemetry.health().dropped_exports_total,
-            1,
-            "the successful recovery does not erase the recorded failed export"
-        );
-        assert_eq!(attempts.load(Ordering::SeqCst), 2);
-        telemetry
-            .shutdown_async_typed()
-            .await
-            .expect("SDK recovery scenario shuts down cleanly");
-        let _ = shutdown_sender.send(());
-        collector.await.expect("collector task exits");
+            .expect("gRPC collector stops cleanly");
     });
+    let clock_guard = tokio::spawn(async {
+        loop {
+            tokio::task::yield_now().await;
+        }
+    });
+
+    let telemetry = V2Telemetry::new_typed(enabled_sdk_grpc_config(address))
+        .expect("public SDK factory constructs");
+    let canonical_gauge = canonical_metrics()
+        .into_iter()
+        .nth(1)
+        .expect("canonical gauge fixture");
+    telemetry
+        .emit_metric(&canonical_gauge)
+        .expect("SDK factory admits healthy sibling metric");
+    telemetry
+        .flush_async_typed()
+        .await
+        .expect("metric export succeeds before the partial failure");
+    let _metric = metrics
+        .recv()
+        .await
+        .expect("metric collector channel remains open");
+
+    telemetry
+        .emit_log(&log_event(service_name(), "partial SDK failure"))
+        .expect("SDK factory admits failing log");
+    telemetry
+        .flush_async_typed()
+        .await
+        .expect_err("terminal log failure reaches the awaited lifecycle barrier");
+    let failed = telemetry.health();
+    assert_eq!(failed.state, TelemetryHealthState::Degraded);
+    assert_eq!(
+        failed.exporter_statuses[0].state,
+        sc_observability_otlp::ExporterHealthState::Degraded
+    );
+    assert_eq!(
+        failed.exporter_statuses[2].state,
+        sc_observability_otlp::ExporterHealthState::Healthy,
+        "the independent metric exporter remains healthy during the log failure"
+    );
+
+    telemetry
+        .emit_log(&log_event(service_name(), "partial SDK recovery"))
+        .expect("SDK factory admits recovery log");
+    telemetry
+        .flush_async_typed()
+        .await
+        .expect("next log export recovers the affected exporter");
+    assert_eq!(
+        telemetry.health().dropped_exports_total,
+        1,
+        "the successful recovery does not erase the recorded failed export"
+    );
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    telemetry
+        .shutdown_async_typed()
+        .await
+        .expect("SDK recovery scenario shuts down cleanly");
+    let _ = shutdown_sender.send(());
+    collector.await.expect("collector task exits");
+    clock_guard.abort();
+    let _ = clock_guard.await;
 }
 
 #[cfg(feature = "otlp-sdk")]

@@ -843,6 +843,27 @@ impl opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsS
     }
 }
 
+/// Real wire fixture: reject every export with a retryable collector status.
+#[derive(Clone)]
+struct ExhaustingRetryCollector(Arc<std::sync::atomic::AtomicUsize>);
+#[tonic::async_trait]
+impl opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsService
+    for ExhaustingRetryCollector
+{
+    async fn export(
+        &self,
+        _: tonic::Request<
+            opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest,
+        >,
+    ) -> Result<
+        tonic::Response<opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse>,
+        tonic::Status,
+    > {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Err(tonic::Status::unavailable("transient collector failure"))
+    }
+}
+
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn sdk_retry_executor_recovers_over_real_grpc_with_two_requests() {
     use opentelemetry_proto::tonic::collector::logs::v1::{
@@ -899,6 +920,78 @@ async fn sdk_retry_executor_recovers_over_real_grpc_with_two_requests() {
     .await;
     task.await.unwrap().unwrap();
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    server.abort();
+    clock_guard.abort();
+    let _ = server.await;
+    let _ = clock_guard.await;
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn sdk_retry_executor_exhausts_default_attempts_over_real_grpc() {
+    use opentelemetry_proto::tonic::collector::logs::v1::{
+        ExportLogsServiceRequest, logs_service_client::LogsServiceClient,
+        logs_service_server::LogsServiceServer,
+    };
+    let incoming =
+        tonic::transport::server::TcpIncoming::bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let address = incoming.local_addr().unwrap();
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server = tokio::spawn(tonic::transport::Server::builder().serve_with_incoming(
+        LogsServiceServer::new(ExhaustingRetryCollector(calls.clone())),
+        incoming,
+    ));
+    // Keep virtual time stationary while OS sockets make progress. Each retry
+    // below acknowledges the scheduled sleep before advancing the Tokio clock.
+    let clock_guard = tokio::spawn(async {
+        loop {
+            tokio::task::yield_now().await;
+        }
+    });
+    let client = LogsServiceClient::connect(format!("http://{address}"))
+        .await
+        .unwrap();
+    let (_tx, rx) = never_cancelled_shutdown();
+    let (waiting_tx, mut waiting_rx) = tokio::sync::mpsc::unbounded_channel();
+    let task = tokio::spawn(super::retry::retry_with_jitter(
+        Duration::from_secs(5),
+        Duration::from_secs(1),
+        rx,
+        move |timeout| {
+            let mut client = client.clone();
+            async move {
+                let mut request = tonic::Request::new(ExportLogsServiceRequest {
+                    resource_logs: vec![],
+                });
+                request.set_timeout(timeout);
+                client.export(request).await.map(|_| ())
+            }
+        },
+        "collector fixture",
+        move || {
+            waiting_tx
+                .send(())
+                .expect("retry schedule observer remains open");
+            Duration::ZERO
+        },
+    ));
+    let mut backoff = Duration::from_millis(crate::constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS);
+    let maximum_backoff = Duration::from_millis(crate::constants::DEFAULT_OTLP_MAX_BACKOFF_MS);
+    for _ in 0..crate::constants::DEFAULT_OTLP_MAX_RETRIES {
+        waiting_rx
+            .recv()
+            .await
+            .expect("retry executor schedules each default backoff");
+        tokio::time::advance(backoff).await;
+        backoff = backoff.saturating_mul(2).min(maximum_backoff);
+    }
+    let error = task.await.unwrap().unwrap_err();
+    assert_eq!(error.code().to_string(), "OTLP_EXPORT_TERMINAL");
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        usize::try_from(crate::constants::DEFAULT_OTLP_MAX_RETRIES)
+            .expect("retry count fits usize")
+            + 1
+    );
     server.abort();
     clock_guard.abort();
     let _ = server.await;
