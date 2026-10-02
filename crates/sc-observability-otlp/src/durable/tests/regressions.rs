@@ -233,27 +233,40 @@ fn flush_after_shutdown_is_closed() {
     ));
 }
 #[test]
-fn database_lock_timeout_is_typed_and_drop_releases() {
+fn database_mutex_timeout_is_typed_and_drop_releases() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::open_with_exporter(
-        config(dir.path()),
-        Arc::new(ScriptedExporter::new(dir.path())),
+    let db = super::super::database::Database::new(
+        super::super::store::open(&dir.path().join("lock.db")).unwrap(),
     )
     .unwrap();
-    let held = client.owner.shared.db.lock().unwrap();
+    let held = db.lock().unwrap();
     assert_eq!(
-        client
-            .owner
-            .shared
-            .db
-            .lock_for(Duration::ZERO)
-            .err()
-            .unwrap()
-            .code(),
+        db.lock_for(Duration::ZERO).err().unwrap().code(),
         &crate::error_codes::DURABLE_LOCK_TIMEOUT
     );
     drop(held);
-    assert!(client.owner.shared.db.try_lock().is_ok());
+    assert!(db.try_lock().is_ok());
+}
+
+#[test]
+fn concurrent_sqlite_writer_reports_coded_lock_timeout() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = config(dir.path());
+    let store_path = config.store_path.clone();
+    let client = DurableTelemetryClient::open_with_exporter(
+        config,
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
+    let writer = rusqlite::Connection::open(store_path).unwrap();
+    writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+
+    let error = client.emit(log("blocked")).unwrap_err();
+    assert_eq!(error.code(), &crate::error_codes::DURABLE_LOCK_TIMEOUT);
+
+    writer.execute_batch("COMMIT").unwrap();
+    assert!(client.emit(log("after-release")).is_ok());
+    assert!(client.shutdown(DEADLINE).is_ok());
 }
 
 #[test]

@@ -210,7 +210,22 @@ fn context(code: ErrorCode, message: &str) -> Box<ErrorContext> {
     Box::new(ErrorContext::new(code, message, remediation))
 }
 
-fn persistence(error: impl std::fmt::Display) -> TelemetryClientError {
+fn persistence<E: std::fmt::Display + 'static>(error: E) -> TelemetryClientError {
+    if matches!(
+        (&error as &dyn std::any::Any)
+            .downcast_ref::<rusqlite::Error>()
+            .and_then(rusqlite::Error::sqlite_error_code),
+        Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
+    ) {
+        return AdmissionError::StoreUnavailable {
+            context: context(
+                crate::error_codes::DURABLE_LOCK_TIMEOUT,
+                "store is locked by another writer; retry after its transaction completes",
+            ),
+        }
+        .into();
+    }
+
     AdmissionError::Persistence {
         context: context(
             error_codes::SC_OBSERVABILITY_ADMIT_PERSISTENCE,
