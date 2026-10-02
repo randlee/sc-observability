@@ -103,6 +103,7 @@ fn emit(body: String, flag: &str, payload: &str, signal: &str, path: &str, rejec
     let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
         .current_dir(store.path())
         .env_remove("SC_OTEL_TEST_DOUBLE")
+        .env("SC_OTEL_REAL_TRANSPORT", "1")
         .env_remove("SC_OTEL_AUTH_HEADER")
         .args([
             "--endpoint",
@@ -135,6 +136,7 @@ fn emit(body: String, flag: &str, payload: &str, signal: &str, path: &str, rejec
     let status = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
         .current_dir(store.path())
         .env_remove("SC_OTEL_TEST_DOUBLE")
+        .env("SC_OTEL_REAL_TRANSPORT", "1")
         .args([
             "--endpoint",
             &format!("http://{}", collector.address),

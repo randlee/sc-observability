@@ -15,6 +15,9 @@ pub(crate) const ERROR_INTERNAL: &str = "SC_OBSERVABILITY_CLI_INTERNAL";
 pub(crate) const TEST_DOUBLE_ENV: &str = "SC_OTEL_TEST_DOUBLE";
 #[cfg(feature = "test-double")]
 pub(crate) const TEST_DOUBLE_RECORD_ENV: &str = "SC_OTEL_TEST_DOUBLE_RECORD";
+/// Test-double builds only; selects the real durable client.
+#[cfg(feature = "test-double")]
+pub(crate) const REAL_TRANSPORT_ENV: &str = "SC_OTEL_REAL_TRANSPORT";
 
 #[derive(Clone, Copy)]
 pub(crate) enum CommandName {

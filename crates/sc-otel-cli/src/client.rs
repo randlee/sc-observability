@@ -4,7 +4,6 @@
     reason = "the shared telemetry error preserves typed delivery diagnostics"
 )]
 
-#[cfg(not(feature = "test-double"))]
 use sc_observability_otlp::durable::DurableTelemetryClient;
 #[cfg(feature = "test-double")]
 use sc_observability_types::otlp::submission::TelemetryConfigError;
@@ -25,7 +24,12 @@ pub(crate) fn open_client(
 ) -> Result<Box<dyn TelemetryClient>, TelemetryClientError> {
     #[cfg(feature = "test-double")]
     {
-        open_test_double(config)
+        if std::env::var_os(constants::REAL_TRANSPORT_ENV).is_some() {
+            DurableTelemetryClient::open(config)
+                .map(|client| Box::new(client) as Box<dyn TelemetryClient>)
+        } else {
+            open_test_double(config)
+        }
     }
 
     #[cfg(not(feature = "test-double"))]
