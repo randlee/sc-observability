@@ -192,8 +192,14 @@ class Importer:
             return report
         previous = state.get(source.path, {})
         first = hashlib.sha256(data.split(b"\n", 1)[0]).hexdigest()
+        inode = path.stat().st_ino
         offset = previous.get("offset", 0) if isinstance(previous, Mapping) else 0
-        offset = offset if isinstance(offset, int) and offset <= len(data) and previous.get("fingerprint") == first else 0
+        offset = offset if (
+            isinstance(offset, int)
+            and offset <= len(data)
+            and previous.get("fingerprint") == first
+            and previous.get("inode") == inode
+        ) else 0
         for raw in data[offset:].splitlines(keepends=True):
             if not raw.endswith(b"\n"):
                 break
@@ -203,14 +209,14 @@ class Importer:
             except json.JSONDecodeError:
                 report.skipped_invalid += 1
                 offset = next_offset
-                state[source.path] = {"offset": offset, "fingerprint": first}
+                state[source.path] = {"offset": offset, "fingerprint": first, "inode": inode}
                 self._write_state(state)
                 continue
             submission = map_row(source, row, self.config) if isinstance(row, Mapping) else None
             if submission is None:
                 report.skipped_invalid += 1
                 offset = next_offset
-                state[source.path] = {"offset": offset, "fingerprint": first}
+                state[source.path] = {"offset": offset, "fingerprint": first, "inode": inode}
                 self._write_state(state)
                 continue
             result = self.telemetry.emit(submission)
@@ -221,7 +227,7 @@ class Importer:
             report.admitted += 1
             report.duplicates += int(result.value.duplicate)
             offset = next_offset
-            state[source.path] = {"offset": offset, "fingerprint": first}
+            state[source.path] = {"offset": offset, "fingerprint": first, "inode": inode}
             self._write_state(state)
         return report
 

@@ -39,10 +39,10 @@ def test_partial_line_not_consumed_until_newline(tmp_path: Path) -> None:
 
 def test_truncation_and_rotation_restart_without_loss(tmp_path: Path) -> None:
     importer, source, spec = _importer(tmp_path); assert importer.import_source(spec).admitted == 1
-    source.write_text(_row(2) + "\n")
+    source.write_text(_row(2) + "\n")  # truncation resets the byte offset
     assert importer.import_source(spec).admitted == 1
-    source.replace(tmp_path / "old") if False else None
-    source.write_text(_row(3) + "\n")
+    replacement = tmp_path / "replacement.jsonl"; replacement.write_text(_row(3) + "\n")
+    replacement.replace(source)  # inode replacement resets the byte offset
     assert importer.import_source(spec).admitted == 1
 
 
