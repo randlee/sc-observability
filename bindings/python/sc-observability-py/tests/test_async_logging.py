@@ -8,6 +8,8 @@ import weakref
 
 import pytest
 
+from controlled_async_loop import CompletionLoop
+
 from sc_observability import Err, LogEvent, Logger, Ok, generated
 from sc_observability.async_logging import _flush_async, _pools, _submit, _teardown
 
@@ -227,3 +229,28 @@ def test_foreign_operation_errors_are_contained_without_retry(stage: str) -> Non
     assert isinstance(result, Err) and result.error.kind == "internal"
     assert native.calls == 1 and native.reserved == 0
     assert all(not pool.observers for pool in _pools.values())
+
+
+def test_observer_expiry_uses_controlled_deadline_without_cancelling_native_work() -> None:
+    with CompletionLoop() as loop:
+        async def run() -> None:
+            native = Native()
+            task = loop.create_task(_flush_async(native))
+            observed = loop.create_future()
+
+            def expire() -> None:
+                assert native.calls == 1
+                assert not native.operations[0].done
+                loop.now = 2.0
+                observed.set_result(None)
+
+            loop.call_soon(expire)
+            await observed
+            result = await task
+            assert isinstance(result, Err) and result.error.kind == "timeout"
+            assert native.calls == 1 and not native.operations[0].done
+            assert all(not pool.observers for pool in _pools.values())
+            native.operations[0].done = True
+            assert native.operations[0].state() == DONE
+
+        loop.run_until_complete(run())
