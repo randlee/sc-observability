@@ -85,7 +85,10 @@ def _assert_wire_form(fixture: str, request: dict[str, object]) -> None:
         }]
         assert dictionary["attributeTable"] == [{"keyStrindex": 0, "unitStrindex": 0}]
         assert dictionary["stackTable"] == [{"locationIndices": []}]
-        assert dictionary["linkTable"][0]["traceId"] == "AAAAAAAAAAAAAAAAAAAAAA=="
+        assert dictionary["linkTable"] == [{
+            "spanId": "AAAAAAAAAAA=",
+            "traceId": "AAAAAAAAAAAAAAAAAAAAAA==",
+        }]
         assert profile["profileId"] == "EREREREREREREREREREREQ=="
         return
 
