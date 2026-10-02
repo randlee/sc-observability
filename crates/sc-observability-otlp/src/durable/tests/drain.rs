@@ -440,6 +440,7 @@ fn flush_deadline_does_not_wait_for_the_writer_mutex() {
     std::thread::scope(|scope| {
         let (entered, receive_entered) = std::sync::mpsc::sync_channel(1);
         let (release, released) = std::sync::mpsc::channel();
+        let (completed, receive_completed) = std::sync::mpsc::sync_channel(1);
         let shared = &client.owner.shared;
         let drain = scope.spawn(move || {
             FROZEN_NOW.set(now);
@@ -452,12 +453,17 @@ fn flush_deadline_does_not_wait_for_the_writer_mutex() {
                 },
                 Signal::Logs,
             );
+            let _ = completed.send(());
         });
-        // The sender belongs solely to the drain: a panic or early return closes
-        // it. There is no scheduler deadline on establishing the precondition.
-        receive_entered
-            .recv()
-            .expect("drain exited before entering export");
+        // Entry is established by the exporter handshake. The deadline is a
+        // failure-only watchdog; panic or early return also closes the sender.
+        if receive_entered.recv_timeout(DEADLINE).is_err() {
+            shared.stop.store(true, Ordering::Release);
+            shared.notify();
+            drop(release);
+            let _ = drain.join();
+            panic!("drain did not reach export");
+        }
         let locked = client.owner.shared.db.lock().unwrap();
         let (send, receive) = std::sync::mpsc::sync_channel(1);
         let client = &client;
@@ -468,7 +474,19 @@ fn flush_deadline_does_not_wait_for_the_writer_mutex() {
         let shutdown = client.shutdown(Duration::ZERO);
         drop(locked);
         drop(release);
-        drain.join().unwrap();
+        match receive_completed.recv_timeout(DEADLINE) {
+            Ok(()) => drain.join().unwrap(),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                shared.stop.store(true, Ordering::Release);
+                shared.notify();
+                let _ = drain.join();
+                panic!("drain did not complete after release");
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                drain.join().unwrap();
+                panic!("drain exited without completion");
+            }
+        }
         assert!(shutdown.is_err());
         assert!(result.expect("flush waited for the writer mutex").is_err());
     });

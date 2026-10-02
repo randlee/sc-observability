@@ -349,7 +349,7 @@ pub(super) fn drain_once_for_test(
     signal: Signal,
 ) -> bool {
     assert!(shared.drain_on_flush_only.load(Ordering::Acquire));
-    assert!(shared.active_flushes.load(Ordering::Acquire) <= 1);
+    assert_eq!(shared.live_workers.load(Ordering::Acquire), 0);
     matches!(
         drain_ready(shared, exporter, signal).unwrap(),
         DrainProgress::Exported
