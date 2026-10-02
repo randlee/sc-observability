@@ -1,4 +1,6 @@
-# Error API migration to 2.0
+# Error API migration to 2.0 (deferred)
+
+> **Current release:** ADR-020 and the [compatible 1.x amendment](plans/phase-d/compatible-1x-amendment.md) supersede the removal instructions below. Released deprecated APIs and typed helpers remain supported in 1.x. The following recipe describes a future, separately authorized 2.0 migration.
 
 This is the ADR-017 replacement contract, not the historical Phase B additive
 `*_typed` rollout. D18 activates the canonical root re-exports and removes the
