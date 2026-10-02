@@ -100,7 +100,7 @@ and neutral signal serialization changes.
 
 The existing consumers are under `scripts/ci/fixtures/error-migration/`.
 D18's final `python3 scripts/ci/validate_error_migration.py` must execute the
-migrated canonical recipes and reject the intentionally old source. At this
-release-governance layer that validator still implements the Phase B warning
-contract; its result does not prove canonical removal. The main D18 work owns
-that adaptation and the full default/all-features workspace tests.
+migrated canonical recipes and reject the intentionally old source. The
+validator enforces the retained 1.x typed-sibling and deprecation contract
+through the `compat.rs` facade. Canonical removal is deferred to a separately
+authorized 2.0 release; D18 owns the full default/all-features workspace tests.
