@@ -38,18 +38,6 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
         .unwrap_or("non-string panic payload")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::panic_message;
-
-    #[test]
-    fn panic_message_preserves_string_payloads_and_bounds_other_payloads() {
-        assert_eq!(panic_message(&"expected panic"), "expected panic");
-        assert_eq!(panic_message(&String::from("owned panic")), "owned panic");
-        assert_eq!(panic_message(&42_u8), "non-string panic payload");
-    }
-}
-
 fn run() -> u8 {
     let cli = match cli::Cli::try_parse() {
         Ok(cli) => cli,
@@ -66,4 +54,16 @@ fn run() -> u8 {
         }
     };
     run::run(&cli)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::panic_message;
+
+    #[test]
+    fn panic_message_preserves_string_payloads_and_bounds_other_payloads() {
+        assert_eq!(panic_message(&"expected panic"), "expected panic");
+        assert_eq!(panic_message(&String::from("owned panic")), "owned panic");
+        assert_eq!(panic_message(&42_u8), "non-string panic payload");
+    }
 }

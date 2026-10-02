@@ -14,7 +14,6 @@ pub(crate) struct Classification {
 pub(crate) fn classify(error: &CliError) -> Classification {
     match error {
         CliError::Input(_) => rejected(constants::EXIT_INVALID_INPUT),
-        CliError::Internal(_) => rejected(constants::EXIT_INTERNAL),
         CliError::Telemetry(TelemetryClientError::Submission(_)) => {
             rejected(constants::EXIT_INVALID_INPUT)
         }
@@ -37,7 +36,7 @@ pub(crate) fn classify(error: &CliError) -> Classification {
         // `TelemetryClientError` is non-exhaustive. A future shared variant has no
         // CLI contract yet, so it remains an internal failure until this table is
         // explicitly extended rather than being misreported as another class.
-        CliError::Telemetry(_) => rejected(constants::EXIT_INTERNAL),
+        CliError::Internal(_) | CliError::Telemetry(_) => rejected(constants::EXIT_INTERNAL),
     }
 }
 
