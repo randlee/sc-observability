@@ -629,6 +629,17 @@ fn rejects_non_utf8_value_in_selected_namespace() {
     assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
 }
 
+#[cfg(windows)]
+#[test]
+fn rejects_non_utf8_value_in_selected_namespace() {
+    let snapshot = EnvSnapshot::from_pairs([(
+        OsString::from("SC_LOG_LEVEL"),
+        OsString::from_wide(&[0xD800]),
+    )]);
+    let error = LogSettings::from_env(&snapshot, &EnvPrefix::new("SC").unwrap()).unwrap_err();
+    assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
+}
+
 #[test]
 fn settings_conversion_preserves_every_non_inventory_default() {
     let service = ServiceName::new("settings-test").expect("valid service");
@@ -739,6 +750,24 @@ fn ignores_non_utf8_key_outside_selected_namespace() {
     let snapshot = EnvSnapshot::from_pairs([
         (
             OsString::from_vec(b"UNRELATED_\xFF".to_vec()),
+            OsString::from("ignored"),
+        ),
+        (OsString::from("SC_LOG_LEVEL"), OsString::from("Info")),
+    ]);
+
+    let settings = LogSettings::from_env(&snapshot, &EnvPrefix::new("SC").unwrap())
+        .expect("unrelated non-UTF-8 key must be ignored");
+    assert_eq!(settings.level, Some(LevelFilter::Info));
+}
+
+#[cfg(windows)]
+#[test]
+fn ignores_non_utf8_key_outside_selected_namespace() {
+    let mut unrelated_key = "UNRELATED_".encode_utf16().collect::<Vec<_>>();
+    unrelated_key.push(0xD800);
+    let snapshot = EnvSnapshot::from_pairs([
+        (
+            OsString::from_wide(&unrelated_key),
             OsString::from("ignored"),
         ),
         (OsString::from("SC_LOG_LEVEL"), OsString::from("Info")),

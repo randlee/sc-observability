@@ -338,6 +338,12 @@ fn paths_keep_absence_and_non_unicode() {
         let path = std::path::PathBuf::from(std::ffi::OsString::from_vec(vec![255]));
         assert_eq!(from_path(Some(&path)), PathDto::Unrepresentable);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+        let path = std::path::PathBuf::from(std::ffi::OsString::from_wide(&[0xD800]));
+        assert_eq!(from_path(Some(&path)), PathDto::Unrepresentable);
+    }
 }
 #[test]
 fn registry_has_unique_literals_and_exact_remediation() {
