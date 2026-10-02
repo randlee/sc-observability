@@ -54,6 +54,12 @@ backends = ["sync-http"]
 features = []
 default_features = true
 
+[transport.bytes]
+version = "=1.12.1"
+backends = ["sync-http"]
+features = []
+default_features = true
+
 [transport.tokio]
 version = "=1.53.1"
 backends = ["otlp-sdk", "sync-http"]
