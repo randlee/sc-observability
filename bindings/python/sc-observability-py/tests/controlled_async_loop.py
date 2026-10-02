@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 
 class CompletionLoop(asyncio.SelectorEventLoop):
@@ -12,8 +13,10 @@ class CompletionLoop(asyncio.SelectorEventLoop):
     operation state still decide completion; this loop never supplies a Result.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, hard_bound_s: float) -> None:
         self.now = 0.0
+        self._hard_bound_s = hard_bound_s
+        self._hard_deadline = time.monotonic() + hard_bound_s
         super().__init__()
         self.set_debug(True)
 
@@ -21,6 +24,11 @@ class CompletionLoop(asyncio.SelectorEventLoop):
         return self.now
 
     def call_later(self, delay, callback, *args, context=None):
+        if time.monotonic() > self._hard_deadline:
+            raise AssertionError(
+                f"observed operation did not complete within {self._hard_bound_s}s "
+                f"of real time; observer clock frozen at {self.now}"
+            )
         return self.call_at(self.now, callback, *args, context=context)
 
     def __enter__(self):

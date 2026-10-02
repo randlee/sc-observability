@@ -79,7 +79,8 @@ def test_32_synchronized_native_submissions_and_async_producers(tmp_path: Path) 
             *(f"thread.{index}" for index in range(32)),
             *(f"task.{index}" for index in range(32)),
         }
-    with CompletionLoop() as loop:
+    # This only fails a hung native flush loudly; it is never a success criterion.
+    with CompletionLoop(hard_bound_s=10.0) as loop:
         loop.run_until_complete(run())
         assert loop.time() == 0.0
     assert isinstance(logger.shutdown(), Ok)

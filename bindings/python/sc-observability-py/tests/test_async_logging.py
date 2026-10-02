@@ -232,7 +232,8 @@ def test_foreign_operation_errors_are_contained_without_retry(stage: str) -> Non
 
 
 def test_observer_expiry_uses_controlled_deadline_without_cancelling_native_work() -> None:
-    with CompletionLoop() as loop:
+    # This only fails a hung native flush loudly; it is never a success criterion.
+    with CompletionLoop(hard_bound_s=10.0) as loop:
         async def run() -> None:
             native = Native()
             task = loop.create_task(_flush_async(native))
@@ -252,5 +253,22 @@ def test_observer_expiry_uses_controlled_deadline_without_cancelling_native_work
             assert all(not pool.observers for pool in _pools.values())
             native.operations[0].done = True
             assert native.operations[0].state() == DONE
-
         loop.run_until_complete(run())
+
+
+def test_completion_loop_hard_bound_fails_loudly() -> None:
+    with CompletionLoop(hard_bound_s=0.0) as loop:
+        async def run() -> None:
+            never = loop.create_future()
+
+            def poll() -> None:
+                try:
+                    loop.call_later(0.001, poll)
+                except AssertionError as error:
+                    never.set_exception(error)
+
+            loop.call_soon(poll)
+            await never
+
+        with pytest.raises(AssertionError, match="did not complete"):
+            loop.run_until_complete(run())
