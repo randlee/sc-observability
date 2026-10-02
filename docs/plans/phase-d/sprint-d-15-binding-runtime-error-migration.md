@@ -46,7 +46,7 @@ Consume `obs-d-12`'s cause mapping and `ErrorContext` contract (ADR-017, PHD-001
 | operation | preserve operation identity/receipt distinction and exact underlying canonical source; no error-to-success conversion | operation result tests |
 | spawn | native startup failure -> `InitError::Runtime`; retain source/remediation | worker spawn failure tests |
 | sync | preserve local synchronization state error and its cause; map only at the existing operation boundary to the relevant flush/shutdown error | concurrent completion tests |
-| timer | deadline -> operation-specific `FlushError::Drain` or `ShutdownError::Timeout`; observer cancellation never cancels native work | timeout/cancellation tests |
+| timer | deadline -> shared `observer_timeout()` failure with the `native_operation` label; observer cancellation never cancels native work | timeout/cancellation tests |
 
 All seven retain their local structural error families where they are not canonical shared errors; do not add duplicate shared wrappers or classifiers. Migrate neutral model consumers and DTO conversion calls in this crate without changing schema ownership. Context keys live in bounded `Diagnostic.details`. No blanket `TryLogFailure -> sink write` conversion: preserve invalid-event/queue-full/shutdown distinctions.
 
@@ -65,7 +65,8 @@ families before projecting to its retained DTO boundary: event conversion uses
 `EventError::Validation`, helper/timer startup uses `InitError::Runtime` (with
 the native startup source retained), flush completion uses `FlushError::Drain`,
 shutdown failures use `ShutdownError::{Timeout,Drain}`, and observer deadlines
-classify flush and shutdown independently. Existing admission categories,
+share one `observer_timeout()` failure with the `native_operation` label.
+Existing admission categories,
 operation ownership, retained shutdown results, and observer cancellation
 semantics remain unchanged. The contract matrix includes typed-context and
 tagged-DTO assertions for these mappings.
