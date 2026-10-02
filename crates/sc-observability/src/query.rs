@@ -495,11 +495,11 @@ fn file_identity_for_path_with_metadata(
     };
 
     let file = File::open(path)?;
-    let handle = file.as_raw_handle() as *mut std::ffi::c_void;
+    let handle = file.as_raw_handle();
     let mut info = BY_HANDLE_FILE_INFORMATION::default();
     // SAFETY: `handle` comes from a live `std::fs::File`, and `info` points to
     // writable stack storage for the OS to fill synchronously.
-    let ok = unsafe { GetFileInformationByHandle(handle, &mut info) };
+    let ok = unsafe { GetFileInformationByHandle(handle, &raw mut info) };
     if ok == 0 {
         return Err(io::Error::other(format!(
             "GetFileInformationByHandle failed for `{}`: {}",
@@ -526,7 +526,7 @@ fn file_identity_for_path_with_metadata(
     Ok(file_identity(metadata))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn file_identity_for_path(path: &Path) -> FileIdentity {
     let metadata = fs::metadata(path).expect("metadata");
     file_identity_for_path_with_metadata(path, &metadata).expect("file identity")

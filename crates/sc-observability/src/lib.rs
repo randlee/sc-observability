@@ -3309,7 +3309,10 @@ mod tests {
     // This test exercises the Unix-specific replacement helper above. Windows
     // follow identity now uses filesystem identity metadata, but the distinct-
     // inode recreation harness remains Unix-only.
-    #[cfg_attr(windows, ignore)]
+    #[cfg_attr(
+        windows,
+        ignore = "the deterministic recreated-inode harness is Unix-only"
+    )]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
