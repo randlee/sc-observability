@@ -1,6 +1,6 @@
 use std::process::Command;
 mod common;
-use common::fixture_component;
+use common::assert_result_v1;
 
 #[test]
 fn stdin_fragment_and_profile_conflicts_are_usage_errors() {
@@ -21,120 +21,133 @@ fn stdin_fragment_and_profile_conflicts_are_usage_errors() {
 }
 
 #[cfg(feature = "test-double")]
+fn recorded_run(
+    args: &[&str],
+    endpoint: Option<&str>,
+) -> (
+    serde_json::Value,
+    Vec<serde_json::Value>,
+    Option<serde_json::Value>,
+) {
+    let directory = tempfile::tempdir().expect("record directory");
+    let record = directory.path().join("record.json");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
+    command
+        .args(args)
+        .env_remove("SC_OTEL_TEST_DOUBLE")
+        .env_remove("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .env("SC_OTEL_TEST_DOUBLE_RECORD", &record);
+    if let Some(endpoint) = endpoint {
+        command.env("OTEL_EXPORTER_OTLP_ENDPOINT", endpoint);
+    }
+    let output = command.output().expect("CLI runs");
+    assert!(output.status.success(), "{output:?}");
+    let name = args
+        .iter()
+        .find(|arg| matches!(**arg, "emit" | "flush" | "status" | "validate"))
+        .expect("subcommand");
+    let result = assert_result_v1(&output.stdout, name);
+    let calls = std::fs::read_to_string(record.with_extension("calls.jsonl"))
+        .expect("calls read")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("call JSON"))
+        .collect();
+    let envelope = std::fs::read(record)
+        .ok()
+        .map(|bytes| serde_json::from_slice(&bytes).expect("envelope JSON"));
+    (result, calls, envelope)
+}
+
+#[cfg(feature = "test-double")]
 #[test]
 fn documented_global_and_repeatable_flags_reach_the_command_contract() {
     let directory = tempfile::tempdir().expect("temporary directory");
     let fragment = directory.path().join("log.json");
-    let script = directory.path().join("double.json");
-    let record = directory.path().join("record.json");
-    std::fs::write(&fragment, "{}").expect("fragment writes");
-    std::fs::write(&script, "{}").expect("double script writes");
-    let file_arg = format!("@{}", fragment.display());
-    let store = directory.path().join("store.sqlite");
-    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
-        .args([
+    let bytes =
+        br#"{"body":{"kind":"string","data":"file-specific payload"},"event_name":"from-file"}"#;
+    std::fs::write(&fragment, bytes).expect("fragment writes");
+    let store = directory.path().join("explicit.sqlite");
+    let store = store.to_str().expect("store path");
+    let file = format!("@{}", fragment.display());
+    let (result, calls, envelope) = recorded_run(
+        &[
             "--store",
-            store.to_str().expect("UTF-8 store"),
+            store,
             "--endpoint",
-            "http://127.0.0.1:4318",
+            "http://localhost:54321",
             "emit",
             "--record-key",
             "flag-record",
             "--log",
-            &file_arg,
-        ])
-        .env("SC_OTEL_TEST_DOUBLE", &script)
-        .env("SC_OTEL_TEST_DOUBLE_RECORD", &record)
-        .output()
-        .expect("binary runs");
-    assert!(output.status.success(), "{output:?}");
-    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("result JSON");
+            &file,
+        ],
+        None,
+    );
+    assert_eq!(calls[0]["endpoint"], "http://localhost:54321");
+    assert_eq!(calls[0]["store_path"], store);
     assert_eq!(result["receipt"]["record_key"], "flag-record");
-    assert!(
-        record.is_file(),
-        "the @file fragment reached the test double"
-    );
-
-    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
-        .args([
-            "--store",
-            store.to_str().expect("UTF-8 store"),
-            "status",
-            "--record-key",
-            "flag-record",
-        ])
-        .env("SC_OTEL_TEST_DOUBLE", &script)
-        .output()
-        .expect("binary runs");
-    assert!(output.status.success(), "{output:?}");
-    assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&output.stdout).expect("result JSON")["state"],
-        "status"
-    );
+    let supplied: serde_json::Value = serde_json::from_slice(bytes).expect("file JSON");
+    let record = &envelope.expect("recorded envelope")["logs"][0]["record"];
+    for (key, value) in supplied.as_object().expect("fragment object") {
+        assert_eq!(&record[key], value, "file field {key}");
+    }
 }
 
 #[cfg(feature = "test-double")]
 #[test]
 fn flag_table_success_paths_cover_fragments_record_keys_and_repeatable_status_queries() {
-    let directory = tempfile::tempdir().expect("temporary directory");
-    let log = directory.path().join("log.json");
-    let span = directory.path().join("span.json");
-    let metric = directory.path().join("metric.json");
-    let profile = directory.path().join("profile.json");
-    std::fs::write(&log, "{}").expect("log writes");
-    std::fs::write(&span, fixture_component("traces", "spans")).expect("span writes");
-    std::fs::write(&metric, fixture_component("metric_gauge", "metrics")).expect("metric writes");
-    std::fs::write(&profile, fixture_component("profiles", "profiles")).expect("profile writes");
-    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+    let combined = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
         .args([
             "validate",
             "--log",
-            &format!("@{}", log.display()),
+            "{}",
             "--span",
-            &format!("@{}", span.display()),
+            &common::fixture_component("traces", "spans"),
             "--metric",
-            &format!("@{}", metric.display()),
+            &common::fixture_component("metric_gauge", "metrics"),
             "--profile",
-            &format!("@{}", profile.display()),
+            &common::fixture_component("profiles", "profiles"),
         ])
         .output()
-        .expect("binary runs");
-    assert!(output.status.success(), "{output:?}");
-
+        .expect("combined flags run");
+    assert!(combined.status.success(), "{combined:?}");
+    let combined = assert_result_v1(&combined.stdout, "validate");
+    for signal in ["logs", "spans", "metrics"] {
+        assert_eq!(
+            combined["envelope"][signal]
+                .as_array()
+                .expect("signal array")
+                .len(),
+            1
+        );
+    }
+    assert!(combined["envelope"]["profiles"].is_object());
+    let directory = tempfile::tempdir().expect("temporary directory");
     let store = directory.path().join("store.sqlite");
-    let script = directory.path().join("double.json");
-    std::fs::write(&script, "{}").expect("double script writes");
-    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
-        .args([
+    let store = store.to_str().expect("store path");
+    let (_, explicit, _) = recorded_run(&["--store", store, "flush", "--timeout", "0"], None);
+    let (_, default, _) = recorded_run(&["--store", store, "flush"], None);
+    assert_eq!(explicit[1]["method"], "flush");
+    assert_eq!(explicit[1]["deadline_ms"], 0);
+    assert!(default[1]["deadline_ms"].as_u64().expect("deadline") > 0);
+    let (_, selected, _) = recorded_run(
+        &[
             "--store",
-            store.to_str().expect("UTF-8 store"),
+            store,
             "status",
             "--record-key",
-            "flag-record",
-        ])
-        .env("SC_OTEL_TEST_DOUBLE", &script)
-        .output()
-        .expect("binary runs");
-    assert!(output.status.success(), "{output:?}");
-    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("result JSON");
-    assert_eq!(result["state"], "status");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
-        .args([
-            "--store",
-            store.to_str().expect("UTF-8 store"),
-            "flush",
-            "--timeout",
-            "0",
-        ])
-        .env("SC_OTEL_TEST_DOUBLE", &script)
-        .output()
-        .expect("binary runs");
-    assert!(output.status.success(), "{output:?}");
-    assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&output.stdout).expect("result JSON")["state"],
-        "admitted_delivered"
+            "K",
+            "--record-key",
+            "J",
+        ],
+        None,
     );
+    let (_, summary, _) = recorded_run(&["--store", store, "status"], None);
+    assert_eq!(
+        selected[1]["query"],
+        serde_json::json!({"kind":"record_keys","keys":["K","J"]})
+    );
+    assert_eq!(summary[1]["query"], serde_json::json!({"kind":"summary"}));
 }
 
 #[cfg(feature = "test-double")]
@@ -142,69 +155,51 @@ fn flag_table_success_paths_cover_fragments_record_keys_and_repeatable_status_qu
 fn config_environment_is_resolved_for_a_valid_test_double_session() {
     let directory = tempfile::tempdir().expect("temporary directory");
     let store = directory.path().join("store.sqlite");
-    let script = directory.path().join("double.json");
-    std::fs::write(&script, "{}").expect("double script writes");
-    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
-        .args(["--store", store.to_str().expect("UTF-8 store"), "flush"])
-        .env("SC_OTEL_TEST_DOUBLE", &script)
-        .env("SC_OTEL_AUTH_HEADER", "config-env-secret")
-        .output()
-        .expect("binary runs");
-    assert!(output.status.success(), "{output:?}");
-    let text = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        !text.contains("config-env-secret"),
-        "secret config is not rendered"
-    );
+    let args = ["--store", store.to_str().expect("store path"), "flush"];
+    let (_, set, _) = recorded_run(&args, Some("http://localhost:54322"));
+    let (_, unset, _) = recorded_run(&args, None);
+    assert_eq!(set[0]["endpoint"], "http://localhost:54322");
+    assert_ne!(unset[0]["endpoint"], set[0]["endpoint"]);
 }
 
 #[test]
 fn equivalent_flag_and_stdin_input_produce_the_same_envelope_field_by_field() {
-    let stdin_path = common::golden_root().join("logs/input.json");
-    let log = fixture_component("logs", "logs");
-    let flags = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
-        .args(["validate", "--log", &log])
-        .output()
-        .expect("flag validation runs");
-    let stdin = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
-        .args(["validate", "--stdin"])
-        .stdin(std::fs::File::open(stdin_path).expect("fixture input opens"))
-        .output()
-        .expect("stdin validation runs");
-    assert!(flags.status.success(), "{flags:?}");
-    assert!(stdin.status.success(), "{stdin:?}");
-    let mut flags: serde_json::Value = serde_json::from_slice::<serde_json::Value>(&flags.stdout)
-        .expect("flag result JSON")["envelope"]
-        .clone();
-    let mut stdin: serde_json::Value = serde_json::from_slice::<serde_json::Value>(&stdin.stdout)
-        .expect("stdin result JSON")["envelope"]
-        .clone();
-    normalize_system_generated_fields(&mut flags);
-    normalize_system_generated_fields(&mut stdin);
-    assert_eq!(
-        flags, stdin,
-        "equivalent inputs preserve every non-generated field"
-    );
-}
-
-fn normalize_system_generated_fields(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Array(values) => {
-            for value in values {
-                normalize_system_generated_fields(value);
-            }
+    for fixture in common::D29_FIXTURES {
+        let path = common::golden_root().join(fixture);
+        if !path.join("expected.envelope.json").is_file() {
+            continue;
         }
-        serde_json::Value::Object(values) => {
-            for (field, value) in values.iter_mut() {
-                if matches!(field.as_str(), "observed_time" | "trace_id" | "span_id")
-                    && value.is_string()
-                {
-                    *value = serde_json::Value::String("<system-generated>".into());
-                } else {
-                    normalize_system_generated_fields(value);
+        let input: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path.join("input.json")).expect("input"))
+                .expect("JSON");
+        let mut command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
+        command.arg("validate");
+        for (key, flag) in [
+            ("logs", "--log"),
+            ("spans", "--span"),
+            ("metrics", "--metric"),
+        ] {
+            if let Some(records) = input[key].as_array() {
+                for record in records {
+                    command.arg(flag).arg(record.to_string());
                 }
             }
         }
-        _ => {}
+        if !input["profiles"].is_null() {
+            command.arg("--profile").arg(input["profiles"].to_string());
+        }
+        let flags = command.output().expect("flags run");
+        let stdin = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+            .args(["validate", "--stdin"])
+            .stdin(std::fs::File::open(path.join("input.json")).expect("input opens"))
+            .output()
+            .expect("stdin runs");
+        assert!(flags.status.success(), "{fixture}: {flags:?}");
+        assert!(stdin.status.success(), "{fixture}: {stdin:?}");
+        let mut flags = assert_result_v1(&flags.stdout, "validate")["envelope"].clone();
+        let mut stdin = assert_result_v1(&stdin.stdout, "validate")["envelope"].clone();
+        common::mask_generated(&mut flags, &input);
+        common::mask_generated(&mut stdin, &input);
+        assert_eq!(flags, stdin, "{fixture}: every non-generated field");
     }
 }

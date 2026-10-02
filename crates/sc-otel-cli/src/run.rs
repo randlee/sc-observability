@@ -9,7 +9,7 @@ use crate::{
     client, config, constants,
     error::CliError,
     input,
-    output::{self, Outcome},
+    output::{self, AdmittedState, Outcome, SuccessState},
 };
 use sc_observability_types::otlp::submission::{
     RecordKey, StatusQuery, SubmissionId, TelemetryClient, TelemetryClientConfig,
@@ -33,10 +33,8 @@ pub(crate) fn run(cli: &Cli) -> u8 {
 fn validate(args: &crate::cli::InputArgs) -> Outcome {
     match input::envelope(args, None) {
         Ok(envelope) => {
-            let mut outcome = Outcome::success(
-                constants::CommandName::Validate,
-                constants::OutcomeState::Validated,
-            );
+            let mut outcome =
+                Outcome::success(constants::CommandName::Validate, SuccessState::Validated);
             outcome.envelope = match serde_json::to_value(envelope) {
                 Ok(envelope) => Some(envelope),
                 Err(error) => {
@@ -63,11 +61,11 @@ fn emit(cli: &Cli, args: &EmitArgs) -> Outcome {
             Err(error) => return failure(constants::CommandName::Emit, error),
         };
         if args.no_flush {
-            return Outcome::success(
+            return Outcome::admitted(
                 constants::CommandName::Emit,
-                constants::OutcomeState::AdmittedPending,
-            )
-            .with_receipt(receipt);
+                receipt,
+                AdmittedState::Pending,
+            );
         }
         flush_emission(client, receipt, config.emit_flush_deadline)
     })
@@ -79,9 +77,12 @@ fn flush_emission(
     deadline: std::time::Duration,
 ) -> Outcome {
     match client.flush_submission(&receipt.submission_id, deadline) {
-        Ok(report) => Outcome::success(constants::CommandName::Emit, delivery_state(&report))
-            .with_receipt(receipt)
-            .with_flush(report),
+        Ok(report) => Outcome::admitted(
+            constants::CommandName::Emit,
+            receipt,
+            delivery_state(&report),
+        )
+        .with_flush(report),
         Err(error) => {
             let error: CliError = error.into();
             Outcome::admitted_failure(constants::CommandName::Emit, receipt, error)
@@ -93,8 +94,11 @@ fn flush(cli: &Cli, args: &FlushArgs) -> Outcome {
     with_session(cli, constants::CommandName::Flush, |config, client| {
         let deadline = args.timeout.unwrap_or(config.flush_deadline);
         match client.flush(deadline) {
-            Ok(report) => Outcome::success(constants::CommandName::Flush, delivery_state(&report))
-                .with_flush(report),
+            Ok(report) => Outcome::success(
+                constants::CommandName::Flush,
+                SuccessState::Delivery(delivery_state(&report)),
+            )
+            .with_flush(report),
             Err(error) => failure(constants::CommandName::Flush, error),
         }
     })
@@ -109,11 +113,8 @@ fn status(cli: &Cli, args: &StatusArgs) -> Outcome {
         cli,
         constants::CommandName::Status,
         |_, client| match client.status(query) {
-            Ok(status) => Outcome::success(
-                constants::CommandName::Status,
-                constants::OutcomeState::Status,
-            )
-            .with_status(status),
+            Ok(status) => Outcome::success(constants::CommandName::Status, SuccessState::Status)
+                .with_status(status),
             Err(error) => failure(constants::CommandName::Status, error),
         },
     )
@@ -164,15 +165,13 @@ fn failure(command: constants::CommandName, error: impl Into<CliError>) -> Outco
     Outcome::failure(command, error.into())
 }
 
-fn delivery_state(
-    report: &sc_observability_types::otlp::submission::FlushReport,
-) -> constants::OutcomeState {
+fn delivery_state(report: &sc_observability_types::otlp::submission::FlushReport) -> AdmittedState {
     if report.failed.total() > 0 || report.evicted.total() > 0 {
-        constants::OutcomeState::AdmittedFailed
+        AdmittedState::Failed
     } else if report.still_pending.total() > 0 {
-        constants::OutcomeState::AdmittedPending
+        AdmittedState::Pending
     } else {
-        constants::OutcomeState::AdmittedDelivered
+        AdmittedState::Delivered
     }
 }
 
@@ -255,7 +254,7 @@ mod tests {
         let client = ShutdownDeadlineRecorder(Mutex::new(None));
         let outcome = Outcome::success(
             constants::CommandName::Emit,
-            constants::OutcomeState::AdmittedDelivered,
+            SuccessState::Delivery(AdmittedState::Delivered),
         );
 
         let result = finish_shutdown(
@@ -333,7 +332,7 @@ mod tests {
         let outcome = flush_emission(&FlushSubmissionFailure, receipt, Duration::ZERO);
 
         assert_eq!(outcome.exit_code, constants::EXIT_ADMISSION);
-        assert_eq!(outcome.state.as_str(), "admitted_failed");
+        assert_eq!(outcome.state().as_str(), "admitted_failed");
         assert!(outcome.receipt().is_some());
     }
 }

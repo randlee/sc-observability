@@ -1,14 +1,16 @@
 //! Maps shared client failures to the stable CLI exit contract.
 
-use crate::{
-    constants::{self, OutcomeState},
-    error::CliError,
-};
+use crate::{constants, error::CliError, output::AdmittedState};
 use sc_observability_types::otlp::submission::{DeliveryError, FlushReport, TelemetryClientError};
+
+pub(crate) enum FailureState {
+    Rejected,
+    Delivery(AdmittedState),
+}
 
 pub(crate) struct Classification {
     pub(crate) exit_code: u8,
-    pub(crate) state: OutcomeState,
+    pub(crate) state: FailureState,
     pub(crate) flush: Option<FlushReport>,
 }
 
@@ -27,7 +29,7 @@ pub(crate) fn classify(error: &CliError) -> Classification {
             ..
         })) => Classification {
             exit_code: constants::EXIT_DELIVERY_PENDING,
-            state: OutcomeState::AdmittedPending,
+            state: FailureState::Delivery(AdmittedState::Pending),
             flush: Some(report.clone()),
         },
         CliError::Telemetry(TelemetryClientError::Delivery(DeliveryError::TerminalFailure {
@@ -35,7 +37,7 @@ pub(crate) fn classify(error: &CliError) -> Classification {
             ..
         })) => Classification {
             exit_code: constants::EXIT_DELIVERY_FAILED,
-            state: OutcomeState::AdmittedFailed,
+            state: FailureState::Delivery(AdmittedState::Failed),
             flush: Some(report.clone()),
         },
         // `TelemetryClientError` is non-exhaustive. A future shared variant has no
@@ -48,7 +50,7 @@ pub(crate) fn classify(error: &CliError) -> Classification {
 const fn rejected(exit_code: u8) -> Classification {
     Classification {
         exit_code,
-        state: OutcomeState::Rejected,
+        state: FailureState::Rejected,
         flush: None,
     }
 }
@@ -56,6 +58,7 @@ const fn rejected(exit_code: u8) -> Classification {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::OutcomeState;
     use crate::error::InputError;
     use sc_observability_types::otlp::submission::{
         AdmissionError, DeliveryError, FlushReport, SubmissionError, TelemetryConfigError,
@@ -138,7 +141,11 @@ mod tests {
         for (error, exit_code, state) in cases {
             let classification = classify(&error);
             assert_eq!(classification.exit_code, exit_code);
-            assert_eq!(classification.state.as_str(), state.as_str());
+            let actual = match classification.state {
+                FailureState::Rejected => OutcomeState::Rejected,
+                FailureState::Delivery(state) => state.output(),
+            };
+            assert_eq!(actual.as_str(), state.as_str());
         }
     }
 }

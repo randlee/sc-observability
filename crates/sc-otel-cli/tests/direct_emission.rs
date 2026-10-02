@@ -2,7 +2,7 @@
 
 use std::process::Command;
 mod common;
-use common::fixture_component;
+use common::{assert_result_v1, fixture_component};
 
 #[test]
 fn test_double_emits_every_signal_and_combined_stdin() {
@@ -40,8 +40,7 @@ fn test_double_emits_every_signal_and_combined_stdin() {
         }
         let output = command.output().expect("binary runs");
         assert!(output.status.success(), "{output:?}");
-        let result: serde_json::Value =
-            serde_json::from_slice(&output.stdout).expect("result JSON");
+        let result: serde_json::Value = assert_result_v1(&output.stdout, "emit");
         assert_eq!(result["state"], "admitted_delivered");
         assert!(
             result["receipt"]["signals"]
@@ -59,8 +58,7 @@ fn test_double_emits_every_signal_and_combined_stdin() {
         }
         let validated = validate.output().expect("validate runs");
         assert!(validated.status.success(), "{validated:?}");
-        let validated: serde_json::Value =
-            serde_json::from_slice(&validated.stdout).expect("validated JSON");
+        let validated: serde_json::Value = assert_result_v1(&validated.stdout, "validate");
         let mut recorded: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&record).expect("record reads"))
                 .expect("recorded envelope JSON");
@@ -110,7 +108,7 @@ fn test_double_uses_default_script_when_script_path_is_unset() {
         .expect("binary runs");
 
     assert!(output.status.success(), "{output:?}");
-    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("result JSON");
+    let result: serde_json::Value = assert_result_v1(&output.stdout, "emit");
     assert_eq!(result["state"], "admitted_pending");
     assert!(result["flush"].is_null());
 }

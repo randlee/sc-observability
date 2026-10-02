@@ -62,6 +62,9 @@ fn open_test_double(
         }
         None => DoubleScript::default(),
     };
+    record_call(
+        &serde_json::json!({"method":"open", "endpoint":config.endpoint, "store_path":config.store_path}),
+    );
     Ok(Box::new(RecordingTestClient {
         inner: InMemoryTelemetryClient::with_script(config, script),
         record_path: std::env::var_os(constants::TEST_DOUBLE_RECORD_ENV)
@@ -108,6 +111,7 @@ impl TelemetryClient for RecordingTestClient {
         &self,
         deadline: std::time::Duration,
     ) -> Result<sc_observability_types::otlp::submission::FlushReport, TelemetryClientError> {
+        record_call(&serde_json::json!({"method":"flush", "deadline_ms":deadline.as_millis()}));
         self.inner.flush(deadline)
     }
 
@@ -130,6 +134,34 @@ impl TelemetryClient for RecordingTestClient {
         &self,
         query: sc_observability_types::otlp::submission::StatusQuery,
     ) -> Result<sc_observability_types::otlp::submission::StoreStatus, TelemetryClientError> {
+        use sc_observability_types::otlp::submission::StatusQuery;
+        let value = match &query {
+            StatusQuery::Summary => serde_json::json!({"kind":"summary"}),
+            StatusQuery::RecordKeys(keys) => {
+                serde_json::json!({"kind":"record_keys", "keys": keys.iter().map(ToString::to_string).collect::<Vec<_>>()})
+            }
+            StatusQuery::Submissions(ids) => {
+                serde_json::json!({"kind":"submissions", "ids":ids.iter().map(ToString::to_string).collect::<Vec<_>>()})
+            }
+            _ => serde_json::json!({"kind":"unknown"}),
+        };
+        record_call(&serde_json::json!({"method":"status", "query":value}));
         self.inner.status(query)
+    }
+}
+
+/// Separate process-test witness preserves the existing envelope-only record.
+#[cfg(feature = "test-double")]
+fn record_call(call: &serde_json::Value) {
+    use std::io::Write;
+    if let Some(path) = std::env::var_os(constants::TEST_DOUBLE_RECORD_ENV) {
+        let path = std::path::PathBuf::from(path).with_extension("calls.jsonl");
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .expect("test witness opens");
+        serde_json::to_writer(&mut file, call).expect("test witness serializes");
+        writeln!(file).expect("test witness writes");
     }
 }

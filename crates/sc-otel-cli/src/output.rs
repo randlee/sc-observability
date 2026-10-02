@@ -9,10 +9,31 @@ use sc_observability_types::otlp::submission::{AdmissionReceipt, FlushReport, St
 use serde_json::{Value, json};
 use std::{error::Error, fmt::Write};
 
+#[derive(Clone, Copy)]
+pub(crate) enum AdmittedState {
+    Pending,
+    Delivered,
+    Failed,
+}
+impl AdmittedState {
+    pub(crate) const fn output(self) -> OutcomeState {
+        match self {
+            Self::Pending => OutcomeState::AdmittedPending,
+            Self::Delivered => OutcomeState::AdmittedDelivered,
+            Self::Failed => OutcomeState::AdmittedFailed,
+        }
+    }
+}
+
+pub(crate) enum SuccessState {
+    Validated,
+    Status,
+    Delivery(AdmittedState),
+}
+
 pub(crate) struct Outcome {
     pub(crate) command: CommandName,
     pub(crate) exit_code: u8,
-    pub(crate) state: OutcomeState,
     result: OutcomeResult,
     pub(crate) flush: Option<FlushReport>,
     pub(crate) status: Option<StoreStatus>,
@@ -20,22 +41,44 @@ pub(crate) struct Outcome {
 }
 
 enum OutcomeResult {
-    Success,
+    Success(SuccessState),
     Admitted {
         receipt: AdmissionReceipt,
+        state: AdmittedState,
         error: Option<CliError>,
     },
-    DeliveryFailure(CliError),
+    DeliveryFailure {
+        state: AdmittedState,
+        error: CliError,
+    },
     Rejected(CliError),
 }
 
 impl Outcome {
-    pub(crate) fn success(command: CommandName, state: OutcomeState) -> Self {
+    pub(crate) fn success(command: CommandName, state: SuccessState) -> Self {
         Self {
             command,
             exit_code: constants::EXIT_OK,
-            state,
-            result: OutcomeResult::Success,
+            result: OutcomeResult::Success(state),
+            flush: None,
+            status: None,
+            envelope: None,
+        }
+    }
+
+    pub(crate) fn admitted(
+        command: CommandName,
+        receipt: AdmissionReceipt,
+        state: AdmittedState,
+    ) -> Self {
+        Self {
+            command,
+            exit_code: constants::EXIT_OK,
+            result: OutcomeResult::Admitted {
+                receipt,
+                state,
+                error: None,
+            },
             flush: None,
             status: None,
             envelope: None,
@@ -44,28 +87,20 @@ impl Outcome {
 
     pub(crate) fn failure(command: CommandName, error: CliError) -> Self {
         let classification = crate::exit::classify(&error);
-        let rejected = matches!(classification.state, OutcomeState::Rejected);
+        let result = match classification.state {
+            crate::exit::FailureState::Rejected => OutcomeResult::Rejected(error),
+            crate::exit::FailureState::Delivery(state) => {
+                OutcomeResult::DeliveryFailure { state, error }
+            }
+        };
         Self {
             command,
             exit_code: classification.exit_code,
-            state: classification.state,
-            result: if rejected {
-                OutcomeResult::Rejected(error)
-            } else {
-                OutcomeResult::DeliveryFailure(error)
-            },
+            result,
             flush: classification.flush,
             status: None,
             envelope: None,
         }
-    }
-
-    pub(crate) fn with_receipt(mut self, receipt: AdmissionReceipt) -> Self {
-        self.result = OutcomeResult::Admitted {
-            receipt,
-            error: None,
-        };
-        self
     }
 
     pub(crate) fn admitted_failure(
@@ -74,23 +109,32 @@ impl Outcome {
         error: CliError,
     ) -> Self {
         let classification = crate::exit::classify(&error);
+        let state = match classification.state {
+            crate::exit::FailureState::Rejected => AdmittedState::Failed,
+            crate::exit::FailureState::Delivery(state) => state,
+        };
         Self {
             command,
             exit_code: classification.exit_code,
-            // Admission completed before the later operation failed, so this is
-            // never a rejected outcome even when the later error has that class.
-            state: if matches!(classification.state, OutcomeState::Rejected) {
-                OutcomeState::AdmittedFailed
-            } else {
-                classification.state
-            },
             result: OutcomeResult::Admitted {
                 receipt,
+                state,
                 error: Some(error),
             },
             flush: classification.flush,
             status: None,
             envelope: None,
+        }
+    }
+
+    pub(crate) fn state(&self) -> OutcomeState {
+        match &self.result {
+            OutcomeResult::Success(SuccessState::Validated) => OutcomeState::Validated,
+            OutcomeResult::Success(SuccessState::Status) => OutcomeState::Status,
+            OutcomeResult::Success(SuccessState::Delivery(state))
+            | OutcomeResult::Admitted { state, .. }
+            | OutcomeResult::DeliveryFailure { state, .. } => state.output(),
+            OutcomeResult::Rejected(_) => OutcomeState::Rejected,
         }
     }
 
@@ -109,8 +153,8 @@ impl Outcome {
     pub(crate) fn receipt(&self) -> Option<&AdmissionReceipt> {
         match &self.result {
             OutcomeResult::Admitted { receipt, .. } => Some(receipt),
-            OutcomeResult::Success
-            | OutcomeResult::DeliveryFailure(_)
+            OutcomeResult::Success(_)
+            | OutcomeResult::DeliveryFailure { .. }
             | OutcomeResult::Rejected(_) => None,
         }
     }
@@ -118,8 +162,10 @@ impl Outcome {
     fn error(&self) -> Option<&CliError> {
         match &self.result {
             OutcomeResult::Admitted { error, .. } => error.as_ref(),
-            OutcomeResult::DeliveryFailure(error) | OutcomeResult::Rejected(error) => Some(error),
-            OutcomeResult::Success => None,
+            OutcomeResult::DeliveryFailure { error, .. } | OutcomeResult::Rejected(error) => {
+                Some(error)
+            }
+            OutcomeResult::Success(_) => None,
         }
     }
 }
@@ -132,7 +178,7 @@ pub(crate) fn print(format: OutputFormat, outcome: &Outcome) {
 }
 
 fn print_text(outcome: &Outcome) {
-    let mut text = format!("{} exit={}", outcome.state.as_str(), outcome.exit_code);
+    let mut text = format!("{} exit={}", outcome.state().as_str(), outcome.exit_code);
     if let Some(receipt) = outcome.receipt() {
         write!(text, " submission={}", receipt.submission_id)
             .expect("writing to a String cannot fail");
@@ -157,7 +203,7 @@ fn as_json(outcome: &Outcome) -> Value {
         "schema": constants::RESULT_SCHEMA,
         "command": outcome.command.as_str(),
         "exit_code": outcome.exit_code,
-        "state": outcome.state.as_str(),
+        "state": outcome.state().as_str(),
         "receipt": outcome.receipt(),
         "flush": outcome.flush,
         "status": outcome.status,

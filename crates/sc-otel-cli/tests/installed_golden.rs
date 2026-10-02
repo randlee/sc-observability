@@ -1,6 +1,6 @@
 mod common;
 
-use common::{d29_system_generated_fields, golden_root};
+use common::{D29_FIXTURES, D29_SYSTEM_GENERATED_FIELDS, assert_result_v1, golden_root};
 use sc_observability_types::Timestamp;
 use std::{
     fs,
@@ -31,22 +31,27 @@ fn installed_cli_matches_every_shared_golden_fixture() {
     let temp = tempfile::tempdir().expect("temporary installation directory");
     let binary = installed_binary(temp.path());
     let fixture_root = golden_root();
-    let expected_fixture_count = fs::read_dir(&fixture_root)
-        .expect("golden root reads")
-        .filter_map(Result::ok)
-        .filter(|entry| entry.path().join("input.json").is_file())
-        .count();
     let mut fixtures = fs::read_dir(&fixture_root)
         .expect("golden root reads")
         .map(|entry| entry.expect("fixture directory reads").path())
         .filter(|path| path.join("input.json").is_file())
         .collect::<Vec<_>>();
     fixtures.sort();
+    let scanned = fixtures
+        .iter()
+        .map(|path| {
+            path.file_name()
+                .expect("name")
+                .to_str()
+                .expect("UTF-8 name")
+        })
+        .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(
-        expected_fixture_count, 22,
-        "D29 golden fixture contract count"
+        scanned,
+        D29_FIXTURES.iter().copied().collect(),
+        "independent D29 fixture-name inventory"
     );
-    assert_eq!(fixtures.len(), 22, "fixture directories on disk");
+    assert_eq!(D29_FIXTURES.len(), 22);
 
     for fixture in fixtures {
         let input = fixture.join("input.json");
@@ -65,8 +70,7 @@ fn installed_cli_matches_every_shared_golden_fixture() {
                 .stdin(fs::File::open(&input).expect("fixture input opens"));
         }
         let output = command.output().expect("installed CLI runs");
-        let result: serde_json::Value =
-            serde_json::from_slice(&output.stdout).expect("installed CLI emits JSON");
+        let result: serde_json::Value = assert_result_v1(&output.stdout, "validate");
         let finished = Timestamp::now_utc();
 
         if let Ok(expected) = fs::read(fixture.join("expected.envelope.json")) {
@@ -105,76 +109,29 @@ fn assert_system_generated_fields(
     started: Timestamp,
     finished: Timestamp,
 ) {
-    let empty_input = Vec::new();
-    assert_eq!(
-        d29_system_generated_fields().len(),
-        3,
-        "the D29 generated-field allowance is derived from canonicalization"
-    );
-    validate_records(
-        envelope["logs"].as_array_mut().expect("logs array"),
-        expected["logs"].as_array().expect("expected logs array"),
-        input["logs"].as_array().unwrap_or(&empty_input),
-        started,
-        finished,
-        false,
-    );
-    validate_records(
-        envelope["spans"].as_array_mut().expect("spans array"),
-        expected["spans"].as_array().expect("expected spans array"),
-        input["spans"].as_array().unwrap_or(&empty_input),
-        started,
-        finished,
-        true,
-    );
-}
-
-fn validate_records(
-    records: &mut [serde_json::Value],
-    expected: &[serde_json::Value],
-    input: &[serde_json::Value],
-    started: Timestamp,
-    finished: Timestamp,
-    span: bool,
-) {
-    for ((record, expected), input) in records.iter_mut().zip(expected).zip(input) {
-        let record = record["record"]
-            .as_object_mut()
-            .expect("canonical record object");
-        let expected = expected["record"]
-            .as_object()
-            .expect("expected record object");
-        if !span && input.get("observed_time").is_none() && expected.contains_key("observed_time") {
-            let actual = record
-                .get("observed_time")
-                .expect("generated observed_time is present")
-                .clone();
-            let timestamp: Timestamp =
-                serde_json::from_value(actual).expect("generated observed_time is RFC 3339 UTC");
-            assert!(
-                started <= timestamp && timestamp <= finished,
-                "generated observed_time falls within the installed invocation"
-            );
-            record.insert("observed_time".into(), expected["observed_time"].clone());
-        }
-        for (field, width) in [("trace_id", 32), ("span_id", 16)] {
-            if input.get(field).is_none() && expected[field].is_string() {
-                let actual = record[field]
-                    .as_str()
-                    .expect("generated identifier is present and string");
-                assert_hex_identifier(actual, width, field);
-                record.insert(field.into(), expected[field].clone());
+    for &(signal, field) in D29_SYSTEM_GENERATED_FIELDS {
+        let records = envelope[signal].as_array_mut().expect("signal records");
+        for (index, record) in records.iter_mut().enumerate() {
+            if input[signal][index][field].is_null()
+                && expected[signal][index]["record"][field].is_string()
+            {
+                let actual = record["record"]
+                    .get(field)
+                    .expect("generated field present");
+                common::assert_generated_value(field, actual, started, finished);
+                record["record"][field] = expected[signal][index]["record"][field].clone();
             }
         }
     }
-}
-
-fn assert_hex_identifier(value: &str, width: usize, field: &str) {
-    assert_eq!(value.len(), width, "generated {field} width");
-    assert!(
-        value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
-        "generated {field} is lowercase hexadecimal"
-    );
+    for signal in ["metrics", "profiles"] {
+        assert!(
+            !D29_SYSTEM_GENERATED_FIELDS
+                .iter()
+                .any(|(owner, _)| *owner == signal)
+        );
+        assert_eq!(
+            envelope[signal], expected[signal],
+            "{signal} has no generated fields"
+        );
+    }
 }

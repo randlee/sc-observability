@@ -1,3 +1,5 @@
+mod common;
+use common::assert_result_v1;
 use std::process::Command;
 
 #[test]
@@ -14,7 +16,7 @@ fn usage_and_invalid_input_have_stable_exit_codes() {
         .output()
         .expect("binary runs");
     assert_eq!(invalid.status.code(), Some(3));
-    let result: serde_json::Value = serde_json::from_slice(&invalid.stdout).expect("result JSON");
+    let result: serde_json::Value = assert_result_v1(&invalid.stdout, "validate");
     assert_eq!(result["schema"], "sc-otel.result/v1");
     assert_eq!(result["exit_code"], 3);
     assert_eq!(
@@ -85,15 +87,18 @@ fn every_non_usage_exit_has_the_result_schema_and_expected_code() {
         let script_path = directory.path().join(format!("{expected_exit}.json"));
         let mut command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
         command.args(["--store", store.to_str().expect("UTF-8 store")]);
-        command.args(args);
+        let result_command = *args
+            .iter()
+            .find(|a| matches!(**a, "emit" | "validate" | "flush" | "status"))
+            .expect("subcommand");
+        command.args(&args);
         if let Some(script) = script {
             std::fs::write(&script_path, script).expect("script writes");
             command.env("SC_OTEL_TEST_DOUBLE", &script_path);
         }
         let output = command.output().expect("binary runs");
         assert_eq!(output.status.code(), Some(expected_exit), "{output:?}");
-        let result: serde_json::Value =
-            serde_json::from_slice(&output.stdout).expect("result JSON");
+        let result: serde_json::Value = assert_result_v1(&output.stdout, result_command);
         assert_eq!(result["schema"], "sc-otel.result/v1");
         assert_eq!(result["exit_code"], expected_exit);
     }
@@ -106,7 +111,7 @@ fn missing_store_path_is_a_config_exit_with_a_result_schema() {
         .output()
         .expect("binary runs");
     assert_eq!(output.status.code(), Some(4), "{output:?}");
-    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("result JSON");
+    let result: serde_json::Value = assert_result_v1(&output.stdout, "flush");
     assert_eq!(result["schema"], "sc-otel.result/v1");
     assert_eq!(
         result["error"]["code"],
@@ -138,6 +143,7 @@ fn delivery_failure_takes_precedence_and_config_diagnostics_redact_credentials()
         .output()
         .expect("binary runs");
     assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert_result_v1(&output.stdout, "emit");
     assert!(!String::from_utf8_lossy(&output.stdout).contains("secret-value"));
     assert!(!String::from_utf8_lossy(&output.stderr).contains("secret-value"));
 }
@@ -152,12 +158,12 @@ fn status_and_flush_successes_have_the_zero_exit_contract() {
         vec!["--store", store.to_str().expect("UTF-8 store"), "flush"],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
-            .args(args)
+            .args(&args)
             .output()
             .expect("binary runs");
         assert_eq!(output.status.code(), Some(0), "{output:?}");
         let result: serde_json::Value =
-            serde_json::from_slice(&output.stdout).expect("result JSON");
+            assert_result_v1(&output.stdout, args.last().expect("command"));
         assert_eq!(result["exit_code"], 0);
     }
 }
