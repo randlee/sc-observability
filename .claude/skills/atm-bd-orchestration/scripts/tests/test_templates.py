@@ -69,6 +69,34 @@ class TemplateContractTests(unittest.TestCase):
                 self.assertIn("`git fetch origin && git rebase origin/{{ pr_target | string | cdata_escape }}` in the worktree", text)
                 self.assertLess(text.index("git rebase origin/"), text.index("assignment-gates.py dev"))
 
+    def test_integration_completion_requires_audit_evidence(self):
+        import json
+        import tempfile
+
+        template = ROOT / "templates/review-complete.md.j2"
+        original = json.loads((ROOT / "examples/review-complete-vars.json").read_text())
+        cases = [
+            ({**original, "verdict": "PASS", "integration_review": "integration_review_passed",
+              "post_mortem_md": "Inventory: 0; fixed 0; justified non-fix 0; unresolved 0. no_systemic_followup"}, True),
+            ({**original, "integration_review": "integration_review_failed"}, True),
+            ({**original, "integration_review": "PASS"}, False),
+            ({**original, "post_mortem_md": "  "}, False),
+            ({k: v for k, v in original.items() if k != "integration_review"}, False),
+            ({k: v for k, v in original.items() if k != "post_mortem_md"}, False),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            variables = Path(directory) / "vars.json"
+            for values, valid in cases:
+                with self.subTest(values=values, valid=valid):
+                    variables.write_text(json.dumps(values))
+                    result = subprocess.run([
+                        "sc-compose", "render", "--file", str(template),
+                        "--var-file", str(variables), "--strict"], capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, valid, result.stderr)
+                    if valid:
+                        machine = json.loads(result.stdout.split("```json\n", 1)[1].split("```", 1)[0])
+                        self.assertEqual(machine["integration_review"], values["integration_review"])
+
     def test_assignment_examples_render_strictly(self):
         examples = ROOT / "examples"
         templates = sorted((ROOT / "templates").glob("*.j2"))

@@ -162,3 +162,11 @@ refusal) is defined once, in the `atm-bd-orchestration` skill ("Dispatch").
 3. When a task closes, its bead closes with it, except after a failed sanity check or plan review, which leaves the bead open. Run `bd sync`, then `bd ready` again. After a
    green sanity check or a triaged QA, create and wire the QA or finding beads
    first, then run `bd ready`.
+
+## Phase Closure
+
+Closed beads alone do not establish that fixes landed. After integration,
+run the phase-end review and finding reconciliation in
+[`atm-bd-orchestration/references/post-mortem.md`](../../atm-bd-orchestration/references/post-mortem.md).
+Include closed finding beads and verify their resolutions at the pinned
+integration head before closing the phase or merging it to `develop`.

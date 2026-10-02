@@ -1,6 +1,6 @@
 ---
 name: atm-bd-orchestration
-version: 0.3.6
+version: 0.3.7
 description: Bead-driven phase orchestration for the lead. Use when running a phase whose plan is in beads, dispatching from `bd ready` with ATM tasks, and landing it as one gh stack.
 requires:
   cli:
@@ -246,11 +246,19 @@ assignee's worktree.
 
 When every sprint and finding bead is closed
 (`bd list -l phase-<x> --status open,in_progress,blocked -n 0 --json` lists only
-the phase root), run the phase-end review (below). When its findings are
-closed too, land the stack (`recipe-land.md`), close the phase root, and run
-`bd sync`.
+the phase root), land the phase stack on `integrate/phase-<x>`, then run the
+phase-end review below on that integration commit. A closed finding is not
+proof that its fix landed. Close the phase root and merge to `develop` only
+after the integration post-mortem passes at the final integration head; then
+run `bd sync`.
 
 ### Phase-End Review
+
+Read [references/post-mortem.md](references/post-mortem.md). The phase-end
+review includes a reconciliation of every finding bead, including closed
+ones, against the final integration source. Assign `branch` =
+`integrate/phase-<x>` and `commit` = its fetched, pinned head; reviewing a
+stack tip alone does not satisfy this gate.
 
 Create the review bead, then dispatch it with `review-template.xml.j2`:
 
@@ -275,7 +283,12 @@ On review-complete, file each finding with `finding-bead.json.j2`, using:
   of the sprints it touches, dropping every `NONE` and duplicate. Use
   exactly `["NONE"]` only when that union is empty.
 
-Fix them as for any finding.
+Fix them as for any finding and land their fixes on the integration branch.
+Have the filing reviewers verify the carried findings there, then refresh
+the post-mortem inventory and integration evidence at the new head. Do not
+restart a full code sweep for this verification pass. The completion report
+must say `integration_review_passed`; missing evidence, unresolved findings,
+or a different integration head leave phase closure pending.
 
 ## Sync
 
