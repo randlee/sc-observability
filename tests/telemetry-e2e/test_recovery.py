@@ -20,35 +20,19 @@ def _config(path: Path, endpoint: str) -> Path:
     return path
 
 
-def test_offline_cli_admission_is_delivered_by_later_flush(
+def test_offline_cli_admission_records_terminal_delivery(
     installed_artifacts: dict[str, Path], tmp_path: Path,
 ) -> None:
-    """A failed delivery remains durable and a later process can take the lease."""
+    """Exhausting synchronous HTTP retries records a terminal durable failure."""
     port = free_port()
     config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{port}")
     payload = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
     offline = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin", cwd=tmp_path, input=payload)
-    assert offline.returncode == 6, offline.stdout + offline.stderr
-    admitted = json.loads(offline.stdout)
-    assert admitted["receipt"] is not None, admitted
-
-    collector = CaptureCollector(port)
-    collector.start()
-    try:
-        # The durable worker's retry schedule is intentional.  A later process
-        # takes the lease only when the first retry becomes eligible.
-        recovered = None
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            recovered = run_cli(installed_artifacts, "--config", str(config), "flush", "--timeout", "1", cwd=tmp_path)
-            if recovered.returncode == 0:
-                break
-            assert recovered.returncode == 6, recovered.stdout + recovered.stderr
-            time.sleep(0.25)
-        assert recovered is not None and recovered.returncode == 0, recovered.stdout + recovered.stderr
-        collector.wait_for("/v1/logs")
-    finally:
-        collector.stop()
+    assert offline.returncode == 7, offline.stdout + offline.stderr
+    terminal = json.loads(offline.stdout)
+    assert terminal["state"] == "admitted_failed", terminal
+    assert terminal["receipt"] is not None, terminal
+    assert terminal["flush"]["failed"]["logs"] == 1, terminal
 
 
 def test_partial_signal_failure_retains_the_failed_signal(
@@ -63,13 +47,18 @@ def test_partial_signal_failure_retains_the_failed_signal(
     }
     emitted = run_cli(installed_artifacts, "--config", str(telemetry_config), "emit", "--stdin",
                       cwd=tmp_path, input=json.dumps(payload))
-    assert emitted.returncode == 6, emitted.stdout + emitted.stderr
+    assert emitted.returncode == 7, emitted.stdout + emitted.stderr
+    result = json.loads(emitted.stdout)
+    assert result["state"] == "admitted_failed", result
+    assert result["flush"]["delivered"]["logs"] == 1, result
+    assert result["flush"]["failed"]["profiles"] == 1, result
     collector.wait_for("/v1/logs")
     collector.wait_for("/v1development/profiles")
     status = run_cli(installed_artifacts, "--config", str(telemetry_config), "status", cwd=tmp_path)
-    assert status.returncode == 6, status.stdout + status.stderr
+    assert status.returncode == 0, status.stdout + status.stderr
     report = json.loads(status.stdout)["status"]
     assert report is not None
+    assert report["failed"]["profiles"] == 1, report
 
 
 def test_context_exit_retains_delivery_failure_as_a_tagged_result(
@@ -125,7 +114,10 @@ os._exit(0)
     collector = CaptureCollector(port)
     collector.start()
     try:
-        deadline = time.monotonic() + 10
+        # A killed producer cannot release its default 30-second durable lease.
+        # Recovery is therefore bounded by that published lease plus a small
+        # scheduling margin, without injecting a test-only lease override.
+        deadline = time.monotonic() + 40
         resumed = None
         while time.monotonic() < deadline:
             resumed = run_cli(installed_artifacts, "--config", str(config), "flush", "--timeout", "1", cwd=tmp_path)

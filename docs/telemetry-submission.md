@@ -42,7 +42,10 @@ sc-otel --config telemetry.yaml status
 | 0 | The command completed and all selected records were delivered or validated. |
 | 2 | Command-line usage error. |
 | 3 | Submission validation error; inspect the JSON `error.code`. |
+| 4 | Configuration or unsupported-combination error. |
+| 5 | Admission failed before a durable record was created. |
 | 6 | The submission was admitted but delivery did not complete; retain the store and run `flush` after recovery. |
+| 7 | A signal exhausted its delivery attempts and was retained as a terminal failure. |
 
 ## Configuration precedence
 
