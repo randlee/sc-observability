@@ -288,6 +288,110 @@ fn signal_ready() {
         std::net::TcpStream::connect(std::env::var("SC_D33_TEST_READY").unwrap()).unwrap();
     stream.write_all(&[1]).unwrap();
 }
+enum DrainChildEvent {
+    SetupReady(std::net::TcpStream),
+    Exited {
+        status: std::process::ExitStatus,
+        stderr: Vec<u8>,
+    },
+}
+
+struct DrainChild {
+    events: std::sync::mpsc::Receiver<DrainChildEvent>,
+    control: Option<std::net::TcpStream>,
+}
+
+impl DrainChild {
+    fn setup_ready(&mut self) {
+        match self.events.recv().expect("drain child setup event") {
+            DrainChildEvent::SetupReady(stream) => self.control = Some(stream),
+            DrainChildEvent::Exited { status, stderr } => panic!(
+                "drain child exited before setup-ready with {status}: {}",
+                String::from_utf8_lossy(&stderr)
+            ),
+        }
+    }
+
+    fn release_setup(&mut self) {
+        self.control
+            .as_mut()
+            .expect("drain child reached setup-ready")
+            .write_all(&[1])
+            .expect("parent releases drain child setup gate");
+    }
+
+    fn wait(mut self) -> std::process::ExitStatus {
+        self.control.take();
+        match self.events.recv().expect("drain child exit event") {
+            DrainChildEvent::Exited { status, stderr } => {
+                assert!(
+                    status.success(),
+                    "drain child exited with {status}: {}",
+                    String::from_utf8_lossy(&stderr)
+                );
+                status
+            }
+            DrainChildEvent::SetupReady(_) => {
+                panic!("drain child reported setup-ready twice before exiting")
+            }
+        }
+    }
+}
+
+fn drain_child(path: &Path) -> DrainChild {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "durable::tests::drain::child_drainer",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env("SC_D33_TEST_STORE", path)
+        .env("SC_D33_TEST_MODE", "drain")
+        .env("SC_D33_TEST_READY", address.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let (send, events) = std::sync::mpsc::channel();
+    let ready_send = send.clone();
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            use std::io::Read;
+            let mut byte = [0];
+            if stream.read_exact(&mut byte).is_ok() && byte == [1] {
+                let _ = ready_send.send(DrainChildEvent::SetupReady(stream));
+            }
+        }
+    });
+    std::thread::spawn(move || {
+        let output = child.wait_with_output().expect("wait for drain child");
+        // Wake the listener if the child exited before connecting. Its EOF is
+        // deliberately not a setup-ready event.
+        let _ = std::net::TcpStream::connect(address);
+        let _ = send.send(DrainChildEvent::Exited {
+            status: output.status,
+            stderr: output.stderr,
+        });
+    });
+    DrainChild {
+        events,
+        control: None,
+    }
+}
+
+fn signal_drain_setup_ready_and_wait() {
+    use std::io::Read;
+    let mut stream =
+        std::net::TcpStream::connect(std::env::var("SC_D33_TEST_READY").unwrap()).unwrap();
+    stream.write_all(&[1]).unwrap();
+    let mut release = [0];
+    stream.read_exact(&mut release).unwrap();
+    assert_eq!(release, [1], "parent releases the drain setup gate");
+}
+
 struct CrashExporter {
     inner: ScriptedExporter,
     ready: std::sync::Once,
@@ -311,6 +415,9 @@ impl SubmissionExporter for CrashExporter {
 fn child_drainer() {
     let path = PathBuf::from(std::env::var_os("SC_D33_TEST_STORE").expect("parent supplies store"));
     let mode = std::env::var("SC_D33_TEST_MODE").unwrap();
+    if mode == "drain" {
+        signal_drain_setup_ready_and_wait();
+    }
     let exporter: Arc<dyn SubmissionExporter> = if mode == "crash" {
         Arc::new(CrashExporter {
             inner: ScriptedExporter::new(&path),
@@ -330,9 +437,6 @@ fn child_drainer() {
         loop {
             std::thread::park();
         }
-    }
-    if mode == "drain" {
-        signal_ready();
     }
     client.flush(DEADLINE).unwrap();
     client.shutdown(DEADLINE).unwrap();
@@ -398,10 +502,12 @@ fn delivery_counts(path: &Path) -> HashMap<String, usize> {
 fn two_process_drainers_no_loss() {
     let dir = tempfile::tempdir().unwrap();
     let receipts = seed(dir.path(), crate::constants::DRAIN_BATCH_SIZE * 2);
-    let mut first = child(dir.path(), "drain");
-    let mut second = child(dir.path(), "drain");
-    first.ready();
-    second.ready();
+    let mut first = drain_child(dir.path());
+    let mut second = drain_child(dir.path());
+    first.setup_ready();
+    second.setup_ready();
+    first.release_setup();
+    second.release_setup();
     assert!(first.wait().success());
     assert!(second.wait().success());
     let counts = delivery_counts(dir.path());
@@ -416,8 +522,9 @@ fn crash_mid_drain_resumes() {
     process.ready();
     process.kill();
     process.wait();
-    let mut replacement = child(dir.path(), "drain");
-    replacement.ready();
+    let mut replacement = drain_child(dir.path());
+    replacement.setup_ready();
+    replacement.release_setup();
     assert!(replacement.wait().success());
     let counts = delivery_counts(dir.path());
     assert_eq!(counts.len(), receipts.len() * 4);
