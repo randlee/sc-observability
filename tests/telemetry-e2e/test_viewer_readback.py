@@ -11,8 +11,11 @@ from conftest import GOLDENS, rpc, run_cli, run_installed_python
 
 _TIME = "1970-01-01T00:00:01.000000000Z"
 _TIME_NANOS = "1000000000"
-_TRACE_ID = "0123456789abcdef0123456789abcdef"
-_SPAN_ID = "0123456789abcdef"
+_TRACE_IDS = {
+    "python": "0123456789abcdef0123456789abcdef",
+    "cli": "fedcba9876543210fedcba9876543210",
+}
+_SPAN_IDS = {"python": "0123456789abcdef", "cli": "fedcba9876543210"}
 _LOW, _HIGH = "-1000000000", "1893456000000000000"
 
 
@@ -70,6 +73,7 @@ def _payload(frontend: str) -> dict[str, object]:
         return json.loads((GOLDENS / name / "input.json").read_text())
 
     service = f"telemetry-e2e-viewer-{frontend}"
+    trace_id, span_id = _TRACE_IDS[frontend], _SPAN_IDS[frontend]
     payload = golden("logs")
     payload["resource"] = {
         "attributes": {"service.name": service, "test.frontend": frontend},
@@ -80,12 +84,13 @@ def _payload(frontend: str) -> dict[str, object]:
     payload["record_key"] = f"viewer-readback-{frontend}"
     payload["logs"][0].update({
         "body": f"viewer-log-{frontend}", "time": _TIME, "observed_time": _TIME,
-        "attributes": {"test.frontend": frontend}, "trace_id": _TRACE_ID, "span_id": _SPAN_ID,
+        "attributes": {"test.frontend": frontend}, "trace_id": trace_id, "span_id": span_id,
         "correlation_id": f"viewer-{frontend}",
     })
     span = golden("traces")["spans"][0]
     span.update({
-        "name": f"viewer-span-{frontend}", "trace_id": _TRACE_ID, "span_id": _SPAN_ID,
+        "name": f"viewer-span-{frontend}", "trace_id": trace_id, "span_id": span_id,
+        "start_time": _TIME,
         "attributes": {"test.frontend": frontend}, "correlation_id": f"viewer-{frontend}",
     })
     payload["spans"] = [span]
@@ -100,7 +105,7 @@ def _payload(frontend: str) -> dict[str, object]:
         point = metric["data"]["data"]["points"][0]
         point["attributes"] = {"test.frontend": frontend}
         if value is not None:
-            point["value"] = {"kind": "float", "data": value}
+            point["value"] = {"kind": "double", "data": value}
         else:
             point.update({"sum": 20.0, "count": 3, "bucket_counts": [1, 2], "explicit_bounds": [5.0]})
         metrics.append(metric)
@@ -127,6 +132,7 @@ with opened.value as telemetry:
 
 def _assert_frontend_readback(viewer: dict[str, str], frontend: str) -> None:
     service = f"telemetry-e2e-viewer-{frontend}"
+    trace_id, span_id = _TRACE_IDS[frontend], _SPAN_IDS[frontend]
     body = f"viewer-log-{frontend}"
     span_name = f"viewer-span-{frontend}"
     logs = _wait_for(viewer, "searchLogs", [_LOW, _HIGH], lambda result: _row(result, body) is not None)
@@ -136,27 +142,29 @@ def _assert_frontend_readback(viewer: dict[str, str], frontend: str) -> None:
     detail = _wait_for(viewer, "getLog", [log_id], lambda result: isinstance(result, dict) and result.get("body") == body)
     assert isinstance(detail, dict)
     assert detail["body"] == body
-    assert detail["timeUnixNano"] == _TIME_NANOS
-    assert detail["observedTimeUnixNano"] == _TIME_NANOS
-    assert detail["traceID"] == _TRACE_ID
-    assert detail["spanID"] == _SPAN_ID
+    assert detail["timestamp"] == _TIME_NANOS
+    assert detail["observedTimestamp"] == _TIME_NANOS
+    assert detail["traceID"] == trace_id
+    assert detail["spanID"] == span_id
     _attributes(detail["resource"], {"service.name": service, "test.frontend": frontend}, "log resource")
     _attributes(detail, {"test.frontend": frontend}, "log")
 
     spans = _wait_for(
-        viewer, "searchSpans", [_TRACE_ID],
+        viewer, "searchSpans", [trace_id],
         lambda result: isinstance(result, dict) and any(
             isinstance(row, dict) and isinstance(row.get("spanData"), dict)
             and row["spanData"].get("name") == span_name for row in result.get("spans", [])
         ),
     )
     assert isinstance(spans, dict)
-    assert spans["traceID"] == _TRACE_ID
+    assert spans["traceID"] == trace_id
+    assert spans["traceStart"] == _TIME_NANOS
     span = next(row["spanData"] for row in spans["spans"]
                 if row.get("spanData", {}).get("name") == span_name)
-    assert span["spanID"] == _SPAN_ID
-    assert span["startTimeUnixNano"] == _TIME_NANOS
-    assert span["endTimeUnixNano"] == "2000000000"
+    assert span["spanID"] == span_id
+    assert span["start"] == 0
+    assert span["dur"] == 1_000_000_000
+    assert int(spans["traceStart"]) + span["start"] + span["dur"] == 2_000_000_000
     _attributes(spans["resources"][str(span["r"])],
                 {"service.name": service, "test.frontend": frontend}, "span resource")
     _attributes(span, {"test.frontend": frontend}, "span")
@@ -185,7 +193,7 @@ def _assert_frontend_readback(viewer: dict[str, str], frontend: str) -> None:
         )
         assert isinstance(metric, dict)
         point = metric["timeseries"][0]["datapoints"][0]
-        assert point["timeUnixNano"] == _TIME_NANOS
+        assert point["timestamp"] == _TIME_NANOS
         for field, value in fields.items():
             assert point[field] == value, f"{name} {field} was {point[field]!r}, expected {value!r}"
 
