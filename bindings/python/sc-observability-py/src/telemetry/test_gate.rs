@@ -19,10 +19,16 @@ pub(super) struct FlushGate {
 const WATCHDOG: Duration = Duration::from_secs(5);
 impl FlushGate {
     pub(super) fn arm(&self) {
-        *self.state.lock().unwrap() = State::Armed;
+        *self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = State::Armed;
     }
     pub(super) fn block(&self) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if *state != State::Armed {
             return;
         }
@@ -31,23 +37,33 @@ impl FlushGate {
         let (mut state, _) = self
             .changed
             .wait_timeout_while(state, WATCHDOG, |s| *s == State::Blocked)
-            .unwrap();
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *state = State::Finished;
         self.changed.notify_all();
     }
     pub(super) fn wait_entered(&self) -> bool {
-        let state = self.state.lock().unwrap();
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (state, _) = self
             .changed
             .wait_timeout_while(state, WATCHDOG, |s| *s == State::Armed)
-            .unwrap();
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         matches!(*state, State::Blocked | State::Released | State::Finished)
     }
     pub(super) fn is_blocked(&self) -> bool {
-        *self.state.lock().unwrap() == State::Blocked
+        *self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            == State::Blocked
     }
     pub(super) fn release(&self) {
-        *self.state.lock().unwrap() = State::Released;
+        *self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = State::Released;
         self.changed.notify_all();
     }
 }

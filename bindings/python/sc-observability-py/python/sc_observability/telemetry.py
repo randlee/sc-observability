@@ -248,7 +248,7 @@ def _serialized(input: Mapping[str, Any]) -> str | TelemetryErr:
         raise TypeError("input must be a Mapping")
     try:
         return json.dumps(dict(input), separators=(",", ":"), allow_nan=False)
-    except (TypeError, ValueError, OverflowError) as error:
+    except Exception as error:
         # Let the Rust parser own the registered invalid_json code and remediation.
         result = _invoke(lambda: _module().build_envelope(""), _string)
         if isinstance(result, TelemetryErr):

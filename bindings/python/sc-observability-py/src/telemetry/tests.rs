@@ -13,7 +13,8 @@ fn context() -> Box<ErrorContext> {
     )
 }
 fn assert_projection(error: &TelemetryClientError, kind: &str, variant: &str) {
-    let value: serde_json::Value = serde_json::from_str(&dto::failure(error)).unwrap();
+    let value: serde_json::Value =
+        serde_json::from_str(&dto::failure(error)).expect("valid test error JSON");
     assert_eq!(value["error"]["kind"], kind);
     assert_eq!(value["error"]["variant"], variant);
     assert_eq!(value["error"]["code"], error.code().as_str());
@@ -181,12 +182,18 @@ fn invalid_arguments_keep_registered_code_and_parse_cause() {
         config::status_query("{").unwrap_err(),
         config::status_query("\"unsupported\"").unwrap_err(),
     ] {
-        let value: serde_json::Value = serde_json::from_str(&dto::failure(&error)).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&dto::failure(&error)).expect("valid test error JSON");
         assert_eq!(
             value["error"]["code"],
             error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID.as_str()
         );
-        assert!(!value["error"]["cause"].as_str().unwrap().is_empty());
+        assert!(
+            !value["error"]["cause"]
+                .as_str()
+                .expect("valid test error JSON")
+                .is_empty()
+        );
     }
 }
 struct Bad;
@@ -198,11 +205,13 @@ impl serde::Serialize for Bad {
 
 #[test]
 fn panic_payload_and_serialization_failure_are_distinct() {
-    let raw = dto::result::<()>(|| panic!("panic detail"));
-    let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let raw =
+        dto::result::<()>(|| std::panic::resume_unwind(Box::new(String::from("panic detail"))));
+    let value: serde_json::Value = serde_json::from_str(&raw).expect("valid test error JSON");
     assert_eq!(value["error"]["variant"], "panic");
     assert_eq!(value["error"]["cause"], "panic detail");
-    let value: serde_json::Value = serde_json::from_str(&dto::ok(Bad)).unwrap();
+    let value: serde_json::Value =
+        serde_json::from_str(&dto::ok(Bad)).expect("valid test error JSON");
     assert_eq!(value["error"]["variant"], "serialization");
     assert_eq!(value["error"]["cause"], "serialize detail");
     assert_eq!(

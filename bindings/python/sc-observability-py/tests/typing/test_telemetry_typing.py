@@ -24,3 +24,19 @@ def render(result: TelemetryResult[str]) -> str:
 def build(document: dict[str, object]) -> str:
     result = build_envelope(document)
     return render(result)
+
+from os import PathLike
+from sc_observability import DeliveryStatus, FlushReport, LeaseInfo, Telemetry
+
+
+def use_facade(path: PathLike[str], telemetry: Telemetry) -> None:
+    Telemetry.open(path, store_path=path)
+    with telemetry:
+        telemetry.flush()
+    shutdown: TelemetryResult[FlushReport] | None = telemetry.last_shutdown
+    status = telemetry.status()
+    if isinstance(status, Ok):
+        lease: LeaseInfo | None = status.value.lease
+        rows: tuple[DeliveryStatus, ...] = status.value.submissions
+        if lease is not None:
+            print(lease.holder, lease.expires_at, rows, shutdown)

@@ -129,3 +129,15 @@ def test_internal_failure_has_registered_code(tmp_path: Path) -> None:
     assert result.error.kind == "internal"
     assert result.error.code == generated.SC_OBSERVABILITY_BINDING_INTERNAL
     assert result.error.cause == "load failed"
+
+
+def test_native_selected_status_decodes_delivery_status(tmp_path: Path) -> None:
+    from sc_observability import DeliveryStatus
+    telemetry = _double(tmp_path)
+    receipt = telemetry.emit(_input("logs"))
+    assert isinstance(receipt, Ok)
+    status = telemetry.status(submissions=[receipt.value.submission_id])
+    assert isinstance(status, Ok), status
+    assert isinstance(status.value.submissions[0], DeliveryStatus)
+    assert status.value.submissions[0].signals[0][0] == "logs"
+    assert status.value.submissions[0].signals[0][1]["state"] == "pending"
