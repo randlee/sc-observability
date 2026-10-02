@@ -47,20 +47,39 @@ def test_32_synchronized_native_submissions_and_async_producers(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=32) as workers:
         results = tuple(workers.map(submit, range(32)))
     assert all(isinstance(result, Ok) for result in results)
+    native_receipts = tuple(result.value for result in results if isinstance(result, Ok))
+    assert len(native_receipts) == 32
     async def run() -> None:
+        for receipt in native_receipts:
+            assert isinstance(await receipt.wait(0), Ok)
+        assert isinstance(await logger.flush_async(), Ok)
+        native_records = logger.query(LogQuery(limit=100))
+        assert isinstance(native_records, Ok)
+        assert {record.action for record in native_records.value.events} == {
+            f"thread.{index}" for index in range(32)
+        }
         ready = asyncio.Event()
-        async def producer(index: int) -> None:
+        async def producer(index: int) -> object:
             await ready.wait()
             submitted = logger.submit(LogEvent(level="info", target="async.runtime", action=f"task.{index}"))
             assert isinstance(submitted, Ok)
-            assert isinstance(await submitted.value.wait(0), Ok)
+            return submitted.value
         producers = [asyncio.create_task(producer(index)) for index in range(32)]
         ready.set()
-        await asyncio.gather(*producers)
+        async_receipts = await asyncio.gather(*producers)
+        assert len(async_receipts) == 32
+        for receipt in async_receipts:
+            assert isinstance(await receipt.wait(0), Ok)
+        # The first synchronized batch is durable before the second batch is
+        # admitted, so flush_async never races the combined 64-record load.
         assert isinstance(await logger.flush_async(), Ok)
+        records = logger.query(LogQuery(limit=100))
+        assert isinstance(records, Ok)
+        assert {record.action for record in records.value.events} == {
+            *(f"thread.{index}" for index in range(32)),
+            *(f"task.{index}" for index in range(32)),
+        }
     asyncio.run(run(), debug=True)
-    records = logger.query(LogQuery(limit=100))
-    assert isinstance(records, Ok) and len(records.value.events) == 64
     assert isinstance(logger.shutdown(), Ok)
 
 
