@@ -19,19 +19,32 @@ def _config(path: Path, endpoint: str) -> Path:
     return path
 
 
-def test_offline_cli_admission_records_terminal_delivery(
+def test_offline_retry_exhaustion_is_terminal_and_a_recovered_collector_accepts_a_new_submission(
     installed_artifacts: dict[str, Path], tmp_path: Path,
 ) -> None:
-    """Exhausting synchronous HTTP retries records a terminal durable failure."""
+    """The released retry budget is terminal; recovery accepts a new durable submission."""
     port = free_port()
     config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{port}")
     payload = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
-    offline = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin", cwd=tmp_path, input=payload)
+    offline = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
+                      cwd=tmp_path, input=payload)
     assert offline.returncode == 7, offline.stdout + offline.stderr
     terminal = json.loads(offline.stdout)
     assert terminal["state"] == "admitted_failed", terminal
     assert terminal["receipt"] is not None, terminal
     assert terminal["flush"]["failed"]["logs"] == 1, terminal
+    try:
+        collector = CaptureCollector(port)
+        collector.start()
+        recovered = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
+                            cwd=tmp_path, input=payload)
+        assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+        result = json.loads(recovered.stdout)
+        assert result["state"] == "admitted_delivered", result
+        collector.wait_for("/v1/logs")
+    finally:
+        if "collector" in locals():
+            collector.stop()
 
 
 def test_partial_signal_failure_retains_the_failed_signal(
@@ -90,7 +103,7 @@ print(telemetry.last_shutdown.error.code)
 def test_killed_python_admission_is_retained_for_recovery(
     installed_artifacts: dict[str, Path], tmp_path: Path,
 ) -> None:
-    """A process death after durable admission preserves a recoverable record."""
+    """A process death preserves the submission identity and its recovery record."""
     config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{free_port()}")
     source = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
     script = f"""\

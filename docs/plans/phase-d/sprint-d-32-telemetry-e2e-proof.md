@@ -153,8 +153,12 @@ reported to the lead. The lists change only by plan amendment.
   generated IDs. Both front ends take the one d-29 `SubmissionInput` shape.
 - [ ] req:PHD-007, req:PHD-008 (D4): `tests/telemetry-e2e/test_recovery.py`
   covers:
-  - `offline_then_recover`: the collector is down at emit (exit 6), and a
-    later `sc-otel flush` delivers.
+  - `offline_retry_exhaustion_is_terminal_and_a_recovered_collector_accepts_a_new_submission`:
+    the collector is down at emit (exit 7) after the released synchronous
+    HTTP retry budget is exhausted; that terminal record remains failed, and
+    a new CLI submission succeeds after the collector recovers. Durable
+    replay is instead proven by the interrupted mid-drain lease-takeover case
+    below, before its retry budget can be exhausted.
   - `kill_python_mid_drain_cli_resumes`: shared store; the CLI takes the
     lease and delivers.
   - `partial_signal_delivery`: the profiles endpoint returns 503 while logs

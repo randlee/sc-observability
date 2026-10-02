@@ -35,6 +35,7 @@ class CaptureCollector:
         self.requests: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self.statuses: dict[str, int] = defaultdict(lambda: 200)
         self._lock = threading.Lock()
+        self._blocked: dict[str, threading.Event] = {}
         collector = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -48,11 +49,19 @@ class CaptureCollector:
                 with collector._lock:
                     collector.requests[self.path].append(body)
                     status = collector.statuses[self.path]
+                    unblock = collector._blocked.get(self.path)
+                if unblock is not None:
+                    unblock.wait()
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", "2")
                 self.end_headers()
-                self.wfile.write(b"{}")
+                try:
+                    self.wfile.write(b"{}")
+                except (BrokenPipeError, ConnectionResetError):
+                    # A recovery test can intentionally terminate the process
+                    # owning this request before its held response is released.
+                    pass
 
             def log_message(self, _format: str, *_args: object) -> None:
                 return
@@ -76,6 +85,18 @@ class CaptureCollector:
     def clear(self) -> None:
         with self._lock:
             self.requests.clear()
+
+    def block(self, path: str) -> None:
+        """Hold subsequent responses on ``path`` until ``unblock`` is called."""
+        with self._lock:
+            self._blocked[path] = threading.Event()
+
+    def unblock(self, path: str) -> None:
+        """Release a response previously held by ``block``."""
+        with self._lock:
+            blocked = self._blocked.pop(path, None)
+        if blocked is not None:
+            blocked.set()
 
     def wait_for(self, path: str, *, count: int = 1, timeout: float = 10) -> list[dict[str, Any]]:
         deadline = time.monotonic() + timeout
@@ -190,8 +211,40 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+class PinnedViewer(dict[str, str]):
+    """A hash-pinned viewer that tests may stop and restart on its same ports."""
+
+    def __init__(self, binary: str, manifest: dict[str, str], state: Path) -> None:
+        self.binary = binary
+        self.manifest = manifest
+        self.state = state
+        self.harness = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
+        self.http, self.grpc, self.ui = (free_port(), free_port(), free_port())
+        super().__init__(otlp=f"http://127.0.0.1:{self.http}", rpc=f"http://127.0.0.1:{self.ui}/rpc")
+
+    def start(self) -> None:
+        started = subprocess.run(
+            [sys.executable, str(self.harness), "start", "--binary", self.binary,
+             "--version", self.manifest["version"], "--binary-sha256", self.manifest["binary_sha256"],
+             "--state-dir", str(self.state), "--http", str(self.http), "--grpc", str(self.grpc), "--ui", str(self.ui)],
+            check=False, text=True, capture_output=True,
+        )
+        assert started.returncode == 0, started.stdout + started.stderr
+
+    def stop(self) -> None:
+        stopped = subprocess.run(
+            [sys.executable, str(self.harness), "stop", "--state-dir", str(self.state), "--remove-state"],
+            check=False, text=True, capture_output=True,
+        )
+        assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+
+    def restart(self) -> None:
+        self.stop()
+        self.start()
+
+
 @pytest.fixture
-def pinned_viewer(tmp_path: Path) -> Iterator[dict[str, str]]:
+def pinned_viewer(tmp_path: Path) -> Iterator[PinnedViewer]:
     """Start only the caller-provided, hash-pinned desktop viewer binary.
 
     The workflow downloads it using the repository verifier; local developers
@@ -205,21 +258,13 @@ def pinned_viewer(tmp_path: Path) -> Iterator[dict[str, str]]:
             pytest.fail(f"{message}; CI must not skip viewer readback", pytrace=False)
         pytest.skip(message)
     manifest = json.loads((ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/release.json").read_text())
-    http, grpc, ui = (free_port(), free_port(), free_port())
-    state = tmp_path / "viewer-state"
-    harness = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
-    started = subprocess.run(
-        [sys.executable, str(harness), "start", "--binary", binary,
-         "--version", manifest["version"], "--binary-sha256", manifest["binary_sha256"],
-         "--state-dir", str(state), "--http", str(http), "--grpc", str(grpc), "--ui", str(ui)],
-        check=False, text=True, capture_output=True,
-    )
-    assert started.returncode == 0, started.stdout + started.stderr
+    viewer = PinnedViewer(binary, manifest, tmp_path / "viewer-state")
+    viewer.start()
     try:
-        yield {"otlp": f"http://127.0.0.1:{http}", "rpc": f"http://127.0.0.1:{ui}/rpc"}
+        yield viewer
     finally:
-        subprocess.run([sys.executable, str(harness), "stop", "--state-dir", str(state),
-                        "--remove-state"], check=False, text=True, capture_output=True)
+        if viewer.state.exists():
+            viewer.stop()
 
 
 def rpc(url: str, method: str, params: list[object]) -> object:
