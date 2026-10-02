@@ -19,6 +19,7 @@ from compatibility_registry import validate_trait_impl_contracts
 
 ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / 'target/public-api'
+PUBLIC_API_TOOLCHAIN = Path(__file__).with_name('public-api-toolchain').read_text().strip()
 
 # This is the sole approved exception to workspace API-policy qualification.
 # Keep the inventory metadata exact so the release gate cannot turn the
@@ -222,7 +223,7 @@ def main() -> int:
             raise ValueError(f'{crate}: initial-release declaration conflicts with registry; set published baseline')
         proc_macro_semver = args.mode == 'semver' and settings['kind'] == 'proc-macro' and not initial
         if args.mode == 'diff' or initial or proc_macro_semver:
-            command = ['cargo', 'public-api', '--manifest-path', package['manifest_path']]
+            command = ['cargo', f'+{PUBLIC_API_TOOLCHAIN}', 'public-api', '--manifest-path', package['manifest_path']]
             command.append('-sss')
             if not initial:
                 command.extend(['diff', baseline])

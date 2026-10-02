@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install nightly toolchain for public API validation
-        run: rustup toolchain install nightly
+        run: rustup toolchain install "$(cat scripts/ci/public-api-toolchain)"
       - name: Install pinned public API and evidence tools
         uses: taiki-e/install-action@v2
         with:
