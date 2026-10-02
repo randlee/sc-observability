@@ -114,10 +114,13 @@ def _common(source: Source, row: Mapping[str, object], config: Mapping[str, obje
         **{
             "phase": row.get("phase") or source.phase,
             "review.reviewer": reviewer,
+            "review.verdict": row.get("verdict"),
             "vcs.commit.sha": row.get("commit"),
             "review.task": row.get("task"),
             "review.sprint": row.get("sprint"),
             "review.iteration": row.get("iteration"),
+            "review.duration_s": row.get("duration_seconds"),
+            "review.duration": row.get("duration"),
             "qa.tested": row.get("tested"),
             "review.findings": row.get("findings") if row.get("findings") is not None else row.get("fnd"),
             "qa.blocking": row.get("blk"),

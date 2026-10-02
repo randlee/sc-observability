@@ -36,6 +36,8 @@ def test_current_pair_preserves_utc_nanos_and_shared_trace() -> None:
     assert a and b
     assert a["spans"][0]["trace_id"] == b["spans"][0]["trace_id"]
     assert a["logs"][0]["time"] == "2026-10-01T12:00:00.123456789Z"
+    assert a["logs"][0]["attributes"]["review.duration_s"] == 60
+    assert a["logs"][0]["attributes"]["review.verdict"] == "PASS"
 
 
 def test_missing_mandatory_time_or_verdict_is_skipped() -> None:
