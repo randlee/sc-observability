@@ -19,10 +19,10 @@ def _config(path: Path, endpoint: str) -> Path:
     return path
 
 
-def test_offline_retry_exhaustion_is_terminal_and_a_recovered_collector_accepts_a_new_submission(
+def test_offline_terminal_then_new_submission_recovers(
     installed_artifacts: dict[str, Path], tmp_path: Path,
 ) -> None:
-    """The released retry budget is terminal; recovery accepts a new durable submission."""
+    """A terminal offline submission is not replayed; a new one can recover."""
     port = free_port()
     config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{port}")
     payload = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")

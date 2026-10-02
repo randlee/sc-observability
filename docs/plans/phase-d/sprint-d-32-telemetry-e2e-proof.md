@@ -153,7 +153,7 @@ reported to the lead. The lists change only by plan amendment.
   generated IDs. Both front ends take the one d-29 `SubmissionInput` shape.
 - [ ] req:PHD-007, req:PHD-008 (D4): `tests/telemetry-e2e/test_recovery.py`
   covers:
-  - `offline_retry_exhaustion_is_terminal_and_a_recovered_collector_accepts_a_new_submission`:
+  - `offline_terminal_then_new_submission_recovers`:
     the collector is down at emit (exit 7) after the released synchronous
     HTTP retry budget is exhausted; that terminal record remains failed, and
     a new CLI submission succeeds after the collector recovers. Durable
