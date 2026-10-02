@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 fn requires_send_sync<T: Send + Sync>() {}
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "compile-time signature check")]
 fn canonical_projector_signature<T: Observable>(
     telemetry: Arc<Telemetry>,
 ) -> sc_observability_otlp::v2::TelemetryProjectors<T> {

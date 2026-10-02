@@ -280,36 +280,15 @@ pub(crate) struct ValidatedTransportBounds {
 /// ambient `OTEL_*` configuration.
 #[derive(Debug, Clone)]
 pub(crate) struct ValidatedBackendConnection {
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(
-            dead_code,
-            reason = "D.21 connection endpoint is consumed by enabled backends"
-        )
-    )]
     endpoint: OtlpEndpoint,
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(
-            dead_code,
-            reason = "D.21 connection auth is consumed by enabled backends"
-        )
-    )]
     auth_header: Option<AuthHeader>,
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(
-            dead_code,
-            reason = "D.21 connection CA is consumed by enabled backends"
-        )
-    )]
     ca_file: Option<PathBuf>,
 }
 
 impl ValidatedBackendConnection {
     #[cfg_attr(
         not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(
+        expect(
             dead_code,
             reason = "D.21 endpoint view is consumed by enabled backends"
         )
@@ -320,7 +299,7 @@ impl ValidatedBackendConnection {
 
     #[cfg_attr(
         not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(dead_code, reason = "D.21 auth view is consumed by enabled backends")
+        expect(dead_code, reason = "D.21 auth view is consumed by enabled backends")
     )]
     pub(crate) fn auth_header(&self) -> Option<&AuthHeader> {
         self.auth_header.as_ref()
@@ -328,7 +307,7 @@ impl ValidatedBackendConnection {
 
     #[cfg_attr(
         not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(dead_code, reason = "D.21 CA view is consumed by enabled backends")
+        expect(dead_code, reason = "D.21 CA view is consumed by enabled backends")
     )]
     pub(crate) fn ca_file(&self) -> Option<&PathBuf> {
         self.ca_file.as_ref()
@@ -347,7 +326,7 @@ impl ValidatedTransportBounds {
     }
     #[cfg_attr(
         all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
-        allow(
+        expect(
             dead_code,
             reason = "D.21 request timeout is consumed by enabled backends"
         )
@@ -373,7 +352,7 @@ impl ValidatedTransportBounds {
 /// Backend-specific state; SDK and disabled transports cannot carry retry policy.
 #[cfg_attr(
     all(not(test), not(feature = "sync-http")),
-    allow(
+    expect(
         dead_code,
         reason = "D.21 synchronous HTTP retry state is consumed by the synchronous HTTP backend"
     )
@@ -397,8 +376,8 @@ pub(crate) struct RetryPolicy {
 }
 
 #[cfg_attr(
-    not(feature = "sync-http"),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    all(not(test), not(feature = "sync-http")),
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl RetryPolicy {
     pub(crate) const fn max_retries(&self) -> u32 {
@@ -445,6 +424,13 @@ impl RetryDelay {
 
 /// Resolves defaults and validates a transport in the documented first-failure
 /// order. This is crate-visible for backend factories and contract tests.
+#[cfg_attr(
+    not(any(test, feature = "durable-store", feature = "sdk-test-support")),
+    expect(
+        dead_code,
+        reason = "only the durable sync-http config builder and the SDK test-support connection view validate raw config"
+    )
+)]
 pub(crate) fn validated_transport_bounds(
     config: &OtelConfig,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
@@ -511,7 +497,7 @@ fn validated_transport_bounds_with_delays(
     let (queue_capacity, queue_byte_capacity) =
         checked_queue_bounds(&queue_capacity, &queue_byte_capacity)?;
     let sync_http_retry = resolved_retry
-        .map(|retry| check_retry_orderings(retry, &timeout))
+        .map(|retry| check_retry_orderings(&retry, &timeout))
         .transpose()?;
 
     let backend = if config.enabled {
@@ -589,10 +575,7 @@ fn checked_queue_bounds(
 /// Returns the connection values only after the transport's ordinary ordered
 /// validation has succeeded. Enabled factories need an explicit endpoint and
 /// must never reconstruct it from environment defaults.
-#[allow(
-    dead_code,
-    reason = "D.18 consumes the validated SDK connection view during facade composition"
-)]
+#[cfg(any(feature = "sdk-test-support", all(test, feature = "otlp-sdk")))]
 pub(crate) fn validated_backend_connection(
     config: &OtelConfig,
 ) -> Result<ValidatedBackendConnection, ConfigFailure> {
@@ -775,7 +758,7 @@ fn resolve_retry(
 
 /// Checks the retry orderings and jitter bound, in the owned first-failure order.
 fn check_retry_orderings(
-    retry: ResolvedRetry,
+    retry: &ResolvedRetry,
     timeout: &ResolvedField<u64>,
 ) -> Result<RetryPolicy, ConfigFailure> {
     if retry.maximum.value < retry.initial.value {

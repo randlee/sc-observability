@@ -50,7 +50,7 @@ fn event() -> LogEvent {
     }
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "compile-time signature check")]
 fn released_projector_signature<T: Observable>(
     telemetry: Arc<Telemetry>,
 ) -> sc_observability_otlp::TelemetryProjectors<T> {

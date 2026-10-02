@@ -209,7 +209,6 @@ fn sync_http_exporter_factory(
     ))
 }
 
-#[allow(dead_code)]
 fn unsupported_protocol(
     backend: config::ExporterBackend,
     protocol: config::OtlpProtocol,

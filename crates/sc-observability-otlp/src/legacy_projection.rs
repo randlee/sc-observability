@@ -178,7 +178,13 @@ fn transport_error(message: &str) -> ExportError {
         )),
     }
 }
-#[allow(dead_code)]
+#[cfg_attr(
+    not(any(feature = "otlp-sdk", feature = "sync-http")),
+    expect(
+        dead_code,
+        reason = "only the compiled exporter backends construct transport failures"
+    )
+)]
 pub(super) fn transport_construction_failure(error: ExportError) -> ConfigFailure {
     ConfigFailure::TransportConstructionFailed {
         context: Box::new(

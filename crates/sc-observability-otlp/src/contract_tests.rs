@@ -580,10 +580,6 @@ fn contract_tests_bracketed_ipv6_endpoint_host_is_validated() {
         .expect("a bracketed IPv6 literal is valid");
 }
 
-fn retry(policy: SyncHttpRetryPolicy) -> Option<SyncHttpRetryPolicy> {
-    Some(policy)
-}
-
 fn assert_bound_ordering(error: &ConfigFailure, field: &str, upper_field: &str) {
     assert!(
         matches!(error, ConfigFailure::InvalidBoundOrdering { .. }),
@@ -602,7 +598,7 @@ fn contract_tests_first_failure_order_for_each_adjacent_pair() {
     // 1. retry positivity precedes the shutdown ordering.
     let error = validated_transport_bounds(&OtelConfig {
         lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
-        sync_http_retry: retry(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             initial_backoff_ms: Some(0_u64.into()),
             ..SyncHttpRetryPolicy::default()
         }),
@@ -632,7 +628,7 @@ fn contract_tests_first_failure_order_for_each_adjacent_pair() {
     // 4. queue capacity precedes the backoff ordering.
     let error = validated_transport_bounds(&OtelConfig {
         queue_capacity: Some(0),
-        sync_http_retry: retry(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             max_backoff_ms: Some(100_u64.into()),
             ..SyncHttpRetryPolicy::default()
         }),
@@ -643,7 +639,7 @@ fn contract_tests_first_failure_order_for_each_adjacent_pair() {
 
     // 5. the backoff ordering precedes the sequence ordering.
     let error = validated_transport_bounds(&OtelConfig {
-        sync_http_retry: retry(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             max_backoff_ms: Some(100_u64.into()),
             retry_sequence_timeout_ms: Some(2_999_u64.into()),
             ..SyncHttpRetryPolicy::default()
@@ -659,7 +655,7 @@ fn contract_tests_first_failure_order_for_each_adjacent_pair() {
 
     // 6. the sequence ordering precedes the Retry-After cap ordering.
     let error = validated_transport_bounds(&OtelConfig {
-        sync_http_retry: retry(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             retry_sequence_timeout_ms: Some(2_999_u64.into()),
             retry_after_cap_ms: Some(3_001_u64.into()),
             ..SyncHttpRetryPolicy::default()
@@ -675,7 +671,7 @@ fn contract_tests_first_failure_order_for_each_adjacent_pair() {
 
     // 7. the Retry-After cap ordering precedes the jitter bound.
     let error = validated_transport_bounds(&OtelConfig {
-        sync_http_retry: retry(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             retry_sequence_timeout_ms: Some(3_000_u64.into()),
             retry_after_cap_ms: Some(3_001_u64.into()),
             retry_jitter_percent: Some(101),
@@ -693,7 +689,7 @@ fn contract_tests_first_failure_order_for_each_adjacent_pair() {
     // 8. the jitter bound precedes the insecure-transport rejection.
     let error = validated_transport_bounds(&OtelConfig {
         insecure_skip_verify: true,
-        sync_http_retry: retry(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             retry_jitter_percent: Some(101),
             ..SyncHttpRetryPolicy::default()
         }),
@@ -705,7 +701,7 @@ fn contract_tests_first_failure_order_for_each_adjacent_pair() {
     // 9. field applicability precedes the insecure-transport rejection.
     let error = validated_transport_bounds(&OtelConfig {
         insecure_skip_verify: true,
-        sync_http_retry: retry(SyncHttpRetryPolicy {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
             max_retries: Some(1),
             ..SyncHttpRetryPolicy::default()
         }),
