@@ -26,6 +26,23 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 GOLDENS = ROOT / "crates/sc-observability-types/tests/fixtures/otlp_submission/golden"
+BUILD_TIMEOUT_SECONDS = 10 * 60
+INSTALL_TIMEOUT_SECONDS = 2 * 60
+FRONTEND_TIMEOUT_SECONDS = 20
+VIEWER_TIMEOUT_SECONDS = 30
+
+
+def run_process(command: list[str], *, timeout: float, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+    """Run an e2e subprocess with a failure that identifies its bounded command."""
+    try:
+        return subprocess.run(command, timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired as error:
+        output = error.output or ""
+        stderr = error.stderr or ""
+        pytest.fail(
+            f"subprocess timed out after {timeout}s: {error.cmd!r}\n"
+            f"stdout:\n{output}\nstderr:\n{stderr}",
+        )
 
 
 class CaptureCollector:
@@ -130,28 +147,32 @@ def installed_artifacts(tmp_path_factory: pytest.TempPathFactory) -> dict[str, P
     """Build the release-config wheel and install the public command once."""
     root = tmp_path_factory.mktemp("installed-telemetry")
     venv = root / "venv"
-    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+    run_process([sys.executable, "-m", "venv", str(venv)], timeout=INSTALL_TIMEOUT_SECONDS, check=True)
     python = venv / "bin" / "python"
-    subprocess.run(
+    run_process(
         [str(python), "-m", "pip", "install", "--upgrade", "pip==25.3", "maturin==1.10.2"],
+        timeout=INSTALL_TIMEOUT_SECONDS,
         check=True,
     )
     wheel_dir = root / "wheel"
-    subprocess.run(
+    run_process(
         [str(python), "-m", "maturin", "build", "--release", "--manifest-path",
          str(ROOT / "bindings/python/sc-observability-py/Cargo.toml"),
          "--features", "otlp-telemetry", "--out", str(wheel_dir)],
         cwd=ROOT,
+        timeout=BUILD_TIMEOUT_SECONDS,
         check=True,
     )
     wheels = sorted(wheel_dir.glob("*.whl"))
     assert len(wheels) == 1, f"expected one wheel, found {wheels}"
-    subprocess.run([str(python), "-m", "pip", "install", str(wheels[0])], check=True)
+    run_process([str(python), "-m", "pip", "install", str(wheels[0])],
+                timeout=INSTALL_TIMEOUT_SECONDS, check=True)
     cli_root = root / "cli"
-    subprocess.run(
+    run_process(
         ["cargo", "install", "--locked", "--path", "crates/sc-otel-cli", "--root", str(cli_root),
          "--force"],
         cwd=ROOT,
+        timeout=BUILD_TIMEOUT_SECONDS,
         check=True,
     )
     return {"root": root, "python": python, "cli": cli_root / "bin" / "sc-otel"}
@@ -190,13 +211,13 @@ def run_installed_python(artifacts: dict[str, Path], script: str, *, cwd: Path, 
     """Run a plain file, never ``python -c`` and never a caller event loop."""
     path = cwd / "installed_frontend.py"
     path.write_text(script, encoding="utf-8")
-    return subprocess.run([str(artifacts["python"]), str(path)], cwd=cwd, input=input,
-                          text=True, capture_output=True, check=False)
+    return run_process([str(artifacts["python"]), str(path)], cwd=cwd, input=input,
+                       text=True, capture_output=True, check=False, timeout=FRONTEND_TIMEOUT_SECONDS)
 
 
 def run_cli(artifacts: dict[str, Path], *args: str, cwd: Path, input: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.run([str(artifacts["cli"]), *args], cwd=cwd, input=input,
-                          text=True, capture_output=True, check=False)
+    return run_process([str(artifacts["cli"]), *args], cwd=cwd, input=input,
+                       text=True, capture_output=True, check=False, timeout=FRONTEND_TIMEOUT_SECONDS)
 
 
 def canonical_json(value: object) -> str:
@@ -277,16 +298,16 @@ class PinnedViewer(dict[str, str]):
         ]
         if reuse_state:
             command.append("--reuse-state")
-        started = subprocess.run(
+        started = run_process(
             command,
-            check=False, text=True, capture_output=True,
+            check=False, text=True, capture_output=True, timeout=VIEWER_TIMEOUT_SECONDS,
         )
         assert started.returncode == 0, started.stdout + started.stderr
 
     def stop(self) -> None:
-        stopped = subprocess.run(
+        stopped = run_process(
             [sys.executable, str(self.harness), "stop", "--state-dir", str(self.state)],
-            check=False, text=True, capture_output=True,
+            check=False, text=True, capture_output=True, timeout=VIEWER_TIMEOUT_SECONDS,
         )
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
 

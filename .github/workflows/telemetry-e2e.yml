@@ -40,7 +40,7 @@ jobs:
       - name: Run real installed-artifact composition suite
         env:
           TELEMETRY_E2E_VIEWER_BINARY: ${{ runner.temp }}/otel-desktop-viewer
-        run: python3 -m pip install pytest==8.4.2 && python3 -m pytest -q tests/telemetry-e2e
+        run: python3 -m pip install pytest==8.4.2 pytest-timeout && python3 -m pytest --timeout=120 -q tests/telemetry-e2e
       - name: Capture public API and error migration evidence
         if: always()
         run: |
