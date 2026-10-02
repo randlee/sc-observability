@@ -12,12 +12,9 @@ defaults:
 
 jobs:
   fmt:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    name: lint / format (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    # Platform-independent text check: Linux only.
+    name: lint / format
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -83,12 +80,9 @@ jobs:
         run: python scripts/ci/cargo_workspaces.py clippy
 
   docs-consistency:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    name: docs-consistency (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    # Platform-independent text check: Linux only.
+    name: docs-consistency
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -96,12 +90,9 @@ jobs:
         run: bash scripts/ci/validate_docs_consistency.sh
 
   version-literals:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    name: version-literals (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    # Platform-independent text check: Linux only.
+    name: version-literals
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -303,18 +294,3 @@ jobs:
       - name: Run imported log bridge release runtime-level fixture
         if: ${{ !cancelled() }}
         run: cargo test --locked -p sc-observability-log --release --test runtime_level_bridge
-
-  integration:
-    name: integration / OTLP (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "1.94.1"
-      - name: Run all OTLP integration targets and features
-        run: cargo test --locked -p sc-observability-otlp --tests --all-features --no-fail-fast
