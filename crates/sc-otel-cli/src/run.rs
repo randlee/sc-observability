@@ -15,7 +15,7 @@ use sc_observability_types::otlp::submission::{
     RecordKey, StatusQuery, SubmissionId, TelemetryClient, TelemetryClientConfig,
     TelemetryClientError,
 };
-use std::{str::FromStr, time::Duration};
+use std::str::FromStr;
 
 pub(crate) fn run(cli: &Cli) -> u8 {
     let format = cli.output;
@@ -141,7 +141,12 @@ fn with_session(
         Ok(client) => client,
         Err(error) => return failure(command, error),
     };
-    finish_shutdown(command, client.as_ref(), action(&config, client.as_ref()))
+    finish_shutdown(
+        command,
+        client.as_ref(),
+        config.flush_deadline,
+        action(&config, client.as_ref()),
+    )
 }
 
 fn failure(command: constants::CommandName, error: impl Into<CliError>) -> Outcome {
@@ -163,9 +168,10 @@ fn delivery_state(
 fn finish_shutdown(
     command: constants::CommandName,
     client: &dyn TelemetryClient,
+    deadline: std::time::Duration,
     outcome: Outcome,
 ) -> Outcome {
-    match client.shutdown(Duration::ZERO) {
+    match client.shutdown(deadline) {
         Ok(_) => outcome,
         Err(error) => {
             let mut shutdown = failure(command, error);
@@ -174,5 +180,83 @@ fn finish_shutdown(
             shutdown.status = outcome.status;
             shutdown
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sc_observability_types::otlp::submission::{
+        AdmissionReceipt, ConfigOverrides, ConfigSources, FlushReport, StatusQuery, StoreStatus,
+        SubmissionEnvelope, SubmissionId, resolve_config,
+    };
+    use std::{path::PathBuf, sync::Mutex, time::Duration};
+
+    struct ShutdownDeadlineRecorder(Mutex<Option<Duration>>);
+
+    impl TelemetryClient for ShutdownDeadlineRecorder {
+        fn open(_: TelemetryClientConfig) -> Result<Self, TelemetryClientError>
+        where
+            Self: Sized,
+        {
+            unreachable!("the recorder is constructed directly")
+        }
+
+        fn emit(&self, _: SubmissionEnvelope) -> Result<AdmissionReceipt, TelemetryClientError> {
+            unreachable!("the regression exercises only shutdown")
+        }
+
+        fn flush(&self, _: Duration) -> Result<FlushReport, TelemetryClientError> {
+            unreachable!("the regression exercises only shutdown")
+        }
+
+        fn flush_submission(
+            &self,
+            _: &SubmissionId,
+            _: Duration,
+        ) -> Result<FlushReport, TelemetryClientError> {
+            unreachable!("the regression exercises only shutdown")
+        }
+
+        fn shutdown(&self, deadline: Duration) -> Result<FlushReport, TelemetryClientError> {
+            *self.0.lock().expect("shutdown deadline lock") = Some(deadline);
+            Ok(FlushReport::default())
+        }
+
+        fn status(&self, _: StatusQuery) -> Result<StoreStatus, TelemetryClientError> {
+            unreachable!("the regression exercises only shutdown")
+        }
+    }
+
+    #[test]
+    fn shutdown_uses_the_resolved_lifecycle_deadline_after_successful_delivery() {
+        let mut overrides = ConfigOverrides::default();
+        overrides.emit_flush_deadline = Some(Duration::from_millis(73));
+        overrides.flush_deadline = Some(Duration::from_millis(73));
+        overrides.store_path = Some(PathBuf::from("test-shutdown-deadline.sqlite"));
+        let config = resolve_config(ConfigSources::new(&overrides, None, &no_environment))
+            .expect("resolved telemetry config");
+        let client = ShutdownDeadlineRecorder(Mutex::new(None));
+        let outcome = Outcome::success(
+            constants::CommandName::Emit,
+            constants::OutcomeState::AdmittedDelivered,
+        );
+
+        let result = finish_shutdown(
+            constants::CommandName::Emit,
+            &client,
+            config.flush_deadline,
+            outcome,
+        );
+
+        assert_eq!(result.exit_code, constants::EXIT_OK);
+        assert_eq!(
+            *client.0.lock().expect("shutdown deadline lock"),
+            Some(Duration::from_millis(73))
+        );
+    }
+
+    fn no_environment(_: &str) -> Option<String> {
+        None
     }
 }
