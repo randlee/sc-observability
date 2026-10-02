@@ -18,11 +18,35 @@ fn main() -> ExitCode {
     std::panic::set_hook(Box::new(|_| {}));
     let result = std::panic::catch_unwind(AssertUnwindSafe(run));
     std::panic::set_hook(previous_hook);
-    if let Ok(exit) = result {
-        ExitCode::from(exit)
-    } else {
-        eprintln!("sc-otel: unexpected internal error");
-        ExitCode::from(constants::EXIT_INTERNAL)
+    match result {
+        Ok(exit) => ExitCode::from(exit),
+        Err(payload) => {
+            eprintln!(
+                "sc-otel: unexpected internal error: {}",
+                panic_message(&*payload)
+            );
+            ExitCode::from(constants::EXIT_INTERNAL)
+        }
+    }
+}
+
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("non-string panic payload")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::panic_message;
+
+    #[test]
+    fn panic_message_preserves_string_payloads_and_bounds_other_payloads() {
+        assert_eq!(panic_message(&"expected panic"), "expected panic");
+        assert_eq!(panic_message(&String::from("owned panic")), "owned panic");
+        assert_eq!(panic_message(&42_u8), "non-string panic payload");
     }
 }
 

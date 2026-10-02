@@ -62,6 +62,25 @@ impl Outcome {
             error: Some(error),
         }
     }
+
+    pub(crate) fn with_receipt(mut self, receipt: AdmissionReceipt) -> Self {
+        assert!(
+            !matches!(self.state, OutcomeState::Rejected),
+            "a rejected outcome cannot carry an admission receipt"
+        );
+        self.receipt = Some(receipt);
+        self
+    }
+
+    pub(crate) fn with_flush(mut self, flush: FlushReport) -> Self {
+        self.flush = Some(flush);
+        self
+    }
+
+    pub(crate) fn with_status(mut self, status: StoreStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
 }
 
 pub(crate) fn print(format: OutputFormat, outcome: &Outcome) {

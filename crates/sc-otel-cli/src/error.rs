@@ -2,6 +2,7 @@
 
 use crate::constants;
 use sc_observability_types::otlp::submission::TelemetryClientError;
+use serde_json::Value;
 use std::{error::Error, fmt, path::PathBuf};
 
 /// Failures from CLI input transport and fragment decoding.
@@ -68,13 +69,21 @@ impl CliError {
         }
     }
 
-    pub(crate) fn remediation(&self) -> &'static str {
+    pub(crate) fn remediation(&self) -> Value {
         match self {
-            Self::Input(InputError::Stdin { .. }) => "supply readable JSON on standard input",
-            Self::Input(InputError::File { .. }) => "supply a readable JSON fragment file",
-            Self::Input(InputError::Fragment { .. }) => "correct the JSON fragment before retrying",
-            Self::Internal(_) => "report the internal CLI failure with the result code",
-            Self::Telemetry(_) => "follow the remediation attached to the telemetry diagnostic",
+            Self::Input(InputError::Stdin { .. }) => {
+                Value::String("supply readable JSON on standard input".into())
+            }
+            Self::Input(InputError::File { .. }) => {
+                Value::String("supply a readable JSON fragment file".into())
+            }
+            Self::Input(InputError::Fragment { .. }) => {
+                Value::String("correct the JSON fragment before retrying".into())
+            }
+            Self::Internal(_) => {
+                Value::String("report the internal CLI failure with the result code".into())
+            }
+            Self::Telemetry(error) => telemetry_remediation(error),
         }
     }
 
@@ -84,6 +93,23 @@ impl CliError {
             Self::Telemetry(error) => Some(error),
         }
     }
+}
+
+fn telemetry_remediation(error: &TelemetryClientError) -> Value {
+    use sc_observability_types::otlp::submission::TelemetryClientError;
+
+    match error {
+        TelemetryClientError::Submission(error) => remediation_value(error.context()),
+        TelemetryClientError::Admission(error) => remediation_value(error.context()),
+        TelemetryClientError::Delivery(error) => remediation_value(error.context()),
+        TelemetryClientError::Config(error) => remediation_value(error.context()),
+        _ => Value::String("report the unknown telemetry failure with the result code".into()),
+    }
+}
+
+fn remediation_value(context: &sc_observability_types::ErrorContext) -> Value {
+    serde_json::to_value(&context.diagnostic().remediation)
+        .expect("the typed remediation is serializable")
 }
 
 impl fmt::Display for CliError {

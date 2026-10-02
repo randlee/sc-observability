@@ -97,3 +97,51 @@ fn every_non_usage_exit_has_the_result_schema_and_expected_code() {
         assert_eq!(result["exit_code"], expected_exit);
     }
 }
+
+#[cfg(feature = "test-double")]
+#[test]
+fn delivery_failure_takes_precedence_and_config_diagnostics_redact_credentials() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let script = directory.path().join("precedence.json");
+    let store = directory.path().join("store.sqlite");
+    std::fs::write(
+        &script,
+        r#"{"deliveries":[{"signal":"logs","outcome":"fail"},{"signal":"metrics","outcome":"stall"}]}"#,
+    )
+    .expect("script writes");
+    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+        .args([
+            "--store",
+            store.to_str().expect("UTF-8 store"),
+            "emit",
+            "--log",
+            "{}",
+        ])
+        .env("SC_OTEL_TEST_DOUBLE", &script)
+        .env("OTEL_EXPORTER_OTLP_HEADERS", "auth_header=secret-value")
+        .output()
+        .expect("binary runs");
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("secret-value"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("secret-value"));
+}
+
+#[cfg(feature = "test-double")]
+#[test]
+fn status_and_flush_successes_have_the_zero_exit_contract() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let store = directory.path().join("store.sqlite");
+    for args in [
+        vec!["--store", store.to_str().expect("UTF-8 store"), "status"],
+        vec!["--store", store.to_str().expect("UTF-8 store"), "flush"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+            .args(args)
+            .output()
+            .expect("binary runs");
+        assert_eq!(output.status.code(), Some(0), "{output:?}");
+        let result: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("result JSON");
+        assert_eq!(result["exit_code"], 0);
+    }
+}
