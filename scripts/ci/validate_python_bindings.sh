@@ -21,6 +21,10 @@ B4_GENERATOR_PYTHON="${B4_GENERATOR_PYTHON:-$(uv python find 3.12.10)}"
 if [[ "$(uname -s)" == Linux ]]; then
   B4_PYTHON_LIBDIR="$("$B4_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
   export LD_LIBRARY_PATH="$B4_PYTHON_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+elif [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
+  B4_PYTHON_DLL_DIR="$("$B4_PYTHON" -c 'import sys; print(sys.base_prefix)')"
+  B4_PYTHON_DLL_DIR="$(cygpath -u "$B4_PYTHON_DLL_DIR")"
+  export PATH="$B4_PYTHON_DLL_DIR${PATH:+:$PATH}"
 fi
 
 B4_TEMP_DIR="$(mktemp -d -t sc-observability-b4.XXXXXX)"
