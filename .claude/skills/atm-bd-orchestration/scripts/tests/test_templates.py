@@ -75,11 +75,14 @@ class TemplateContractTests(unittest.TestCase):
 
         template = ROOT / "templates/review-complete.md.j2"
         original = json.loads((ROOT / "examples/review-complete-vars.json").read_text())
-        passed = {**original, "verdict": "PASS", "integration_review": "integration_review_passed",
+        passed = {**original, "findings_important": 0, "verdict": "PASS", "integration_review": "integration_review_passed",
                   "post_mortem_counts": {"total": 0, "verified_fixed": 0, "justified_nonfix": 0, "unresolved": 0},
                   "post_mortem_md": "Empty inventory verified; no_systemic_followup"}
         cases = [
             (passed, True),
+            ({**passed, "findings_blocking": 1}, False),
+            ({**passed, "findings_important": 1}, False),
+            ({**passed, "findings_minor": -1}, False),
             (original, True),
             ({**original, "integration_review": "PASS"}, False),
             ({**original, "post_mortem_md": "  "}, False),

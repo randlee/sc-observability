@@ -7,10 +7,17 @@ import sys
 
 
 def validate(values):
+    if not isinstance(values, dict):
+        raise ValueError("completion variables must be an object")
     verdict = values.get("verdict")
     outcome = values.get("integration_review")
     if verdict not in ("PASS", "FAIL"):
         raise ValueError("verdict must be PASS or FAIL")
+    for key in ("findings_blocking", "findings_important", "findings_minor"):
+        if type(values.get(key)) is not int or values[key] < 0:
+            raise ValueError(f"{key} must be a nonnegative integer")
+    if verdict == "PASS" and (values["findings_blocking"] or values["findings_important"]):
+        raise ValueError("PASS requires zero blocking and important findings")
     expected = "integration_review_passed" if verdict == "PASS" else "integration_review_failed"
     if outcome != expected:
         raise ValueError("integration_review must agree with verdict")

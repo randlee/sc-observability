@@ -91,7 +91,8 @@ In `review-complete.md.j2`, set `integration_commit` to the same full SHA as
   Do not manufacture a lint, ADR, or new process for every family.
 
 Before the close, run `python3 .claude/skills/atm-bd-orchestration/scripts/check-review-completion.py <vars.json>`.
-It rejects inconsistent verdicts, SHA mismatches and count totals; it does not
+It rejects inconsistent verdicts, PASS with blocking/important code findings,
+SHA mismatches and count totals; it does not
 prove the prose evidence is true. The reviewer remains responsible for that.
 Both the overall `verdict` and `integration_review` must fail if the audit is
 incomplete or the accompanying code review has failed.
