@@ -482,28 +482,37 @@ fn validated_transport_bounds_with_delays(
         constants::DEFAULT_OTLP_QUEUE_BYTE_CAPACITY,
     );
 
-    // The ordering below is normative: do not aggregate failures or move
-    // checks without updating the D.21 contract tests.
+    // This sequence is the single owned first-failure order for transport
+    // validation (docs/api-design.md, "Validation, using checked arithmetic,
+    // is:"). Failures are never aggregated; moving a step changes the
+    // diagnostic a multi-violation config reports, so update the D.21 contract
+    // tests and that document together:
+    //   1. shared positivity: timeout, flush, shutdown
+    //   2. sync-http retry positivity
+    //   3. shutdown >= timeout, then flush >= timeout
+    //   4. queue capacity bounds
+    //   5. sync-http retry orderings (backoff, sequence, Retry-After cap, jitter)
+    //   6. fields not applicable to the disabled transport or selected backend
+    //   7. rejected insecure verification override
     let request_timeout = checked_duration(&timeout)?;
     let lifecycle_flush_timeout = checked_duration(&flush)?;
     let lifecycle_shutdown_timeout = checked_duration(&shutdown)?;
+    let resolved_retry = if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
+        Some(resolve_retry(config.sync_http_retry.as_ref(), immediate)?)
+    } else {
+        None
+    };
     if shutdown.value < timeout.value {
         return Err(invalid_bound(&timeout, &shutdown));
     }
     if flush.value < timeout.value {
         return Err(invalid_bound(&timeout, &flush));
     }
-    let sync_http_retry = if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
-        Some(resolve_retry(
-            config.sync_http_retry.as_ref(),
-            &timeout,
-            immediate,
-        )?)
-    } else {
-        None
-    };
     let (queue_capacity, queue_byte_capacity) =
         checked_queue_bounds(&queue_capacity, &queue_byte_capacity)?;
+    let sync_http_retry = resolved_retry
+        .map(|retry| check_retry_orderings(retry, &timeout))
+        .transpose()?;
 
     let backend = if config.enabled {
         match config.backend {
@@ -686,11 +695,25 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<PositiveDuration, Conf
     Ok(PositiveDuration(Duration::from_millis(value.value)))
 }
 
+/// Retry fields resolved and checked positive, awaiting ordering checks.
+struct ResolvedRetry {
+    max_retries: u32,
+    initial: ResolvedField<u64>,
+    maximum: ResolvedField<u64>,
+    sequence: ResolvedField<u64>,
+    after_cap: ResolvedField<u64>,
+    jitter: ResolvedField<u8>,
+    initial_backoff: RetryDelay,
+    max_backoff: RetryDelay,
+    sequence_timeout: PositiveDuration,
+    retry_after_cap: PositiveDuration,
+}
+
+/// Resolves retry defaults and checks every retry duration positive.
 fn resolve_retry(
     raw: Option<&SyncHttpRetryPolicy>,
-    timeout: &ResolvedField<u64>,
     immediate: bool,
-) -> Result<RetryPolicy, ConfigFailure> {
+) -> Result<ResolvedRetry, ConfigFailure> {
     let raw = raw.cloned().unwrap_or_default();
     let initial = resolve_duration(
         OtlpConfigField::InitialBackoff,
@@ -734,16 +757,37 @@ fn resolve_retry(
     let max_backoff = delay(&maximum)?;
     let sequence_timeout = checked_duration(&sequence)?;
     let retry_after_cap = checked_duration(&after_cap)?;
-    if maximum.value < initial.value {
-        return Err(invalid_bound(&initial, &maximum));
+    Ok(ResolvedRetry {
+        max_retries: raw
+            .max_retries
+            .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
+        initial,
+        maximum,
+        sequence,
+        after_cap,
+        jitter,
+        initial_backoff,
+        max_backoff,
+        sequence_timeout,
+        retry_after_cap,
+    })
+}
+
+/// Checks the retry orderings and jitter bound, in the owned first-failure order.
+fn check_retry_orderings(
+    retry: ResolvedRetry,
+    timeout: &ResolvedField<u64>,
+) -> Result<RetryPolicy, ConfigFailure> {
+    if retry.maximum.value < retry.initial.value {
+        return Err(invalid_bound(&retry.initial, &retry.maximum));
     }
-    if sequence.value < timeout.value {
-        return Err(invalid_bound(timeout, &sequence));
+    if retry.sequence.value < timeout.value {
+        return Err(invalid_bound(timeout, &retry.sequence));
     }
-    if after_cap.value > sequence.value {
-        return Err(invalid_bound(&after_cap, &sequence));
+    if retry.after_cap.value > retry.sequence.value {
+        return Err(invalid_bound(&retry.after_cap, &retry.sequence));
     }
-    if jitter.value > constants::MAX_OTLP_RETRY_JITTER_PERCENT {
+    if retry.jitter.value > constants::MAX_OTLP_RETRY_JITTER_PERCENT {
         return Err(config_failure(
             ConfigFailureKind::InvalidJitterPercent,
             error_codes::OTLP_CONFIG_JITTER_PERCENT,
@@ -751,19 +795,17 @@ fn resolve_retry(
                 "retry jitter percent must be in 0..={}",
                 constants::MAX_OTLP_RETRY_JITTER_PERCENT
             ),
-            jitter.field,
-            jitter.origin,
+            retry.jitter.field,
+            retry.jitter.origin,
         ));
     }
     Ok(RetryPolicy {
-        max_retries: raw
-            .max_retries
-            .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
-        initial_backoff,
-        max_backoff,
-        sequence_timeout,
-        retry_after_cap,
-        jitter: BoundedPercent(jitter.value),
+        max_retries: retry.max_retries,
+        initial_backoff: retry.initial_backoff,
+        max_backoff: retry.max_backoff,
+        sequence_timeout: retry.sequence_timeout,
+        retry_after_cap: retry.retry_after_cap,
+        jitter: BoundedPercent(retry.jitter.value),
     })
 }
 
