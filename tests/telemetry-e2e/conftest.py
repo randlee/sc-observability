@@ -264,30 +264,35 @@ class PinnedViewer(dict[str, str]):
         assert len({self.http, self.grpc, self.ui}) == 3
         super().__init__(otlp=f"http://127.0.0.1:{self.http}", rpc=f"http://127.0.0.1:{self.ui}/rpc")
 
-    def start(self) -> None:
+    def start(self, *, reuse_state: bool = False) -> None:
         # The harness owns the listeners, so release the deterministic
         # reservations immediately before it is invoked.
         for reserved in self._reservations:
             reserved.close()
         self._reservations = []
+        command = [
+            sys.executable, str(self.harness), "start", "--binary", self.binary,
+            "--version", self.manifest["version"], "--binary-sha256", self.manifest["binary_sha256"],
+            "--state-dir", str(self.state), "--http", str(self.http), "--grpc", str(self.grpc), "--ui", str(self.ui),
+        ]
+        if reuse_state:
+            command.append("--reuse-state")
         started = subprocess.run(
-            [sys.executable, str(self.harness), "start", "--binary", self.binary,
-             "--version", self.manifest["version"], "--binary-sha256", self.manifest["binary_sha256"],
-             "--state-dir", str(self.state), "--http", str(self.http), "--grpc", str(self.grpc), "--ui", str(self.ui)],
+            command,
             check=False, text=True, capture_output=True,
         )
         assert started.returncode == 0, started.stdout + started.stderr
 
     def stop(self) -> None:
         stopped = subprocess.run(
-            [sys.executable, str(self.harness), "stop", "--state-dir", str(self.state), "--remove-state"],
+            [sys.executable, str(self.harness), "stop", "--state-dir", str(self.state)],
             check=False, text=True, capture_output=True,
         )
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
 
     def restart(self) -> None:
         self.stop()
-        self.start()
+        self.start(reuse_state=True)
 
 
 @pytest.fixture

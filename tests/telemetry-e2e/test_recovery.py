@@ -7,7 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from conftest import CaptureCollector, GOLDENS, loopback_endpoint, reserve_loopback_sockets, run_cli, run_installed_python
+from conftest import (
+    CaptureCollector,
+    GOLDENS,
+    PinnedViewer,
+    loopback_endpoint,
+    reserve_loopback_sockets,
+    run_cli,
+    run_installed_python,
+)
+from test_viewer_readback import _HIGH, _LOW, _row, _wait_for
 
 
 def _config(path: Path, endpoint: str) -> Path:
@@ -20,6 +29,48 @@ def _config(path: Path, endpoint: str) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def _log_payload(body: str) -> str:
+    """Create one public log envelope whose decoded body is unambiguous."""
+    payload = json.loads((GOLDENS / "logs/input.json").read_text(encoding="utf-8"))
+    payload["logs"][0]["body"] = body
+    return json.dumps(payload)
+
+
+def _python_emit_script(config: Path) -> str:
+    return f"""\
+import json
+import sys
+from sc_observability import Ok
+from sc_observability.telemetry import Telemetry
+
+opened = Telemetry.open(config={str(config)!r})
+assert isinstance(opened, Ok), opened
+with opened.value as telemetry:
+    admitted = telemetry.emit(json.load(sys.stdin))
+    assert isinstance(admitted, Ok), admitted
+    delivered = telemetry.flush_submission(admitted.value.submission_id, timeout_s=10)
+    assert isinstance(delivered, Ok), delivered
+"""
+
+
+def _viewer_log(viewer: dict[str, str], body: str) -> dict[str, object]:
+    """Read one exact decoded log through the existing bounded viewer helper."""
+    rows = _wait_for(viewer, "searchLogs", [_LOW, _HIGH], lambda value: _row(value, body) is not None)
+    row = _row(rows, body)
+    assert row is not None
+    log_id = row["id"]
+    assert isinstance(log_id, str)
+    detail = _wait_for(
+        viewer,
+        "getLog",
+        [log_id],
+        lambda value: isinstance(value, dict) and value.get("body") == body,
+    )
+    assert isinstance(detail, dict)
+    assert detail["body"] == body
+    return detail
 
 
 def test_reserved_loopback_sockets_are_distinct_and_held() -> None:
@@ -67,6 +118,54 @@ def test_offline_terminal_then_new_submission_recovers(
             reserved.close()
         else:
             collector.stop()
+
+
+def test_viewer_restart_no_loss(
+    installed_artifacts: dict[str, Path], pinned_viewer: PinnedViewer, tmp_path: Path,
+) -> None:
+    """Pinned viewer state retains installed Python and CLI records across restart."""
+    config = _config(tmp_path / "telemetry.yaml", pinned_viewer["otlp"])
+    python_body = "viewer-restart-python"
+    cli_body = "viewer-restart-cli"
+    post_restart_body = "viewer-restart-cli-after-restart"
+
+    python = run_installed_python(
+        installed_artifacts,
+        _python_emit_script(config),
+        cwd=tmp_path,
+        input=_log_payload(python_body),
+    )
+    assert python.returncode == 0, python.stdout + python.stderr
+    cli = run_cli(
+        installed_artifacts,
+        "--config",
+        str(config),
+        "emit",
+        "--stdin",
+        cwd=tmp_path,
+        input=_log_payload(cli_body),
+    )
+    assert cli.returncode == 0, cli.stdout + cli.stderr
+
+    before_restart = {
+        python_body: _viewer_log(pinned_viewer, python_body),
+        cli_body: _viewer_log(pinned_viewer, cli_body),
+    }
+    pinned_viewer.restart()
+    assert _viewer_log(pinned_viewer, python_body) == before_restart[python_body]
+    assert _viewer_log(pinned_viewer, cli_body) == before_restart[cli_body]
+
+    post_restart = run_cli(
+        installed_artifacts,
+        "--config",
+        str(config),
+        "emit",
+        "--stdin",
+        cwd=tmp_path,
+        input=_log_payload(post_restart_body),
+    )
+    assert post_restart.returncode == 0, post_restart.stdout + post_restart.stderr
+    assert _viewer_log(pinned_viewer, post_restart_body)["body"] == post_restart_body
 
 
 def test_partial_signal_failure_retains_the_failed_signal(
