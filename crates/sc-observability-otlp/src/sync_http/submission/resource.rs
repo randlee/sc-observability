@@ -4,14 +4,15 @@ use super::values::key_values;
 use sc_observability_types::{
     Timestamp,
     otlp::signals::{InstrumentationScope, Resource},
+    v2::ExportError,
 };
 use serde_json::{Map, Value};
 
-pub(super) fn resource(value: &Resource) -> Map<String, Value> {
+pub(super) fn resource(value: &Resource) -> Result<Map<String, Value>, ExportError> {
     let mut encoded = Map::new();
     encoded.insert(
         "attributes".to_owned(),
-        Value::Array(key_values(&value.attributes)),
+        Value::Array(key_values(&value.attributes)?),
     );
     encoded.insert(
         "droppedAttributesCount".to_owned(),
@@ -48,23 +49,23 @@ pub(super) fn resource(value: &Resource) -> Map<String, Value> {
         ),
     );
     insert_string(&mut encoded, "schemaUrl", value.schema_url.as_ref());
-    encoded
+    Ok(encoded)
 }
 
-pub(super) fn scope(value: &InstrumentationScope) -> Map<String, Value> {
+pub(super) fn scope(value: &InstrumentationScope) -> Result<Map<String, Value>, ExportError> {
     let mut encoded = Map::new();
     encoded.insert("name".to_owned(), Value::String(value.name.clone()));
     insert_string(&mut encoded, "version", value.version.as_ref());
     encoded.insert(
         "attributes".to_owned(),
-        Value::Array(key_values(&value.attributes)),
+        Value::Array(key_values(&value.attributes)?),
     );
     encoded.insert(
         "droppedAttributesCount".to_owned(),
         Value::from(value.dropped_attributes_count),
     );
     insert_string(&mut encoded, "schemaUrl", value.schema_url.as_ref());
-    encoded
+    Ok(encoded)
 }
 
 /// Returns the group for a resource/scope pair, creating each layer once.

@@ -1,11 +1,15 @@
 //! OTLP/JSON representations shared by all submission signal encoders.
 
-use sc_observability_types::otlp::signals::{AnyValue, AttributeKey, KeyValues, OtlpDouble};
+use sc_observability_types::{
+    ErrorContext, Remediation,
+    otlp::signals::{AnyValue, AttributeKey, KeyValues, OtlpDouble},
+    v2::ExportError,
+};
 use serde_json::{Map, Number, Value};
 
 /// Encodes ordered OTLP attributes without passing the neutral tagged shape
 /// through to the wire format.
-pub(super) fn key_values(values: &KeyValues) -> Vec<Value> {
+pub(super) fn key_values(values: &KeyValues) -> Result<Vec<Value>, ExportError> {
     values
         .entries()
         .iter()
@@ -18,18 +22,16 @@ pub(super) fn key_values(values: &KeyValues) -> Vec<Value> {
                 AttributeKey::Index(index) => {
                     item.insert("keyStrindex".to_owned(), Value::from(index.get()));
                 }
-                _ => {
-                    unreachable!("new AttributeKey variants require an explicit OTLP/JSON mapping")
-                }
+                _ => return Err(unsupported_variant("AttributeKey")),
             }
-            item.insert("value".to_owned(), any_value(value));
-            Value::Object(item)
+            item.insert("value".to_owned(), any_value(value)?);
+            Ok(Value::Object(item))
         })
         .collect()
 }
 
 /// Encodes a neutral value in the OTLP protobuf JSON oneof spelling.
-pub(super) fn any_value(value: &AnyValue) -> Value {
+pub(super) fn any_value(value: &AnyValue) -> Result<Value, ExportError> {
     let mut encoded = Map::new();
     match value {
         AnyValue::String(value) => {
@@ -58,7 +60,12 @@ pub(super) fn any_value(value: &AnyValue) -> Value {
                 "arrayValue".to_owned(),
                 Value::Object(Map::from_iter([(
                     "values".to_owned(),
-                    Value::Array(values.iter().map(any_value).collect()),
+                    Value::Array(
+                        values
+                            .iter()
+                            .map(any_value)
+                            .collect::<Result<Vec<_>, _>>()?,
+                    ),
                 )])),
             );
         }
@@ -67,13 +74,27 @@ pub(super) fn any_value(value: &AnyValue) -> Value {
                 "kvlistValue".to_owned(),
                 Value::Object(Map::from_iter([(
                     "values".to_owned(),
-                    Value::Array(key_values(values)),
+                    Value::Array(key_values(values)?),
                 )])),
             );
         }
-        _ => unreachable!("new AnyValue variants require an explicit OTLP/JSON mapping"),
+        _ => return Err(unsupported_variant("AnyValue")),
     }
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
+}
+
+/// Emits the terminal coded error required when a newer neutral variant has
+/// no safe OTLP/JSON representation in this installed exporter.
+pub(super) fn unsupported_variant(variant: &str) -> ExportError {
+    ExportError::TerminalExportFailure {
+        context: Box::new(ErrorContext::new(
+            crate::error_codes::OTLP_EXPORT_TERMINAL,
+            format!("this sc-observability-otlp version cannot encode {variant}"),
+            Remediation::not_recoverable(
+                "upgrade sc-observability-otlp to a version that encodes this signal",
+            ),
+        )),
+    }
 }
 
 /// Encodes signed 64-bit values with the protobuf JSON decimal-string rule.

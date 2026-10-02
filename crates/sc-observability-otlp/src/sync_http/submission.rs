@@ -73,18 +73,21 @@ impl SubmissionExporter for SyncHttpSubmissionExporter {
         let (route, payload, encode) = match signal {
             Signal::Logs => (
                 SubmissionRoute::Signal(Signal::Logs),
-                logs::request(envelopes),
-                logs::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
+                logs::request(envelopes).map_err(classify)?,
+                logs::request
+                    as fn(&[SubmissionEnvelope]) -> Result<serde_json::Value, ExportError>,
             ),
             Signal::Traces => (
                 SubmissionRoute::Signal(Signal::Traces),
-                traces::request(envelopes),
-                traces::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
+                traces::request(envelopes).map_err(classify)?,
+                traces::request
+                    as fn(&[SubmissionEnvelope]) -> Result<serde_json::Value, ExportError>,
             ),
             Signal::Metrics => (
                 SubmissionRoute::Signal(Signal::Metrics),
-                metrics::request(envelopes),
-                metrics::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
+                metrics::request(envelopes).map_err(classify)?,
+                metrics::request
+                    as fn(&[SubmissionEnvelope]) -> Result<serde_json::Value, ExportError>,
             ),
             Signal::Profiles => return self.export_profiles(envelopes).map_err(classify),
             _ => {
@@ -100,6 +103,7 @@ impl SubmissionExporter for SyncHttpSubmissionExporter {
             }
         };
         self.submit_encoded(route, envelopes, &payload, encode)
+            .map_err(classify)
     }
 
     fn cancel(&self) {
@@ -113,13 +117,10 @@ impl SyncHttpSubmissionExporter {
         route: SubmissionRoute,
         envelopes: &[SubmissionEnvelope],
         payload: &serde_json::Value,
-        encode: fn(&[SubmissionEnvelope]) -> serde_json::Value,
-    ) -> Result<(), SubmissionExportFailure> {
+        encode: fn(&[SubmissionEnvelope]) -> Result<serde_json::Value, ExportError>,
+    ) -> Result<(), ExportError> {
         if payload.to_string().len() <= MAX_OTLP_ENCODED_REQUEST_BYTES || envelopes.len() <= 1 {
-            return self
-                .exporter()
-                .submit_json_blocking(route, payload)
-                .map_err(classify);
+            return self.exporter().submit_json_blocking(route, payload);
         }
 
         // Request boundaries must be based on encoded bytes, not the input
@@ -128,7 +129,7 @@ impl SyncHttpSubmissionExporter {
             self.submit_encoded(
                 route,
                 std::slice::from_ref(envelope),
-                &encode(std::slice::from_ref(envelope)),
+                &encode(std::slice::from_ref(envelope))?,
                 encode,
             )?;
         }
@@ -144,7 +145,7 @@ impl ProfileExporter<SubmissionEnvelope> for SyncHttpSubmissionExporter {
             // request per dictionary preserves every index without flattening tables.
             exporter.submit_json_blocking(
                 SubmissionRoute::Profiles,
-                &profiles::request(std::slice::from_ref(envelope)),
+                &profiles::request(std::slice::from_ref(envelope))?,
             )?;
         }
         Ok(())
@@ -188,4 +189,28 @@ fn completed_retry_budgets_are_terminal_but_shutdown_is_recoverable() {
         classify(ExportError::ShutdownCancelledRetry { context: context() }),
         SubmissionExportFailure::Retryable(_)
     ));
+}
+
+#[cfg(test)]
+#[test]
+fn unsupported_encoder_paths_are_coded_terminal_failures() {
+    // These names are the crate-private seams for the non-exhaustive variants
+    // that downstream code cannot construct today. Each production match maps
+    // its unknown arm through this helper instead of panicking or emitting 0.
+    for variant in [
+        "AttributeKey",
+        "AnyValue",
+        "MetricData",
+        "NumberValue",
+        "AggregationTemporality",
+        "SpanKindPoint",
+        "StatusCode",
+    ] {
+        let error = values::unsupported_variant(variant);
+        assert_eq!(error.code(), OTLP_EXPORT_TERMINAL);
+        assert!(matches!(
+            classify(error),
+            SubmissionExportFailure::Terminal(ExportError::TerminalExportFailure { .. })
+        ));
+    }
 }

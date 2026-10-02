@@ -8,6 +8,7 @@ use sc_observability_types::otlp::{
     },
     submission::SubmissionEnvelope,
 };
+use sc_observability_types::v2::ExportError;
 use serde_json::{Map, Value};
 
 struct ScopeSpans {
@@ -20,50 +21,57 @@ struct ResourceSpans {
     scopes: Vec<ScopeSpans>,
 }
 
-pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
+pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {
     let mut resources = Vec::new();
     for envelope in envelopes {
         for record in &envelope.spans {
-            append(&mut resources, record);
+            append(&mut resources, record)?;
         }
     }
-    Value::Object(Map::from_iter([(
+    Ok(Value::Object(Map::from_iter([(
         "resourceSpans".to_owned(),
         Value::Array(
             resources
                 .into_iter()
-                .map(|resource_spans| {
-                    Value::Object(Map::from_iter([
-                        (
-                            "resource".to_owned(),
-                            Value::Object(resource::resource(&resource_spans.resource)),
-                        ),
-                        (
-                            "scopeSpans".to_owned(),
-                            Value::Array(
-                                resource_spans
-                                    .scopes
-                                    .into_iter()
-                                    .map(|scope_spans| {
-                                        Value::Object(Map::from_iter([
-                                            (
-                                                "scope".to_owned(),
-                                                Value::Object(resource::scope(&scope_spans.scope)),
-                                            ),
-                                            ("spans".to_owned(), Value::Array(scope_spans.records)),
-                                        ]))
-                                    })
-                                    .collect(),
-                            ),
-                        ),
-                    ]))
-                })
-                .collect(),
+                .map(wire_resource_spans)
+                .collect::<Result<Vec<_>, _>>()?,
         ),
-    )]))
+    )])))
 }
 
-fn append(groups: &mut Vec<ResourceSpans>, record: &ResourceRecord<SpanPoint>) {
+fn wire_resource_spans(value: ResourceSpans) -> Result<Value, ExportError> {
+    Ok(Value::Object(Map::from_iter([
+        (
+            "resource".to_owned(),
+            Value::Object(resource::resource(&value.resource)?),
+        ),
+        (
+            "scopeSpans".to_owned(),
+            Value::Array(
+                value
+                    .scopes
+                    .into_iter()
+                    .map(wire_scope_spans)
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+        ),
+    ])))
+}
+
+fn wire_scope_spans(value: ScopeSpans) -> Result<Value, ExportError> {
+    Ok(Value::Object(Map::from_iter([
+        (
+            "scope".to_owned(),
+            Value::Object(resource::scope(&value.scope)?),
+        ),
+        ("spans".to_owned(), Value::Array(value.records)),
+    ])))
+}
+
+fn append(
+    groups: &mut Vec<ResourceSpans>,
+    record: &ResourceRecord<SpanPoint>,
+) -> Result<(), ExportError> {
     let scope = resource::resource_scope_group(
         groups,
         &record.resource,
@@ -80,10 +88,11 @@ fn append(groups: &mut Vec<ResourceSpans>, record: &ResourceRecord<SpanPoint>) {
             records: Vec::new(),
         },
     );
-    scope.records.push(span(&record.record));
+    scope.records.push(span(&record.record)?);
+    Ok(())
 }
 
-fn span(value: &SpanPoint) -> Value {
+fn span(value: &SpanPoint) -> Result<Value, ExportError> {
     let mut encoded = Map::new();
     encoded.insert(
         "traceId".to_owned(),
@@ -107,7 +116,7 @@ fn span(value: &SpanPoint) -> Value {
     }
     encoded.insert("flags".to_owned(), Value::from(value.flags));
     encoded.insert("name".to_owned(), Value::String(value.name.clone()));
-    encoded.insert("kind".to_owned(), Value::from(kind(value.kind)));
+    encoded.insert("kind".to_owned(), Value::from(kind(value.kind)?));
     encoded.insert(
         "startTimeUnixNano".to_owned(),
         resource::timestamp(&value.start_time),
@@ -118,7 +127,7 @@ fn span(value: &SpanPoint) -> Value {
     );
     encoded.insert(
         "attributes".to_owned(),
-        Value::Array(values::key_values(&value.attributes)),
+        Value::Array(values::key_values(&value.attributes)?),
     );
     encoded.insert(
         "droppedAttributesCount".to_owned(),
@@ -126,7 +135,13 @@ fn span(value: &SpanPoint) -> Value {
     );
     encoded.insert(
         "events".to_owned(),
-        Value::Array(value.events.iter().map(event).collect()),
+        Value::Array(
+            value
+                .events
+                .iter()
+                .map(event)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
     );
     encoded.insert(
         "droppedEventsCount".to_owned(),
@@ -134,32 +149,38 @@ fn span(value: &SpanPoint) -> Value {
     );
     encoded.insert(
         "links".to_owned(),
-        Value::Array(value.links.iter().map(link).collect()),
+        Value::Array(
+            value
+                .links
+                .iter()
+                .map(link)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
     );
     encoded.insert(
         "droppedLinksCount".to_owned(),
         Value::from(value.dropped_links_count),
     );
-    encoded.insert("status".to_owned(), status(value));
-    Value::Object(encoded)
+    encoded.insert("status".to_owned(), status(value)?);
+    Ok(Value::Object(encoded))
 }
 
-fn event(value: &SpanEventPoint) -> Value {
-    Value::Object(Map::from_iter([
+fn event(value: &SpanEventPoint) -> Result<Value, ExportError> {
+    Ok(Value::Object(Map::from_iter([
         ("timeUnixNano".to_owned(), resource::timestamp(&value.time)),
         ("name".to_owned(), Value::String(value.name.clone())),
         (
             "attributes".to_owned(),
-            Value::Array(values::key_values(&value.attributes)),
+            Value::Array(values::key_values(&value.attributes)?),
         ),
         (
             "droppedAttributesCount".to_owned(),
             Value::from(value.dropped_attributes_count),
         ),
-    ]))
+    ])))
 }
 
-fn link(value: &SpanLinkPoint) -> Value {
+fn link(value: &SpanLinkPoint) -> Result<Value, ExportError> {
     let mut encoded = Map::from_iter([
         (
             "traceId".to_owned(),
@@ -171,7 +192,7 @@ fn link(value: &SpanLinkPoint) -> Value {
         ),
         (
             "attributes".to_owned(),
-            Value::Array(values::key_values(&value.attributes)),
+            Value::Array(values::key_values(&value.attributes)?),
         ),
         (
             "droppedAttributesCount".to_owned(),
@@ -185,35 +206,37 @@ fn link(value: &SpanLinkPoint) -> Value {
             Value::String(trace_state.as_str().to_owned()),
         );
     }
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
 }
 
-fn status(value: &SpanPoint) -> Value {
+fn status(value: &SpanPoint) -> Result<Value, ExportError> {
     let mut encoded = Map::from_iter([(
         "code".to_owned(),
-        Value::from(status_code(value.status.code)),
+        Value::from(status_code(value.status.code)?),
     )]);
     resource::insert_string(&mut encoded, "message", value.status.message.as_ref());
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
 }
 
-fn kind(value: SpanKindPoint) -> u8 {
-    match value {
+fn kind(value: SpanKindPoint) -> Result<u8, ExportError> {
+    Ok(match value {
+        SpanKindPoint::Unspecified => 0,
         SpanKindPoint::Internal => 1,
         SpanKindPoint::Server => 2,
         SpanKindPoint::Client => 3,
         SpanKindPoint::Producer => 4,
         SpanKindPoint::Consumer => 5,
-        _ => 0,
-    }
+        _ => return Err(values::unsupported_variant("SpanKindPoint")),
+    })
 }
 
-fn status_code(value: StatusCode) -> u8 {
-    match value {
+fn status_code(value: StatusCode) -> Result<u8, ExportError> {
+    Ok(match value {
+        StatusCode::Unset => 0,
         StatusCode::Ok => 1,
         StatusCode::Error => 2,
-        _ => 0,
-    }
+        _ => return Err(values::unsupported_variant("StatusCode")),
+    })
 }
 
 #[cfg(test)]
@@ -227,7 +250,7 @@ mod tests {
             "expected.envelope.json",
         ))
         .expect("canonical trace fixture parses");
-        let value = request(&[envelope]);
+        let value = request(&[envelope]).expect("fixture encodes");
         let span = &value["resourceSpans"][0]["scopeSpans"][0]["spans"][0];
         assert!(span["startTimeUnixNano"].is_string());
         assert!(span["status"]["code"].is_number());

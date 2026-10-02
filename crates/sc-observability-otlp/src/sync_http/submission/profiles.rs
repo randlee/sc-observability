@@ -8,6 +8,7 @@ use sc_observability_types::otlp::{
     },
     submission::SubmissionEnvelope,
 };
+use sc_observability_types::v2::ExportError;
 use serde_json::{Map, Value};
 
 struct ScopeProfiles {
@@ -19,12 +20,13 @@ struct ResourceProfiles {
     scopes: Vec<ScopeProfiles>,
 }
 
-pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
+pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {
     let mut groups = Vec::new();
     let dictionary = envelopes
         .iter()
         .find_map(|envelope| envelope.profiles.as_ref())
-        .map(|profiles| wire_dictionary(&profiles.dictionary));
+        .map(|profiles| wire_dictionary(&profiles.dictionary))
+        .transpose()?;
     for envelope in envelopes {
         let Some(profiles) = &envelope.profiles else {
             continue;
@@ -42,38 +44,42 @@ pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
         Value::Array(
             groups
                 .into_iter()
-                .map(|group| {
-                    let schema_url = group.resource.schema_url.clone();
-                    let mut resource = resource::resource(&group.resource);
-                    resource.remove("schemaUrl");
-                    Value::Object(Map::from_iter([
-                        ("resource".to_owned(), Value::Object(resource)),
-                        ("schemaUrl".to_owned(), optional_string(schema_url)),
-                        (
-                            "scopeProfiles".to_owned(),
-                            Value::Array(
-                                group
-                                    .scopes
-                                    .into_iter()
-                                    .map(|scope| {
-                                        let schema_url = scope.scope.schema_url.clone();
-                                        let mut scope_value = resource::scope(&scope.scope);
-                                        scope_value.remove("schemaUrl");
-                                        Value::Object(Map::from_iter([
-                                            ("scope".to_owned(), Value::Object(scope_value)),
-                                            ("schemaUrl".to_owned(), optional_string(schema_url)),
-                                            ("profiles".to_owned(), Value::Array(scope.profiles)),
-                                        ]))
-                                    })
-                                    .collect(),
-                            ),
-                        ),
-                    ]))
-                })
-                .collect(),
+                .map(wire_resource_profiles)
+                .collect::<Result<Vec<_>, _>>()?,
         ),
     );
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
+}
+
+fn wire_resource_profiles(value: ResourceProfiles) -> Result<Value, ExportError> {
+    let schema_url = value.resource.schema_url.clone();
+    let mut resource_value = resource::resource(&value.resource)?;
+    resource_value.remove("schemaUrl");
+    Ok(Value::Object(Map::from_iter([
+        ("resource".to_owned(), Value::Object(resource_value)),
+        ("schemaUrl".to_owned(), optional_string(schema_url)),
+        (
+            "scopeProfiles".to_owned(),
+            Value::Array(
+                value
+                    .scopes
+                    .into_iter()
+                    .map(wire_scope_profiles)
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+        ),
+    ])))
+}
+
+fn wire_scope_profiles(value: ScopeProfiles) -> Result<Value, ExportError> {
+    let schema_url = value.scope.schema_url.clone();
+    let mut scope_value = resource::scope(&value.scope)?;
+    scope_value.remove("schemaUrl");
+    Ok(Value::Object(Map::from_iter([
+        ("scope".to_owned(), Value::Object(scope_value)),
+        ("schemaUrl".to_owned(), optional_string(schema_url)),
+        ("profiles".to_owned(), Value::Array(value.profiles)),
+    ])))
 }
 
 fn append(groups: &mut Vec<ResourceProfiles>, profile: &ResourceRecord<Profile>) {
@@ -96,8 +102,10 @@ fn append(groups: &mut Vec<ResourceProfiles>, profile: &ResourceRecord<Profile>)
     scope_group.profiles.push(wire_profile(&profile.record));
 }
 
-fn wire_dictionary(value: &sc_observability_types::otlp::signals::ProfilesDictionary) -> Value {
-    Value::Object(Map::from_iter([
+fn wire_dictionary(
+    value: &sc_observability_types::otlp::signals::ProfilesDictionary,
+) -> Result<Value, ExportError> {
+    Ok(Value::Object(Map::from_iter([
         (
             "mappingTable".to_owned(),
             Value::Array(value.mapping_table.iter().map(mapping).collect()),
@@ -127,13 +135,19 @@ fn wire_dictionary(value: &sc_observability_types::otlp::signals::ProfilesDictio
         ),
         (
             "attributeTable".to_owned(),
-            Value::Array(value.attribute_table.iter().map(attribute).collect()),
+            Value::Array(
+                value
+                    .attribute_table
+                    .iter()
+                    .map(attribute)
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
         ),
         (
             "stackTable".to_owned(),
             Value::Array(value.stack_table.iter().map(stack).collect()),
         ),
-    ]))
+    ])))
 }
 
 fn wire_profile(value: &Profile) -> Value {
@@ -242,17 +256,15 @@ fn link(value: &ProfileLink) -> Value {
     ]))
 }
 
-fn attribute(value: &KeyValueAndUnit) -> Value {
+fn attribute(value: &KeyValueAndUnit) -> Result<Value, ExportError> {
     let mut encoded = Map::from_iter([
         ("keyStrindex".to_owned(), Value::from(value.key_strindex)),
         ("unitStrindex".to_owned(), Value::from(value.unit_strindex)),
     ]);
-    insert_optional(
-        &mut encoded,
-        "value",
-        value.value.as_ref().map(values::any_value),
-    );
-    Value::Object(encoded)
+    if let Some(value) = &value.value {
+        encoded.insert("value".to_owned(), values::any_value(value)?);
+    }
+    Ok(Value::Object(encoded))
 }
 
 fn stack(value: &Stack) -> Value {
@@ -339,7 +351,7 @@ mod tests {
             "expected.envelope.json",
         ))
         .expect("canonical profile fixture parses");
-        let value = request(&[envelope]);
+        let value = request(&[envelope]).expect("fixture encodes");
         assert!(value["dictionary"].is_object());
         let profile = &value["resourceProfiles"][0]["scopeProfiles"][0]["profiles"][0];
         assert_eq!(profile["timeUnixNano"], "0");

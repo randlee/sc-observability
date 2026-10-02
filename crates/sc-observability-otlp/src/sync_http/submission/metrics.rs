@@ -8,6 +8,7 @@ use sc_observability_types::otlp::{
     },
     submission::SubmissionEnvelope,
 };
+use sc_observability_types::v2::ExportError;
 use serde_json::{Map, Value};
 
 struct ScopeMetrics {
@@ -19,50 +20,57 @@ struct ResourceMetrics {
     scopes: Vec<ScopeMetrics>,
 }
 
-pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Value {
+pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {
     let mut resources = Vec::new();
     for envelope in envelopes {
         for record in &envelope.metrics {
-            append(&mut resources, record);
+            append(&mut resources, record)?;
         }
     }
-    Value::Object(Map::from_iter([(
+    Ok(Value::Object(Map::from_iter([(
         "resourceMetrics".to_owned(),
         Value::Array(
             resources
                 .into_iter()
-                .map(|group| {
-                    Value::Object(Map::from_iter([
-                        (
-                            "resource".to_owned(),
-                            Value::Object(resource::resource(&group.resource)),
-                        ),
-                        (
-                            "scopeMetrics".to_owned(),
-                            Value::Array(
-                                group
-                                    .scopes
-                                    .into_iter()
-                                    .map(|scope| {
-                                        Value::Object(Map::from_iter([
-                                            (
-                                                "scope".to_owned(),
-                                                Value::Object(resource::scope(&scope.scope)),
-                                            ),
-                                            ("metrics".to_owned(), Value::Array(scope.records)),
-                                        ]))
-                                    })
-                                    .collect(),
-                            ),
-                        ),
-                    ]))
-                })
-                .collect(),
+                .map(wire_resource_metrics)
+                .collect::<Result<Vec<_>, _>>()?,
         ),
-    )]))
+    )])))
 }
 
-fn append(groups: &mut Vec<ResourceMetrics>, record: &ResourceRecord<MetricStream>) {
+fn wire_resource_metrics(value: ResourceMetrics) -> Result<Value, ExportError> {
+    Ok(Value::Object(Map::from_iter([
+        (
+            "resource".to_owned(),
+            Value::Object(resource::resource(&value.resource)?),
+        ),
+        (
+            "scopeMetrics".to_owned(),
+            Value::Array(
+                value
+                    .scopes
+                    .into_iter()
+                    .map(wire_scope_metrics)
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+        ),
+    ])))
+}
+
+fn wire_scope_metrics(value: ScopeMetrics) -> Result<Value, ExportError> {
+    Ok(Value::Object(Map::from_iter([
+        (
+            "scope".to_owned(),
+            Value::Object(resource::scope(&value.scope)?),
+        ),
+        ("metrics".to_owned(), Value::Array(value.records)),
+    ])))
+}
+
+fn append(
+    groups: &mut Vec<ResourceMetrics>,
+    record: &ResourceRecord<MetricStream>,
+) -> Result<(), ExportError> {
     let scope_group = resource::resource_scope_group(
         groups,
         &record.resource,
@@ -79,10 +87,11 @@ fn append(groups: &mut Vec<ResourceMetrics>, record: &ResourceRecord<MetricStrea
             records: Vec::new(),
         },
     );
-    scope_group.records.push(metric(&record.record));
+    scope_group.records.push(metric(&record.record)?);
+    Ok(())
 }
 
-fn metric(value: &MetricStream) -> Value {
+fn metric(value: &MetricStream) -> Result<Value, ExportError> {
     let mut encoded = Map::new();
     encoded.insert(
         "name".to_owned(),
@@ -93,112 +102,140 @@ fn metric(value: &MetricStream) -> Value {
     if !value.metadata.entries().is_empty() {
         encoded.insert(
             "metadata".to_owned(),
-            Value::Array(values::key_values(&value.metadata)),
+            Value::Array(values::key_values(&value.metadata)?),
         );
     }
-    match &value.data {
-        MetricData::Gauge { points } => {
-            encoded.insert("gauge".to_owned(), points_value(points));
-        }
+    let (key, data) = metric_data(&value.data)?;
+    encoded.insert(key.to_owned(), data);
+    Ok(Value::Object(encoded))
+}
+
+fn metric_data(value: &MetricData) -> Result<(&'static str, Value), ExportError> {
+    match value {
+        MetricData::Gauge { points } => Ok(("gauge", points_value(points)?)),
         MetricData::Sum {
             points,
             temporality,
             monotonic,
-        } => {
-            encoded.insert(
-                "sum".to_owned(),
-                Value::Object(Map::from_iter([
-                    (
-                        "aggregationTemporality".to_owned(),
-                        Value::from(temporality_value(*temporality)),
+        } => Ok((
+            "sum",
+            Value::Object(Map::from_iter([
+                (
+                    "aggregationTemporality".to_owned(),
+                    Value::from(temporality_value(*temporality)?),
+                ),
+                ("isMonotonic".to_owned(), Value::Bool(*monotonic)),
+                (
+                    "dataPoints".to_owned(),
+                    Value::Array(
+                        points
+                            .iter()
+                            .map(number_point)
+                            .collect::<Result<Vec<_>, _>>()?,
                     ),
-                    ("isMonotonic".to_owned(), Value::Bool(*monotonic)),
-                    (
-                        "dataPoints".to_owned(),
-                        Value::Array(points.iter().map(number_point).collect()),
-                    ),
-                ])),
-            );
-        }
+                ),
+            ])),
+        )),
         MetricData::Histogram {
             points,
             temporality,
-        } => {
-            encoded.insert(
-                "histogram".to_owned(),
-                Value::Object(Map::from_iter([
-                    (
-                        "aggregationTemporality".to_owned(),
-                        Value::from(temporality_value(*temporality)),
+        } => Ok((
+            "histogram",
+            Value::Object(Map::from_iter([
+                (
+                    "aggregationTemporality".to_owned(),
+                    Value::from(temporality_value(*temporality)?),
+                ),
+                (
+                    "dataPoints".to_owned(),
+                    Value::Array(
+                        points
+                            .iter()
+                            .map(histogram_point)
+                            .collect::<Result<Vec<_>, _>>()?,
                     ),
-                    (
-                        "dataPoints".to_owned(),
-                        Value::Array(points.iter().map(histogram_point).collect()),
-                    ),
-                ])),
-            );
-        }
+                ),
+            ])),
+        )),
         MetricData::ExponentialHistogram {
             points,
             temporality,
-        } => {
-            encoded.insert(
-                "exponentialHistogram".to_owned(),
-                Value::Object(Map::from_iter([
-                    (
-                        "aggregationTemporality".to_owned(),
-                        Value::from(temporality_value(*temporality)),
-                    ),
-                    (
-                        "dataPoints".to_owned(),
-                        Value::Array(points.iter().map(exponential_point).collect()),
-                    ),
-                ])),
-            );
-        }
-        MetricData::Summary { points } => {
-            encoded.insert(
-                "summary".to_owned(),
-                Value::Object(Map::from_iter([(
+        } => Ok((
+            "exponentialHistogram",
+            Value::Object(Map::from_iter([
+                (
+                    "aggregationTemporality".to_owned(),
+                    Value::from(temporality_value(*temporality)?),
+                ),
+                (
                     "dataPoints".to_owned(),
-                    Value::Array(points.iter().map(summary_point).collect()),
-                )])),
-            );
-        }
-        _ => unreachable!("new MetricData variants require an explicit OTLP/JSON mapping"),
+                    Value::Array(
+                        points
+                            .iter()
+                            .map(exponential_point)
+                            .collect::<Result<Vec<_>, _>>()?,
+                    ),
+                ),
+            ])),
+        )),
+        MetricData::Summary { points } => Ok((
+            "summary",
+            Value::Object(Map::from_iter([(
+                "dataPoints".to_owned(),
+                Value::Array(
+                    points
+                        .iter()
+                        .map(summary_point)
+                        .collect::<Result<Vec<_>, _>>()?,
+                ),
+            )])),
+        )),
+        _ => Err(values::unsupported_variant("MetricData")),
     }
-    Value::Object(encoded)
 }
 
-fn points_value(points: &[NumberPoint]) -> Value {
-    Value::Object(Map::from_iter([(
+fn points_value(points: &[NumberPoint]) -> Result<Value, ExportError> {
+    Ok(Value::Object(Map::from_iter([(
         "dataPoints".to_owned(),
-        Value::Array(points.iter().map(number_point).collect()),
-    )]))
+        Value::Array(
+            points
+                .iter()
+                .map(number_point)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+    )])))
 }
 
-fn number_point(value: &NumberPoint) -> Value {
+fn number_point(value: &NumberPoint) -> Result<Value, ExportError> {
     let mut encoded = common_point(
         &value.attributes,
         value.start_time.as_ref(),
         &value.time,
         value.flags.bits(),
-    );
-    number_value(&mut encoded, &value.value);
+    )?;
+    number_value(&mut encoded, &value.value)?;
     encoded.insert(
         "exemplars".to_owned(),
-        Value::Array(value.exemplars.iter().map(exemplar).collect()),
+        Value::Array(
+            value
+                .exemplars
+                .iter()
+                .map(exemplar)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
     );
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
 }
 
-fn histogram_point(value: &sc_observability_types::otlp::signals::HistogramDataPoint) -> Value {
+fn histogram_point(
+    value: &sc_observability_types::otlp::signals::HistogramDataPoint,
+) -> Result<Value, ExportError> {
     let mut encoded = common_point(
         &value.attributes,
         value.start_time.as_ref(),
         &value.time,
         value.flags.bits(),
-    );
+    )?;
     encoded.insert("count".to_owned(), uint(value.count));
     insert_double(&mut encoded, "sum", value.sum);
     encoded.insert(
@@ -218,22 +255,28 @@ fn histogram_point(value: &sc_observability_types::otlp::signals::HistogramDataP
     );
     encoded.insert(
         "exemplars".to_owned(),
-        Value::Array(value.exemplars.iter().map(exemplar).collect()),
+        Value::Array(
+            value
+                .exemplars
+                .iter()
+                .map(exemplar)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
     );
     insert_double(&mut encoded, "min", value.min);
     insert_double(&mut encoded, "max", value.max);
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
 }
 
 fn exponential_point(
     value: &sc_observability_types::otlp::signals::ExponentialHistogramDataPoint,
-) -> Value {
+) -> Result<Value, ExportError> {
     let mut encoded = common_point(
         &value.attributes,
         value.start_time.as_ref(),
         &value.time,
         value.flags.bits(),
-    );
+    )?;
     encoded.insert("count".to_owned(), uint(value.count));
     insert_double(&mut encoded, "sum", value.sum);
     encoded.insert("scale".to_owned(), Value::from(value.scale));
@@ -246,20 +289,28 @@ fn exponential_point(
     encoded.insert("negative".to_owned(), buckets(&value.negative));
     encoded.insert(
         "exemplars".to_owned(),
-        Value::Array(value.exemplars.iter().map(exemplar).collect()),
+        Value::Array(
+            value
+                .exemplars
+                .iter()
+                .map(exemplar)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
     );
     insert_double(&mut encoded, "min", value.min);
     insert_double(&mut encoded, "max", value.max);
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
 }
 
-fn summary_point(value: &sc_observability_types::otlp::signals::SummaryDataPoint) -> Value {
+fn summary_point(
+    value: &sc_observability_types::otlp::signals::SummaryDataPoint,
+) -> Result<Value, ExportError> {
     let mut encoded = common_point(
         &value.attributes,
         value.start_time.as_ref(),
         &value.time,
         value.flags.bits(),
-    );
+    )?;
     encoded.insert("count".to_owned(), uint(value.count));
     encoded.insert("sum".to_owned(), values::double(value.sum));
     encoded.insert(
@@ -277,7 +328,7 @@ fn summary_point(value: &sc_observability_types::otlp::signals::SummaryDataPoint
                 .collect(),
         ),
     );
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
 }
 
 fn common_point(
@@ -285,38 +336,38 @@ fn common_point(
     start: Option<&sc_observability_types::Timestamp>,
     time: &sc_observability_types::Timestamp,
     flags: u32,
-) -> Map<String, Value> {
+) -> Result<Map<String, Value>, ExportError> {
     let mut encoded = Map::from_iter([
         (
             "attributes".to_owned(),
-            Value::Array(values::key_values(attributes)),
+            Value::Array(values::key_values(attributes)?),
         ),
         ("timeUnixNano".to_owned(), resource::timestamp(time)),
         ("flags".to_owned(), Value::from(flags)),
     ]);
     resource::insert_timestamp(&mut encoded, "startTimeUnixNano", start);
-    encoded
+    Ok(encoded)
 }
 
-fn exemplar(value: &Exemplar) -> Value {
+fn exemplar(value: &Exemplar) -> Result<Value, ExportError> {
     let mut encoded = Map::from_iter([
         (
             "filteredAttributes".to_owned(),
-            Value::Array(values::key_values(&value.filtered_attributes)),
+            Value::Array(values::key_values(&value.filtered_attributes)?),
         ),
         ("timeUnixNano".to_owned(), resource::timestamp(&value.time)),
     ]);
-    number_value(&mut encoded, &value.value);
+    number_value(&mut encoded, &value.value)?;
     if let Some(trace_id) = &value.trace_id {
         encoded.insert("traceId".to_owned(), Value::String(trace_id.to_string()));
     }
     if let Some(span_id) = &value.span_id {
         encoded.insert("spanId".to_owned(), Value::String(span_id.to_string()));
     }
-    Value::Object(encoded)
+    Ok(Value::Object(encoded))
 }
 
-fn number_value(encoded: &mut Map<String, Value>, value: &NumberValue) {
+fn number_value(encoded: &mut Map<String, Value>, value: &NumberValue) -> Result<(), ExportError> {
     match value {
         NumberValue::Int(value) => {
             encoded.insert("asInt".to_owned(), values::int64(*value));
@@ -324,8 +375,9 @@ fn number_value(encoded: &mut Map<String, Value>, value: &NumberValue) {
         NumberValue::Double(value) => {
             encoded.insert("asDouble".to_owned(), values::double(*value));
         }
-        _ => unreachable!("new NumberValue variants require an explicit OTLP/JSON mapping"),
+        _ => return Err(values::unsupported_variant("NumberValue")),
     }
+    Ok(())
 }
 
 fn insert_double(
@@ -348,11 +400,11 @@ fn buckets(value: &sc_observability_types::otlp::signals::ExponentialBuckets) ->
     ]))
 }
 
-fn temporality_value(value: AggregationTemporality) -> u8 {
+fn temporality_value(value: AggregationTemporality) -> Result<u8, ExportError> {
     match value {
-        AggregationTemporality::Delta => 1,
-        AggregationTemporality::Cumulative => 2,
-        _ => 0,
+        AggregationTemporality::Delta => Ok(1),
+        AggregationTemporality::Cumulative => Ok(2),
+        _ => Err(values::unsupported_variant("AggregationTemporality")),
     }
 }
 
@@ -376,7 +428,7 @@ mod tests {
             let contents = super::super::golden_fixture(fixture, "expected.envelope.json");
             let envelope: SubmissionEnvelope =
                 serde_json::from_str(&contents).expect("fixture parses");
-            let value = request(&[envelope]);
+            let value = request(&[envelope]).expect("fixture encodes");
             assert!(value["resourceMetrics"][0]["scopeMetrics"][0]["metrics"][0].is_object());
         }
     }
