@@ -180,11 +180,19 @@ fn context(code: ErrorCode, message: &str) -> Box<ErrorContext> {
             "retain the store for recovery; do not delete pending records",
         ),
     };
-    Box::new(ErrorContext::new(
-        code,
-        message,
-        Remediation::recoverable(action, [step]),
-    ))
+    let remediation = match code.as_str() {
+        "SC_OBSERVABILITY_DURABLE_RECORD_TOO_LARGE"
+        | "SC_OBSERVABILITY_DURABLE_CORRUPT_ENVELOPE"
+        | "SC_OBSERVABILITY_DURABLE_UNSUPPORTED_QUERY"
+        | "SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW"
+        | "SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE"
+        | "SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID"
+        | "SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED" => {
+            Remediation::not_recoverable(format!("{action}; {step}."))
+        }
+        _ => Remediation::recoverable(action, [step]),
+    };
+    Box::new(ErrorContext::new(code, message, remediation))
 }
 
 fn persistence(error: impl std::fmt::Display) -> TelemetryClientError {
@@ -381,5 +389,74 @@ impl<'a> FlushActivity<'a> {
 impl Drop for FlushActivity<'_> {
     fn drop(&mut self) {
         self.0.active_flushes.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_classification_tests {
+    use super::context;
+    use crate::error_codes::{DURABLE_CORRUPT, DURABLE_OVERSIZE, DURABLE_QUERY};
+    use sc_observability_types::{Remediation, error_codes};
+
+    #[test]
+    fn permanent_durable_and_configuration_failures_are_not_recoverable() {
+        let cases = [
+            (DURABLE_OVERSIZE, "split the submission"),
+            (DURABLE_CORRUPT, "restore it from the original source"),
+            (DURABLE_QUERY, "select Summary or Submissions"),
+            (
+                error_codes::SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW,
+                "use a client supporting this store version",
+            ),
+            (
+                error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE,
+                "correct the telemetry file",
+            ),
+            (
+                error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID,
+                "correct the named configuration field",
+            ),
+            (
+                error_codes::SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED,
+                "select the sync_http backend",
+            ),
+        ];
+
+        for (code, expected_guidance) in cases {
+            let diagnostic = context(code.clone(), "test diagnostic")
+                .diagnostic()
+                .clone();
+            assert_eq!(diagnostic.code, code);
+            let Remediation::NotRecoverable { justification } = diagnostic.remediation else {
+                panic!("{code} is a permanent failure and must not be recoverable");
+            };
+            assert!(
+                justification.contains(expected_guidance),
+                "{code} remediation is not actionable: {justification}"
+            );
+        }
+    }
+
+    #[test]
+    fn transient_store_failures_remain_recoverable() {
+        let diagnostic = context(
+            error_codes::SC_OBSERVABILITY_ADMIT_PERSISTENCE,
+            "temporary store failure",
+        )
+        .diagnostic()
+        .clone();
+
+        assert_eq!(
+            diagnostic.code,
+            error_codes::SC_OBSERVABILITY_ADMIT_PERSISTENCE
+        );
+        let Remediation::Recoverable { steps } = diagnostic.remediation else {
+            panic!("transient persistence failures should remain recoverable");
+        };
+        assert!(
+            steps
+                .first_step()
+                .is_some_and(|step| !step.trim().is_empty())
+        );
     }
 }

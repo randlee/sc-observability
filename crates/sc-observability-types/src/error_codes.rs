@@ -1,4 +1,8 @@
 //! Stable `ErrorCode` registry for `sc-observability-types`.
+//!
+//! This root module is the canonical documentation path for stable public
+//! error codes. Feature-specific modules may re-export the same code values,
+//! but their definitions and trigger/remediation descriptions belong here.
 
 use crate::ErrorCode;
 
@@ -275,64 +279,104 @@ pub mod otlp {
 pub const SIGNAL_VALIDATION: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_TYPES_SIGNAL_VALIDATION");
 
-/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_INVALID_JSON`. Recovery: correct the reported cause before retrying.
+/// The submission document is not valid JSON.
+///
+/// Remediation: correct the syntax at the reported line and column, then resubmit.
 pub const SC_OBSERVABILITY_SUBMIT_INVALID_JSON: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_INVALID_JSON");
-/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION`. Recovery: correct the reported cause before retrying.
+/// The submission envelope version is not supported by this reader.
+///
+/// Remediation: resubmit using the current envelope version or upgrade the reader.
 pub const SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION");
-/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_EMPTY`. Recovery: correct the reported cause before retrying.
+/// A submission has no log, span, metric, or profile records.
+///
+/// Remediation: add at least one record and resubmit.
 pub const SC_OBSERVABILITY_SUBMIT_EMPTY: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_EMPTY");
-/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_VALIDATION`. Recovery: correct the reported cause before retrying.
+/// A submitted field violates the neutral signal data model.
+///
+/// Remediation: correct the named field to satisfy the reported validation rule and resubmit.
 pub const SC_OBSERVABILITY_SUBMIT_VALIDATION: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_VALIDATION");
-/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE`. Recovery: correct the reported cause before retrying.
+/// A plain JSON integer cannot be represented as an OTLP `int64`.
+///
+/// Remediation: send the value as a double or string, or reduce it to the supported range.
 pub const SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE");
-/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT`. Recovery: correct the reported cause before retrying.
+/// Records sharing a correlation ID disagree on their trace or span ID.
+///
+/// Remediation: remove the conflicting explicit IDs or make them agree.
 pub const SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT");
-/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT`. Recovery: correct the reported cause before retrying.
+/// A span supplies inconsistent end-time and duration values.
+///
+/// Remediation: supply only one value, or make the end time equal the start time plus duration.
 pub const SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT");
-/// Telemetry failure `SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE`. Recovery: correct the reported cause before retrying.
+/// A profiles record references an entry absent from its dictionary.
+///
+/// Remediation: add the referenced entry or correct the reported index.
 pub const SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE");
-/// Telemetry failure `SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE`. Recovery: correct the reported cause before retrying.
+/// The durable store cannot be opened or reached for admission.
+///
+/// Remediation: make the store path writable and available, then retry the emit.
 pub const SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE");
-/// Telemetry failure `SC_OBSERVABILITY_ADMIT_DISK_BOUND`. Recovery: correct the reported cause before retrying.
+/// The submission would exceed the configured retained-payload byte bound.
+///
+/// Remediation: flush pending rows or raise `max_store_bytes`; use eviction only if dropping old payloads is acceptable.
 pub const SC_OBSERVABILITY_ADMIT_DISK_BOUND: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_DISK_BOUND");
-/// Telemetry failure `SC_OBSERVABILITY_ADMIT_PERSISTENCE`. Recovery: correct the reported cause before retrying.
+/// A durable-store operation failed before admission could be committed.
+///
+/// Remediation: check free disk space and file permissions, then retry; no receipt was committed.
 pub const SC_OBSERVABILITY_ADMIT_PERSISTENCE: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_PERSISTENCE");
-/// Telemetry failure `SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW`. Recovery: correct the reported cause before retrying.
+/// The store schema was written by a newer client than this one supports.
+///
+/// Remediation: use a compatible newer client or a different store path; preserve the existing database.
 pub const SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW");
-/// Telemetry failure `SC_OBSERVABILITY_ADMIT_CLOSED`. Recovery: correct the reported cause before retrying.
+/// Admission was attempted after the durable client shut down.
+///
+/// Remediation: open a new client, then emit through it.
 pub const SC_OBSERVABILITY_ADMIT_CLOSED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_ADMIT_CLOSED");
-/// Telemetry failure `SC_OBSERVABILITY_DELIVERY_DEADLINE`. Recovery: correct the reported cause before retrying.
+/// Delivery did not finish before the caller's flush deadline; rows remain pending.
+///
+/// Remediation: flush again later or with a longer deadline, and check collector reachability.
 pub const SC_OBSERVABILITY_DELIVERY_DEADLINE: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_DELIVERY_DEADLINE");
-/// Telemetry failure `SC_OBSERVABILITY_DELIVERY_FAILED`. Recovery: correct the reported cause before retrying.
+/// The collector terminally rejected a delivery.
+///
+/// Remediation: inspect status for the per-signal error and correct the payload or collector configuration.
 pub const SC_OBSERVABILITY_DELIVERY_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_DELIVERY_FAILED");
-/// Telemetry failure `SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE`. Recovery: correct the reported cause before retrying.
+/// The telemetry configuration file is missing, unreadable, oversized, or invalid YAML.
+///
+/// Remediation: correct the named path, permissions, size, or YAML syntax and load it again.
 pub const SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE");
-/// Telemetry failure `SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING`. Recovery: correct the reported cause before retrying.
+/// A required telemetry configuration field has no value from any allowed source.
+///
+/// Remediation: supply the named field explicitly or in the configuration file.
 pub const SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING");
-/// Telemetry failure `SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID`. Recovery: correct the reported cause before retrying.
+/// A telemetry configuration field is malformed or outside its accepted bounds.
+///
+/// Remediation: set the named field to a value within the documented bounds.
 pub const SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID");
-/// Telemetry failure `SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED`. Recovery: correct the reported cause before retrying.
+/// The selected backend does not support the requested signal representation.
+///
+/// Remediation: select a backend that supports the combination or omit that signal.
 pub const SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED");
-/// Telemetry failure `SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE`. Recovery: correct the reported cause before retrying.
+/// The in-memory test client script requested a delivery failure.
+///
+/// Remediation: change the script outcome when testing a different delivery path.
 pub const SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE");
 
