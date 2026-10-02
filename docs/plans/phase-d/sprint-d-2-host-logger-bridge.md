@@ -18,10 +18,12 @@ Generated projection of `obs-d-2`; the bead is authoritative.
 - ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-013, ADR-014, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-log/src/bridge.rs`
-- `crates/sc-observability-log/tests/bridge_*.rs`
-- `docs/logging/d-2-host-logger-bridge.md`
-- `docs/plans/phase-d/sprint-d-2-host-logger-bridge.md`
-- `crates/sc-observability-log/src/control.rs (attachment control binding seam)`
+  - `crates/sc-observability-log/tests/bridge_*.rs`
+  - `docs/logging/d-2-host-logger-bridge.md`
+  - `docs/plans/phase-d/sprint-d-2-host-logger-bridge.md`
+  - `crates/sc-observability-log/src/lib.rs (root export lines for the attachment API only)`
+  - `crates/sc-observability-log/src/handle.rs (Attached/Closing slot and Arc<Logger> ownership seam only)`
+  - `crates/sc-observability-log/src/control.rs (policy submission seam only)`
 
 ## Goal and dependency
 

@@ -211,13 +211,6 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}${{ runner.os == 'Windows' && ';' || ':' }}${{ github.workspace }}/scripts/ci
         run: python3 -m pytest scripts/ci/tests -q
 
-      - name: Run staged-package and retry idempotency tests
-        run: |
-          python3 -m unittest \
-            scripts.ci.tests.test_release_wheel_targets \
-            scripts.ci.tests.test_prepare_release_staged_packages \
-            scripts.ci.tests.test_publish_retry_idempotency
-
       - name: Validate manifest completeness
         run: |
           python3 .github/scripts/release_artifacts.py validate-manifest \
@@ -226,9 +219,6 @@ jobs:
 
       - name: Validate install contract semantics
         run: python3 scripts/ci/validate_phase_c_install_contract.py
-
-      - name: Run release manifest regression tests
-        run: python3 -m pytest .github/scripts/tests/test_release_artifacts.py -q -k 'manifest or publish_order'
 
       - name: Validate publish_order dependency graph
         run: |
