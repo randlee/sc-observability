@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from collections import defaultdict
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -184,3 +185,42 @@ def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+@pytest.fixture
+def pinned_viewer(tmp_path: Path) -> Iterator[dict[str, str]]:
+    """Start only the caller-provided, hash-pinned desktop viewer binary.
+
+    The workflow downloads it using the repository verifier; local developers
+    opt in by exporting the same binary path.  This avoids an unpinned network
+    download from a test while ensuring the CI test owns its process and state.
+    """
+    binary = os.environ.get("TELEMETRY_E2E_VIEWER_BINARY")
+    if not binary:
+        pytest.skip("set TELEMETRY_E2E_VIEWER_BINARY to run pinned viewer readback")
+    manifest = json.loads((ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/release.json").read_text())
+    http, grpc, ui = (free_port(), free_port(), free_port())
+    state = tmp_path / "viewer-state"
+    harness = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
+    started = subprocess.run(
+        [sys.executable, str(harness), "start", "--binary", binary,
+         "--version", manifest["version"], "--binary-sha256", manifest["binary_sha256"],
+         "--state-dir", str(state), "--http", str(http), "--grpc", str(grpc), "--ui", str(ui)],
+        check=False, text=True, capture_output=True,
+    )
+    assert started.returncode == 0, started.stdout + started.stderr
+    try:
+        yield {"otlp": f"http://127.0.0.1:{http}", "rpc": f"http://127.0.0.1:{ui}/rpc"}
+    finally:
+        subprocess.run([sys.executable, str(harness), "stop", "--state-dir", str(state),
+                        "--remove-state"], check=False, text=True, capture_output=True)
+
+
+def rpc(url: str, method: str, params: list[object]) -> object:
+    payload = json.dumps({"jsonrpc": "2.0", "id": "d32", "method": method,
+                          "params": params}).encode("utf-8")
+    request = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        decoded = json.loads(response.read())
+    assert "error" not in decoded, decoded
+    return decoded["result"]
