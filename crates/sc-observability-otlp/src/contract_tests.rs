@@ -524,6 +524,31 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
         shutdown_before_retry_bound.diagnostic().details["field"].as_str(),
         Some("timeout_ms")
     );
+    assert_eq!(
+        shutdown_before_retry_bound.diagnostic().details["upper_field"].as_str(),
+        Some("lifecycle_shutdown_timeout_ms")
+    );
+
+    let sequence_below_timeout = validated_transport_bounds(&OtelConfig {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
+            retry_sequence_timeout_ms: Some(2_999_u64.into()),
+            ..SyncHttpRetryPolicy::default()
+        }),
+        ..sync_http_config()
+    })
+    .expect_err("retry sequence timeout may not be below the request timeout");
+    assert!(matches!(
+        sequence_below_timeout,
+        ConfigFailure::InvalidBoundOrdering { .. }
+    ));
+    let details = &sequence_below_timeout.diagnostic().details;
+    assert_eq!(details["field"].as_str(), Some("timeout_ms"));
+    assert_eq!(
+        details["upper_field"].as_str(),
+        Some("sync_http_retry.retry_sequence_timeout_ms")
+    );
+    assert_eq!(details["lower_value"].as_u64(), Some(3_000));
+    assert_eq!(details["upper_value"].as_u64(), Some(2_999));
 
     let retry_after_cap = validated_transport_bounds(&OtelConfig {
         sync_http_retry: Some(SyncHttpRetryPolicy {
