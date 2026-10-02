@@ -260,7 +260,9 @@ ones, against the final integration source. Assign `branch` =
 `integrate/phase-<x>` and `commit` = its fetched, pinned head; reviewing a
 stack tip alone does not satisfy this gate.
 
-Create the review bead, then dispatch it with `review-template.xml.j2`:
+After the sprint/fix stack has landed on the integration branch, create the
+review bead and dispatch it with `review-template.xml.j2`. After corrections,
+reuse its carried verification scope at the new integration head:
 
 ```bash
 bd create --id <root>-review --type task --parent <root> \

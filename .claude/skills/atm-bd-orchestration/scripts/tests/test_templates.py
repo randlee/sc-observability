@@ -75,20 +75,36 @@ class TemplateContractTests(unittest.TestCase):
 
         template = ROOT / "templates/review-complete.md.j2"
         original = json.loads((ROOT / "examples/review-complete-vars.json").read_text())
+        passed = {**original, "verdict": "PASS", "integration_review": "integration_review_passed",
+                  "post_mortem_counts": {"total": 0, "verified_fixed": 0, "justified_nonfix": 0, "unresolved": 0},
+                  "post_mortem_md": "Empty inventory verified; no_systemic_followup"}
         cases = [
-            ({**original, "verdict": "PASS", "integration_review": "integration_review_passed",
-              "post_mortem_md": "Inventory: 0; fixed 0; justified non-fix 0; unresolved 0. no_systemic_followup"}, True),
-            ({**original, "integration_review": "integration_review_failed"}, True),
+            (passed, True),
+            (original, True),
             ({**original, "integration_review": "PASS"}, False),
             ({**original, "post_mortem_md": "  "}, False),
             ({k: v for k, v in original.items() if k != "integration_review"}, False),
             ({k: v for k, v in original.items() if k != "post_mortem_md"}, False),
+            ({**passed, "post_mortem_counts": original["post_mortem_counts"]}, False),
+            ({**passed, "integration_commit": "f" * 40}, False),
+            ({**passed, "integration_commit": "short"}, False),
+            ({**passed, "verdict": "FAIL"}, False),
+            ({**passed, "post_mortem_counts": {"total": 2, "verified_fixed": 1, "justified_nonfix": 0, "unresolved": 0}}, False),
+            ({**passed, "post_mortem_counts": {"total": 0, "verified_fixed": 1, "justified_nonfix": -1, "unresolved": 0}}, False),
         ]
         with tempfile.TemporaryDirectory() as directory:
             variables = Path(directory) / "vars.json"
             for values, valid in cases:
                 with self.subTest(values=values, valid=valid):
                     variables.write_text(json.dumps(values))
+                    import sys
+                    checked = subprocess.run([
+                        sys.executable, str(ROOT / "scripts/check-review-completion.py"),
+                        str(variables)], capture_output=True, text=True)
+                    self.assertEqual(checked.returncode == 0, valid, checked.stderr)
+                    if not valid:
+                        self.assertIn("review completion:", checked.stderr)
+                        continue
                     result = subprocess.run([
                         "sc-compose", "render", "--file", str(template),
                         "--var-file", str(variables), "--strict"], capture_output=True, text=True)

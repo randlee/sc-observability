@@ -15,8 +15,13 @@ Read all phase finding beads, including closed ones, without the default
 
 ```bash
 bd list --all -l phase-<x> -l stage:finding -n 0 --json
+# Also inventory the full database: labels alone miss historical findings.
+bd list --all -n 0 --json
 ```
 
+From the full list, select the phase root's descendants and historical
+finding IDs associated with the phase in reports; do not treat an ID pattern
+alone as authoritative phase membership. Union and deduplicate by bead id.
 Reconcile this list with the phase's QA, sanity and phase-end review reports
 and the phase root's descendants. Include nested fix-on-fix findings and
 legacy findings missing the label; account for every reported finding by bead
@@ -47,9 +52,35 @@ This reconciliation verifies carried findings. It does not dispatch baseline
 reviewers to discover replacements or expand each fix's scope. The phase-end
 code review remains separate within the same report.
 
+## Handling history and large inventories
+
+Use ancestry, stable patch IDs (`git show <fix> | git patch-id --stable`),
+PR/squash receipts, subjects and changed paths to locate an equivalent change.
+Follow renames with `git log --follow -- <path>` when needed. None of these,
+nor a percentage of matching added lines, proves the defect is fixed now.
+Read the current affected source and focused check before marking verified.
+Record the repository for every SHA. For another repository, use its relevant
+integration source and receipt; do not classify its SHA as missing here.
+
+Partition large inventories into disjoint batches (for example, 15 findings)
+for read-only workers when delegation is authorized. Give each worker the
+pinned head, original finding/remedy, closure notes and a fixed question:
+"Does the recorded resolution hold here? Give source/check evidence, or the
+exact missing evidence." Reconcile returned IDs against the entire inventory.
+An ancestor SHA still requires this check. Sampling cannot produce a PASS;
+a time-limited partial run reports its unchecked IDs as unresolved.
+
+For administrative closures or evidence held outside git, read the bead's
+notes and filing-reviewer receipt, or request that receipt from the owner.
+Check rulings/deferrals against their actual authorization before treating the
+original defect as actionable. Do not reopen work merely because an authorized
+non-fix leaves the original code unchanged. Missing receipts remain unresolved.
+
 ## Report and closure
 
-In `review-complete.md.j2`, supply `post_mortem_md` containing:
+In `review-complete.md.j2`, set `integration_commit` to the same full SHA as
+`commit`, and `post_mortem_counts` to nonnegative integer fields `total`,
+`verified_fixed`, `justified_nonfix`, `unresolved`. Supply `post_mortem_md` containing:
 
 - inventory total and counts verified fixed, justified non-fix, and unresolved;
   the counts must sum to the inventory total;
@@ -58,6 +89,12 @@ In `review-complete.md.j2`, supply `post_mortem_md` containing:
 - repeated finding families, their root causes, and the smallest useful
   prevention action with owner and target artifact, or `no_systemic_followup`.
   Do not manufacture a lint, ADR, or new process for every family.
+
+Before the close, run `python3 .claude/skills/atm-bd-orchestration/scripts/check-review-completion.py <vars.json>`.
+It rejects inconsistent verdicts, SHA mismatches and count totals; it does not
+prove the prose evidence is true. The reviewer remains responsible for that.
+Both the overall `verdict` and `integration_review` must fail if the audit is
+incomplete or the accompanying code review has failed.
 
 Set `integration_review` to `integration_review_passed` only when every
 finding is accounted for and verified or explicitly authorized as a non-fix

@@ -1,6 +1,6 @@
 ---
 name: review-complete
-version: 2.1.0
+version: 2.2.0
 description: Reviewer completion report for a review bead (review-task); the lead files each finding as a finding bead; the body of `atm task close <task-id> completed`.
 format: markdown
 required_variables:
@@ -15,6 +15,8 @@ required_variables:
   - findings_minor
   - findings_md
   - integration_review
+  - integration_commit
+  - post_mortem_counts
   - post_mortem_md
 optional_variables:
   - notes_md
@@ -33,7 +35,7 @@ metadata:
     stage: review
     transition: complete
 ---
-{% if integration_review not in ["integration_review_passed", "integration_review_failed"] %}{{ integration_review | invalid_integration_review }}{% endif %}{% if not post_mortem_md | trim %}{{ post_mortem_md | missing_post_mortem }}{% endif %}# Review Complete
+# Review Complete
 
 Generated: {{ generated_at }}
 Phase/Task: {{ phase }} / {{ task_id }}
@@ -50,6 +52,8 @@ Verdict: **{{ verdict }}**
   "commit": {{ commit | tojson }},
   "verdict": {{ verdict | tojson }},
   "integration_review": {{ integration_review | tojson }},
+  "integration_commit": {{ integration_commit | tojson }},
+  "post_mortem_counts": {{ post_mortem_counts | tojson }},
   "findings": {
     "blocking": {{ findings_blocking }},
     "important": {{ findings_important }},
@@ -63,6 +67,8 @@ Verdict: **{{ verdict }}**
 
 ## Integration Post-Mortem
 Outcome: **{{ integration_review }}**
+Verified integration head: `{{ integration_commit }}`
+Counts: {{ post_mortem_counts | tojson }}
 {{ post_mortem_md }}
 {% if notes_md %}
 ## Notes
