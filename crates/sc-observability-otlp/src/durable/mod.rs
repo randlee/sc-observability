@@ -241,7 +241,10 @@ impl DurableTelemetryClient {
         build_exporter: impl FnOnce(
             crate::sync_http::submission::SyncHttpConfig,
             crate::config::ValidatedTransportBounds,
-        ) -> Result<Arc<dyn SubmissionExporter>, sc_observability_types::v2::ExportError>,
+        ) -> Result<
+            Arc<dyn SubmissionExporter>,
+            sc_observability_types::v2::ExportError,
+        >,
     ) -> Result<Self, TelemetryClientError> {
         let otel = adapter::otel_config_from(&config)?;
         let (worker_config, bounds) =

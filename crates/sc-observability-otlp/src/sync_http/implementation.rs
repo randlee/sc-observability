@@ -879,19 +879,20 @@ pub(crate) struct OtlpHttpExporter {
 /// submission from drifting onto different endpoint construction paths.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum SubmissionRoute {
-    Signal(SignalKind),
+    Signal(Signal),
     Profiles,
 }
 
 impl SubmissionRoute {
     fn endpoint(self, endpoint: &str) -> String {
         match self {
-            Self::Signal(SignalKind::Logs) => normalize_signal_endpoint(endpoint, "logs"),
-            Self::Signal(SignalKind::Traces) => normalize_signal_endpoint(endpoint, "traces"),
-            Self::Signal(SignalKind::Metrics) => normalize_signal_endpoint(endpoint, "metrics"),
-            Self::Signal(SignalKind::Profiles) | Self::Profiles => {
+            Self::Signal(Signal::Logs) => normalize_signal_endpoint(endpoint, "logs"),
+            Self::Signal(Signal::Traces) => normalize_signal_endpoint(endpoint, "traces"),
+            Self::Signal(Signal::Metrics) => normalize_signal_endpoint(endpoint, "metrics"),
+            Self::Signal(Signal::Profiles) | Self::Profiles => {
                 format!("{}{PROFILES_EXPORT_PATH}", endpoint.trim_end_matches('/'))
             }
+            Self::Signal(_) => endpoint.to_owned(),
         }
     }
 }

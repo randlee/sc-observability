@@ -36,7 +36,7 @@ fn fixture(name: &str) -> SubmissionEnvelope {
     serde_json::from_str(&canonical).expect("store envelope parses")
 }
 
-fn envelope(input: serde_json::Value) -> SubmissionEnvelope {
+fn envelope(input: &serde_json::Value) -> SubmissionEnvelope {
     SubmissionEnvelope::from_json(&input.to_string(), &mut Ids).expect("canonical envelope")
 }
 
@@ -302,7 +302,7 @@ fn generated_id_and_plain_attribute_fixtures_reach_their_signal_routes() {
 
 #[test]
 fn rich_log_and_span_fields_survive_capture_as_canonical_values() {
-    let envelope = envelope(serde_json::json!({
+    let input = serde_json::json!({
         "version": 1,
         "logs": [{
             "time": "1970-01-01T00:00:00.000000000Z",
@@ -326,7 +326,7 @@ fn rich_log_and_span_fields_survive_capture_as_canonical_values() {
             "name": "operation",
             "kind": "server",
             "start_time": "1970-01-01T00:00:00.000000000Z",
-            "duration_nanos": 2000000000_u64,
+            "duration_nanos": 2_000_000_000_u64,
             "attributes": [["span.attribute", {"kind": "int", "data": 42}]],
             "dropped_attributes_count": 3,
             "events": [{
@@ -347,9 +347,8 @@ fn rich_log_and_span_fields_survive_capture_as_canonical_values() {
             "dropped_links_count": 9,
             "status": {"code": "error", "message": "failed"}
         }]
-    }));
-    let expected_log = envelope.logs[0].record.clone();
-    let expected_span = envelope.spans[0].record.clone();
+    });
+    let envelope = envelope(&input);
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind capture listener");
     let exporter = submission_exporter(
         format!("http://{}", listener.local_addr().expect("address")),
@@ -371,66 +370,68 @@ fn rich_log_and_span_fields_survive_capture_as_canonical_values() {
         .expect("captured traces")
         .1;
     assert_eq!(server.join().expect("capture server exits"), 2);
+    assert_captured_log(&logs, &envelope);
+    assert_captured_span(&traces, &envelope);
+}
 
-    let log = &logs["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0];
+fn assert_captured_log(captured: &serde_json::Value, envelope: &SubmissionEnvelope) {
+    let expected = &envelope.logs[0].record;
+    let log = &captured["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0];
     assert_eq!(log["timeUnixNano"], "0");
     assert_eq!(log["observedTimeUnixNano"], "1000000000");
-    assert_eq!(log["severityNumber"], expected_log.severity_number.get());
+    assert_eq!(log["severityNumber"], expected.severity_number.get());
     assert_eq!(
         log["severityText"],
-        expected_log.severity_text.as_deref().unwrap()
+        expected.severity_text.as_deref().unwrap()
     );
-    assert_eq!(
-        log["eventName"],
-        expected_log.event_name.as_deref().unwrap()
-    );
+    assert_eq!(log["eventName"], expected.event_name.as_deref().unwrap());
     assert_eq!(
         decode_any_value(&log["body"]).expect("decode log body"),
-        expected_log.body.expect("log body")
+        expected.body.clone().expect("log body")
     );
     assert_eq!(
         decode_key_values(&log["attributes"]).expect("decode log attributes"),
-        expected_log.attributes
+        expected.attributes
     );
     assert_eq!(log["droppedAttributesCount"], 2);
     assert_eq!(log["flags"], 5);
     assert_eq!(log["traceId"], "0123456789abcdef0123456789abcdef");
     assert_eq!(log["spanId"], "0123456789abcdef");
+}
 
-    let span = &traces["resourceSpans"][0]["scopeSpans"][0]["spans"][0];
+fn assert_captured_span(captured: &serde_json::Value, envelope: &SubmissionEnvelope) {
+    let expected = &envelope.spans[0].record;
+    let span = &captured["resourceSpans"][0]["scopeSpans"][0]["spans"][0];
     assert_eq!(span["traceId"], "0123456789abcdef0123456789abcdef");
     assert_eq!(span["spanId"], "0123456789abcdef");
     assert_eq!(span["parentSpanId"], "fedcba9876543210");
     assert_eq!(
         span["traceState"],
-        expected_span.trace_state.unwrap().as_str()
+        expected.trace_state.as_ref().unwrap().as_str()
     );
-    assert_eq!(span["flags"], expected_span.flags);
-    assert_eq!(span["name"], expected_span.name);
+    assert_eq!(span["flags"], expected.flags);
+    assert_eq!(span["name"], expected.name);
     assert_eq!(span["kind"], 2);
     assert_eq!(span["startTimeUnixNano"], "0");
     assert_eq!(span["endTimeUnixNano"], "2000000000");
     assert_eq!(
         decode_key_values(&span["attributes"]).expect("decode span attributes"),
-        expected_span.attributes
+        expected.attributes
     );
     assert_eq!(
         span["droppedAttributesCount"],
-        expected_span.dropped_attributes_count
+        expected.dropped_attributes_count
     );
-    assert_eq!(
-        span["droppedEventsCount"],
-        expected_span.dropped_events_count
-    );
-    assert_eq!(span["droppedLinksCount"], expected_span.dropped_links_count);
+    assert_eq!(span["droppedEventsCount"], expected.dropped_events_count);
+    assert_eq!(span["droppedLinksCount"], expected.dropped_links_count);
     assert_eq!(span["status"]["code"], 2);
     assert_eq!(span["status"]["message"], "failed");
     let event = &span["events"][0];
     assert_eq!(event["timeUnixNano"], "1000000000");
-    assert_eq!(event["name"], expected_span.events[0].name);
+    assert_eq!(event["name"], expected.events[0].name);
     assert_eq!(
         decode_key_values(&event["attributes"]).expect("decode event attributes"),
-        expected_span.events[0].attributes
+        expected.events[0].attributes
     );
     assert_eq!(event["droppedAttributesCount"], 4);
     let link = &span["links"][0];
@@ -439,7 +440,7 @@ fn rich_log_and_span_fields_survive_capture_as_canonical_values() {
     assert_eq!(link["traceState"], "link=state");
     assert_eq!(
         decode_key_values(&link["attributes"]).expect("decode link attributes"),
-        expected_span.links[0].attributes
+        expected.links[0].attributes
     );
     assert_eq!(link["droppedAttributesCount"], 6);
     assert_eq!(link["flags"], 8);

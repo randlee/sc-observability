@@ -14,7 +14,6 @@ use crate::constants::MAX_OTLP_ENCODED_REQUEST_BYTES;
 use crate::contracts::profiles::ProfileExporter;
 use crate::contracts::submission::{SubmissionExportFailure, SubmissionExporter};
 use crate::error_codes::OTLP_EXPORT_TERMINAL;
-use crate::lifecycle::SignalKind;
 use sc_observability_types::{
     ErrorContext, Remediation,
     otlp::submission::{Signal, SubmissionEnvelope},
@@ -73,17 +72,17 @@ impl SubmissionExporter for SyncHttpSubmissionExporter {
     ) -> Result<(), SubmissionExportFailure> {
         let (route, payload, encode) = match signal {
             Signal::Logs => (
-                SubmissionRoute::Signal(SignalKind::Logs),
+                SubmissionRoute::Signal(Signal::Logs),
                 logs::request(envelopes),
                 logs::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
             ),
             Signal::Traces => (
-                SubmissionRoute::Signal(SignalKind::Traces),
+                SubmissionRoute::Signal(Signal::Traces),
                 traces::request(envelopes),
                 traces::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
             ),
             Signal::Metrics => (
-                SubmissionRoute::Signal(SignalKind::Metrics),
+                SubmissionRoute::Signal(Signal::Metrics),
                 metrics::request(envelopes),
                 metrics::request as fn(&[SubmissionEnvelope]) -> serde_json::Value,
             ),

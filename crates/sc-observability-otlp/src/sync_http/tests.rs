@@ -4,7 +4,7 @@ use super::implementation::{
 };
 use crate::config::SyncHttpRetryPolicy;
 use crate::contracts::{ExporterLifecycle, LogExporter};
-use crate::lifecycle::{LifecycleState, SignalKind};
+use crate::lifecycle::{LifecycleState, Signal};
 use sc_observability_types::{
     ActionName, CorrelationId, Level, LogEvent, ProcessIdentity, Remediation, SchemaVersion,
     ServiceName, TargetCategory, Timestamp,
@@ -505,7 +505,7 @@ fn assert_retry_sleep_uses_post_request_remaining(send_retryable_response: bool)
     )
     .expect("construct exporter");
     let export_thread = thread::spawn(move || {
-        exporter.submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
     });
     let delay = delay_rx
         .recv_timeout(RETRY_OBSERVER_SERVER_WATCHDOG)
@@ -781,7 +781,7 @@ fn retained_wrong_auth_fixture_is_rejected_without_credential_diagnostic() {
     .expect("construct exporter");
     let error = exporter
         .submit_json_blocking(
-            SubmissionRoute::Signal(SignalKind::Logs),
+            SubmissionRoute::Signal(Signal::Logs),
             &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
         )
         .expect_err("wrong credential is rejected by collector");
@@ -861,7 +861,7 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
         OtlpHttpExporter::for_test_config(format!("https://{address}"), None, Some(ca.clone()))
             .expect("construct exporter with trusted CA");
     let trusted =
-        exporter.submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload());
+        exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload());
     exporter
         .shutdown_blocking()
         .expect("shut down successful TLS exporter");
@@ -883,7 +883,7 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
     )
     .expect("unrelated CA does not prevent client construction");
     let rejected =
-        exporter.submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload());
+        exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload());
     exporter
         .shutdown_blocking()
         .expect("shut down certificate-rejected TLS exporter");
@@ -920,7 +920,7 @@ fn terminal_client_status_is_not_retried() {
         OtlpHttpExporter::for_endpoint(format!("http://{address}")).expect("construct exporter");
     let error = exporter
         .submit_json_blocking(
-            SubmissionRoute::Signal(SignalKind::Logs),
+            SubmissionRoute::Signal(Signal::Logs),
             &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
         )
         .expect_err("400 is terminal");
@@ -955,7 +955,7 @@ fn response_loss_retries_the_same_batch_without_false_success_drop() {
         OtlpHttpExporter::for_endpoint(format!("http://{address}")).expect("construct exporter");
     exporter
         .submit_json_blocking(
-            SubmissionRoute::Signal(SignalKind::Logs),
+            SubmissionRoute::Signal(Signal::Logs),
             &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
         )
         .expect("response loss is retried");
@@ -992,7 +992,7 @@ fn loopback_retry_after_is_capped_before_the_next_request() {
     )
     .expect("construct exporter");
     let export_thread = thread::spawn(move || {
-        exporter.submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
     });
     let delay = delay_rx
         .recv_timeout(Duration::from_secs(1))
@@ -1033,7 +1033,7 @@ fn loopback_fallback_jitter_preserves_an_ordered_retry_sequence() {
     )
     .expect("construct exporter");
     let export_thread = thread::spawn(move || {
-        exporter.submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
     });
     let first_delay = delay_rx
         .recv_timeout(Duration::from_secs(1))
@@ -1176,7 +1176,7 @@ fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests()
     )
     .expect("construct exporter");
     let error = exporter
-        .submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        .submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
         .expect_err("retry sequence must exhaust its deadline");
     done.store(true, Ordering::Release);
     server.join().expect("join server");
@@ -1274,8 +1274,8 @@ fn loopback_stalled_sync_http_retry_attempt_is_bounded_by_remaining_sequence_dea
     .expect("construct exporter with request timeout below sequence bound");
     let (result_tx, result_rx) = mpsc::channel();
     let export_thread = thread::spawn(move || {
-        let result = exporter
-            .submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload());
+        let result =
+            exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload());
         let _ = result_tx.send(result);
     });
 
@@ -1348,7 +1348,7 @@ fn loopback_retry_attempt_limit_returns_typed_exhaustion() {
     )
     .expect("construct exporter");
     let error = exporter
-        .submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        .submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
         .expect_err("retry attempt limit must stop the sequence");
     server.join().expect("join server");
     assert!(matches!(
@@ -1385,7 +1385,7 @@ fn shutdown_cancels_an_actual_retry_backoff() {
     let export = Arc::clone(&exporter);
     let export_thread = thread::spawn(move || {
         export.submit_json_blocking(
-            SubmissionRoute::Signal(SignalKind::Logs),
+            SubmissionRoute::Signal(Signal::Logs),
             &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
         )
     });
@@ -1474,7 +1474,7 @@ fn start_unrelated_retry_observer() -> RetryObserverUnrelated {
     );
     let for_export = Arc::clone(&exporter);
     let export = thread::spawn(move || {
-        for_export.submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        for_export.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
     });
     RetryObserverUnrelated {
         delay: unrelated_delay_rx,
@@ -1511,8 +1511,7 @@ fn retry_wait_observer_is_scoped_to_its_worker() {
     )
     .expect("construct target exporter");
     let target_export = thread::spawn(move || {
-        target_exporter
-            .submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        target_exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
     });
     target_request_rx
         .recv_timeout(OBSERVER_WATCHDOG)
@@ -1590,7 +1589,7 @@ fn async_shutdown_stays_responsive_during_an_in_flight_request() {
     let export = Arc::clone(&exporter);
     let export_thread = thread::spawn(move || {
         export.submit_json_blocking(
-            SubmissionRoute::Signal(SignalKind::Logs),
+            SubmissionRoute::Signal(Signal::Logs),
             &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
         )
     });
@@ -1734,7 +1733,7 @@ fn blocking_submission_is_rejected_from_entered_tokio() {
         .build()
         .expect("runtime");
     let error = runtime.block_on(async {
-        exporter.submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
     });
     assert!(matches!(
         error,
@@ -1801,7 +1800,7 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
     let (delay_tx, delay_rx) = mpsc::channel();
     let exporter = OtlpHttpExporter::for_prepared_test(&connection, &bounds, delay_tx).unwrap();
     let error = exporter
-        .submit_json_blocking(SubmissionRoute::Signal(SignalKind::Logs), &logs_payload())
+        .submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
         .expect_err("retry attempt limit must stop the sequence");
     server.join().expect("join server");
     assert!(matches!(
