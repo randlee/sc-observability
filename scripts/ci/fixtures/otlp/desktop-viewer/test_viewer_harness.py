@@ -28,7 +28,28 @@ def _record(state: Path, proc: subprocess.Popen[bytes], database: Path,
         "pid": proc.pid, "binary": binary, "database": str(database)}))
 
 
+def _fake_binary(directory: Path, *, body: str) -> Path:
+    """Write a runnable fake viewer; body is "exit" (returns 0) or "sleep" (stays up 30s)."""
+    if sys.platform == "win32":
+        # CreateProcess cannot run a shebang script; a .cmd file is the simplest
+        # runnable form. The tests using it never rely on _owned's identity check.
+        binary = directory / "viewer.cmd"
+        script = {"exit": "@echo off\r\nexit /b 0\r\n",
+                  "sleep": "@echo off\r\nping -n 31 127.0.0.1 >nul 2>nul\r\n"}[body]
+        binary.write_bytes(script.encode())
+        return binary
+    binary = directory / "viewer"
+    binary.write_text({"exit": "#!/bin/sh\nexit 0\n",
+                       "sleep": "#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n"}[body])
+    binary.chmod(0o755)
+    return binary
+
+
 def _owned_process(database: Path, *, ignore_term: bool = False) -> subprocess.Popen[bytes]:
+    if sys.platform == "win32":
+        # TerminateProcess cannot be ignored, so ignore_term has no Windows effect.
+        return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)",
+                                 "--db", str(database)])
     code = "trap - TERM; sleep 30"
     if ignore_term:
         code = "trap '' TERM; sleep 30"
@@ -146,9 +167,7 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
     def test_start_occupied_port_writes_no_state_and_does_not_signal_listener(self) -> None:
         with tempfile.TemporaryDirectory() as temp, socket.socket() as listener:
             root = Path(temp)
-            binary = root / "viewer"
-            binary.write_text("#!/bin/sh\nexit 0\n")
-            binary.chmod(0o755)
+            binary = _fake_binary(root, body="exit")
             listener.bind(("127.0.0.1", 0))
             listener.listen()
             host, occupied_port = listener.getsockname()
@@ -196,9 +215,7 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
     def test_hash_mismatch_prevents_process_start(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            binary = root / "viewer"
-            binary.write_text("#!/bin/sh\nexit 0\n")
-            binary.chmod(0o755)
+            binary = _fake_binary(root, body="exit")
             args = argparse.Namespace(binary=str(binary), state_dir=str(root / "state"),
                                       binary_sha256="0" * 64, version=None, host="127.0.0.1",
                                       http=44318, grpc=44317, ui=48000)
@@ -209,9 +226,7 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
     def test_start_cleans_up_process_and_files_after_keyboard_interrupt(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            binary = root / "viewer"
-            binary.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
-            binary.chmod(0o755)
+            binary = _fake_binary(root, body="sleep")
             args = argparse.Namespace(binary=str(binary), state_dir=str(root / "state"),
                                       binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
                                       version=None, host="127.0.0.1", http=44318,
@@ -230,9 +245,7 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
             root = Path(temp)
             state = root / "state"
             state.mkdir()
-            binary = root / "viewer"
-            binary.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(30)\n")
-            binary.chmod(0o755)
+            binary = _fake_binary(root, body="sleep")
             args = argparse.Namespace(binary=str(binary), state_dir=str(state),
                                       binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
                                       version=None, host="127.0.0.1", http=44318,
@@ -243,6 +256,8 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
             self.assertTrue(state.is_dir())
             self.assertEqual(list(state.iterdir()), [])
 
+    @unittest.skipIf(sys.platform == "win32",
+                     "Windows twin: test_stop_terminates_and_removes_owned_wal_windows")
     def test_stop_escalates_after_timeout_and_removes_owned_wal(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             state = Path(temp) / "state"
@@ -252,6 +267,30 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
             Path(str(database) + ".wal").write_text("owned wal")
             (state / "viewer.log").write_text("owned")
             proc = _owned_process(database, ignore_term=True)
+            try:
+                _record(state, proc, database)
+                harness.stop(argparse.Namespace(state_dir=str(state), timeout=0.1,
+                                                remove_state=True))
+                proc.wait(timeout=5)
+                self.assertFalse(state.exists())
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
+
+    @unittest.skipUnless(sys.platform == "win32",
+                         "Unix twin: test_stop_escalates_after_timeout_and_removes_owned_wal")
+    def test_stop_terminates_and_removes_owned_wal_windows(self) -> None:
+        # TerminateProcess cannot be ignored, so there is no TERM-ignoring case to
+        # escalate from; the end state asserted matches the Unix twin.
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state"
+            state.mkdir()
+            database = state / "viewer.duckdb"
+            database.write_text("owned")
+            Path(str(database) + ".wal").write_text("owned wal")
+            (state / "viewer.log").write_text("owned")
+            proc = _owned_process(database)
             try:
                 _record(state, proc, database)
                 harness.stop(argparse.Namespace(state_dir=str(state), timeout=0.1,
@@ -346,6 +385,7 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
             metadata = {"pid": 123, "database": str(database)}
             with mock.patch.object(harness, "_owned", return_value=(123, metadata)), \
                     mock.patch.object(harness, "_owned_database", return_value=database), \
+                    mock.patch.object(harness, "_pid_alive", return_value=True), \
                     mock.patch.object(harness.os, "kill", side_effect=PermissionError):
                 with self.assertRaises(PermissionError):
                     harness.stop(argparse.Namespace(state_dir=str(state), timeout=5,

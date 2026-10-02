@@ -65,7 +65,9 @@ def rpc(base: str, method: str, params: list[Any], timeout: float = 10) -> Any:
 def _port_available(host: str, port: int, *, reuse_address: bool = False) -> bool:
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as sock:
-        if reuse_address:
+        # On Windows SO_REUSEADDR lets bind succeed on a port with a live
+        # listener, so it is applied on POSIX only.
+        if reuse_address and sys.platform != "win32":
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((host, port))
@@ -85,7 +87,132 @@ def _tcp_listener(host: str, port: int, timeout: float = 2) -> bool:
     return True
 
 
+_WIN = None
+
+
+def _win32() -> Any:
+    """Declare the Win32 entry points once; only called on Windows."""
+    global _WIN
+    if _WIN is not None:
+        return _WIN
+    import ctypes
+    from ctypes import wintypes
+
+    class UnicodeString(ctypes.Structure):
+        _fields_ = [("Length", ctypes.c_ushort), ("MaximumLength", ctypes.c_ushort),
+                    ("Buffer", ctypes.c_void_p)]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    ntdll = ctypes.WinDLL("ntdll")
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+    ntdll.NtQueryInformationProcess.argtypes = [
+        wintypes.HANDLE, ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong,
+        ctypes.POINTER(ctypes.c_ulong)]
+    ntdll.NtQueryInformationProcess.restype = ctypes.c_long
+    shell32.CommandLineToArgvW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int)]
+    shell32.CommandLineToArgvW.restype = ctypes.POINTER(wintypes.LPWSTR)
+    _WIN = type("Win32", (), {
+        "ctypes": ctypes, "kernel32": kernel32, "ntdll": ntdll, "shell32": shell32,
+        "UnicodeString": UnicodeString})
+    return _WIN
+
+
+_SYNCHRONIZE = 0x00100000
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_WAIT_TIMEOUT = 0x102
+_ERROR_ACCESS_DENIED = 5
+_PROCESS_COMMAND_LINE_INFORMATION = 60
+
+
+def _open_process_win(pid: int) -> tuple[Any, int]:
+    win = _win32()
+    handle = win.kernel32.OpenProcess(
+        _SYNCHRONIZE | _PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    return handle, win.ctypes.get_last_error()
+
+
+def _pid_alive(pid: int) -> bool:
+    """Return whether a process with this PID currently exists and has not exited."""
+    if sys.platform != "win32":
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return False
+        return True
+    # Never os.kill(pid, 0) on Windows: signal 0 is CTRL_C_EVENT there.
+    if pid <= 0:
+        return False
+    win = _win32()
+    handle, error = _open_process_win(pid)
+    if not handle:
+        # Access denied means the process exists but is not ours to inspect.
+        return error == _ERROR_ACCESS_DENIED
+    try:
+        return win.kernel32.WaitForSingleObject(handle, 0) == _WAIT_TIMEOUT
+    finally:
+        win.kernel32.CloseHandle(handle)
+
+
+def _terminate(pid: int, *, force: bool) -> None:
+    """Send the stop signal; Windows has only TerminateProcess for both modes."""
+    if sys.platform == "win32":
+        os.kill(pid, signal.SIGTERM)
+    else:
+        os.kill(pid, signal.SIGKILL if force else signal.SIGTERM)
+
+
+def _command_args_win(pid: int) -> list[str] | None:
+    """Read a live process's command line with NtQueryInformationProcess (class 60)."""
+    if pid <= 0:
+        return None
+    win = _win32()
+    ctypes = win.ctypes
+    handle, _ = _open_process_win(pid)
+    if not handle:
+        return None
+    try:
+        if win.kernel32.WaitForSingleObject(handle, 0) != _WAIT_TIMEOUT:
+            return None
+        needed = ctypes.c_ulong(0)
+        win.ntdll.NtQueryInformationProcess(
+            handle, _PROCESS_COMMAND_LINE_INFORMATION, None, 0, ctypes.byref(needed))
+        size = needed.value
+        if size < ctypes.sizeof(win.UnicodeString):
+            return None
+        buffer = ctypes.create_string_buffer(size)
+        status = win.ntdll.NtQueryInformationProcess(
+            handle, _PROCESS_COMMAND_LINE_INFORMATION, buffer, size, ctypes.byref(needed))
+        if status < 0:
+            return None
+        text = win.UnicodeString.from_buffer(buffer)
+        if not text.Length or not text.Buffer:
+            return None
+        command_line = ctypes.wstring_at(text.Buffer, text.Length // 2)
+    finally:
+        win.kernel32.CloseHandle(handle)
+    if not command_line.strip():
+        return None
+    count = ctypes.c_int(0)
+    argv = win.shell32.CommandLineToArgvW(command_line, ctypes.byref(count))
+    if not argv:
+        return None
+    try:
+        return [argv[index] for index in range(count.value)] or None
+    finally:
+        win.kernel32.LocalFree(ctypes.cast(argv, ctypes.c_void_p))
+
+
 def _command_args(pid: int) -> list[str] | None:
+    if sys.platform == "win32":
+        return _command_args_win(pid)
     if sys.platform.startswith("linux"):
         try:
             stat = Path(f"/proc/{pid}/stat").read_text().split()
@@ -133,7 +260,8 @@ def _owned(state: Path) -> tuple[int, dict[str, Any]]:
     db_index = args.index("--db") + 1 if args and "--db" in args else -1
     executable = args[0] if args else ""
     try:
-        executable_matches = Path(executable).resolve() == Path(binary).resolve()
+        executable_matches = (os.path.normcase(str(Path(executable).resolve()))
+                              == os.path.normcase(str(Path(binary).resolve())))
     except (OSError, RuntimeError):
         executable_matches = False
     if (not args or not executable_matches or db_index < 1 or db_index >= len(args)
@@ -229,9 +357,11 @@ def start(args: argparse.Namespace) -> None:
     log = None
     try:
         log = log_path.open("ab")
+        detach: dict[str, Any] = (
+            {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+            if sys.platform == "win32" else {"start_new_session": True})
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
-                                   stdout=log, stderr=subprocess.STDOUT,
-                                   start_new_session=True)
+                                   stdout=log, stderr=subprocess.STDOUT, **detach)
         if restart is not None:
             restart[0].unlink()
     except BaseException:
@@ -299,10 +429,8 @@ def start(args: argparse.Namespace) -> None:
 
 def status(args: argparse.Namespace) -> None:
     pid, metadata = _owned(Path(args.state_dir).expanduser().resolve())
-    try:
-        os.kill(pid, 0)
-    except OSError as error:
-        raise HarnessError(f"owned viewer PID {pid} is not running") from error
+    if not _pid_alive(pid):
+        raise HarnessError(f"owned viewer PID {pid} is not running")
     _request(f"http://{metadata['host']}:{metadata['ui']}/", timeout=2)
     print(json.dumps({"status": "ready", **metadata,
                       "ui_url": f"http://{metadata['host']}:{metadata['ui']}/"}))
@@ -313,9 +441,14 @@ def stop(args: argparse.Namespace) -> None:
     pid, metadata = _owned(state)
     database = _owned_database(state, metadata) if args.remove_state else None
     try:
-        os.kill(pid, signal.SIGTERM)
+        _terminate(pid, force=False)
     except ProcessLookupError:
         pass
+    except OSError:
+        # Windows reports a dead PID as OSError/PermissionError, not
+        # ProcessLookupError; a PID that is no longer alive is already gone.
+        if sys.platform != "win32" or _pid_alive(pid):
+            raise
     else:
         deadline = time.monotonic() + args.timeout
         while time.monotonic() < deadline:
@@ -326,20 +459,31 @@ def stop(args: argparse.Namespace) -> None:
             if _command_args(pid) is not None:
                 # Revalidate ownership immediately before escalation in case the
                 # PID exited and was reused while the graceful deadline elapsed.
-                checked_pid, _ = _owned(state)
+                try:
+                    checked_pid, _ = _owned(state)
+                except HarnessError:
+                    # The process may have exited between the check above and
+                    # this revalidation; only a still-running mismatch refuses.
+                    if _command_args(pid) is not None:
+                        raise
+                    checked_pid = pid
                 if checked_pid != pid:
                     raise HarnessError(f"refusing to force-stop changed viewer PID {pid}")
                 try:
-                    os.kill(pid, signal.SIGKILL)
+                    _terminate(pid, force=True)
                 except ProcessLookupError:
                     pass
+                except OSError:
+                    if sys.platform != "win32" or _pid_alive(pid):
+                        raise
                 deadline = time.monotonic() + 5
                 while time.monotonic() < deadline:
                     if _command_args(pid) is None:
-                        try:
-                            os.waitpid(pid, os.WNOHANG)
-                        except ChildProcessError:
-                            pass
+                        if sys.platform != "win32":
+                            try:
+                                os.waitpid(pid, os.WNOHANG)
+                            except ChildProcessError:
+                                pass
                         break
                     time.sleep(0.05)
                 else:
