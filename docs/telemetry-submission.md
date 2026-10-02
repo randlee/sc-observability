@@ -40,6 +40,7 @@ sc-otel --config telemetry.yaml status
 | Exit code | Meaning |
 | --- | --- |
 | 0 | The command completed and all selected records were delivered or validated. |
+| 1 | Unexpected internal error; inspect stderr for the diagnostic. |
 | 2 | Command-line usage error. |
 | 3 | Submission validation error; inspect the JSON `error.code`. |
 | 4 | Configuration or unsupported-combination error. |
@@ -50,12 +51,14 @@ sc-otel --config telemetry.yaml status
 ## Configuration precedence
 
 For both front ends, explicit `store_path` / `--store` and `endpoint` /
-`--endpoint` values win over `telemetry.yaml`, which wins over supported
-`OTEL_EXPORTER_OTLP_*` environment values. `store.path` is resolved relative
-to the configuration file, keeping each application's durable queue isolated.
+`--endpoint` values take precedence over `telemetry.yaml`. The endpoint then
+falls back to `OTEL_EXPORTER_OTLP_ENDPOINT`; `store_path` has no environment
+fallback and must come from an explicit value or `store.path` in the file.
+`store.path` is resolved relative to the configuration file, keeping each
+application's durable queue isolated.
 
 The supported signal and backend combinations are listed in the
-[OTLP capability matrix](architecture.md#capability-matrix-backend--signal--representation). The pinned
-desktop viewer is a readback tool for its supported logs, spans, Gauge, Sum,
-and explicit Histogram forms; profiles, Summary, exemplars, and
+[OTLP capability matrix](architecture.md#otlp-capability-matrix).
+The pinned desktop viewer is a readback tool for its supported logs, spans,
+Gauge, Sum, and explicit Histogram forms; profiles, Summary, exemplars, and
 ExponentialHistogram are verified against collector capture instead.

@@ -1583,7 +1583,9 @@ was reworded accordingly to describe the remaining validation.
   exponential histogram and summary, with exemplars. Events use log
   `event_name` or span events. Correlation, resource and scope are metadata.
   Baggage is not a signal.
-- **Capability matrix** (backend × signal × representation). "Typed error"
+#### OTLP capability matrix
+
+"Typed error"
   means `TelemetryConfigError::UnsupportedCombination` at construction, never
   silent omission.
 
