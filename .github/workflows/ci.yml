@@ -202,11 +202,19 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}${{ runner.os == 'Windows' && ';' || ':' }}${{ github.workspace }}/scripts/ci
         run: python3 -m pytest scripts/ci/tests -q
 
-      - name: Run repository script tests
+      - name: Run OTLP Grafana fixture tests
         env:
           CI: "1"
           PYTHONPATH: ${{ github.workspace }}${{ runner.os == 'Windows' && ';' || ':' }}${{ github.workspace }}/scripts/ci
-        run: python3 -m pytest scripts/tests scripts/ci/fixtures/otlp/grafana -q
+        run: python3 -m pytest scripts/ci/fixtures/otlp/grafana -q
+
+      - name: Run agent sanity tooling tests
+        if: runner.os != 'Windows'
+        env:
+          CI: "1"
+          PYTHONPATH: ${{ github.workspace }}${{ runner.os == 'Windows' && ';' || ':' }}${{ github.workspace }}/scripts/ci
+        # agent sanity tooling; runs only on developer macOS/Linux hosts, not shipped
+        run: python3 -m pytest scripts/tests -q
 
       - name: Validate manifest completeness
         run: |

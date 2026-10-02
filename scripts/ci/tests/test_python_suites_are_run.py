@@ -10,10 +10,6 @@ ROOT = Path(__file__).resolve().parents[3]
 EXCLUDED_PREFIXES = {
     ".claude/": "User-owned agent tooling is intentionally outside product CI.",
     "docs/plans/": "Planning documents and their examples are not executable test suites.",
-    "bindings/python/sc-observability-py/tests_telemetry/": (
-        "Requires an installed wheel with otlp-telemetry and private test-hooks; "
-        "the existing three-platform build omits the native test-double entry point."
-    ),
 }
 
 

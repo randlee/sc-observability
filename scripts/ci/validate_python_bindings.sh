@@ -65,6 +65,24 @@ cp -R bindings/python/sc-observability-py/examples "$B4_TEMP_DIR/examples"
 SC_OBSERVABILITY_RUNTIME_TEST=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
   "$B4_VENV_PYTHON" -I -X dev -W error -m pytest \
   "$B4_TEMP_DIR/tests" -ra
+
+# Telemetry tests need the production telemetry implementation and the private
+# test-double hooks. Keep this test-only wheel separate from the B.4 validation
+# wheel above so test-hooks never affect the package wheel's feature set.
+uvx --from maturin==1.10.2 maturin build --locked \
+  --manifest-path bindings/python/sc-observability-py/Cargo.toml \
+  --features pyo3/abi3-py310,pyo3/extension-module,otlp-telemetry,test-hooks \
+  --interpreter "$B4_PYTHON" \
+  --out "$B4_TEMP_DIR/telemetry-wheels"
+uv venv --python "$B4_PYTHON" "$B4_TEMP_DIR/telemetry-venv"
+B4_TELEMETRY_PYTHON="$B4_TEMP_DIR/telemetry-venv/bin/python"
+if [[ -f "$B4_TEMP_DIR/telemetry-venv/Scripts/python.exe" ]]; then
+  B4_TELEMETRY_PYTHON="$B4_TEMP_DIR/telemetry-venv/Scripts/python.exe"
+fi
+uv pip install --python "$B4_TELEMETRY_PYTHON" pytest==9.1.1 "$B4_TEMP_DIR"/telemetry-wheels/*.whl
+"$B4_TELEMETRY_PYTHON" -I -m pytest \
+  bindings/python/sc-observability-py/tests_telemetry -q
+
 "$B4_VENV_PYTHON" -I -m mypy --strict --python-version 3.10 \
   "$B4_TEMP_DIR/tests/typing/test_result_narrowing.py" "$B4_TEMP_DIR/examples/standard_logging.py" \
   "$B4_TEMP_DIR/tests/typing/test_async_narrowing.py" "$B4_TEMP_DIR/examples/async_logging.py"
