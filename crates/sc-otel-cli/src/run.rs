@@ -55,20 +55,30 @@ fn emit(cli: &Cli, args: &EmitArgs) -> Outcome {
         Ok(envelope) => envelope,
         Err(error) => return failure(constants::CommandName::Emit, error),
     };
-    with_session(cli, constants::CommandName::Emit, |config, client| {
-        let receipt = match client.emit(envelope) {
-            Ok(receipt) => receipt,
-            Err(error) => return failure(constants::CommandName::Emit, error),
-        };
-        if args.no_flush {
-            return Outcome::admitted(
-                constants::CommandName::Emit,
-                receipt,
-                AdmittedState::Pending,
-            );
-        }
-        flush_emission(client, receipt, config.emit_flush_deadline)
-    })
+    let teardown = if args.no_flush {
+        SessionTeardown::AdmissionOnly
+    } else {
+        SessionTeardown::Delivery
+    };
+    with_session(
+        cli,
+        constants::CommandName::Emit,
+        teardown,
+        |config, client| {
+            let receipt = match client.emit(envelope) {
+                Ok(receipt) => receipt,
+                Err(error) => return failure(constants::CommandName::Emit, error),
+            };
+            if args.no_flush {
+                return Outcome::admitted(
+                    constants::CommandName::Emit,
+                    receipt,
+                    AdmittedState::Pending,
+                );
+            }
+            flush_emission(client, receipt, config.emit_flush_deadline)
+        },
+    )
 }
 
 fn flush_emission(
@@ -91,17 +101,22 @@ fn flush_emission(
 }
 
 fn flush(cli: &Cli, args: &FlushArgs) -> Outcome {
-    with_session(cli, constants::CommandName::Flush, |config, client| {
-        let deadline = args.timeout.unwrap_or(config.flush_deadline);
-        match client.flush(deadline) {
-            Ok(report) => Outcome::success(
-                constants::CommandName::Flush,
-                SuccessState::Delivery(delivery_state(&report)),
-            )
-            .with_flush(report),
-            Err(error) => failure(constants::CommandName::Flush, error),
-        }
-    })
+    with_session(
+        cli,
+        constants::CommandName::Flush,
+        SessionTeardown::Delivery,
+        |config, client| {
+            let deadline = args.timeout.unwrap_or(config.flush_deadline);
+            match client.flush(deadline) {
+                Ok(report) => Outcome::success(
+                    constants::CommandName::Flush,
+                    SuccessState::Delivery(delivery_state(&report)),
+                )
+                .with_flush(report),
+                Err(error) => failure(constants::CommandName::Flush, error),
+            }
+        },
+    )
 }
 
 fn status(cli: &Cli, args: &StatusArgs) -> Outcome {
@@ -112,6 +127,7 @@ fn status(cli: &Cli, args: &StatusArgs) -> Outcome {
     with_session(
         cli,
         constants::CommandName::Status,
+        SessionTeardown::Delivery,
         |_, client| match client.status(query) {
             Ok(status) => Outcome::success(constants::CommandName::Status, SuccessState::Status)
                 .with_status(status),
@@ -143,6 +159,7 @@ fn status_query(args: &StatusArgs) -> Result<StatusQuery, TelemetryClientError> 
 fn with_session(
     cli: &Cli,
     command: constants::CommandName,
+    teardown: SessionTeardown,
     action: impl FnOnce(&TelemetryClientConfig, &dyn TelemetryClient) -> Outcome,
 ) -> Outcome {
     let config = match config::resolve(cli) {
@@ -153,12 +170,20 @@ fn with_session(
         Ok(client) => client,
         Err(error) => return failure(command, error),
     };
-    finish_shutdown(
-        command,
-        client.as_ref(),
-        config.flush_deadline,
-        action(&config, client.as_ref()),
-    )
+    let outcome = action(&config, client.as_ref());
+    match teardown {
+        SessionTeardown::Delivery => {
+            finish_shutdown(command, client.as_ref(), config.flush_deadline, outcome)
+        }
+        // Dropping the durable client stops its workers without adding a delivery attempt.
+        SessionTeardown::AdmissionOnly => outcome,
+    }
+}
+
+#[derive(Clone, Copy)]
+enum SessionTeardown {
+    AdmissionOnly,
+    Delivery,
 }
 
 fn failure(command: constants::CommandName, error: impl Into<CliError>) -> Outcome {
