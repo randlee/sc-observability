@@ -1086,7 +1086,7 @@ fn project_log(log: LogRecord) -> proto_logs::LogRecord {
         time_unix_nano: unix_nanos(event.timestamp),
         observed_time_unix_nano: unix_nanos(event.timestamp),
         severity_number: project_severity(event.level),
-        severity_text: format!("{:?}", event.level).to_uppercase(),
+        severity_text: crate::severity::fields(event.level).1.to_owned(),
         body: event.message.map(string_value),
         attributes: project_attributes(&attributes),
         dropped_attributes_count: 0,
@@ -1363,14 +1363,8 @@ const fn hex_nibble(value: u8) -> u8 {
     }
 }
 
-const fn project_severity(level: sc_observability_types::Level) -> i32 {
-    match level {
-        sc_observability_types::Level::Trace => proto_logs::SeverityNumber::Trace as i32,
-        sc_observability_types::Level::Debug => proto_logs::SeverityNumber::Debug as i32,
-        sc_observability_types::Level::Info => proto_logs::SeverityNumber::Info as i32,
-        sc_observability_types::Level::Warn => proto_logs::SeverityNumber::Warn as i32,
-        sc_observability_types::Level::Error => proto_logs::SeverityNumber::Error as i32,
-    }
+pub(crate) const fn project_severity(level: sc_observability_types::Level) -> i32 {
+    crate::severity::fields(level).0 as i32
 }
 
 fn project_span_kind(kind: SpanKind) -> i32 {

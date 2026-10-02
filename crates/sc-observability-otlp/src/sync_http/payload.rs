@@ -17,7 +17,7 @@ use sc_observability_types::v2::{
 };
 use sc_observability_types::{LogEvent, Timestamp};
 
-pub(super) fn log_record(event: &LogEvent) -> ExportRecord<LogRecord> {
+pub(crate) fn log_record(event: &LogEvent) -> ExportRecord<LogRecord> {
     ExportRecord {
         resource: Resource {
             attributes: BTreeMap::from_iter([(
@@ -66,7 +66,7 @@ pub(super) fn metric_record(metric: &MetricRecord) -> ExportRecord<MetricRecord>
     }
 }
 
-pub(super) fn build_logs_payload(records: &[ExportRecord<LogRecord>]) -> Value {
+pub(crate) fn build_logs_payload(records: &[ExportRecord<LogRecord>]) -> Value {
     let resource_logs = group_records_by_resource_and_scope(records)
         .into_iter()
         .map(|group| {
@@ -170,7 +170,7 @@ fn log_json(record: LogRecord) -> Value {
             "value": { "stringValue": trace.span_id.as_str() },
         }));
     }
-    let (severity_number, severity_text) = severity_fields(event.level);
+    let (severity_number, severity_text) = crate::severity::fields(event.level);
     json!({
         "timeUnixNano": timestamp_nanos(event.timestamp),
         "body": { "stringValue": event.message.unwrap_or_else(|| event.action.as_str().to_owned()) },
@@ -332,16 +332,6 @@ fn timestamp_nanos(timestamp: Timestamp) -> String {
 fn timestamp_nanos_with_duration(timestamp: Timestamp, duration_ms: u64) -> String {
     (timestamp.into_inner().unix_timestamp_nanos() + i128::from(duration_ms) * 1_000_000)
         .to_string()
-}
-
-fn severity_fields(level: sc_observability_types::Level) -> (u32, &'static str) {
-    match level {
-        sc_observability_types::Level::Trace => (1, "TRACE"),
-        sc_observability_types::Level::Debug => (5, "DEBUG"),
-        sc_observability_types::Level::Info => (9, "INFO"),
-        sc_observability_types::Level::Warn => (13, "WARN"),
-        sc_observability_types::Level::Error => (17, "ERROR"),
-    }
 }
 
 fn span_kind_number(kind: SpanKind) -> u8 {

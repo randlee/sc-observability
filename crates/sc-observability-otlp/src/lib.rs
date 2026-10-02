@@ -34,6 +34,10 @@ mod lifecycle;
 mod lifecycle_tests;
 mod projectors;
 mod runtime;
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
+mod severity;
+#[cfg(all(test, feature = "otlp-sdk", feature = "sync-http"))]
+mod severity_tests;
 mod testing;
 
 #[cfg(feature = "otlp-sdk")]
