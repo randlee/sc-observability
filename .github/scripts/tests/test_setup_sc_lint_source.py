@@ -11,6 +11,7 @@ import tempfile
 import unittest
 import yaml
 import shutil
+from _shell import BASH
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'setup_sc_lint_source.py'
 spec = importlib.util.spec_from_file_location('setup_source', SCRIPT)
@@ -90,7 +91,8 @@ class SourceSetupTests(unittest.TestCase):
         action = SCRIPT.parents[1] / 'actions/setup-sc-lint/action.yml'
         steps = yaml.safe_load(action.read_text())['runs']['steps']
         for label, shell in (('Unix', 'bash'), ('Windows', 'pwsh')):
-            if not shutil.which(shell):
+            executable = BASH if shell == 'bash' else shutil.which(shell)
+            if not executable:
                 continue
             with self.subTest(platform=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -104,7 +106,7 @@ class SourceSetupTests(unittest.TestCase):
                 script = root / ('resolve.ps1' if label == 'Windows' else 'resolve.sh')
                 script.write_text(step['run'])
                 env = dict(os.environ, GITHUB_ENV=str(root/'env'), SC_LINT_SOURCE_REVISION_INPUT='')
-                cmd = [shell, '-NoProfile', '-File', str(script)] if label == 'Windows' else [shell, str(script)]
+                cmd = [executable, '-NoProfile', '-File', str(script)] if label == 'Windows' else [executable, str(script)]
                 result = subprocess.run(cmd, cwd=root, env=env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual((root/'env').read_text().strip(), 'SC_LINT_SOURCE_REVISION=')

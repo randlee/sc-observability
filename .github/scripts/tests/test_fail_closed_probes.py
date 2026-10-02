@@ -11,6 +11,7 @@ import os
 import stat
 import subprocess
 from pathlib import Path
+from _shell import BASH
 
 
 REPO_ROOT = next(
@@ -51,7 +52,7 @@ def run_probe_script(
     output_file = tmp_path / "github-output"
     output_file.write_text("", encoding="utf-8")
     result = subprocess.run(
-        ["bash"],
+        [BASH],
         input=script,
         text=True,
         capture_output=True,

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+from _shell import BASH
 import sys
 import tarfile
 import urllib.error
@@ -89,7 +90,7 @@ def test_liveness_workflow_records_every_channel_outcome(tmp_path, kind, exit_co
     selected = step("credential_liveness")
     assert selected["env"]["CARGO_REGISTRY_TOKEN"] == "${{ secrets.CARGO_REGISTRY_TOKEN }}"
     output = tmp_path / "output"
-    result = subprocess.run(["bash", "-c", selected["run"]], cwd=tmp_path, env={
+    result = subprocess.run([BASH, "-c", selected["run"]], cwd=tmp_path, env={
         **os.environ, "SECRET_PLAN": json.dumps({"liveness_channel_checks": [{"channel": "crates_io", "name": "CARGO_REGISTRY_TOKEN", "kind": kind}]}),
         "RELEASE_ARTIFACT_MANIFEST": "unused", "GITHUB_OUTPUT": str(output),
     }, text=True, capture_output=True, timeout=30)
@@ -141,7 +142,7 @@ def test_package_workflow_checks_unpublished_and_standalone_dependencies(tmp_pat
     for source in (ROOT / ".github/scripts").glob("*.py"):
         shutil.copy2(source, scripts / source.name)
     body = step("package_checks")["run"].replace("${{ steps.build_plan.outputs.workspace_toml }}", "Cargo.toml")
-    result = subprocess.run(["bash", "-c", body], cwd=tmp_path, env={**env, "RELEASE_ARTIFACT_MANIFEST": str(manifest)}, text=True, capture_output=True, timeout=30)
+    result = subprocess.run([BASH, "-c", body], cwd=tmp_path, env={**env, "RELEASE_ARTIFACT_MANIFEST": str(manifest)}, text=True, capture_output=True, timeout=30)
     if broken:
         assert result.returncode != 0, result.stdout
         return

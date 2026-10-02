@@ -4,6 +4,7 @@ import io
 import json
 import os
 import subprocess
+from _shell import BASH
 import sys
 import tarfile
 import tomllib
@@ -393,7 +394,7 @@ def run_release_preflight_registry_step(
         encoding="utf-8",
     )
     return subprocess.run(
-        ["bash", "-c", shell.replace("'${{ steps.meta.outputs.release_version }}'", "'1.5.0'")],
+        [BASH, "-c", shell.replace("'${{ steps.meta.outputs.release_version }}'", "'1.5.0'")],
         cwd=tmp_path,
         env={
             **os.environ,
@@ -484,7 +485,7 @@ def run_release_gate_readiness(
 
     return subprocess.run(
         [
-            "bash",
+            BASH,
             str(scripts_dir / "release_gate.sh"),
             mode,
             release_ref,
@@ -567,7 +568,7 @@ def run_release_tag_step(
         .replace("'${{ steps.release_gate.outputs.release_sha }}'", "'main-sha'")
     )
     return subprocess.run(
-        ["bash", "-c", shell],
+        [BASH, "-c", shell],
         cwd=tmp_path,
         env={
             **os.environ,
@@ -664,7 +665,7 @@ def run_release_tag_step_in_git_fixture(repository: Path) -> subprocess.Complete
         )
     )
     return subprocess.run(
-        ["bash", "-c", shell],
+        [BASH, "-c", shell],
         cwd=repository,
         env={**os.environ, "GITHUB_OUTPUT": str(repository / "github-output")},
         text=True,
@@ -707,7 +708,7 @@ def run_release_preflight_channel_results_shell(
         "GITHUB_STEP_SUMMARY": str(output.with_name("summary.md")),
     }
     return subprocess.run(
-        ["bash", "-c", shell],
+        [BASH, "-c", shell],
         cwd=repo_root(),
         env=environment,
         text=True,

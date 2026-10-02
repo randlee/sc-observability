@@ -12,6 +12,7 @@ import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from _shell import BASH
 
 
 INSTALLER = next(path / "install.py" for path in Path(__file__).resolve().parents if (path / "install.py").is_file())
@@ -471,7 +472,7 @@ class InstallValuesTests(unittest.TestCase):
             self.assertEqual(order.returncode, 0, order.stderr)
             self.assertIn("matches the workspace dependency graph", order.stdout)
             gate_check = subprocess.run(
-                ["bash", "-n", str(gate)],
+                [BASH, "-n", str(gate)],
                 text=True,
                 capture_output=True,
                 check=False,

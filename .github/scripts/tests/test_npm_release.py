@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import subprocess
+from _shell import BASH
 import sys
 import tarfile
 import urllib.error
@@ -321,7 +322,7 @@ def test_download_step_requires_immutable_release(tmp_path, immutable, expected)
     gh.write_text('#!/bin/sh\nif [ "$1" = api ]; then\n  printf \'%s\\n\' \'{"immutable":' + str(immutable).lower() + ',"draft":false}\'\nelse\n  touch downloaded\nfi\n')
     gh.chmod(0o755)
     env = {**os.environ, 'PATH': str(tmp_path) + os.pathsep + os.environ['PATH'], 'RELEASE_TAG': 'v1.2.3', 'RELEASE_REPOSITORY': 'example/project'}
-    result = subprocess.run(['bash', '-c', step['run']], cwd=tmp_path, env=env, capture_output=True)
+    result = subprocess.run([BASH, '-c', step['run']], cwd=tmp_path, env=env, capture_output=True)
     assert result.returncode == expected
     assert (tmp_path / 'downloaded').exists() is immutable
 

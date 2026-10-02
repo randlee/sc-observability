@@ -8,6 +8,8 @@ import tomllib
 import unittest
 from pathlib import Path
 
+from scripts.ci.tests._shell import BASH
+
 from scripts.ci.otlp_dependencies import validate_composition_harness, validate_transport_dependencies
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -256,7 +258,7 @@ class ShellGateIntegrationTests(unittest.TestCase):
             "CARGO_TARGET_DIR": os.environ.get("CARGO_TARGET_DIR", str(ROOT / "target")),
         }
         process = subprocess.Popen(
-            ["bash", script],
+            [BASH, script],
             cwd=self.root,
             env=env,
             stdout=subprocess.PIPE,

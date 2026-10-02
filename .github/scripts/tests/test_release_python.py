@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from release_python import wheel_targets, verify_platforms
 from test_install import INSTALL, InstallValuesTests
+from _shell import BASH
 
 TARGETS = [
  {"id":"linux-x86_64","os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu","platform":"manylinux_2_28_x86_64","manylinux":"2_28"},
@@ -92,7 +93,7 @@ esac
     cargo = tmp_path / 'cargo'
     cargo.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > cargo-args\n')
     cargo.chmod(0o755)
-    result = subprocess.run(['bash', '-c', shell], cwd=tmp_path, env={**os.environ, 'PATH':str(tmp_path)+os.pathsep+os.environ['PATH'], 'RELEASE_ARTIFACT_MANIFEST':'release/publish-artifacts.toml', 'RELEASE_TAG':'v1.2.3'}, capture_output=True, text=True)
+    result = subprocess.run([BASH, '-c', shell], cwd=tmp_path, env={**os.environ, 'PATH':str(tmp_path)+os.pathsep+os.environ['PATH'], 'RELEASE_ARTIFACT_MANIFEST':'release/publish-artifacts.toml', 'RELEASE_TAG':'v1.2.3'}, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert (tmp_path / 'cargo-args').read_text().splitlines() == ['publish', '--manifest-path', 'bindings/standalone/Cargo.toml', '--locked']
 
@@ -112,7 +113,7 @@ def test_declared_wheel_verifier_executes_bash_environment_contract(tmp_path, pl
         shutil.copy2(source, scripts / source.name)
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist/example-1.4.0-cp310-abi3-win_amd64.whl").touch()
-    result = subprocess.run(["bash", "-c", step["run"]], cwd=tmp_path,
+    result = subprocess.run([BASH, "-c", step["run"]], cwd=tmp_path,
         env={**os.environ, "WHEEL_PLATFORM": platform}, capture_output=True, text=True, timeout=30)
     assert (result.returncode == 0) is accepted, result.stderr
 
@@ -129,7 +130,7 @@ def test_python_setup_selects_manifest_toolchain_for_all_maturin_builds(tmp_path
     assert selection["env"]["RELEASE_RUST_TOOLCHAIN"] == "${{ inputs.rust_toolchain }}"
     assert steps.index(selection) > next(i for i, s in enumerate(steps) if s.get("uses", "").startswith("dtolnay/rust-toolchain@"))
     output = tmp_path / "environment"
-    result = subprocess.run(["bash", "-c", selection["run"]], cwd=tmp_path,
+    result = subprocess.run([BASH, "-c", selection["run"]], cwd=tmp_path,
         env={**os.environ, "GITHUB_ENV": str(output), "RELEASE_RUST_TOOLCHAIN": "1.94.1"}, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     assert output.read_text() == "RUSTUP_TOOLCHAIN=1.94.1\n"
