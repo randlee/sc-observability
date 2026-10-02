@@ -410,8 +410,12 @@ fn crash_mid_drain_resumes() {
 #[test]
 fn flush_deadline_does_not_wait_for_the_writer_mutex() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let exporter = Arc::new(ScriptedExporter::new(dir.path()));
+    exporter.set_outcome(Signal::Logs, DeliveryOutcome::Stall);
+    let client =
+        DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone()).unwrap();
     client.emit(log("pending")).unwrap();
+    exporter.await_stall();
     let locked = client.owner.shared.db.lock().unwrap();
     std::thread::scope(|scope| {
         let (send, receive) = std::sync::mpsc::sync_channel(1);
@@ -424,6 +428,8 @@ fn flush_deadline_does_not_wait_for_the_writer_mutex() {
         drop(locked);
         assert!(result.expect("flush waited for the writer mutex").is_err());
     });
+    exporter.release();
+    worker::join(&client.owner.shared, DEADLINE);
 }
 
 #[test]

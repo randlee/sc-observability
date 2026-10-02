@@ -41,13 +41,6 @@ pub(crate) struct CreditLease {
     signal: Option<Signal>,
 }
 
-#[cfg_attr(
-    not(any(test, feature = "durable-store")),
-    expect(
-        dead_code,
-        reason = "durable admission accounting; exercised by credit unit tests"
-    )
-)]
 impl AdmissionCredits {
     /// Waits for a release notification; the mutex makes checking and sleeping atomic.
     #[cfg(any(test, feature = "durable-store"))]
@@ -66,6 +59,13 @@ impl AdmissionCredits {
         budget.releases != generation
     }
 
+    #[cfg_attr(
+        not(any(test, feature = "durable-store")),
+        expect(
+            dead_code,
+            reason = "no-default-features has no AdmissionCredits constructor caller"
+        )
+    )]
     pub(crate) fn new(bounds: &ValidatedTransportBounds) -> Self {
         Self(Arc::new(SharedBudget {
             state: Mutex::new(Budget {
@@ -102,6 +102,13 @@ impl AdmissionCredits {
         self.reserve_inner(bytes, Some(signal))
     }
 
+    #[cfg_attr(
+        not(any(test, feature = "durable-store")),
+        expect(
+            dead_code,
+            reason = "no-default-features has no AdmissionCredits reservation caller"
+        )
+    )]
     fn reserve_inner(
         &self,
         serialized_bytes: usize,

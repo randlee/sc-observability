@@ -237,13 +237,6 @@ impl DurableTelemetryClient {
         worker::start(&client.owner.shared, exporter)?;
         Ok(client)
     }
-    #[cfg(test)]
-    fn prepare(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
-        let otel = adapter::otel_config_from(&config)?;
-        let bounds = crate::config::validated_transport_bounds(&otel)
-            .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
-        Self::prepare_validated(config, &bounds)
-    }
     fn prepare_validated(
         config: TelemetryClientConfig,
         bounds: &crate::config::ValidatedTransportBounds,

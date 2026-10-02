@@ -63,7 +63,11 @@ fn metric_exemplar_row_is_preserved() {
         None,
         None,
     ));
-    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let client = DurableTelemetryClient::open_with_exporter(
+        config(dir.path()),
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
     let receipt = client.emit(envelope.clone()).unwrap();
     let stored: Vec<u8> = client
         .owner
@@ -81,11 +85,6 @@ fn metric_exemplar_row_is_preserved() {
         serde_json::from_slice::<SubmissionEnvelope>(&stored).unwrap(),
         envelope
     );
-    worker::start(
-        &client.owner.shared,
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
-    .unwrap();
     assert_eq!(
         client
             .flush_submission(&receipt.submission_id, DEADLINE)
@@ -94,4 +93,25 @@ fn metric_exemplar_row_is_preserved() {
             .metrics,
         1
     );
+}
+
+#[test]
+fn production_open_starts_the_sync_http_exporter() {
+    let dir = tempfile::tempdir().unwrap();
+    let client = DurableTelemetryClient::open(config(dir.path())).unwrap();
+
+    assert_eq!(
+        client.owner.shared.config.backend,
+        ExporterBackendId::SyncHttp
+    );
+    assert_eq!(
+        client
+            .owner
+            .shared
+            .live_workers
+            .load(std::sync::atomic::Ordering::Acquire),
+        5,
+        "production open should start the lease worker and all four signal workers"
+    );
+    client.shutdown(DEADLINE).unwrap();
 }

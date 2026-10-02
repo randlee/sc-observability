@@ -149,7 +149,11 @@ fn backend_queue_full_pauses_no_eviction() {
 #[test]
 fn batch_larger_than_available_credits_exports_in_prefixes() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let client = DurableTelemetryClient::open_with_exporter(
+        config(dir.path()),
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
     let size = log("one").to_canonical_json().len();
     let held = client
         .owner
@@ -159,11 +163,6 @@ fn batch_larger_than_available_credits_exports_in_prefixes() {
         .unwrap();
     let first = client.emit(log("one")).unwrap();
     let second = client.emit(log("two")).unwrap();
-    worker::start(
-        &client.owner.shared,
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
-    .unwrap();
     // A worker holding its first reservation must not wait for its own credits.
     assert_eq!(
         client

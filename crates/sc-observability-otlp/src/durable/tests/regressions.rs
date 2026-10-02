@@ -117,10 +117,10 @@ fn eviction_reclaims_failed_payload_but_preserves_future_and_live_claims() {
 fn corrupt_and_oversized_stored_rows_do_not_starve_later_rows() {
     for corrupt in [true, false] {
         let dir = tempfile::tempdir().unwrap();
-        let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
-        let bad = client.emit(log("bad")).unwrap();
+        let config = config(dir.path());
+        let mut db = store::open(&config.store_path).unwrap();
+        let bad = store::admit(&mut db, &config, &log("bad")).unwrap();
         {
-            let db = client.owner.shared.db.lock().unwrap();
             if corrupt {
                 db.execute("UPDATE submissions SET envelope=x'ffff'", [])
                     .unwrap();
@@ -135,12 +135,13 @@ fn corrupt_and_oversized_stored_rows_do_not_starve_later_rows() {
                 .unwrap();
             }
         }
-        let good = client.emit(log("good")).unwrap();
-        worker::start(
-            &client.owner.shared,
+        drop(db);
+        let client = DurableTelemetryClient::open_with_exporter(
+            config,
             Arc::new(ScriptedExporter::new(dir.path())),
         )
         .unwrap();
+        let good = client.emit(log("good")).unwrap();
         assert_eq!(
             client
                 .flush_submission(&good.submission_id, DEADLINE)
@@ -161,7 +162,11 @@ fn corrupt_and_oversized_stored_rows_do_not_starve_later_rows() {
 #[test]
 fn oversized_admission_is_typed_and_does_not_block_small_submission() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let client = DurableTelemetryClient::open_with_exporter(
+        config(dir.path()),
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
     let mut huge = fixture("logs");
     huge.logs[0].record.body = Some(sc_observability_types::otlp::signals::AnyValue::String(
         "x".repeat(64 * 1024),
@@ -174,11 +179,6 @@ fn oversized_admission_is_typed_and_does_not_block_small_submission() {
     let error = client.emit(huge).unwrap_err();
     assert_eq!(error.code(), &crate::error_codes::DURABLE_OVERSIZE);
     let good = client.emit(log("good")).unwrap();
-    worker::start(
-        &client.owner.shared,
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
-    .unwrap();
     assert_eq!(
         client
             .flush_submission(&good.submission_id, DEADLINE)
@@ -219,7 +219,11 @@ fn oversized_yaml_is_a_config_error() {
 #[test]
 fn flush_after_shutdown_is_closed() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let client = DurableTelemetryClient::open_with_exporter(
+        config(dir.path()),
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
     client.shutdown(DEADLINE).unwrap();
     assert!(matches!(
         client.flush(DEADLINE),
@@ -231,7 +235,11 @@ fn flush_after_shutdown_is_closed() {
 #[test]
 fn database_lock_timeout_is_typed_and_drop_releases() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let client = DurableTelemetryClient::open_with_exporter(
+        config(dir.path()),
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
     let held = client.owner.shared.db.lock().unwrap();
     assert_eq!(
         client
@@ -251,7 +259,11 @@ fn database_lock_timeout_is_typed_and_drop_releases() {
 #[test]
 fn invalid_envelope_is_rejected_before_any_rows_are_inserted() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
+    let client = DurableTelemetryClient::open_with_exporter(
+        config(dir.path()),
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
     let mut input = SubmissionInput::new();
     let mut span = sc_observability_types::otlp::submission::SpanInput::new(
         "invalid-after-mutation".into(),
@@ -292,17 +304,13 @@ fn invalid_envelope_is_rejected_before_any_rows_are_inserted() {
 #[test]
 fn worker_database_errors_are_retained_and_poisoned_wake_is_recoverable() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::prepare(config(dir.path())).unwrap();
-    client
-        .owner
-        .shared
-        .db
-        .lock()
+    let config = config(dir.path());
+    store::open(&config.store_path)
         .unwrap()
         .execute_batch("DROP TABLE signal_deliveries")
         .unwrap();
-    worker::start(
-        &client.owner.shared,
+    let client = DurableTelemetryClient::open_with_exporter(
+        config,
         Arc::new(ScriptedExporter::new(dir.path())),
     )
     .unwrap();
