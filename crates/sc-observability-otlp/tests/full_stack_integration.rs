@@ -5,7 +5,7 @@
 
 use std::net::TcpListener;
 use std::sync::Arc;
-#[cfg(feature = "otlp-sdk")]
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
 use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "sync-http")]
 use std::time::{Duration, Instant};
@@ -1086,20 +1086,21 @@ fn public_sync_http_factory_redacts_rejected_authorization_from_diagnostics_and_
 
 #[cfg(feature = "sync-http")]
 #[test]
-fn public_sync_http_factory_reports_retry_exhaustion_after_the_configured_attempts() {
+fn public_sync_http_factory_retains_terminal_http_failure() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
     let address = listener.local_addr().expect("collector address");
+    let requests = Arc::new(AtomicUsize::new(0));
+    let collector_requests = Arc::clone(&requests);
     let collector = std::thread::spawn(move || {
-        for _ in 0..2 {
-            let mut stream = accept_sync_http_export(&listener).expect("accept retry attempt");
-            let request = read_http_request(&mut stream);
-            assert!(request.starts_with("POST /v1/logs HTTP/1.1"));
-            stream
-                .write_all(
-                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-                )
-                .expect("reject retry attempt");
-        }
+        let mut stream = accept_sync_http_export(&listener).expect("accept terminal request");
+        let request = read_http_request(&mut stream);
+        assert!(request.starts_with("POST /v1/logs HTTP/1.1"));
+        collector_requests.fetch_add(1, Ordering::Relaxed);
+        stream
+            .write_all(
+                b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .expect("reject terminal request");
     });
 
     let telemetry = Telemetry::new_typed(enabled_sync_http_retry_config(address, 1))
@@ -1109,18 +1110,19 @@ fn public_sync_http_factory_reports_retry_exhaustion_after_the_configured_attemp
         .expect("sync-http factory admits log before export");
     let error = telemetry
         .flush_typed()
-        .expect_err("retryable collector failures exhaust the configured attempt budget");
+        .expect_err("terminal collector failure is retained by the public factory");
     let export_error = std::error::Error::source(&error)
         .and_then(std::error::Error::source)
         .and_then(|source| source.downcast_ref::<sc_observability_types::v2::ExportError>())
         .expect("the typed flush failure retains its typed export cause");
     assert_eq!(
         export_error.code(),
-        sc_observability_types::error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
-        "the retained export cause classifies exhausted sync-http retry attempts with the stable error code"
+        sc_observability_types::error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL,
+        "the retained export cause classifies the terminal sync-http status with the stable error code"
     );
     assert_eq!(telemetry.health().dropped_exports_total, 1);
     collector.join().expect("collector exits");
+    assert_eq!(requests.load(Ordering::Relaxed), 1);
 }
 
 #[cfg(feature = "sync-http")]

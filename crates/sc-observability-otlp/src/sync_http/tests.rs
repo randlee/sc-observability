@@ -1329,43 +1329,6 @@ fn loopback_stalled_sync_http_retry_attempt_is_bounded_by_remaining_sequence_dea
 }
 
 #[test]
-fn loopback_retry_attempt_limit_returns_typed_exhaustion() {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
-    let address = listener.local_addr().expect("listener address");
-    let calls = Arc::new(AtomicUsize::new(0));
-    let calls_server = Arc::clone(&calls);
-    let server = thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut stream, _) = listener.accept().expect("accept request");
-            let request = read_request(&mut stream);
-            assert!(request.contains("\"hello\""));
-            calls_server.fetch_add(1, Ordering::Relaxed);
-            stream
-                .write_all(
-                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-                )
-                .expect("write response");
-        }
-    });
-    let exporter = OtlpHttpExporter::for_endpoint_with_retry(
-        format!("http://{address}"),
-        retry_policy(1, 5, 5, 500, 20, 0),
-        1,
-        None,
-    )
-    .expect("construct exporter");
-    let error = exporter
-        .submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
-        .expect_err("retry attempt limit must stop the sequence");
-    server.join().expect("join server");
-    assert!(matches!(
-        error,
-        sc_observability_types::v2::ExportError::RetryAttemptsExhausted { .. }
-    ));
-    assert_eq!(calls.load(Ordering::Relaxed), 2);
-}
-
-#[test]
 fn shutdown_cancels_an_actual_retry_backoff() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
@@ -1764,17 +1727,36 @@ fn shutdown_blocking_is_rejected_from_entered_tokio() {
 }
 
 #[test]
-fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
+fn prepared_immediate_retry_attempt_limit_returns_typed_exhaustion() {
+    let retry = retry_policy(1, 0, 0, 30_000, 20, 0);
+    let configured_attempts = usize::try_from(
+        retry
+            .max_retries
+            .expect("fixture carries its configured retry limit"),
+    )
+    .expect("retry limit fits usize")
+        + 1;
+    let expected_attempts = configured_attempts;
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let address = listener.local_addr().expect("listener address");
     let calls = Arc::new(AtomicUsize::new(0));
     let calls_server = Arc::clone(&calls);
+    let (first_request_tx, first_request_rx) = mpsc::channel();
+    let (release_first_response_tx, release_first_response_rx) = mpsc::channel();
     let server = thread::spawn(move || {
-        for _ in 0..2 {
+        for attempt in 0..configured_attempts {
             let (mut stream, _) = listener.accept().expect("accept request");
             let request = read_request(&mut stream);
             assert!(request.contains("\"hello\""));
             calls_server.fetch_add(1, Ordering::Relaxed);
+            if attempt == 0 {
+                first_request_tx
+                    .send(())
+                    .expect("signal first request before releasing its response");
+                release_first_response_rx
+                    .recv()
+                    .expect("release first retryable response");
+            }
             stream
                 .write_all(
                     b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -1789,7 +1771,7 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
         endpoint: Some(
             crate::config::OtlpEndpoint::new_typed(format!("http://{address}")).unwrap(),
         ),
-        sync_http_retry: Some(retry_policy(1, 0, 0, 30_000, 20, 0)),
+        sync_http_retry: Some(retry),
         ..crate::config::OtelConfig::default()
     };
     assert!(crate::config::validated_transport_bounds(&transport).is_err());
@@ -1806,17 +1788,29 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
         crate::config::prepared_backend_connection(&config.transport, &bounds).unwrap();
     let (delay_tx, delay_rx) = mpsc::channel();
     let exporter = OtlpHttpExporter::for_prepared_test(&connection, &bounds, delay_tx).unwrap();
-    let error = exporter
-        .submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
+    let export_thread = thread::spawn(move || {
+        exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload())
+    });
+    first_request_rx
+        .recv()
+        .expect("first request is held until the test releases it");
+    release_first_response_tx
+        .send(())
+        .expect("release the first retryable response");
+    let error = export_thread
+        .join()
+        .expect("join retry-limited export")
         .expect_err("retry attempt limit must stop the sequence");
     server.join().expect("join server");
     assert!(matches!(
         error,
         sc_observability_types::v2::ExportError::RetryAttemptsExhausted { .. }
     ));
-    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    assert_eq!(calls.load(Ordering::Relaxed), expected_attempts);
     assert_eq!(
-        delay_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+        delay_rx
+            .recv()
+            .expect("immediate retry publishes its zero delay"),
         Duration::ZERO
     );
 }
