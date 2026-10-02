@@ -257,6 +257,26 @@ fn database_lock_timeout_is_typed_and_drop_releases() {
 }
 
 #[test]
+fn shutdown_after_successful_delivery_does_not_race_a_drain_writer() {
+    let dir = tempfile::tempdir().unwrap();
+    let client = DurableTelemetryClient::open_with_exporter(
+        config(dir.path()),
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
+    let receipt = client.emit(log("delivered-before-shutdown")).unwrap();
+
+    let report = client
+        .flush_submission(&receipt.submission_id, DEADLINE)
+        .expect("successful delivery");
+    assert_eq!(report.delivered.logs, 1);
+    assert!(
+        client.shutdown(DEADLINE).is_ok(),
+        "a completed delivery must not become a durable lock timeout during shutdown"
+    );
+}
+
+#[test]
 fn invalid_envelope_is_rejected_before_any_rows_are_inserted() {
     let dir = tempfile::tempdir().unwrap();
     let client = DurableTelemetryClient::open_with_exporter(

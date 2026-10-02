@@ -368,22 +368,26 @@ impl TelemetryClient for DurableTelemetryClient {
     fn shutdown(&self, deadline: Duration) -> Result<FlushReport, TelemetryClientError> {
         let shared = &self.owner.shared;
         let start = Instant::now();
-        if shared.closed.load(Ordering::Acquire) {
+        if shared.closed.swap(true, Ordering::AcqRel) {
             return Ok(FlushReport::default());
         }
-        {
-            let _db = shared.db.lock_for(deadline)?;
-            if shared.closed.swap(true, Ordering::AcqRel) {
-                return Ok(FlushReport::default());
-            }
-        }
+        // Keep workers alive for the bounded final flush.  Taking the single
+        // write connection first lets a worker repeatedly contend with the
+        // shutdown path after delivery has already completed.
+        let result = self.flush_scope(None, deadline.saturating_sub(start.elapsed()));
+        shared.stop.store(true, Ordering::Release);
         if let Some(exporter) = &self.owner.exporter {
             exporter.cancel();
         }
-        let result = self.flush_scope(None, deadline.saturating_sub(start.elapsed()));
-        shared.stop.store(true, Ordering::Release);
         shared.notify();
         worker::join(shared, deadline.saturating_sub(start.elapsed()));
+        // This waits only for an admission that was already in progress when
+        // `closed` was set.  Workers are gone, so a successful final flush
+        // cannot be turned into an in-process lock timeout during shutdown.
+        let remaining = deadline.saturating_sub(start.elapsed());
+        if !remaining.is_zero() {
+            let _db = shared.db.lock_for(remaining)?;
+        }
         result
     }
 
