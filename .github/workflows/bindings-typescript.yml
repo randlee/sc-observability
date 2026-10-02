@@ -90,8 +90,8 @@ jobs:
           [[ "$QUALIFICATION_SOURCE" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$QUALIFICATION_SOURCE"
           if [[ "$RUNNER_OS" == Windows ]]; then
-            # Bundle isolation has no Windows backend; schema/generators still run.
             bash scripts/ci/validate_binding_schema.sh --schema-only
+            python scripts/ci/supervise_windows_proof.py --evidence target/b3-isolation -- "$(cygpath -w "$BASH")" scripts/ci/validate_binding_schema.sh --bundle-only
           else
             bash scripts/ci/validate_binding_schema.sh
           fi

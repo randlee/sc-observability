@@ -48,16 +48,24 @@ class AggregateConsumerTests(unittest.TestCase):
         self.platforms.mkdir()
         write_platforms(self.platforms)
 
-    def test_two_valid_consumers_pass_and_message_names_both(self):
+    def test_three_valid_consumers_pass_and_message_names_all(self):
         ubuntu = write_consumer(self.root / "ubuntu" / "consumer.json")
         macos = write_consumer(self.root / "macos" / "consumer.json")
+        windows = write_consumer(self.root / "windows" / "consumer.json")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            gate.aggregate(self.platforms, [ubuntu, macos])
+            gate.aggregate(self.platforms, [ubuntu, macos, windows])
         text = out.getvalue()
-        self.assertIn("2 isolated packaged consumer(s)", text)
-        self.assertIn(str(ubuntu), text)
-        self.assertIn(str(macos), text)
+        self.assertIn("3 isolated packaged consumer(s)", text)
+        for consumer in (ubuntu, macos, windows):
+            self.assertIn(str(consumer), text)
+
+    def test_third_consumer_with_failed_isolation_check_fails(self):
+        ubuntu = write_consumer(self.root / "ubuntu" / "consumer.json")
+        macos = write_consumer(self.root / "macos" / "consumer.json")
+        windows = write_consumer(self.root / "windows" / "consumer.json", denied=False)
+        with self.assertRaisesRegex(RuntimeError, "isolated consumer proof incomplete"):
+            gate.aggregate(self.platforms, [ubuntu, macos, windows])
 
     def test_second_consumer_with_failed_isolation_check_fails(self):
         ubuntu = write_consumer(self.root / "ubuntu" / "consumer.json")

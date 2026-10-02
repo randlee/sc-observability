@@ -32,11 +32,8 @@ Lint failures do not suppress the unit or integration category.
   jobs run on `macos-14` on every PR. Linux/Windows coverage of this binary is
   unavailable, not silently successful. The hermetic OTLP collector tests
   run on all three platforms.
-- `validate_binding_bundle.py` implements isolation with `sandbox-exec` on
-  macOS and `bubblewrap` on Linux. Its packaged consumer and source-bundle
-  isolation checks run on both; Windows has no backend in that validator.
-  Schema, generator, typing, native runtime and real Tauri IPC checks still
-  run on Windows. The latter has its own Windows sandbox implementation.
+- `validate_binding_bundle.py` isolates the packaged consumer and source-bundle
+  checks on all three OSes (`sandbox-exec`, `bubblewrap`, supervised Windows identity sandbox).
 - `complete-gate` and `all-platforms` only aggregate the required platform
   evidence, on Ubuntu. They cannot pass on an incomplete platform inventory.
   Tauri builds on all hosts; consumers share the one Linux-produced immutable
