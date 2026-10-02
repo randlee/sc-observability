@@ -409,28 +409,69 @@ fn crash_mid_drain_resumes() {
 
 #[test]
 fn flush_deadline_does_not_wait_for_the_writer_mutex() {
+    struct HandshakeExporter {
+        entered: std::sync::mpsc::SyncSender<()>,
+        released: Mutex<std::sync::mpsc::Receiver<()>>,
+    }
+    impl SubmissionExporter for HandshakeExporter {
+        fn export(
+            &self,
+            _: Signal,
+            _: &[SubmissionEnvelope],
+        ) -> Result<(), SubmissionExportFailure> {
+            self.entered.send(()).unwrap();
+            // Sender drop also releases this worker during assertion unwinding.
+            let _ = self.released.lock().unwrap().recv();
+            Ok(())
+        }
+    }
+    let _clock = FrozenClock::new();
     let dir = tempfile::tempdir().unwrap();
     let exporter = Arc::new(ScriptedExporter::new(dir.path()));
-    let release = ReleaseExporter(exporter.as_ref());
-    exporter.set_outcome(Signal::Logs, DeliveryOutcome::Stall);
-    let client =
-        DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone()).unwrap();
+    let client = conformance::open_gated(config(dir.path()), &exporter);
     client.emit(log("pending")).unwrap();
-    exporter.await_stall();
-    let locked = client.owner.shared.db.lock().unwrap();
+    // This test exercises flush's writer-lock deadline, not scripted settlement.
+    client
+        .owner
+        .shared
+        .drain_on_flush_only
+        .store(false, Ordering::Release);
+    let now = frozen_now();
     std::thread::scope(|scope| {
+        let (entered, receive_entered) = std::sync::mpsc::sync_channel(1);
+        let (release, released) = std::sync::mpsc::channel();
+        let shared = &client.owner.shared;
+        let drain = scope.spawn(move || {
+            FROZEN_NOW.set(now);
+            let _clock = FrozenClock;
+            worker::drain_for_handshake_test(
+                shared,
+                &HandshakeExporter {
+                    entered,
+                    released: Mutex::new(released),
+                },
+                Signal::Logs,
+            );
+        });
+        // The sender belongs solely to the drain: a panic or early return closes
+        // it. There is no scheduler deadline on establishing the precondition.
+        receive_entered
+            .recv()
+            .expect("drain exited before entering export");
+        let locked = client.owner.shared.db.lock().unwrap();
         let (send, receive) = std::sync::mpsc::sync_channel(1);
         let client = &client;
         scope.spawn(move || {
-            send.send(client.flush(Duration::ZERO)).unwrap();
+            let _ = send.send(client.flush(Duration::ZERO));
         });
         let result = receive.recv_timeout(DEADLINE);
-        assert!(client.shutdown(Duration::ZERO).is_err());
+        let shutdown = client.shutdown(Duration::ZERO);
         drop(locked);
+        drop(release);
+        drain.join().unwrap();
+        assert!(shutdown.is_err());
         assert!(result.expect("flush waited for the writer mutex").is_err());
     });
-    drop(release);
-    worker::join(&client.owner.shared, DEADLINE);
 }
 
 #[test]

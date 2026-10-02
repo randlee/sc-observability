@@ -171,9 +171,15 @@ fn metric_record() -> OtlpRecord<MetricRecord> {
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn external_fixture_drives_all_signals_and_host_lifecycle() {
-    let fixture = SdkFixture::new(&fixture_config(8 * 1_024)).expect("fixture adapter");
+    // This deliberately relies on the endpoint validator accepting a port above
+    // 65535 and reqwest rejecting it synchronously during request construction.
+    // Tightening validation must fail this fixture loudly at construction.
+    let mut config = fixture_config_for_endpoint(8 * 1_024, "http://127.0.0.1:99999");
+    config.transport.protocol = OtlpProtocol::HttpBinary;
+    let fixture = SdkFixture::new(&config).expect("fixture adapter");
+    let started = tokio::time::Instant::now();
 
     fixture.export_logs(&[log_record()]).expect("schedule log");
     fixture
@@ -183,14 +189,19 @@ async fn external_fixture_drives_all_signals_and_host_lifecycle() {
         .export_metrics(&[metric_record()])
         .expect("schedule metric");
 
-    // The closed loopback endpoint supplies a deterministic terminal transport
-    // failure. Flush reports that window through the caller-runtime admission
+    // Request construction supplies a deterministic terminal transport failure.
+    // Flush reports that window through the caller-runtime admission
     // core; the following empty shutdown window must not repeat its failure.
     let flush = fixture
         .flush()
         .await
         .expect_err("ordered async flush reports the admitted RPC failure");
     assert_eq!(flush.diagnostic().code, OTLP_EXPORT_TERMINAL);
+    assert_eq!(
+        tokio::time::Instant::now(),
+        started,
+        "request construction fails without advancing any deadline"
+    );
     fixture
         .shutdown()
         .await

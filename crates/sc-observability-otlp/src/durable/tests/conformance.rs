@@ -21,39 +21,38 @@ pub(super) fn open_gated(
 
 pub(in crate::durable) fn await_scripted_outcomes(
     shared: &Shared,
+    exporter: &dyn SubmissionExporter,
     reader: &rusqlite::Connection,
     scope: &query::Scope,
 ) {
-    let start = Instant::now();
-    loop {
-        let generation = shared.generation();
-        let non_stalled: query::Scope = {
-            let stalled = shared.stalled_signals.lock().unwrap();
-            scope
-                .iter()
-                .filter(|(_, signal)| !stalled.contains(signal))
-                .cloned()
-                .collect()
-        };
-        if query::report(reader, &non_stalled)
+    let _clock = FrozenClock::new();
+    // The real flush snapshot has already been taken. Drive only its signals;
+    // scripted Stall leaves its real admitted rows pending without a live sleeper.
+    for signal in [
+        Signal::Logs,
+        Signal::Traces,
+        Signal::Metrics,
+        Signal::Profiles,
+    ] {
+        if shared.stalled_signals.lock().unwrap().contains(&signal) {
+            continue;
+        }
+        let selected: query::Scope = scope
+            .iter()
+            .filter(|(_, candidate)| *candidate == signal)
+            .cloned()
+            .collect();
+        while query::report(reader, &selected)
             .unwrap()
             .still_pending
             .total()
-            == 0
+            != 0
         {
-            return;
+            assert!(
+                drain_once_bounded(shared, exporter, signal),
+                "scripted drain made no progress for {signal:?}"
+            );
         }
-        let wake = shared.wake.lock().unwrap();
-        let (_guard, result) = shared
-            .changed
-            .wait_timeout_while(wake, DEADLINE.saturating_sub(start.elapsed()), |value| {
-                *value == generation
-            })
-            .unwrap();
-        assert!(
-            !result.timed_out(),
-            "conformance drain timed out: scope={scope:?}; non-stalled={non_stalled:?}"
-        );
     }
 }
 
@@ -131,7 +130,20 @@ impl<const ZERO_DEADLINE: bool> ConformanceHarness for Harness<ZERO_DEADLINE> {
         Client(client, Some(exporter))
     }
     fn set_outcome(&mut self, signal: Signal, outcome: DeliveryOutcome) {
-        self.exporters.last().unwrap().set_outcome(signal, outcome);
+        let exporter = self.exporters.last().unwrap();
+        exporter.set_outcome(signal, outcome);
+        if matches!(outcome, DeliveryOutcome::Stall) {
+            exporter
+                .conformance_shared
+                .lock()
+                .unwrap()
+                .upgrade()
+                .unwrap()
+                .stalled_signals
+                .lock()
+                .unwrap()
+                .insert(signal);
+        }
     }
 }
 #[test]
