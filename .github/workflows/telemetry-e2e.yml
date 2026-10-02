@@ -2,7 +2,7 @@ name: Telemetry end-to-end
 
 on:
   pull_request:
-    branches: ["sprint/**", "integrate/**"]
+    branches: ["sprint/*", "integrate/*"]
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
