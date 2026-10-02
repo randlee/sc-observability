@@ -95,7 +95,10 @@ def installed_artifacts(tmp_path_factory: pytest.TempPathFactory) -> dict[str, P
     venv = root / "venv"
     subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
     python = venv / "bin" / "python"
-    subprocess.run([str(python), "-m", "pip", "install", "--upgrade", "pip", "maturin"], check=True)
+    subprocess.run(
+        [str(python), "-m", "pip", "install", "--upgrade", "pip==25.3", "maturin==1.10.2"],
+        check=True,
+    )
     wheel_dir = root / "wheel"
     subprocess.run(
         [str(python), "-m", "maturin", "build", "--release", "--manifest-path",
