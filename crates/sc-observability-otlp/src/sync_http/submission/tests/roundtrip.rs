@@ -1,6 +1,6 @@
 use super::super::*;
 use super::capture::{CAPTURE_TIMEOUT, capture_server};
-use super::proto_json::{NonFiniteDouble, decode_forms};
+use super::proto_json::{NonFiniteDouble, decode_forms, decode_key_values};
 use crate::config::{
     ExporterBackend, LogsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, ResourceAttributes,
     SyncHttpRetryPolicy, TelemetryConfig, prepared_backend_connection,
@@ -263,6 +263,7 @@ fn generated_id_and_plain_attribute_fixtures_reach_their_signal_routes() {
     );
     let paired = fixture("paired_log_span_generated_ids");
     let plain_attributes = fixture("plain_attribute_map");
+    let expected_attributes = plain_attributes.logs[0].record.attributes.clone();
     let (captured, server) = capture_server(listener, &[200, 200]);
 
     exporter
@@ -281,13 +282,13 @@ fn generated_id_and_plain_attribute_fixtures_reach_their_signal_routes() {
     assert_eq!(server.join().expect("capture server exits"), 2);
     assert_eq!(logs.0, "/v1/logs");
     assert_eq!(traces.0, "/v1/traces");
+    let decoded_attributes = decode_key_values(
+        &logs.1["resourceLogs"][0]["scopeLogs"][0]["logRecords"][1]["attributes"],
+    )
+    .expect("captured attributes decode back into canonical values");
     assert_eq!(
-        logs.1["resourceLogs"][0]["scopeLogs"][0]["logRecords"][1]["attributes"],
-        serde_json::json!([
-            {"key": "a", "value": {"intValue": "2"}},
-            {"key": "z", "value": {"boolValue": true}},
-        ]),
-        "the plain attribute fixture retains its canonical key/value pairs"
+        decoded_attributes, expected_attributes,
+        "the plain attribute fixture retains each canonical key/value pair"
     );
     assert!(
         traces.1["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["traceId"].is_string(),
