@@ -215,9 +215,11 @@ def run_installed_python(artifacts: dict[str, Path], script: str, *, cwd: Path, 
                        text=True, capture_output=True, check=False, timeout=FRONTEND_TIMEOUT_SECONDS)
 
 
-def run_cli(artifacts: dict[str, Path], *args: str, cwd: Path, input: str = "") -> subprocess.CompletedProcess[str]:
+def run_cli(
+    artifacts: dict[str, Path], *args: str, cwd: Path, input: str = "", subprocess_timeout: float = FRONTEND_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
     return run_process([str(artifacts["cli"]), *args], cwd=cwd, input=input,
-                       text=True, capture_output=True, check=False, timeout=FRONTEND_TIMEOUT_SECONDS)
+                       text=True, capture_output=True, check=False, timeout=subprocess_timeout)
 
 
 def canonical_json(value: object) -> str:
