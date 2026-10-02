@@ -292,6 +292,13 @@ pub struct ObservabilityBuilder {
     observability_health_provider: Option<Arc<dyn ObservabilityHealthProvider>>,
 }
 
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoggerWaitSite {
+    Flush,
+    Health,
+}
+
 /// Producer-facing routing runtime for typed observations.
 #[expect(
     missing_debug_implementations,
@@ -304,7 +311,7 @@ pub struct Observability {
     logger: Mutex<LoggerHandle>,
     logger_changed: Condvar,
     #[cfg(test)]
-    logger_waiting: Option<std::sync::mpsc::Sender<&'static str>>,
+    logger_waiting: Option<std::sync::mpsc::Sender<LoggerWaitSite>>,
     shutdown: AtomicBool,
     subscriber_registrations: Vec<ErasedSubscriberRegistration>,
     projection_registrations: Vec<ErasedProjectionRegistration>,
@@ -570,7 +577,7 @@ impl Observability {
         while matches!(&*logger, LoggerHandle::ShuttingDown) {
             #[cfg(test)]
             if let Some(waiting) = &self.logger_waiting {
-                let _ = waiting.send("flush");
+                let _ = waiting.send(LoggerWaitSite::Flush);
             }
             logger = self
                 .logger_changed
@@ -628,7 +635,7 @@ impl Observability {
             while matches!(&*logger, LoggerHandle::ShuttingDown) {
                 #[cfg(test)]
                 if let Some(waiting) = &self.logger_waiting {
-                    let _ = waiting.send("health");
+                    let _ = waiting.send(LoggerWaitSite::Health);
                 }
                 logger = self
                     .logger_changed
@@ -1003,6 +1010,7 @@ mod tests {
 
     struct RecordingSubscriber {
         id: &'static str,
+        // MUTEX: concurrent callbacks append call order for the test assertions.
         calls: Arc<Mutex<Vec<&'static str>>>,
     }
 
@@ -1045,6 +1053,7 @@ mod tests {
     }
 
     struct RecordingLogProjector {
+        // MUTEX: concurrent callbacks append call order for the test assertions.
         calls: Arc<Mutex<Vec<&'static str>>>,
         id: &'static str,
     }
@@ -1154,6 +1163,22 @@ mod tests {
                 .expect("system time before unix epoch")
                 .as_nanos()
         ))
+    }
+
+    fn test_runtime(
+        handle: LoggerHandle,
+        waiting: Option<mpsc::Sender<LoggerWaitSite>>,
+    ) -> Observability {
+        Observability {
+            logger: Mutex::new(handle),
+            logger_changed: Condvar::new(),
+            logger_waiting: waiting,
+            shutdown: AtomicBool::new(false),
+            subscriber_registrations: Vec::new(),
+            projection_registrations: Vec::new(),
+            observability_health_provider: None,
+            runtime: RuntimeState::default(),
+        }
     }
 
     fn trace_context() -> TraceContext {
@@ -1554,73 +1579,67 @@ mod tests {
 
     #[test]
     fn concurrent_typed_shutdown_is_idempotent() {
-        let runtime = Arc::new(
-            Observability::builder(
-                ObservabilityConfig::default_for(tool_name(), temp_path("typed-concurrent"))
-                    .expect("typed config"),
-            )
-            .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
-                TypedRecordingSubscriber {
-                    calls: Arc::new(AtomicU64::new(0)),
-                },
-            ))))
-            .build()
-            .expect("typed runtime"),
+        let mut config = LoggerConfig::default_for(
+            ServiceName::new("obs-app").expect("service"),
+            temp_path("typed-concurrent"),
         );
-
-        let (completed_tx, completed_rx) = std::sync::mpsc::channel();
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(ControlledFlushSink {
+            flush_calls: Arc::new(AtomicU64::new(0)),
+            first_flush: None,
+            gate: None,
+        })));
+        let logger = builder.build().expect("built logger");
+        let runtime = Arc::new(test_runtime(
+            LoggerHandle::Running(RunningLogger::Canonical(logger)),
+            None,
+        ));
         let handles: Vec<_> = (0..8)
             .map(|_| {
                 let runtime = runtime.clone();
-                let completed_tx = completed_tx.clone();
-                std::thread::spawn(move || {
-                    let result = runtime.shutdown();
-                    completed_tx
-                        .send(result)
-                        .expect("shutdown completion receiver");
-                })
+                std::thread::spawn(move || runtime.shutdown())
             })
             .collect();
-        drop(completed_tx);
-        for _ in 0..8 {
-            completed_rx
-                .recv_timeout(std::time::Duration::from_secs(1))
-                .expect("bounded shutdown completion")
-                .expect("shutdown");
-        }
         for handle in handles {
-            handle.join().expect("shutdown thread");
+            handle.join().expect("shutdown thread").expect("shutdown");
         }
         assert_eq!(runtime.health().state, ObservationHealthState::Unavailable);
     }
 
-    struct BlockingFlushSink {
-        flush_calls: AtomicU64,
-        seed_completed: mpsc::Sender<()>,
+    struct ControlledFlushSink {
+        flush_calls: Arc<AtomicU64>,
+        first_flush: Option<mpsc::Sender<()>>,
+        gate: Option<FlushGate>,
+    }
+
+    struct FlushGate {
         armed: Arc<AtomicBool>,
         entered: mpsc::Sender<()>,
         // MUTEX: LogSink is Sync; the sole writer owns receives on this
-        // test-control channel. A timeout/disconnect releases failed tests.
+        // test-control channel. Disconnect releases failed tests.
         release: Mutex<mpsc::Receiver<()>>,
     }
     #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
-    impl LogSink for BlockingFlushSink {
+    impl LogSink for ControlledFlushSink {
         fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
             Ok(())
         }
         fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
-            if self.armed.swap(false, Ordering::SeqCst) {
-                let _ = self.entered.send(());
-                let _ = self
-                    .release
-                    .lock()
-                    .expect("release lock")
-                    .recv_timeout(Duration::from_secs(5));
+            if let Some(gate) = &self.gate
+                && gate.armed.swap(false, Ordering::SeqCst)
+            {
+                let _ = gate.entered.send(());
+                // Err means the control sender was dropped; treat it as released.
+                let _ = gate.release.lock().expect("release lock").recv();
             }
             // A Flush command makes one sink pass. Signal after that pass so
             // the seed cannot consume the later shutdown arm.
-            if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 0 {
-                let _ = self.seed_completed.send(());
+            if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 0
+                && let Some(first_flush) = &self.first_flush
+            {
+                let _ = first_flush.send(());
             }
             Err(sc_observability_types::LogSinkError(Box::new(
                 ErrorContext::new(
@@ -1643,7 +1662,7 @@ mod tests {
         before: sc_observability_types::LoggingHealthReport,
         entered_rx: mpsc::Receiver<()>,
         release_tx: mpsc::Sender<()>,
-        waiting_rx: mpsc::Receiver<&'static str>,
+        waiting_rx: mpsc::Receiver<LoggerWaitSite>,
     }
 
     fn shutdown_fixture() -> ShutdownFixture {
@@ -1658,12 +1677,14 @@ mod tests {
         config.enable_file_sink = false;
         config.enable_console_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink {
-            flush_calls: AtomicU64::new(0),
-            seed_completed,
-            armed: armed.clone(),
-            entered: entered_tx,
-            release: Mutex::new(release_rx),
+        builder.register_sink(SinkRegistration::new(Arc::new(ControlledFlushSink {
+            flush_calls: Arc::new(AtomicU64::new(0)),
+            first_flush: Some(seed_completed),
+            gate: Some(FlushGate {
+                armed: armed.clone(),
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
         })));
         let logger = builder.build().expect("built logger");
         logger.flush().expect_err("seed logging failure counter");
@@ -1674,17 +1695,10 @@ mod tests {
         assert_eq!(before.flush_errors_total, 1);
         assert!(before.last_error.is_some());
         let (waiting_tx, waiting_rx) = mpsc::channel();
-        let runtime = Arc::new(Observability {
-            logger: Mutex::new(LoggerHandle::Running(RunningLogger::Canonical(logger))),
-            logger_changed: Condvar::new(),
-            #[cfg(test)]
-            logger_waiting: Some(waiting_tx),
-            shutdown: AtomicBool::new(false),
-            subscriber_registrations: Vec::new(),
-            projection_registrations: Vec::new(),
-            observability_health_provider: None,
-            runtime: RuntimeState::default(),
-        });
+        let runtime = Arc::new(test_runtime(
+            LoggerHandle::Running(RunningLogger::Canonical(logger)),
+            Some(waiting_tx),
+        ));
         armed.store(true, Ordering::SeqCst);
         ShutdownFixture {
             runtime,
@@ -1695,7 +1709,7 @@ mod tests {
         }
     }
 
-    fn assert_logger_waiters(waiting: &mpsc::Receiver<&'static str>) {
+    fn assert_logger_waiters(waiting: &mpsc::Receiver<LoggerWaitSite>) {
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         let (mut flush, mut health) = (false, false);
         while !(flush && health) {
@@ -1703,9 +1717,8 @@ mod tests {
                 .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
                 .expect("both callers reached the logger condition wait")
             {
-                "flush" => flush = true,
-                "health" => health = true,
-                other => panic!("unexpected logger wait site: {other}"),
+                LoggerWaitSite::Flush => flush = true,
+                LoggerWaitSite::Health => health = true,
             }
         }
     }
@@ -1814,17 +1827,11 @@ mod tests {
             });
             assert_logger_waiters(&waiting_rx);
             assert!(
-                matches!(
-                    flush_rx.recv_timeout(Duration::from_millis(50)),
-                    Err(mpsc::RecvTimeoutError::Timeout)
-                ),
+                matches!(flush_rx.try_recv(), Err(mpsc::TryRecvError::Empty)),
                 "flush must wait for original writer"
             );
             assert!(
-                matches!(
-                    health_rx.recv_timeout(Duration::from_millis(50)),
-                    Err(mpsc::RecvTimeoutError::Timeout)
-                ),
+                matches!(health_rx.try_recv(), Err(mpsc::TryRecvError::Empty)),
                 "health must wait for retained stopped snapshot"
             );
             assert!(matches!(
@@ -1866,17 +1873,9 @@ mod tests {
         use std::sync::mpsc;
         use std::time::Duration;
         let (waiting_tx, waiting_rx) = mpsc::channel();
-        let runtime = Arc::new(Observability {
-            logger: Mutex::new(LoggerHandle::ShuttingDown),
-            logger_changed: Condvar::new(),
-            #[cfg(test)]
-            logger_waiting: Some(waiting_tx),
-            shutdown: AtomicBool::new(true),
-            subscriber_registrations: Vec::new(),
-            projection_registrations: Vec::new(),
-            observability_health_provider: None,
-            runtime: RuntimeState::default(),
-        });
+        let runtime = test_runtime(LoggerHandle::ShuttingDown, Some(waiting_tx));
+        runtime.shutdown.store(true, Ordering::SeqCst);
+        let runtime = Arc::new(runtime);
         let _release_on_failure = ReleaseOnFailure(runtime.clone());
         let (done_tx, done_rx) = mpsc::channel();
         let threads: Vec<_> = [false, true]
@@ -1897,7 +1896,7 @@ mod tests {
             })
             .collect();
         assert_logger_waiters(&waiting_rx);
-        assert!(done_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        assert!(matches!(done_rx.try_recv(), Err(mpsc::TryRecvError::Empty)));
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             runtime.complete_shutdown(|| panic!("injected shutdown unwind"));
         }));
@@ -1917,40 +1916,6 @@ mod tests {
     #[test]
     #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
     fn flush_forwards_logger_flush_behavior_directly() {
-        use sc_observability_types::LogSinkError;
-
-        struct FlushFailSink {
-            flush_calls: Arc<AtomicU64>,
-            flush_completed: std::sync::mpsc::Sender<()>,
-        }
-
-        impl LogSink for FlushFailSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
-                Ok(())
-            }
-
-            fn flush(&self) -> Result<(), LogSinkError> {
-                let call = self.flush_calls.fetch_add(1, Ordering::SeqCst);
-                let result = Err(LogSinkError(Box::new(ErrorContext::new(
-                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                    "flush failed",
-                    Remediation::not_recoverable("test sink intentionally fails flush"),
-                ))));
-                if call == 0 {
-                    let _ = self.flush_completed.send(());
-                }
-                result
-            }
-
-            fn health(&self) -> SinkHealth {
-                SinkHealth {
-                    name: sink_name("flush-fail"),
-                    state: SinkHealthState::DegradedDropping,
-                    last_error: None,
-                }
-            }
-        }
-
         let ok_root = temp_path("flush-ok");
         let ok_config =
             ObservabilityConfig::default_for(tool_name(), ok_root.clone()).expect("config");
@@ -1974,23 +1939,17 @@ mod tests {
             logger_config.enable_console_sink = false;
             let mut builder =
                 sc_observability::v2::Logger::builder(logger_config).expect("logger builder");
-            builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink {
+            builder.register_sink(SinkRegistration::new(Arc::new(ControlledFlushSink {
                 flush_calls: flush_calls.clone(),
-                flush_completed,
+                first_flush: Some(flush_completed),
+                gate: None,
             })));
             let logger = builder.build().expect("built logger");
 
-            let runtime = Observability {
-                logger: Mutex::new(LoggerHandle::Running(RunningLogger::Canonical(logger))),
-                logger_changed: Condvar::new(),
-                #[cfg(test)]
-                logger_waiting: None,
-                shutdown: AtomicBool::new(false),
-                subscriber_registrations: Vec::new(),
-                projection_registrations: Vec::new(),
-                observability_health_provider: None,
-                runtime: RuntimeState::default(),
-            };
+            let runtime = test_runtime(
+                LoggerHandle::Running(RunningLogger::Canonical(logger)),
+                None,
+            );
             (runtime, flush_calls, flush_rx)
         };
 
@@ -2070,17 +2029,7 @@ mod tests {
                 RuntimeAdmission::Canonical => RunningLogger::Canonical(logger),
                 RuntimeAdmission::Released => RunningLogger::Released(ReleasedLogger::from(logger)),
             };
-            Observability {
-                logger: Mutex::new(LoggerHandle::Running(logger)),
-                logger_changed: Condvar::new(),
-                #[cfg(test)]
-                logger_waiting: None,
-                shutdown: AtomicBool::new(false),
-                subscriber_registrations: Vec::new(),
-                projection_registrations: Vec::new(),
-                observability_health_provider: None,
-                runtime: RuntimeState::default(),
-            }
+            test_runtime(LoggerHandle::Running(logger), None)
         }
 
         // Canonical (v2) facade: the canonical arm keeps the original context.
