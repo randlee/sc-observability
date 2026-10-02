@@ -104,3 +104,9 @@ migrated canonical recipes and reject the intentionally old source. The
 validator enforces the retained 1.x typed-sibling and deprecation contract
 through the `compat.rs` facade. Canonical removal is deferred to a separately
 authorized 2.0 release; D18 owns the full default/all-features workspace tests.
+
+No replacement source-text presence guard or exact `*_typed` inventory is
+intended. The compiled migration consumers already fail if a released typed
+method they call is deleted. Retaining those methods does not prohibit
+additive typed APIs; an exact-name-set assertion would impose that unintended
+restriction.
