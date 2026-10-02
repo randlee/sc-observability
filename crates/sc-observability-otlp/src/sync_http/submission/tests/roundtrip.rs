@@ -1,10 +1,14 @@
 use super::super::*;
 use super::capture::{CAPTURE_TIMEOUT, capture_server};
 use super::proto_json::{NonFiniteDouble, decode_forms};
-use crate::config::{ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, SyncHttpRetryPolicy};
+use crate::config::{
+    ExporterBackend, LogsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, ResourceAttributes,
+    SyncHttpRetryPolicy, TelemetryConfig, prepared_backend_connection,
+    validated_released_telemetry_bounds,
+};
 use crate::constants::MAX_OTLP_ENCODED_REQUEST_BYTES;
 use sc_observability_types::{
-    SpanId, Timestamp, TraceId,
+    ServiceName, SpanId, Timestamp, TraceId,
     otlp::{
         signals::AnyValue,
         submission::{IdSource, Signal, SubmissionEnvelope},
@@ -40,7 +44,21 @@ fn submission_exporter(
     config.enabled = true;
     config.endpoint = Some(OtlpEndpoint::new_typed(endpoint).expect("loopback endpoint"));
     config.sync_http_retry = retry;
-    let (config, bounds) = SyncHttpConfig::from_otel(&config).expect("valid test exporter");
+    let telemetry = TelemetryConfig {
+        service_name: ServiceName::new("submission-capture").expect("service name"),
+        resource: ResourceAttributes::default(),
+        transport: config,
+        logs: Some(LogsConfig::default()),
+        traces: None,
+        metrics: None,
+    };
+    // The released compatibility preparation path explicitly permits immediate
+    // retry delays, which makes these capture assertions independent of the
+    // scheduler while retaining production retry behavior.
+    let bounds = validated_released_telemetry_bounds(&telemetry).expect("valid test exporter");
+    let connection = prepared_backend_connection(&telemetry.transport, &bounds)
+        .expect("prepared test connection");
+    let config = SyncHttpConfig::from_prepared(&connection, &bounds).expect("valid test exporter");
     let exporter = Arc::new(
         OtlpHttpExporter::from_prepared(config.clone(), &bounds)
             .expect("test exporter constructs eagerly"),
@@ -55,8 +73,10 @@ fn submission_exporter(
 fn retry_policy(max_retries: u32) -> SyncHttpRetryPolicy {
     SyncHttpRetryPolicy {
         max_retries: Some(max_retries),
-        initial_backoff_ms: Some(5.into()),
-        max_backoff_ms: Some(5.into()),
+        // Capture tests assert retry behavior directly, so keep their timing
+        // independent of wall-clock scheduling.
+        initial_backoff_ms: Some(0.into()),
+        max_backoff_ms: Some(0.into()),
         retry_sequence_timeout_ms: Some(3_000.into()),
         retry_after_cap_ms: Some(20.into()),
         retry_jitter_percent: Some(0),
