@@ -1,13 +1,14 @@
 # Local desktop viewer setup
 
 The local collector and viewer is the released `otel-desktop-viewer` v0.5.0
-selected and installed by the managed installer. The approved release is the
-macOS Apple Silicon archive at
+selected and installed by the managed installer. The approved release is pinned per platform
+(`darwin_arm64`, `linux_amd64`, `windows_amd64`); the macOS Apple Silicon
+archive is
 `https://github.com/CtrlSpice/otel-desktop-viewer/releases/download/v0.5.0/otel-desktop-viewer_darwin_arm64.tar.gz`,
 SHA-256 `e4a0051f827e6a40f52b097f490d7832af85bae577f4b33a69a986112c7618a4`.
 The same source commit is recorded in
 [`release.json`](../../../scripts/ci/fixtures/otlp/desktop-viewer/release.json).
-The pin supports macOS Apple Silicon (`darwin_arm64`) only. Setup provenance is
+The download script selects the host entry. Setup provenance is
 the `obs-d9-local-viewer-setup` deliverables and
 [`collector-environments.md`](../../plans/phase-d/collector-environments.md).
 The `desktop-viewer-factory-conformance` job in
@@ -132,7 +133,7 @@ and that the gRPC listener was reachable. The isolated PID, database, and run
 directory were reported removed by the harness. Raw command output was not
 retained, so these owner-run results are attested only. The retained,
 reproducible verification is the CI job `desktop-viewer-factory-conformance`
-(macOS arm64) in `.github/workflows/otlp-conformance.yml`. It starts the pinned
+(ubuntu, macOS and Windows matrix) in `.github/workflows/otlp-conformance.yml`. It starts the pinned
 desktop viewer, runs both public factory tests (SDK and sync-http), and asserts
 the production logs, spans and metrics with `viewer_harness.py assert-production`.
 A passing run on macOS arm64 is run 36813560097.

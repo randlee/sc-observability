@@ -39,9 +39,13 @@ jobs:
           --test canonical_ingress --features otlp-sdk,sync-http
 
   desktop-viewer-factory-conformance:
-    name: desktop-viewer-factory-conformance (macOS arm64)
-    runs-on: macos-14
+    name: desktop-viewer-factory-conformance (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
@@ -54,19 +58,28 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import sys
           from pathlib import Path
 
-          manifest = json.loads(Path(
-              'scripts/ci/fixtures/otlp/desktop-viewer/release.json'
-          ).read_text())
+          viewer_dir = Path('scripts/ci/fixtures/otlp/desktop-viewer')
+          sys.path.insert(0, str(viewer_dir))
+          import download_pinned_release as downloader
+
+          manifest = json.loads((viewer_dir / 'release.json').read_text())
+          host = downloader._host_platform()
+          entry = manifest['platforms'][host]
+          binary = Path(os.environ['RUNNER_TEMP']) / 'otel-desktop-viewer'
+          if host.startswith('windows_'):
+              binary = binary.with_name(binary.name + '.exe')
           with Path(os.environ['GITHUB_ENV']).open('a') as output:
               output.write(f"VIEWER_VERSION={manifest['version']}\n")
-              output.write(f"VIEWER_BINARY_SHA256={manifest['binary_sha256']}\n")
+              output.write(f"VIEWER_BINARY_SHA256={entry['binary_sha256']}\n")
+              output.write(f"VIEWER_BINARY={binary}\n")
           PY
       - name: Download verified pinned desktop viewer
         run: >-
           python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py
-          "$RUNNER_TEMP/otel-desktop-viewer"
+          "$VIEWER_BINARY"
       - name: Select isolated free viewer ports
         run: |
           python3 - <<'PY'
@@ -91,7 +104,7 @@ jobs:
       - name: Start an owned isolated desktop viewer
         run: |
           python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py start \
-            --binary "$RUNNER_TEMP/otel-desktop-viewer" \
+            --binary "$VIEWER_BINARY" \
             --version "$VIEWER_VERSION" \
             --binary-sha256 "$VIEWER_BINARY_SHA256" \
             --state-dir "$VIEWER_STATE_DIR" \

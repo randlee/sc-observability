@@ -27,11 +27,11 @@ Lint failures do not suppress the unit or integration category.
 
 ## Actual platform limits
 
-- The pinned desktop viewer manifest is `darwin_arm64` only. The
-  `desktop-viewer-factory-conformance` and installed-artifact `telemetry-e2e`
-  jobs run on `macos-14` on every PR. Linux/Windows coverage of this binary is
-  unavailable, not silently successful. The hermetic OTLP collector tests
-  run on all three platforms.
+- The pinned desktop viewer manifest carries `darwin_arm64`, `linux_amd64` and
+  `windows_amd64` entries. The `desktop-viewer-factory-conformance` and
+  installed-artifact `telemetry-e2e` jobs run on ubuntu, macOS and Windows on
+  every PR, each selecting its host entry. The hermetic OTLP collector tests
+  run on the same three platforms.
 - `validate_binding_bundle.py` isolates the packaged consumer and source-bundle
   checks on all three OSes (`sandbox-exec`, `bubblewrap`, supervised Windows identity sandbox).
 - `complete-gate` and `all-platforms` only aggregate the required platform

@@ -12,9 +12,13 @@ defaults:
 
 jobs:
   telemetry-e2e:
-    name: installed wheel and CLI telemetry e2e (macOS arm64)
-    runs-on: macos-14
+    name: installed wheel and CLI telemetry e2e (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
@@ -28,21 +32,30 @@ jobs:
       - name: Install pinned public API and evidence tools
         uses: taiki-e/install-action@v2
         with:
-          tool: just@1.58.0,cargo-deny@0.19.4,cargo-public-api@0.52.0,cargo-semver-checks@0.48.0
+          tool: cargo-deny@0.19.4,cargo-public-api@0.52.0,cargo-semver-checks@0.48.0
+      - name: Select the host desktop viewer binary path
+        run: |
+          binary="$RUNNER_TEMP/otel-desktop-viewer"
+          if [ "$RUNNER_OS" = "Windows" ]; then binary="$binary.exe"; fi
+          echo "TELEMETRY_E2E_VIEWER_BINARY=$binary" >> "$GITHUB_ENV"
       - name: Download verified pinned desktop viewer
         run: >-
           python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py
-          "$RUNNER_TEMP/otel-desktop-viewer"
+          "$TELEMETRY_E2E_VIEWER_BINARY"
       - name: Run real installed-artifact composition suite
-        env:
-          TELEMETRY_E2E_VIEWER_BINARY: ${{ runner.temp }}/otel-desktop-viewer
         run: python3 -m pip install pytest==8.4.2 pytest-timeout==2.4.0 && python3 -m pytest -q tests/telemetry-e2e
       - name: Capture public API and error migration evidence
         if: always()
         run: |
           mkdir -p target/telemetry-e2e/evidence
           set +e
-          just public-api > target/telemetry-e2e/evidence/public-api.log 2>&1
+          {
+            python3 -m unittest discover -s scripts/ci/tests -p test_validate_public_api.py -v || exit $?
+            # Exit 1 means a diff to review; semver and docs remain mandatory below.
+            status=0; bash scripts/ci/validate_public_api_diff.sh || status=$?; if [ "$status" -gt 1 ]; then exit "$status"; fi
+            python3 scripts/ci/validate_public_api_semver.py || exit $?
+            bash scripts/ci/validate_public_api_docs.sh
+          } > target/telemetry-e2e/evidence/public-api.log 2>&1
           public_api=$?
           printf 'exit=%s\n' "$public_api" >> target/telemetry-e2e/evidence/public-api.log
           python3 scripts/ci/validate_error_migration.py > target/telemetry-e2e/evidence/error-migration.log 2>&1

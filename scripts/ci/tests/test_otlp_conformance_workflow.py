@@ -37,6 +37,16 @@ class OtlpConformanceWorkflowTests(unittest.TestCase):
         self.assertIn('[ -d "$VIEWER_STATE_DIR" ]', steps[cleanup_step]["run"])
         self.assertIn('viewer_harness.py stop', steps[cleanup_step]["run"])
 
+    def test_desktop_viewer_job_runs_on_all_three_oses(self) -> None:
+        workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+        job = workflow["jobs"]["desktop-viewer-factory-conformance"]
+        self.assertEqual(job["strategy"]["matrix"]["os"],
+                         ["ubuntu-latest", "macos-latest", "windows-latest"])
+        self.assertFalse(job["strategy"]["fail-fast"])
+        self.assertEqual(job["runs-on"], "${{ matrix.os }}")
+        self.assertIn("matrix.os", job["name"])
+        self.assertNotIn("macOS", job["name"])
+
     def test_trigger_inputs_and_actions_are_immutable(self) -> None:
         workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
         triggers = workflow.get("on") or workflow[True]

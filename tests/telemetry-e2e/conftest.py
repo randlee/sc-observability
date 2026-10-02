@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import socket
 import subprocess
 import sys
@@ -148,7 +149,8 @@ def installed_artifacts(tmp_path_factory: pytest.TempPathFactory) -> dict[str, P
     root = tmp_path_factory.mktemp("installed-telemetry")
     venv = root / "venv"
     run_process([sys.executable, "-m", "venv", str(venv)], timeout=INSTALL_TIMEOUT_SECONDS, check=True)
-    python = venv / "bin" / "python"
+    windows = os.name == "nt"
+    python = venv / ("Scripts/python.exe" if windows else "bin/python")
     run_process(
         [str(python), "-m", "pip", "install", "--upgrade", "pip==25.3", "maturin==1.10.2"],
         timeout=INSTALL_TIMEOUT_SECONDS,
@@ -175,7 +177,7 @@ def installed_artifacts(tmp_path_factory: pytest.TempPathFactory) -> dict[str, P
         timeout=BUILD_TIMEOUT_SECONDS,
         check=True,
     )
-    return {"root": root, "python": python, "cli": cli_root / "bin" / "sc-otel"}
+    return {"root": root, "python": python, "cli": cli_root / "bin" / ("sc-otel.exe" if windows else "sc-otel")}
 
 
 @pytest.fixture
@@ -332,7 +334,12 @@ def pinned_viewer(tmp_path: Path) -> Iterator[PinnedViewer]:
         if os.environ.get("GITHUB_ACTIONS", "").lower() == "true":
             pytest.fail(f"{message}; CI must not skip viewer readback", pytrace=False)
         pytest.skip(message)
-    manifest = json.loads((ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/release.json").read_text())
+    release = json.loads((ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/release.json").read_text())
+    machine = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(
+        platform.machine().lower(), platform.machine().lower())
+    host = f"{platform.system().lower()}_{machine}"
+    assert host in release["platforms"], f"pinned viewer has no {host} entry"
+    manifest = {"version": release["version"], **release["platforms"][host]}
     viewer = PinnedViewer(binary, manifest, tmp_path / "viewer-state")
     viewer.start()
     try:
