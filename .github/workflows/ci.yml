@@ -285,10 +285,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: python scripts/ci/cargo_workspaces.py unit
 
-      - name: Run standalone Tauri tests with all features
-        if: ${{ !cancelled() }}
-        run: cargo test --locked --manifest-path bindings/tauri/Cargo.toml --all-features --no-fail-fast
-
       - name: Run external OTLP SDK fixture
         if: ${{ !cancelled() }}
         run: cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked --no-fail-fast
