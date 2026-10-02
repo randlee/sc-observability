@@ -70,22 +70,19 @@ impl SubmissionExporter for SyncHttpSubmissionExporter {
         signal: Signal,
         envelopes: &[SubmissionEnvelope],
     ) -> Result<(), SubmissionExportFailure> {
-        let (route, payload, encode) = match signal {
+        let (route, encode) = match signal {
             Signal::Logs => (
                 SubmissionRoute::Signal(Signal::Logs),
-                logs::request(envelopes).map_err(classify)?,
                 logs::request
                     as fn(&[SubmissionEnvelope]) -> Result<serde_json::Value, ExportError>,
             ),
             Signal::Traces => (
                 SubmissionRoute::Signal(Signal::Traces),
-                traces::request(envelopes).map_err(classify)?,
                 traces::request
                     as fn(&[SubmissionEnvelope]) -> Result<serde_json::Value, ExportError>,
             ),
             Signal::Metrics => (
                 SubmissionRoute::Signal(Signal::Metrics),
-                metrics::request(envelopes).map_err(classify)?,
                 metrics::request
                     as fn(&[SubmissionEnvelope]) -> Result<serde_json::Value, ExportError>,
             ),
@@ -102,8 +99,7 @@ impl SubmissionExporter for SyncHttpSubmissionExporter {
                 }));
             }
         };
-        self.submit_encoded(route, envelopes, &payload, encode)
-            .map_err(classify)
+        self.export_encoded(route, envelopes, encode)
     }
 
     fn cancel(&self) {
@@ -112,6 +108,17 @@ impl SubmissionExporter for SyncHttpSubmissionExporter {
 }
 
 impl SyncHttpSubmissionExporter {
+    fn export_encoded(
+        &self,
+        route: SubmissionRoute,
+        envelopes: &[SubmissionEnvelope],
+        encode: fn(&[SubmissionEnvelope]) -> Result<serde_json::Value, ExportError>,
+    ) -> Result<(), SubmissionExportFailure> {
+        let payload = encode(envelopes).map_err(classify)?;
+        self.submit_encoded(route, envelopes, &payload, encode)
+            .map_err(classify)
+    }
+
     fn submit_encoded(
         &self,
         route: SubmissionRoute,
@@ -189,28 +196,4 @@ fn completed_retry_budgets_are_terminal_but_shutdown_is_recoverable() {
         classify(ExportError::ShutdownCancelledRetry { context: context() }),
         SubmissionExportFailure::Retryable(_)
     ));
-}
-
-#[cfg(test)]
-#[test]
-fn unsupported_encoder_paths_are_coded_terminal_failures() {
-    // These names are the crate-private seams for the non-exhaustive variants
-    // that downstream code cannot construct today. Each production match maps
-    // its unknown arm through this helper instead of panicking or emitting 0.
-    for variant in [
-        "AttributeKey",
-        "AnyValue",
-        "MetricData",
-        "NumberValue",
-        "AggregationTemporality",
-        "SpanKindPoint",
-        "StatusCode",
-    ] {
-        let error = values::unsupported_variant(variant);
-        assert_eq!(error.code(), OTLP_EXPORT_TERMINAL);
-        assert!(matches!(
-            classify(error),
-            SubmissionExportFailure::Terminal(ExportError::TerminalExportFailure { .. })
-        ));
-    }
 }

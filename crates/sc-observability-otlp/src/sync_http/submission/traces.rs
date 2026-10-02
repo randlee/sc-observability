@@ -155,7 +155,7 @@ fn kind(value: SpanKindPoint) -> Result<u8, ExportError> {
         SpanKindPoint::Client => 3,
         SpanKindPoint::Producer => 4,
         SpanKindPoint::Consumer => 5,
-        _ => return Err(values::unsupported_variant("SpanKindPoint")),
+        _ => return Err(unsupported_span_kind()),
     })
 }
 
@@ -164,13 +164,44 @@ fn status_code(value: StatusCode) -> Result<u8, ExportError> {
         StatusCode::Unset => 0,
         StatusCode::Ok => 1,
         StatusCode::Error => 2,
-        _ => return Err(values::unsupported_variant("StatusCode")),
+        _ => return Err(unsupported_status_code()),
     })
+}
+
+// These helpers are the exact wildcard-arm seams. Tests cannot construct a
+// future variant of a non-exhaustive neutral enum, so they exercise the same
+// coded failure each wildcard arm selects without adding a fake public value.
+fn unsupported_span_kind() -> ExportError {
+    values::unsupported_variant("SpanKindPoint")
+}
+
+fn unsupported_status_code() -> ExportError {
+    values::unsupported_variant("StatusCode")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contracts::submission::SubmissionExportFailure;
+    use crate::error_codes::OTLP_EXPORT_TERMINAL;
+
+    fn assert_terminal(error: ExportError) {
+        assert_eq!(error.code(), OTLP_EXPORT_TERMINAL);
+        assert!(matches!(
+            super::super::classify(error),
+            SubmissionExportFailure::Terminal(ExportError::TerminalExportFailure { .. })
+        ));
+    }
+
+    #[test]
+    fn unsupported_span_kind_is_coded_terminal() {
+        assert_terminal(unsupported_span_kind());
+    }
+
+    #[test]
+    fn unsupported_status_code_is_coded_terminal() {
+        assert_terminal(unsupported_status_code());
+    }
 
     #[test]
     fn encodes_trace_fixture_with_events_links_and_status() {

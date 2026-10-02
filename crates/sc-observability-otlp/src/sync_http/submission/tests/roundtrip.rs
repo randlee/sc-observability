@@ -19,6 +19,7 @@ use sc_observability_types::{
         },
         submission::{IdSource, Signal, SubmissionEnvelope},
     },
+    v2::ExportError,
 };
 use serde_json::Value;
 use std::net::TcpListener;
@@ -1583,6 +1584,37 @@ fn assert_grouping(captured: &Value, resource_key: &str, scope_key: &str) {
         &resources[1]["resource"]["schemaUrl"]
     };
     assert_eq!(schema_url, "https://example.test/second-resource");
+}
+
+fn unsupported_after_split(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {
+    if envelopes.len() > 1 {
+        return Ok(Value::String(
+            "x".repeat(MAX_OTLP_ENCODED_REQUEST_BYTES.saturating_add(1)),
+        ));
+    }
+    Err(super::super::values::unsupported_variant(
+        "test split encoder",
+    ))
+}
+
+#[test]
+fn terminal_encoder_errors_survive_submission_routing_and_split_recursion() {
+    let exporter = submission_exporter("http://127.0.0.1:1".to_owned(), None);
+    let first = fixture("logs");
+    let second = fixture("logs");
+
+    let error = exporter
+        .export_encoded(
+            SubmissionRoute::Signal(Signal::Logs),
+            &[first, second],
+            unsupported_after_split,
+        )
+        .expect_err("the split encoder fails for each individual request");
+
+    assert!(matches!(
+        error,
+        SubmissionExportFailure::Terminal(ExportError::TerminalExportFailure { .. })
+    ));
 }
 
 #[test]

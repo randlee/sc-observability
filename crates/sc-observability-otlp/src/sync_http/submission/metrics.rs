@@ -122,7 +122,7 @@ fn metric_data(value: &MetricData) -> Result<(&'static str, Value), ExportError>
                 ),
             )])),
         )),
-        _ => Err(values::unsupported_variant("MetricData")),
+        _ => Err(unsupported_metric_data()),
     }
 }
 
@@ -314,7 +314,7 @@ fn number_value(encoded: &mut Map<String, Value>, value: &NumberValue) -> Result
         NumberValue::Double(value) => {
             encoded.insert("asDouble".to_owned(), values::double(*value));
         }
-        _ => return Err(values::unsupported_variant("NumberValue")),
+        _ => return Err(unsupported_number_value()),
     }
     Ok(())
 }
@@ -350,13 +350,53 @@ fn temporality_value(value: AggregationTemporality) -> Result<u8, ExportError> {
     match value {
         AggregationTemporality::Delta => Ok(1),
         AggregationTemporality::Cumulative => Ok(2),
-        _ => Err(values::unsupported_variant("AggregationTemporality")),
+        _ => Err(unsupported_aggregation_temporality()),
     }
+}
+
+// These helpers are the exact wildcard-arm seams. Tests cannot construct a
+// future variant of a non-exhaustive neutral enum, so they exercise the same
+// coded failure each wildcard arm selects without adding a fake public value.
+fn unsupported_metric_data() -> ExportError {
+    values::unsupported_variant("MetricData")
+}
+
+fn unsupported_number_value() -> ExportError {
+    values::unsupported_variant("NumberValue")
+}
+
+fn unsupported_aggregation_temporality() -> ExportError {
+    values::unsupported_variant("AggregationTemporality")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contracts::submission::SubmissionExportFailure;
+    use crate::error_codes::OTLP_EXPORT_TERMINAL;
+
+    fn assert_terminal(error: ExportError) {
+        assert_eq!(error.code(), OTLP_EXPORT_TERMINAL);
+        assert!(matches!(
+            super::super::classify(error),
+            SubmissionExportFailure::Terminal(ExportError::TerminalExportFailure { .. })
+        ));
+    }
+
+    #[test]
+    fn unsupported_metric_data_is_coded_terminal() {
+        assert_terminal(unsupported_metric_data());
+    }
+
+    #[test]
+    fn unsupported_number_value_is_coded_terminal() {
+        assert_terminal(unsupported_number_value());
+    }
+
+    #[test]
+    fn unsupported_aggregation_temporality_is_coded_terminal() {
+        assert_terminal(unsupported_aggregation_temporality());
+    }
 
     #[test]
     fn encodes_each_metric_fixture_variant() {

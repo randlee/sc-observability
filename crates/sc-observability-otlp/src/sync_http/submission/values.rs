@@ -22,7 +22,7 @@ pub(super) fn key_values(values: &KeyValues) -> Result<Vec<Value>, ExportError> 
                 AttributeKey::Index(index) => {
                     item.insert("keyStrindex".to_owned(), Value::from(index.get()));
                 }
-                _ => return Err(unsupported_variant("AttributeKey")),
+                _ => return Err(unsupported_attribute_key()),
             }
             item.insert("value".to_owned(), any_value(value)?);
             Ok(Value::Object(item))
@@ -78,7 +78,7 @@ pub(super) fn any_value(value: &AnyValue) -> Result<Value, ExportError> {
                 )])),
             );
         }
-        _ => return Err(unsupported_variant("AnyValue")),
+        _ => return Err(unsupported_any_value()),
     }
     Ok(Value::Object(encoded))
 }
@@ -95,6 +95,17 @@ pub(super) fn unsupported_variant(variant: &str) -> ExportError {
             ),
         )),
     }
+}
+
+// These helpers are the exact wildcard-arm seams. Tests cannot construct a
+// future variant of a non-exhaustive neutral enum, so they exercise the same
+// coded failure each wildcard arm selects without adding a fake public value.
+fn unsupported_attribute_key() -> ExportError {
+    unsupported_variant("AttributeKey")
+}
+
+fn unsupported_any_value() -> ExportError {
+    unsupported_variant("AnyValue")
 }
 
 /// Encodes signed 64-bit values with the protobuf JSON decimal-string rule.
@@ -159,6 +170,26 @@ pub(super) fn base64(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::contracts::submission::SubmissionExportFailure;
+    use crate::error_codes::OTLP_EXPORT_TERMINAL;
+
+    fn assert_terminal(error: ExportError) {
+        assert_eq!(error.code(), OTLP_EXPORT_TERMINAL);
+        assert!(matches!(
+            super::super::classify(error),
+            SubmissionExportFailure::Terminal(ExportError::TerminalExportFailure { .. })
+        ));
+    }
+
+    #[test]
+    fn unsupported_attribute_key_is_coded_terminal() {
+        assert_terminal(unsupported_attribute_key());
+    }
+
+    #[test]
+    fn unsupported_any_value_is_coded_terminal() {
+        assert_terminal(unsupported_any_value());
+    }
 
     #[test]
     fn base64_encodes_rfc_4648_section_10_vectors() {
