@@ -278,3 +278,44 @@ async fn http_hung_attempt_uses_same_absolute_deadline() {
     );
     assert_eq!(Instant::now() - started, Duration::from_millis(90));
 }
+
+#[tokio::test(start_paused = true)]
+async fn exhausted_http_timeout_preserves_its_source() {
+    // Use the existing classified error as the fake operation result; the SDK
+    // loopback test separately covers real reqwest -> HttpError classification.
+    let (_tx, rx) = watch::channel(false);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = calls.clone();
+    let (wait_tx, wait_rx) = tokio::sync::oneshot::channel();
+    let mut wait_tx = Some(wait_tx);
+    let task = tokio::spawn(retry_with_jitter(
+        Duration::from_secs(1),
+        Duration::from_secs(1),
+        rx,
+        move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            async { Err::<(), _>(HttpFailure::ConnectOrTimeout) }
+        },
+        "HTTP timeout fixture",
+        move || {
+            if let Some(tx) = wait_tx.take() {
+                let _ = tx.send(());
+            }
+            Duration::ZERO
+        },
+    ));
+    wait_rx.await.unwrap();
+    tokio::time::advance(Duration::from_secs(2)).await;
+    let error = task.await.unwrap().unwrap_err();
+    assert_eq!(error.code().to_string(), "OTLP_EXPORT_TERMINAL");
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let mut source = std::error::Error::source(&error);
+    let mut found = None;
+    while let Some(error) = source {
+        if let Some(failure) = error.downcast_ref::<HttpFailure>() {
+            found = Some(*failure);
+        }
+        source = error.source();
+    }
+    assert_eq!(found, Some(HttpFailure::ConnectOrTimeout));
+}
