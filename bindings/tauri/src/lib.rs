@@ -33,6 +33,12 @@ pub struct AdapterPolicy {
 }
 
 impl AdapterPolicy {
+    /// Validates the host-selected window, target, size, depth, and redaction policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Failure::Validation`] when an allowlist is empty or invalid, a limit is
+    /// outside the supported range, or a redaction key is reserved for host provenance.
     pub fn validate(&self) -> Result<(), Failure> {
         if self.allowed_window_labels.is_empty() || self.allowed_targets.is_empty() {
             return Err(invalid(
@@ -103,6 +109,12 @@ pub struct AdapterSettings {
 }
 
 impl AdapterSettings {
+    /// Validates the adapter policy and query observation deadline.
+    ///
+    /// # Errors
+    ///
+    /// Returns the policy validation failure, or a timeout validation failure when
+    /// `query_timeout_ms` is outside the supported range.
     pub fn validate(&self) -> Result<(), Failure> {
         self.policy.validate()?;
         decode_timeout(Value::from(self.query_timeout_ms)).map(|_| ())
@@ -382,9 +394,9 @@ fn redact_value(value: &mut sc_observability_dto::ValueDto, keys: &BTreeSet<Stri
             }
         }
     } else if let sc_observability_dto::ValueDto::Array { value: values } = value {
-        values
-            .iter_mut()
-            .for_each(|child| redact_value(child, keys));
+        for child in values.iter_mut() {
+            redact_value(child, keys);
+        }
     }
 }
 
@@ -413,6 +425,11 @@ impl std::fmt::Debug for Adapter {
 }
 
 impl Adapter {
+    /// Creates an adapter using the default query observation deadline.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Failure::Validation`] when `policy` is invalid.
     pub fn new(
         backend: Arc<dyn HostLoggingBackend>,
         policy: AdapterPolicy,
@@ -421,6 +438,10 @@ impl Adapter {
     }
 
     /// Creates an adapter with host-selected query observation settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Failure::Validation`] when the policy or query observation deadline is invalid.
     pub fn with_settings(
         backend: Arc<dyn HostLoggingBackend>,
         settings: AdapterSettings,
@@ -433,6 +454,7 @@ impl Adapter {
         })
     }
 
+    #[must_use]
     pub fn try_log(&self, window: &str, value: Value) -> WireEnvelope<AdmissionDto> {
         envelope(self.try_log_inner(window, value))
     }
@@ -511,6 +533,7 @@ impl Adapter {
         })
     }
 
+    #[must_use]
     pub fn health(&self, window: &str, value: Value) -> WireEnvelope<LogHealthDto> {
         envelope(self.health_inner(window, value))
     }
@@ -557,6 +580,10 @@ fn integral_millisecond_timeout(timeout: Duration) -> Option<Duration> {
 struct ManagedAdapter(Adapter);
 
 /// Register the isolated plugin after validating all host policy.
+///
+/// # Errors
+///
+/// Returns [`Failure::Validation`] when `policy` is invalid.
 #[cfg(feature = "tauri")]
 pub fn plugin<R: tauri::Runtime>(
     backend: Arc<dyn HostLoggingBackend>,
@@ -566,6 +593,10 @@ pub fn plugin<R: tauri::Runtime>(
 }
 
 /// Registers the plugin with an explicit query observation deadline.
+///
+/// # Errors
+///
+/// Returns [`Failure::Validation`] when the policy or query observation deadline is invalid.
 #[cfg(feature = "tauri")]
 pub fn plugin_with_settings<R: tauri::Runtime>(
     backend: Arc<dyn HostLoggingBackend>,
@@ -731,8 +762,10 @@ mod tests {
         AdapterPolicy {
             allowed_window_labels: BTreeSet::from(["main".to_owned()]),
             allowed_targets: BTreeSet::from(["app".to_owned()]),
-            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
-            max_depth: MAX_CONTAINER_DEPTH as u32,
+            max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                .expect("wire payload limit fits in u32"),
+            max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                .expect("container depth limit fits in u32"),
             redacted_field_keys: BTreeSet::new(),
         }
     }
@@ -826,8 +859,10 @@ mod tests {
             ..AdapterPolicy {
                 allowed_window_labels: ["main".into()].into(),
                 allowed_targets: ["app".into()].into(),
-                max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
-                max_depth: MAX_CONTAINER_DEPTH as u32,
+                max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                    .expect("wire payload limit fits in u32"),
+                max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                    .expect("container depth limit fits in u32"),
                 redacted_field_keys: BTreeSet::new(),
             }
         };
@@ -839,8 +874,10 @@ mod tests {
             ..AdapterPolicy {
                 allowed_window_labels: ["main".into()].into(),
                 allowed_targets: ["app".into()].into(),
-                max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
-                max_depth: MAX_CONTAINER_DEPTH as u32,
+                max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                    .expect("wire payload limit fits in u32"),
+                max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                    .expect("container depth limit fits in u32"),
                 redacted_field_keys: BTreeSet::new(),
             }
         };
@@ -859,8 +896,10 @@ mod tests {
         let policy = AdapterPolicy {
             allowed_window_labels: BTreeSet::from(["main".to_owned()]),
             allowed_targets: BTreeSet::from(["app".to_owned()]),
-            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
-            max_depth: MAX_CONTAINER_DEPTH as u32,
+            max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                .expect("wire payload limit fits in u32"),
+            max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                .expect("container depth limit fits in u32"),
             redacted_field_keys: BTreeSet::new(),
         };
         let result = parse::<QueryRequest>(
@@ -886,8 +925,10 @@ mod tests {
             policy: AdapterPolicy {
                 allowed_window_labels: ["main".into()].into(),
                 allowed_targets: ["app".into()].into(),
-                max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
-                max_depth: MAX_CONTAINER_DEPTH as u32,
+                max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                    .expect("wire payload limit fits in u32"),
+                max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                    .expect("container depth limit fits in u32"),
                 redacted_field_keys: BTreeSet::new(),
             },
             query_timeout_ms: 17,
@@ -915,8 +956,10 @@ mod tests {
             allowed_targets: (0..=TAURI_MAX_QUERY_TARGETS)
                 .map(|index| format!("app.{index}"))
                 .collect(),
-            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
-            max_depth: MAX_CONTAINER_DEPTH as u32,
+            max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                .expect("wire payload limit fits in u32"),
+            max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                .expect("container depth limit fits in u32"),
             redacted_field_keys: BTreeSet::new(),
         };
         assert!(
@@ -954,7 +997,10 @@ mod tests {
 
         assert!(
             inspect(
-                &nested_objects(MAX_CONTAINER_DEPTH - 1, Value::Object(Default::default())),
+                &nested_objects(
+                    MAX_CONTAINER_DEPTH - 1,
+                    Value::Object(serde_json::Map::default())
+                ),
                 0,
                 MAX_CONTAINER_DEPTH
             )
@@ -970,7 +1016,10 @@ mod tests {
         );
         assert!(
             inspect(
-                &nested_objects(MAX_CONTAINER_DEPTH, Value::Object(Default::default())),
+                &nested_objects(
+                    MAX_CONTAINER_DEPTH,
+                    Value::Object(serde_json::Map::default())
+                ),
                 0,
                 MAX_CONTAINER_DEPTH
             )
@@ -983,8 +1032,10 @@ mod tests {
         let policy = AdapterPolicy {
             allowed_window_labels: BTreeSet::from(["main".to_owned()]),
             allowed_targets: BTreeSet::from(["app".to_owned()]),
-            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
-            max_depth: MAX_CONTAINER_DEPTH as u32,
+            max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                .expect("wire payload limit fits in u32"),
+            max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                .expect("container depth limit fits in u32"),
             redacted_field_keys: BTreeSet::new(),
         };
         let adapter = Adapter::new(Arc::new(IpcBackend), policy).unwrap();
@@ -1049,8 +1100,10 @@ mod tests {
         let policy = AdapterPolicy {
             allowed_window_labels: BTreeSet::from(["main".to_owned()]),
             allowed_targets: BTreeSet::from(["app".to_owned()]),
-            max_request_bytes: MAX_WIRE_PAYLOAD_BYTES as u32,
-            max_depth: MAX_CONTAINER_DEPTH as u32,
+            max_request_bytes: u32::try_from(MAX_WIRE_PAYLOAD_BYTES)
+                .expect("wire payload limit fits in u32"),
+            max_depth: u32::try_from(MAX_CONTAINER_DEPTH)
+                .expect("container depth limit fits in u32"),
             redacted_field_keys: BTreeSet::new(),
         };
         let app = tauri::test::mock_builder()
@@ -1063,7 +1116,7 @@ mod tests {
             ])
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
-        let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        let window = tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::default())
             .build()
             .unwrap();
         let url = window.url().unwrap();
@@ -1075,7 +1128,7 @@ mod tests {
                 error: tauri::ipc::CallbackFn(1),
                 url,
                 body: serde_json::json!({"request": {"schema_version": 1}}).into(),
-                headers: Default::default(),
+                headers: tauri::http::HeaderMap::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_owned(),
             },
         )
@@ -1105,7 +1158,7 @@ mod tests {
                     }
                 })
                 .into(),
-                headers: Default::default(),
+                headers: tauri::http::HeaderMap::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_owned(),
             },
         )
