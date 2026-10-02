@@ -93,7 +93,14 @@ jobs:
           merge-multiple: true
       - uses: actions/download-artifact@v7
         with:
+          name: binding-consumer-ubuntu-latest
+          path: target/binding-consumer-ubuntu-latest
+      - uses: actions/download-artifact@v7
+        with:
           name: binding-consumer-macos-latest
-          path: target
+          path: target/binding-consumer-macos-latest
       - name: Reject missing, stale, skipped or altered evidence
-        run: bash scripts/ci/validate_binding_runtime.sh --aggregate-only
+        run: >-
+          bash scripts/ci/validate_binding_runtime.sh --aggregate-only
+          --consumer-evidence target/binding-consumer-ubuntu-latest/binding-runtime-consumer.json
+          --consumer-evidence target/binding-consumer-macos-latest/binding-runtime-consumer.json

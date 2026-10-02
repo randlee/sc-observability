@@ -73,7 +73,15 @@ def platform_run(output):
     (output/f'{platform.system().lower()}.json').write_text(json.dumps(result,indent=2)+'\n')
     print('BINDING_PLATFORM_PASS '+platform.system())
 
-def aggregate(directory, consumer):
+def validate_consumer(consumer):
+    proof=json.loads(consumer.read_text(encoding='utf-8'))
+    if proof.get('runtime_source_sha256')!=source_digest(): raise RuntimeError(f'stale packaged consumer source proof: {consumer}')
+    if proof['status']!='passed' or not all(p['denied'] for p in proof['isolation_probes'].values()): raise RuntimeError(f'isolated consumer proof incomplete: {consumer}')
+    if PACKAGE not in proof['archives'] or 'runtime core+bridge' not in proof['consumer_output']: raise RuntimeError(f'consumer did not exercise packaged runtime: {consumer}')
+
+def aggregate(directory, consumers):
+    if isinstance(consumers,Path): consumers=[consumers]
+    if not consumers: raise RuntimeError('no packaged consumer evidence supplied')
     expected=cases()
     for system in ('Darwin','Linux','Windows'):
         report=json.loads((directory/f'{system.lower()}.json').read_text(encoding='utf-8'))
@@ -81,11 +89,8 @@ def aggregate(directory, consumer):
         for profile in ('debug','release'):
             cell=report['profiles'][profile]
             if cell['status']!='passed' or cell['cases']!=expected or digest(directory/cell['log'])!=cell['sha256']: raise RuntimeError(f'incomplete platform evidence {system}/{profile}')
-        proof=json.loads(consumer.read_text(encoding='utf-8'))
-    if proof.get('runtime_source_sha256')!=source_digest(): raise RuntimeError('stale packaged consumer source proof')
-    if proof['status']!='passed' or not all(p['denied'] for p in proof['isolation_probes'].values()): raise RuntimeError('isolated consumer proof incomplete')
-    if PACKAGE not in proof['archives'] or 'runtime core+bridge' not in proof['consumer_output']: raise RuntimeError('consumer did not exercise packaged runtime')
-    print('BINDING_RUNTIME_COMPLETE_GATE_PASS three platforms debug+release and isolated packaged consumer')
+    for consumer in consumers: validate_consumer(consumer)
+    print(f'BINDING_RUNTIME_COMPLETE_GATE_PASS three platforms debug+release and {len(consumers)} isolated packaged consumer(s): '+', '.join(str(c) for c in consumers))
 
 def consumer_run(evidence):
     evidence = evidence.resolve()
@@ -99,16 +104,18 @@ def consumer_run(evidence):
         (evidence.parent/'binding-runtime-bundle-manifest.json').write_bytes((bundle/'manifest.json').read_bytes())
 
 def main():
-    parser=argparse.ArgumentParser(); parser.add_argument('--platform-only',action='store_true');parser.add_argument('--evidence',type=Path,default=ROOT/'target/binding-runtime-platforms');parser.add_argument('--consumer-evidence',type=Path,default=ROOT/'target/binding-runtime-consumer.json');parser.add_argument('--aggregate-only',action='store_true');parser.add_argument('--consumer-only',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser(); parser.add_argument('--platform-only',action='store_true');parser.add_argument('--evidence',type=Path,default=ROOT/'target/binding-runtime-platforms');parser.add_argument('--consumer-evidence',type=Path,action='append',help='repeatable; aggregation validates every one given');parser.add_argument('--aggregate-only',action='store_true');parser.add_argument('--consumer-only',action='store_true');args=parser.parse_args()
+    consumers=args.consumer_evidence or [ROOT/'target/binding-runtime-consumer.json']
+    if not args.aggregate_only and len(consumers)!=1: parser.error('exactly one --consumer-evidence is allowed outside --aggregate-only')
     dependencies();negatives()
     golden=ROOT/'crates'/PACKAGE/'tests/native-diagnostic.json'
     if hashlib.sha256(golden.read_text(encoding='utf-8').replace('\r\n','\n').encode()).hexdigest() != '3f5a4f41bb9cd140a5f207811b26e33063fa5e9d96385aa17b7c3128095e5f3e':
         raise RuntimeError('native diagnostic golden overwritten; explicit contract review required')
     if args.consumer_only:
-        consumer_run(args.consumer_evidence)
+        consumer_run(consumers[0])
         return
     if not args.aggregate_only: platform_run(args.evidence)
     if not args.platform_only:
-        if not args.aggregate_only: consumer_run(args.consumer_evidence)
-        aggregate(args.evidence,args.consumer_evidence)
+        if not args.aggregate_only: consumer_run(consumers[0])
+        aggregate(args.evidence,consumers)
 if __name__=='__main__':main()
