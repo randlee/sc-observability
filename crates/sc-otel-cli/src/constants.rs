@@ -13,6 +13,8 @@ pub(crate) const ERROR_INVALID_JSON: &str = "SC_OBSERVABILITY_SUBMIT_INVALID_JSO
 pub(crate) const ERROR_INTERNAL: &str = "SC_OBSERVABILITY_CLI_INTERNAL";
 #[cfg(feature = "test-double")]
 pub(crate) const TEST_DOUBLE_ENV: &str = "SC_OTEL_TEST_DOUBLE";
+#[cfg(feature = "test-double")]
+pub(crate) const TEST_DOUBLE_RECORD_ENV: &str = "SC_OTEL_TEST_DOUBLE_RECORD";
 
 #[derive(Clone, Copy)]
 pub(crate) enum CommandName {

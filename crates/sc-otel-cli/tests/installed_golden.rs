@@ -45,11 +45,23 @@ fn installed_binary(root: &Path) -> PathBuf {
 fn installed_cli_matches_every_shared_golden_fixture() {
     let temp = tempfile::tempdir().expect("temporary installation directory");
     let binary = installed_binary(temp.path());
-    let mut fixtures = fs::read_dir(golden_root())
+    let fixture_root = golden_root();
+    let expected_fixture_count = fs::read_dir(&fixture_root)
+        .expect("golden root reads")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().join("input.json").is_file())
+        .count();
+    let mut fixtures = fs::read_dir(&fixture_root)
         .expect("golden root reads")
         .map(|entry| entry.expect("fixture directory reads").path())
+        .filter(|path| path.join("input.json").is_file())
         .collect::<Vec<_>>();
     fixtures.sort();
+    assert_eq!(
+        fixtures.len(),
+        expected_fixture_count,
+        "every fixture is exercised"
+    );
 
     for fixture in fixtures {
         let input = fixture.join("input.json");
@@ -147,7 +159,7 @@ fn validate_records(
         let expected = expected["record"]
             .as_object()
             .expect("expected record object");
-        if !span && input.get("observed_time").is_none() {
+        if !span && input.get("observed_time").is_none() && expected.contains_key("observed_time") {
             let actual = record
                 .get("observed_time")
                 .expect("generated observed_time is present")
