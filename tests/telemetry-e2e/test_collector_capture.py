@@ -64,6 +64,13 @@ def _assert_wire_form(fixture: str, request: dict[str, object]) -> None:
         dictionary = request["dictionary"]
         profile = request["resourceProfiles"][0]["scopeProfiles"][0]["profiles"][0]
         assert dictionary["stringTable"] == [""]
+        assert dictionary["mappingTable"] == [{
+            "memoryStart": "0",
+            "memoryLimit": "0",
+            "fileOffset": "0",
+            "filenameStrindex": 0,
+            "attributeIndices": [],
+        }]
         assert dictionary["functionTable"] == [{
             "nameStrindex": 0,
             "systemNameStrindex": 0,
@@ -76,6 +83,8 @@ def _assert_wire_form(fixture: str, request: dict[str, object]) -> None:
             "lines": [],
             "attributeIndices": [],
         }]
+        assert dictionary["attributeTable"] == [{"keyStrindex": 0, "unitStrindex": 0}]
+        assert dictionary["stackTable"] == [{"locationIndices": []}]
         assert dictionary["linkTable"][0]["traceId"] == "AAAAAAAAAAAAAAAAAAAAAA=="
         assert profile["profileId"] == "EREREREREREREREREREREQ=="
         return
