@@ -814,7 +814,7 @@ fn repeated_shutdown_uses_one_backend_operation() {
 }
 
 #[test]
-fn failed_shutdown_is_idempotent_after_terminal_completion() {
+fn failed_shutdown_replays_terminal_failure_to_core_rejoiners() {
     let (core, _, shutdowns, _) = fixture(Some(runtime_terminated), &OtelConfig::default());
     let mut first = core.shutdown_async();
     let Poll::Ready(result) = poll_once(&mut first) else {

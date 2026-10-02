@@ -1449,6 +1449,43 @@ fn combined_export_failure_and_incomplete_span_preserve_baseline_shutdown_summar
     typed.shutdown_typed().expect("typed repeated shutdown");
 }
 
+/// Async twin of the repeated-shutdown assertion above: the public entry
+/// point reports the final export failure once, then returns `Ok(())`. The
+/// core's replay of the stored failure (see
+/// `failed_shutdown_replays_terminal_failure_to_core_rejoiners`) is not
+/// observable through this entry point.
+#[tokio::test(start_paused = true)]
+async fn failed_shutdown_async_typed_returns_ok_on_repeat() {
+    let exporter = Arc::new(RecordingLogExporter::default());
+    exporter.fail.store(true, Ordering::SeqCst);
+    let telemetry = Telemetry::new_with_exporters_typed(
+        telemetry_config(),
+        exporter,
+        Arc::new(RecordingTraceExporter::default()),
+        Arc::new(RecordingMetricExporter::default()),
+    )
+    .expect("typed telemetry");
+
+    telemetry
+        .emit_log(&log_event(service_name(), "shutdown-export"))
+        .expect("emit log");
+    let (started, _) = complete_span_signals();
+    telemetry
+        .emit_span_released(&started)
+        .expect("emit incomplete span");
+
+    let error = telemetry
+        .shutdown_async_typed()
+        .await
+        .expect_err("first async shutdown should report final export failure");
+    assert_eq!(error.diagnostic().code, error_codes::OTLP_FLUSH_FAILED);
+
+    telemetry
+        .shutdown_async_typed()
+        .await
+        .expect("repeated async shutdown");
+}
+
 // Released-versus-canonical `entity_id` admission. The active (exporting) state
 // is only constructible through injected exporters, so the buffered-state
 // assertions live here; `tests/released_emit_log.rs` covers the public surface.
