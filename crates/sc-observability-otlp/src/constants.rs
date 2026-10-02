@@ -65,7 +65,7 @@ pub(crate) const LEASE_RENEWAL_DIVISOR: u32 = 3;
 #[cfg(feature = "durable-store")]
 pub(crate) const STORE_BUSY_TIMEOUT_MS: u64 = 5_000;
 /// Pinned profiles export route.
-#[cfg(any(feature = "durable-store", all(test, feature = "sync-http")))]
+#[cfg(feature = "sync-http")]
 pub(crate) const PROFILES_EXPORT_PATH: &str = "/v1development/profiles";
 
 /// Idle durable workers wake on admission; the timer covers other processes.
