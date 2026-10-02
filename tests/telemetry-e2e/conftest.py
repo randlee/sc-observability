@@ -31,7 +31,7 @@ GOLDENS = ROOT / "crates/sc-observability-types/tests/fixtures/otlp_submission/g
 class CaptureCollector:
     """A loopback OTLP/JSON server with per-path responses and retained bodies."""
 
-    def __init__(self, port: int = 0) -> None:
+    def __init__(self, port: int = 0, *, bound_socket: socket.socket | None = None) -> None:
         self.requests: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self.statuses: dict[str, int] = defaultdict(lambda: 200)
         self._lock = threading.Lock()
@@ -66,8 +66,21 @@ class CaptureCollector:
             def log_message(self, _format: str, *_args: object) -> None:
                 return
 
-        self._server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        if bound_socket is None:
+            self._server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            self._needs_activate = False
+        else:
+            self._server = ThreadingHTTPServer(bound_socket.getsockname(), Handler, bind_and_activate=False)
+            self._server.socket.close()
+            self._server.socket = bound_socket
+            self._server.server_address = bound_socket.getsockname()
+            self._needs_activate = True
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+
+    @classmethod
+    def from_socket(cls, bound_socket: socket.socket) -> CaptureCollector:
+        """Adopt an already-bound socket and begin listening only on ``start``."""
+        return cls(bound_socket=bound_socket)
 
     @property
     def endpoint(self) -> str:
@@ -75,6 +88,9 @@ class CaptureCollector:
         return f"http://{host}:{port}"
 
     def start(self) -> None:
+        if self._needs_activate:
+            self._server.server_activate()
+            self._needs_activate = False
         self._thread.start()
 
     def stop(self) -> None:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import CaptureCollector, GOLDENS, reserve_loopback_sockets, run_cli, run_installed_python
+from conftest import CaptureCollector, GOLDENS, loopback_endpoint, reserve_loopback_sockets, run_cli, run_installed_python
 
 
 def _config(path: Path, endpoint: str) -> Path:
@@ -37,19 +37,36 @@ def test_reserved_loopback_sockets_are_distinct_and_held() -> None:
             port.close()
 
 
-def test_offline_cli_admission_records_terminal_delivery(
-    installed_artifacts: dict[str, Path], dead_collector_endpoint: str, tmp_path: Path,
+def test_offline_terminal_then_new_submission_recovers(
+    installed_artifacts: dict[str, Path], tmp_path: Path,
 ) -> None:
-    """Exhausting synchronous HTTP retries records a terminal durable failure."""
-    config = _config(tmp_path / "telemetry.yaml", dead_collector_endpoint)
+    """A terminal offline submission is not replayed; a new one can recover."""
+    reserved, = reserve_loopback_sockets(1)
+    config = _config(tmp_path / "telemetry.yaml", loopback_endpoint(reserved))
     payload = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
-    offline = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
-                      cwd=tmp_path, input=payload)
-    assert offline.returncode == 7, offline.stdout + offline.stderr
-    terminal = json.loads(offline.stdout)
-    assert terminal["state"] == "admitted_failed", terminal
-    assert terminal["receipt"] is not None, terminal
-    assert terminal["flush"]["failed"]["logs"] == 1, terminal
+    collector: CaptureCollector | None = None
+    try:
+        offline = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
+                          cwd=tmp_path, input=payload)
+        assert offline.returncode == 7, offline.stdout + offline.stderr
+        terminal = json.loads(offline.stdout)
+        assert terminal["state"] == "admitted_failed", terminal
+        assert terminal["receipt"] is not None, terminal
+        assert terminal["flush"]["failed"]["logs"] == 1, terminal
+
+        collector = CaptureCollector.from_socket(reserved)
+        collector.start()
+        recovered = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
+                            cwd=tmp_path, input=payload)
+        assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+        result = json.loads(recovered.stdout)
+        assert result["state"] == "admitted_delivered", result
+        collector.wait_for("/v1/logs")
+    finally:
+        if collector is None:
+            reserved.close()
+        else:
+            collector.stop()
 
 
 def test_partial_signal_failure_retains_the_failed_signal(
