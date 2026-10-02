@@ -1,7 +1,7 @@
 //! Blocking synchronous HTTP OTLP/HTTP JSON transport.
 //!
 //! This module retains the immutable synchronous HTTP request and payload behavior while
-//! applying only the four authorized safety deltas: retry classification,
+//! validating bounded collector acknowledgements and applying retry classification,
 //! bounded server pacing/jitter, cancellation-aware retry waits, and an
 //! overall retry-sequence deadline. The blocking client is owned exclusively
 //! by one private worker thread.
@@ -200,6 +200,7 @@ impl SyncHttpConfig {
 enum DataCommand {
     Export {
         endpoint: String,
+        route: SubmissionRoute,
         body: Bytes,
         complete: Box<dyn FnOnce(Result<(), ExportError>) + Send + 'static>,
     },
@@ -329,6 +330,7 @@ impl Worker {
     fn enqueue(
         &self,
         endpoint: String,
+        route: SubmissionRoute,
         body: Bytes,
         complete: Box<dyn FnOnce(Result<(), ExportError>) + Send + 'static>,
     ) -> Result<(), ExportError> {
@@ -343,6 +345,7 @@ impl Worker {
             .expect("synchronous HTTP worker send lock");
         match self.inner.data_tx.try_send(DataCommand::Export {
             endpoint,
+            route,
             body,
             complete,
         }) {
@@ -359,10 +362,16 @@ impl Worker {
         }
     }
 
-    fn export(&self, endpoint: String, body: Bytes) -> Result<(), ExportError> {
+    fn export(
+        &self,
+        endpoint: String,
+        route: SubmissionRoute,
+        body: Bytes,
+    ) -> Result<(), ExportError> {
         let (result_tx, result_rx) = mpsc::channel();
         self.enqueue(
             endpoint,
+            route,
             body,
             Box::new(move |result| {
                 let _ = result_tx.send(result);
@@ -545,10 +554,11 @@ fn worker_main(
         match data_rx.recv_timeout(WORKER_POLL_INTERVAL) {
             Ok(DataCommand::Export {
                 endpoint,
+                route,
                 body,
                 complete,
             }) => {
-                let outcome = send_with_retries(&client, &config, &endpoint, &body, cancel);
+                let outcome = send_with_retries(&client, &config, &endpoint, route, &body, cancel);
                 complete(outcome);
             }
             Err(RecvTimeoutError::Timeout) => {}
@@ -565,11 +575,12 @@ fn drain_data(
 ) {
     while let Ok(DataCommand::Export {
         endpoint,
+        route,
         body,
         complete,
     }) = data_rx.try_recv()
     {
-        let outcome = send_with_retries(client, config, &endpoint, &body, cancel);
+        let outcome = send_with_retries(client, config, &endpoint, route, &body, cancel);
         complete(outcome);
     }
 }
@@ -632,6 +643,7 @@ fn send_with_retries(
     client: &Client,
     config: &SyncHttpConfig,
     endpoint: &str,
+    route: SubmissionRoute,
     body: &Bytes,
     cancel: &AtomicBool,
 ) -> Result<(), ExportError> {
@@ -660,7 +672,10 @@ fn send_with_retries(
             .timeout(request_timeout)
             .send();
         match response {
-            Ok(response) if response.status().is_success() => return Ok(()),
+            Ok(response) if response.status().is_success() => {
+                // A partial acceptance must never retry the already accepted records.
+                return super::response::check(response, route);
+            }
             Ok(response) => {
                 let status = response.status();
                 if !is_retryable_status(status) {
@@ -1060,9 +1075,11 @@ impl OtlpHttpExporter {
             .lifecycle
             .admit(signal, batch, body.len())
             .map_err(telemetry_error_to_export_error)?;
-        let endpoint = SubmissionRoute::Signal(signal).endpoint(&self.endpoint);
+        let route = SubmissionRoute::Signal(signal);
+        let endpoint = route.endpoint(&self.endpoint);
         self.backend.worker.enqueue(
             endpoint,
+            route,
             body,
             Box::new(move |result| {
                 let _ = admitted.complete(result);
@@ -1081,7 +1098,7 @@ impl OtlpHttpExporter {
         let endpoint = route.endpoint(&self.endpoint);
         self.backend
             .worker
-            .export(endpoint, Bytes::from(payload.to_string()))
+            .export(endpoint, route, Bytes::from(payload.to_string()))
     }
 
     #[cfg(test)]
