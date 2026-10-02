@@ -64,13 +64,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.94.1"
-          components: rustfmt
+          components: rustfmt, clippy
       - name: Check standalone Tauri formatting
         run: cargo fmt --manifest-path bindings/tauri/Cargo.toml -- --check
+      - name: Clippy Tauri binding
+        run: cargo clippy --locked --manifest-path bindings/tauri/Cargo.toml --all-targets --all-features -- -D warnings
       - name: Install Linux native prerequisites for Tauri
         uses: ./.github/actions/install-linux-native-deps
       - name: Test standalone Tauri adapter
-        run: cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test
+        run: cargo test --locked --no-fail-fast --manifest-path bindings/tauri/Cargo.toml --all-features
       - name: Install isolation helper
         run: |
           sudo apt-get update
