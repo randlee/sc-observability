@@ -51,12 +51,17 @@ fn installed_cli_matches_every_shared_golden_fixture() {
             serde_json::from_slice(&fs::read(&input).expect("fixture input reads"))
                 .expect("fixture input JSON");
         let started = Timestamp::now_utc();
-        let output = Command::new(&binary)
-            .current_dir(temp.path())
-            .args(["validate", "--stdin"])
-            .stdin(fs::File::open(&input).expect("fixture input opens"))
-            .output()
-            .expect("installed CLI runs");
+        let flags = fixture.join("flags.args");
+        let mut command = Command::new(&binary);
+        command.current_dir(temp.path()).arg("validate");
+        if let Ok(args) = fs::read_to_string(&flags) {
+            command.args(args.lines().filter(|arg| !arg.is_empty()));
+        } else {
+            command
+                .arg("--stdin")
+                .stdin(fs::File::open(&input).expect("fixture input opens"));
+        }
+        let output = command.output().expect("installed CLI runs");
         let result: serde_json::Value =
             serde_json::from_slice(&output.stdout).expect("installed CLI emits JSON");
         let finished = Timestamp::now_utc();
