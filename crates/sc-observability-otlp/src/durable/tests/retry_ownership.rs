@@ -116,7 +116,7 @@ fn exhausted_transport_is_terminal_across_drain_reruns_including_profiles() {
         let dir = tempfile::tempdir().unwrap();
         let collector = Collector::new(None);
         let config = collector.configure(dir.path());
-        let client = DurableTelemetryClient::open(config.clone()).unwrap();
+        let client = conformance::open_real_gated(config.clone());
         let receipt = client.emit(fixture(name)).unwrap();
         for _ in 0..2 {
             assert!(matches!(
@@ -138,7 +138,7 @@ fn exhausted_transport_is_terminal_across_drain_reruns_including_profiles() {
         let _ = client.shutdown(DEADLINE);
         drop(client);
         // A new owner must not spend the exhausted network budget again.
-        let reopened = DurableTelemetryClient::open(config).unwrap();
+        let reopened = conformance::open_real_gated(config);
         assert!(
             reopened
                 .flush_submission(&receipt.submission_id, DEADLINE)
@@ -162,7 +162,7 @@ fn transient_collector_failure_delivers_within_one_drain_attempt() {
     for name in ["logs", "profiles"] {
         let dir = tempfile::tempdir().unwrap();
         let collector = Collector::new(Some(1));
-        let client = DurableTelemetryClient::open(collector.configure(dir.path())).unwrap();
+        let client = conformance::open_real_gated(collector.configure(dir.path()));
         let receipt = client.emit(fixture(name)).unwrap();
         client
             .flush_submission(&receipt.submission_id, DEADLINE)
@@ -199,26 +199,26 @@ fn interrupted_transport_remains_pending_for_replacement_client() {
     let dir = tempfile::tempdir().unwrap();
     let exporter = Arc::new(CancelledExporter(AtomicUsize::new(0)));
     let config = config(dir.path());
-    let client =
-        DurableTelemetryClient::open_with_exporter(config.clone(), exporter.clone()).unwrap();
+    let client = conformance::open_gated_with(config.clone(), exporter.clone());
     let receipt = client.emit(fixture("logs")).unwrap();
-    let deadline = std::time::Instant::now() + DEADLINE;
-    loop {
-        let generation = client.owner.shared.generation();
-        let status = client
-            .status(StatusQuery::Submissions(vec![
-                receipt.submission_id.clone(),
-            ]))
-            .unwrap();
-        if exporter.0.load(Ordering::Acquire) == 1
-            && matches!(status.submissions[0].signals[0].1, DeliveryState::Pending)
-        {
-            break;
-        }
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        assert!(!remaining.is_zero(), "cancelled row was not restored");
-        client.owner.shared.wait_since(generation, remaining);
-    }
+    // Frozen lease instant and no background workers: the lease cannot lapse and
+    // no other thread can claim the row, so the single drain below is the only
+    // claim and its refund is observable exactly.
+    let _clock = FrozenClock::new();
+    assert!(!drain_once_bounded(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs
+    ));
+    let status = client
+        .status(StatusQuery::Submissions(vec![
+            receipt.submission_id.clone(),
+        ]))
+        .unwrap();
+    assert!(matches!(
+        status.submissions[0].signals[0].1,
+        DeliveryState::Pending
+    ));
     let attempts: u32 = client
         .owner
         .shared
@@ -230,14 +230,12 @@ fn interrupted_transport_remains_pending_for_replacement_client() {
         })
         .unwrap();
     assert_eq!(attempts, 0);
-    let _ = client.shutdown(Duration::from_millis(10));
+    assert_eq!(exporter.0.load(Ordering::Acquire), 1);
+    // Shutdown would re-drive the cancelled exporter; hand the lease over instead.
+    worker::release(&client.owner.shared);
     drop(client);
     assert_eq!(exporter.0.load(Ordering::Acquire), 1);
-    let replacement = DurableTelemetryClient::open_with_exporter(
-        config,
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
-    .unwrap();
+    let replacement = conformance::open_gated(config, &Arc::new(ScriptedExporter::new(dir.path())));
     replacement
         .flush_submission(&receipt.submission_id, DEADLINE)
         .unwrap();

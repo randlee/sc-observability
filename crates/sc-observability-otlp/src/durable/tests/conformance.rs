@@ -7,14 +7,32 @@ pub(in crate::durable) fn enabled() -> bool {
     ENABLED.get()
 }
 
+// Opens with autonomous workers disabled; the flag is read once, at open.
+fn gated(
+    open: impl FnOnce() -> Result<DurableTelemetryClient, TelemetryClientError>,
+) -> DurableTelemetryClient {
+    ENABLED.set(true);
+    let opened = open();
+    ENABLED.set(false);
+    opened.unwrap()
+}
+
+pub(super) fn open_gated_with(
+    config: TelemetryClientConfig,
+    exporter: Arc<dyn SubmissionExporter>,
+) -> DurableTelemetryClient {
+    gated(|| DurableTelemetryClient::open_with_exporter(config, exporter))
+}
+
+pub(super) fn open_real_gated(config: TelemetryClientConfig) -> DurableTelemetryClient {
+    gated(|| DurableTelemetryClient::open(config))
+}
+
 pub(super) fn open_gated(
     config: TelemetryClientConfig,
     exporter: &Arc<ScriptedExporter>,
 ) -> DurableTelemetryClient {
-    ENABLED.set(true);
-    let opened = DurableTelemetryClient::open_with_exporter(config, exporter.clone());
-    ENABLED.set(false);
-    let client = opened.unwrap();
+    let client = open_gated_with(config, exporter.clone());
     *exporter.conformance_shared.lock().unwrap() = Arc::downgrade(&client.owner.shared);
     client
 }
