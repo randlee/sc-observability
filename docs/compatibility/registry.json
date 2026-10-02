@@ -1965,7 +1965,8 @@
       "conversion",
       "removable_paths"
     ],
-    "null_canonical_signature": "No selected-head root declaration exists; the record names a required later facade restoration rather than inventing one."
+    "null_canonical_signature": "No selected-head root declaration exists; the record names a required later facade restoration rather than inventing one.",
+    "empty_removable_paths": "Valid only for unchanged_alias rows (baseline and canonical are the same declaration, nothing to remove) or rows with a non-blank removal_rationale."
   },
   "method_contracts": [
     {
@@ -4640,7 +4641,8 @@
         "owner": "v2::ObservabilityBuilder",
         "member": "register_subscriber"
       },
-      "removable_paths": []
+      "removable_paths": [],
+      "removal_rationale": "The released builder method is retained at its 1.4.1 path and stays for all of 1.x; the root method converts its released registration to the canonical v2 registration, so no released path is removable."
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::register_projection",
@@ -4666,7 +4668,8 @@
         "owner": "v2::ObservabilityBuilder",
         "member": "register_projection"
       },
-      "removable_paths": []
+      "removable_paths": [],
+      "removal_rationale": "The released builder method is retained at its 1.4.1 path and stays for all of 1.x; the root method converts its released registration to the canonical v2 registration, so no released path is removable."
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::build",
