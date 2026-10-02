@@ -23,10 +23,16 @@ fn golden_root() -> PathBuf {
     path
 }
 
-fn installed_binary(root: &Path, cwd: &Path) -> PathBuf {
+fn installed_binary(root: &Path) -> PathBuf {
     let status = Command::new("cargo")
-        .current_dir(cwd)
-        .args(["install", "--path", env!("CARGO_MANIFEST_DIR"), "--root"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .args([
+            "install",
+            "--locked",
+            "--path",
+            env!("CARGO_MANIFEST_DIR"),
+            "--root",
+        ])
         .arg(root)
         .args(["--force", "--debug"])
         .status()
@@ -38,7 +44,7 @@ fn installed_binary(root: &Path, cwd: &Path) -> PathBuf {
 #[test]
 fn installed_cli_matches_every_shared_golden_fixture() {
     let temp = tempfile::tempdir().expect("temporary installation directory");
-    let binary = installed_binary(temp.path(), temp.path());
+    let binary = installed_binary(temp.path());
     let mut fixtures = fs::read_dir(golden_root())
         .expect("golden root reads")
         .map(|entry| entry.expect("fixture directory reads").path())
