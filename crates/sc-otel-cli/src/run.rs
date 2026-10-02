@@ -69,13 +69,24 @@ fn emit(cli: &Cli, args: &EmitArgs) -> Outcome {
             )
             .with_receipt(receipt);
         }
-        match client.flush_submission(&receipt.submission_id, config.emit_flush_deadline) {
-            Ok(report) => Outcome::success(constants::CommandName::Emit, delivery_state(&report))
-                .with_receipt(receipt)
-                .with_flush(report),
-            Err(error) => failure(constants::CommandName::Emit, error).with_receipt(receipt),
-        }
+        flush_emission(client, receipt, config.emit_flush_deadline)
     })
+}
+
+fn flush_emission(
+    client: &dyn TelemetryClient,
+    receipt: sc_observability_types::otlp::submission::AdmissionReceipt,
+    deadline: std::time::Duration,
+) -> Outcome {
+    match client.flush_submission(&receipt.submission_id, deadline) {
+        Ok(report) => Outcome::success(constants::CommandName::Emit, delivery_state(&report))
+            .with_receipt(receipt)
+            .with_flush(report),
+        Err(error) => {
+            let error: CliError = error.into();
+            Outcome::admitted_failure(constants::CommandName::Emit, receipt, error)
+        }
+    }
 }
 
 fn flush(cli: &Cli, args: &FlushArgs) -> Outcome {
@@ -174,8 +185,12 @@ fn finish_shutdown(
     match client.shutdown(deadline) {
         Ok(_) => outcome,
         Err(error) => {
-            let mut shutdown = failure(command, error);
-            shutdown.receipt = outcome.receipt;
+            let error: CliError = error.into();
+            let receipt = outcome.receipt().cloned();
+            let mut shutdown = match receipt {
+                Some(receipt) => Outcome::admitted_failure(command, receipt, error),
+                None => failure(command, error),
+            };
             shutdown.flush = outcome.flush.or(shutdown.flush);
             shutdown.status = outcome.status;
             shutdown
@@ -187,9 +202,10 @@ fn finish_shutdown(
 mod tests {
     use super::*;
     use sc_observability_types::otlp::submission::{
-        AdmissionReceipt, ConfigOverrides, ConfigSources, FlushReport, StatusQuery, StoreStatus,
-        SubmissionEnvelope, SubmissionId, resolve_config,
+        AdmissionError, AdmissionReceipt, ConfigOverrides, ConfigSources, FlushReport, Signal,
+        StatusQuery, StoreStatus, SubmissionEnvelope, SubmissionId, resolve_config,
     };
+    use sc_observability_types::{ErrorCode, ErrorContext, Remediation, Timestamp};
     use std::{path::PathBuf, sync::Mutex, time::Duration};
 
     struct ShutdownDeadlineRecorder(Mutex<Option<Duration>>);
@@ -258,5 +274,66 @@ mod tests {
 
     fn no_environment(_: &str) -> Option<String> {
         None
+    }
+
+    struct FlushSubmissionFailure;
+
+    impl TelemetryClient for FlushSubmissionFailure {
+        fn open(_: TelemetryClientConfig) -> Result<Self, TelemetryClientError>
+        where
+            Self: Sized,
+        {
+            unreachable!("the client is constructed directly")
+        }
+
+        fn emit(&self, _: SubmissionEnvelope) -> Result<AdmissionReceipt, TelemetryClientError> {
+            unreachable!("the regression exercises flush_submission")
+        }
+
+        fn flush(&self, _: Duration) -> Result<FlushReport, TelemetryClientError> {
+            unreachable!("the regression exercises flush_submission")
+        }
+
+        fn flush_submission(
+            &self,
+            _: &SubmissionId,
+            _: Duration,
+        ) -> Result<FlushReport, TelemetryClientError> {
+            Err(AdmissionError::Closed {
+                context: Box::new(ErrorContext::new(
+                    ErrorCode::new_static("SC_OTEL_TEST_CLOSED"),
+                    "closed after admission",
+                    Remediation::not_recoverable("test"),
+                )),
+            }
+            .into())
+        }
+
+        fn shutdown(&self, _: Duration) -> Result<FlushReport, TelemetryClientError> {
+            unreachable!("the regression exercises flush_submission")
+        }
+
+        fn status(&self, _: StatusQuery) -> Result<StoreStatus, TelemetryClientError> {
+            unreachable!("the regression exercises flush_submission")
+        }
+    }
+
+    #[test]
+    fn flush_submission_non_delivery_failure_keeps_admission_without_panicking() {
+        let receipt = AdmissionReceipt::new(
+            "018f8f5e-5c4c-7abc-8def-0123456789ab"
+                .parse()
+                .expect("submission id"),
+            None,
+            Timestamp::now_utc(),
+            vec![Signal::Logs],
+            false,
+        );
+
+        let outcome = flush_emission(&FlushSubmissionFailure, receipt, Duration::ZERO);
+
+        assert_eq!(outcome.exit_code, constants::EXIT_ADMISSION);
+        assert_eq!(outcome.state.as_str(), "admitted_failed");
+        assert!(outcome.receipt().is_some());
     }
 }

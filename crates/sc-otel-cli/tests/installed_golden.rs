@@ -1,27 +1,12 @@
+mod common;
+
+use common::{d29_system_generated_fields, golden_root};
 use sc_observability_types::Timestamp;
 use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
 };
-
-/// D29's `SystemIds` contract generates only these fields when their input omits them.
-const D29_SYSTEM_GENERATED_FIELDS: &[&str] = &["observed_time", "trace_id", "span_id"];
-
-fn golden_root() -> PathBuf {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for segment in [
-        "..",
-        "sc-observability-types",
-        "tests",
-        "fixtures",
-        "otlp_submission",
-        "golden",
-    ] {
-        path.push(segment);
-    }
-    path
-}
 
 fn installed_binary(root: &Path) -> PathBuf {
     let status = Command::new("cargo")
@@ -58,10 +43,10 @@ fn installed_cli_matches_every_shared_golden_fixture() {
         .collect::<Vec<_>>();
     fixtures.sort();
     assert_eq!(
-        fixtures.len(),
-        expected_fixture_count,
-        "every fixture is exercised"
+        expected_fixture_count, 22,
+        "D29 golden fixture contract count"
     );
+    assert_eq!(fixtures.len(), 22, "fixture directories on disk");
 
     for fixture in fixtures {
         let input = fixture.join("input.json");
@@ -122,9 +107,9 @@ fn assert_system_generated_fields(
 ) {
     let empty_input = Vec::new();
     assert_eq!(
-        D29_SYSTEM_GENERATED_FIELDS,
-        ["observed_time", "trace_id", "span_id"],
-        "the D29-generated-field allowance must stay explicit and bounded"
+        d29_system_generated_fields().len(),
+        3,
+        "the D29 generated-field allowance is derived from canonicalization"
     );
     validate_records(
         envelope["logs"].as_array_mut().expect("logs array"),

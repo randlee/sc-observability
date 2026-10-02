@@ -86,13 +86,6 @@ impl CliError {
             Self::Telemetry(error) => telemetry_remediation(error),
         }
     }
-
-    pub(crate) fn telemetry(&self) -> Option<&TelemetryClientError> {
-        match self {
-            Self::Input(_) | Self::Internal(_) => None,
-            Self::Telemetry(error) => Some(error),
-        }
-    }
 }
 
 fn telemetry_remediation(error: &TelemetryClientError) -> Value {

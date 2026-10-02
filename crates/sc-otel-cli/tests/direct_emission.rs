@@ -1,22 +1,8 @@
 #![cfg(feature = "test-double")]
 
 use std::process::Command;
-
-fn fixture_component(name: &str, field: &str) -> String {
-    let input = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../sc-observability-types/tests/fixtures/otlp_submission/golden")
-        .join(name)
-        .join("input.json");
-    let input: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(input).expect("fixture reads"))
-            .expect("fixture JSON");
-    input[field]
-        .as_array()
-        .and_then(|values| values.first())
-        .unwrap_or(&input[field])
-        .clone()
-        .to_string()
-}
+mod common;
+use common::fixture_component;
 
 #[test]
 fn test_double_emits_every_signal_and_combined_stdin() {

@@ -15,6 +15,7 @@ fn usage_and_invalid_input_have_stable_exit_codes() {
         .expect("binary runs");
     assert_eq!(invalid.status.code(), Some(3));
     let result: serde_json::Value = serde_json::from_slice(&invalid.stdout).expect("result JSON");
+    assert_eq!(result["schema"], "sc-otel.result/v1");
     assert_eq!(result["exit_code"], 3);
     assert_eq!(
         result["error"]["code"],
@@ -98,6 +99,21 @@ fn every_non_usage_exit_has_the_result_schema_and_expected_code() {
     }
 }
 
+#[test]
+fn missing_store_path_is_a_config_exit_with_a_result_schema() {
+    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+        .arg("flush")
+        .output()
+        .expect("binary runs");
+    assert_eq!(output.status.code(), Some(4), "{output:?}");
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).expect("result JSON");
+    assert_eq!(result["schema"], "sc-otel.result/v1");
+    assert_eq!(
+        result["error"]["code"],
+        "SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING"
+    );
+}
+
 #[cfg(feature = "test-double")]
 #[test]
 fn delivery_failure_takes_precedence_and_config_diagnostics_redact_credentials() {
@@ -118,7 +134,7 @@ fn delivery_failure_takes_precedence_and_config_diagnostics_redact_credentials()
             "{}",
         ])
         .env("SC_OTEL_TEST_DOUBLE", &script)
-        .env("OTEL_EXPORTER_OTLP_HEADERS", "auth_header=secret-value")
+        .env("SC_OTEL_AUTH_HEADER", "secret-value")
         .output()
         .expect("binary runs");
     assert_eq!(output.status.code(), Some(7), "{output:?}");

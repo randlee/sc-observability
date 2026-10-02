@@ -4,11 +4,12 @@ use crate::{
     constants::{self, OutcomeState},
     error::CliError,
 };
-use sc_observability_types::otlp::submission::{DeliveryError, TelemetryClientError};
+use sc_observability_types::otlp::submission::{DeliveryError, FlushReport, TelemetryClientError};
 
 pub(crate) struct Classification {
     pub(crate) exit_code: u8,
     pub(crate) state: OutcomeState,
+    pub(crate) flush: Option<FlushReport>,
 }
 
 pub(crate) fn classify(error: &CliError) -> Classification {
@@ -22,16 +23,20 @@ pub(crate) fn classify(error: &CliError) -> Classification {
             rejected(constants::EXIT_ADMISSION)
         }
         CliError::Telemetry(TelemetryClientError::Delivery(DeliveryError::DeadlineExceeded {
+            report,
             ..
         })) => Classification {
             exit_code: constants::EXIT_DELIVERY_PENDING,
             state: OutcomeState::AdmittedPending,
+            flush: Some(report.clone()),
         },
         CliError::Telemetry(TelemetryClientError::Delivery(DeliveryError::TerminalFailure {
+            report,
             ..
         })) => Classification {
             exit_code: constants::EXIT_DELIVERY_FAILED,
             state: OutcomeState::AdmittedFailed,
+            flush: Some(report.clone()),
         },
         // `TelemetryClientError` is non-exhaustive. A future shared variant has no
         // CLI contract yet, so it remains an internal failure until this table is
@@ -44,6 +49,7 @@ const fn rejected(exit_code: u8) -> Classification {
     Classification {
         exit_code,
         state: OutcomeState::Rejected,
+        flush: None,
     }
 }
 
