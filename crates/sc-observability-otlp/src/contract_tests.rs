@@ -545,6 +545,17 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
 }
 
 #[test]
+fn contract_tests_bracketed_ipv6_endpoint_host_is_validated() {
+    let error = super::config::OtlpEndpoint::new_typed("https://[not-an-ip]:4318")
+        .expect_err("a bracketed non-IPv6 host must be rejected");
+    assert!(matches!(error, ConfigFailure::InvalidEndpoint { .. }));
+    assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_INVALID_ENDPOINT);
+
+    super::config::OtlpEndpoint::new_typed("https://[::1]:4318")
+        .expect("a bracketed IPv6 literal is valid");
+}
+
+#[test]
 fn contract_tests_fake_exporter_contract() {
     let fixture = recording_exporter_set::<
         ExportRecord<LogRecord>,

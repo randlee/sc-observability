@@ -911,7 +911,7 @@ pub(super) fn is_valid_http_endpoint(value: &str) -> bool {
         let Some((host, port)) = bracketed.split_once(']') else {
             return false;
         };
-        return !host.is_empty()
+        return host.parse::<std::net::Ipv6Addr>().is_ok()
             && (port.is_empty()
                 || port.strip_prefix(':').is_some_and(|value| {
                     !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit())
