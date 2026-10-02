@@ -166,7 +166,7 @@ fn non_finite(value: &Value) -> Option<NonFiniteDouble> {
     }
 }
 
-fn decode_base64(value: &str) -> Result<Vec<u8>, String> {
+pub(super) fn decode_base64(value: &str) -> Result<Vec<u8>, String> {
     if !value.len().is_multiple_of(4) {
         return Err("base64 length is not divisible by four".to_owned());
     }
