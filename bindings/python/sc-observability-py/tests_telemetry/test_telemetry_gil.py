@@ -1,35 +1,35 @@
-from __future__ import annotations
-
-import json
 from pathlib import Path
 import threading
-
 from sc_observability import Ok
-from sc_observability.telemetry import Telemetry
+from telemetry_test_support import open_test_double
 
 
-GOLDENS = Path(__file__).parents[4] / "crates/sc-observability-types/tests/fixtures/otlp_submission/golden"
-
-
-def test_flush_releases_the_gil_for_the_test_double(tmp_path: Path) -> None:
-    result = Telemetry._with_test_double(
-        store_path=tmp_path / "store", endpoint="http://127.0.0.1:4318", service_name="d30-gil",
-        script_json=json.dumps({"flush_delay_ms": 500}),
-    )
+def test_flush_releases_the_gil_while_native_flush_is_blocked(tmp_path: Path) -> None:
+    result = open_test_double(store_path=tmp_path / "store", endpoint="http://127.0.0.1:4318", service_name="gil")
     assert isinstance(result, Ok)
     telemetry = result.value
-    input_document = json.loads((GOLDENS / "logs" / "input.json").read_text())
-    assert isinstance(telemetry.emit(input_document), Ok)
-    started = threading.Event()
-    progressed = threading.Event()
+    native = telemetry._native
+    native._gate_arm()
+    completed = threading.Event()
+    results = []
 
-    def worker() -> None:
-        started.wait()
-        progressed.set()
+    def flush() -> None:
+        try:
+            results.append(telemetry.flush())
+        finally:
+            completed.set()
 
-    thread = threading.Thread(target=worker)
-    thread.start()
-    started.set()
-    telemetry.flush()
-    thread.join()
-    assert progressed.is_set()
+    worker = threading.Thread(target=flush, daemon=True)
+    worker.start()
+    try:
+        assert native._gate_wait_entered(), "native flush never entered the gate"
+        # This Python assertion must run before release, while flush still owns the gate.
+        # Removing py.detach forces the native watchdog to expire before Python runs.
+        assert native._gate_is_blocked(), "Python made no progress while native flush was blocked"
+        assert not completed.is_set()
+    finally:
+        native._gate_release()
+        worker.join(timeout=6)
+    assert not worker.is_alive()
+    assert completed.is_set()
+    assert len(results) == 1 and isinstance(results[0], Ok)

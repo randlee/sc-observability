@@ -5,22 +5,25 @@ from dataclasses import dataclass, field
 import importlib
 import json
 import math
-from pathlib import Path
-from typing import Any, Literal, Mapping, Sequence, TypeAlias, TypeVar, cast
+from os import PathLike
+from types import MappingProxyType
+from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, TypeVar, cast
 
-from . import Ok
+from . import Ok, generated
 
 T = TypeVar("T")
 
 
 @dataclass(frozen=True)
 class TelemetryFailure:
-    kind: Literal["submission", "admission", "delivery", "config", "internal"]
+    kind: Literal["submission", "admission", "delivery", "config", "internal", "unknown"]
     variant: str
     code: str
     message: str
     path: str | None = None
     report: "FlushReport | None" = None
+    remediation: Mapping[str, object] | None = None
+    cause: str | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,18 @@ class FlushReport:
 
 
 @dataclass(frozen=True)
+class LeaseInfo:
+    holder: str
+    expires_at: str
+
+
+@dataclass(frozen=True)
+class DeliveryStatus:
+    submission_id: str
+    signals: tuple[tuple[str, Mapping[str, object]], ...]
+
+
+@dataclass(frozen=True)
 class StoreStatus:
     schema_version: int
     store_bytes: int
@@ -69,173 +84,276 @@ class StoreStatus:
     evicted_by_disk_bound: int
     rejected_by_disk_bound: int
     unreadable_newer_envelopes: int
-    lease: Mapping[str, object] | None
-    submissions: tuple[Mapping[str, object], ...]
+    lease: LeaseInfo | None
+    submissions: tuple[DeliveryStatus, ...]
+
+
+
+def _object(value: object) -> Mapping[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("expected an object")
+    return value
+
+
+def _string(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("expected a string")
+    return value
+
+
+def _optional_string(value: object) -> str | None:
+    return None if value is None else _string(value)
+
+
+def _integer(value: object) -> int:
+    if type(value) is not int or value < 0:
+        raise ValueError("expected a non-negative integer")
+    return value
+
+
+def _boolean(value: object) -> bool:
+    if type(value) is not bool:
+        raise ValueError("expected a boolean")
+    return value
+
+
+def _list(value: object) -> list[Any]:
+    if not isinstance(value, list):
+        raise ValueError("expected an array")
+    return value
+
+
+def _signal(value: object) -> str:
+    text = _string(value)
+    if text not in {"logs", "traces", "metrics", "profiles"}:
+        raise ValueError("unknown signal")
+    return text
 
 
 def _counts(value: object) -> SignalCounts:
-    source = cast(Mapping[str, object], value) if isinstance(value, Mapping) else {}
-    return SignalCounts(*(int(source.get(name, 0)) for name in ("logs", "traces", "metrics", "profiles")))
+    source = _object(value)
+    return SignalCounts(*(_integer(source[name]) for name in ("logs", "traces", "metrics", "profiles")))
 
 
 def _flush_report(value: object) -> FlushReport:
-    source = cast(Mapping[str, object], value) if isinstance(value, Mapping) else {}
-    return FlushReport(*(_counts(source.get(name)) for name in ("delivered", "still_pending", "failed", "evicted")))
+    source = _object(value)
+    return FlushReport(*(_counts(source[name]) for name in ("delivered", "still_pending", "failed", "evicted")))
 
 
 def _admission_receipt(value: object) -> AdmissionReceipt:
-    source = cast(Mapping[str, object], value) if isinstance(value, Mapping) else {}
-    signals = source.get("signals", ())
-    return AdmissionReceipt(str(source.get("submission_id", "")), cast(str | None, source.get("record_key")), str(source.get("admitted_at", "")), tuple(map(str, signals if isinstance(signals, list) else ())), bool(source.get("duplicate", False)))
+    source = _object(value)
+    return AdmissionReceipt(_string(source["submission_id"]), _optional_string(source["record_key"]),
+                            _string(source["admitted_at"]), tuple(_signal(s) for s in _list(source["signals"])),
+                            _boolean(source["duplicate"]))
+
+
+def _delivery_state(value: object) -> Mapping[str, object]:
+    source = _object(value)
+    state = _string(source["state"])
+    fields = {
+        "pending": {}, "claimed": {"holder": _string, "attempts": _integer},
+        "retry_scheduled": {"attempts": _integer, "next_attempt_at": _string, "last_error": _string},
+        "delivered": {"at": _string, "attempts": _integer},
+        "failed": {"attempts": _integer, "error": _string}, "evicted_by_disk_bound": {"at": _string},
+    }
+    if state not in fields:
+        raise ValueError("unknown delivery state")
+    result: dict[str, object] = {"state": state}
+    for name, decode in fields[state].items():
+        result[name] = decode(source[name])
+    return MappingProxyType(result)
+
+
+def _delivery_status(value: object) -> DeliveryStatus:
+    source = _object(value)
+    signals = []
+    for value_pair in _list(source["signals"]):
+        pair = _list(value_pair)
+        if len(pair) != 2:
+            raise ValueError("expected signal/state pair")
+        signals.append((_signal(pair[0]), _delivery_state(pair[1])))
+    return DeliveryStatus(_string(source["submission_id"]), tuple(signals))
 
 
 def _store_status(value: object) -> StoreStatus:
-    source = cast(Mapping[str, object], value) if isinstance(value, Mapping) else {}
-    submissions = source.get("submissions", ())
+    source = _object(value)
+    lease = source["lease"]
+    if lease is not None:
+        lease = _object(lease)
+        lease = LeaseInfo(_string(lease["holder"]), _string(lease["expires_at"]))
     return StoreStatus(
-        *(int(source.get(name, 0)) for name in ("schema_version", "store_bytes", "max_store_bytes")),
-        *(_counts(source.get(name)) for name in ("pending", "retry_scheduled", "delivered_retained", "failed")),
-        *(int(source.get(name, 0)) for name in ("evicted_by_disk_bound", "rejected_by_disk_bound", "unreadable_newer_envelopes")),
-        cast(Mapping[str, object] | None, source.get("lease")),
-        tuple(cast(Mapping[str, object], item) for item in submissions if isinstance(item, Mapping)) if isinstance(submissions, list) else (),
+        *(_integer(source[name]) for name in ("schema_version", "store_bytes", "max_store_bytes")),
+        *(_counts(source[name]) for name in ("pending", "retry_scheduled", "delivered_retained", "failed")),
+        *(_integer(source[name]) for name in ("evicted_by_disk_bound", "rejected_by_disk_bound", "unreadable_newer_envelopes")),
+        lease, tuple(_delivery_status(item) for item in _list(source["submissions"])),
     )
 
 
-def _result(payload: object, decode: Any = lambda value: value) -> TelemetryResult[object]:
-    if not isinstance(payload, Mapping):
-        return TelemetryErr(TelemetryFailure("internal", "decode", "SC_OBSERVABILITY_BINDING_INTERNAL", "native telemetry returned an invalid result"))
-    if payload.get("kind") == "ok":
-        return Ok(decode(payload.get("value")))
-    error = payload.get("error")
-    if not isinstance(error, Mapping):
-        return TelemetryErr(TelemetryFailure("internal", "decode", "SC_OBSERVABILITY_BINDING_INTERNAL", "native telemetry returned an invalid failure"))
-    kind = str(error.get("kind", "internal"))
-    if kind not in {"submission", "admission", "delivery", "config", "internal"}:
-        kind = "internal"
-    return TelemetryErr(TelemetryFailure(
-        kind=cast(Literal["submission", "admission", "delivery", "config", "internal"], kind),
-        variant=str(error.get("variant", "unknown")),
-        code=str(error.get("code", "SC_OBSERVABILITY_BINDING_INTERNAL")),
-        message=str(error.get("message", "unknown telemetry failure")),
-        path=cast(str | None, error.get("path")),
-        report=_flush_report(error["report"]) if error.get("report") is not None else None,
-    ))
+def _remediation(value: object) -> Mapping[str, object] | None:
+    if value is None:
+        return None
+    source = _object(value)
+    kind = _string(source["kind"])
+    if kind == "not_recoverable":
+        return MappingProxyType({"kind": kind, "justification": _string(source["justification"])})
+    if kind == "recoverable":
+        steps = _list(_object(source["steps"])["steps"])
+        return MappingProxyType({"kind": kind, "steps": tuple(_string(step) for step in steps)})
+    raise ValueError("unknown remediation kind")
 
 
-def _call(function: str, *args: object) -> TelemetryResult[object]:
+def _internal(variant: str, error: object) -> TelemetryErr:
+    return TelemetryErr(TelemetryFailure("internal", variant, generated.SC_OBSERVABILITY_BINDING_INTERNAL,
+                        "native telemetry operation failed", cause=str(error)))
+
+
+def _result(payload: object, decode: Callable[[object], T]) -> TelemetryResult[T]:
     try:
-        native = importlib.import_module("sc_observability._native")
-        raw = getattr(native, function)(*args)
-        if isinstance(raw, tuple):
-            raw = raw[-1]
-        return _result(json.loads(cast(str, raw)))
-    except BaseException as error:
-        return TelemetryErr(TelemetryFailure("internal", "native", "SC_OBSERVABILITY_BINDING_INTERNAL", f"native telemetry unavailable: {error}"))
+        source = _object(payload)
+        if source["kind"] == "ok":
+            return Ok(decode(source["value"]))
+        if source["kind"] != "error":
+            raise ValueError("unknown result tag")
+        error = _object(source["error"])
+        kind = _string(error["kind"])
+        if kind not in {"submission", "admission", "delivery", "config", "internal", "unknown"}:
+            raise ValueError("unknown failure kind")
+        return TelemetryErr(TelemetryFailure(
+            kind=cast(Any, kind), variant=_string(error["variant"]), code=_string(error["code"]),
+            message=_string(error["message"]), path=_optional_string(error["path"]),
+            report=None if error["report"] is None else _flush_report(error["report"]),
+            remediation=_remediation(error["remediation"]), cause=_optional_string(error["cause"]),
+        ))
+    except Exception as error:
+        return _internal("decode", error)
 
 
-def _milliseconds(timeout_s: float | None) -> int | None:
+def _invoke(action: Callable[[], str], decode: Callable[[object], T]) -> TelemetryResult[T]:
+    try:
+        raw = action()
+    except Exception as error:
+        return _internal("native", error)
+    try:
+        return _result(json.loads(raw), decode)
+    except Exception as error:
+        return _internal("decode", error)
+
+
+def _module() -> Any:
+    return importlib.import_module("sc_observability._native")
+
+
+def _serialized(input: Mapping[str, Any]) -> str | TelemetryErr:
+    if not isinstance(input, Mapping):
+        raise TypeError("input must be a Mapping")
+    try:
+        return json.dumps(dict(input), separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError, OverflowError) as error:
+        # Let the Rust parser own the registered invalid_json code and remediation.
+        result = _invoke(lambda: _module().build_envelope(""), _string)
+        if isinstance(result, TelemetryErr):
+            from dataclasses import replace
+            return TelemetryErr(replace(result.error, cause=str(error)))
+        return _internal("serialization", error)
+
+
+def _milliseconds(timeout_s: float | None) -> int | None | TelemetryErr:
     if timeout_s is None:
         return None
-    return max(0, math.ceil(timeout_s * 1000))
+    try:
+        if not math.isfinite(timeout_s) or timeout_s < 0:
+            raise ValueError("timeout_s must be finite and non-negative")
+        milliseconds = math.ceil(timeout_s * 1000)
+        if milliseconds > 2**64 - 1:
+            raise ValueError("timeout_s exceeds the u64 millisecond range")
+        return milliseconds
+    except (TypeError, ValueError, OverflowError) as error:
+        try:
+            code = _module().TELEMETRY_CONFIG_INVALID
+        except Exception as native_error:
+            return _internal("native", native_error)
+        return TelemetryErr(TelemetryFailure("config", "invalid_field", code, str(error),
+            remediation=MappingProxyType({"kind": "not_recoverable", "justification": "Supply a finite non-negative timeout within the u64 millisecond range."})))
 
 
 class Telemetry:
     """Owned admission and delivery handle for canonical telemetry submissions."""
 
-    def __init__(self, native: object) -> None:
+    def __init__(self, native: Any) -> None:
         self._native = native
-        self.last_shutdown: TelemetryResult[object] | None = None
+        self.last_shutdown: TelemetryResult[FlushReport] | None = None
 
     @classmethod
-    def open(
-        cls,
-        config: str | Path | None = None,
-        *,
-        store_path: str | Path | None = None,
-        endpoint: str | None = None,
-        service_name: str | None = None,
-    ) -> TelemetryResult["Telemetry"]:
-        args = {"config": str(config) if config is not None else None, "store_path": str(store_path) if store_path is not None else None, "endpoint": endpoint, "service_name": service_name}
-        try:
-            native = importlib.import_module("sc_observability._native")
-            handle, raw = native.open(json.dumps(args, separators=(",", ":")))
-            result = _result(json.loads(raw))
-        except BaseException as error:
-            return TelemetryErr(TelemetryFailure("internal", "native", "SC_OBSERVABILITY_BINDING_INTERNAL", f"native telemetry unavailable: {error}"))
-        if isinstance(result, TelemetryErr):
-            return result
-        if handle is None:
-            return TelemetryErr(TelemetryFailure("internal", "factory", "SC_OBSERVABILITY_BINDING_INTERNAL", "native telemetry factory returned no handle"))
-        return Ok(cls(handle))
+    def open(cls, config: str | PathLike[str] | None = None, *,
+             store_path: str | PathLike[str] | None = None, endpoint: str | None = None,
+             service_name: str | None = None) -> TelemetryResult["Telemetry"]:
+        return _factory(cls, "open", config, store_path, endpoint, service_name)
 
     def emit(self, input: Mapping[str, Any]) -> TelemetryResult[AdmissionReceipt]:
-        if not isinstance(input, Mapping):
-            raise TypeError("input must be a Mapping")
-        try:
-            payload = json.dumps(input, separators=(",", ":"))
-        except (TypeError, ValueError) as error:
-            return TelemetryErr(TelemetryFailure("submission", "invalid_json", "SC_OBSERVABILITY_SUBMISSION_INVALID_JSON", str(error)))
-        return cast(TelemetryResult[AdmissionReceipt], _result(json.loads(self._native.emit(payload)), _admission_receipt))
+        payload = _serialized(input)
+        if isinstance(payload, TelemetryErr):
+            return payload
+        return _invoke(lambda: self._native.emit(payload), _admission_receipt)
+
+    def _flush(self, method: str, timeout_s: float | None, *args: object) -> TelemetryResult[FlushReport]:
+        timeout = _milliseconds(timeout_s)
+        if isinstance(timeout, TelemetryErr):
+            return timeout
+        return _invoke(lambda: getattr(self._native, method)(*args, timeout), _flush_report)
 
     def flush(self, timeout_s: float | None = None) -> TelemetryResult[FlushReport]:
-        return cast(TelemetryResult[FlushReport], _result(json.loads(self._native.flush(_milliseconds(timeout_s))), _flush_report))
+        return self._flush("flush", timeout_s)
 
     def flush_submission(self, submission_id: str, timeout_s: float | None = None) -> TelemetryResult[FlushReport]:
-        return cast(TelemetryResult[FlushReport], _result(json.loads(self._native.flush_submission(submission_id, _milliseconds(timeout_s))), _flush_report))
+        return self._flush("flush_submission", timeout_s, submission_id)
 
     def shutdown(self, timeout_s: float | None = None) -> TelemetryResult[FlushReport]:
-        result = cast(TelemetryResult[FlushReport], _result(json.loads(self._native.shutdown(_milliseconds(timeout_s))), _flush_report))
+        result = self._flush("shutdown", timeout_s)
         self.last_shutdown = result
         return result
 
-    def status(
-        self, *, submissions: Sequence[str] | None = None, record_keys: Sequence[str] | None = None
-    ) -> TelemetryResult[StoreStatus]:
+    def status(self, *, submissions: Sequence[str] | None = None,
+               record_keys: Sequence[str] | None = None) -> TelemetryResult[StoreStatus]:
         if submissions is not None and record_keys is not None:
             raise ValueError("status accepts submissions or record_keys, not both")
-        query: object = "summary"
-        if submissions is not None:
-            query = {"submissions": list(submissions)}
-        elif record_keys is not None:
-            query = {"record_keys": list(record_keys)}
-        return cast(TelemetryResult[StoreStatus], _result(json.loads(self._native.status(json.dumps(query, separators=(",", ":")))), _store_status))
+        def call() -> str:
+            query: object = "summary"
+            if submissions is not None:
+                query = {"submissions": list(submissions)}
+            elif record_keys is not None:
+                query = {"record_keys": list(record_keys)}
+            return cast(str, self._native.status(json.dumps(query, separators=(",", ":"))))
+        return _invoke(call, _store_status)
 
     def __enter__(self) -> "Telemetry":
         return self
 
-    def __exit__(self, _type: object, _value: object, _traceback: object) -> bool:
+    def __exit__(self, _type: object, _value: object, _traceback: object) -> Literal[False]:
         self.shutdown()
         return False
 
-    @classmethod
-    def _with_test_double(cls, script_json: str | None = None, **kwargs: Any) -> TelemetryResult["Telemetry"]:
-        return _open_test_double(script_json=script_json, **kwargs)
 
-
-def _open_test_double(
-    *, store_path: str | Path, endpoint: str, service_name: str, script_json: str | None = None
-) -> TelemetryResult[Telemetry]:
-    """Create the test-hooks-only in-memory client; this is not a release API."""
-    try:
-        native = importlib.import_module("sc_observability._native")
-        args = json.dumps({"config": None, "store_path": str(store_path), "endpoint": endpoint, "service_name": service_name}, separators=(",", ":"))
-        handle, raw = native._open_test_double(args, script_json)
-        result = _result(json.loads(raw))
-    except BaseException as error:
-        return TelemetryErr(TelemetryFailure("internal", "native", "SC_OBSERVABILITY_BINDING_INTERNAL", f"native telemetry unavailable: {error}"))
-    if isinstance(result, TelemetryErr):
-        return result
-    if handle is None:
-        return TelemetryErr(TelemetryFailure("internal", "factory", "SC_OBSERVABILITY_BINDING_INTERNAL", "native telemetry factory returned no handle"))
-    return Ok(Telemetry(handle))
+def _factory(cls: type[Telemetry], function: str, config: str | PathLike[str] | None,
+             store_path: str | PathLike[str] | None, endpoint: str | None, service_name: str | None,
+             *extra: object) -> TelemetryResult[Telemetry]:
+    def call() -> str:
+        args = {"config": str(config) if config is not None else None,
+                "store_path": str(store_path) if store_path is not None else None,
+                "endpoint": endpoint, "service_name": service_name}
+        handle, raw = getattr(_module(), function)(json.dumps(args, separators=(",", ":")), *extra)
+        handles.append(handle)
+        return cast(str, raw)
+    def decode(value: object) -> Telemetry:
+        if value is not None or not handles or handles[0] is None:
+            raise ValueError("native telemetry factory returned no handle or invalid value")
+        return cls(handles[0])
+    handles: list[Any] = []
+    return _invoke(call, decode)
 
 
 def build_envelope(input: Mapping[str, Any]) -> TelemetryResult[str]:
     """Validate one canonical submission document without opening a store."""
-    if not isinstance(input, Mapping):
-        raise TypeError("input must be a Mapping")
-    try:
-        payload = json.dumps(input, separators=(",", ":"))
-    except (TypeError, ValueError) as error:
-        return TelemetryErr(TelemetryFailure("submission", "invalid_json", "SC_OBSERVABILITY_SUBMISSION_INVALID_JSON", str(error)))
-    return cast(TelemetryResult[str], _call("build_envelope", payload))
+    payload = _serialized(input)
+    if isinstance(payload, TelemetryErr):
+        return payload
+    return _invoke(lambda: _module().build_envelope(payload), _string)
