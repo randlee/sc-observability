@@ -1,0 +1,51 @@
+{
+  "logs": [],
+  "metrics": [
+    {
+      "record": {
+        "data": {
+          "data": {
+            "points": [
+              {
+                "attributes": [],
+                "count": 2,
+                "flags": 0,
+                "quantile_values": [
+                  {
+                    "quantile": 0.5,
+                    "value": "NaN"
+                  }
+                ],
+                "start_time": null,
+                "sum": 4.0,
+                "time": "1970-01-01T00:00:01.000000000Z"
+              }
+            ]
+          },
+          "kind": "summary"
+        },
+        "description": null,
+        "metadata": [],
+        "name": "requests",
+        "unit": null
+      },
+      "resource": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "entity_refs": [],
+        "schema_url": null
+      },
+      "scope": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "name": "",
+        "schema_url": null,
+        "version": null
+      }
+    }
+  ],
+  "profiles": null,
+  "record_key": null,
+  "spans": [],
+  "version": 1
+}

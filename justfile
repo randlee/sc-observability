@@ -22,9 +22,16 @@ test:
 # Public API checks; these need the nightly toolchain (see .github/workflows/ci.yml).
 public-api:
     python3 -m unittest discover -s scripts/ci/tests -p test_validate_public_api.py -v
-    bash scripts/ci/validate_public_api_diff.sh
+    # Exit 1 means a diff to review; semver and docs remain mandatory below.
+    status=0; bash scripts/ci/validate_public_api_diff.sh || status=$?; if [ "$status" -gt 1 ]; then exit "$status"; fi
     python3 scripts/ci/validate_public_api_semver.py
     bash scripts/ci/validate_public_api_docs.sh
 
-# Full gate: lint plus tests.
-validate: lint test
+# cargo-deny with policy/deny-durable-store.toml over the durable-store, otlp-telemetry and sc-otel-cli graphs.
+deny:
+    cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store --locked --config policy/deny-durable-store.toml check licenses bans advisories
+    cargo deny --manifest-path bindings/python/sc-observability-py/Cargo.toml --features otlp-telemetry --locked --config policy/deny-durable-store.toml check licenses bans advisories
+    cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --locked --config policy/deny-durable-store.toml check licenses bans advisories
+
+# Full gate: lint, tests and the scoped dependency audit.
+validate: lint test deny

@@ -31,6 +31,7 @@ DEFAULT_UI = 8000
 READY_SECONDS = 30
 QUERY_SECONDS = 120
 SERVICE = "sc-observability-d9"
+RESTART_MARKER = "viewer.stopped.json"
 
 
 class HarnessError(RuntimeError):
@@ -61,9 +62,11 @@ def rpc(base: str, method: str, params: list[Any], timeout: float = 10) -> Any:
     return response.get("result")
 
 
-def _port_available(host: str, port: int) -> bool:
+def _port_available(host: str, port: int, *, reuse_address: bool = False) -> bool:
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as sock:
+        if reuse_address:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((host, port))
         except OSError:
@@ -153,6 +156,34 @@ def _owned_database(state: Path, metadata: dict[str, Any]) -> Path:
     return database
 
 
+def _restart_metadata(state: Path, binary: Path, binary_sha256: str,
+                      version: str | None) -> tuple[Path, dict[str, Any]]:
+    """Validate the explicit restart-only state retained by one owned stop."""
+    marker = state / RESTART_MARKER
+    try:
+        metadata = json.loads(marker.read_text())
+        recorded_binary = Path(metadata["binary"]).expanduser().resolve()
+        recorded_sha256 = str(metadata["sha256"])
+        recorded_version = metadata["version"]
+        database = Path(metadata["database"]).expanduser().resolve()
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise HarnessError(f"state directory is not a stopped owned viewer: {state}") from error
+    expected_database = (state / "viewer.duckdb").resolve()
+    if (recorded_binary != binary or recorded_sha256.lower() != binary_sha256.lower()
+            or recorded_version != version or database != expected_database or not database.is_file()):
+        raise HarnessError("restart state does not match the requested binary, version, and database")
+    permitted = {
+        RESTART_MARKER,
+        "viewer.duckdb",
+        "viewer.duckdb.wal",
+        "viewer.log",
+    }
+    unexpected = [entry.name for entry in state.iterdir() if entry.name not in permitted]
+    if unexpected:
+        raise HarnessError(f"restart state contains unexpected files: {unexpected}")
+    return marker, metadata
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -164,8 +195,6 @@ def _sha256(path: Path) -> str:
 def start(args: argparse.Namespace) -> None:
     binary = Path(args.binary).expanduser().resolve(strict=True)
     state = Path(args.state_dir).expanduser().resolve()
-    if state.exists() and (not state.is_dir() or any(state.iterdir())):
-        raise HarnessError(f"state directory is not empty: {state}")
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise HarnessError(f"viewer binary is not executable: {binary}")
     actual_hash = _sha256(binary)
@@ -177,8 +206,17 @@ def start(args: argparse.Namespace) -> None:
         if version.returncode != 0 or args.version not in (version.stdout + version.stderr):
             raise HarnessError(f"viewer version mismatch; expected {args.version!r}: "
                                f"{version.stdout}{version.stderr}")
+    restart = None
+    reuse_state = getattr(args, "reuse_state", False)
+    if state.exists() and (not state.is_dir() or any(state.iterdir())):
+        if not reuse_state:
+            raise HarnessError(f"state directory is not empty: {state}")
+        restart = _restart_metadata(state, binary, actual_hash, args.version)
+    elif reuse_state:
+        raise HarnessError(f"restart state does not exist: {state}")
     ports = ((args.host, args.http), (args.host, args.grpc), (args.host, args.ui))
-    if len({port for _, port in ports}) != 3 or any(not _port_available(h, p) for h, p in ports):
+    if len({port for _, port in ports}) != 3 or any(
+            not _port_available(h, p, reuse_address=restart is not None) for h, p in ports):
         raise HarnessError("one or more selected ports are occupied; choose explicit free ports; "
                            "the harness will not stop the existing listener")
     state_created = not state.exists()
@@ -194,6 +232,8 @@ def start(args: argparse.Namespace) -> None:
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
                                    stdout=log, stderr=subprocess.STDOUT,
                                    start_new_session=True)
+        if restart is not None:
+            restart[0].unlink()
     except BaseException:
         if log is not None:
             log.close()
@@ -241,9 +281,12 @@ def start(args: argparse.Namespace) -> None:
         finally:
             (state / "viewer.pid").unlink(missing_ok=True)
             (state / "viewer.json").unlink(missing_ok=True)
-            (state / "viewer.log").unlink(missing_ok=True)
-            database.unlink(missing_ok=True)
-            Path(str(database) + ".wal").unlink(missing_ok=True)
+            if restart is not None:
+                restart[0].write_text(json.dumps(restart[1], indent=2) + "\n")
+            else:
+                (state / "viewer.log").unlink(missing_ok=True)
+                database.unlink(missing_ok=True)
+                Path(str(database) + ".wal").unlink(missing_ok=True)
             if state_created:
                 try:
                     state.rmdir()
@@ -309,7 +352,10 @@ def stop(args: argparse.Namespace) -> None:
         database.unlink(missing_ok=True)
         Path(str(database) + ".wal").unlink(missing_ok=True)
         (state / "viewer.log").unlink(missing_ok=True)
+        (state / RESTART_MARKER).unlink(missing_ok=True)
         state.rmdir()
+    else:
+        (state / RESTART_MARKER).write_text(json.dumps(metadata, indent=2) + "\n")
     print(json.dumps({"status": "stopped", "pid": pid, "state_dir": str(state),
                       "removed_owned_state": args.remove_state}))
 
@@ -585,6 +631,8 @@ def parser() -> argparse.ArgumentParser:
     launch.add_argument("--http", type=int, default=DEFAULT_HTTP)
     launch.add_argument("--grpc", type=int, default=DEFAULT_GRPC)
     launch.add_argument("--ui", type=int, default=DEFAULT_UI)
+    launch.add_argument("--reuse-state", action="store_true",
+                        help="restart only a matching instance previously stopped by this harness")
     launch.set_defaults(func=start)
     check = commands.add_parser("status", help="show only this harness-owned instance")
     check.add_argument("--state-dir", required=True)

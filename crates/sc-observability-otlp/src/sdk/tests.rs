@@ -10,7 +10,7 @@ use crate::config::{
     validated_transport_bounds,
 };
 use crate::contracts::{ExportRecord, InstrumentationScope, LogRecord, Resource};
-use crate::lifecycle::{LifecycleCore, SignalKind};
+use crate::lifecycle::{LifecycleCore, Signal};
 use crate::testing::RecordingLifecycle;
 use sc_observability_types::v2::{
     AttributeValue, Attributes, FiniteF64, MetricRecord, MetricValue, TraceFlags,
@@ -98,7 +98,7 @@ fn sdk_retry_exhaustion_and_deadline_are_terminal() {
 async fn run_retry_script(
     statuses: &[Code],
     deadline: Duration,
-) -> (usize, Option<String>, [u64; 3]) {
+) -> (usize, Option<String>, [u64; 4]) {
     let outcomes = statuses
         .iter()
         .map(|&code| {
@@ -120,7 +120,7 @@ async fn run_retry_script(
 async fn run_http_retry_script(
     outcomes: &[Result<(), HttpFailure>],
     deadline: Duration,
-) -> (usize, Option<String>, [u64; 3]) {
+) -> (usize, Option<String>, [u64; 4]) {
     run_scripted_retry(outcomes.to_vec(), || HttpFailure::Status(503), deadline).await
 }
 
@@ -128,7 +128,7 @@ async fn run_scripted_retry<E, D>(
     outcomes: Vec<Result<(), E>>,
     exhausted: D,
     deadline: Duration,
-) -> (usize, Option<String>, [u64; 3])
+) -> (usize, Option<String>, [u64; 4])
 where
     E: RetryClass + std::error::Error + Clone + Send + Sync + 'static,
     D: Fn() -> E + Send + 'static,
@@ -147,7 +147,7 @@ where
         LifecycleCore::from_backend(Arc::new(RecordingLifecycle::default()), &bounds)
             .expect("retry lifecycle");
     let admitted = lifecycle_core
-        .admit(SignalKind::Logs, (), 1_024)
+        .admit(Signal::Logs, (), 1_024)
         .expect("retry admission");
     let (_shutdown, shutdown_rx) = never_cancelled_shutdown();
     let result = super::implementation::retry_export(
@@ -172,25 +172,25 @@ where
     (
         attempts.load(std::sync::atomic::Ordering::SeqCst),
         status_code,
-        lifecycle_core.health().dropped_by_signal,
+        lifecycle_core.health().dropped_by_signal.into_inner(),
     )
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn sdk_transport_retry_loop_exercises_attempts_and_terminal_modes() {
     assert_eq!(
         run_retry_script(&[Code::Unavailable, Code::Ok], Duration::from_secs(30)).await,
-        (2, None, [0, 0, 0]),
+        (2, None, [0, 0, 0, 0]),
         "transient failure must be retried once before success"
     );
     assert_eq!(
         run_retry_script(&[Code::Internal], Duration::from_secs(30)).await,
-        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0, 0]),
         "permanent failure must not be retried"
     );
     assert_eq!(
         run_retry_script(&[Code::Unavailable], Duration::from_millis(100)).await,
-        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0, 0]),
         "retry deadline must prevent a second attempt"
     );
     assert_eq!(
@@ -204,7 +204,7 @@ async fn sdk_transport_retry_loop_exercises_attempts_and_terminal_modes() {
             Duration::from_secs(30),
         )
         .await,
-        (4, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        (4, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0, 0]),
         "max retry budget must terminate after the initial attempt plus three retries"
     );
 }
@@ -282,7 +282,7 @@ fn sdk_http_retry_exhaustion_and_deadline_are_terminal() {
     );
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn sdk_http_retry_loop_uses_the_shared_attempt_and_deadline_policy() {
     assert_eq!(
         run_http_retry_script(
@@ -290,12 +290,12 @@ async fn sdk_http_retry_loop_uses_the_shared_attempt_and_deadline_policy() {
             Duration::from_secs(30)
         )
         .await,
-        (2, None, [0, 0, 0]),
+        (2, None, [0, 0, 0, 0]),
         "throttled request must be retried once before success"
     );
     assert_eq!(
         run_http_retry_script(&[Err(HttpFailure::Status(400))], Duration::from_secs(30)).await,
-        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0, 0]),
         "client error must not be retried"
     );
     assert_eq!(
@@ -304,12 +304,12 @@ async fn sdk_http_retry_loop_uses_the_shared_attempt_and_deadline_policy() {
             Duration::from_millis(100)
         )
         .await,
-        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        (1, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0, 0]),
         "retry deadline must prevent a second attempt"
     );
     assert_eq!(
         run_http_retry_script(&[], Duration::from_secs(30)).await,
-        (4, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0]),
+        (4, Some("OTLP_EXPORT_TERMINAL".to_owned()), [1, 0, 0, 0]),
         "max retry budget must terminate after the initial attempt plus three retries"
     );
 }
@@ -541,7 +541,7 @@ async fn sdk_grpc_exports_of_one_signal_are_in_flight_together() {
         2,
         "the second export must reach the collector while the first is in flight"
     );
-    assert_eq!(adapter.lifecycle.health().dropped_by_signal, [0, 0, 0]);
+    assert_eq!(adapter.lifecycle.health().dropped_by_signal, [0, 0, 0, 0]);
 }
 
 #[test]
@@ -774,4 +774,94 @@ fn metric_projection_keeps_resource_scope_and_histogram_distribution() {
     assert_eq!(histogram.data_points[0].explicit_bounds, vec![10.0]);
     assert_eq!(histogram.data_points[0].count, 3);
     assert_eq!(histogram.data_points[0].sum, Some(18.0));
+}
+
+/// Real wire fixture: reject the first export, accept the second.
+#[derive(Clone)]
+struct RetryCollector(Arc<std::sync::atomic::AtomicUsize>);
+#[tonic::async_trait]
+impl opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsService
+    for RetryCollector
+{
+    async fn export(
+        &self,
+        _: tonic::Request<
+            opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest,
+        >,
+    ) -> Result<
+        tonic::Response<opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse>,
+        tonic::Status,
+    > {
+        if self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+            Err(tonic::Status::unavailable("transient collector failure"))
+        } else {
+            Ok(tonic::Response::new(
+                opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse {
+                    partial_success: None,
+                },
+            ))
+        }
+    }
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn sdk_retry_executor_recovers_over_real_grpc_with_two_requests() {
+    use opentelemetry_proto::tonic::collector::logs::v1::{
+        ExportLogsServiceRequest, logs_service_client::LogsServiceClient,
+        logs_service_server::LogsServiceServer,
+    };
+    let incoming =
+        tonic::transport::server::TcpIncoming::bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let address = incoming.local_addr().unwrap();
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server = tokio::spawn(tonic::transport::Server::builder().serve_with_incoming(
+        LogsServiceServer::new(RetryCollector(calls.clone())),
+        incoming,
+    ));
+    // Keep virtual time stationary while OS sockets make progress. Only the
+    // acknowledged retry below advances it; no timer can race network readiness.
+    let clock_guard = tokio::spawn(async {
+        loop {
+            tokio::task::yield_now().await;
+        }
+    });
+    let client = LogsServiceClient::connect(format!("http://{address}"))
+        .await
+        .unwrap();
+    let (_tx, rx) = never_cancelled_shutdown();
+    let (waiting_tx, waiting_rx) = tokio::sync::oneshot::channel();
+    let mut waiting_tx = Some(waiting_tx);
+    let task = tokio::spawn(super::retry::retry_with_jitter(
+        Duration::from_secs(5),
+        Duration::from_secs(1),
+        rx,
+        move |timeout| {
+            let mut client = client.clone();
+            async move {
+                let mut request = tonic::Request::new(ExportLogsServiceRequest {
+                    resource_logs: vec![],
+                });
+                request.set_timeout(timeout);
+                client.export(request).await.map(|_| ())
+            }
+        },
+        "collector fixture",
+        move || {
+            if let Some(tx) = waiting_tx.take() {
+                let _ = tx.send(());
+            }
+            Duration::ZERO
+        },
+    ));
+    waiting_rx.await.unwrap();
+    tokio::time::advance(Duration::from_millis(
+        crate::constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
+    ))
+    .await;
+    task.await.unwrap().unwrap();
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    server.abort();
+    clock_guard.abort();
+    let _ = server.await;
+    let _ = clock_guard.await;
 }

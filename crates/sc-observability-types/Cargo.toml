@@ -11,7 +11,12 @@ repository.workspace = true
 homepage.workspace = true
 description = "Standalone shared types for observability records and config."
 
+[features]
+test-double = ["dep:uuid"]
+
 [dependencies]
+sc-lint-attributes = "=0.4.0"
+uuid = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

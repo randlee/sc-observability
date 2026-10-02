@@ -8,6 +8,8 @@ from pathlib import Path
 import threading
 import tracemalloc
 
+from controlled_async_loop import CompletionLoop
+
 from sc_observability import Err, LogEvent, LoggerConfig, LogQuery, Ok, create_logger
 
 
@@ -47,20 +49,40 @@ def test_32_synchronized_native_submissions_and_async_producers(tmp_path: Path) 
     with ThreadPoolExecutor(max_workers=32) as workers:
         results = tuple(workers.map(submit, range(32)))
     assert all(isinstance(result, Ok) for result in results)
+    native_receipts = tuple(result.value for result in results if isinstance(result, Ok))
+    assert len(native_receipts) == 32
+    assert all(receipt.state().admission.kind == "accepted" for receipt in native_receipts)
     async def run() -> None:
+        for receipt in native_receipts:
+            assert isinstance(await receipt.wait(0), Ok)
         ready = asyncio.Event()
-        async def producer(index: int) -> None:
+        async def producer(index: int) -> object:
             await ready.wait()
             submitted = logger.submit(LogEvent(level="info", target="async.runtime", action=f"task.{index}"))
             assert isinstance(submitted, Ok)
-            assert isinstance(await submitted.value.wait(0), Ok)
+            return submitted.value
         producers = [asyncio.create_task(producer(index)) for index in range(32)]
         ready.set()
-        await asyncio.gather(*producers)
+        async_receipts = await asyncio.gather(*producers)
+        assert len(async_receipts) == 32
+        assert all(receipt.state().admission.kind == "accepted" for receipt in async_receipts)
+        for receipt in async_receipts:
+            assert isinstance(await receipt.wait(0), Ok)
+        # All 64 admissions precede one real native flush. The observer clock
+        # stays fixed: this checks completion and persistence, not runner speed.
+        # Native errors remain real; no completion result is mocked.
         assert isinstance(await logger.flush_async(), Ok)
-    asyncio.run(run(), debug=True)
-    records = logger.query(LogQuery(limit=100))
-    assert isinstance(records, Ok) and len(records.value.events) == 64
+        records = logger.query(LogQuery(limit=100))
+        assert isinstance(records, Ok)
+        assert len(records.value.events) == 64
+        assert {record.action for record in records.value.events} == {
+            *(f"thread.{index}" for index in range(32)),
+            *(f"task.{index}" for index in range(32)),
+        }
+    # This only fails a hung native flush loudly; it is never a success criterion.
+    with CompletionLoop(hard_bound_s=10.0) as loop:
+        loop.run_until_complete(run())
+        assert loop.time() == 0.0
     assert isinstance(logger.shutdown(), Ok)
 
 

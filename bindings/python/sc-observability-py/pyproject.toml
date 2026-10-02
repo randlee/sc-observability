@@ -22,5 +22,5 @@ classifiers = [
 [tool.maturin]
 module-name = "sc_observability._native"
 python-source = "python"
-features = ["pyo3/abi3-py310", "pyo3/extension-module"]
+features = ["pyo3/abi3-py310", "pyo3/extension-module", "otlp-telemetry"]
 locked = true

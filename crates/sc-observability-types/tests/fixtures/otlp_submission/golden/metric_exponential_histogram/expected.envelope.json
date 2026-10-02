@@ -1,0 +1,64 @@
+{
+  "logs": [],
+  "metrics": [
+    {
+      "record": {
+        "data": {
+          "data": {
+            "points": [
+              {
+                "attributes": [],
+                "count": 3,
+                "exemplars": [],
+                "flags": 0,
+                "max": null,
+                "min": null,
+                "negative": {
+                  "bucket_counts": [
+                    1
+                  ],
+                  "offset": 0
+                },
+                "positive": {
+                  "bucket_counts": [
+                    1
+                  ],
+                  "offset": 0
+                },
+                "scale": 0,
+                "start_time": "1970-01-01T00:00:00.000000000Z",
+                "sum": null,
+                "time": "1970-01-01T00:00:01.000000000Z",
+                "zero_count": 1,
+                "zero_threshold": 0.0
+              }
+            ],
+            "temporality": "delta"
+          },
+          "kind": "exponential_histogram"
+        },
+        "description": null,
+        "metadata": [],
+        "name": "requests",
+        "unit": null
+      },
+      "resource": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "entity_refs": [],
+        "schema_url": null
+      },
+      "scope": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "name": "",
+        "schema_url": null,
+        "version": null
+      }
+    }
+  ],
+  "profiles": null,
+  "record_key": null,
+  "spans": [],
+  "version": 1
+}

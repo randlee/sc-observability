@@ -64,6 +64,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-lint-attributes"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d171ed3b766d7156eaff8a4bdb0b18b4dca0492b0900a785245df054b958695"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "sc-lint-directives",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "sc-lint-directives"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c59d16ee010b347f206134c9af1f0278cb541a6a5c8cc0bd9ca26323e35fd5b8"
+dependencies = [
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "sc-observability"
 version = "1.5.0"
 dependencies = [
@@ -78,7 +99,7 @@ dependencies = [
 name = "sc-observability-otlp"
 version = "1.5.0"
 dependencies = [
- "sc-observability",
+ "sc-lint-attributes",
  "sc-observability-types",
  "serde_json",
  "thiserror",
@@ -88,6 +109,7 @@ dependencies = [
 name = "sc-observability-types"
 version = "1.5.0"
 dependencies = [
+ "sc-lint-attributes",
  "serde",
  "serde_json",
  "thiserror",
@@ -129,7 +151,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -143,6 +165,17 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "syn"
+version = "2.0.119"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
 ]
 
 [[package]]
@@ -173,7 +206,7 @@ checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 3.0.6",
 ]
 
 [[package]]

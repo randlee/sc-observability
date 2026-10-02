@@ -1415,17 +1415,32 @@ was reworded accordingly to describe the remaining validation.
   construction but not the pre-aggregated metric construction required by the
   neutral contract. Replacing the lossless protobuf transport would therefore
   lose supported data or add an unreviewed dependency/API seam.
-- **Decision**: Keep the raw tonic transport and add a bounded, transport-local
-  retry loop. It mirrors the pinned SDK's tonic classification (including
-  terminal `RESOURCE_EXHAUSTED` without RetryInfo), uses the existing finite
-  retry limits/backoff constants and validated lifecycle shutdown deadline, and
-  preserves one typed terminal result through the D.6 admission path. No new
-  configuration knobs, dependencies, public APIs, or runtime are introduced.
-  The bridge is provisional pending a public lossless SDK path.
-- **Consequences**: transient gRPC failures can recover without duplicate
-  admission/accounting; permanent failures, retry exhaustion, and deadline
-  exhaustion remain redacted `OTLP_EXPORT_TERMINAL` transport results. D.18
-  retains final facade activation and any future SDK-path replacement.
+- **Decision**: Keep the existing raw tonic/protobuf adapter retry executor.
+  Its transient/permanent classification follows pinned `opentelemetry-otlp`
+  0.33: `RESOURCE_EXHAUSTED` requires valid `RetryInfo`; `UNAVAILABLE` honors
+  positive server pacing. Private `prost` decoding preserves these details
+  without a new dependency. The classifier caps hints at 600 seconds and the
+  executor caps effective throttling at 30 seconds, as in the pinned SDK.
+  Throttling seeds exponential backoff; bounded additive jitter never shortens
+  the server minimum. A delay that cannot fit the remaining budget is terminal.
+  Released project limits remain three retries, 250ms initial backoff and 5s
+  ordinary cap; these are not the SDK's recommended 100ms/1600ms values.
+  Jitter is bounded to the pinned recommended 100ms.
+- **Deadlines**: The validated lifecycle shutdown duration bounds one absolute
+  sequence deadline. Every attempt and post-sleep wake checks it; each RPC is
+  bounded by the smaller of remaining sequence time and validated request
+  timeout. Shutdown cancels both waits and in-flight requests. HTTP protobuf
+  uses the same executor with its existing status classification.
+- **Ownership**: The SDK adapter owns retries on the SDK route. Durable
+  submissions currently use sync HTTP and do not provide SDK retries. The
+  separate D33 ownership fix prevents durable scheduling from resetting an
+  exhausted sync HTTP transport budget; this SDK change does not implement
+  that durable policy or assert it already holds.
+- **Consequences**: Preserve one admission and typed terminal outcome with the
+  original cause, fail-open health accounting, and no new public API, config
+  knob, dependency or runtime. The bridge remains provisional pending a public
+  lossless SDK path. Retry tests control time and jitter rather than relying on
+  wall-clock delays.
 
 #### ADR-019 amendment: deferred DTO attribute projection
 
@@ -1553,7 +1568,10 @@ was reworded accordingly to describe the remaining validation.
   themselves. The Python surface returns tagged results for expected
   failures and raises only for programmer errors (ADR-014). Customer-specific mapping
   stays in the consumer. New surface is added through new `#[non_exhaustive]`
-  types; no released exhaustive enum gains a variant.
+  types; no released exhaustive enum gains a variant. Existing producer-record
+  conversions use `TryFrom` with `SignalValidationError`: a null attribute is
+  rejected at its exact path rather than dropped or coerced. Unsigned values
+  are preserved by conversion and checked for OTLP range at envelope validation.
 - **Signals**: Logs, completed spans, metrics and profiles are all
   first-class submission signals. Profiles use the versioned development
   protocol `profiles.v1development`. Full payload support covers every
@@ -1565,7 +1583,9 @@ was reworded accordingly to describe the remaining validation.
   exponential histogram and summary, with exemplars. Events use log
   `event_name` or span events. Correlation, resource and scope are metadata.
   Baggage is not a signal.
-- **Capability matrix** (backend × signal × representation). "Typed error"
+#### OTLP capability matrix
+
+"Typed error"
   means `TelemetryConfigError::UnsupportedCombination` at construction, never
   silent omission.
 

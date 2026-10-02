@@ -10,14 +10,19 @@ homepage.workspace = true
 description = "Standalone OTLP export adapter for sc-observability."
 
 [features]
+durable-store = ["sync-http", "dep:rusqlite", "dep:serde-saphyr", "dep:uuid"]
 default = []
 otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest"]
 # Unstable, non-default support for the D.7 external consumer fixture. This
 # deliberately does not activate the production Telemetry factory (D.18).
 sdk-test-support = ["otlp-sdk"]
-sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:tokio"]
+sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio"]
 
 [dependencies]
+sc-lint-attributes = "=0.4.0"
+rusqlite = { workspace = true, optional = true }
+serde-saphyr = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
 serde_json.workspace = true
 thiserror.workspace = true
 sc-observability-types.workspace = true
@@ -30,9 +35,12 @@ prost = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 httpdate = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [dev-dependencies]
+sc-observability-types = { workspace = true, features = ["test-double"] }
+tempfile.workspace = true
 sc-observability.workspace = true
 sc-observe.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

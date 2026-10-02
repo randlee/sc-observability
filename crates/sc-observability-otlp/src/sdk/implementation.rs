@@ -19,25 +19,24 @@
 
 use std::future::Future;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use super::retry::{RetryDecision, retry_export_bounded};
+#[cfg(test)]
+pub(super) use super::retry::{http_retry_action, retry_action, retry_export};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderValue};
 use tokio::runtime::Handle;
 use tokio::sync::{Mutex, watch};
-use tokio::time::sleep;
 use tonic::Request;
 use tonic::metadata::MetadataValue;
 use tonic::transport::{Channel, Endpoint};
 
 use crate::config::{OtlpProtocol, ValidatedBackendConnection, ValidatedTransportBounds};
-use crate::constants::{
-    DEFAULT_OTLP_INITIAL_BACKOFF_MS, DEFAULT_OTLP_MAX_BACKOFF_MS, DEFAULT_OTLP_MAX_RETRIES,
-};
 use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
     LifecycleFuture, LogExporter, LogRecord, MetricExporter, Resource, TraceExporter,
 };
-use crate::lifecycle::{Admitted, LifecycleCore, LifecycleState, SignalKind};
+use crate::lifecycle::{Admitted, LifecycleCore, LifecycleState, Signal};
 use sc_observability_types::otlp::group_records_by_resource_and_scope;
 use sc_observability_types::v2::{
     AggregationTemporality, AttributeValue, Attributes, ExportError, MetricRecord, MetricValue,
@@ -149,6 +148,7 @@ struct SdkBackend {
 pub(super) struct SdkTerminal {
     transport: SdkTransport,
     retry_deadline: Duration,
+    request_timeout: Duration,
     shutdown: watch::Receiver<bool>,
 }
 
@@ -210,6 +210,7 @@ impl SdkTerminal {
         Ok(Self {
             transport,
             retry_deadline: bounds.lifecycle().shutdown().get(),
+            request_timeout: bounds.request_timeout().get(),
             shutdown,
         })
     }
@@ -225,11 +226,13 @@ impl SdkTerminal {
                 // Clone under the guard and release it before any RPC or retry
                 // sleep, so concurrent exports of one signal never serialize.
                 let client = grpc.logs.lock().await.clone();
-                retry_export(
+                retry_export_bounded(
                     self.retry_deadline,
+                    self.request_timeout,
                     self.shutdown.clone(),
-                    || {
-                        let request = grpc.request(request.clone());
+                    |timeout| {
+                        let mut request = grpc.request(request.clone());
+                        request.set_timeout(timeout);
                         let mut client = client.clone();
                         async move { client.export(request).await.map(|_| ()) }
                     },
@@ -240,6 +243,7 @@ impl SdkTerminal {
             SdkTransport::HttpProtobuf(http) => {
                 http.export(
                     self.retry_deadline,
+                    self.request_timeout,
                     self.shutdown.clone(),
                     &http.logs_url,
                     &request,
@@ -261,11 +265,13 @@ impl SdkTerminal {
                 // Clone under the guard and release it before any RPC or retry
                 // sleep, so concurrent exports of one signal never serialize.
                 let client = grpc.traces.lock().await.clone();
-                retry_export(
+                retry_export_bounded(
                     self.retry_deadline,
+                    self.request_timeout,
                     self.shutdown.clone(),
-                    || {
-                        let request = grpc.request(request.clone());
+                    |timeout| {
+                        let mut request = grpc.request(request.clone());
+                        request.set_timeout(timeout);
                         let mut client = client.clone();
                         async move { client.export(request).await.map(|_| ()) }
                     },
@@ -276,6 +282,7 @@ impl SdkTerminal {
             SdkTransport::HttpProtobuf(http) => {
                 http.export(
                     self.retry_deadline,
+                    self.request_timeout,
                     self.shutdown.clone(),
                     &http.traces_url,
                     &request,
@@ -297,11 +304,13 @@ impl SdkTerminal {
                 // Clone under the guard and release it before any RPC or retry
                 // sleep, so concurrent exports of one signal never serialize.
                 let client = grpc.metrics.lock().await.clone();
-                retry_export(
+                retry_export_bounded(
                     self.retry_deadline,
+                    self.request_timeout,
                     self.shutdown.clone(),
-                    || {
-                        let request = grpc.request(request.clone());
+                    |timeout| {
+                        let mut request = grpc.request(request.clone());
+                        request.set_timeout(timeout);
                         let mut client = client.clone();
                         async move { client.export(request).await.map(|_| ()) }
                     },
@@ -312,6 +321,7 @@ impl SdkTerminal {
             SdkTransport::HttpProtobuf(http) => {
                 http.export(
                     self.retry_deadline,
+                    self.request_timeout,
                     self.shutdown.clone(),
                     &http.metrics_url,
                     &request,
@@ -404,19 +414,22 @@ impl HttpProtobufTransport {
     async fn export<M: prost::Message>(
         &self,
         deadline: Duration,
+        request_timeout: Duration,
         shutdown: watch::Receiver<bool>,
         url: &str,
         request: &M,
         message: &'static str,
     ) -> Result<(), ExportError> {
         let body = request.encode_to_vec();
-        retry_export(
+        retry_export_bounded(
             deadline,
+            request_timeout,
             shutdown,
-            || {
+            |timeout| {
                 let mut send = self
                     .client
                     .post(url)
+                    .timeout(timeout)
                     .header(CONTENT_TYPE, PROTOBUF_CONTENT_TYPE)
                     .body(body.clone());
                 if let Some(header) = &self.auth_header {
@@ -514,137 +527,29 @@ impl std::error::Error for HttpError {
 }
 
 impl RetryClass for HttpError {
-    fn is_retryable(&self) -> bool {
-        self.failure().is_retryable()
+    fn retry_decision(&self) -> RetryDecision {
+        self.failure().retry_decision()
     }
 }
 
-/// Retry classification shared by the gRPC and HTTP terminal sends.
+/// Protocol classification without discarding server pacing details.
 pub(super) trait RetryClass {
-    fn is_retryable(&self) -> bool;
+    fn retry_decision(&self) -> RetryDecision;
 }
 
 impl RetryClass for tonic::Status {
-    fn is_retryable(&self) -> bool {
-        grpc_code_retryable(self.code())
+    fn retry_decision(&self) -> RetryDecision {
+        super::retry::classify_grpc(self)
     }
 }
 
-/// OTLP/HTTP throttling and transient gateway statuses (429, 502, 503, 504)
-/// and connect/timeout failures are retryable; every other failure is terminal.
 impl RetryClass for HttpFailure {
-    fn is_retryable(&self) -> bool {
+    fn retry_decision(&self) -> RetryDecision {
         match self {
-            Self::Status(status) => matches!(status, 429 | 502 | 503 | 504),
-            Self::ConnectOrTimeout => true,
-            Self::Other => false,
-        }
-    }
-}
-
-/// Mirrors the pinned SDK's tonic classification. In particular,
-/// `RESOURCE_EXHAUSTED` is terminal without `RetryInfo` (which is not exposed
-/// by the direct tonic dependency); all other decisions match the pinned OTLP
-/// implementation's code classification.
-fn grpc_code_retryable(code: tonic::Code) -> bool {
-    matches!(
-        code,
-        tonic::Code::Cancelled
-            | tonic::Code::Unavailable
-            | tonic::Code::DeadlineExceeded
-            | tonic::Code::Aborted
-            | tonic::Code::OutOfRange
-            | tonic::Code::DataLoss
-    )
-}
-
-/// Mirrors the pinned SDK's tonic classification and retry limits.
-pub(super) fn retry_action(
-    code: tonic::Code,
-    attempt: u32,
-    elapsed: Duration,
-    deadline: Duration,
-    delay: Duration,
-) -> Option<Duration> {
-    retry_wait(grpc_code_retryable(code), attempt, elapsed, deadline, delay)
-}
-
-/// The OTLP/HTTP counterpart of [`retry_action`], under the same limits.
-pub(super) fn http_retry_action(
-    failure: HttpFailure,
-    attempt: u32,
-    elapsed: Duration,
-    deadline: Duration,
-    delay: Duration,
-) -> Option<Duration> {
-    retry_wait(failure.is_retryable(), attempt, elapsed, deadline, delay)
-}
-
-fn retry_wait(
-    retryable: bool,
-    attempt: u32,
-    elapsed: Duration,
-    deadline: Duration,
-    delay: Duration,
-) -> Option<Duration> {
-    if !retryable || attempt >= DEFAULT_OTLP_MAX_RETRIES {
-        return None;
-    }
-    let remaining = deadline.saturating_sub(elapsed);
-    let wait = delay.min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
-    (!wait.is_zero() && wait < remaining).then_some(wait)
-}
-
-pub(super) async fn retry_export<F, Fut, E>(
-    deadline: Duration,
-    mut shutdown: watch::Receiver<bool>,
-    mut operation: F,
-    message: &'static str,
-) -> Result<(), ExportError>
-where
-    F: FnMut() -> Fut + Send,
-    Fut: Future<Output = Result<(), E>> + Send,
-    E: RetryClass + std::error::Error + Send + Sync + 'static,
-{
-    let started = Instant::now();
-    let mut attempt = 0;
-    let mut delay = Duration::from_millis(DEFAULT_OTLP_INITIAL_BACKOFF_MS);
-    loop {
-        if *shutdown.borrow() {
-            return Err(shutdown_cancelled_error());
-        }
-        let result = tokio::select! {
-            biased;
-            _ = shutdown.changed() => return Err(shutdown_cancelled_error()),
-            result = operation() => result,
-        };
-        match result {
-            Ok(()) => return Ok(()),
-            Err(failure) => {
-                match retry_wait(
-                    failure.is_retryable(),
-                    attempt,
-                    started.elapsed(),
-                    deadline,
-                    delay,
-                ) {
-                    Some(wait) => {
-                        if *shutdown.borrow() {
-                            return Err(shutdown_cancelled_error());
-                        }
-                        tokio::select! {
-                            biased;
-                            _ = shutdown.changed() => return Err(shutdown_cancelled_error()),
-                            () = sleep(wait) => {}
-                        }
-                        attempt += 1;
-                        delay = delay
-                            .saturating_mul(2)
-                            .min(Duration::from_millis(DEFAULT_OTLP_MAX_BACKOFF_MS));
-                    }
-                    None => return Err(transport_error_from(message, Box::new(failure))),
-                }
+            Self::Status(429 | 502 | 503 | 504) | Self::ConnectOrTimeout => {
+                RetryDecision::Retryable
             }
+            Self::Status(_) | Self::Other => RetryDecision::Terminal,
         }
     }
 }
@@ -735,7 +640,7 @@ impl LogExporter for SdkLogExporter {
     fn export_logs(&self, batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
         schedule(
             &self.backend,
-            SignalKind::Logs,
+            Signal::Logs,
             batch,
             project_logs,
             |terminal, request| async move { terminal.export_logs(request).await },
@@ -751,7 +656,7 @@ impl TraceExporter for SdkTraceExporter {
     fn export_spans(&self, batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
         schedule(
             &self.backend,
-            SignalKind::Traces,
+            Signal::Traces,
             batch,
             project_spans,
             |terminal, request| async move { terminal.export_spans(request).await },
@@ -767,7 +672,7 @@ impl MetricExporter for SdkMetricExporter {
     fn export_metrics(&self, batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
         schedule(
             &self.backend,
-            SignalKind::Metrics,
+            Signal::Metrics,
             batch,
             project_metrics,
             |terminal, request| async move { terminal.export_metrics(request).await },
@@ -777,7 +682,7 @@ impl MetricExporter for SdkMetricExporter {
 
 fn schedule<T, R, P, E, F>(
     backend: &Arc<SdkBackend>,
-    signal: SignalKind,
+    signal: Signal,
     batch: &[ExportRecord<T>],
     project: P,
     export: E,
@@ -834,7 +739,7 @@ fn transport_error(message: &str) -> ExportError {
 }
 
 /// [`transport_error`] that keeps the underlying failure as the error source.
-fn transport_error_from(
+pub(super) fn transport_error_from(
     message: &str,
     source: Box<dyn std::error::Error + Send + Sync + 'static>,
 ) -> ExportError {
@@ -854,7 +759,7 @@ fn transport_context(message: &str) -> ErrorContext {
     )
 }
 
-fn shutdown_cancelled_error() -> ExportError {
+pub(super) fn shutdown_cancelled_error() -> ExportError {
     ExportError::ShutdownCancelledRetry {
         context: Box::new(ErrorContext::new(
             sc_observability_types::error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
@@ -1086,7 +991,7 @@ fn project_log(log: LogRecord) -> proto_logs::LogRecord {
         time_unix_nano: unix_nanos(event.timestamp),
         observed_time_unix_nano: unix_nanos(event.timestamp),
         severity_number: project_severity(event.level),
-        severity_text: format!("{:?}", event.level).to_uppercase(),
+        severity_text: crate::severity::fields(event.level).1.to_owned(),
         body: event.message.map(string_value),
         attributes: project_attributes(&attributes),
         dropped_attributes_count: 0,
@@ -1363,14 +1268,8 @@ const fn hex_nibble(value: u8) -> u8 {
     }
 }
 
-const fn project_severity(level: sc_observability_types::Level) -> i32 {
-    match level {
-        sc_observability_types::Level::Trace => proto_logs::SeverityNumber::Trace as i32,
-        sc_observability_types::Level::Debug => proto_logs::SeverityNumber::Debug as i32,
-        sc_observability_types::Level::Info => proto_logs::SeverityNumber::Info as i32,
-        sc_observability_types::Level::Warn => proto_logs::SeverityNumber::Warn as i32,
-        sc_observability_types::Level::Error => proto_logs::SeverityNumber::Error as i32,
-    }
+pub(crate) const fn project_severity(level: sc_observability_types::Level) -> i32 {
+    crate::severity::fields(level).0 as i32
 }
 
 fn project_span_kind(kind: SpanKind) -> i32 {

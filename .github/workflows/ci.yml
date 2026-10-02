@@ -123,7 +123,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Install nightly toolchain for cargo-public-api
-        run: rustup toolchain install nightly
+        run: rustup toolchain install "$(cat scripts/ci/public-api-toolchain)"
 
       - name: Run public API validator fixtures
         run: python3 -m unittest discover -s scripts/ci/tests -p test_validate_public_api.py -v

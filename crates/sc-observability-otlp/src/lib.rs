@@ -11,6 +11,9 @@
     reason = "telemetry-facade error behavior is documented centrally in workspace docs, and repeating it on every wrapper method adds low-signal boilerplate"
 )]
 
+#[cfg(feature = "durable-store")]
+pub mod durable;
+
 mod assembly;
 mod compat;
 mod config;
@@ -31,6 +34,10 @@ mod lifecycle;
 mod lifecycle_tests;
 mod projectors;
 mod runtime;
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
+mod severity;
+#[cfg(all(test, feature = "otlp-sdk", feature = "sync-http"))]
+mod severity_tests;
 mod testing;
 
 #[cfg(feature = "otlp-sdk")]

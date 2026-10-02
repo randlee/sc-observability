@@ -78,6 +78,7 @@ for package, manifest_path in {
     "sc-observability-log": root / "crates/sc-observability-log/Cargo.toml",
     "sc-observability-log-macros": root / "crates/sc-observability-log-macros/Cargo.toml",
     "sc-observability-log-consumer-check": root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+    "sc-otel-cli": root / "crates/sc-otel-cli/Cargo.toml",
 }.items():
     try:
         validate_first_party_dependencies(root, package, dependency_names(manifest_path))
@@ -93,7 +94,7 @@ if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
 if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-required_otlp = {"serde_json", "thiserror"}
+required_otlp = {"serde_json", "thiserror", "sc-lint-attributes"}
 # ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
 sys.path.insert(0, str(root / "scripts/ci"))
 from otlp_dependencies import validate_composition_harness, validate_transport_dependencies
@@ -142,6 +143,7 @@ shared_crate_roots = [
     root / "crates/sc-observability-log",
     root / "crates/sc-observability-log-macros",
     root / "crates/sc-observability-log-consumer-check",
+    root / "crates/sc-otel-cli",
 ]
 
 source_files = []

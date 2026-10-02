@@ -4,6 +4,11 @@
 //! which OTLP transport requests require while keeping SDK and HTTP details in
 //! `sc-observability-otlp`.
 
+/// Full transport-neutral signal payloads.
+pub mod signals;
+/// Shared telemetry submission contracts.
+pub mod submission;
+
 use crate::LogEvent;
 use crate::v2::{Attributes, MetricRecord, SpanEnded, SpanEvent, SpanRecord, TraceFlags};
 

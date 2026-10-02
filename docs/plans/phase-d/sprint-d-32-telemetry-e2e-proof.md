@@ -153,10 +153,13 @@ reported to the lead. The lists change only by plan amendment.
   generated IDs. Both front ends take the one d-29 `SubmissionInput` shape.
 - [ ] req:PHD-007, req:PHD-008 (D4): `tests/telemetry-e2e/test_recovery.py`
   covers:
-  - `offline_then_recover`: the collector is down at emit (exit 6), and a
-    later `sc-otel flush` delivers.
-  - `kill_python_mid_drain_cli_resumes`: shared store; the CLI takes the
-    lease and delivers.
+  - `offline_terminal_then_new_submission_recovers`:
+    the collector is down at emit (exit 7) after the released synchronous
+    HTTP retry budget is exhausted; that terminal record remains failed, and
+    a new CLI submission succeeds after the collector recovers.
+  - `killed_python_admission_is_retained_for_recovery`: a shared-store
+    submission ID is retained after its producer exits. Lease-expiry takeover
+    is covered separately by the injected-clock Rust regression.
   - `partial_signal_delivery`: the profiles endpoint returns 503 while logs
     deliver, and status shows per-signal state.
   - `context_exit_retains_delivery_failure`: Python `last_shutdown` holds

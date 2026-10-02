@@ -55,3 +55,29 @@ pub(crate) use sc_observability_types::error_codes::otlp::{
 
 #[cfg(test)]
 pub(crate) use sc_observability_types::error_codes::otlp::OTLP_RUNTIME_TERMINATED;
+
+/// Legacy/reserved compatibility code for the staged submission-export seam.
+///
+/// This public value remains in [`ALL`] while the durable exporter wiring is
+/// completed; it is retained without a deprecation attribute for compatibility.
+pub const SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED");
+/// Internal durable-store diagnostic; no new public API.
+#[cfg(feature = "durable-store")]
+pub(crate) const DURABLE_OVERSIZE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DURABLE_RECORD_TOO_LARGE");
+
+/// Internal durable-store diagnostic; no new public API.
+#[cfg(feature = "durable-store")]
+pub(crate) const DURABLE_CORRUPT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DURABLE_CORRUPT_ENVELOPE");
+
+/// Internal durable-store diagnostic; no new public API.
+#[cfg(feature = "durable-store")]
+pub(crate) const DURABLE_QUERY: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DURABLE_UNSUPPORTED_QUERY");
+
+/// Internal durable-store diagnostic; no new public API.
+#[cfg(feature = "durable-store")]
+pub(crate) const DURABLE_LOCK_TIMEOUT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_DURABLE_LOCK_TIMEOUT");

@@ -69,6 +69,7 @@ CORE_BOUNDARY_MANIFESTS = {
     "sc-observability-log": root / "crates/sc-observability-log/Cargo.toml",
     "sc-observability-log-macros": root / "crates/sc-observability-log-macros/Cargo.toml",
     "sc-observability-log-consumer-check": root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+    "sc-otel-cli": root / "crates/sc-otel-cli/Cargo.toml",
 }
 
 def assert_no_core_boundary_dependencies(path: Path):
@@ -138,6 +139,7 @@ if observe_test_deps - {"serde_json"}:
     )
 
 required_otlp = {
+    "sc-lint-attributes",
     "serde_json",
     "thiserror",
 }
@@ -183,6 +185,7 @@ boundary_manifests = [
     root / "crates/sc-observability-log/Cargo.toml",
     root / "crates/sc-observability-log-macros/Cargo.toml",
     root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+    root / "crates/sc-otel-cli/Cargo.toml",
 ]
 for path in boundary_manifests:
     assert_no_banned_dependencies(path)

@@ -327,6 +327,8 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
             self.assertTrue(database.exists())
             self.assertTrue(wal.exists())
             self.assertTrue(log.exists())
+            marker = json.loads((state / harness.RESTART_MARKER).read_text())
+            self.assertEqual(marker, metadata)
             self.assertTrue(state.is_dir())
 
     def test_stop_permission_error_preserves_all_owned_state(self) -> None:

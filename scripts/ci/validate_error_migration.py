@@ -35,17 +35,27 @@ METHODS = (
     ("otlp_assembly", "SpanAssembler::push", "SpanAssembler::push_typed"),
 )
 
-# D18 keeps one unsuffixed constructor/operation seam.  The old suffixed
-# methods are deliberately checked as an absence contract: leaving one public
-# sibling behind creates a second API rather than a migration path.
-OBSOLETE_TYPED_METHODS = (
-    ("otlp_config", "pub fn new_typed("),
-    ("otlp_config", "pub fn build_typed("),
-    ("otlp_assembly", "pub fn push_typed("),
-    ("otlp_runtime", "pub fn new_typed("),
-    ("otlp_runtime", "pub fn flush_typed("),
-    ("otlp_runtime", "pub fn shutdown_typed("),
+RETAINED_FACADE_METHODS = (
+    ("logger", "LoggerBuilder::new", "LoggerBuilder::new_typed"),
+    ("runtime", "Logger::builder", "Logger::builder_typed"),
+    ("runtime", "Logger::new", "Logger::new_typed"),
+    ("runtime", "Logger::log", "Logger::log_typed"),
+    ("runtime", "Logger::try_log", "Logger::try_log_typed"),
+    ("runtime", "Logger::try_log_with_outcome", "Logger::try_log_with_outcome_typed"),
+    ("runtime", "Logger::flush", "Logger::flush_typed"),
+    ("observe", "ObservabilityConfig::default_for", "ObservabilityConfig::default_for_typed"),
+    ("observe", "ObservabilityConfig::service_name", "ObservabilityConfig::service_name_typed"),
+    ("observe", "Observability::new", "Observability::new_typed"),
+    ("observe", "ObservabilityBuilder::build", "ObservabilityBuilder::build_typed"),
+    ("observe", "Observability::flush", "Observability::flush_typed"),
+    ("observe", "Observability::shutdown", "Observability::shutdown_typed"),
+    ("otlp_runtime", "Telemetry::new", "Telemetry::new_typed"),
+    ("otlp_runtime", "Telemetry::flush", "Telemetry::flush_typed"),
+    ("otlp_runtime", "Telemetry::shutdown", "Telemetry::shutdown_typed"),
 )
+
+# ADR-020 retains released typed helpers for compatible 1.x; their removal
+# belongs to a separately authorized 2.0 release. Migrated fixtures exercise them.
 
 
 def migration_notes() -> tuple[str, ...]:
@@ -54,7 +64,7 @@ def migration_notes() -> tuple[str, ...]:
         for _, typed in WRAPPERS
     )
     method_notes = tuple(
-        f"Use {typed}(); see migrate-error-api.md." for _, _, typed in METHODS
+        f"Use {typed}(); see migrate-error-api.md." for _, _, typed in METHODS + RETAINED_FACADE_METHODS
     )
     return wrapper_notes + method_notes
 
@@ -121,7 +131,7 @@ def diagnostic_note(diagnostic: dict) -> str | None:
     return message[message.index(marker) + 2 :]
 
 
-def item_window(source: str, marker: str, note: str) -> str:
+def item_window(source: str, marker: str, note: str, *, owner: str | None = None) -> str:
     lines = source.splitlines()
     candidates = []
     for index, line in enumerate(lines):
@@ -163,22 +173,32 @@ def item_window(source: str, marker: str, note: str) -> str:
             and note_literals == [note]
         ):
             return block
-    raise AssertionError(f"{marker} has no local deprecation attribute/note")
+    raise AssertionError(f"{owner or marker} has no local deprecation attribute/note")
+
+
+def check_b1e_marker(source: str, name: str) -> None:
+    assert_true(
+        source.count('since = "1.4.0"') > 0,
+        f"{name} has no B.1e deprecation marker",
+    )
 
 
 def check_source_contract() -> None:
     sources = {
         "types": ROOT / "crates" / "sc-observability-types" / "src" / "errors.rs",
-        "logger": ROOT / "crates" / "sc-observability" / "src" / "builder.rs",
-        "runtime": ROOT / "crates" / "sc-observability" / "src" / "runtime.rs",
-        "observe": ROOT / "crates" / "sc-observe" / "src" / "lib.rs",
-        # OTLP configuration was modularized; the constructors live in the
-        # owning config/types.rs module rather than the re-exporting mod.rs.
-        "otlp_config": ROOT / "crates" / "sc-observability-otlp" / "src" / "config" / "types.rs",
-        "otlp_assembly": ROOT / "crates" / "sc-observability-otlp" / "src" / "assembly.rs",
-        "otlp_runtime": ROOT / "crates" / "sc-observability-otlp" / "src" / "lib.rs",
+        "logger": ROOT / "crates" / "sc-observability" / "src" / "compat.rs",
+        "runtime": ROOT / "crates" / "sc-observability" / "src" / "compat.rs",
+        "observe": ROOT / "crates" / "sc-observe" / "src" / "compat.rs",
+        # Released wrapper methods live in the compatibility facade, not the
+        # canonical implementation modules or their re-exporting roots.
+        "otlp_config": ROOT / "crates" / "sc-observability-otlp" / "src" / "compat.rs",
+        "otlp_runtime": ROOT / "crates" / "sc-observability-otlp" / "src" / "compat.rs",
+        "otlp_assembly": ROOT / "crates" / "sc-observability-otlp" / "src" / "compat.rs",
     }
     text = {name: path.read_text(encoding="utf-8") for name, path in sources.items()}
+
+    for source in ("otlp_config", "otlp_assembly"):
+        check_b1e_marker(text[source], source)
 
     for legacy, typed in WRAPPERS:
         item_window(
@@ -188,23 +208,12 @@ def check_source_contract() -> None:
         )
 
     assert_true(len(WRAPPERS) + len(METHODS) == 13, "B.1e target inventory is not 13 items")
-    for source, legacy, typed in METHODS:
+    for source, legacy, typed in METHODS + RETAINED_FACADE_METHODS:
         item_window(
             text[source],
             f"pub fn {legacy.rsplit('::', 1)[1]}(",
             f"Use {typed}(); see migrate-error-api.md.",
-        )
-
-    for source, marker in OBSOLETE_TYPED_METHODS:
-        assert_true(
-            marker not in text[source],
-            f"{source} retains obsolete public typed sibling {marker}",
-        )
-
-    for source in ("otlp_config", "otlp_assembly"):
-        assert_true(
-            text[source].count("since = \"1.4.0\"") > 0,
-            f"{source} has no B.1e deprecation marker",
+            owner=legacy,
         )
 
     for path in (
@@ -313,7 +322,7 @@ def fixture_spans(source: str, expected_notes: tuple[str, ...]) -> dict[str, lis
         "Telemetry::shutdown": lambda _index, line: "telemetry.shutdown(" in line,
         "SpanAssembler::push": lambda _index, line: "assembler.push(" in line,
     }
-    for _source, legacy, typed in METHODS:
+    for _source, legacy, typed in METHODS + RETAINED_FACADE_METHODS:
         note = f"Use {typed}(); see migrate-error-api.md."
         if legacy == "ObservabilityBuilder::build":
             add(
