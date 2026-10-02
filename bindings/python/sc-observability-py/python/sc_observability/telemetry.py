@@ -289,6 +289,10 @@ class Telemetry:
              service_name: str | None = None) -> TelemetryResult["Telemetry"]:
         return _factory(cls, "open", config, store_path, endpoint, service_name)
 
+    @classmethod
+    def _with_test_double(cls, script_json: str | None = None, **kwargs: Any) -> TelemetryResult["Telemetry"]:
+        return _open_test_double(cls, script_json=script_json, **kwargs)
+
     def emit(self, input: Mapping[str, Any]) -> TelemetryResult[AdmissionReceipt]:
         payload = _serialized(input)
         if isinstance(payload, TelemetryErr):
@@ -349,6 +353,11 @@ def _factory(cls: type[Telemetry], function: str, config: str | PathLike[str] | 
         return cls(handles[0])
     handles: list[Any] = []
     return _invoke(call, decode)
+
+
+def _open_test_double(cls: type[Telemetry], *, store_path: str | PathLike[str], endpoint: str,
+                      service_name: str, script_json: str | None = None) -> TelemetryResult[Telemetry]:
+    return _factory(cls, "_open_test_double", None, store_path, endpoint, service_name, script_json)
 
 
 def build_envelope(input: Mapping[str, Any]) -> TelemetryResult[str]:

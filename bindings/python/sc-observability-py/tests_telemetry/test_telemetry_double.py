@@ -32,6 +32,17 @@ def test_test_double_admits_each_signal_and_combined_submission(tmp_path: Path) 
         assert isinstance(result, Ok), (name, result)
 
 
+def test_installed_test_double_wrapper_admits_a_record(tmp_path: Path) -> None:
+    result = Telemetry._with_test_double(
+        store_path=tmp_path / "store",
+        endpoint="http://127.0.0.1:4318",
+        service_name="d30-installed-test",
+    )
+    assert isinstance(result, Ok), result
+    admitted = result.value.emit(_input("logs"))
+    assert isinstance(admitted, Ok), admitted
+
+
 def test_delivery_failure_is_returned_and_retained_at_context_exit(tmp_path: Path) -> None:
     script = {"deliveries": [{"signal": "logs", "outcome": "fail"}]}
     telemetry = _double(tmp_path, script)
