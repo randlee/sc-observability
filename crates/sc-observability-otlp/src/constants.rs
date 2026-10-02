@@ -78,3 +78,16 @@ pub(crate) const TELEMETRY_CONFIG_MAX_BYTES: u64 = 1024 * 1024;
 #[cfg(feature = "durable-store")]
 #[allow(clippy::cast_possible_wrap, reason = "the fixed limit 64 fits in i64")]
 pub(crate) const DRAIN_BATCH_SIZE_SQL: i64 = DRAIN_BATCH_SIZE as i64;
+
+/// Pinned SDK classifier cap for a server `RetryInfo` delay.
+#[cfg(feature = "otlp-sdk")]
+pub(crate) const SDK_RETRY_INFO_CAP: std::time::Duration = std::time::Duration::from_secs(600);
+/// Pinned SDK executor cap for effective throttling.
+#[cfg(feature = "otlp-sdk")]
+pub(crate) const SDK_THROTTLE_CAP: std::time::Duration = std::time::Duration::from_secs(30);
+/// Pinned SDK recommended maximum additive jitter, in milliseconds.
+#[cfg(feature = "otlp-sdk")]
+pub(crate) const SDK_RETRY_JITTER_MS: u64 = 100;
+/// Protobuf Duration's maximum valid seconds magnitude.
+#[cfg(feature = "otlp-sdk")]
+pub(crate) const PROTO_DURATION_MAX_SECONDS: i64 = 315_576_000_000;

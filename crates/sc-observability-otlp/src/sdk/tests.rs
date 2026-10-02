@@ -176,7 +176,7 @@ where
     )
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn sdk_transport_retry_loop_exercises_attempts_and_terminal_modes() {
     assert_eq!(
         run_retry_script(&[Code::Unavailable, Code::Ok], Duration::from_secs(30)).await,
@@ -282,7 +282,7 @@ fn sdk_http_retry_exhaustion_and_deadline_are_terminal() {
     );
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn sdk_http_retry_loop_uses_the_shared_attempt_and_deadline_policy() {
     assert_eq!(
         run_http_retry_script(
@@ -774,4 +774,94 @@ fn metric_projection_keeps_resource_scope_and_histogram_distribution() {
     assert_eq!(histogram.data_points[0].explicit_bounds, vec![10.0]);
     assert_eq!(histogram.data_points[0].count, 3);
     assert_eq!(histogram.data_points[0].sum, Some(18.0));
+}
+
+/// Real wire fixture: reject the first export, accept the second.
+#[derive(Clone)]
+struct RetryCollector(Arc<std::sync::atomic::AtomicUsize>);
+#[tonic::async_trait]
+impl opentelemetry_proto::tonic::collector::logs::v1::logs_service_server::LogsService
+    for RetryCollector
+{
+    async fn export(
+        &self,
+        _: tonic::Request<
+            opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest,
+        >,
+    ) -> Result<
+        tonic::Response<opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse>,
+        tonic::Status,
+    > {
+        if self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+            Err(tonic::Status::unavailable("transient collector failure"))
+        } else {
+            Ok(tonic::Response::new(
+                opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceResponse {
+                    partial_success: None,
+                },
+            ))
+        }
+    }
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn sdk_retry_executor_recovers_over_real_grpc_with_two_requests() {
+    use opentelemetry_proto::tonic::collector::logs::v1::{
+        ExportLogsServiceRequest, logs_service_client::LogsServiceClient,
+        logs_service_server::LogsServiceServer,
+    };
+    let incoming =
+        tonic::transport::server::TcpIncoming::bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let address = incoming.local_addr().unwrap();
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server = tokio::spawn(tonic::transport::Server::builder().serve_with_incoming(
+        LogsServiceServer::new(RetryCollector(calls.clone())),
+        incoming,
+    ));
+    // Keep virtual time stationary while OS sockets make progress. Only the
+    // acknowledged retry below advances it; no timer can race network readiness.
+    let clock_guard = tokio::spawn(async {
+        loop {
+            tokio::task::yield_now().await;
+        }
+    });
+    let client = LogsServiceClient::connect(format!("http://{address}"))
+        .await
+        .unwrap();
+    let (_tx, rx) = never_cancelled_shutdown();
+    let (waiting_tx, waiting_rx) = tokio::sync::oneshot::channel();
+    let mut waiting_tx = Some(waiting_tx);
+    let task = tokio::spawn(super::retry::retry_with_jitter(
+        Duration::from_secs(5),
+        Duration::from_secs(1),
+        rx,
+        move |timeout| {
+            let mut client = client.clone();
+            async move {
+                let mut request = tonic::Request::new(ExportLogsServiceRequest {
+                    resource_logs: vec![],
+                });
+                request.set_timeout(timeout);
+                client.export(request).await.map(|_| ())
+            }
+        },
+        "collector fixture",
+        move || {
+            if let Some(tx) = waiting_tx.take() {
+                let _ = tx.send(());
+            }
+            Duration::ZERO
+        },
+    ));
+    waiting_rx.await.unwrap();
+    tokio::time::advance(Duration::from_millis(
+        crate::constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
+    ))
+    .await;
+    task.await.unwrap().unwrap();
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    server.abort();
+    clock_guard.abort();
+    let _ = server.await;
+    let _ = clock_guard.await;
 }
