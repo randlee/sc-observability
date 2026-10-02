@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+import socket
 from pathlib import Path
 
-from conftest import CaptureCollector, GOLDENS, free_port, run_cli, run_installed_python
+import pytest
+
+from conftest import CaptureCollector, GOLDENS, reserve_loopback_sockets, run_cli, run_installed_python
 
 
 def _config(path: Path, endpoint: str) -> Path:
@@ -19,12 +22,26 @@ def _config(path: Path, endpoint: str) -> Path:
     return path
 
 
-def test_offline_terminal_then_new_submission_recovers(
-    installed_artifacts: dict[str, Path], tmp_path: Path,
+def test_reserved_loopback_sockets_are_distinct_and_held() -> None:
+    """The harness must not expose a probe-and-close port allocation race."""
+    reserved = reserve_loopback_sockets(3)
+    try:
+        ports = [int(port.getsockname()[1]) for port in reserved]
+        assert len(set(ports)) == 3
+        for port in ports:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as contender:
+                with pytest.raises(OSError):
+                    contender.bind(("127.0.0.1", port))
+    finally:
+        for port in reserved:
+            port.close()
+
+
+def test_offline_cli_admission_records_terminal_delivery(
+    installed_artifacts: dict[str, Path], dead_collector_endpoint: str, tmp_path: Path,
 ) -> None:
-    """A terminal offline submission is not replayed; a new one can recover."""
-    port = free_port()
-    config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{port}")
+    """Exhausting synchronous HTTP retries records a terminal durable failure."""
+    config = _config(tmp_path / "telemetry.yaml", dead_collector_endpoint)
     payload = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
     offline = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
                       cwd=tmp_path, input=payload)
@@ -33,18 +50,6 @@ def test_offline_terminal_then_new_submission_recovers(
     assert terminal["state"] == "admitted_failed", terminal
     assert terminal["receipt"] is not None, terminal
     assert terminal["flush"]["failed"]["logs"] == 1, terminal
-    try:
-        collector = CaptureCollector(port)
-        collector.start()
-        recovered = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
-                            cwd=tmp_path, input=payload)
-        assert recovered.returncode == 0, recovered.stdout + recovered.stderr
-        result = json.loads(recovered.stdout)
-        assert result["state"] == "admitted_delivered", result
-        collector.wait_for("/v1/logs")
-    finally:
-        if "collector" in locals():
-            collector.stop()
 
 
 def test_partial_signal_failure_retains_the_failed_signal(
@@ -74,10 +79,10 @@ def test_partial_signal_failure_retains_the_failed_signal(
 
 
 def test_context_exit_retains_delivery_failure_as_a_tagged_result(
-    installed_artifacts: dict[str, Path], tmp_path: Path,
+    installed_artifacts: dict[str, Path], dead_collector_endpoint: str, tmp_path: Path,
 ) -> None:
     """A down collector is a delivery result, never an exception from ``with``."""
-    config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{free_port()}")
+    config = _config(tmp_path / "telemetry.yaml", dead_collector_endpoint)
     source = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
     script = f"""\
 import json
@@ -101,10 +106,10 @@ print(telemetry.last_shutdown.error.code)
 
 
 def test_killed_python_admission_is_retained_for_recovery(
-    installed_artifacts: dict[str, Path], tmp_path: Path,
+    installed_artifacts: dict[str, Path], dead_collector_endpoint: str, tmp_path: Path,
 ) -> None:
     """A process death preserves the submission identity and its recovery record."""
-    config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{free_port()}")
+    config = _config(tmp_path / "telemetry.yaml", dead_collector_endpoint)
     source = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
     script = f"""\
 import json

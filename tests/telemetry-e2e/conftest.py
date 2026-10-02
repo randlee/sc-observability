@@ -205,10 +205,34 @@ def normalise_system_generated_fields(envelope: dict[str, Any], input: dict[str,
     return result
 
 
-def free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+def reserve_loopback_sockets(count: int) -> list[socket.socket]:
+    """Reserve distinct loopback ports until the caller deliberately releases them."""
+    sockets: list[socket.socket] = []
+    try:
+        for _ in range(count):
+            reserved = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            reserved.bind(("127.0.0.1", 0))
+            sockets.append(reserved)
+        return sockets
+    except BaseException:
+        for reserved in sockets:
+            reserved.close()
+        raise
+
+
+def loopback_endpoint(reserved: socket.socket) -> str:
+    host, port = reserved.getsockname()[:2]
+    return f"http://{host}:{port}"
+
+
+@pytest.fixture
+def dead_collector_endpoint() -> Iterator[str]:
+    """Keep a bound, non-listening socket so the endpoint remains unavailable."""
+    reserved, = reserve_loopback_sockets(1)
+    try:
+        yield loopback_endpoint(reserved)
+    finally:
+        reserved.close()
 
 
 class PinnedViewer(dict[str, str]):
@@ -219,10 +243,17 @@ class PinnedViewer(dict[str, str]):
         self.manifest = manifest
         self.state = state
         self.harness = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
-        self.http, self.grpc, self.ui = (free_port(), free_port(), free_port())
+        self._reservations = reserve_loopback_sockets(3)
+        self.http, self.grpc, self.ui = (int(port.getsockname()[1]) for port in self._reservations)
+        assert len({self.http, self.grpc, self.ui}) == 3
         super().__init__(otlp=f"http://127.0.0.1:{self.http}", rpc=f"http://127.0.0.1:{self.ui}/rpc")
 
     def start(self) -> None:
+        # The harness owns the listeners, so release the deterministic
+        # reservations immediately before it is invoked.
+        for reserved in self._reservations:
+            reserved.close()
+        self._reservations = []
         started = subprocess.run(
             [sys.executable, str(self.harness), "start", "--binary", self.binary,
              "--version", self.manifest["version"], "--binary-sha256", self.manifest["binary_sha256"],
