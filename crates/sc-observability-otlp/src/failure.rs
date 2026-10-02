@@ -46,32 +46,6 @@ pub(crate) fn flush_lifecycle_failure(error: ExportError) -> FlushFailure {
     .source(Box::new(error))
 }
 
-/// Converts a flush failure into a shutdown failure, chaining the flush
-/// failure as the shutdown context's native source.
-///
-/// `flush_outcome` never currently returns `Err` (it is intentionally
-/// `Result`-shaped so shutdown can propagate real flush failures without a
-/// public-signature change later; see its own `unnecessary_wraps` rationale),
-/// so this conversion is unreachable at runtime today. It is kept, rather
-/// than deleted, for that future propagation path, and is covered directly
-/// by `shutdown_flush_failure_preserves_flush_context_as_native_source`
-/// below so a regression in its error-context/source chaining is still
-/// caught even while the call site is dormant.
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
-    ShutdownFailure::from_context(Box::new(
-        ErrorContext::new(
-            error_codes::OTLP_FLUSH_FAILED,
-            "failed to flush telemetry during shutdown",
-            Remediation::recoverable(
-                "inspect telemetry health and retry shutdown after the exporter recovers",
-                ["retry shutdown"],
-            ),
-        )
-        .source(Box::new(error)),
-    ))
-}
-
 pub(crate) fn shutdown_export_failure_typed(
     error: ExportError,
     diagnostic_summary: Option<DiagnosticSummary>,

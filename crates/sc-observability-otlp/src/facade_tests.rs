@@ -908,45 +908,6 @@ fn export_failure_from_canonical_event_moves_original_context_without_reconstruc
 }
 
 #[test]
-fn shutdown_flush_failure_preserves_flush_context_as_native_source() {
-    let flush_failure = FlushFailure::from_context(Box::new(
-        ErrorContext::new(
-            error_codes::OTLP_EXPORT_TERMINAL,
-            "log export failed",
-            Remediation::not_recoverable("test flush failure"),
-        )
-        .source(Box::new(std::io::Error::other("native flush source"))),
-    ));
-
-    let shutdown_failure = shutdown_flush_failure(flush_failure);
-
-    assert_eq!(
-        shutdown_failure.diagnostic().code,
-        error_codes::OTLP_FLUSH_FAILED
-    );
-    assert_eq!(
-        shutdown_failure.diagnostic().message,
-        "failed to flush telemetry during shutdown"
-    );
-    let shutdown_context = std::error::Error::source(&shutdown_failure)
-        .expect("shutdown failure preserves its context");
-    let chained_flush_failure = shutdown_context
-        .source()
-        .expect("shutdown context preserves the flush failure");
-    assert_eq!(
-        chained_flush_failure.to_string(),
-        "log export failed; caused by: native flush source"
-    );
-    let flush_context = chained_flush_failure
-        .source()
-        .expect("flush failure preserves its context");
-    let native_source = flush_context
-        .source()
-        .expect("flush context preserves the native export source");
-    assert_eq!(native_source.to_string(), "native flush source");
-}
-
-#[test]
 fn exporter_failure_accounting_is_tracked() {
     let log_exporter = Arc::new(RecordingLogExporter::default());
     log_exporter.fail.store(true, Ordering::SeqCst);

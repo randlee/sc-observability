@@ -50,6 +50,8 @@ pub mod error_codes;
 
 use sc_observability_types::telemetry_health_provider_sealed;
 // `facade_tests` reaches the runtime's collaborators through `super::*`.
+#[cfg(all(test, feature = "otlp-sdk", feature = "sync-http"))]
+use sc_observability_types::typed::FlushFailure;
 #[doc(inline)]
 pub use sc_observability_types::{
     ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
@@ -61,9 +63,8 @@ use {
     crate::config::{TelemetryConfig as RuntimeTelemetryConfig, validated_transport_bounds},
     crate::contracts::{ExportRecord, ExporterSet, LogExporter, LogRecord},
     crate::exporter_factory::exporter_factory,
-    crate::failure::{export_failure_from_canonical_event, shutdown_flush_failure},
+    crate::failure::export_failure_from_canonical_event,
     crate::legacy_projection::trace_context,
-    sc_observability_types::typed::FlushFailure,
     sc_observability_types::v2::TelemetryError as CanonicalTelemetryError,
     sc_observability_types::v2::{
         ConfigFailure, EventError as CanonicalEventError, ExportError,
