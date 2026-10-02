@@ -197,7 +197,10 @@ def pinned_viewer(tmp_path: Path) -> Iterator[dict[str, str]]:
     """
     binary = os.environ.get("TELEMETRY_E2E_VIEWER_BINARY")
     if not binary:
-        pytest.skip("set TELEMETRY_E2E_VIEWER_BINARY to run pinned viewer readback")
+        message = "set TELEMETRY_E2E_VIEWER_BINARY to run pinned viewer readback"
+        if os.environ.get("GITHUB_ACTIONS", "").lower() == "true":
+            pytest.fail(f"{message}; CI must not skip viewer readback", pytrace=False)
+        pytest.skip(message)
     manifest = json.loads((ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/release.json").read_text())
     http, grpc, ui = (free_port(), free_port(), free_port())
     state = tmp_path / "viewer-state"
