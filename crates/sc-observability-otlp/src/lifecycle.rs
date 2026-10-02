@@ -49,7 +49,7 @@ impl<T> SignalArray<T> {
         Self(values)
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "otlp-sdk"))]
     pub(crate) fn into_inner(self) -> [T; 4] {
         self.0
     }
