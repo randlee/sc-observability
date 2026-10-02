@@ -27,6 +27,12 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
+      - name: Install nightly toolchain for public API validation
+        run: rustup toolchain install nightly
+      - name: Install pinned public API and evidence tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.58.0,cargo-deny@0.19.4,cargo-public-api@0.52.0,cargo-semver-checks@0.48.0
       - name: Download verified pinned desktop viewer
         run: >-
           python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py
@@ -36,21 +42,30 @@ jobs:
           TELEMETRY_E2E_VIEWER_BINARY: ${{ runner.temp }}/otel-desktop-viewer
         run: python3 -m pip install pytest==8.4.2 && python3 -m pytest -q tests/telemetry-e2e
       - name: Capture public API and error migration evidence
+        if: always()
         run: |
           mkdir -p target/telemetry-e2e/evidence
           set +e
           just public-api > target/telemetry-e2e/evidence/public-api.log 2>&1
           public_api=$?
-          printf 'exit=%s\\n' "$public_api" >> target/telemetry-e2e/evidence/public-api.log
+          printf 'exit=%s\n' "$public_api" >> target/telemetry-e2e/evidence/public-api.log
           python3 scripts/ci/validate_error_migration.py > target/telemetry-e2e/evidence/error-migration.log 2>&1
           error_migration=$?
-          printf 'exit=%s\\n' "$error_migration" >> target/telemetry-e2e/evidence/error-migration.log
+          printf 'exit=%s\n' "$error_migration" >> target/telemetry-e2e/evidence/error-migration.log
           cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories > target/telemetry-e2e/evidence/cargo-deny.log 2>&1
           deny_otlp=$?
-          printf 'exit=%s\\n' "$deny_otlp" >> target/telemetry-e2e/evidence/cargo-deny.log
+          printf 'exit=%s\n' "$deny_otlp" >> target/telemetry-e2e/evidence/cargo-deny.log
           cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features check --config policy/deny-durable-store.toml licenses bans advisories >> target/telemetry-e2e/evidence/cargo-deny.log 2>&1
           deny_cli=$?
-          printf 'exit=%s\\n' "$deny_cli" >> target/telemetry-e2e/evidence/cargo-deny.log
+          printf 'exit=%s\n' "$deny_cli" >> target/telemetry-e2e/evidence/cargo-deny.log
           test "$public_api" -eq 0 -a "$error_migration" -eq 0 -a "$deny_otlp" -eq 0 -a "$deny_cli" -eq 0
+      - name: Upload telemetry evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: telemetry-e2e-evidence-${{ github.run_id }}-${{ github.sha }}
+          path: target/telemetry-e2e/evidence
+          if-no-files-found: error
+          retention-days: 14
       - name: Check user documentation links
         run: bash scripts/ci/validate_docs_consistency.sh
