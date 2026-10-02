@@ -3,7 +3,7 @@
 //! A lease belongs to its originating budget and releases both credits on drop,
 //! including cancellation. D.6 retains it until an admission's terminal outcome.
 
-use crate::lifecycle::SignalKind;
+use crate::lifecycle::Signal;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 
 use sc_observability_types::{ErrorContext, Remediation, error_codes, v2::ExportError};
@@ -38,7 +38,7 @@ pub(crate) struct AdmissionCredits(Arc<SharedBudget>);
 pub(crate) struct CreditLease {
     budget: Arc<SharedBudget>,
     bytes: usize,
-    signal: Option<SignalKind>,
+    signal: Option<Signal>,
 }
 
 #[cfg_attr(
@@ -96,7 +96,7 @@ impl AdmissionCredits {
     #[cfg(feature = "durable-store")]
     pub(crate) fn reserve_for(
         &self,
-        signal: SignalKind,
+        signal: Signal,
         bytes: usize,
     ) -> Result<CreditLease, ExportError> {
         self.reserve_inner(bytes, Some(signal))
@@ -105,7 +105,7 @@ impl AdmissionCredits {
     fn reserve_inner(
         &self,
         serialized_bytes: usize,
-        signal: Option<SignalKind>,
+        signal: Option<Signal>,
     ) -> Result<CreditLease, ExportError> {
         let mut budget = self.0.state.lock().unwrap_or_else(PoisonError::into_inner);
         if budget.records == 0 || serialized_bytes > budget.bytes {
@@ -248,7 +248,7 @@ mod tests {
     #[cfg(feature = "durable-store")]
     fn profile_credit_is_accounted_and_released() {
         let credits = credits(2, 100);
-        let lease = credits.reserve_for(SignalKind::Profiles, 10).unwrap();
+        let lease = credits.reserve_for(Signal::Profiles, 10).unwrap();
         assert_eq!(credits.0.state.lock().unwrap().by_signal, [0, 0, 0, 1]);
         drop(lease);
         assert_eq!(credits.0.state.lock().unwrap().by_signal, [0; 4]);

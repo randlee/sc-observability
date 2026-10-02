@@ -41,7 +41,7 @@ use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
     LogRecord, MetricExporter, TraceExporter,
 };
-use crate::lifecycle::{LifecycleCore, LifecycleState, SignalKind};
+use crate::lifecycle::{LifecycleCore, LifecycleState, Signal};
 use sc_observability_types::v2::{ExportError, MetricRecord, TelemetryError};
 use sc_observability_types::{ErrorContext, LogEvent, Remediation, error_codes};
 
@@ -1010,7 +1010,7 @@ impl OtlpHttpExporter {
 
     fn send_payload(
         &self,
-        signal: SignalKind,
+        signal: Signal,
         endpoint_signal: &str,
         batch: impl Send + 'static,
         payload: &Value,
@@ -1084,7 +1084,7 @@ impl LogExporter<LogEvent> for OtlpHttpExporter {
     fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
         let records = batch.iter().map(log_record).collect::<Vec<_>>();
         self.send_payload(
-            SignalKind::Logs,
+            Signal::Logs,
             "logs",
             batch.to_vec(),
             &build_logs_payload(&records),
@@ -1095,7 +1095,7 @@ impl LogExporter<LogEvent> for OtlpHttpExporter {
 impl LogExporter<ExportRecord<LogRecord>> for OtlpHttpExporter {
     fn export_logs(&self, batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
         self.send_payload(
-            SignalKind::Logs,
+            Signal::Logs,
             "logs",
             batch.to_vec(),
             &build_logs_payload(batch),
@@ -1107,7 +1107,7 @@ impl TraceExporter<CompleteSpan> for OtlpHttpExporter {
     fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
         let records = batch.iter().map(span_record).collect::<Vec<_>>();
         self.send_payload(
-            SignalKind::Traces,
+            Signal::Traces,
             "traces",
             batch.to_vec(),
             &build_traces_payload(&records),
@@ -1118,7 +1118,7 @@ impl TraceExporter<CompleteSpan> for OtlpHttpExporter {
 impl TraceExporter<ExportRecord<CompleteSpan>> for OtlpHttpExporter {
     fn export_spans(&self, batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
         self.send_payload(
-            SignalKind::Traces,
+            Signal::Traces,
             "traces",
             batch.to_vec(),
             &build_traces_payload(batch),
@@ -1130,7 +1130,7 @@ impl MetricExporter<MetricRecord> for OtlpHttpExporter {
     fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
         let records = batch.iter().map(metric_record).collect::<Vec<_>>();
         self.send_payload(
-            SignalKind::Metrics,
+            Signal::Metrics,
             "metrics",
             batch.to_vec(),
             &build_metrics_payload(&records),
@@ -1141,7 +1141,7 @@ impl MetricExporter<MetricRecord> for OtlpHttpExporter {
 impl MetricExporter<ExportRecord<MetricRecord>> for OtlpHttpExporter {
     fn export_metrics(&self, batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
         self.send_payload(
-            SignalKind::Metrics,
+            Signal::Metrics,
             "metrics",
             batch.to_vec(),
             &build_metrics_payload(batch),

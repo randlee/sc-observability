@@ -37,7 +37,7 @@ use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
     LifecycleFuture, LogExporter, LogRecord, MetricExporter, Resource, TraceExporter,
 };
-use crate::lifecycle::{Admitted, LifecycleCore, LifecycleState, SignalKind};
+use crate::lifecycle::{Admitted, LifecycleCore, LifecycleState, Signal};
 use sc_observability_types::otlp::group_records_by_resource_and_scope;
 use sc_observability_types::v2::{
     AggregationTemporality, AttributeValue, Attributes, ExportError, MetricRecord, MetricValue,
@@ -735,7 +735,7 @@ impl LogExporter for SdkLogExporter {
     fn export_logs(&self, batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
         schedule(
             &self.backend,
-            SignalKind::Logs,
+            Signal::Logs,
             batch,
             project_logs,
             |terminal, request| async move { terminal.export_logs(request).await },
@@ -751,7 +751,7 @@ impl TraceExporter for SdkTraceExporter {
     fn export_spans(&self, batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
         schedule(
             &self.backend,
-            SignalKind::Traces,
+            Signal::Traces,
             batch,
             project_spans,
             |terminal, request| async move { terminal.export_spans(request).await },
@@ -767,7 +767,7 @@ impl MetricExporter for SdkMetricExporter {
     fn export_metrics(&self, batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
         schedule(
             &self.backend,
-            SignalKind::Metrics,
+            Signal::Metrics,
             batch,
             project_metrics,
             |terminal, request| async move { terminal.export_metrics(request).await },
@@ -777,7 +777,7 @@ impl MetricExporter for SdkMetricExporter {
 
 fn schedule<T, R, P, E, F>(
     backend: &Arc<SdkBackend>,
-    signal: SignalKind,
+    signal: Signal,
     batch: &[ExportRecord<T>],
     project: P,
     export: E,

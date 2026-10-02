@@ -15,7 +15,7 @@ use crate::contracts::{
     CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
     LifecycleFuture, Resource,
 };
-use crate::lifecycle::{LifecycleCore, LifecycleState, SignalKind};
+use crate::lifecycle::{LifecycleCore, LifecycleState, Signal};
 use crate::testing::{RecordingLogExporter, RecordingMetricExporter, RecordingTraceExporter};
 use sc_observability_types::v2::{
     AggregationTemporality, AttributeValue, Attributes, ExportError, FiniteF64, HistogramPoint,
@@ -286,7 +286,7 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
     };
     let bounds = validated_transport_bounds(&OtelConfig::default()).expect("test bounds");
     let core = LifecycleCore::new(exporters, &bounds).expect("test lifecycle core");
-    core.admit(SignalKind::Logs, (), 1)
+    core.admit(Signal::Logs, (), 1)
         .unwrap()
         .complete(Err(runtime_terminated()));
     let mut first = core.flush_async();
@@ -350,10 +350,10 @@ fn ordered_flush_waits_for_prior_admission_and_preserves_payload() {
     let (core, flushes, _, released) = default_fixture();
     let (span_payload, metric_payload) = preserved_records();
     let admitted_span = core
-        .admit(SignalKind::Traces, span_payload.clone(), 256)
+        .admit(Signal::Traces, span_payload.clone(), 256)
         .expect("admit span");
     let admitted_metric = core
-        .admit(SignalKind::Metrics, metric_payload.clone(), 128)
+        .admit(Signal::Metrics, metric_payload.clone(), 128)
         .expect("admit metric");
     assert_eq!(admitted_span.get(), &span_payload);
     assert_eq!(admitted_metric.get(), &metric_payload);
@@ -386,7 +386,7 @@ fn ordered_flush_waits_for_prior_admission_and_preserves_payload() {
 fn ordered_flush_returns_admitted_export_failure_and_keeps_success_control() {
     let (core, _, _, released) = default_fixture();
     let admitted = core
-        .admit(SignalKind::Logs, (), 1)
+        .admit(Signal::Logs, (), 1)
         .expect("admit log before transport failure");
     admitted.complete(Err(runtime_terminated()));
     released.store(true, Ordering::Release);
@@ -406,7 +406,7 @@ fn ordered_flush_returns_admitted_export_failure_and_keeps_success_control() {
 
     let (control, _, _, released) = default_fixture();
     let admitted = control
-        .admit(SignalKind::Logs, (), 1)
+        .admit(Signal::Logs, (), 1)
         .expect("admit success-control log");
     admitted.complete(Ok(()));
     released.store(true, Ordering::Release);
@@ -417,7 +417,7 @@ fn ordered_flush_returns_admitted_export_failure_and_keeps_success_control() {
 #[test]
 fn consumed_failure_does_not_poison_later_successful_windows() {
     let (core, flushes, shutdowns, released) = default_fixture();
-    core.admit(SignalKind::Logs, (), 1)
+    core.admit(Signal::Logs, (), 1)
         .unwrap()
         .complete(Err(runtime_terminated()));
     let mut first = core.flush_async();
@@ -430,7 +430,7 @@ fn consumed_failure_does_not_poison_later_successful_windows() {
             Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
         ));
     }
-    core.admit(SignalKind::Logs, (), 1)
+    core.admit(Signal::Logs, (), 1)
         .unwrap()
         .complete(Ok(()));
     assert!(matches!(
@@ -453,7 +453,7 @@ fn consumed_failure_does_not_poison_later_successful_windows() {
 #[test]
 fn signal_recovery_clears_only_that_signal_and_keeps_cumulative_drops() {
     let (core, _, _, _) = default_fixture();
-    for signal in [SignalKind::Logs, SignalKind::Traces] {
+    for signal in [Signal::Logs, Signal::Traces] {
         core.admit(signal, (), 1)
             .unwrap()
             .complete(Err(runtime_terminated()));
@@ -462,12 +462,12 @@ fn signal_recovery_clears_only_that_signal_and_keeps_cumulative_drops() {
     assert_eq!(failing.degraded_by_signal, [true, true, false, false]);
     assert!(failing.degraded);
 
-    core.admit(SignalKind::Logs, (), 1)
+    core.admit(Signal::Logs, (), 1)
         .unwrap()
         .complete(Ok(()));
     let logs_recovered = core.health();
-    assert!(!logs_recovered.degraded_for(SignalKind::Logs));
-    assert!(logs_recovered.degraded_for(SignalKind::Traces));
+    assert!(!logs_recovered.degraded_for(Signal::Logs));
+    assert!(logs_recovered.degraded_for(Signal::Traces));
     assert!(
         logs_recovered.degraded,
         "a still-failing signal keeps the core degraded"
@@ -475,7 +475,7 @@ fn signal_recovery_clears_only_that_signal_and_keeps_cumulative_drops() {
     assert_eq!(logs_recovered.dropped_by_signal, [1, 1, 0, 0]);
     assert_eq!(logs_recovered.last_error, failing.last_error);
 
-    core.admit(SignalKind::Traces, (), 1)
+    core.admit(Signal::Traces, (), 1)
         .unwrap()
         .complete(Ok(()));
     let recovered = core.health();
@@ -511,9 +511,9 @@ fn failed_operation_degrades_until_a_later_operation_succeeds() {
 fn failures_on_both_sides_of_cutoff_survive_either_completion_order() {
     for later_completes_first in [false, true] {
         let (core, _, _, released) = default_fixture();
-        let earlier = core.admit(SignalKind::Logs, (), 1).unwrap();
+        let earlier = core.admit(Signal::Logs, (), 1).unwrap();
         let mut first = core.flush_async();
-        let later = core.admit(SignalKind::Traces, (), 1).unwrap();
+        let later = core.admit(Signal::Traces, (), 1).unwrap();
         if later_completes_first {
             later.complete(Err(admission_timeout()));
             earlier.complete(Err(runtime_terminated()));
@@ -544,14 +544,14 @@ fn failures_on_both_sides_of_cutoff_survive_either_completion_order() {
 #[test]
 fn pending_backend_retains_window_failure_after_waiter_cancellation() {
     let (core, flushes, _, released) = default_fixture();
-    let earlier = core.admit(SignalKind::Logs, (), 1).unwrap();
+    let earlier = core.admit(Signal::Logs, (), 1).unwrap();
     let mut first = core.flush_async();
     earlier.complete(Err(runtime_terminated()));
     assert!(
         poll_once(&mut first).is_pending(),
         "backend is still pending"
     );
-    core.admit(SignalKind::Traces, (), 1)
+    core.admit(Signal::Traces, (), 1)
         .unwrap()
         .complete(Err(admission_timeout()));
     drop(first);
@@ -574,7 +574,7 @@ fn overlapping_shutdown_preserves_flush_failure_for_all_waiters() {
     // both operations are active. Shutdown must inherit its flush precondition.
     for complete_before_shutdown in [false, true] {
         let (core, flushes, shutdowns, released) = default_fixture();
-        let admission = core.admit(SignalKind::Logs, (), 1).unwrap();
+        let admission = core.admit(Signal::Logs, (), 1).unwrap();
         let mut flush = core.flush_async();
         let admission = if complete_before_shutdown {
             admission.complete(Err(runtime_terminated()));
@@ -608,7 +608,7 @@ fn overlapping_shutdown_preserves_flush_failure_for_all_waiters() {
 fn empty_flush_excludes_first_later_admission() {
     let (core, flushes, _, released) = default_fixture();
     let mut empty = core.flush_async();
-    let later = core.admit(SignalKind::Logs, (), 1).unwrap();
+    let later = core.admit(Signal::Logs, (), 1).unwrap();
     released.store(true, Ordering::Release);
     assert!(matches!(poll_once(&mut empty), Poll::Ready(Ok(()))));
     assert_eq!(flushes.load(Ordering::Acquire), 1);
@@ -622,7 +622,7 @@ fn empty_flush_excludes_first_later_admission() {
 #[test]
 fn admission_failure_after_timed_out_window_reaches_next_barrier() {
     let (core, _, _, released) = fixture(None, &OtelConfig::default());
-    let admission = core.admit(SignalKind::Logs, (), 1).unwrap();
+    let admission = core.admit(Signal::Logs, (), 1).unwrap();
     let mut expired = core.flush_async();
     assert!(poll_once(&mut expired).is_pending());
     expired.expire_for_test();
@@ -659,7 +659,7 @@ fn admission_timeout() -> ExportError {
 fn ordered_barrier_wakes_after_its_last_admission_finishes() {
     let (core, _, _, released) = default_fixture();
     let admitted = core
-        .admit(SignalKind::Logs, (), 1)
+        .admit(Signal::Logs, (), 1)
         .expect("admit log record");
     let (completion_attempt_tx, completion_attempt_rx) = mpsc::channel();
     let (completion_ready_tx, completion_ready_rx) = mpsc::channel();
@@ -727,9 +727,9 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
     };
     let (core, _, _, released) = fixture(None, &transport);
     let admitted = core
-        .admit(SignalKind::Logs, (), 4)
+        .admit(Signal::Logs, (), 4)
         .expect("first admission");
-    let Err(rejected) = core.admit(SignalKind::Logs, (), 1) else {
+    let Err(rejected) = core.admit(Signal::Logs, (), 1) else {
         panic!("queue must be full")
     };
     assert_eq!(rejected.code(), crate::error_codes::OTLP_QUEUE_FULL);
@@ -739,7 +739,7 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
     released.store(true, Ordering::Release);
     let mut shutdown = core.shutdown_async();
     assert!(poll_once(&mut shutdown).is_ready());
-    let Err(closed) = core.admit(SignalKind::Logs, (), 1) else {
+    let Err(closed) = core.admit(Signal::Logs, (), 1) else {
         panic!("closed admission")
     };
     assert!(matches!(
@@ -759,13 +759,13 @@ fn byte_capacity_rejects_when_record_capacity_remains() {
     };
     let (core, _, _, released) = fixture(None, &transport);
     let admitted = core
-        .admit(SignalKind::Logs, (), 3)
+        .admit(Signal::Logs, (), 3)
         .expect("admit below the byte capacity");
     let before_rejection = core.health();
     assert_eq!(before_rejection.admitted_records, 1);
     assert_eq!(before_rejection.admitted_bytes, 3);
 
-    let Err(rejected) = core.admit(SignalKind::Logs, (), 2) else {
+    let Err(rejected) = core.admit(Signal::Logs, (), 2) else {
         panic!("byte capacity must reject while record capacity remains")
     };
     assert_eq!(rejected.code(), crate::error_codes::OTLP_QUEUE_FULL);
@@ -799,7 +799,7 @@ fn admission_rejects_a_record_above_the_per_record_limit() {
     let (core, _, _, _) = default_fixture();
 
     assert!(matches!(
-        core.admit(SignalKind::Logs, (), MAX_OTLP_RECORD_BYTES + 1),
+        core.admit(Signal::Logs, (), MAX_OTLP_RECORD_BYTES + 1),
         Err(sc_observability_types::v2::TelemetryError::ExportFailure(
             ExportError::QueueFull { .. }
         ))

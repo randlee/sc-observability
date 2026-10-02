@@ -10,7 +10,7 @@ use crate::config::{
     validated_transport_bounds,
 };
 use crate::contracts::{ExportRecord, InstrumentationScope, LogRecord, Resource};
-use crate::lifecycle::{LifecycleCore, SignalKind};
+use crate::lifecycle::{LifecycleCore, Signal};
 use crate::testing::RecordingLifecycle;
 use sc_observability_types::v2::{
     AttributeValue, Attributes, FiniteF64, MetricRecord, MetricValue, TraceFlags,
@@ -147,7 +147,7 @@ where
         LifecycleCore::from_backend(Arc::new(RecordingLifecycle::default()), &bounds)
             .expect("retry lifecycle");
     let admitted = lifecycle_core
-        .admit(SignalKind::Logs, (), 1_024)
+        .admit(Signal::Logs, (), 1_024)
         .expect("retry admission");
     let (_shutdown, shutdown_rx) = never_cancelled_shutdown();
     let result = super::implementation::retry_export(

@@ -415,13 +415,13 @@ fn drain(
     Ok(true)
 }
 
-fn signal_kind(signal: Signal) -> Result<crate::lifecycle::SignalKind, TelemetryClientError> {
-    use crate::lifecycle::SignalKind;
+fn signal_kind(signal: Signal) -> Result<crate::lifecycle::Signal, TelemetryClientError> {
+    use crate::lifecycle::Signal;
     match signal {
-        Signal::Logs => Ok(SignalKind::Logs),
-        Signal::Traces => Ok(SignalKind::Traces),
-        Signal::Metrics => Ok(SignalKind::Metrics),
-        Signal::Profiles => Ok(SignalKind::Profiles),
+        Signal::Logs => Ok(Signal::Logs),
+        Signal::Traces => Ok(Signal::Traces),
+        Signal::Metrics => Ok(Signal::Metrics),
+        Signal::Profiles => Ok(Signal::Profiles),
         _ => Err(persistence("unsupported signal")),
     }
 }

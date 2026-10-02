@@ -32,6 +32,7 @@ use crate::contracts::{ExporterSet, LifecycleFuture};
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
 use crate::error_codes;
 use sc_observability_types::DiagnosticSummary;
+pub(crate) use sc_observability_types::otlp::submission::Signal;
 #[cfg(feature = "sync-http")]
 use sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED;
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
@@ -39,31 +40,41 @@ use sc_observability_types::v2::{ExportError, TelemetryError};
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
 use sc_observability_types::{ErrorContext, Remediation};
 
-/// Signal family used for per-signal dropped accounting.
+/// Fixed signal-indexed values for the four supported telemetry families.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SignalKind {
-    /// Log records.
-    Logs,
-    /// Completed spans.
-    Traces,
-    /// Metric records.
-    Metrics,
-    /// Profile samples.
-    #[cfg_attr(
-        not(feature = "durable-store"),
-        expect(dead_code, reason = "durable profiles accounting")
-    )]
-    Profiles,
+pub(crate) struct SignalArray<T>([T; 4]);
+
+impl<T> SignalArray<T> {
+    pub(crate) const fn new(values: [T; 4]) -> Self {
+        Self(values)
+    }
+
+    pub(crate) fn get(&self, signal: Signal) -> Option<&T> {
+        self.index(signal).map(|index| &self.0[index])
+    }
+
+    pub(crate) fn get_mut(&mut self, signal: Signal) -> Option<&mut T> {
+        self.index(signal).map(|index| &mut self.0[index])
+    }
+
+    pub(crate) fn iter(&self) -> std::slice::Iter<'_, T> {
+        self.0.iter()
+    }
+
+    fn index(&self, signal: Signal) -> Option<usize> {
+        match signal {
+            Signal::Logs => Some(0),
+            Signal::Traces => Some(1),
+            Signal::Metrics => Some(2),
+            Signal::Profiles => Some(3),
+            _ => None,
+        }
+    }
 }
 
-impl SignalKind {
-    pub(crate) const fn index(self) -> usize {
-        match self {
-            Self::Logs => 0,
-            Self::Traces => 1,
-            Self::Metrics => 2,
-            Self::Profiles => 3,
-        }
+impl<T: PartialEq> PartialEq<[T; 4]> for SignalArray<T> {
+    fn eq(&self, other: &[T; 4]) -> bool {
+        self.0 == *other
     }
 }
 
@@ -77,11 +88,11 @@ pub(crate) struct LifecycleHealth {
     /// Aggregate bytes not yet terminal.
     pub(crate) admitted_bytes: usize,
     /// Dropped records by signal: logs, traces, metrics, profiles.
-    pub(crate) dropped_by_signal: [u64; 4],
+    pub(crate) dropped_by_signal: SignalArray<u64>,
     /// Whether a signal or the latest lifecycle operation is currently degraded.
     pub(crate) degraded: bool,
     /// Current degradation by signal: logs, traces, metrics, profiles.
-    pub(crate) degraded_by_signal: [bool; 4],
+    pub(crate) degraded_by_signal: SignalArray<bool>,
     /// Last diagnostic recorded by the lifecycle core.
     pub(crate) last_error: Option<DiagnosticSummary>,
 }
@@ -93,8 +104,8 @@ impl LifecycleHealth {
     }
 
     /// Returns whether one signal family is currently degraded.
-    pub(crate) fn degraded_for(&self, signal: SignalKind) -> bool {
-        self.degraded_by_signal[signal.index()]
+    pub(crate) fn degraded_for(&self, signal: Signal) -> bool {
+        self.degraded_by_signal.get(signal).copied().unwrap_or(false)
     }
 }
 
@@ -139,7 +150,7 @@ impl<T> Admitted<T> {
 struct AdmissionPermit {
     inner: Weak<LifecycleInner>,
     sequence: u64,
-    signal: SignalKind,
+    signal: Signal,
     bytes: usize,
     finished: AtomicBool,
 }
@@ -165,7 +176,7 @@ impl Drop for AdmissionPermit {
 
 #[cfg(feature = "sync-http")]
 struct AdmissionMeta {
-    signal: SignalKind,
+    signal: Signal,
     bytes: usize,
 }
 
@@ -179,9 +190,9 @@ struct CoreState {
     active: BTreeMap<u64, AdmissionMeta>,
     #[cfg(not(feature = "sync-http"))]
     active: BTreeSet<u64>,
-    dropped_by_signal: [u64; 4],
+    dropped_by_signal: SignalArray<u64>,
     // Set by a signal's terminal loss; cleared by its next successful export.
-    degraded_by_signal: [bool; 4],
+    degraded_by_signal: SignalArray<bool>,
     // Reflects the most recently completed flush or shutdown.
     operation_degraded: bool,
     last_error: Option<DiagnosticSummary>,
@@ -261,8 +272,8 @@ impl LifecycleCore {
                     active: BTreeMap::new(),
                     #[cfg(not(feature = "sync-http"))]
                     active: BTreeSet::new(),
-                    dropped_by_signal: [0; 4],
-                    degraded_by_signal: [false; 4],
+                    dropped_by_signal: SignalArray::new([0; 4]),
+                    degraded_by_signal: SignalArray::new([false; 4]),
                     operation_degraded: false,
                     last_error: None,
                     pending_failure: None,
@@ -289,7 +300,7 @@ impl LifecycleCore {
     /// assign its sequence and reserve its record/byte budget.
     pub(crate) fn admit<T>(
         &self,
-        signal: SignalKind,
+        signal: Signal,
         value: T,
         bytes: usize,
     ) -> Result<Admitted<T>, TelemetryError> {
@@ -465,7 +476,7 @@ impl LifecycleCore {
             admitted_records: state.admitted_records,
             admitted_bytes: state.admitted_bytes,
             dropped_by_signal: state.dropped_by_signal,
-            degraded: state.operation_degraded || state.degraded_by_signal.contains(&true),
+            degraded: state.operation_degraded || state.degraded_by_signal.iter().any(|value| *value),
             degraded_by_signal: state.degraded_by_signal,
             last_error: state.last_error.clone(),
         }
@@ -474,9 +485,13 @@ impl LifecycleCore {
 
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
 impl LifecycleInner {
-    fn record_drop(state: &mut CoreState, signal: SignalKind, error: Option<&ExportError>) {
-        state.dropped_by_signal[signal.index()] += 1;
-        state.degraded_by_signal[signal.index()] = true;
+    fn record_drop(state: &mut CoreState, signal: Signal, error: Option<&ExportError>) {
+        if let Some(dropped) = state.dropped_by_signal.get_mut(signal) {
+            *dropped += 1;
+        }
+        if let Some(degraded) = state.degraded_by_signal.get_mut(signal) {
+            *degraded = true;
+        }
         if let Some(error) = error {
             state.last_error = Some(DiagnosticSummary::from(error.diagnostic()));
         }
@@ -485,7 +500,7 @@ impl LifecycleInner {
     fn finish_admission(
         &self,
         sequence: u64,
-        signal: SignalKind,
+        signal: Signal,
         bytes: usize,
         result: Result<(), ExportError>,
     ) {
@@ -514,7 +529,9 @@ impl LifecycleInner {
                 state.pending_failure.get_or_insert(snapshot);
             }
         } else {
-            state.degraded_by_signal[signal.index()] = false;
+            if let Some(degraded) = state.degraded_by_signal.get_mut(signal) {
+                *degraded = false;
+            }
         }
         let waiters = std::mem::take(&mut state.barrier_wakers);
         drop(state);

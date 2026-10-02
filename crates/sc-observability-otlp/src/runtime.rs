@@ -33,7 +33,7 @@ use crate::exporter_factory::exporter_factory_prepared;
 use crate::failure::{
     export_failure_from_canonical_event, flush_lifecycle_failure, shutdown_export_failure_typed,
 };
-use crate::lifecycle::{LifecycleHealth, LifecycleState, SignalKind};
+use crate::lifecycle::{LifecycleHealth, LifecycleState, Signal};
 #[cfg(test)]
 use crate::testing;
 use crate::{error_codes, legacy_projection};
@@ -121,7 +121,7 @@ impl Default for ExporterRuntime {
 fn merged_lifecycle_status(
     runtime: &ExporterRuntime,
     lifecycle: Option<&LifecycleHealth>,
-    signal: SignalKind,
+    signal: Signal,
 ) -> ExporterRuntime {
     let mut status = runtime.clone();
     if lifecycle.is_some_and(|health| health.degraded_for(signal)) {
@@ -598,17 +598,17 @@ impl RuntimeTelemetry {
         let log_status = merged_lifecycle_status(
             &runtime.log_status,
             lifecycle_health.as_ref(),
-            SignalKind::Logs,
+            Signal::Logs,
         );
         let trace_status = merged_lifecycle_status(
             &runtime.trace_status,
             lifecycle_health.as_ref(),
-            SignalKind::Traces,
+            Signal::Traces,
         );
         let metric_status = merged_lifecycle_status(
             &runtime.metric_status,
             lifecycle_health.as_ref(),
-            SignalKind::Metrics,
+            Signal::Metrics,
         );
         let exporter_statuses = vec![
             ExporterHealth {
