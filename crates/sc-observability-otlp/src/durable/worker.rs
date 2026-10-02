@@ -585,4 +585,16 @@ mod regression_tests {
             crate::constants::DEFAULT_OTLP_MAX_BACKOFF_MS
         );
     }
+
+    #[test]
+    fn persisted_retry_uses_configured_initial_and_max_backoff() {
+        let mut retry = SyncHttpRetryPolicyDto::default();
+        retry.initial_backoff_ms = Some(10);
+        retry.max_backoff_ms = Some(35);
+
+        assert_eq!(retry_backoff_ms(1, Some(&retry)), 10);
+        assert_eq!(retry_backoff_ms(2, Some(&retry)), 20);
+        assert_eq!(retry_backoff_ms(3, Some(&retry)), 35);
+        assert_eq!(retry_backoff_ms(u32::MAX, Some(&retry)), 35);
+    }
 }
