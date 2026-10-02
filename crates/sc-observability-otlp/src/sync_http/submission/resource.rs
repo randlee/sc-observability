@@ -3,7 +3,7 @@
 use super::values::key_values;
 use sc_observability_types::{
     Timestamp,
-    otlp::signals::{InstrumentationScope, Resource},
+    otlp::signals::{InstrumentationScope, Resource, ResourceRecord},
     v2::ExportError,
 };
 use serde_json::{Map, Value};
@@ -68,40 +68,81 @@ pub(super) fn scope(value: &InstrumentationScope) -> Result<Map<String, Value>, 
     Ok(encoded)
 }
 
-/// Returns the group for a resource/scope pair, creating each layer once.
-///
-/// Signal encoders supply their record wrapper and encoder only; this keeps
-/// the grouping semantics identical for logs, traces, metrics, and profiles.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the four signal encoders supply their distinct group and scope wrappers"
-)]
-pub(super) fn resource_scope_group<'a, G, S>(
-    groups: &'a mut Vec<G>,
-    resource: &Resource,
-    scope: &InstrumentationScope,
-    resource_of: impl Fn(&G) -> &Resource,
-    scopes: impl Fn(&mut G) -> &mut Vec<S>,
-    scope_of: impl Fn(&S) -> &InstrumentationScope,
-    new_resource_group: impl FnOnce(Resource) -> G,
-    new_scope_group: impl FnOnce(InstrumentationScope) -> S,
-) -> &'a mut S {
-    let resource_index = groups
-        .iter()
-        .position(|group| resource_of(group) == resource)
-        .unwrap_or_else(|| {
-            groups.push(new_resource_group(resource.clone()));
-            groups.len() - 1
-        });
-    let scoped_groups = scopes(&mut groups[resource_index]);
-    let scope_index = scoped_groups
-        .iter()
-        .position(|group| scope_of(group) == scope)
-        .unwrap_or_else(|| {
-            scoped_groups.push(new_scope_group(scope.clone()));
-            scoped_groups.len() - 1
-        });
-    &mut scoped_groups[scope_index]
+struct ResourceScopeGroup {
+    resource: Resource,
+    scopes: Vec<InstrumentationScopeGroup>,
+}
+
+struct InstrumentationScopeGroup {
+    scope: InstrumentationScope,
+    records: Vec<Value>,
+}
+
+/// Groups records by resource and instrumentation scope, preserving first-seen
+/// order and propagating record encoding errors.
+pub(super) fn group_by_resource_scope<'a, T: 'a>(
+    records: impl IntoIterator<Item = &'a ResourceRecord<T>>,
+    mut encode_record: impl FnMut(&T) -> Result<Value, ExportError>,
+    scopes_key: &str,
+    records_key: &str,
+) -> Result<Vec<Value>, ExportError> {
+    let mut groups: Vec<ResourceScopeGroup> = Vec::new();
+    for record in records {
+        let resource_index = groups
+            .iter()
+            .position(|group| group.resource == record.resource)
+            .unwrap_or_else(|| {
+                groups.push(ResourceScopeGroup {
+                    resource: record.resource.clone(),
+                    scopes: Vec::new(),
+                });
+                groups.len() - 1
+            });
+        let resource_group = &mut groups[resource_index];
+        let scope_index = resource_group
+            .scopes
+            .iter()
+            .position(|group| group.scope == record.scope)
+            .unwrap_or_else(|| {
+                resource_group.scopes.push(InstrumentationScopeGroup {
+                    scope: record.scope.clone(),
+                    records: Vec::new(),
+                });
+                resource_group.scopes.len() - 1
+            });
+        resource_group.scopes[scope_index]
+            .records
+            .push(encode_record(&record.record)?);
+    }
+    groups
+        .into_iter()
+        .map(|group| {
+            Ok(Value::Object(Map::from_iter([
+                (
+                    "resource".to_owned(),
+                    Value::Object(resource(&group.resource)?),
+                ),
+                (
+                    scopes_key.to_owned(),
+                    Value::Array(
+                        group
+                            .scopes
+                            .into_iter()
+                            .map(|scope| {
+                                Ok(Value::Object(Map::from_iter([
+                                    (
+                                        "scope".to_owned(),
+                                        Value::Object(self::scope(&scope.scope)?),
+                                    ),
+                                    (records_key.to_owned(), Value::Array(scope.records)),
+                                ])))
+                            })
+                            .collect::<Result<Vec<_>, ExportError>>()?,
+                    ),
+                ),
+            ])))
+        })
+        .collect()
 }
 
 pub(super) fn timestamp(value: &Timestamp) -> Value {

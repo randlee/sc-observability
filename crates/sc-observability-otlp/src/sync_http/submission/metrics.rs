@@ -3,92 +3,24 @@
 use super::{resource, values};
 use sc_observability_types::otlp::{
     signals::{
-        AggregationTemporality, Exemplar, InstrumentationScope, MetricData, MetricStream,
-        NumberPoint, NumberValue, Resource, ResourceRecord,
+        AggregationTemporality, Exemplar, MetricData, MetricStream, NumberPoint, NumberValue,
     },
     submission::SubmissionEnvelope,
 };
 use sc_observability_types::v2::ExportError;
 use serde_json::{Map, Value};
 
-struct ScopeMetrics {
-    scope: InstrumentationScope,
-    records: Vec<Value>,
-}
-struct ResourceMetrics {
-    resource: Resource,
-    scopes: Vec<ScopeMetrics>,
-}
-
 pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {
-    let mut resources = Vec::new();
-    for envelope in envelopes {
-        for record in &envelope.metrics {
-            append(&mut resources, record)?;
-        }
-    }
+    let resources = resource::group_by_resource_scope(
+        envelopes.iter().flat_map(|envelope| &envelope.metrics),
+        metric,
+        "scopeMetrics",
+        "metrics",
+    )?;
     Ok(Value::Object(Map::from_iter([(
         "resourceMetrics".to_owned(),
-        Value::Array(
-            resources
-                .into_iter()
-                .map(wire_resource_metrics)
-                .collect::<Result<Vec<_>, _>>()?,
-        ),
+        Value::Array(resources),
     )])))
-}
-
-fn wire_resource_metrics(value: ResourceMetrics) -> Result<Value, ExportError> {
-    Ok(Value::Object(Map::from_iter([
-        (
-            "resource".to_owned(),
-            Value::Object(resource::resource(&value.resource)?),
-        ),
-        (
-            "scopeMetrics".to_owned(),
-            Value::Array(
-                value
-                    .scopes
-                    .into_iter()
-                    .map(wire_scope_metrics)
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
-        ),
-    ])))
-}
-
-fn wire_scope_metrics(value: ScopeMetrics) -> Result<Value, ExportError> {
-    Ok(Value::Object(Map::from_iter([
-        (
-            "scope".to_owned(),
-            Value::Object(resource::scope(&value.scope)?),
-        ),
-        ("metrics".to_owned(), Value::Array(value.records)),
-    ])))
-}
-
-fn append(
-    groups: &mut Vec<ResourceMetrics>,
-    record: &ResourceRecord<MetricStream>,
-) -> Result<(), ExportError> {
-    let scope_group = resource::resource_scope_group(
-        groups,
-        &record.resource,
-        &record.scope,
-        |group| &group.resource,
-        |group| &mut group.scopes,
-        |group| &group.scope,
-        |resource| ResourceMetrics {
-            resource,
-            scopes: Vec::new(),
-        },
-        |scope| ScopeMetrics {
-            scope,
-            records: Vec::new(),
-        },
-    );
-    scope_group.records.push(metric(&record.record)?);
-    Ok(())
 }
 
 fn metric(value: &MetricStream) -> Result<Value, ExportError> {
@@ -236,11 +168,18 @@ fn histogram_point(
         &value.time,
         value.flags.bits(),
     )?;
-    encoded.insert("count".to_owned(), uint(value.count));
+    encoded.insert("count".to_owned(), values::uint64(value.count));
     insert_double(&mut encoded, "sum", value.sum);
     encoded.insert(
         "bucketCounts".to_owned(),
-        Value::Array(value.bucket_counts.iter().copied().map(uint).collect()),
+        Value::Array(
+            value
+                .bucket_counts
+                .iter()
+                .copied()
+                .map(values::uint64)
+                .collect(),
+        ),
     );
     encoded.insert(
         "explicitBounds".to_owned(),
@@ -277,10 +216,10 @@ fn exponential_point(
         &value.time,
         value.flags.bits(),
     )?;
-    encoded.insert("count".to_owned(), uint(value.count));
+    encoded.insert("count".to_owned(), values::uint64(value.count));
     insert_double(&mut encoded, "sum", value.sum);
     encoded.insert("scale".to_owned(), Value::from(value.scale));
-    encoded.insert("zeroCount".to_owned(), uint(value.zero_count));
+    encoded.insert("zeroCount".to_owned(), values::uint64(value.zero_count));
     encoded.insert(
         "zeroThreshold".to_owned(),
         values::double(value.zero_threshold),
@@ -311,7 +250,7 @@ fn summary_point(
         &value.time,
         value.flags.bits(),
     )?;
-    encoded.insert("count".to_owned(), uint(value.count));
+    encoded.insert("count".to_owned(), values::uint64(value.count));
     encoded.insert("sum".to_owned(), values::double(value.sum));
     encoded.insert(
         "quantileValues".to_owned(),
@@ -395,7 +334,14 @@ fn buckets(value: &sc_observability_types::otlp::signals::ExponentialBuckets) ->
         ("offset".to_owned(), Value::from(value.offset)),
         (
             "bucketCounts".to_owned(),
-            Value::Array(value.bucket_counts.iter().copied().map(uint).collect()),
+            Value::Array(
+                value
+                    .bucket_counts
+                    .iter()
+                    .copied()
+                    .map(values::uint64)
+                    .collect(),
+            ),
         ),
     ]))
 }
@@ -406,10 +352,6 @@ fn temporality_value(value: AggregationTemporality) -> Result<u8, ExportError> {
         AggregationTemporality::Cumulative => Ok(2),
         _ => Err(values::unsupported_variant("AggregationTemporality")),
     }
-}
-
-fn uint(value: u64) -> Value {
-    values::uint64(value)
 }
 
 #[cfg(test)]

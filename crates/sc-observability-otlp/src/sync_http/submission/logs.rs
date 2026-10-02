@@ -1,92 +1,21 @@
 //! OTLP/JSON log submission request encoder.
 
 use super::{resource, values};
-use sc_observability_types::otlp::{
-    signals::{InstrumentationScope, LogPoint, Resource, ResourceRecord},
-    submission::SubmissionEnvelope,
-};
+use sc_observability_types::otlp::{signals::LogPoint, submission::SubmissionEnvelope};
 use sc_observability_types::v2::ExportError;
 use serde_json::{Map, Value};
 
-struct ScopeLogs {
-    scope: InstrumentationScope,
-    records: Vec<Value>,
-}
-
-struct ResourceLogs {
-    resource: Resource,
-    scopes: Vec<ScopeLogs>,
-}
-
 pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {
-    let mut resources: Vec<ResourceLogs> = Vec::new();
-    for envelope in envelopes {
-        for record in &envelope.logs {
-            append(&mut resources, record)?;
-        }
-    }
+    let resources = resource::group_by_resource_scope(
+        envelopes.iter().flat_map(|envelope| &envelope.logs),
+        log_record,
+        "scopeLogs",
+        "logRecords",
+    )?;
     Ok(Value::Object(Map::from_iter([(
         "resourceLogs".to_owned(),
-        Value::Array(
-            resources
-                .into_iter()
-                .map(wire_resource_logs)
-                .collect::<Result<Vec<_>, _>>()?,
-        ),
+        Value::Array(resources),
     )])))
-}
-
-fn wire_resource_logs(value: ResourceLogs) -> Result<Value, ExportError> {
-    Ok(Value::Object(Map::from_iter([
-        (
-            "resource".to_owned(),
-            Value::Object(resource::resource(&value.resource)?),
-        ),
-        (
-            "scopeLogs".to_owned(),
-            Value::Array(
-                value
-                    .scopes
-                    .into_iter()
-                    .map(wire_scope_logs)
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
-        ),
-    ])))
-}
-
-fn wire_scope_logs(value: ScopeLogs) -> Result<Value, ExportError> {
-    Ok(Value::Object(Map::from_iter([
-        (
-            "scope".to_owned(),
-            Value::Object(resource::scope(&value.scope)?),
-        ),
-        ("logRecords".to_owned(), Value::Array(value.records)),
-    ])))
-}
-
-fn append(
-    groups: &mut Vec<ResourceLogs>,
-    record: &ResourceRecord<LogPoint>,
-) -> Result<(), ExportError> {
-    let scope = resource::resource_scope_group(
-        groups,
-        &record.resource,
-        &record.scope,
-        |group| &group.resource,
-        |group| &mut group.scopes,
-        |group| &group.scope,
-        |resource| ResourceLogs {
-            resource,
-            scopes: Vec::new(),
-        },
-        |scope| ScopeLogs {
-            scope,
-            records: Vec::new(),
-        },
-    );
-    scope.records.push(log_record(&record.record)?);
-    Ok(())
 }
 
 fn log_record(record: &LogPoint) -> Result<Value, ExportError> {

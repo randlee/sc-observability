@@ -3,103 +3,55 @@
 use super::{resource, values};
 use sc_observability_types::otlp::{
     signals::{
-        Function, InstrumentationScope, KeyValueAndUnit, Line, Location, Mapping, Profile,
-        ProfileLink, Resource, ResourceRecord, Sample, Stack, ValueType,
+        Function, KeyValueAndUnit, Line, Location, Mapping, Profile, ProfileLink, Sample, Stack,
+        ValueType,
     },
     submission::SubmissionEnvelope,
 };
 use sc_observability_types::v2::ExportError;
 use serde_json::{Map, Value};
 
-struct ScopeProfiles {
-    scope: InstrumentationScope,
-    profiles: Vec<Value>,
-}
-struct ResourceProfiles {
-    resource: Resource,
-    scopes: Vec<ScopeProfiles>,
-}
-
 pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {
-    let mut groups = Vec::new();
     let dictionary = envelopes
         .iter()
         .find_map(|envelope| envelope.profiles.as_ref())
         .map(|profiles| wire_dictionary(&profiles.dictionary))
         .transpose()?;
-    for envelope in envelopes {
-        let Some(profiles) = &envelope.profiles else {
-            continue;
-        };
-        for profile in &profiles.profiles {
-            append(&mut groups, profile);
+    let groups = resource::group_by_resource_scope(
+        envelopes
+            .iter()
+            .flat_map(|envelope| envelope.profiles.iter())
+            .flat_map(|profiles| &profiles.profiles),
+        |profile| Ok(wire_profile(profile)),
+        "scopeProfiles",
+        "profiles",
+    )?;
+    let mut groups = groups;
+    for group in &mut groups {
+        if let Some(group) = group.as_object_mut() {
+            if let Some(resource) = group.get_mut("resource").and_then(Value::as_object_mut) {
+                let schema_url = resource.remove("schemaUrl").unwrap_or(Value::Null);
+                group.insert("schemaUrl".to_owned(), schema_url);
+            }
+            if let Some(scopes) = group.get_mut("scopeProfiles").and_then(Value::as_array_mut) {
+                for scope in scopes {
+                    if let Some(scope) = scope.as_object_mut()
+                        && let Some(scope_value) =
+                            scope.get_mut("scope").and_then(Value::as_object_mut)
+                    {
+                        let schema_url = scope_value.remove("schemaUrl").unwrap_or(Value::Null);
+                        scope.insert("schemaUrl".to_owned(), schema_url);
+                    }
+                }
+            }
         }
     }
     let mut encoded = Map::new();
     if let Some(dictionary) = dictionary {
         encoded.insert("dictionary".to_owned(), dictionary);
     }
-    encoded.insert(
-        "resourceProfiles".to_owned(),
-        Value::Array(
-            groups
-                .into_iter()
-                .map(wire_resource_profiles)
-                .collect::<Result<Vec<_>, _>>()?,
-        ),
-    );
+    encoded.insert("resourceProfiles".to_owned(), Value::Array(groups));
     Ok(Value::Object(encoded))
-}
-
-fn wire_resource_profiles(value: ResourceProfiles) -> Result<Value, ExportError> {
-    let schema_url = value.resource.schema_url.clone();
-    let mut resource_value = resource::resource(&value.resource)?;
-    resource_value.remove("schemaUrl");
-    Ok(Value::Object(Map::from_iter([
-        ("resource".to_owned(), Value::Object(resource_value)),
-        ("schemaUrl".to_owned(), optional_string(schema_url)),
-        (
-            "scopeProfiles".to_owned(),
-            Value::Array(
-                value
-                    .scopes
-                    .into_iter()
-                    .map(wire_scope_profiles)
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
-        ),
-    ])))
-}
-
-fn wire_scope_profiles(value: ScopeProfiles) -> Result<Value, ExportError> {
-    let schema_url = value.scope.schema_url.clone();
-    let mut scope_value = resource::scope(&value.scope)?;
-    scope_value.remove("schemaUrl");
-    Ok(Value::Object(Map::from_iter([
-        ("scope".to_owned(), Value::Object(scope_value)),
-        ("schemaUrl".to_owned(), optional_string(schema_url)),
-        ("profiles".to_owned(), Value::Array(value.profiles)),
-    ])))
-}
-
-fn append(groups: &mut Vec<ResourceProfiles>, profile: &ResourceRecord<Profile>) {
-    let scope_group = resource::resource_scope_group(
-        groups,
-        &profile.resource,
-        &profile.scope,
-        |group| &group.resource,
-        |group| &mut group.scopes,
-        |group| &group.scope,
-        |resource| ResourceProfiles {
-            resource,
-            scopes: Vec::new(),
-        },
-        |scope| ScopeProfiles {
-            scope,
-            profiles: Vec::new(),
-        },
-    );
-    scope_group.profiles.push(wire_profile(&profile.record));
 }
 
 fn wire_dictionary(
@@ -199,9 +151,9 @@ fn wire_profile(value: &Profile) -> Value {
 
 fn mapping(value: &Mapping) -> Value {
     Value::Object(Map::from_iter([
-        ("memoryStart".to_owned(), uint(value.memory_start)),
-        ("memoryLimit".to_owned(), uint(value.memory_limit)),
-        ("fileOffset".to_owned(), uint(value.file_offset)),
+        ("memoryStart".to_owned(), values::uint64(value.memory_start)),
+        ("memoryLimit".to_owned(), values::uint64(value.memory_limit)),
+        ("fileOffset".to_owned(), values::uint64(value.file_offset)),
         (
             "filenameStrindex".to_owned(),
             Value::from(value.filename_strindex),
@@ -216,7 +168,7 @@ fn mapping(value: &Mapping) -> Value {
 fn location(value: &Location) -> Value {
     Value::Object(Map::from_iter([
         ("mappingIndex".to_owned(), Value::from(value.mapping_index)),
-        ("address".to_owned(), uint(value.address)),
+        ("address".to_owned(), values::uint64(value.address)),
         (
             "lines".to_owned(),
             Value::Array(value.lines.iter().map(line).collect()),
@@ -239,7 +191,7 @@ fn function(value: &Function) -> Value {
             "filenameStrindex".to_owned(),
             Value::from(value.filename_strindex),
         ),
-        ("startLine".to_owned(), int(value.start_line)),
+        ("startLine".to_owned(), values::int64(value.start_line)),
     ]))
 }
 
@@ -284,7 +236,7 @@ fn sample(value: &Sample) -> Value {
         ("linkIndex".to_owned(), Value::from(value.link_index)),
         (
             "values".to_owned(),
-            Value::Array(value.values.iter().copied().map(int).collect()),
+            Value::Array(value.values.iter().copied().map(values::int64).collect()),
         ),
         (
             "timestampsUnixNano".to_owned(),
@@ -293,7 +245,7 @@ fn sample(value: &Sample) -> Value {
                     .timestamps_unix_nano
                     .iter()
                     .copied()
-                    .map(uint)
+                    .map(values::uint64)
                     .collect(),
             ),
         ),
@@ -313,25 +265,13 @@ fn line(value: &Line) -> Value {
             "functionIndex".to_owned(),
             Value::from(value.function_index),
         ),
-        ("line".to_owned(), int(value.line)),
-        ("column".to_owned(), int(value.column)),
+        ("line".to_owned(), values::int64(value.line)),
+        ("column".to_owned(), values::int64(value.column)),
     ]))
 }
 
 fn indices(values: &[i32]) -> Value {
     Value::Array(values.iter().copied().map(Value::from).collect())
-}
-
-fn uint(value: u64) -> Value {
-    values::uint64(value)
-}
-
-fn int(value: i64) -> Value {
-    values::int64(value)
-}
-
-fn optional_string(value: Option<String>) -> Value {
-    value.map_or(Value::Null, Value::String)
 }
 
 fn insert_optional(map: &mut Map<String, Value>, key: &str, value: Option<Value>) {

@@ -2,94 +2,23 @@
 
 use super::{resource, values};
 use sc_observability_types::otlp::{
-    signals::{
-        InstrumentationScope, Resource, ResourceRecord, SpanEventPoint, SpanKindPoint,
-        SpanLinkPoint, SpanPoint, StatusCode,
-    },
+    signals::{SpanEventPoint, SpanKindPoint, SpanLinkPoint, SpanPoint, StatusCode},
     submission::SubmissionEnvelope,
 };
 use sc_observability_types::v2::ExportError;
 use serde_json::{Map, Value};
 
-struct ScopeSpans {
-    scope: InstrumentationScope,
-    records: Vec<Value>,
-}
-
-struct ResourceSpans {
-    resource: Resource,
-    scopes: Vec<ScopeSpans>,
-}
-
 pub(super) fn request(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {
-    let mut resources = Vec::new();
-    for envelope in envelopes {
-        for record in &envelope.spans {
-            append(&mut resources, record)?;
-        }
-    }
+    let resources = resource::group_by_resource_scope(
+        envelopes.iter().flat_map(|envelope| &envelope.spans),
+        span,
+        "scopeSpans",
+        "spans",
+    )?;
     Ok(Value::Object(Map::from_iter([(
         "resourceSpans".to_owned(),
-        Value::Array(
-            resources
-                .into_iter()
-                .map(wire_resource_spans)
-                .collect::<Result<Vec<_>, _>>()?,
-        ),
+        Value::Array(resources),
     )])))
-}
-
-fn wire_resource_spans(value: ResourceSpans) -> Result<Value, ExportError> {
-    Ok(Value::Object(Map::from_iter([
-        (
-            "resource".to_owned(),
-            Value::Object(resource::resource(&value.resource)?),
-        ),
-        (
-            "scopeSpans".to_owned(),
-            Value::Array(
-                value
-                    .scopes
-                    .into_iter()
-                    .map(wire_scope_spans)
-                    .collect::<Result<Vec<_>, _>>()?,
-            ),
-        ),
-    ])))
-}
-
-fn wire_scope_spans(value: ScopeSpans) -> Result<Value, ExportError> {
-    Ok(Value::Object(Map::from_iter([
-        (
-            "scope".to_owned(),
-            Value::Object(resource::scope(&value.scope)?),
-        ),
-        ("spans".to_owned(), Value::Array(value.records)),
-    ])))
-}
-
-fn append(
-    groups: &mut Vec<ResourceSpans>,
-    record: &ResourceRecord<SpanPoint>,
-) -> Result<(), ExportError> {
-    let scope = resource::resource_scope_group(
-        groups,
-        &record.resource,
-        &record.scope,
-        |group| &group.resource,
-        |group| &mut group.scopes,
-        |group| &group.scope,
-        |resource| ResourceSpans {
-            resource,
-            scopes: Vec::new(),
-        },
-        |scope| ScopeSpans {
-            scope,
-            records: Vec::new(),
-        },
-    );
-    scope.records.push(span(&record.record)?);
-    Ok(())
 }
 
 fn span(value: &SpanPoint) -> Result<Value, ExportError> {
