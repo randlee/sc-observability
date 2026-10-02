@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.ci.cargo_workspaces import discover, main
+from scripts.ci.cargo_workspaces import commands, discover, main
 
 
 class WorkspaceDiscoveryTests(unittest.TestCase):
@@ -38,11 +38,28 @@ class WorkspaceDiscoveryTests(unittest.TestCase):
         with patch("sys.argv", ["cargo_workspaces.py", "unit"]), \
              patch("scripts.ci.cargo_workspaces.discover", return_value=manifests), \
              patch("scripts.ci.cargo_workspaces.subprocess.run") as run:
-            run.side_effect = [subprocess.CompletedProcess([], 1), subprocess.CompletedProcess([], 0)]
+            run.side_effect = [subprocess.CompletedProcess([], 1)] + [
+                subprocess.CompletedProcess([], 0) for _ in range(3)]
             self.assertEqual(main(), 1)
-            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_count, 4)
             for call in run.call_args_list:
                 self.assertIn("--no-fail-fast", call.args[0])
+
+    def test_unit_runs_default_features_then_all_features(self):
+        default, all_features = commands("unit", Path("Cargo.toml"))
+        self.assertNotIn("--all-features", default)
+        self.assertEqual(all_features, [*default, "--all-features"])
+
+    def test_failed_default_features_run_still_runs_all_features_and_fails(self):
+        manifests = [Path("Cargo.toml")]
+        with patch("sys.argv", ["cargo_workspaces.py", "unit"]), \
+             patch("scripts.ci.cargo_workspaces.discover", return_value=manifests), \
+             patch("scripts.ci.cargo_workspaces.subprocess.run") as run:
+            run.side_effect = [subprocess.CompletedProcess([], 101), subprocess.CompletedProcess([], 0)]
+            self.assertEqual(main(), 1)
+            self.assertEqual(run.call_count, 2)
+            self.assertNotIn("--all-features", run.call_args_list[0].args[0])
+            self.assertIn("--all-features", run.call_args_list[1].args[0])
 
 
 if __name__ == "__main__":

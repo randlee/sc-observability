@@ -42,7 +42,10 @@ def commands(category: str, manifest: Path) -> list[list[str]]:
               "--all-targets", "--all-features", "--", "-D", "warnings"]
     tests = ["cargo", "test", *selection, "--locked", "--workspace",
              "--all-targets", "--no-fail-fast"]
-    return {"fmt": [fmt], "clippy": [clippy], "lint": [fmt, clippy], "unit": [tests]}[category]
+    # Default features first, then all features so feature-gated tests run too.
+    all_feature_tests = [*tests, "--all-features"]
+    return {"fmt": [fmt], "clippy": [clippy], "lint": [fmt, clippy],
+            "unit": [tests, all_feature_tests]}[category]
 
 
 def main() -> int:
