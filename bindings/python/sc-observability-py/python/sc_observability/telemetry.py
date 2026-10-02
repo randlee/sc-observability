@@ -328,7 +328,7 @@ class Telemetry:
     def __enter__(self) -> "Telemetry":
         return self
 
-    def __exit__(self, _type: object, _value: object, _traceback: object) -> Literal[False]:
+    def __exit__(self, *exc: object) -> Literal[False]:
         self.shutdown()
         return False
 
