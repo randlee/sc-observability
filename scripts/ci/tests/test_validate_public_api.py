@@ -2,6 +2,9 @@
 import contextlib
 import io
 import json
+import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -697,6 +700,47 @@ class CandidateVersionLockTests(unittest.TestCase):
                                              "qualificationCandidate": {"version": "2.0.0"}}))
             with self.assertRaisesRegex(ValueError, "qualificationCandidate.version must be 1.5.0"):
                 validate_inventory_candidate(inventory, "1.5.0")
+
+
+class PublicApiRecipeTests(unittest.TestCase):
+    def test_diff_changes_continue_but_tool_semver_and_docs_failures_stop(self):
+        just = shutil.which("just")
+        self.assertIsNotNone(just, "repository gates require just")
+        root = Path(__file__).resolve().parents[3]
+        for diff, semver, docs, expected_calls, success in (
+            (0, 0, 0, "diff semver docs", True),
+            (1, 0, 0, "diff semver docs", True),
+            (2, 0, 0, "diff", False),
+            (3, 0, 0, "diff", False),
+            (1, 1, 0, "diff semver", False),
+            (1, 0, 1, "diff semver docs", False),
+        ):
+            with self.subTest(diff=diff, semver=semver, docs=docs):
+                with tempfile.TemporaryDirectory() as temporary:
+                    work = Path(temporary)
+                    shutil.copyfile(root / "justfile", work / "justfile")
+                    scripts = work / "scripts/ci"
+                    scripts.mkdir(parents=True)
+                    for name, code, label in (
+                        ("validate_public_api_diff.sh", diff, "diff"),
+                        ("validate_public_api_docs.sh", docs, "docs"),
+                    ):
+                        (scripts / name).write_text(f"echo {label} >> calls\nexit {code}\n")
+                    # Stub only the commands; execute the actual repository recipe.
+                    binary = work / "bin"
+                    binary.mkdir()
+                    python = binary / "python3"
+                    python.write_text(
+                        '#!/bin/sh\nif [ "$1" = "scripts/ci/validate_public_api_semver.py" ]; then\n'
+                        f'echo semver >> calls\nexit {semver}\nfi\nexit 0\n'
+                    )
+                    python.chmod(0o755)
+                    result = subprocess.run(
+                        [just, "public-api"], cwd=work, capture_output=True, text=True,
+                        env={**os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"]},
+                    )
+                    self.assertEqual(result.returncode == 0, success, result.stderr)
+                    self.assertEqual(" ".join((work / "calls").read_text().split()), expected_calls)
 
 
 if __name__ == '__main__':
