@@ -10,7 +10,7 @@ use std::future::Future;
 use std::io::Read;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Barrier, Condvar, Mutex, mpsc};
+use std::sync::{Arc, Barrier, Condvar, Mutex, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -957,6 +957,13 @@ fn core_admission_and_flush_faults() {
         "io",
         None,
     );
+    let source_chain = lock(&backend.shared.hooks.flush_source_chain)
+        .take()
+        .expect("typed flush error was observed before DTO conversion");
+    assert!(
+        source_chain.is_empty(),
+        "flush drain source chain changed: {source_chain:?}"
+    );
     let _ = owner.shutdown(Duration::from_secs(2));
     crate::spawn::wait_live(1);
 }
@@ -1384,6 +1391,13 @@ fn d15_callback_fixture() {
         "closed",
         None,
     );
+    let Err(error) = backend.shared.dispatcher.reserve(
+        crate::callback::ObserverPermit(Arc::new(AtomicUsize::new(1))),
+        Box::new(|| {}),
+    ) else {
+        panic!("closed dispatcher must reject direct callback reservations");
+    };
+    assert_canonical_context(&error, dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED, 0);
     callback_bounds();
 }
 
@@ -1442,10 +1456,10 @@ fn d15_operation_fixture() {
 }
 
 fn d15_spawn_fixture() {
-    let error = crate::error::init_runtime(
-        "helper startup failed",
-        Box::new(std::io::Error::other("native startup source")),
-    );
+    crate::spawn::fail_at(0);
+    let cause = crate::spawn::spawn("d15", || {})
+        .expect_err("the real helper spawn seam must inject its startup failure");
+    let error = crate::error::init_runtime(cause.to_string(), Box::new(cause));
     assert_canonical_context(
         &error,
         dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED,
@@ -1460,7 +1474,6 @@ fn d15_spawn_fixture() {
         "unavailable",
         None,
     );
-    spawn_rollback(0);
 }
 
 fn d15_sync_fixture() {

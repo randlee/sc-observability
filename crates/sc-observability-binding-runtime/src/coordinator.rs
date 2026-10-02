@@ -356,6 +356,8 @@ impl Coordinator {
                                 .flush()
                                 .map_err(|error| {
                                     let (typed, kind) = conversion::core_flush(error);
+                                    #[cfg(test)]
+                                    self.record_flush_source_chain(&typed);
                                     conversion::canonical(&typed, kind)
                                 })?,
                             Backend::Bridge(control) => {
@@ -461,6 +463,16 @@ impl Coordinator {
             source = std::error::Error::source(cause);
         }
         *lock(&self.hooks.shutdown_source_chain) = Some(chain);
+    }
+    #[cfg(test)]
+    fn record_flush_source_chain(&self, error: &native::v2::FlushError) {
+        let mut chain = Vec::new();
+        let mut source = std::error::Error::source(error);
+        while let Some(cause) = source {
+            chain.push(cause.to_string());
+            source = std::error::Error::source(cause);
+        }
+        *lock(&self.hooks.flush_source_chain) = Some(chain);
     }
     pub(crate) fn level(
         &self,
@@ -586,6 +598,9 @@ pub(crate) struct TestHooks {
     // MUTEX: publishes the optional flush gate; callers clone it before
     // waiting outside the lock.
     pub(crate) flush: Mutex<Option<Arc<crate::tests::Gate>>>,
+    // MUTEX: stores the flush source chain for later test inspection; the
+    // shared lock helper recovers poison.
+    pub(crate) flush_source_chain: Mutex<Option<Vec<String>>>,
     pub(crate) crash: AtomicBool,
     // MUTEX: stores the shutdown source chain for later test inspection; the
     // shared lock helper recovers poison.
