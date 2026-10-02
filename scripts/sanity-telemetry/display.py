@@ -5,6 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 
+# Consumed by test_display.py; imported history remains stored in UTC.
 def format_local(ts: str, tz: str) -> str:
     """Render a stored UTC timestamp in a requested timezone without storing local time."""
     instant = datetime.fromisoformat(ts.replace("Z", "+00:00"))
