@@ -172,7 +172,7 @@ where
     (
         attempts.load(std::sync::atomic::Ordering::SeqCst),
         status_code,
-        lifecycle_core.health().dropped_by_signal,
+        lifecycle_core.health().dropped_by_signal.into_inner(),
     )
 }
 

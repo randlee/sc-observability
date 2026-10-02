@@ -18,9 +18,7 @@ mod store;
 #[cfg(test)]
 mod tests;
 mod worker;
-use crate::contracts::credits::AdmissionCredits;
-#[cfg(test)]
-use crate::contracts::submission::SubmissionExporter;
+use crate::contracts::{credits::AdmissionCredits, submission::SubmissionExporter};
 pub use config_file::load_telemetry_file;
 use sc_lint_attributes::sc_lint;
 use sc_observability_types::otlp::submission::{
@@ -61,10 +59,15 @@ struct Shared {
     db: database::Database,
     config: TelemetryClientConfig,
     holder: row::LeaseHolder,
+    // Acquire reads reject operations; the AcqRel swap linearizes concurrent shutdown.
     closed: AtomicBool,
+    // Shutdown/drop stores Release; worker wait predicates observe it with Acquire.
     stop: AtomicBool,
+    // AdmissionCredits protects its counters with its internal mutex and condition variable.
     credits: AdmissionCredits,
+    // The generation is mutex-guarded so a waiter cannot miss a notification.
     wake: Mutex<u64>,
+    // Always paired with `wake`; waiters recheck the generation and `stop` predicate.
     changed: Condvar,
     // Last background failure is retained and emitted as a code-only diagnostic.
     last_error: Mutex<Option<ErrorCode>>,
@@ -208,10 +211,21 @@ impl DurableTelemetryClient {
         config: TelemetryClientConfig,
         exporter: Arc<dyn SubmissionExporter>,
     ) -> Result<Self, TelemetryClientError> {
+        Self::open_with_exporter_factory(config, |_, _| exporter)
+    }
+    fn open_with_exporter_factory(
+        config: TelemetryClientConfig,
+        build_exporter: impl FnOnce(
+            crate::sync_http::submission::SyncHttpConfig,
+            crate::config::ValidatedTransportBounds,
+        ) -> Arc<dyn SubmissionExporter>,
+    ) -> Result<Self, TelemetryClientError> {
         let otel = adapter::otel_config_from(&config)?;
-        let bounds = crate::config::validated_transport_bounds(&otel)
-            .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
+        let (worker_config, bounds) =
+            crate::sync_http::submission::SyncHttpConfig::from_otel(&otel)
+                .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
         let client = Self::prepare_validated(config, &bounds)?;
+        let exporter = build_exporter(worker_config, bounds);
         worker::start(&client.owner.shared, exporter)?;
         Ok(client)
     }
@@ -297,15 +311,7 @@ impl DurableTelemetryClient {
 impl TelemetryClient for DurableTelemetryClient {
     #[sc_lint(boundary.allow("cycle.type_method_self_loop"))]
     fn open(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
-        let otel = adapter::otel_config_from(&config)?;
-        let (worker, bounds) = crate::sync_http::submission::SyncHttpConfig::from_otel(&otel)
-            .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
-        let client = Self::prepare_validated(config, &bounds)?;
-        worker::start(
-            &client.owner.shared,
-            crate::sync_http::submission::exporter_for(worker, bounds),
-        )?;
-        Ok(client)
+        Self::open_with_exporter_factory(config, crate::sync_http::submission::exporter_for)
     }
     fn emit(&self, envelope: SubmissionEnvelope) -> Result<AdmissionReceipt, TelemetryClientError> {
         let shared = &self.owner.shared;

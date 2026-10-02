@@ -430,9 +430,7 @@ fn consumed_failure_does_not_poison_later_successful_windows() {
             Poll::Ready(Err(ExportError::RuntimeTerminated { .. }))
         ));
     }
-    core.admit(Signal::Logs, (), 1)
-        .unwrap()
-        .complete(Ok(()));
+    core.admit(Signal::Logs, (), 1).unwrap().complete(Ok(()));
     assert!(matches!(
         poll_once(&mut core.flush_async()),
         Poll::Ready(Ok(()))
@@ -462,9 +460,7 @@ fn signal_recovery_clears_only_that_signal_and_keeps_cumulative_drops() {
     assert_eq!(failing.degraded_by_signal, [true, true, false, false]);
     assert!(failing.degraded);
 
-    core.admit(Signal::Logs, (), 1)
-        .unwrap()
-        .complete(Ok(()));
+    core.admit(Signal::Logs, (), 1).unwrap().complete(Ok(()));
     let logs_recovered = core.health();
     assert!(!logs_recovered.degraded_for(Signal::Logs));
     assert!(logs_recovered.degraded_for(Signal::Traces));
@@ -475,9 +471,7 @@ fn signal_recovery_clears_only_that_signal_and_keeps_cumulative_drops() {
     assert_eq!(logs_recovered.dropped_by_signal, [1, 1, 0, 0]);
     assert_eq!(logs_recovered.last_error, failing.last_error);
 
-    core.admit(Signal::Traces, (), 1)
-        .unwrap()
-        .complete(Ok(()));
+    core.admit(Signal::Traces, (), 1).unwrap().complete(Ok(()));
     let recovered = core.health();
     assert_eq!(recovered.degraded_by_signal, [false; 4]);
     assert!(!recovered.degraded);
@@ -658,9 +652,7 @@ fn admission_timeout() -> ExportError {
 #[test]
 fn ordered_barrier_wakes_after_its_last_admission_finishes() {
     let (core, _, _, released) = default_fixture();
-    let admitted = core
-        .admit(Signal::Logs, (), 1)
-        .expect("admit log record");
+    let admitted = core.admit(Signal::Logs, (), 1).expect("admit log record");
     let (completion_attempt_tx, completion_attempt_rx) = mpsc::channel();
     let (completion_ready_tx, completion_ready_rx) = mpsc::channel();
     let completion_ready_rx = Arc::new(Mutex::new(completion_ready_rx));
@@ -726,9 +718,7 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
         ..OtelConfig::default()
     };
     let (core, _, _, released) = fixture(None, &transport);
-    let admitted = core
-        .admit(Signal::Logs, (), 4)
-        .expect("first admission");
+    let admitted = core.admit(Signal::Logs, (), 4).expect("first admission");
     let Err(rejected) = core.admit(Signal::Logs, (), 1) else {
         panic!("queue must be full")
     };

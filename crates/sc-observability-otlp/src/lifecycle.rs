@@ -32,9 +32,9 @@ use crate::contracts::{ExporterSet, LifecycleFuture};
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
 use crate::error_codes;
 use sc_observability_types::DiagnosticSummary;
-pub(crate) use sc_observability_types::otlp::submission::Signal;
 #[cfg(feature = "sync-http")]
 use sc_observability_types::error_codes::otlp::OTLP_WORKER_TERMINATED;
+pub(crate) use sc_observability_types::otlp::submission::Signal;
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
 use sc_observability_types::v2::{ExportError, TelemetryError};
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
@@ -49,19 +49,24 @@ impl<T> SignalArray<T> {
         Self(values)
     }
 
+    #[cfg(test)]
+    pub(crate) fn into_inner(self) -> [T; 4] {
+        self.0
+    }
+
     pub(crate) fn get(&self, signal: Signal) -> Option<&T> {
-        self.index(signal).map(|index| &self.0[index])
+        Self::index(signal).map(|index| &self.0[index])
     }
 
     pub(crate) fn get_mut(&mut self, signal: Signal) -> Option<&mut T> {
-        self.index(signal).map(|index| &mut self.0[index])
+        Self::index(signal).map(|index| &mut self.0[index])
     }
 
     pub(crate) fn iter(&self) -> std::slice::Iter<'_, T> {
         self.0.iter()
     }
 
-    fn index(&self, signal: Signal) -> Option<usize> {
+    fn index(signal: Signal) -> Option<usize> {
         match signal {
             Signal::Logs => Some(0),
             Signal::Traces => Some(1),
@@ -105,7 +110,10 @@ impl LifecycleHealth {
 
     /// Returns whether one signal family is currently degraded.
     pub(crate) fn degraded_for(&self, signal: Signal) -> bool {
-        self.degraded_by_signal.get(signal).copied().unwrap_or(false)
+        self.degraded_by_signal
+            .get(signal)
+            .copied()
+            .unwrap_or(false)
     }
 }
 
@@ -476,7 +484,8 @@ impl LifecycleCore {
             admitted_records: state.admitted_records,
             admitted_bytes: state.admitted_bytes,
             dropped_by_signal: state.dropped_by_signal,
-            degraded: state.operation_degraded || state.degraded_by_signal.iter().any(|value| *value),
+            degraded: state.operation_degraded
+                || state.degraded_by_signal.iter().any(|value| *value),
             degraded_by_signal: state.degraded_by_signal,
             last_error: state.last_error.clone(),
         }
@@ -528,10 +537,8 @@ impl LifecycleInner {
             if !captured {
                 state.pending_failure.get_or_insert(snapshot);
             }
-        } else {
-            if let Some(degraded) = state.degraded_by_signal.get_mut(signal) {
-                *degraded = false;
-            }
+        } else if let Some(degraded) = state.degraded_by_signal.get_mut(signal) {
+            *degraded = false;
         }
         let waiters = std::mem::take(&mut state.barrier_wakers);
         drop(state);

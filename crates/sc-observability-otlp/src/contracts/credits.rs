@@ -3,7 +3,7 @@
 //! A lease belongs to its originating budget and releases both credits on drop,
 //! including cancellation. D.6 retains it until an admission's terminal outcome.
 
-use crate::lifecycle::Signal;
+use crate::lifecycle::{Signal, SignalArray};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 
 use sc_observability_types::{ErrorContext, Remediation, error_codes, v2::ExportError};
@@ -15,7 +15,7 @@ struct Budget {
     records: usize,
     bytes: usize,
     releases: u64,
-    by_signal: [usize; 4],
+    by_signal: SignalArray<usize>,
     #[cfg(test)]
     wait_started: Option<Arc<std::sync::Barrier>>,
 }
@@ -72,7 +72,7 @@ impl AdmissionCredits {
                 records: bounds.queue_capacity().get(),
                 bytes: bounds.queue_byte_capacity().get(),
                 releases: 0,
-                by_signal: [0; 4],
+                by_signal: SignalArray::new([0; 4]),
                 #[cfg(test)]
                 wait_started: None,
             }),
@@ -124,8 +124,10 @@ impl AdmissionCredits {
         }
         budget.records -= 1;
         budget.bytes -= serialized_bytes;
-        if let Some(signal) = signal {
-            budget.by_signal[signal.index()] += 1;
+        if let Some(signal) = signal
+            && let Some(count) = budget.by_signal.get_mut(signal)
+        {
+            *count += 1;
         }
         Ok(CreditLease {
             budget: Arc::clone(&self.0),
@@ -145,8 +147,10 @@ impl Drop for CreditLease {
         // Every lease debited these exact amounts from this same budget once.
         budget.records += 1;
         budget.bytes += self.bytes;
-        if let Some(signal) = self.signal {
-            budget.by_signal[signal.index()] -= 1;
+        if let Some(signal) = self.signal
+            && let Some(count) = budget.by_signal.get_mut(signal)
+        {
+            *count -= 1;
         }
         budget.releases = budget.releases.wrapping_add(1);
         self.budget.released.notify_all();

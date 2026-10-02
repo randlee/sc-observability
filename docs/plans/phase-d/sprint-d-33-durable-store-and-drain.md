@@ -190,6 +190,8 @@ The signatures are in the d-29 doc and are not restated here.
 - **Claims.** Only the lease holder claims rows. It sets `state='claimed'`,
   `claimed_by` and `claim_expires_at = lease expiry`. After a batch completes,
   rows move to `delivered`, `retry` (with `next_attempt_at`) or `failed`.
+- **Retry.** The d-34 transport owns in-sequence retry; durable owns only the
+  bounded, persisted retry count and backoff from named constants.
 - **Takeover.** Claims held by an expired holder are reset to `pending` when
   the lease is taken over.
 - **Flush and shutdown.** Scope and results follow the d-29 flush rules.

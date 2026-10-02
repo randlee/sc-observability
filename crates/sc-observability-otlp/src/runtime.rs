@@ -595,11 +595,8 @@ impl RuntimeTelemetry {
     pub fn health(&self) -> TelemetryHealthReport {
         let lifecycle_health = self.exporters.lifecycle.lifecycle_health();
         let runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        let log_status = merged_lifecycle_status(
-            &runtime.log_status,
-            lifecycle_health.as_ref(),
-            Signal::Logs,
-        );
+        let log_status =
+            merged_lifecycle_status(&runtime.log_status, lifecycle_health.as_ref(), Signal::Logs);
         let trace_status = merged_lifecycle_status(
             &runtime.trace_status,
             lifecycle_health.as_ref(),

@@ -50,7 +50,7 @@ pub const DEFAULT_METRIC_BATCH_SIZE: usize = 256;
 pub const DEFAULT_METRIC_EXPORT_INTERVAL_MS: u64 = 5_000;
 
 /// Maximum envelopes claimed by one durable drain batch.
-#[cfg(all(test, feature = "durable-store"))]
+#[cfg(feature = "durable-store")]
 pub(crate) const DRAIN_BATCH_SIZE: usize = 64;
 /// Renew a drain lease after one third of its duration.
 #[cfg(feature = "durable-store")]
@@ -76,4 +76,5 @@ pub(crate) const STORE_SCHEMA_VERSION: u32 = 1;
 pub(crate) const TELEMETRY_CONFIG_MAX_BYTES: u64 = 1024 * 1024;
 /// `SQLite` integer form of the durable batch record limit.
 #[cfg(feature = "durable-store")]
-pub(crate) const DRAIN_BATCH_SIZE_SQL: i64 = 64;
+#[allow(clippy::cast_possible_wrap, reason = "the fixed limit 64 fits in i64")]
+pub(crate) const DRAIN_BATCH_SIZE_SQL: i64 = DRAIN_BATCH_SIZE as i64;

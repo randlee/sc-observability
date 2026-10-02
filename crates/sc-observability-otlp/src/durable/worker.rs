@@ -10,7 +10,8 @@ use super::{
 use crate::contracts::submission::{SubmissionExportFailure, SubmissionExporter};
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
 use sc_observability_types::otlp::submission::{
-    EnvelopeVersion, Signal, SubmissionEnvelope, SubmissionId, TelemetryClientError,
+    EnvelopeVersion, Signal, SubmissionEnvelope, SubmissionId, SyncHttpRetryPolicyDto,
+    TelemetryClientError,
 };
 use std::{
     sync::{Arc, atomic::Ordering},
@@ -333,7 +334,7 @@ fn drain(
             if shared.stop.load(Ordering::Acquire) {
                 return Ok(false);
             }
-            if let Ok(credit) = shared.credits.reserve_for(signal_kind(signal)?, row.bytes) {
+            if let Ok(credit) = shared.credits.reserve_for(signal, row.bytes) {
                 credits.push(credit);
                 break;
             }
@@ -392,15 +393,7 @@ fn drain(
                 if row.attempts > max {
                     Outcome::Failed(error.diagnostic().code.as_str())
                 } else {
-                    let initial = retry
-                        .and_then(|r| r.initial_backoff_ms)
-                        .unwrap_or(crate::constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS);
-                    let cap = retry
-                        .and_then(|r| r.max_backoff_ms)
-                        .unwrap_or(crate::constants::DEFAULT_OTLP_MAX_BACKOFF_MS);
-                    let delay = initial
-                        .saturating_mul(2u64.saturating_pow(row.attempts.saturating_sub(1)))
-                        .min(cap);
+                    let delay = retry_backoff_ms(row.attempts, retry);
                     Outcome::Retry {
                         code: error.diagnostic().code.as_str(),
                         next: now.saturating_add(store::nanos(Duration::from_millis(delay))),
@@ -415,15 +408,16 @@ fn drain(
     Ok(true)
 }
 
-fn signal_kind(signal: Signal) -> Result<crate::lifecycle::Signal, TelemetryClientError> {
-    use crate::lifecycle::Signal;
-    match signal {
-        Signal::Logs => Ok(Signal::Logs),
-        Signal::Traces => Ok(Signal::Traces),
-        Signal::Metrics => Ok(Signal::Metrics),
-        Signal::Profiles => Ok(Signal::Profiles),
-        _ => Err(persistence("unsupported signal")),
-    }
+fn retry_backoff_ms(attempts: u32, retry: Option<&SyncHttpRetryPolicyDto>) -> u64 {
+    let initial = retry
+        .and_then(|r| r.initial_backoff_ms)
+        .unwrap_or(crate::constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS);
+    let cap = retry
+        .and_then(|r| r.max_backoff_ms)
+        .unwrap_or(crate::constants::DEFAULT_OTLP_MAX_BACKOFF_MS);
+    initial
+        .saturating_mul(2u64.saturating_pow(attempts.saturating_sub(1)))
+        .min(cap)
 }
 enum Outcome<'a> {
     Delivered,
@@ -521,6 +515,17 @@ mod regression_tests {
         assert_eq!(
             *delays.last().unwrap(),
             Duration::from_millis(crate::constants::DRAIN_ERROR_BACKOFF_MAX_MS)
+        );
+    }
+    #[test]
+    fn persisted_retry_uses_named_initial_and_max_backoff_bounds() {
+        assert_eq!(
+            retry_backoff_ms(1, None),
+            crate::constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS
+        );
+        assert_eq!(
+            retry_backoff_ms(u32::MAX, None),
+            crate::constants::DEFAULT_OTLP_MAX_BACKOFF_MS
         );
     }
 }
