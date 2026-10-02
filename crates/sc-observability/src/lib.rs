@@ -929,36 +929,21 @@ mod tests {
         )
     }
 
-    #[cfg(unix)]
-    fn unix_file_identity(path: &Path) -> crate::query::FileIdentity {
-        crate::query::file_identity_for_path(path)
-    }
-
-    #[cfg(unix)]
-    fn recreate_with_distinct_unix_identity(active_path: &Path) {
-        // Keep the old inode allocated while installing the replacement. This
-        // makes a distinct identity deterministic instead of depending on the
-        // filesystem's inode-reuse timing after unlink.
+    fn recreate_with_distinct_identity(active_path: &Path) {
+        // Keep the old file open while installing the replacement. The
+        // retained handle keeps the old inode (Unix) or file index (Windows)
+        // allocated, so the replacement identity is distinct by construction
+        // instead of depending on the filesystem's reuse timing.
         let retained_previous = fs::File::open(active_path).expect("open active log");
-        let previous_identity = unix_file_identity(active_path);
+        let previous_identity = crate::query::file_identity_for_path(active_path);
         fs::remove_file(active_path).expect("remove active log");
         fs::File::create(active_path).expect("recreate active log");
         assert_ne!(
-            unix_file_identity(active_path),
+            crate::query::file_identity_for_path(active_path),
             previous_identity,
-            "retained old inode makes replacement identity distinct"
+            "retained old file makes replacement identity distinct"
         );
         drop(retained_previous);
-    }
-
-    #[cfg(not(unix))]
-    fn recreate_with_distinct_unix_identity(active_path: &Path) {
-        // Non-Unix follow tests only verify that truncate/recreate remains
-        // callable. Identity-distinctness is intentionally not asserted here,
-        // and both cfg variants must stay behaviorally aligned when this helper
-        // changes.
-        fs::remove_file(active_path).expect("remove active log");
-        fs::File::create(active_path).expect("recreate active log");
     }
 
     fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
@@ -3306,13 +3291,6 @@ mod tests {
         );
     }
 
-    // This test exercises the Unix-specific replacement helper above. Windows
-    // follow identity now uses filesystem identity metadata, but the distinct-
-    // inode recreation harness remains Unix-only.
-    #[cfg_attr(
-        windows,
-        ignore = "the deterministic recreated-inode harness is Unix-only"
-    )]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
@@ -3364,7 +3342,7 @@ mod tests {
                 .contains("truncation")
         );
 
-        recreate_with_distinct_unix_identity(&active_path);
+        recreate_with_distinct_identity(&active_path);
         logger
             .emit(log_event_with_request(service_name(), "after-recreate", 20))
             .expect("emit after recreate");
