@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 from conftest import CaptureCollector, GOLDENS, free_port, run_cli, run_installed_python
@@ -88,12 +87,11 @@ print(telemetry.last_shutdown.error.code)
     assert "DELIVERY" in exited.stdout
 
 
-def test_killed_python_admission_is_resumed_by_installed_cli(
+def test_killed_python_admission_is_retained_for_recovery(
     installed_artifacts: dict[str, Path], tmp_path: Path,
 ) -> None:
-    """A process death after durable admission leaves a record the CLI can drain."""
-    port = free_port()
-    config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{port}")
+    """A process death after durable admission preserves a recoverable record."""
+    config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{free_port()}")
     source = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
     script = f"""\
 import json
@@ -107,25 +105,36 @@ assert isinstance(opened, Ok), opened
 admitted = opened.value.emit(json.load(sys.stdin))
 assert isinstance(admitted, Ok), admitted
 # Deliberately bypass normal cleanup: the next process must own recovery.
+print(admitted.value.submission_id, flush=True)
 os._exit(0)
 """
     killed = run_installed_python(installed_artifacts, script, cwd=tmp_path, input=source)
     assert killed.returncode == 0, killed.stdout + killed.stderr
-    collector = CaptureCollector(port)
-    collector.start()
-    try:
-        # A killed producer cannot release its default 30-second durable lease.
-        # Recovery is therefore bounded by that published lease plus a small
-        # scheduling margin, without injecting a test-only lease override.
-        deadline = time.monotonic() + 40
-        resumed = None
-        while time.monotonic() < deadline:
-            resumed = run_cli(installed_artifacts, "--config", str(config), "flush", "--timeout", "1", cwd=tmp_path)
-            if resumed.returncode == 0:
-                break
-            assert resumed.returncode == 6, resumed.stdout + resumed.stderr
-            time.sleep(0.25)
-        assert resumed is not None and resumed.returncode == 0, resumed.stdout + resumed.stderr
-        collector.wait_for("/v1/logs")
-    finally:
-        collector.stop()
+    submission_id = killed.stdout.strip()
+    assert submission_id, killed.stderr
+    recovery = f"""\
+import json
+import os
+from sc_observability import Ok
+from sc_observability.telemetry import Telemetry
+
+opened = Telemetry.open(config={str(config)!r})
+assert isinstance(opened, Ok), opened
+status = opened.value.status(submissions=[{submission_id!r}])
+assert isinstance(status, Ok), status
+delivery = status.value.submissions[0]
+assert delivery.submission_id == {submission_id!r}, delivery
+signal, state = delivery.signals[0]
+assert signal == "logs", delivery
+# A prior process may have claimed its admission before dying, but neither
+# pending nor claimed work has been delivered or discarded.
+report = dict(state)
+assert report["state"] in {{"pending", "claimed"}}, delivery
+print(json.dumps(report), flush=True)
+# Avoid a second process's shutdown flush: expired-lease takeover is covered
+# deterministically by durable::tests::drain::lease_expiry_takeover.
+os._exit(0)
+"""
+    retained = run_installed_python(installed_artifacts, recovery, cwd=tmp_path)
+    assert retained.returncode == 0, retained.stdout + retained.stderr
+    assert json.loads(retained.stdout)["state"] in {"pending", "claimed"}
