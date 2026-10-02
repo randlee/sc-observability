@@ -503,10 +503,8 @@ fn complete_health_projection_and_unsigned_wire_counters() -> Result<(), Failure
         effective_level: core::LevelFilter::Debug,
         revision: u64::MAX,
     };
-    let released: fn(core::LoggingHealthReport, core::LevelState) -> Result<LogHealthDto, Failure> =
-        from_core_health;
     let canonical = from_canonical_core_health(native.clone(), level);
-    let dto = released(native, level)?;
+    let dto = from_core_health(native, level)?;
     assert_eq!(dto, canonical);
     let mut value = serde_json::to_value(&dto).unwrap();
     assert_eq!(value["logging"].as_object().unwrap().len(), 14);
