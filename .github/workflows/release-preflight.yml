@@ -249,7 +249,7 @@ jobs:
         name: Run workspace tests
         if: ${{ always() && steps.build_plan.outputs.has_crates == 'true' }}
         continue-on-error: true
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
 
       - id: manifest
         name: Validate manifest completeness

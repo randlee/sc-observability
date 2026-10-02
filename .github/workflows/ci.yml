@@ -283,19 +283,24 @@ jobs:
         run: cargo check --locked -p sc-observability-log-consumer-check
 
       - name: Run workspace tests
-        run: cargo test --locked --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets --no-fail-fast
 
       - name: Run external OTLP SDK fixture
-        run: cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked
+        if: ${{ !cancelled() }}
+        run: cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked --no-fail-fast
 
       - name: Run workspace doctests
+        if: ${{ !cancelled() }}
         run: cargo test --locked --workspace --doc
 
       - name: Run imported log bridge test_hooks feature
-        run: cargo test --locked -p sc-observability-log --all-targets --features test_hooks
+        if: ${{ !cancelled() }}
+        run: cargo test --locked -p sc-observability-log --all-targets --features test_hooks --no-fail-fast
 
       - name: Run imported log bridge release static-level-cap fixture
+        if: ${{ !cancelled() }}
         run: cargo test --locked -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
 
       - name: Run imported log bridge release runtime-level fixture
+        if: ${{ !cancelled() }}
         run: cargo test --locked -p sc-observability-log --release --test runtime_level_bridge
