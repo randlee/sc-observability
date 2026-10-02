@@ -487,10 +487,11 @@ impl Adapter {
             let mut target_query = query.clone();
             target_query.target = Some(target);
             let operation = self.backend.start_query(target_query)?;
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
+            let Some(remaining) =
+                integral_millisecond_timeout(deadline.saturating_duration_since(Instant::now()))
+            else {
                 return Err(query_timeout_failure());
-            }
+            };
             let snapshot = operation.completion(remaining).await?;
             truncated |= snapshot.truncated;
             events.extend(snapshot.events);
@@ -545,6 +546,11 @@ impl Adapter {
             .await?;
         Ok(sc_observability_dto::CompletionDto::Completed)
     }
+}
+
+fn integral_millisecond_timeout(timeout: Duration) -> Option<Duration> {
+    let milliseconds = u64::try_from(timeout.as_millis()).ok()?;
+    (milliseconds > 0).then(|| Duration::from_millis(milliseconds))
 }
 
 #[cfg(feature = "tauri")]
@@ -888,6 +894,18 @@ mod tests {
         };
         let adapter = Adapter::with_settings(Arc::new(IpcBackend), settings).unwrap();
         assert_eq!(adapter.query_timeout, Duration::from_millis(17));
+    }
+
+    #[test]
+    fn query_observer_timeout_is_quantized_to_integral_milliseconds() {
+        assert_eq!(
+            integral_millisecond_timeout(Duration::from_micros(1_999)),
+            Some(Duration::from_millis(1))
+        );
+        assert_eq!(
+            integral_millisecond_timeout(Duration::from_micros(999)),
+            None
+        );
     }
 
     #[test]
