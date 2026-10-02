@@ -80,6 +80,29 @@ class SourceContractTests(unittest.TestCase):
             path.write_text(original)
         validator.check_source_contract()
 
+    def test_supported_methods_reject_deprecation(self):
+        path = self.root / LOGGER
+        original = path.read_text()
+        for method in ('pub fn build(self)', 'pub fn build_with_level_owner(',
+                       'pub fn new_with_level_owner('):
+            with self.subTest(method=method):
+                self.assertEqual(original.count(method), 1)
+                try:
+                    path.write_text(original.replace(
+                        method,
+                        '#[deprecated(since = "1.4.0", note = "planted negative")]\n    ' + method,
+                        1,
+                    ))
+                    with self.assertRaisesRegex(
+                        AssertionError,
+                        '^' + re.escape(f'supported method {method} was deprecated') + '$',
+                    ) as failure:
+                        validator.check_source_contract()
+                    print(f'planted exemption negative: {failure.exception}')
+                finally:
+                    path.write_text(original)
+                validator.check_source_contract()
+
     def test_emit_rejects_missing_original_warning(self):
         path = self.root / LOGGER
         source = path.read_text()
