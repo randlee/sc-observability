@@ -20,7 +20,7 @@ fn every_matrix_row_delivers_and_sdk_is_rejected() {
         let receipt = client.emit(envelope).unwrap();
         // Capability is independent of Windows fsync/scheduler latency. Drive the
         // real claim/export/commit at a frozen lease clock, then inspect its result.
-        assert!(worker::drain_once_for_test(
+        assert!(drain_once_bounded(
             &client.owner.shared,
             exporter.as_ref(),
             signal

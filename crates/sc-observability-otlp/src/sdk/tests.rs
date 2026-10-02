@@ -389,6 +389,48 @@ async fn sdk_terminal_http_failure_keeps_the_client_error_as_source() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn sdk_exhausted_http_timeout_keeps_the_client_error_as_source() {
+    // An owned listener accepts the request but never responds. There is no
+    // dependency on platform-specific connection-refusal/RTO behaviour.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}/v1/logs", listener.local_addr().unwrap());
+    let (release, released) = tokio::sync::oneshot::channel::<()>();
+    let server = tokio::spawn(async move {
+        let (_stream, _) = listener.accept().await.unwrap();
+        let _ = released.await;
+    });
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let (_shutdown, shutdown_rx) = never_cancelled_shutdown();
+    let error = super::implementation::retry_export(
+        Duration::from_millis(100),
+        shutdown_rx,
+        || {
+            let send = client
+                .post(&endpoint)
+                .timeout(Duration::from_millis(10))
+                .send();
+            async move { send.await.map(|_| ()).map_err(HttpError::Client) }
+        },
+        "OTLP log export failed",
+    )
+    .await
+    .expect_err("request times out before the export budget");
+    // Release before assertions, and abort if no accept occurred, so a regression
+    // cannot leave the fixture pending when this test fails.
+    let _ = release.send(());
+    server.abort();
+    let _ = server.await;
+    assert_eq!(error.code().to_string(), "OTLP_EXPORT_TERMINAL");
+    let http = find_source::<HttpError>(&error).expect("HTTP timeout source");
+    assert_eq!(http.failure(), HttpFailure::ConnectOrTimeout);
+    assert!(
+        find_source::<reqwest::Error>(&error)
+            .expect("reqwest timeout source")
+            .is_timeout()
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn sdk_retry_shutdown_interrupts_an_in_flight_rpc() {
     let (shutdown, shutdown_rx) = watch::channel(false);
     let (started_tx, started_rx) = tokio::sync::oneshot::channel();

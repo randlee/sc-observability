@@ -88,13 +88,17 @@ impl SubmissionExporter for ScriptedExporter {
                     shared.stalled_signals.lock().unwrap().insert(signal);
                     shared.notify();
                 }
-                // Stall is an explicit test-controlled event, not a timed failure.
-                // Conformance clients release their own exporter on case teardown.
-                drop(
-                    self.gate
-                        .wait_while(self.released.lock().unwrap(), |released| !*released)
-                        .unwrap(),
-                );
+                // Teardown releases each scripted stall; the watchdog also catches
+                // a missing release without leaving a worker blocked indefinitely.
+                let (released, _) = self
+                    .gate
+                    .wait_timeout_while(self.released.lock().unwrap(), DEADLINE, |released| {
+                        !*released
+                    })
+                    .unwrap();
+                let was_released = *released;
+                drop(released);
+                assert!(was_released, "scripted {signal:?} export was not released");
             }
             _ => {}
         }
@@ -247,4 +251,43 @@ impl Drop for FrozenClock {
     fn drop(&mut self) {
         FROZEN_NOW.set(None);
     }
+}
+
+struct ReleaseExporter<'a>(&'a ScriptedExporter);
+impl Drop for ReleaseExporter<'_> {
+    fn drop(&mut self) {
+        self.0.release();
+    }
+}
+
+fn drain_once_bounded(shared: &Shared, exporter: &dyn SubmissionExporter, signal: Signal) -> bool {
+    let now = frozen_now();
+    std::thread::scope(|scope| {
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        let helper = scope.spawn(move || {
+            // The scoped helper owns the same frozen lease instant as its caller.
+            FROZEN_NOW.set(now);
+            let _clock = FrozenClock;
+            let result = worker::drain_once_for_test(shared, exporter, signal);
+            let _ = send.send(result);
+        });
+        match receive.recv_timeout(DEADLINE) {
+            Ok(result) => {
+                helper.join().unwrap();
+                result
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                shared
+                    .stop
+                    .store(true, std::sync::atomic::Ordering::Release);
+                shared.notify();
+                helper.join().unwrap();
+                panic!("drain waited for its own batch credits");
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                helper.join().unwrap();
+                panic!("drain helper exited without a result");
+            }
+        }
+    })
 }

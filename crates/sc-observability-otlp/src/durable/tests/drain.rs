@@ -411,6 +411,7 @@ fn crash_mid_drain_resumes() {
 fn flush_deadline_does_not_wait_for_the_writer_mutex() {
     let dir = tempfile::tempdir().unwrap();
     let exporter = Arc::new(ScriptedExporter::new(dir.path()));
+    let release = ReleaseExporter(exporter.as_ref());
     exporter.set_outcome(Signal::Logs, DeliveryOutcome::Stall);
     let client =
         DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone()).unwrap();
@@ -428,7 +429,7 @@ fn flush_deadline_does_not_wait_for_the_writer_mutex() {
         drop(locked);
         assert!(result.expect("flush waited for the writer mutex").is_err());
     });
-    exporter.release();
+    drop(release);
     worker::join(&client.owner.shared, DEADLINE);
 }
 

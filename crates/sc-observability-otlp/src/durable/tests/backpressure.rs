@@ -168,7 +168,7 @@ fn batch_larger_than_available_credits_exports_in_prefixes() {
     let second = client.emit(second).unwrap();
     // Both rows are committed before a drain begins, guaranteeing one claimed
     // batch that must split. Each explicit step traverses the production drain.
-    assert!(worker::drain_once_for_test(
+    assert!(drain_once_bounded(
         &client.owner.shared,
         exporter.as_ref(),
         Signal::Logs
@@ -176,7 +176,7 @@ fn batch_larger_than_available_credits_exports_in_prefixes() {
     let status = client.status(StatusQuery::Summary).unwrap();
     assert_eq!(status.delivered_retained.logs, 1);
     assert_eq!(status.pending.logs, 1);
-    assert!(worker::drain_once_for_test(
+    assert!(drain_once_bounded(
         &client.owner.shared,
         exporter.as_ref(),
         Signal::Logs
