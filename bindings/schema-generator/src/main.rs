@@ -12,7 +12,10 @@ use schemars::{
     generate::{SchemaGenerator, SchemaSettings},
 };
 use serde_json::{Map, Value, json};
-use std::{error::Error, path::Path};
+use std::{
+    error::Error,
+    path::{Path, PathBuf},
+};
 fn register<T: JsonSchema>(
     g: &mut SchemaGenerator,
     entries: &mut Map<String, Value>,
@@ -561,9 +564,37 @@ fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
     bytes.push(b'\n');
     Ok(bytes)
 }
+
+#[derive(Debug)]
+struct SchemaReadError {
+    path: PathBuf,
+    source: std::io::Error,
+}
+
+impl std::fmt::Display for SchemaReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "unable to read `{}`: {}; regenerate with `{SCHEMA_REGENERATION_COMMAND}`",
+            self.path.display(),
+            self.source
+        )
+    }
+}
+
+impl Error for SchemaReadError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
 fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn Error>> {
     if check {
-        if std::fs::read(path)? != bytes {
+        let existing = std::fs::read(path).map_err(|source| SchemaReadError {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        if existing != bytes {
             return Err(generated_drift_error(path).into());
         }
     } else {
@@ -674,6 +705,23 @@ mod tests {
         let error = generated_drift_error(Path::new("bindings/schema/v1.json"));
         assert!(error.contains("bindings/schema/v1.json"));
         assert!(error.contains(SCHEMA_REGENERATION_COMMAND));
+    }
+
+    #[test]
+    fn missing_checked_schema_reports_path_hint_and_source() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("no-such-dir/absent.json");
+
+        let error = write_or_check(&path, b"{}\n", true)
+            .expect_err("checking a missing generated file should fail");
+        let message = error.to_string();
+
+        assert!(message.contains(&path.display().to_string()));
+        assert!(message.contains(SCHEMA_REGENERATION_COMMAND));
+        let source = error
+            .source()
+            .and_then(|source| source.downcast_ref::<std::io::Error>())
+            .expect("the read error should remain in the error source chain");
+        assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[test]
