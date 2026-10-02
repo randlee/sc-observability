@@ -55,6 +55,31 @@ class SourceContractTests(unittest.TestCase):
                     OTLP if key.startswith('otlp_') else (Path('crates/sc-observe/src/compat.rs') if key == 'observe' else LOGGER),
                     f'Use {replacement}(); see migrate-error-api.md.', owner)
 
+    def test_missing_all_otlp_markers_names_the_marker_check(self):
+        path = self.root / OTLP
+        original = path.read_text()
+        self.assertIn('since = "1.4.0"', original)
+        try:
+            mutated = original.replace('since = "1.4.0"', '')
+            path.write_text(mutated)
+            # Both source keys currently share this facade; exercise each label
+            # as well as the fail-fast source-contract entry point below.
+            for name in ('otlp_config', 'otlp_assembly'):
+                with self.subTest(source=name):
+                    validator.check_b1e_marker(original, name)
+                    with self.assertRaisesRegex(
+                        AssertionError, f'^{name} has no B.1e deprecation marker$'
+                    ):
+                        validator.check_b1e_marker(mutated, name)
+            with self.assertRaisesRegex(
+                AssertionError, '^otlp_config has no B.1e deprecation marker$'
+            ) as failure:
+                validator.check_source_contract()
+            print(f'planted all-marker negative: {failure.exception}')
+        finally:
+            path.write_text(original)
+        validator.check_source_contract()
+
     def test_emit_rejects_missing_original_warning(self):
         path = self.root / LOGGER
         source = path.read_text()

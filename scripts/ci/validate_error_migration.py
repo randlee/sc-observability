@@ -176,6 +176,13 @@ def item_window(source: str, marker: str, note: str, *, owner: str | None = None
     raise AssertionError(f"{owner or marker} has no local deprecation attribute/note")
 
 
+def check_b1e_marker(source: str, name: str) -> None:
+    assert_true(
+        source.count('since = "1.4.0"') > 0,
+        f"{name} has no B.1e deprecation marker",
+    )
+
+
 def check_source_contract() -> None:
     sources = {
         "types": ROOT / "crates" / "sc-observability-types" / "src" / "errors.rs",
@@ -189,6 +196,9 @@ def check_source_contract() -> None:
         "otlp_assembly": ROOT / "crates" / "sc-observability-otlp" / "src" / "compat.rs",
     }
     text = {name: path.read_text(encoding="utf-8") for name, path in sources.items()}
+
+    for source in ("otlp_config", "otlp_assembly"):
+        check_b1e_marker(text[source], source)
 
     for legacy, typed in WRAPPERS:
         item_window(
@@ -204,12 +214,6 @@ def check_source_contract() -> None:
             f"pub fn {legacy.rsplit('::', 1)[1]}(",
             f"Use {typed}(); see migrate-error-api.md.",
             owner=legacy,
-        )
-
-    for source in ("otlp_config", "otlp_assembly"):
-        assert_true(
-            text[source].count("since = \"1.4.0\"") > 0,
-            f"{source} has no B.1e deprecation marker",
         )
 
     for path in (
