@@ -190,6 +190,11 @@ jobs:
           # The compatibility registry test reads the pinned v1.4.1 commit.
           fetch-depth: 0
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
       - name: Set up Python
         uses: actions/setup-python@v6
         with:

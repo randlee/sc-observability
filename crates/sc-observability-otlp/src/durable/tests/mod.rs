@@ -20,6 +20,7 @@ const DEADLINE: Duration = Duration::from_secs(3);
 #[derive(Default)]
 struct ScriptedExporter {
     outcomes: Mutex<HashMap<Signal, VecDeque<DeliveryOutcome>>>,
+    batches: Mutex<Vec<usize>>,
     released: Mutex<bool>,
     gate: Condvar,
     stalled: Mutex<bool>,
@@ -87,19 +88,21 @@ impl SubmissionExporter for ScriptedExporter {
                     shared.stalled_signals.lock().unwrap().insert(signal);
                     shared.notify();
                 }
-                let (released, timeout) = self
+                // Teardown releases each scripted stall; the watchdog also catches
+                // a missing release without leaving a worker blocked indefinitely.
+                let (released, _) = self
                     .gate
                     .wait_timeout_while(self.released.lock().unwrap(), DEADLINE, |released| {
                         !*released
                     })
                     .unwrap();
-                assert!(
-                    *released && !timeout.timed_out(),
-                    "scripted {signal:?} export was not released"
-                );
+                let was_released = *released;
+                drop(released);
+                assert!(was_released, "scripted {signal:?} export was not released");
             }
             _ => {}
         }
+        self.batches.lock().unwrap().push(envelopes.len());
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -229,4 +232,62 @@ fn newer_envelope_skipped_and_counted() {
         1
     );
     assert!(!exporter.deliveries.exists());
+}
+
+// Only manually driven drains use this clock; worker threads never inherit it.
+thread_local! { static FROZEN_NOW: std::cell::Cell<Option<row::UnixNanos>> = const { std::cell::Cell::new(None) }; }
+pub(super) fn frozen_now() -> Option<row::UnixNanos> {
+    FROZEN_NOW.get()
+}
+struct FrozenClock;
+impl FrozenClock {
+    fn new() -> Self {
+        let now = store::now();
+        FROZEN_NOW.set(Some(now));
+        Self
+    }
+}
+impl Drop for FrozenClock {
+    fn drop(&mut self) {
+        FROZEN_NOW.set(None);
+    }
+}
+
+struct ReleaseExporter<'a>(&'a ScriptedExporter);
+impl Drop for ReleaseExporter<'_> {
+    fn drop(&mut self) {
+        self.0.release();
+    }
+}
+
+fn drain_once_bounded(shared: &Shared, exporter: &dyn SubmissionExporter, signal: Signal) -> bool {
+    let now = frozen_now();
+    std::thread::scope(|scope| {
+        let (send, receive) = std::sync::mpsc::sync_channel(1);
+        let helper = scope.spawn(move || {
+            // The scoped helper owns the same frozen lease instant as its caller.
+            FROZEN_NOW.set(now);
+            let _clock = FrozenClock;
+            let result = worker::drain_once_for_test(shared, exporter, signal);
+            let _ = send.send(result);
+        });
+        match receive.recv_timeout(DEADLINE) {
+            Ok(result) => {
+                helper.join().unwrap();
+                result
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                shared
+                    .stop
+                    .store(true, std::sync::atomic::Ordering::Release);
+                shared.notify();
+                helper.join().unwrap();
+                panic!("drain waited for its own batch credits");
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                helper.join().unwrap();
+                panic!("drain helper exited without a result");
+            }
+        }
+    })
 }

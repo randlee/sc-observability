@@ -1472,6 +1472,7 @@ fn logs_are_grouped_by_distinct_resource_and_scope() {
     let first = fixture("logs");
     let mut second_scope = first.clone();
     second_scope.logs[0].scope.name = "second-scope".to_owned();
+    second_scope.logs[0].scope.schema_url = Some("https://example.test/second-scope".to_owned());
     let mut second_resource = first.clone();
     second_resource.logs[0].resource.schema_url =
         Some("https://example.test/second-resource".to_owned());
@@ -1491,10 +1492,7 @@ fn logs_are_grouped_by_distinct_resource_and_scope() {
         Some(2),
         "different scopes within one resource stay distinct"
     );
-    assert_eq!(
-        resources[1]["resource"]["schemaUrl"],
-        "https://example.test/second-resource"
-    );
+    assert_group_schema_urls(resources, "scopeLogs");
 }
 
 #[test]
@@ -1543,6 +1541,7 @@ fn grouped_profile_records() -> SubmissionEnvelope {
     let first = profiles.profiles[0].clone();
     let mut second_scope = first.clone();
     second_scope.scope.name = "second-scope".to_owned();
+    second_scope.scope.schema_url = Some("https://example.test/second-scope".to_owned());
     let mut second_resource = first;
     second_resource.resource.schema_url = Some("https://example.test/second-resource".to_owned());
     profiles.profiles.push(second_scope);
@@ -1556,11 +1555,15 @@ fn grouped_envelopes(first: SubmissionEnvelope, signal: Signal) -> [SubmissionEn
     match signal {
         Signal::Traces => {
             second_scope.spans[0].scope.name = "second-scope".to_owned();
+            second_scope.spans[0].scope.schema_url =
+                Some("https://example.test/second-scope".to_owned());
             second_resource.spans[0].resource.schema_url =
                 Some("https://example.test/second-resource".to_owned());
         }
         Signal::Metrics => {
             second_scope.metrics[0].scope.name = "second-scope".to_owned();
+            second_scope.metrics[0].scope.schema_url =
+                Some("https://example.test/second-scope".to_owned());
             second_resource.metrics[0].resource.schema_url =
                 Some("https://example.test/second-resource".to_owned());
         }
@@ -1578,12 +1581,33 @@ fn assert_grouping(captured: &Value, resource_key: &str, scope_key: &str) {
         Some(2),
         "distinct scopes within one resource stay distinct"
     );
-    let schema_url = if resource_key == "resourceProfiles" {
-        &resources[1]["schemaUrl"]
-    } else {
-        &resources[1]["resource"]["schemaUrl"]
-    };
-    assert_eq!(schema_url, "https://example.test/second-resource");
+    assert_group_schema_urls(resources, scope_key);
+}
+
+fn assert_group_schema_urls(resources: &[Value], scope_key: &str) {
+    assert_eq!(
+        resources[1]["schemaUrl"],
+        "https://example.test/second-resource"
+    );
+    for resource in resources {
+        assert!(
+            resource["resource"].get("schemaUrl").is_none(),
+            "resource schemaUrl belongs to its enclosing group"
+        );
+        for scope in resource[scope_key]
+            .as_array()
+            .expect("each resource group contains scope groups")
+        {
+            assert!(
+                scope["scope"].get("schemaUrl").is_none(),
+                "scope schemaUrl belongs to its enclosing group"
+            );
+        }
+    }
+    assert_eq!(
+        resources[0][scope_key][1]["schemaUrl"],
+        "https://example.test/second-scope"
+    );
 }
 
 fn unsupported_after_split(envelopes: &[SubmissionEnvelope]) -> Result<Value, ExportError> {

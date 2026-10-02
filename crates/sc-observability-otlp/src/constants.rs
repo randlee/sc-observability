@@ -103,3 +103,7 @@ pub(crate) const PROTO_DURATION_MAX_SECONDS: i64 = 315_576_000_000;
 #[cfg(feature = "sync-http")]
 pub(crate) const SUBMISSION_DISPATCH_MARGIN: std::time::Duration =
     std::time::Duration::from_secs(1);
+
+/// Maximum OTLP/JSON export response size (64 KiB, including collector warnings).
+#[cfg(feature = "sync-http")]
+pub(crate) const MAX_OTLP_RESPONSE_BYTES: u64 = 64 * 1024;

@@ -7,6 +7,18 @@ pub(in crate::durable) fn enabled() -> bool {
     ENABLED.get()
 }
 
+pub(super) fn open_gated(
+    config: TelemetryClientConfig,
+    exporter: &Arc<ScriptedExporter>,
+) -> DurableTelemetryClient {
+    ENABLED.set(true);
+    let opened = DurableTelemetryClient::open_with_exporter(config, exporter.clone());
+    ENABLED.set(false);
+    let client = opened.unwrap();
+    *exporter.conformance_shared.lock().unwrap() = Arc::downgrade(&client.owner.shared);
+    client
+}
+
 pub(in crate::durable) fn await_scripted_outcomes(
     shared: &Shared,
     reader: &rusqlite::Connection,
@@ -47,7 +59,16 @@ pub(in crate::durable) fn await_scripted_outcomes(
 
 // The second run supplies zero instead of ten milliseconds to the same real methods.
 // It proves all shared cases work with the planned zero-deadline suite as well.
-struct Client<const ZERO_DEADLINE: bool>(DurableTelemetryClient);
+struct Client<const ZERO_DEADLINE: bool>(DurableTelemetryClient, Option<Arc<ScriptedExporter>>);
+impl<const ZERO_DEADLINE: bool> Drop for Client<ZERO_DEADLINE> {
+    fn drop(&mut self) {
+        // Release this case's blocked exporter before later cases run. The harness
+        // retains exporters for cleanup, but must not retain the blocking lifetime.
+        if let Some(exporter) = &self.1 {
+            exporter.release();
+        }
+    }
+}
 impl<const ZERO_DEADLINE: bool> Client<ZERO_DEADLINE> {
     fn deadline(value: Duration) -> Duration {
         if ZERO_DEADLINE { Duration::ZERO } else { value }
@@ -55,7 +76,7 @@ impl<const ZERO_DEADLINE: bool> Client<ZERO_DEADLINE> {
 }
 impl<const ZERO_DEADLINE: bool> TelemetryClient for Client<ZERO_DEADLINE> {
     fn open(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
-        DurableTelemetryClient::open(config).map(Self)
+        DurableTelemetryClient::open(config).map(|client| Self(client, None))
     }
     fn emit(&self, envelope: SubmissionEnvelope) -> Result<AdmissionReceipt, TelemetryClientError> {
         self.0.emit(envelope)
@@ -104,15 +125,10 @@ impl<const ZERO_DEADLINE: bool> ConformanceHarness for Harness<ZERO_DEADLINE> {
     fn open(&mut self) -> Self::Client {
         let dir = tempfile::tempdir().unwrap();
         let exporter = Arc::new(ScriptedExporter::new(dir.path()));
-        ENABLED.set(true);
-        let opened =
-            DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone());
-        ENABLED.set(false);
-        let client = opened.unwrap();
-        *exporter.conformance_shared.lock().unwrap() = Arc::downgrade(&client.owner.shared);
+        let client = open_gated(config(dir.path()), &exporter);
         self.dirs.push(dir);
-        self.exporters.push(exporter);
-        Client(client)
+        self.exporters.push(exporter.clone());
+        Client(client, Some(exporter))
     }
     fn set_outcome(&mut self, signal: Signal, outcome: DeliveryOutcome) {
         self.exporters.last().unwrap().set_outcome(signal, outcome);

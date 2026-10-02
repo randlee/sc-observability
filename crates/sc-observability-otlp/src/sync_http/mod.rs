@@ -2,6 +2,7 @@
 
 mod implementation;
 pub(crate) mod payload;
+mod response;
 pub(crate) use implementation::build_exporter_set;
 #[cfg(test)]
 mod tests;
