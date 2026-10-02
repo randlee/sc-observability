@@ -2,20 +2,24 @@ name: Python packaging boundaries
 
 on:
   pull_request:
-    paths:
-      - 'scripts/ci/*python*'
-      - 'scripts/ci/tests/test_python_distribution.py'
-      - 'release/python-platform-policy.json'
-      - '.github/workflows/b4a-python-distributions.yml'
-      - '.github/workflows/python-packaging-boundaries.yml'
+  push:
+    branches: [develop, main, 'integrate/*']
   workflow_dispatch:
 
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   boundaries:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

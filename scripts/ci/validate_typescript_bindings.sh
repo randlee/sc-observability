@@ -18,7 +18,7 @@ python3 -m unittest discover -s scripts/ci/tests -p test_tauri_platform_evidence
 python3 -m unittest discover -s scripts/ci/tests -p test_tauri_network_scope.py
 python3 -m unittest discover -s scripts/ci/tests -p test_windows_proof_supervisor.py
 python3 scripts/ci/validate_binding_runtime.py --platform-only --evidence target/tauri-qualification/native-runtime
-cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test
+cargo test --locked --no-fail-fast --manifest-path bindings/tauri/Cargo.toml --features test
 qualification_args=(--evidence target/tauri-qualification)
 if [[ -n ${TAURI_NPM_ARCHIVE:-} ]]; then
   qualification_args+=(--npm-archive "$TAURI_NPM_ARCHIVE" --npm-manifest "$TAURI_NPM_MANIFEST")

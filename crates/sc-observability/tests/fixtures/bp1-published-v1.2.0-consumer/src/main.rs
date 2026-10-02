@@ -8,6 +8,10 @@ fn main() {
         ServiceName::new("published-baseline").expect("valid service name"),
         PathBuf::from("logs"),
     );
+    #[expect(
+        deprecated,
+        reason = "legacy v1.2.0 compatibility fixture: proves deprecated Logger::new/builder still work"
+    )]
     let logger = Logger::new(config).expect("legacy Logger::new remains available");
     let _stopped = logger.shutdown();
 
@@ -15,6 +19,10 @@ fn main() {
         ServiceName::new("published-builder").expect("valid service name"),
         PathBuf::from("logs"),
     );
+    #[expect(
+        deprecated,
+        reason = "legacy v1.2.0 compatibility fixture: proves deprecated Logger::new/builder still work"
+    )]
     let logger = Logger::builder(builder_config)
         .expect("legacy builder remains available")
         .build();

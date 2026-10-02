@@ -2,17 +2,13 @@ name: Telemetry end-to-end
 
 on:
   pull_request:
-    branches: ["sprint/*", "integrate/*"]
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "crates/sc-observability-types/src/otlp/**"
-      - "crates/sc-observability-otlp/**"
-      - "crates/sc-otel-cli/**"
-      - "bindings/python/sc-observability-py/**"
-      - "tests/telemetry-e2e/**"
-      - ".github/workflows/telemetry-e2e.yml"
+  push:
+    branches: [develop, main, 'integrate/*']
   workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   telemetry-e2e:

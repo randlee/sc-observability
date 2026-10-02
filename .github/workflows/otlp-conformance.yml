@@ -2,26 +2,22 @@ name: OTLP conformance
 
 on:
   pull_request:
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'crates/sc-observability-otlp/**'
-      - 'crates/sc-observability-types/**'
-      - 'docs/observability/otlp/**'
-      - 'policy/otlp-transport.toml'
-      - 'scripts/ci/otlp_dependencies.py'
-      - 'scripts/ci/otlp_dev_install_smoke.py'
-      - 'scripts/ci/fixtures/otlp/**'
-      - '.github/workflows/otlp-conformance.yml'
+  push:
+    branches: [develop, main, 'integrate/*']
   workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   collector-conformance:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         features:
           - otlp-sdk
           - sync-http

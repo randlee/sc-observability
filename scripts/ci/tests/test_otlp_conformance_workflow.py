@@ -40,13 +40,12 @@ class OtlpConformanceWorkflowTests(unittest.TestCase):
     def test_trigger_inputs_and_actions_are_immutable(self) -> None:
         workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
         triggers = workflow.get("on") or workflow[True]
-        paths = triggers["pull_request"]["paths"]
-        self.assertTrue({
-            "Cargo.toml",
-            "Cargo.lock",
-            "policy/otlp-transport.toml",
-            "scripts/ci/otlp_dependencies.py",
-        }.issubset(paths))
+        self.assertIsNone(triggers["pull_request"])
+        self.assertEqual(triggers["push"]["branches"], ["develop", "main", "integrate/*"])
+        collector = workflow["jobs"]["collector-conformance"]
+        self.assertEqual(collector["strategy"]["matrix"]["os"],
+                         ["ubuntu-latest", "macos-latest", "windows-latest"])
+        self.assertFalse(collector["strategy"]["fail-fast"])
 
         jobs = workflow["jobs"]
         uses = [step["uses"] for job in jobs.values() for step in job["steps"]

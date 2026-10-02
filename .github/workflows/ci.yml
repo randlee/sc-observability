@@ -2,33 +2,27 @@ name: CI
 
 on:
   pull_request:
-    branches: [develop, main, "integrate/*", "sprint/*", "fix/*"]
-    paths:
-      - 'Cargo.*'
-      - 'rust-toolchain.toml'
-      - 'crates/**'
-      - 'bindings/**'
-      - 'examples/**'
-      - 'docs/**'
-      - 'scripts/ci/**'
-      - '.github/scripts/**'
-      - '.github/actions/**'
-      - '.github/workflows/**'
-      - 'release/**'
-      - 'boundaries/**'
-      - 'install.json'
-      - 'install.py'
-      - 'justfile'
   push:
-    branches: [develop, main]
+    branches: [develop, main, 'integrate/*']
   workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   fmt:
-    name: Format check
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: lint / format (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -37,13 +31,24 @@ jobs:
           components: rustfmt, clippy
 
       - name: Check formatting
-        run: cargo fmt --check --all
+        run: python scripts/ci/cargo_workspaces.py fmt
 
   clippy:
-    needs: [fmt]
-    runs-on: ubuntu-latest
+    name: lint / clippy (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux native prerequisites
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/install-linux-native-deps
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -55,34 +60,35 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cargo/registry
-          key: ubuntu-clippy-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-clippy-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo index
         uses: actions/cache@v5
         with:
           path: ~/.cargo/git
-          key: ubuntu-clippy-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-clippy-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo build
         uses: actions/cache@v5
         with:
           path: target
-          key: ubuntu-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       # Retire with obs-d-18 when the deprecated legacy types are removed.
       - name: Check deprecated lint policies in external examples
         run: python3 scripts/ci/check_external_example_deprecated.py
 
-      - name: Check standalone custom sink example
-        run: cargo check --locked --manifest-path examples/custom-sink-example/Cargo.toml
-
       - name: Run clippy
-        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+        if: ${{ !cancelled() }}
+        run: python scripts/ci/cargo_workspaces.py clippy
 
   docs-consistency:
-    name: docs-consistency (ubuntu)
-    needs: [clippy]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: docs-consistency (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
 
@@ -90,9 +96,12 @@ jobs:
         run: bash scripts/ci/validate_docs_consistency.sh
 
   version-literals:
-    name: version-literals (ubuntu)
-    needs: [clippy]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: version-literals (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
 
@@ -105,9 +114,12 @@ jobs:
         run: python3 scripts/ci/validate_version_literals.py
 
   public-api-governance:
-    name: public-api-governance (ubuntu)
-    needs: [clippy, docs-consistency, version-literals]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: public-api-governance (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -130,7 +142,7 @@ jobs:
 
       - name: Validate public API diff visibility
         id: public_api_diff
-        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
+
         run: |
           status=0
           bash scripts/ci/validate_public_api_diff.sh || status=$?
@@ -138,52 +150,31 @@ jobs:
           if [ "$status" -gt 1 ]; then exit "$status"; fi
 
       - name: Validate public API semver compatibility
-        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
+
         if: always()
         run: python3 scripts/ci/validate_public_api_semver.py
 
       - name: Validate public API documentation approvals
-        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
+
         if: always()
         run: bash scripts/ci/validate_public_api_docs.sh
-
-      - name: Summarize report-only API findings
-        if: ${{ always() && github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
-        run: |
-          echo "::warning::Public API governance is report-only for this base; review the API diff summary and artifact before promotion to develop or main."
-          python3 - <<'PYTHON'
-          import html
-          import os
-          from pathlib import Path
-          reports = Path('target/public-api')
-          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
-              summary.write('## Public API report (non-blocking)\n\nStrict governance applies to PR bases `develop` and `main`, pushes and manual runs.\n\n')
-              logs = sorted(reports.glob('*-diff.log'))
-              if not logs:
-                  summary.write('No API diff was produced; inspect the failed diff step.\n')
-              for log in logs:
-                  summary.write('<details><summary>' + html.escape(log.name) + '</summary><pre>')
-                  summary.write(html.escape(log.read_text()))
-                  summary.write('</pre></details>\n\n')
-              for name in ('public-api-diff.txt', 'public-api-semver.txt'):
-                  report = reports / name
-                  if report.is_file():
-                      summary.write('### ' + name + '\n\n```text\n' + report.read_text() + '\n```\n\n')
-          PYTHON
 
       - name: Upload public API governance reports
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: public-api-governance-${{ github.run_id }}-${{ github.sha }}
+          name: public-api-governance-${{ matrix.os }}-${{ github.run_id }}-${{ github.sha }}
           path: target/public-api/
           if-no-files-found: error
           retention-days: 14
 
   manifest-validation:
-    name: manifest-validation (ubuntu)
-    needs: [clippy, docs-consistency, version-literals]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: manifest-validation (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -201,7 +192,7 @@ jobs:
           python-version: "3.x"
 
       - name: Install release manifest test runner
-        run: python3 -m pip install --disable-pip-version-check --quiet pytest==8.4.2
+        run: python3 -m pip install --disable-pip-version-check --quiet -r scripts/ci/python-packaging-requirements.txt PyYAML==6.0.3
 
       - name: Provision pinned publish-kit renderer
         run: |
@@ -213,6 +204,12 @@ jobs:
 
       - name: Run complete installed publish-kit test suite
         run: '"$SC_COMPOSE_PYTHON" -m pytest .github/scripts/tests -q'
+
+      - name: Run CI script tests
+        env:
+          CI: "1"
+          PYTHONPATH: ${{ github.workspace }}${{ runner.os == 'Windows' && ';' || ':' }}${{ github.workspace }}/scripts/ci
+        run: python3 -m pytest scripts/ci/tests -q
 
       - name: Run staged-package and retry idempotency tests
         run: |
@@ -246,14 +243,21 @@ jobs:
         run: bash scripts/ci/validate_repo_boundaries.sh
 
   test:
-    needs: [clippy, manifest-validation]
+    name: unit (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main') && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux native prerequisites
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/install-linux-native-deps
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -283,7 +287,12 @@ jobs:
         run: cargo check --locked -p sc-observability-log-consumer-check
 
       - name: Run workspace tests
-        run: cargo test --locked --workspace --all-targets --no-fail-fast
+        if: ${{ !cancelled() }}
+        run: python scripts/ci/cargo_workspaces.py unit
+
+      - name: Run standalone Tauri tests with all features
+        if: ${{ !cancelled() }}
+        run: cargo test --locked --manifest-path bindings/tauri/Cargo.toml --all-features --no-fail-fast
 
       - name: Run external OTLP SDK fixture
         if: ${{ !cancelled() }}
@@ -291,7 +300,7 @@ jobs:
 
       - name: Run workspace doctests
         if: ${{ !cancelled() }}
-        run: cargo test --locked --workspace --doc
+        run: cargo test --locked --workspace --doc --no-fail-fast
 
       - name: Run imported log bridge test_hooks feature
         if: ${{ !cancelled() }}
@@ -304,3 +313,18 @@ jobs:
       - name: Run imported log bridge release runtime-level fixture
         if: ${{ !cancelled() }}
         run: cargo test --locked -p sc-observability-log --release --test runtime_level_bridge
+
+  integration:
+    name: integration / OTLP (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+      - name: Run all OTLP integration targets and features
+        run: cargo test --locked -p sc-observability-otlp --tests --all-features --no-fail-fast

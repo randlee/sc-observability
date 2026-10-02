@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use sc_observability::v2::{LogSink, LogSinkError, LoggerBuilder};
 use sc_observability::{
     ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent, LogFilter,
-    LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity,
-    Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName,
-    SinkRegistration, TargetCategory, Timestamp, WriterState,
+    LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, Remediation,
+    SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName, SinkRegistration,
+    TargetCategory, Timestamp, WriterState,
 };
 use serde_json::json;
 
@@ -191,8 +191,7 @@ fn build_health_event(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("custom-sink-example")?;
     let root = std::env::temp_dir().join("sc-observability-custom-sink-example");
-    let mut builder =
-        LoggerBuilder::new(LoggerConfig::default_for(service.clone(), root))?;
+    let mut builder = LoggerBuilder::new(LoggerConfig::default_for(service.clone(), root))?;
 
     builder.register_sink(
         SinkRegistration::typed(Arc::new(AuditSink::new())).with_filter(Arc::new(AuditOnly)),

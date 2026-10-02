@@ -2,20 +2,14 @@ name: sc-lint source preflight
 
 on:
   pull_request:
-    paths:
-      - ".github/scripts/tests/**"
-      - ".github/actions/setup-sc-lint/**"
-      - ".github/scripts/setup_sc_lint_source.py"
-      - ".github/scripts/verify_sc_lint_source_receipt.py"
-      - ".github/workflows/sc-lint-source-preflight.yml"
-      - "boundaries/**"
-      - "install.json"
-      - "release/publish-artifacts.toml"
-      - "release/sc-publish-pin.toml"
-      - "crates/**"
-
+  push:
+    branches: [develop, main, 'integrate/*']
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   source-consumer:
@@ -25,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main') && '["ubuntu-latest","windows-2022"]' || '["ubuntu-latest"]') }}
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Check out consumer
         uses: actions/checkout@v5

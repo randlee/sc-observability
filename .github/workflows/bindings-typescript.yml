@@ -2,13 +2,8 @@ name: TypeScript/Tauri bindings
 
 on:
   pull_request:
-    paths:
-      - "bindings/**"
-      - "crates/**"
-      - "examples/tauri-logging/**"
-      - "scripts/ci/**"
-      - "scripts/generate_typescript_bindings.py"
-      - ".github/workflows/bindings-typescript.yml"
+  push:
+    branches: [develop, main, 'integrate/*']
   workflow_dispatch:
     inputs:
       source_commit:
@@ -42,9 +37,17 @@ env:
   PYTHONUTF8: "1"
   QUALIFICATION_SOURCE: ${{ inputs.source_commit || github.sha }}
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   schema-and-contract:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -65,15 +68,17 @@ jobs:
         with:
           toolchain: "1.94.1"
           components: rustfmt, clippy
+      - name: Install Linux native prerequisites for Tauri
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/install-linux-native-deps
       - name: Check standalone Tauri formatting
         run: cargo fmt --manifest-path bindings/tauri/Cargo.toml -- --check
       - name: Clippy Tauri binding
         run: cargo clippy --locked --manifest-path bindings/tauri/Cargo.toml --all-targets --all-features -- -D warnings
-      - name: Install Linux native prerequisites for Tauri
-        uses: ./.github/actions/install-linux-native-deps
       - name: Test standalone Tauri adapter
         run: cargo test --locked --no-fail-fast --manifest-path bindings/tauri/Cargo.toml --all-features
       - name: Install isolation helper
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y bubblewrap
@@ -84,7 +89,12 @@ jobs:
         run: |
           [[ "$QUALIFICATION_SOURCE" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$QUALIFICATION_SOURCE"
-          bash scripts/ci/validate_binding_schema.sh
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            # Bundle isolation has no Windows backend; schema/generators still run.
+            bash scripts/ci/validate_binding_schema.sh --schema-only
+          else
+            bash scripts/ci/validate_binding_schema.sh
+          fi
           bash scripts/ci/validate_dependency_bans.sh
           bash scripts/ci/validate_repo_boundaries.sh
           bash scripts/ci/validate_docs_consistency.sh
@@ -107,22 +117,25 @@ jobs:
           python scripts/ci/build_binding_source_bundle.py --root-manifest bindings/tauri/Cargo.toml --output target/tauri-rust-bundle
           tar -czf target/tauri-rust-bundle.tar.gz -C target tauri-rust-bundle
       - uses: actions/upload-artifact@v6
+        # All hosts build/test; consumers share one immutable Linux-produced artifact.
+        if: runner.os == 'Linux'
         with:
           name: tauri-shared-rust-bundle
           path: target/tauri-rust-bundle.tar.gz
           if-no-files-found: error
       - uses: actions/upload-artifact@v6
+        # All hosts build/test; consumers share one immutable Linux-produced artifact.
+        if: runner.os == 'Linux'
         with:
           name: tauri-shared-npm
           path: target/tauri-npm/
           if-no-files-found: error
   real-ipc-artifacts:
-    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     needs: schema-and-contract
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-2022]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -198,7 +211,6 @@ jobs:
           path: target/tauri-qualification/
           if-no-files-found: error
   all-platforms:
-    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     outputs:
       source_commit: ${{ steps.summary.outputs.source_commit }}
       inventory_sha256: ${{ steps.summary.outputs.inventory_sha256 }}

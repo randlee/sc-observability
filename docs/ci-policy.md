@@ -1,67 +1,67 @@
 # CI scope and retirement policy
 
-Effective 2026-09-26, under the user-directed `obs-t5h` / `obs-ci-trim`
-cleanup. A job that runs on sprint or fix PRs must name its consumer, enforced
-gate, observed defect or existing regression case, and retirement condition.
-Without that record it does not run on a sprint PR. New checks require an
-identified need; historical evidence alone is not a permanent product gate.
+Effective 2026-10-02, lint, unit and integration checks run on every pull
+request, without branch or path filters, and on pushes to `develop`, `main`
+and `integrate/*`. Each platform test matrix is fixed to `ubuntu-latest`,
+`macos-latest`, `windows-latest`, with `fail-fast: false`. A PR's base never
+reduces coverage or makes a failed gate advisory. Public API diff exit 1 means
+an API change to assess; tool failures, semver failures and missing required
+approvals fail the job.
 
-Public API governance is report-only for pull requests whose base is neither
-`develop` nor `main`. Both semver and approval checks still run; findings
-produce a warning, step-summary diff and uploaded artifact. PRs into `develop`
-or `main`, push events and manual runs are strict. There is no head-branch
-condition. API diff exit 1 means a change to assess; diff tool failures are
-blocking in strict mode. Local `just public-api` remains an explicit strict check.
+## Categories
 
-Platform qualification has a separate rule: PRs into `develop` or `main`,
-explicit dispatch and reusable/non-PR qualification run all
-platforms.
-Relevant-path filters apply before jobs start. An intermediate PR, including one into `integrate/*`, retains
-Ubuntu coverage; Windows/macOS and real IPC qualification run at integration.
-For PR-triggered workflows, aggregators run under the same condition as their required platform proofs;
-no aggregator accepts a partial platform inventory. Release workflows and
-publication checks remain strict.
+| Category | Jobs (existing IDs retained) |
+| --- | --- |
+| Lint | CI `fmt`, `clippy`, `docs-consistency`, `version-literals`, `public-api-governance`; Python packaging `boundaries` |
+| Unit | CI `test`, `manifest-validation` (including CI script tests) |
+| Integration | CI `integration` (all OTLP integration targets/features); `native-contract`, `packaged-consumer`, `binding-schema`, `schema-and-contract`, `real-ipc-artifacts`, `collector-conformance`, `desktop-viewer-factory-conformance`, `telemetry-e2e`, `python-source-runtime`, `source-consumer`, sanity telemetry `importer` |
 
-The CI workflow also targets PR bases `sprint/*` and `fix/*`: stacked sprint
-PRs target the layer below them (`sprint/<lower>`), and quick-fix PRs target
-`fix/*` or another layer. Without these bases, those stack layers get no CI
-from this workflow. Retire this added base coverage when stacks stop using
-`sprint/*` bases.
+`scripts/ci/cargo_workspaces.py` discovers Cargo workspace roots from Git's
+tracked and non-ignored file inventory. Root-excluded packages are included.
+The script's `EXCLUDED` constant is the sole list of content exclusions.
+Formatting, all-target/all-feature clippy and unit tests cover every discovered
+workspace without a workflow edit when another workspace is added. Failures
+are collected across workspaces; multi-binary tests use `--no-fail-fast`.
+The retained feature-specific tests and workspace doctests also run.
+Lint failures do not suppress the unit or integration category.
 
-Dependency restrictions remain checked by `just lint` through
-`scripts/ci/validate_dependency_bans.sh`.
+## Actual platform limits
 
-## Intermediate PR job inventory
+- The pinned desktop viewer manifest is `darwin_arm64` only. The
+  `desktop-viewer-factory-conformance` and installed-artifact `telemetry-e2e`
+  jobs run on `macos-14` on every PR. Linux/Windows coverage of this binary is
+  unavailable, not silently successful. The hermetic OTLP collector tests
+  run on all three platforms.
+- `validate_binding_bundle.py` implements isolation with `sandbox-exec` on
+  macOS and `bubblewrap` on Linux. Its packaged consumer and source-bundle
+  isolation checks run on both; Windows has no backend in that validator.
+  Schema, generator, typing, native runtime and real Tauri IPC checks still
+  run on Windows. The latter has its own Windows sandbox implementation.
+- `complete-gate` and `all-platforms` only aggregate the required platform
+  evidence, on Ubuntu. They cannot pass on an incomplete platform inventory.
+  Tauri builds on all hosts; consumers share the one Linux-produced immutable
+  npm/Rust artifact pair to compare the same input across hosts.
 
-Each row names the existing regression motivating the check, rather than
-claiming a new production incident. The historical import identity failures
-on PRs 233–235 are the observed reason for retiring those checks.
+## Expensive checks retained unconditionally
 
-| Jobs | Consumer and gate | Observed defect / existing regression | Retirement condition |
-| --- | --- | --- | --- |
-| CI: `fmt`, `clippy` | Rust maintainers; formatting and compiler lint errors | Compiler/lint failures before tests; existing workspace gate | Compiler/build tooling replaces the gate with equivalent coverage |
-| CI: `docs-consistency` | API consumers; public Rust API documentation | Rustdoc missing-doc checks | Equivalent public API documentation validation replaces the check |
-| CI: `version-literals` | Package consumers; one coherent release train | Existing version and exact macro-pin mismatch rejection | Packages stop using a coordinated release train |
-| CI: `public-api-governance` | Integration reviewer; visible API diffs, report-only for PRs except bases develop/main | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs intermediate API reports |
-| CI: `manifest-validation` | Release maintainer; publish inventory, install contract, retry correctness | `test_release_artifacts`, `test_prepare_release_staged_packages`, `test_publish_retry_idempotency` | Publish/install tooling is replaced and its coverage moves with it |
-| CI: `test` (Ubuntu) | Rust crate consumers; workspace tests, doctests and log feature fixtures | Existing runtime/bridge regression tests | Consumer contract or supported platform is retired |
-| Binding runtime: `native-contract` (Ubuntu) | Core/bridge hosts; debug and release native contract | Existing native runtime conversion, ownership and lifecycle fixtures | Native binding runtime is retired or superseded |
-| Binding schema: `binding-schema` | Generated TS/Python model consumers; DTO, schema, typing and isolated bundle | Existing schema/conversion corpus, generator drift and isolated consumer negatives | These generated bindings are retired |
-| Python binding runtime: `python-source-runtime` | Owned/attached Python users; source runtime contract | Existing Python ownership, context, timeout and teardown fixtures | Python binding or supported interpreter contract is retired |
-| TypeScript/Tauri: `schema-and-contract` | Tauri adapter consumers; schema and packaged source/JS contract | Existing schema corpus, neutral boundaries and artifact build checks | Tauri binding is retired |
-| Python packaging boundaries: `boundaries` | Wheel/sdist consumers; package and platform policy | `test_python_distribution.py` | Python distribution contract is retired |
-| sc-lint preflight: `source-consumer` (Ubuntu) | Install consumers; source installer and receipt contract | Existing receipt mismatch/rejection cases | Source-installed sc-lint is no longer supported |
+These are rough **cold-cache estimates per runner**, not measured timings or
+permission to add filters. Only the user decides future path gating.
 
-## Integration-only platform work
+| Work | Approximate minutes | Inputs that affect it |
+| --- | --- | --- |
+| All workspace lint/unit, including native Tauri builds | 5–20 | Cargo manifests/locks, Rust sources, native build configuration |
+| Python source wheel plus installed runtime/typing suite; importer wheel | 5–15 each | bindings/python, core/OTLP/DTO/runtime crates, scripts/ci, scripts/sanity-telemetry, toolchain/locks |
+| Packaged Rust consumer and schema source bundle | 5–15 | crate sources/manifests/locks, bindings/schema, generators, bundle/isolation scripts |
+| Tauri npm/Rust packaging and installed real IPC | 10–30 | bindings/typescript, bindings/tauri, shared crates, Tauri qualification scripts/fixtures |
+| Installed wheel and CLI telemetry end-to-end / wheel API checks | 10–25 | Python bindings, sc-otel-cli, OTLP/types crates, telemetry tests, pinned viewer, public API and migration policies |
+| Public API/semver reports | 5–15 | exported crate APIs, Cargo/toolchain, API approvals and baselines |
 
-- CI `test` and binding-runtime `native-contract`: Windows/macOS coverage
-  qualifies the composed integration instead of every intermediate layer.
-- Binding-runtime `packaged-consumer` and `complete-gate`: the macOS sandbox
-  proof and all-platform aggregation need the full platform run.
-- TypeScript/Tauri `real-ipc-artifacts` and `all-platforms`: real webview IPC
-  and all-platform aggregation qualify integration/release artifacts.
-- sc-lint `source-consumer` on Windows: integration proves the second
-  installer platform while intermediate PRs keep Ubuntu coverage.
+Thus an intermediate PR gains two platform executions for previously
+Ubuntu-only work plus previously integration-only packaging/IPC jobs. These
+run concurrently; summing their runner minutes is not a wall-clock estimate.
+Release-only sdist/wheel distribution builds remain in their existing explicit
+release/preflight workflows; this change does not turn publication jobs into
+PR jobs or alter their triggers.
 
 ## Release preflight
 
@@ -88,13 +88,10 @@ B.2 runs
 `test_validate_runtime_level_qualification_metadata.py`,
 `test_validate_runtime_level_platform_evidence.py`,
 `validate_runtime_level_qualification_metadata.py` and the `rustfmt --check`
-check on `scripts/ci/fixtures/runtime-level-consumer/*.rs`. These checks run
-only on dispatch in CI. No PR workflow discovers all of `scripts/ci/tests`:
-`ci.yml` runs `test_prepare_release_staged_packages` and
-`test_publish_retry_idempotency`, while other PR workflows select their own
-binding, packaging and platform suites. Those suites do not run the six
-preflight checks listed here. The preflight aggregators always run after their
-platform consumers succeed, retaining complete-platform evidence requirements.
+check on `scripts/ci/fixtures/runtime-level-consumer/*.rs`. Release qualification runs only on dispatch. PR unit tests also exercise the
+CI helper implementations, including their rejection fixtures; they do not
+publish packages or replace the candidate's installed release qualification.
+The preflight aggregators always require successful platform consumers.
 
 The binding source bundle uses B.2 qualified archives only when the B.2 candidate
 version matches the workspace release train; otherwise it builds unpublished

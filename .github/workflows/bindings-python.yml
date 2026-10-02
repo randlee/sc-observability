@@ -2,26 +2,22 @@ name: Python binding runtime
 
 on:
   pull_request:
-    paths:
-      - 'scripts/ci/**'
-      - '.github/scripts/**'
-      - 'boundaries/**'
-      - 'Cargo.*'
-      - 'rust-toolchain.toml'
-      - 'crates/sc-observability*/**'
-      - 'bindings/python/**'
-      - 'bindings/schema/**'
-      - 'examples/rust-python-logging/**'
-      - 'scripts/*binding*'
-      - '.github/workflows/bindings-python.yml'
   push:
     branches: [develop, main, 'integrate/*']
   workflow_dispatch:
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   python-source-runtime:
-    name: Python source runtime (ubuntu)
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: Python source runtime (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
         with:
