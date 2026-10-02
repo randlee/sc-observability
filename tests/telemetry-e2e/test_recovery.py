@@ -5,7 +5,7 @@ import json
 import time
 from pathlib import Path
 
-from conftest import CaptureCollector, GOLDENS, free_port, run_cli
+from conftest import CaptureCollector, GOLDENS, free_port, run_cli, run_installed_python
 
 
 def _config(path: Path, endpoint: str) -> Path:
@@ -70,3 +70,70 @@ def test_partial_signal_failure_retains_the_failed_signal(
     assert status.returncode == 6, status.stdout + status.stderr
     report = json.loads(status.stdout)["status"]
     assert report is not None
+
+
+def test_context_exit_retains_delivery_failure_as_a_tagged_result(
+    installed_artifacts: dict[str, Path], tmp_path: Path,
+) -> None:
+    """A down collector is a delivery result, never an exception from ``with``."""
+    config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{free_port()}")
+    source = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
+    script = f"""\
+import json
+import sys
+from sc_observability import Ok
+from sc_observability.telemetry import Telemetry, TelemetryErr
+
+opened = Telemetry.open(config={str(config)!r})
+assert isinstance(opened, Ok), opened
+telemetry = opened.value
+with telemetry:
+    admitted = telemetry.emit(json.load(sys.stdin))
+    assert isinstance(admitted, Ok), admitted
+assert isinstance(telemetry.last_shutdown, TelemetryErr), telemetry.last_shutdown
+assert telemetry.last_shutdown.error.kind == "delivery"
+print(telemetry.last_shutdown.error.code)
+"""
+    exited = run_installed_python(installed_artifacts, script, cwd=tmp_path, input=source)
+    assert exited.returncode == 0, exited.stdout + exited.stderr
+    assert "DELIVERY" in exited.stdout
+
+
+def test_killed_python_admission_is_resumed_by_installed_cli(
+    installed_artifacts: dict[str, Path], tmp_path: Path,
+) -> None:
+    """A process death after durable admission leaves a record the CLI can drain."""
+    port = free_port()
+    config = _config(tmp_path / "telemetry.yaml", f"http://127.0.0.1:{port}")
+    source = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
+    script = f"""\
+import json
+import os
+import sys
+from sc_observability import Ok
+from sc_observability.telemetry import Telemetry
+
+opened = Telemetry.open(config={str(config)!r})
+assert isinstance(opened, Ok), opened
+admitted = opened.value.emit(json.load(sys.stdin))
+assert isinstance(admitted, Ok), admitted
+# Deliberately bypass normal cleanup: the next process must own recovery.
+os._exit(0)
+"""
+    killed = run_installed_python(installed_artifacts, script, cwd=tmp_path, input=source)
+    assert killed.returncode == 0, killed.stdout + killed.stderr
+    collector = CaptureCollector(port)
+    collector.start()
+    try:
+        deadline = time.monotonic() + 10
+        resumed = None
+        while time.monotonic() < deadline:
+            resumed = run_cli(installed_artifacts, "--config", str(config), "flush", "--timeout", "1", cwd=tmp_path)
+            if resumed.returncode == 0:
+                break
+            assert resumed.returncode == 6, resumed.stdout + resumed.stderr
+            time.sleep(0.25)
+        assert resumed is not None and resumed.returncode == 0, resumed.stdout + resumed.stderr
+        collector.wait_for("/v1/logs")
+    finally:
+        collector.stop()
