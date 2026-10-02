@@ -170,14 +170,14 @@ fn submission_exporter_round_trips_every_signal_variant() {
 }
 
 #[test]
-fn submission_exporter_classifies_400_as_terminal_and_exhausted_503_as_retryable() {
-    for (status, expected_retryable) in [(400, false), (503, true)] {
+fn submission_exporter_classifies_400_and_exhausted_503_as_terminal() {
+    for status in [400, 503] {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
         let exporter = submission_exporter(
             format!("http://{}", listener.local_addr().expect("address")),
             Some(retry_policy(1)),
         );
-        let statuses = if expected_retryable {
+        let statuses = if status == 503 {
             vec![status, status]
         } else {
             vec![status]
@@ -189,15 +189,9 @@ fn submission_exporter_classifies_400_as_terminal_and_exhausted_503_as_retryable
                 .recv_timeout(CAPTURE_TIMEOUT)
                 .expect("captured request");
         }
-        assert_eq!(server.join().expect("capture server exits"), statuses.len(),);
-        assert_eq!(
-            matches!(result, Err(SubmissionExportFailure::Retryable(_))),
-            expected_retryable,
-            "status {status}"
-        );
-        assert_eq!(
+        assert_eq!(server.join().expect("capture server exits"), statuses.len());
+        assert!(
             matches!(result, Err(SubmissionExportFailure::Terminal(_))),
-            !expected_retryable,
             "status {status}"
         );
     }

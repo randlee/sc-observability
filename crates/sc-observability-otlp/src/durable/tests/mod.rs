@@ -13,6 +13,7 @@ mod capability;
 pub(super) mod conformance;
 mod drain;
 mod regressions;
+mod retry_ownership;
 mod schema;
 const DEADLINE: Duration = Duration::from_secs(3);
 

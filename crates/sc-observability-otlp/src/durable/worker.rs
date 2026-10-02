@@ -86,10 +86,15 @@ pub(super) fn start(
                     match drain(&shared, exporter.as_ref(), signal) {
                         Ok(progress) => {
                             failures = 0;
-                            if progress {
-                                shared.notify();
-                            } else {
-                                shared.wait_since(generation, Shared::poll_interval());
+                            match progress {
+                                DrainProgress::Exported => shared.notify(),
+                                DrainProgress::Idle => {
+                                    shared.wait_since(generation, Shared::poll_interval());
+                                }
+                                DrainProgress::Interrupted => {
+                                    shared.notify();
+                                    break;
+                                }
                             }
                         }
                         Err(error) => {
@@ -313,26 +318,31 @@ fn claim(shared: &Shared, signal: Signal) -> Result<Vec<Claimed>, TelemetryClien
     tx.commit().map_err(persistence)?;
     Ok(batch)
 }
+enum DrainProgress {
+    Idle,
+    Exported,
+    Interrupted,
+}
 fn drain(
     shared: &Shared,
     exporter: &dyn SubmissionExporter,
     signal: Signal,
-) -> Result<bool, TelemetryClientError> {
+) -> Result<DrainProgress, TelemetryClientError> {
     #[cfg(test)]
     if shared.drain_on_flush_only.load(Ordering::Acquire)
         && shared.active_flushes.load(Ordering::Acquire) == 0
     {
-        return Ok(false);
+        return Ok(DrainProgress::Idle);
     }
     let mut batch = claim(shared, signal)?;
     if batch.is_empty() {
-        return Ok(false);
+        return Ok(DrainProgress::Idle);
     }
     let mut credits = vec![];
     'reserve: for row in &batch {
         loop {
             if shared.stop.load(Ordering::Acquire) {
-                return Ok(false);
+                return Ok(DrainProgress::Idle);
             }
             if let Ok(credit) = shared.credits.reserve_for(signal, row.bytes) {
                 credits.push(credit);
@@ -359,7 +369,7 @@ fn drain(
         }
         let owns: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM drain_lease WHERE holder=?1 AND expires_at_unix_nano>=?2)", params![shared.holder,store::now()], |r|r.get(0)).map_err(persistence)?;
         if !owns || shared.stop.load(Ordering::Acquire) {
-            return Ok(false);
+            return Ok(DrainProgress::Idle);
         }
     }
     let envelopes: Vec<_> = batch.iter().map(|row| row.envelope.clone()).collect();
@@ -377,7 +387,20 @@ fn drain(
         )
         .map_err(persistence)?;
     if !owns {
-        return Ok(false);
+        return Ok(DrainProgress::Idle);
+    }
+    // Explicit transport shutdown interrupts delivery; it does not exhaust a
+    // network retry budget. Release these claims without charging an attempt
+    // and stop this signal worker rather than repeatedly calling a stopped
+    // exporter. A replacement client can reclaim the pending rows.
+    if matches!(
+        &result,
+        Err(SubmissionExportFailure::Retryable(
+            sc_observability_types::v2::ExportError::ShutdownCancelledRetry { .. }
+        ))
+    ) {
+        release_interrupted(tx, shared, signal, &batch)?;
+        return Ok(DrainProgress::Interrupted);
     }
     for row in &batch {
         let outcome = match &result {
@@ -386,26 +409,43 @@ fn drain(
                 Outcome::Failed(error.diagnostic().code.as_str())
             }
             Err(SubmissionExportFailure::Retryable(error)) => {
-                let retry = shared.config.sync_http_retry.as_ref();
-                let max = retry
-                    .and_then(|r| r.max_retries)
-                    .unwrap_or(crate::constants::DEFAULT_OTLP_MAX_RETRIES);
-                if row.attempts > max {
-                    Outcome::Failed(error.diagnostic().code.as_str())
-                } else {
-                    let delay = retry_backoff_ms(row.attempts, retry);
-                    Outcome::Retry {
-                        code: error.diagnostic().code.as_str(),
-                        next: now.saturating_add(store::nanos(Duration::from_millis(delay))),
-                    }
-                }
+                retry_outcome(shared, row.attempts, error.diagnostic().code.as_str(), now)
             }
         };
         tx.execute(&super::row::sql("UPDATE signal_deliveries SET state=?3,last_error_code=?4,next_attempt_at_unix_nano=?5,delivered_at_unix_nano=?6,claimed_by=NULL,claim_expires_at_unix_nano=NULL WHERE submission_id=?1 AND signal=?2 AND state='{claimed}' AND claimed_by=?7 AND attempts=?8"), params![row.id.to_string(),store::signal_name(signal)?,outcome.state().as_str(),outcome.code(),outcome.next(),if matches!(outcome, Outcome::Delivered) { Some(now) } else { None },shared.holder,row.attempts]).map_err(persistence)?;
     }
     tx.commit().map_err(persistence)?;
     drop(credits);
-    Ok(true)
+    Ok(DrainProgress::Exported)
+}
+
+fn retry_outcome<'a>(shared: &Shared, attempts: u32, code: &'a str, now: UnixNanos) -> Outcome<'a> {
+    let retry = shared.config.sync_http_retry.as_ref();
+    let max = retry
+        .and_then(|r| r.max_retries)
+        .unwrap_or(crate::constants::DEFAULT_OTLP_MAX_RETRIES);
+    if attempts > max {
+        Outcome::Failed(code)
+    } else {
+        let delay = retry_backoff_ms(attempts, retry);
+        Outcome::Retry {
+            code,
+            next: now.saturating_add(store::nanos(Duration::from_millis(delay))),
+        }
+    }
+}
+
+fn release_interrupted(
+    tx: rusqlite::Transaction<'_>,
+    shared: &Shared,
+    signal: Signal,
+    batch: &[Claimed],
+) -> Result<(), TelemetryClientError> {
+    for row in batch {
+        tx.execute(&super::row::sql("UPDATE signal_deliveries SET state='{pending}',attempts=attempts-1,next_attempt_at_unix_nano=NULL,claimed_by=NULL,claim_expires_at_unix_nano=NULL WHERE submission_id=?1 AND signal=?2 AND state='{claimed}' AND claimed_by=?3 AND attempts=?4"), params![row.id.to_string(),store::signal_name(signal)?,shared.holder,row.attempts]).map_err(persistence)?;
+    }
+    tx.commit().map_err(persistence)?;
+    Ok(())
 }
 
 fn retry_backoff_ms(attempts: u32, retry: Option<&SyncHttpRetryPolicyDto>) -> u64 {

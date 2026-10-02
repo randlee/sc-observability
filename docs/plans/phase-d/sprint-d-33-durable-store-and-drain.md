@@ -96,7 +96,14 @@ exporting through the d-29 `SubmissionExporter` seam.
    expiry, row claims, `SubmissionExportFailure::Retryable` → `retry` with
    `next_attempt_at` (bounded by `SyncHttpRetryPolicy`), `Terminal` →
    `failed`, at-least-once delivery with the duplicate window documented
-   below, and resumption after a crash or exit. [PHD-008, PHB-011]
+   below, and resumption after a crash or exit. The transport owns the network
+   retry budget: completed `RetryAttemptsExhausted` and `RetryDeadlineExhausted`
+   results are terminal to the drain and must not start another transport
+   sequence. Explicit transport shutdown returns interrupted rows to pending
+   without charging a persisted attempt and stops that signal worker; after
+   client shutdown releases the lease, a replacement client can reclaim them.
+   Process interruption retains the existing lease-expiry recovery behavior.
+   [PHD-008, PHB-011]
 3. Implement the layering and backpressure: store → drain worker →
    `AdmissionCredits::reserve` → `SubmissionExporter::export`. Implement
    `AdmissionCredits::wait_for_release` (staged by d-29 as a signature only):

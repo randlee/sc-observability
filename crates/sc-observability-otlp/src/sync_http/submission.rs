@@ -154,10 +154,37 @@ impl ProfileExporter<SubmissionEnvelope> for SyncHttpSubmissionExporter {
 fn classify(error: ExportError) -> SubmissionExportFailure {
     match error {
         error @ (ExportError::NonRetryableHttpStatus { .. }
+        | ExportError::RetryAttemptsExhausted { .. }
+        | ExportError::RetryDeadlineExhausted { .. }
         | ExportError::TerminalExportFailure { .. }
         // A producer-side deadline has an unknown worker outcome. Retrying
         // the drained batch could duplicate a request the worker completes.
         | ExportError::LifecycleTimeout { .. }) => SubmissionExportFailure::Terminal(error),
         error => SubmissionExportFailure::Retryable(error),
     }
+}
+
+#[cfg(test)]
+#[test]
+fn completed_retry_budgets_are_terminal_but_shutdown_is_recoverable() {
+    let context = || {
+        Box::new(ErrorContext::new(
+            crate::error_codes::SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED,
+            "retry classification fixture",
+            Remediation::recoverable("retry after restart", ["fixture"]),
+        ))
+    };
+    for error in [
+        ExportError::RetryAttemptsExhausted { context: context() },
+        ExportError::RetryDeadlineExhausted { context: context() },
+    ] {
+        assert!(matches!(
+            classify(error),
+            SubmissionExportFailure::Terminal(_)
+        ));
+    }
+    assert!(matches!(
+        classify(ExportError::ShutdownCancelledRetry { context: context() }),
+        SubmissionExportFailure::Retryable(_)
+    ));
 }
