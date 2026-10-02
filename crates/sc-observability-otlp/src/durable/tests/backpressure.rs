@@ -149,36 +149,48 @@ fn backend_queue_full_pauses_no_eviction() {
 #[test]
 fn batch_larger_than_available_credits_exports_in_prefixes() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::open_with_exporter(
-        config(dir.path()),
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
-    .unwrap();
-    let size = log("one").to_canonical_json().len();
+    let _clock = FrozenClock::new();
+    let exporter = Arc::new(ScriptedExporter::new(dir.path()));
+    let client = conformance::open_gated(config(dir.path()), &exporter);
+    let first = log("one");
+    let second = log("two");
+    let size = first
+        .to_canonical_json()
+        .len()
+        .max(second.to_canonical_json().len());
     let held = client
         .owner
         .shared
         .credits
         .reserve(crate::constants::DEFAULT_OTLP_QUEUE_BYTE_CAPACITY - size)
         .unwrap();
-    let first = client.emit(log("one")).unwrap();
-    let second = client.emit(log("two")).unwrap();
-    // A worker holding its first reservation must not wait for its own credits.
-    assert_eq!(
-        client
-            .flush_submission(&first.submission_id, DEADLINE)
-            .unwrap()
-            .delivered
-            .logs,
-        1
-    );
-    assert_eq!(
-        client
-            .flush_submission(&second.submission_id, DEADLINE)
-            .unwrap()
-            .delivered
-            .logs,
-        1
-    );
+    let first = client.emit(first).unwrap();
+    let second = client.emit(second).unwrap();
+    // Both rows are committed before a drain begins, guaranteeing one claimed
+    // batch that must split. Each explicit step traverses the production drain.
+    assert!(worker::drain_once_for_test(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs
+    ));
+    let status = client.status(StatusQuery::Summary).unwrap();
+    assert_eq!(status.delivered_retained.logs, 1);
+    assert_eq!(status.pending.logs, 1);
+    assert!(worker::drain_once_for_test(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs
+    ));
+    assert_eq!(*exporter.batches.lock().unwrap(), vec![1, 1]);
+    for receipt in [first, second] {
+        assert_eq!(
+            client
+                .flush_submission(&receipt.submission_id, Duration::ZERO)
+                .unwrap()
+                .delivered
+                .logs,
+            1
+        );
+    }
     drop(held);
 }

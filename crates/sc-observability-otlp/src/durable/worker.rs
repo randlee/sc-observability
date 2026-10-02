@@ -334,6 +334,28 @@ fn drain(
     {
         return Ok(DrainProgress::Idle);
     }
+    drain_ready(shared, exporter, signal)
+}
+
+#[cfg(test)]
+pub(super) fn drain_once_for_test(
+    shared: &Shared,
+    exporter: &dyn SubmissionExporter,
+    signal: Signal,
+) -> bool {
+    assert!(shared.drain_on_flush_only.load(Ordering::Acquire));
+    assert_eq!(shared.active_flushes.load(Ordering::Acquire), 0);
+    matches!(
+        drain_ready(shared, exporter, signal).unwrap(),
+        DrainProgress::Exported
+    )
+}
+
+fn drain_ready(
+    shared: &Shared,
+    exporter: &dyn SubmissionExporter,
+    signal: Signal,
+) -> Result<DrainProgress, TelemetryClientError> {
     let mut batch = claim(shared, signal)?;
     if batch.is_empty() {
         return Ok(DrainProgress::Idle);

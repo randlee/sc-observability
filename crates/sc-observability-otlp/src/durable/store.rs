@@ -11,6 +11,10 @@ use sc_observability_types::{
 use std::{path::Path, time::Duration};
 
 pub(super) fn now() -> UnixNanos {
+    #[cfg(test)]
+    if let Some(now) = super::tests::frozen_now() {
+        return now;
+    }
     UnixNanos(
         i64::try_from(Timestamp::now_utc().into_inner().unix_timestamp_nanos()).unwrap_or(i64::MAX),
     )

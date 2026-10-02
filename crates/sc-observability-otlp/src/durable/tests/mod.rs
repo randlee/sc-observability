@@ -20,6 +20,7 @@ const DEADLINE: Duration = Duration::from_secs(3);
 #[derive(Default)]
 struct ScriptedExporter {
     outcomes: Mutex<HashMap<Signal, VecDeque<DeliveryOutcome>>>,
+    batches: Mutex<Vec<usize>>,
     released: Mutex<bool>,
     gate: Condvar,
     stalled: Mutex<bool>,
@@ -87,19 +88,17 @@ impl SubmissionExporter for ScriptedExporter {
                     shared.stalled_signals.lock().unwrap().insert(signal);
                     shared.notify();
                 }
-                let (released, timeout) = self
-                    .gate
-                    .wait_timeout_while(self.released.lock().unwrap(), DEADLINE, |released| {
-                        !*released
-                    })
-                    .unwrap();
-                assert!(
-                    *released && !timeout.timed_out(),
-                    "scripted {signal:?} export was not released"
+                // Stall is an explicit test-controlled event, not a timed failure.
+                // Conformance clients release their own exporter on case teardown.
+                drop(
+                    self.gate
+                        .wait_while(self.released.lock().unwrap(), |released| !*released)
+                        .unwrap(),
                 );
             }
             _ => {}
         }
+        self.batches.lock().unwrap().push(envelopes.len());
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -229,4 +228,23 @@ fn newer_envelope_skipped_and_counted() {
         1
     );
     assert!(!exporter.deliveries.exists());
+}
+
+// Only manually driven drains use this clock; worker threads never inherit it.
+thread_local! { static FROZEN_NOW: std::cell::Cell<Option<row::UnixNanos>> = const { std::cell::Cell::new(None) }; }
+pub(super) fn frozen_now() -> Option<row::UnixNanos> {
+    FROZEN_NOW.get()
+}
+struct FrozenClock;
+impl FrozenClock {
+    fn new() -> Self {
+        let now = store::now();
+        FROZEN_NOW.set(Some(now));
+        Self
+    }
+}
+impl Drop for FrozenClock {
+    fn drop(&mut self) {
+        FROZEN_NOW.set(None);
+    }
 }

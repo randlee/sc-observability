@@ -12,15 +12,22 @@ fn every_matrix_row_delivers_and_sdk_is_rejected() {
         "profiles",
     ] {
         let dir = tempfile::tempdir().unwrap();
-        let client = DurableTelemetryClient::open_with_exporter(
-            config(dir.path()),
-            Arc::new(ScriptedExporter::new(dir.path())),
-        )
-        .unwrap();
-        let receipt = client.emit(fixture(name)).unwrap();
+        let _clock = FrozenClock::new();
+        let exporter = Arc::new(ScriptedExporter::new(dir.path()));
+        let client = conformance::open_gated(config(dir.path()), &exporter);
+        let envelope = fixture(name);
+        let signal = envelope.signals().iter().next().unwrap();
+        let receipt = client.emit(envelope).unwrap();
+        // Capability is independent of Windows fsync/scheduler latency. Drive the
+        // real claim/export/commit at a frozen lease clock, then inspect its result.
+        assert!(worker::drain_once_for_test(
+            &client.owner.shared,
+            exporter.as_ref(),
+            signal
+        ));
         assert_eq!(
             client
-                .flush_submission(&receipt.submission_id, DEADLINE)
+                .flush_submission(&receipt.submission_id, Duration::ZERO)
                 .unwrap()
                 .delivered
                 .total(),
