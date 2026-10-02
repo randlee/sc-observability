@@ -172,7 +172,17 @@ def map_row(source: Source, row: Mapping[str, object], config: Mapping[str, obje
 class Importer:
     def __init__(self, config_path: Path, telemetry: Telemetry, checkpoint_path: Path | None = None) -> None:
         self.config_path, self.config, self.telemetry = config_path, load_config(config_path), telemetry
-        self.checkpoint_path = checkpoint_path or config_path.parent / ".sc/telemetry-state/checkpoints.json"
+        self.checkpoint_path = checkpoint_path or config_path.parent / "telemetry-state/checkpoints.json"
+
+    def _source_path(self, source_path: str) -> Path:
+        """Resolve configured sources without duplicating the conventional .sc directory."""
+        path = Path(source_path)
+        if path.is_absolute():
+            return path
+        config_directory = self.config_path.parent
+        if path.parts[:1] == (config_directory.name,):
+            config_directory = config_directory.parent
+        return (config_directory / path).resolve()
 
     def _state(self) -> dict[str, dict[str, object]]:
         try:
@@ -187,7 +197,7 @@ class Importer:
 
     def import_source(self, source: Source) -> Report:
         report, state = Report(), self._state()
-        path = (self.config_path.parent / source.path).resolve()
+        path = self._source_path(source.path)
         try:
             data = path.read_bytes()
         except OSError as error:

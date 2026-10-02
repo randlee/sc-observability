@@ -57,3 +57,20 @@ def test_checkpoint_written_only_after_admission_receipt(tmp_path: Path) -> None
     report = importer.import_source(spec)
     assert report.failures and report.failures[0][0] == "admission"
     assert not importer.checkpoint_path.exists()
+
+
+def test_committed_sc_config_resolves_state_and_sources_once(tmp_path: Path) -> None:
+    config_directory = tmp_path / ".sc"
+    source = config_directory / "sanity-log" / "events.jsonl"
+    source.parent.mkdir(parents=True)
+    source.write_text(_row() + "\n")
+    config = config_directory / "telemetry.yaml"
+    config.write_text("service: test\nteam: team\nsources: []\n")
+    telemetry = _double(tmp_path)
+    importer = Importer(config, telemetry)
+    spec = Source(".sc/sanity-log/events.jsonl", "sanity", "phase-d", "sanity-llm")
+
+    assert importer.checkpoint_path == config_directory / "telemetry-state/checkpoints.json"
+    assert importer.import_source(spec).admitted == 1
+    assert importer.checkpoint_path.exists()
+    assert not (config_directory / ".sc").exists()
