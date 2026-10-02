@@ -324,7 +324,12 @@ impl DurableTelemetryClient {
         // Production includes snapshot/drain time in the original deadline.
         #[cfg(test)]
         let start = if shared.drain_on_flush_only.load(Ordering::Acquire) {
-            tests::conformance::await_scripted_outcomes(shared, &reader, &scope);
+            tests::conformance::await_scripted_outcomes(
+                shared,
+                self.owner.exporter.as_deref().unwrap(),
+                &reader,
+                &scope,
+            );
             Instant::now()
         } else {
             start

@@ -51,10 +51,9 @@ def stage_host(destination, bundle, report):
     source = ROOT / 'examples/tauri-logging/src-tauri'
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns('target', 'gen'))
     original = (source / 'src/main.rs').read_text(encoding='utf-8')
-    instrumented = 'mod qualification;\n' + original
     # Inner crate attributes must remain at the beginning of the file.
-    instrumented = original.replace('#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]',
-                                    '#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]\nmod qualification;', 1)
+    instrumented = replace_once(original, '#![deny(deprecated)]\n',
+                                '#![deny(deprecated)]\nmod qualification;\n')
     instrumented = replace_once(instrumented, '    let config = sc_observability::LoggerConfig::default_for(service, PathBuf::from("logs"));',
         '    let mut config = sc_observability::LoggerConfig::default_for(service, PathBuf::from("logs"));\n    qualification::configure(&mut config);')
     instrumented = replace_once(instrumented, '    let policy = AdapterPolicy {',

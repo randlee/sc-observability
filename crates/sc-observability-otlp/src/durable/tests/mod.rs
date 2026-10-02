@@ -253,13 +253,6 @@ impl Drop for FrozenClock {
     }
 }
 
-struct ReleaseExporter<'a>(&'a ScriptedExporter);
-impl Drop for ReleaseExporter<'_> {
-    fn drop(&mut self) {
-        self.0.release();
-    }
-}
-
 fn drain_once_bounded(shared: &Shared, exporter: &dyn SubmissionExporter, signal: Signal) -> bool {
     let now = frozen_now();
     std::thread::scope(|scope| {
