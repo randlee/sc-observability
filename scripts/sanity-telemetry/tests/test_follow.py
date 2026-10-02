@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from sc_observability import Ok
-from sc_observability.telemetry import Telemetry
+from sc_observability.telemetry import Telemetry, TelemetryErr, TelemetryFailure
 
 from import_sanity import Importer, Source, _checkpoint_key
 
@@ -85,7 +85,7 @@ def test_checkpoint_written_only_after_receipt(tmp_path: Path) -> None:
     with source.open("a") as handle:
         handle.write(_row(2) + "\n")
     report = importer.import_source(spec)
-    assert report.failures and report.failures[0][0] == "admission"
+    assert report.failures == [("admission", "SC_OBSERVABILITY_ADMIT_DISK_BOUND")]
     assert importer.checkpoint_path.read_bytes() == checkpoint_before
 
 
@@ -178,10 +178,10 @@ def test_main_import_status_and_final_flush(tmp_path: Path, monkeypatch) -> None
     config = _config(tmp_path, tmp_path / "events.jsonl")
 
     class FakeTelemetry:
-        flushed = False
+        flush_calls = 0
 
         def flush(self):
-            self.flushed = True
+            self.flush_calls += 1
             return Ok(None)
 
     telemetry = FakeTelemetry()
@@ -196,7 +196,49 @@ def test_main_import_status_and_final_flush(tmp_path: Path, monkeypatch) -> None
     monkeypatch.setattr(import_sanity.Telemetry, "open", classmethod(lambda cls, config: Ok(telemetry)))
     monkeypatch.setattr(import_sanity, "Importer", FakeImporter)
     assert import_sanity.main(["import", "--config", str(config)]) == 0
-    assert telemetry.flushed
+    assert telemetry.flush_calls == 1
+
+
+def test_main_open_error_is_counted_with_its_exit_status(tmp_path: Path, monkeypatch, capsys) -> None:
+    import import_sanity
+
+    config = _config(tmp_path, tmp_path / "events.jsonl")
+    failure = TelemetryErr(TelemetryFailure(
+        "admission", "disk_bound_exceeded", "SC_OBSERVABILITY_ADMIT_DISK_BOUND", "disk is full"
+    ))
+
+    monkeypatch.setattr(import_sanity.Telemetry, "open", classmethod(lambda cls, config: failure))
+    assert import_sanity.main(["import", "--config", str(config)]) == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "admitted": 0,
+        "duplicates": 0,
+        "skipped_invalid": 0,
+        "failures": [["admission", "SC_OBSERVABILITY_ADMIT_DISK_BOUND"]],
+    }
+
+
+def test_main_flush_error_is_counted_with_its_exit_status(tmp_path: Path, monkeypatch, capsys) -> None:
+    import import_sanity
+
+    config = _config(tmp_path, tmp_path / "events.jsonl")
+    failure = TelemetryErr(TelemetryFailure(
+        "delivery", "terminal_failure", "SC_OBSERVABILITY_DELIVERY_TERMINAL", "delivery failed"
+    ))
+    telemetry = type("FakeTelemetry", (), {"flush": lambda self: failure})()
+
+    class FakeImporter:
+        def __init__(self, config_path, opened, **kwargs):
+            assert config_path == config and opened is telemetry
+
+        def run_once(self):
+            return import_sanity.Report()
+
+    monkeypatch.setattr(import_sanity.Telemetry, "open", classmethod(lambda cls, config: Ok(telemetry)))
+    monkeypatch.setattr(import_sanity, "Importer", FakeImporter)
+    assert import_sanity.main(["import", "--config", str(config)]) == 1
+    assert json.loads(capsys.readouterr().out)["failures"] == [
+        ["delivery", "SC_OBSERVABILITY_DELIVERY_TERMINAL"]
+    ]
 
 
 def test_main_reports_counted_failure_with_status_one(tmp_path: Path, monkeypatch, capsys) -> None:

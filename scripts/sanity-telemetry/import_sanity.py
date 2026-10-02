@@ -3,6 +3,9 @@
 The importer deliberately owns no transport policy.  It translates source rows into
 the neutral submission document accepted by the installed Python facade, and only
 advances a source cursor after its admission receipt is returned.
+
+Exit status is 0 for a clean import, 1 for counted failures, and 2 for
+configuration or command-usage failures.
 """
 from __future__ import annotations
 
@@ -39,7 +42,7 @@ def _timestamp(value: object) -> str | None:
         # all nine fractional digits instead of silently truncating nanoseconds.
         from datetime import datetime
 
-        datetime.fromisoformat(value[:-1] + "+00:00")
+        datetime.fromisoformat(head + "+00:00")
     except ValueError:
         return None
     return f"{head}.{(fraction or '').ljust(9, '0')}Z"

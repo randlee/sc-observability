@@ -107,6 +107,13 @@ def test_real_format_fixtures_map_to_exact_envelopes_admitted_by_test_double(tmp
             assert [metric["data"]["data"]["points"][0]["value"]["data"] for metric in document["metrics"]] == [6, 9]
 
 
+def test_current_format_nine_digit_timestamp_preserves_nanoseconds() -> None:
+    row = json.loads((FIXTURES / "sanity-current.json").read_text())
+    document = map_row(Source(".sc/sanity.jsonl", "sanity", "phase-d", "sanity-llm"), row, CONFIG)
+    assert document is not None
+    assert document["logs"][0]["time"] == "2026-10-01T12:00:00.123456789Z"
+
+
 def test_llm_and_jev_envelopes_share_trace_and_keep_exact_error_fields(tmp_path: Path) -> None:
     row = json.loads((FIXTURES / "sanity-current.json").read_text())
     row.update({"verdict": "CANNOT_RUN", "findings": None, "error": {"code": "SC_SANITY_TOOL_MISSING", "message": "missing tool"}})
