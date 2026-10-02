@@ -177,6 +177,7 @@ fn completed_retry_budgets_are_terminal_but_shutdown_is_recoverable() {
     for error in [
         ExportError::RetryAttemptsExhausted { context: context() },
         ExportError::RetryDeadlineExhausted { context: context() },
+        ExportError::LifecycleTimeout { context: context() },
     ] {
         assert!(matches!(
             classify(error),
