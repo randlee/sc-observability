@@ -66,13 +66,14 @@ Bootstrap on macOS (observed with cargo-xwin 0.23.0, rustc 1.94.1, Homebrew
 LLVM 22):
 
 ```sh
-cargo install --locked cargo-xwin
+cargo install --locked cargo-xwin --version 0.23.0
 rustup target add x86_64-pc-windows-msvc
 brew install llvm   # clang-cl and llvm-lib; Apple clang has no clang-cl
 ```
 
 On first use cargo-xwin downloads the MSVC CRT and Windows SDK via xwin into
-`~/Library/Caches/cargo-xwin` and accepts the Microsoft licence itself; no
+`~/Library/Caches/cargo-xwin` (observed: MSVC CRT 14.44.17.14, Windows SDK
+10.0.26100) and accepts the Microsoft licence itself; no
 environment variable is needed. It links with the toolchain's `rust-lld` as
 `lld-link`. Run, per discovered workspace (`--manifest-path`):
 
@@ -84,6 +85,8 @@ cargo xwin test --locked --workspace --all-features --target x86_64-pc-windows-m
 This proves the code compiles, passes clippy and links its test binaries for
 Windows. It does not run any test; native runtime behaviour (viewer process,
 file locks, paths, DLL loading) is checked only on the Windows CI runners.
+A change touching Rust code that builds for Windows runs both checks locally
+before push.
 
 ## Release preflight
 
