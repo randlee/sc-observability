@@ -1106,6 +1106,7 @@ impl OtlpHttpExporter {
         self.backend.worker.inner.export_result_timeout
     }
 
+    #[cfg(feature = "durable-store")]
     pub(super) fn cancel_submission(&self) {
         self.backend.worker.cancel();
     }

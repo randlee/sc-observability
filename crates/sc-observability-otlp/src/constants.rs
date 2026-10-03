@@ -29,7 +29,7 @@ pub const MAX_OTLP_BATCH_BYTES: usize = 1024 * 1024;
 /// This bound is applied after OTLP/JSON encoding rather than to the source
 /// envelope so that transport requests remain bounded even when JSON expands
 /// IDs, base64 values, or escaped strings.
-#[cfg(feature = "sync-http")]
+#[cfg(all(feature = "sync-http", any(test, feature = "durable-store")))]
 pub(crate) const MAX_OTLP_ENCODED_REQUEST_BYTES: usize = 1024 * 1024;
 /// Default maximum number of OTLP export retries.
 pub const DEFAULT_OTLP_MAX_RETRIES: u32 = 3;

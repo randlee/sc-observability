@@ -1,6 +1,7 @@
 //! Crate-private OTLP exporter contracts.
 
 pub(crate) mod credits;
+#[cfg(any(feature = "durable-store", all(test, feature = "sync-http")))]
 pub(crate) mod profiles;
 #[cfg(any(feature = "durable-store", all(test, feature = "sync-http")))]
 pub(crate) mod submission;
