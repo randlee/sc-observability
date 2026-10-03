@@ -5,7 +5,11 @@
 use super::*;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    mpsc,
+};
+use std::time::Duration;
 
 struct Collector {
     address: std::net::SocketAddr,
@@ -16,6 +20,7 @@ struct Collector {
 impl Collector {
     fn new(recover_after: Option<usize>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
         let stop = Arc::new(AtomicBool::new(false));
         let calls = Arc::new(AtomicUsize::new(0));
@@ -24,10 +29,17 @@ impl Collector {
             (stop.clone(), calls.clone(), paths.clone());
         let worker = std::thread::spawn(move || {
             loop {
-                let (mut stream, _) = listener.accept().unwrap();
                 if thread_stop.load(Ordering::Acquire) {
                     break;
                 }
+                let (mut stream, _) = match listener.accept() {
+                    Ok(connection) => connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(1));
+                        continue;
+                    }
+                    Err(error) => panic!("accept collector request: {error}"),
+                };
                 stream.set_read_timeout(Some(DEADLINE)).unwrap();
                 let (path, _) = read_http(&mut stream);
                 thread_paths.lock().unwrap().push(path);
@@ -166,12 +178,31 @@ fn scripted_retry_attempt_budgets_are_exact_for_logs_and_profiles() {
 impl Drop for Collector {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
-        let _ = TcpStream::connect(self.address);
-        if let Some(worker) = self.worker.take() {
-            worker.join().unwrap();
+        if !std::thread::panicking()
+            && let Some(worker) = self.worker.take()
+        {
+            worker.join().expect("collector worker exits");
         }
     }
 }
+
+#[test]
+fn collector_drop_does_not_depend_on_a_wake_connection() {
+    let mut collector = Collector::new(None);
+    let closed_listener = TcpListener::bind("127.0.0.1:0").expect("reserve closed wake address");
+    collector.address = closed_listener.local_addr().expect("closed wake address");
+    drop(closed_listener);
+
+    let (completed, dropped) = mpsc::channel();
+    std::thread::spawn(move || {
+        drop(collector);
+        completed.send(()).expect("report collector drop");
+    });
+    dropped
+        .recv_timeout(Duration::from_secs(1))
+        .expect("collector drops without a wake connection");
+}
+
 fn read_http(stream: &mut TcpStream) -> (String, Vec<u8>) {
     let mut bytes = Vec::new();
     let mut buffer = [0; 4096];
