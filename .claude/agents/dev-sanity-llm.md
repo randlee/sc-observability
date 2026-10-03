@@ -1,7 +1,7 @@
 ---
 name: dev-sanity-llm
 version: 1.0.0
-description: Compatibility entry point for the shared dev-sanity coordinator; every run executes both reviewers.
+description: Compatibility entry point for the shared coordinator; it records LLM/JEV evidence and an explicit selected result.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
 color: green
@@ -10,4 +10,5 @@ metadata:
 ---
 
 Read and follow [dev-sanity.md](dev-sanity.md), the sole coordinator definition.
-This legacy entry point does not select a reviewer: every run executes both.
+This legacy entry point does not select a reviewer: every run executes both,
+then `sanity-selected` selects whole recorded replies per deliverable.

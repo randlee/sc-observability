@@ -22,10 +22,10 @@ decides both:
 
 The member name is unique to the team, because Herdr agent names are global
 on the host. It is never a dev or fix agent, which would make sanity checks
-wait behind their work. Every run executes both reviewers; the manifest's
-operational reviewer (LLM) owns the verdict and finding children, and JEV is
-comparison-only. Before the close, dev-sanity triages operational findings and
-LLM/JEV disagreements; a finding judged a checker defect creates no child.
+wait behind their work. Every run executes both reviewers and records a
+`sanity-selected` result per deliverable. The selected report owns verdict
+and finding children, but every selected reply remains an unchanged LLM, JEV,
+or explicitly rerun envelope. A checker defect creates no child.
 
 ## Tasks
 
@@ -73,7 +73,8 @@ One check is one closed bead at one pinned commit, split per deliverable:
 - The directive sends each assignment unchanged to one child of each
   reviewer as fenced JSON, dispatches both reviewer families concurrently
   in the background before waiting for either, and keeps separate results.
-  Merge and log each reviewer when it finishes while the other continues.
+  It merges LLM/JEV rows, then passes both raw arrays and a strict selection
+  array to `sanity-selected`, which merges and logs the operational row.
   The subagent owns that contract, in its `## Inputs` and `## Output Format`:
   [`.claude/agents/sc-sanity-llm.md`](../../../agents/sc-sanity-llm.md).
   Every check subagent (`sc-sanity-jev.md` too) keeps the same assignment
@@ -82,8 +83,9 @@ One check is one closed bead at one pinned commit, split per deliverable:
 - `scripts/sanity-merge` accepts exactly one result per deliverable at the
   pinned SHA, checks that the worktree is still at that SHA and clean,
   folds in the lint exit code and diagnostics, and writes each reviewer’s
-  verdict and report vars separately, carrying
-  the shared run_id, reviewer identity, tested commit and own UTC timing.
+  verdict and report vars separately, carrying the shared run_id, reviewer
+  identity, tested commit and own UTC timing. The selected mode validates
+  source statuses and retains selection/source provenance.
 
 The check leaves nothing in the repository: `sanity-split` writes only the
 lint log and the lint exit file under `--scratch`, the renderer's transient
@@ -104,7 +106,7 @@ in the report by number, done or with its findings, so closure is explicit.
 | cannot run | stays open, with a note | `refused`, `task-refused.md.j2` |
 
 A FAIL never closes the bead. Closing it would release the dev beads that
-depend on the checked sprint. Only the operational reviewer’s FAIL creates one child finding bead of
+depend on the checked sprint. Only the selected reviewer’s FAIL creates one child finding bead of
 the checked bead per undone deliverable, never one per lint diagnostic. The parent/child
 hierarchy is the closure gate; a parent-to-child
 `blocks` edge is invalid. Each child is blocking at `clamp(parent priority - 1, P1, P4)`, records
@@ -121,15 +123,15 @@ round is dispatched without the lead's ruling.
 
 ## Mandatory Console Report
 
-Follow the canonical [coordinator](../../../agents/dev-sanity.md): append each
-reviewer’s PASS/FAIL/CANNOT_RUN independently to the same ignored phase
+Follow the canonical [coordinator](../../../agents/dev-sanity.md): append SEL,
+LLM, and JEV PASS/FAIL/CANNOT_RUN independently to the same ignored phase
 JSONL via `sanity-run-history`: strict sc-compose record-template render,
 typed JSON validation, compact serialization, locked append. Failed render or
 validation must append nothing; use no unsupported `--append` option. Then render
-the newest ten **runs**, grouping all reviewer rows sharing
-run_id. A run produces up to twenty rows. Include the rendered table
-as Markdown in the user-visible completion reply after the operational close.
-The compact columns are `S | PR | R | Find | Result | Done | Iter`; no full task
+the newest ten **runs**, grouping all reviewer rows sharing run_id. A run
+produces up to thirty rows. Include the rendered table as Markdown in the
+user-visible completion reply after the selected close. The compact columns are
+`S | PR | R | Pick | Find | Result | Done | Iter`; no full task
 IDs. New ledger timestamps are UTC only; local display is derived at rendering.
 Legacy rows are LLM by user attestation; never rewrite historical ledgers.
 CANNOT_RUN has unknown findings and an explicit error, never a fabricated PASS.

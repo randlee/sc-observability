@@ -13,5 +13,6 @@
   "iteration": 1,
   "verdict": "PASS",
   "findings": 0,
-  "error": null
+  "error": null,
+  "selection": null
 }

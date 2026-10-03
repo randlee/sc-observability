@@ -4,6 +4,8 @@
 Usage:
   sanity-merge <manifest.json> <sanity bead> <dev bead> <sprint>
     --reviewer sanity-llm|sanity-jev --started-at <epoch> < results.json
+    --reviewer sanity-selected --started-at <epoch> --llm-results <file>
+    --jev-results <file> --selection <file>
 
 `manifest.json` is what `sanity-split` printed. stdin is a JSON array holding
 the unchanged JSON reply of every child of one selected reviewer, one per
@@ -132,6 +134,95 @@ def validate(result, index, manifest, sanity_bead, dev_bead):
     return number, findings
 
 
+def reply_status(result, index, manifest, sanity_bead, dev_bead):
+    """Validate one unchanged reply and return its deliverable and coarse status."""
+    if not isinstance(result, dict) or not isinstance(result.get("success"), bool):
+        raise Reject(f"result {index}: not a success or failure envelope")
+    if result["success"] is False:
+        error = failure_envelope(result, index, manifest["deliverables_total"])
+        return error["deliverable"], "cannot_run"
+    number, findings = validate(result, index, manifest, sanity_bead, dev_bead)
+    return number, "undone" if findings else "done"
+
+
+def load_result_file(path):
+    try:
+        value = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as exc:
+        raise Reject(f"cannot read results file {path}: {exc}")
+    if not isinstance(value, list):
+        raise Reject(f"results file {path} must be a JSON array")
+    return value
+
+
+def selected_results(args, manifest, sanity_bead, dev_bead):
+    """Choose whole validated replies; selection metadata is never a reply edit."""
+    llm, jev = load_result_file(args.llm_results), load_result_file(args.jev_results)
+    try:
+        selection = json.loads(Path(args.selection).read_text())
+    except (OSError, ValueError) as exc:
+        raise Reject(f"cannot read selection: {exc}")
+    if not isinstance(selection, list):
+        raise Reject("selection must be a JSON array")
+
+    def index_replies(rows, name):
+        indexed = {}
+        for index, reply in enumerate(rows):
+            number, status = reply_status(reply, index, manifest, sanity_bead, dev_bead)
+            if number in indexed:
+                raise Reject(f"deliverable {number}: more than one {name} result")
+            indexed[number] = (reply, status)
+        for number in range(1, manifest["deliverables_total"] + 1):
+            if number not in indexed:
+                raise Reject(f"deliverable {number}: no {name} result")
+        return indexed
+
+    llm_by, jev_by = index_replies(llm, "llm"), index_replies(jev, "jev")
+    selected, seen, sources = [], set(), {}
+    required = {"deliverable", "llm", "jev", "selected", "reason", "rerun", "checker_defect"}
+    for entry in selection:
+        if not isinstance(entry, dict) or set(entry) != required:
+            raise Reject("selection entry has incorrect fields")
+        number = entry.get("deliverable")
+        if not isinstance(number, int) or isinstance(number, bool) or not 1 <= number <= manifest["deliverables_total"] or number in seen:
+            raise Reject(f"deliverable {number!r}: selection must appear once")
+        seen.add(number)
+        if entry["llm"] != llm_by[number][1] or entry["jev"] != jev_by[number][1]:
+            raise Reject(f"deliverable {number}: selection status does not match reply")
+        if entry["selected"] not in {"llm", "jev", "rerun"} or not isinstance(entry["reason"], str):
+            raise Reject(f"deliverable {number}: invalid selection or reason")
+        if not entry["reason"] and (entry["llm"] != entry["jev"] or entry["selected"] == "rerun"):
+            raise Reject(f"deliverable {number}: reason required for disagreement or rerun")
+        rerun = entry["rerun"]
+        if (entry["selected"] == "rerun") != (rerun is not None):
+            raise Reject(f"deliverable {number}: rerun must match selected")
+        if rerun is not None:
+            if not isinstance(rerun, dict) or set(rerun) != {"reviewer", "context", "reply"}:
+                raise Reject(f"deliverable {number}: invalid rerun")
+            if rerun["reviewer"] not in {"sanity-llm", "sanity-jev"} or not isinstance(rerun["context"], list) or not rerun["context"] or not all(isinstance(path, str) and path and not Path(path).is_absolute() for path in rerun["context"]):
+                raise Reject(f"deliverable {number}: rerun requires reviewer and nonempty repo-relative context")
+            reply_number, status = reply_status(rerun["reply"], number, manifest, sanity_bead, dev_bead)
+            if reply_number != number:
+                raise Reject(f"deliverable {number}: rerun reply names another deliverable")
+            reply, source = rerun["reply"], rerun["reviewer"]
+        elif entry["selected"] == "llm":
+            reply, status, source = *llm_by[number], "sanity-llm"
+        else:
+            reply, status, source = *jev_by[number], "sanity-jev"
+        if not isinstance(entry["checker_defect"], bool):
+            raise Reject(f"deliverable {number}: checker_defect must be boolean")
+        if entry["checker_defect"] and status != "undone":
+            raise Reject(f"deliverable {number}: checker_defect requires selected undone reply")
+        if entry["checker_defect"] and not entry["reason"]:
+            raise Reject(f"deliverable {number}: checker_defect requires a reason")
+        sources[number] = source
+        selected.append(reply)
+    missing = [number for number in range(1, manifest["deliverables_total"] + 1) if number not in seen]
+    if missing:
+        raise Reject(f"deliverable {missing[0]}: missing selection")
+    return selected, selection, sources
+
+
 class TaskFailure(Exception):
     """A task-level failure: printed as `<code> fatal 0`, exit 3."""
 
@@ -207,15 +298,18 @@ def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("manifest_path", "sanity_bead", "dev_bead", "sprint"):
         parser.add_argument(name)
-    parser.add_argument("--reviewer", choices=("sanity-llm", "sanity-jev"))
+    parser.add_argument("--reviewer", choices=("sanity-llm", "sanity-jev", "sanity-selected"))
     parser.add_argument("--started-at", type=float)
+    parser.add_argument("--llm-results")
+    parser.add_argument("--jev-results")
+    parser.add_argument("--selection")
     try:
         args = parser.parse_args(argv[1:])
     except SystemExit:
         return 1
     manifest_path, sanity_bead, dev_bead, sprint = args.manifest_path, args.sanity_bead, args.dev_bead, args.sprint
     manifest = None
-    results = []
+    results, selection, selection_sources = [], None, {}
 
     def metadata():
         if not args.reviewer:
@@ -226,7 +320,7 @@ def main(argv):
                 "started_at": datetime.fromtimestamp(args.started_at, timezone.utc).isoformat().replace("+00:00", "Z"),
                 "completed_at": completed.isoformat().replace("+00:00", "Z"),
                 "duration_seconds": max(0, round(completed.timestamp() - args.started_at)),
-                "reviewer_results": results}
+                "reviewer_results": results, "selection": selection}
 
     def unavailable(code, message, legacy_status=None):
         if args.reviewer and manifest and manifest.get("run_id") and args.started_at is not None:
@@ -245,7 +339,15 @@ def main(argv):
         if args.reviewer and (args.reviewer not in manifest.get("reviewers", []) or args.started_at is None):
             print("reviewer must be selected in manifest and --started-at is required", file=sys.stderr)
             return 1
-        results = read_results()
+        selected_mode = args.reviewer == "sanity-selected"
+        if selected_mode:
+            if not all((args.llm_results, args.jev_results, args.selection)):
+                raise Reject("sanity-selected requires --llm-results, --jev-results, and --selection")
+            results, selection, selection_sources = selected_results(args, manifest, sanity_bead, dev_bead)
+        else:
+            if any((args.llm_results, args.jev_results, args.selection)):
+                raise Reject("selection inputs are only valid for sanity-selected")
+            results = read_results()
         by_number = {}
         for index, result in enumerate(results):
             if (not isinstance(result, dict) or not isinstance(result.get("success"), bool)
@@ -290,6 +392,9 @@ def main(argv):
                 "depends_on": finding.get("depends_on", []),
                 "deliverable_text": deliverable_text(manifest, number),
             })
+            if selection is not None:
+                entry = next(item for item in selection if item["deliverable"] == number)
+                finding_records[-1]["reviewer"] = "sc-" + selection_sources[number]
     for index, finding in enumerate(lint_findings, 1):
         finding_records.append({
             "finding_ref": f"L-F{index}", "deliverable": 0,
@@ -307,7 +412,7 @@ def main(argv):
         "task_id": sanity_bead, "checked_bead": dev_bead, "sprint": sprint,
         "branch": manifest["branch"], "commit": manifest["sha"],
         "verdict": "PASS" if all(not findings for findings in by_number.values()) and lint_exit == 0 else "FAIL",
-        "findings_count": count, "findings": finding_records,
+        "findings_count": count, "findings": finding_records, "selection": selection,
         "findings_md": "\n".join(blocks), "lint_md": lint_md,
     }, sys.stdout, indent=2)
     print()

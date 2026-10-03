@@ -1,6 +1,6 @@
 ---
 name: sanity-run-record
-version: 1.0.0
+version: 1.1.0
 description: Fixed sanity ledger record. sanity-run-history validates required string/integer/nullable fields after strict rendering and before locked append. UTC timestamps only.
 format: json
 required_variables:
@@ -19,6 +19,7 @@ required_variables:
   - verdict
   - findings
   - error
+  - selection
 ---
 {
   "run_id": {{ run_id | tojson }},
@@ -35,5 +36,6 @@ required_variables:
   "iteration": {{ iteration | tojson }},
   "verdict": {{ verdict | tojson }},
   "findings": {{ findings | tojson }},
-  "error": {{ error | tojson }}
+  "error": {{ error | tojson }},
+  "selection": {{ selection | tojson }}
 }
