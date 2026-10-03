@@ -303,7 +303,8 @@ jobs:
 
   windows-test:
     name: test (windows-latest top)
-    if: (github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep') || (github.event_name == 'push' && github.ref == 'refs/heads/integrate/phase-d')
+    # Integration pushes already include Windows in the original test matrix.
+    if: github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep'
     needs: [fmt]
     runs-on: windows-latest
     steps:
