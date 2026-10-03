@@ -19,6 +19,38 @@ from python_test_fixtures import pe
 
 
 class DistributionTests(unittest.TestCase):
+    def test_source_python_contract_reads_utf8_independent_of_locale(self):
+        import io
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'pyproject.toml').write_text(
+                '# café ✓ č\n'
+                '[project]\nrequires-python = ">=3.10"\n'
+                '[tool.maturin]\nfeatures = ["pyo3/abi3-py310"]\n',
+                encoding='utf-8',
+            )
+            (root / 'Cargo.toml').write_text(
+                '# café ✓ č\n'
+                '[dependencies]\n'
+                'pyo3 = { version = "0.29.2", features = ["abi3-py310"] }\n',
+                encoding='utf-8',
+            )
+
+            default_open = io.open
+
+            def cp1252_default(*args, **kwargs):
+                if len(args) > 3:
+                    if args[3] in (None, 'locale'):
+                        args = (*args[:3], 'cp1252', *args[4:])
+                elif kwargs.get('encoding') in (None, 'locale'):
+                    kwargs['encoding'] = 'cp1252'
+                return default_open(*args, **kwargs)
+
+            with patch('pathlib.io.open', side_effect=cp1252_default):
+                self.assertEqual(source_python_contract(root), '>=3.10')
+
+
     def test_actual_cell_rejects_interpreter_outside_matched_platform_policy(self):
         policy = {
             'interpreters': ['3.10', '3.11', '3.12', '3.13', '3.14'],

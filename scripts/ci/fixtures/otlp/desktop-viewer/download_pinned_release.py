@@ -96,7 +96,7 @@ def main() -> int:
               file=sys.stderr)
         return 2
     output = _output_path(sys.argv[1] if len(sys.argv) > 1 else "build/otel-desktop-viewer")
-    with tempfile.TemporaryDirectory(prefix="sc-obs-d9-viewer-") as temp:
+    with tempfile.TemporaryDirectory(prefix="sc-obs-d9-viewer-", dir=output.parent) as temp:
         archive_path = Path(temp) / "release.tar.gz"
         digest = _download_archive(lock["artifact_url"], archive_path, lock["artifact_sha256"])
         staged = Path(temp) / lock["binary_name"]

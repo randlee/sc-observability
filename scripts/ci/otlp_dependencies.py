@@ -44,6 +44,11 @@ def validate_transport_dependencies(root: Path) -> set[str]:
     reviewed_dev = document["dev_dependencies"]
     dev = set()
     for kind, dependencies in dependency_sections(manifest):
+        if kind != "dev-dependencies" and "sc-observe" in dependencies:
+            raise SystemExit(
+                f"OTLP dependency sc-observe: dev-only; it must not appear in [{kind}]"
+            )
+    for kind, dependencies in dependency_sections(manifest):
         if kind != "dev-dependencies":
             continue
         for key, value in dependencies.items():
