@@ -123,7 +123,7 @@ class SanityMerge(unittest.TestCase):
         self.assertEqual(vars_["findings_md"], "D1: done\nD2: done")
         self.assertEqual(vars_["lint_md"], "`just lint` exit 0")
         self.assertRegex(vars_["generated_at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
-        self.render_complete(vars_, "# Dev Sanity Check PASS")
+        self.assertIsNone(vars_["selection"])
 
     def test_fail_from_skipped_finding(self):
         self.lint(0)
@@ -132,6 +132,33 @@ class SanityMerge(unittest.TestCase):
         vars_ = json.loads(out.stdout)
         self.assertEqual((vars_["verdict"], vars_["findings_count"]), ("FAIL", 1))
         self.assertEqual(vars_["findings_md"], "D1: done\nD2:\n- `crates/x/src/lib.rs:3` skipped: no 503 test")
+        self.assertIsNone(vars_["selection"])
+
+    def test_selected_vars_render_the_completion_template(self):
+        self.write_manifest(run_id="selected-run",
+                            reviewers=["sanity-llm", "sanity-jev", "sanity-selected"],
+                            operational_reviewer="sanity-selected")
+        self.lint(0)
+        llm_path = self.dir / "llm.json"
+        jev_path = self.dir / "jev.json"
+        selection_path = self.dir / "selection.json"
+        llm_path.write_text(json.dumps([self.result(1), self.result(2)]))
+        jev_path.write_text(json.dumps([self.result(1), self.result(2, [FINDING])]))
+        selection_path.write_text(json.dumps([
+            {"deliverable": 1, "llm": "done", "jev": "done", "selected": "llm",
+             "reason": "", "rerun": None, "checker_defect": False},
+            {"deliverable": 2, "llm": "done", "jev": "undone", "selected": "jev",
+             "reason": "JEV has pinned evidence", "rerun": None, "checker_defect": False},
+        ]))
+        completed = time.time()
+        out = self.merge([], str(self.manifest), TASK, DEV, SPRINT,
+                         "--reviewer", "sanity-selected", "--started-at", str(completed - 1),
+                         "--completed-at", str(completed), "--llm-results", str(llm_path),
+                         "--jev-results", str(jev_path), "--selection", str(selection_path))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        vars_ = json.loads(out.stdout)
+        self.assertEqual(vars_["reviewer"], "sanity-selected")
+        self.assertIsInstance(vars_["selection"], list)
         self.render_complete(vars_, "# Dev Sanity Check FAIL")
 
     def test_rejects_multiple_or_non_skipped_findings(self):
