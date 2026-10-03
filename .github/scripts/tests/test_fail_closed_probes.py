@@ -10,7 +10,11 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from shell_helpers import bash_command, bash_environment, bash_path
 
 
 REPO_ROOT = next(
@@ -51,18 +55,20 @@ def run_probe_script(
     output_file = tmp_path / "github-output"
     output_file.write_text("", encoding="utf-8")
     result = subprocess.run(
-        ["bash"],
+        bash_command(),
         input=script,
         text=True,
         capture_output=True,
         check=False,
-        env={
+        env=bash_environment(
+            {
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "GH_TOKEN": "stub-token",
-            "GITHUB_OUTPUT": str(output_file),
             **env,
-        },
+            },
+            prepend_path=bin_dir,
+            github_output=output_file,
+        ),
     )
     outputs = dict(
         line.split("=", 1)
@@ -70,6 +76,35 @@ def run_probe_script(
         if "=" in line
     )
     return result, outputs
+
+
+def test_shell_helper_uses_git_bash_and_translates_windows_fixture_paths() -> None:
+    assert bash_command(platform="darwin") == ["bash"]
+    configured = r"C:\\Program Files\\Git\\bin\\bash.exe"
+    assert bash_command(
+        platform="win32",
+        environ={"GIT_BASH_PATH": configured},
+        exists=lambda path: str(path) == configured,
+    ) == [configured]
+    environment = bash_environment(
+        {"PATH": r"C:\\Tools;C:\\Program Files\\Git\\bin"},
+        prepend_path=r"C:\\Temp Space\\stub-bin",
+        github_output=r"C:\\Temp Space\\github-output",
+        platform="win32",
+    )
+    assert environment["PATH"] == "/c/Temp Space/stub-bin:/c/Tools:/c/Program Files/Git/bin"
+    assert environment["PATH"].split(":", 1)[0] == "/c/Temp Space/stub-bin"
+    assert environment["GITHUB_OUTPUT"] == "/c/Temp Space/github-output"
+    assert bash_path(r"C:\\Temp Space\\stub-bin", platform="win32") == "/c/Temp Space/stub-bin"
+
+
+def test_shell_helper_refuses_the_windows_wsl_shim_when_git_bash_is_missing() -> None:
+    try:
+        bash_command(platform="win32", environ={}, exists=lambda _path: False)
+    except RuntimeError as error:
+        assert "Git Bash is required" in str(error)
+    else:
+        raise AssertionError("Windows shell selection accepted an unconfigured bash executable")
 
 
 # --- GitHub Release probe (verify-published-release, issue #40) -------------

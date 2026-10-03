@@ -12,6 +12,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).parent))
+from shell_helpers import bash_command, bash_environment
+
 
 # Local fixture commands should finish quickly; bound hangs on every platform.
 TEST_COMMAND_TIMEOUT_SECONDS = 30
@@ -116,7 +119,7 @@ class RegistryVersionStateTests(unittest.TestCase):
 class ReleaseScriptTests(unittest.TestCase):
     def test_release_gate_has_valid_bash_syntax(self) -> None:
         result = subprocess.run(
-            ["bash", "-n", str(SCRIPTS / "release_gate.sh")],
+            [*bash_command(), "-n", str(SCRIPTS / "release_gate.sh")],
             text=True,
             capture_output=True,
             check=False,
@@ -187,7 +190,7 @@ class ReleaseScriptTests(unittest.TestCase):
                     "Cargo.toml",
                 ],
                 cwd=repo,
-                env={**os.environ, "GITHUB_OUTPUT": str(gate_output)},
+                env=bash_environment(os.environ, github_output=gate_output),
                 text=True,
                 capture_output=True,
                 check=False,
@@ -232,7 +235,7 @@ class ReleaseScriptTests(unittest.TestCase):
 
             result = subprocess.run(
                 [
-                    "bash",
+                    *bash_command(),
                     str(SCRIPTS / "release_gate.sh"),
                     "final",
                     "origin/main",
@@ -245,6 +248,7 @@ class ReleaseScriptTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                env=bash_environment(),
                 timeout=TEST_COMMAND_TIMEOUT_SECONDS,
             )
 
@@ -337,6 +341,13 @@ class ReleaseScriptTests(unittest.TestCase):
             self.assertIn("sc_compose.ComposeMode.file", text)
             self.assertIn("--var-file", text)
             self.assertIn('choices=["render"]', text)
+
+    def test_renderer_cli_path_uses_windows_scripts_directory(self) -> None:
+        with patch.object(BOOTSTRAP.sys, "platform", "win32"):
+            self.assertEqual(
+                BOOTSTRAP.renderer_cli_path(Path("managed-venv")),
+                Path("managed-venv") / "Scripts" / "renderer",
+            )
 
     def test_runtime_renderer_paths_use_the_bootstrapped_exact_pin(self) -> None:
         """Guard every package Python-renderer path against independent pins."""
