@@ -315,7 +315,9 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
                 with self.assertRaises(KeyboardInterrupt):
                     harness.start(args)
 
-    def test_stop_escalates_after_timeout_and_removes_owned_wal(self) -> None:
+    @unittest.skipIf(sys.platform == "win32",
+                     "Windows terminates an owned process in one native stage")
+    def test_stop_escalates_after_timeout_and_removes_owned_wal_on_posix(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             state = Path(temp) / "state"
             state.mkdir()
@@ -329,6 +331,30 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
                 harness.stop(argparse.Namespace(state_dir=str(state), timeout=0.1,
                                                 remove_state=True))
                 proc.wait(timeout=5)
+                self.assertFalse(state.exists())
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=5)
+
+    @unittest.skipUnless(sys.platform == "win32",
+                         "Windows has one native owned-process termination stage")
+    def test_windows_stop_uses_one_termination_stage_and_removes_owned_wal(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state"
+            state.mkdir()
+            database = state / "viewer.duckdb"
+            database.write_text("owned")
+            Path(str(database) + ".wal").write_text("owned wal")
+            (state / "viewer.log").write_text("owned")
+            proc = _owned_process(database)
+            try:
+                _record(state, proc, database)
+                with mock.patch.object(harness, "_terminate", wraps=harness._terminate) as terminate:
+                    harness.stop(argparse.Namespace(state_dir=str(state), timeout=5,
+                                                    remove_state=True))
+                proc.wait(timeout=5)
+                terminate.assert_called_once_with(proc.pid, force=False)
                 self.assertFalse(state.exists())
             finally:
                 if proc.poll() is None:
