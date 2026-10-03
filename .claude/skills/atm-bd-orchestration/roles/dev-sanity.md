@@ -73,8 +73,11 @@ One check is one closed bead at one pinned commit, split per deliverable:
 - The directive sends each assignment unchanged to one child of each
   reviewer as fenced JSON, dispatches both reviewer families concurrently
   in the background before waiting for either, and keeps separate results.
-  It merges LLM/JEV rows, then passes both raw arrays and a strict selection
-  array to `sanity-selected`, which merges and logs the operational row.
+  It merges each LLM/JEV result as it finishes but defers ledger append until
+  both raw arrays and the final selected verdict are available. It then appends
+  LLM, JEV, and selected rows in that order, all carrying the selected final
+  verdict, and passes both raw arrays and a strict selection array to
+  `sanity-selected`, which merges the operational row.
   The subagent owns that contract, in its `## Inputs` and `## Output Format`:
   [`.claude/agents/sc-sanity-llm.md`](../../../agents/sc-sanity-llm.md).
   Every check subagent (`sc-sanity-jev.md` too) keeps the same assignment
@@ -123,15 +126,16 @@ round is dispatched without the lead's ruling.
 
 ## Mandatory Console Report
 
-Follow the canonical [coordinator](../../../agents/dev-sanity.md): append SEL,
-LLM, and JEV PASS/FAIL/CANNOT_RUN independently to the same ignored phase
+Follow the canonical [coordinator](../../../agents/dev-sanity.md): append LLM,
+JEV, and SEL PASS/FAIL/CANNOT_RUN independently, in that order, to the same ignored phase
 JSONL via `sanity-run-history`: strict sc-compose record-template render,
 typed JSON validation, compact serialization, locked append. Failed render or
 validation must append nothing; use no unsupported `--append` option. Then render
 the newest ten **runs**, grouping all reviewer rows sharing run_id. A run
 produces up to thirty rows. Include the rendered table as Markdown in the
-user-visible completion reply after the selected close. The compact columns are
-`S | PR | R | Pick | Find | Result | Done | Iter`; no full task
+user-visible completion reply after the selected close. Every new row carries
+the selected `final_verdict`; Match compares only LLM/JEV verdicts to it. The compact columns are
+`S | PR | R | Pick | Find | Result | Match | Done | Iter`; no full task
 IDs. New ledger timestamps are UTC only; local display is derived at rendering.
 Legacy rows are LLM by user attestation; never rewrite historical ledgers.
 CANNOT_RUN has unknown findings and an explicit error, never a fabricated PASS.

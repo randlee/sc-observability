@@ -60,16 +60,18 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    `code`, the actual `message`, `recoverable`, `suggested_action`, and the
    `deliverable` number. Say explicitly that the reviewer could not run.
    Never substitute an LLM result for unavailable JEV (or vice versa).
-4. Once both reviewer result arrays are available, select each deliverable in
-   a strict JSON array. Every entry records exact LLM/JEV statuses, `selected`
+4. Merge each LLM/JEV result array as soon as that reviewer finishes, using
+   its existing stdin invocation and preserving its own vars/report. Do not
+   append either history row yet: the final selected verdict is not known.
+   Once both raw arrays are available, select each deliverable in a strict
+   JSON array. Every entry records exact LLM/JEV statuses, `selected`
    source (`llm`, `jev`, or `rerun`), a reason for a disagreement or rerun,
    and a checker-defect flag. A checker defect creates no child; its selection
    record and workflow-issue class bead carry the evidence, and the lead may
    reopen it. A rerun supplies one unchanged reply, its
    reviewer, and nonempty repo-relative missing-context paths. A checker
    defect is allowed only for a selected undone reply and needs its reason.
-5. Merge and log the LLM/JEV comparison reports, then merge the selected
-   report from the raw files and selection array:
+5. Merge the selected report from the raw files and selection array:
 
    ```bash
    $S/sanity-merge "$manifest" "$task" "$checked_bead" "$sprint" \
@@ -79,19 +81,22 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
      --selection "$scratch/selection.json" > "$scratch/sanity-selected-vars.json"
    ```
 
-   The LLM/JEV reports retain the existing stdin form with reviewer
-   `sanity-llm` or `sanity-jev`. Exit 4 means shared lint is still running:
+   Exit 4 means shared lint is still running:
    wait and retry with the same start time and unchanged results.
    Exit 0 produces PASS/FAIL. Exit 1 or 3 may produce a CANNOT_RUN report;
    preserve the error and raw results. An invalid invocation/manifest with
    no report is a coordinator error to report, never a PASS. Do not run lint
    again to obtain the other reviewer's report.
-6. Append the LLM, JEV, and selected reports after their merge finishes, using
-   its own completed UTC timestamp (do not include time spent waiting for
-   the other reviewer or task closure). The same task attempt/iteration
-   applies to all three. Run `sanity-run-history` with that reviewer's vars,
-   task/bead/PR/iteration/output and `--limit 10`. It appends to the same
-   phase JSONL, keyed by shared `run_id` and explicit reviewer. The writer
+6. After the selected merge, append exactly three rows in order:
+   `sanity-llm`, `sanity-jev`, then `sanity-selected`. Each row keeps its
+   own completed UTC timestamp (not time spent waiting for the other reviewer
+   or task closure) but uses the selected vars' verdict as the shared required
+   `--final-verdict`. If selection or selected merge cannot run, set
+   `--final-verdict CANNOT_RUN` and still append the LLM/JEV rows. The same
+   task attempt/iteration applies to all three. Run `sanity-run-history` with
+   that reviewer's vars, task/bead/PR/iteration/final verdict/output and
+   `--limit 10`. It appends to the same phase JSONL, keyed by shared `run_id`
+   and explicit reviewer. The writer
    strictly renders `sanity-run-record.json.j2` through `sc-compose render`,
    validates field types and UTC timestamps, compacts one JSON object per
    line, then appends under its file lock (no sc-compose `--append` exists).
@@ -102,6 +107,7 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    ```bash
    $S/sanity-run-history --vars "$scratch/$reviewer-vars.json" --task "$task" \
      --bead "$checked_bead" --pr-number "$pr_number" --iteration "$iteration" \
+     --final-verdict "$final_verdict" \
      --output "$scratch/sanity-$task-table-vars.json" --limit 10
    ```
 7. Complete the selected lifecycle using its vars copied to
@@ -126,7 +132,9 @@ coordinator invocation at one pinned commit; it has up to three rows (SEL,
 LLM, JEV), grouped by run_id. `Pick` appears only for SEL as
 `=<agree> L<llm> J<jev> R<rerun>` with zero L/J/R counts omitted and `D<n>`
 for checker defects. The compact columns are
-`S | PR | R | Pick | Find | Result | Done | Iter`.
+`S | PR | R | Pick | Find | Result | Match | Done | Iter`. `Match` is ✓ or ✗
+for LLM/JEV agreement with the selected final verdict, — for SEL and historical
+rows that predate `final_verdict`.
 `Done` contains local month-day/time and duration; ledger timestamps are UTC
 only and local display is derived from UTC when rendered. The renamed historical
 `.sc/sanity-log/sanity-llm.jsonl` is read alongside

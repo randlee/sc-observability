@@ -88,7 +88,7 @@ class SelectedMergeTests(unittest.TestCase):
             "task": "sanity", "sprint": "d", "phase": "d",
             "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:00:01Z",
             "duration": "1s", "duration_seconds": 1, "pr_number": 1, "iteration": 1,
-            "verdict": "PASS", "findings": 0, "error": None, "selection": [],
+            "verdict": "PASS", "final_verdict": "PASS", "findings": 0, "error": None, "selection": [],
         }
         self.assertEqual(history.validate_record(record), record)
 

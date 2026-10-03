@@ -22,7 +22,8 @@ def record(**changes):
     value = dict(run_id="run-one", reviewer="sanity-llm", commit="a" * 40,
                  task='task-"quote"\nnext', sprint="d-4", phase="d", started_at="2026-09-30T16:00:00Z",
                  completed_at="2026-09-30T16:01:05Z", duration="1m05s", duration_seconds=65,
-                 pr_number=42, iteration=1, verdict="PASS", findings=0, error=None)
+                 pr_number=42, iteration=1, verdict="PASS", final_verdict="PASS", findings=0,
+                 error=None, selection=None)
     return dict(value, **changes)
 
 
@@ -56,7 +57,9 @@ class SanityHistory(unittest.TestCase):
         before = self.log.read_bytes()
         missing = record()
         del missing["reviewer"]
-        for invalid in (missing, record(pr_number="42"), record(completed_at="2026-09-30T09:01:05-07:00")):
+        missing_final = record()
+        del missing_final["final_verdict"]
+        for invalid in (missing, missing_final, record(pr_number="42"), record(completed_at="2026-09-30T09:01:05-07:00")):
             with self.subTest(invalid=invalid), self.assertRaises(SystemExit):
                 HISTORY.append_record(self.log, HISTORY.render_record(invalid), self.output)
             self.assertEqual(self.log.read_bytes(), before)
@@ -67,7 +70,7 @@ class SanityHistory(unittest.TestCase):
         self.assertEqual(self.log.read_bytes(), before)
 
     def test_group_limit_retains_pair_and_legacy_is_llm_without_mutation(self):
-        legacy = {k: v for k, v in record().items() if k not in {"run_id", "reviewer"}}
+        legacy = {k: v for k, v in record().items() if k not in {"run_id", "reviewer", "final_verdict"}}
         legacy["completed_local"] = "wrong old local time"
         saved = dict(legacy)
         pair = [record(run_id="new", completed_at="2026-09-30T18:01:05Z"),
@@ -78,6 +81,26 @@ class SanityHistory(unittest.TestCase):
         self.assertEqual(HISTORY.display_runs([legacy])[0]["reviewer"], "sanity-llm")
         self.assertEqual(legacy, saved)
         self.assertEqual(len(HISTORY.display_runs([*pair, *[record(run_id=str(i)) for i in range(10)]])), 11)
+        self.assertEqual(HISTORY.display_runs([legacy])[0]["match"], "—")
+
+    def test_selected_final_verdict_must_match_and_reviewer_match_is_rendered(self):
+        selected = record(reviewer="sanity-selected", selection=[])
+        with self.assertRaises(SystemExit):
+            HISTORY.validate_record(dict(selected, final_verdict="FAIL"))
+        rows = HISTORY.display_runs([
+            record(reviewer="sanity-llm"),
+            record(reviewer="sanity-jev", verdict="FAIL", findings=1),
+            selected,
+        ])
+        self.assertEqual([row["match"] for row in rows], ["—", "✓", "✗"])
+        self.output.write_text(json.dumps({"runs": rows}))
+        result = subprocess.run(["sc-compose", "render", "--strict", "--file",
+                                 str(SCRIPTS.parent / "templates/sanity-run-table.md.j2"),
+                                 "--var-file", str(self.output)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("| Match |", result.stdout)
+        self.assertIn("| ✓ |", result.stdout)
+        self.assertIn("| ✗ |", result.stdout)
 
     def test_local_display_is_derived_from_utc_in_requested_timezone(self):
         old = os.environ.get("TZ")
@@ -102,7 +125,7 @@ class SanityHistory(unittest.TestCase):
                                          str(SCRIPTS.parent / "templates/sanity-run-table.md.j2"),
                                          "--var-file", str(self.output)], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("| S | PR | R | Find | Result | Done | Iter |", result.stdout)
+                self.assertIn("| S | PR | R | Pick | Find | Result | Match | Done | Iter |", result.stdout)
                 self.assertEqual(sum(line.startswith("| d-4") for line in result.stdout.splitlines()), len(selected))
                 self.assertNotIn("task-", result.stdout)
                 if len(selected) == 2:
@@ -121,8 +144,8 @@ class SanityHistory(unittest.TestCase):
             self.assertEqual(rendered.returncode, 0, rendered.stderr)
             self.assertIn(f"<reviewers>{selection or 'both'}</reviewers>", rendered.stdout)
             self.assertIn("canonical coordinator", rendered.stdout)
-            self.assertIn("JEV as comparison-only", rendered.stdout)
-            self.assertIn("both reviewer families concurrently in the background before waiting for either", rendered.stdout)
+            self.assertIn("selected replies as the operational result", rendered.stdout)
+            self.assertIn("send identical assignments to both reviewers concurrently", rendered.stdout)
 
     def test_conflicting_identity_or_truncated_log_is_not_appended(self):
         HISTORY.append_record(self.log, record(), self.output)
@@ -148,7 +171,7 @@ class SanityHistory(unittest.TestCase):
         env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ["PATH"])
         history_path = self.root / ".sc/sanity-log/sanity-llm.jsonl"
         history_path.parent.mkdir(parents=True)
-        legacy = {k: v for k, v in record().items() if k not in {"run_id", "reviewer"}}
+        legacy = {k: v for k, v in record().items() if k not in {"run_id", "reviewer", "final_verdict"}}
         history_bytes = (json.dumps(legacy) + "\n").encode()
         history_path.write_bytes(history_bytes)
 
@@ -159,7 +182,8 @@ class SanityHistory(unittest.TestCase):
             var_file.write_text(json.dumps(values))
             return subprocess.run([str(SCRIPTS / "sanity-run-history"), "--vars", str(var_file),
                                    "--task", values["task"], "--bead", "dev-d-4", "--pr-number", "42",
-                                   "--iteration", "1", "--output", str(self.root / f"out-{index}.json")],
+                                   "--iteration", "1", "--final-verdict", "PASS",
+                                   "--output", str(self.root / f"out-{index}.json")],
                                   cwd=self.root, env=env, capture_output=True, text=True)
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
             results = list(executor.map(run, range(12)))
