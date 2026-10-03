@@ -89,6 +89,18 @@ class PinnedReleaseDownloadTests(unittest.TestCase):
             with mock.patch.object(downloader.platform, "system", return_value="Windows"):
                 self.assertEqual(downloader._output_path(str(requested)),
                                  requested.parent.resolve() / "viewer.exe")
+                self.assertEqual(downloader._output_path(str(requested.with_suffix(".exe"))),
+                                 requested.parent.resolve() / "viewer.exe")
+                self.assertEqual(downloader._output_path(str(requested.with_suffix(".EXE"))),
+                                 requested.parent.resolve() / "viewer.EXE")
+
+    def test_main_refuses_unpinned_windows_before_selecting_an_output_path(self) -> None:
+        with mock.patch.object(downloader.platform, "system", return_value="Windows"), \
+                mock.patch.object(downloader.platform, "machine", return_value="AMD64"), \
+                mock.patch.object(downloader.sys, "argv", ["download_pinned_release.py", "viewer"]), \
+                mock.patch.object(downloader, "_output_path") as output_path:
+            self.assertEqual(downloader.main(), 2)
+        output_path.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -38,6 +38,11 @@ class HarnessError(RuntimeError):
     pass
 
 
+def _is_windows() -> bool:
+    """Small platform seam for fixture-only Windows branch coverage."""
+    return sys.platform == "win32"
+
+
 def _request(url: str, payload: bytes | None = None, *, timeout: float = 2,
              content_type: str = "application/json") -> tuple[int, bytes]:
     headers = {"Content-Type": content_type} if payload is not None else {}
@@ -66,7 +71,7 @@ def _port_available(host: str, port: int, *, reuse_address: bool = False) -> boo
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as sock:
         # Windows SO_REUSEADDR permits binding a port with a live listener.
-        if reuse_address and sys.platform != "win32":
+        if reuse_address and not _is_windows():
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((host, port))
@@ -126,7 +131,6 @@ def _win32() -> Any:
 _SYNCHRONIZE = 0x00100000
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _WAIT_TIMEOUT = 0x102
-_ERROR_ACCESS_DENIED = 5
 _PROCESS_COMMAND_LINE_INFORMATION = 60
 
 
@@ -137,29 +141,9 @@ def _open_process_win(pid: int) -> tuple[Any, int]:
     return handle, win.ctypes.get_last_error()
 
 
-def _pid_alive(pid: int) -> bool:
-    """Return whether a process with this PID exists and has not exited."""
-    if sys.platform != "win32":
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            return False
-        return True
-    if pid <= 0:
-        return False
-    win = _win32()
-    handle, error = _open_process_win(pid)
-    if not handle:
-        return error == _ERROR_ACCESS_DENIED
-    try:
-        return win.kernel32.WaitForSingleObject(handle, 0) == _WAIT_TIMEOUT
-    finally:
-        win.kernel32.CloseHandle(handle)
-
-
 def _terminate(pid: int, *, force: bool) -> None:
     """Stop an owned process; Windows maps both stages to TerminateProcess."""
-    if sys.platform == "win32":
+    if _is_windows():
         os.kill(pid, signal.SIGTERM)
     else:
         os.kill(pid, signal.SIGKILL if force else signal.SIGTERM)
@@ -204,7 +188,12 @@ def _command_args_win(pid: int) -> list[str] | None:
 
 
 def _command_args(pid: int) -> list[str] | None:
-    if sys.platform == "win32":
+    """Return command arguments only for a live, non-zombie process.
+
+    This is the sole liveness authority. POSIX zombies intentionally return
+    None, so they are treated as stopped rather than signalable.
+    """
+    if _is_windows():
         return _command_args_win(pid)
     if sys.platform.startswith("linux"):
         try:
@@ -351,7 +340,7 @@ def start(args: argparse.Namespace) -> None:
     try:
         log = log_path.open("ab")
         detach: dict[str, Any] = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-                                  if sys.platform == "win32" else {"start_new_session": True})
+                                  if _is_windows() else {"start_new_session": True})
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
                                    stdout=log, stderr=subprocess.STDOUT, **detach)
         if restart is not None:
@@ -426,7 +415,7 @@ def start(args: argparse.Namespace) -> None:
 
 def status(args: argparse.Namespace) -> None:
     pid, metadata = _owned(Path(args.state_dir).expanduser().resolve())
-    if not _pid_alive(pid):
+    if _command_args(pid) is None:
         raise HarnessError(f"owned viewer PID {pid} is not running")
     _request(f"http://{metadata['host']}:{metadata['ui']}/", timeout=2)
     print(json.dumps({"status": "ready", **metadata,
@@ -442,7 +431,7 @@ def stop(args: argparse.Namespace) -> None:
     except ProcessLookupError:
         pass
     except OSError:
-        if sys.platform != "win32" or _pid_alive(pid):
+        if not _is_windows() or _command_args(pid) is not None:
             raise
     else:
         deadline = time.monotonic() + args.timeout
@@ -467,12 +456,12 @@ def stop(args: argparse.Namespace) -> None:
                 except ProcessLookupError:
                     pass
                 except OSError:
-                    if sys.platform != "win32" or _pid_alive(pid):
+                    if not _is_windows() or _command_args(pid) is not None:
                         raise
                 deadline = time.monotonic() + 5
                 while time.monotonic() < deadline:
                     if _command_args(pid) is None:
-                        if sys.platform != "win32":
+                        if not _is_windows():
                             try:
                                 os.waitpid(pid, os.WNOHANG)
                             except ChildProcessError:
