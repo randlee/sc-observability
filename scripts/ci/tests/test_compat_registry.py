@@ -69,12 +69,14 @@ class ContractSignatureTests(unittest.TestCase):
 
     def row(self, **overrides):
         row = {"symbol": "sc_observability_types::IdentityError", "treatment": "unchanged_alias",
-               "baseline_signature": self.SIGNATURE, "canonical_signature": self.SIGNATURE}
+               "baseline_signature": self.SIGNATURE, "canonical_signature": self.SIGNATURE,
+               "removable_paths": [],
+               "removal_rationale": "fixture row intentionally has no removable path"}
         row.update(overrides)
         return row
 
     def test_equal_unchanged_alias_is_accepted(self):
-        validate_contract_signatures([self.row()])
+        validate_contract_signatures([self.row(removal_rationale=None)])
 
     def test_unchanged_alias_with_different_signatures_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unchanged_alias baseline and canonical signatures differ"):
@@ -82,7 +84,25 @@ class ContractSignatureTests(unittest.TestCase):
 
     def test_different_signatures_are_accepted_for_existing_pair(self):
         validate_contract_signatures([self.row(
-            treatment="existing_pair", canonical_signature="pub enum IdentityError { Process }")])
+            treatment="existing_pair", canonical_signature="pub enum IdentityError { Process }",
+            removal_rationale="the retained declaration is not removable")])
+
+    def test_empty_removable_paths_with_rationale_is_accepted(self):
+        validate_contract_signatures([self.row(
+            treatment="existing_pair", canonical_signature="pub enum IdentityError { Process }",
+            removal_rationale="the retained declaration is not removable")])
+
+    def test_empty_removable_paths_without_rationale_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "empty removable_paths.*unchanged_alias.*removal_rationale"):
+            validate_contract_signatures([self.row(
+                treatment="existing_pair", canonical_signature="pub enum IdentityError { Process }",
+                removal_rationale=None)])
+
+    def test_empty_removable_paths_with_blank_rationale_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "empty removable_paths.*unchanged_alias.*removal_rationale"):
+            validate_contract_signatures([self.row(
+                treatment="existing_pair", canonical_signature="pub enum IdentityError { Process }",
+                removal_rationale=" \t ")])
 
     def test_placeholder_canonical_signature_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "placeholder canonical contract"):
@@ -130,7 +150,8 @@ class TraitSlotContractTests(unittest.TestCase):
         row = {"symbol": "sc_observability_types::ProcessIdentityResolver::resolve", "treatment": "new_adapter",
                "baseline_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError>",
                "canonical_signature": "fn resolve(&self) -> Result<ProcessIdentity, crate::v2::IdentityError>",
-               "canonical_source": {"path": self.PATH}, "removable_paths": []}
+               "canonical_source": {"path": self.PATH}, "removable_paths": [],
+               "removal_rationale": "the released trait is retained for the supported release line"}
         row.update(overrides)
         return row
 

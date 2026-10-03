@@ -54,10 +54,23 @@ def has_placeholder_baseline_signature(signature: str) -> bool:
     return any(signature.startswith(prefix) for prefix in PLACEHOLDER_BASELINE_SIGNATURE_PREFIXES)
 
 
+def validate_empty_removable_paths(row: Mapping[str, object]) -> None:
+    """Require a rationale when a non-alias contract has no removable paths."""
+    if row.get("removable_paths") != [] or row.get("treatment") == "unchanged_alias":
+        return
+    rationale = row.get("removal_rationale")
+    if not isinstance(rationale, str) or not rationale.strip():
+        raise ValueError(
+            "compatibility registry row has empty removable_paths but is not an "
+            f"unchanged_alias and has no non-blank removal_rationale: {row.get('symbol')}"
+        )
+
+
 def validate_contract_signatures(rows: Iterable[dict]) -> None:
     """Reject unsigned or placeholder signatures and unequal unchanged aliases."""
     for row in rows:
         symbol = row.get("symbol")
+        validate_empty_removable_paths(row)
         baseline = row["baseline_signature"]
         canonical = row["canonical_signature"]
         if (
@@ -80,6 +93,7 @@ def validate_trait_slot_contracts(rows: Iterable[dict]) -> None:
     """Reject trait-slot adapters without a signature change or with a removable canonical path."""
     for row in rows:
         symbol = row.get("symbol")
+        validate_empty_removable_paths(row)
         if row["treatment"] == "new_adapter" and row["baseline_signature"] == row["canonical_signature"]:
             raise ValueError(f"trait-slot new_adapter baseline and canonical signatures are equal: {symbol}")
         canonical_path = (row.get("canonical_source") or {}).get("path")
