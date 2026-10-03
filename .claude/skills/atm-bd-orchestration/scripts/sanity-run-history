@@ -29,7 +29,7 @@ def read_vars(path: Path) -> dict[str, object]:
     for field in ("sprint", "run_id", "reviewer", "commit", "started_at", "completed_at"):
         if not isinstance(value.get(field), str) or not value[field]:
             fail(f"completion vars.{field} must be a nonempty string")
-    if value["reviewer"] not in {"sanity-llm", "sanity-jev"}:
+    if value["reviewer"] not in {"sanity-llm", "sanity-jev", "sanity-selected"}:
         fail("invalid reviewer")
     if value.get("verdict") not in {"PASS", "FAIL", "CANNOT_RUN"}:
         fail("invalid verdict")
@@ -41,6 +41,14 @@ def read_vars(path: Path) -> dict[str, object]:
         fail("findings_count must be a nonnegative integer")
     for field in ("started_at", "completed_at"):
         utc_timestamp(value[field])
+    selection = value.get("selection")
+    if value["reviewer"] == "sanity-selected":
+        if not isinstance(selection, list):
+            fail("sanity-selected requires a selection list")
+        if not selection and value["verdict"] != "CANNOT_RUN":
+            fail("sanity-selected accepts an empty selection only for CANNOT_RUN")
+    elif selection is not None:
+        fail("comparison reviewers require null selection")
     return value
 
 
@@ -122,11 +130,35 @@ def display_runs(records, limit=10):
         groups.setdefault(key, []).append(record)
     ordered = sorted(groups.values(), key=lambda group: max(utc_timestamp(r["completed_at"]) for r in group), reverse=True)
     rows = []
+    reviewer_order = {"sanity-selected": 0, "sanity-llm": 1, "sanity-jev": 2}
     for group in ordered[:limit] if limit else ordered:
-        for record in sorted(group, key=lambda r: r.get("reviewer", "sanity-llm"), reverse=True):
+        for record in sorted(group, key=lambda r: reviewer_order.get(r.get("reviewer", "sanity-llm"), 99)):
             row = dict(record)
             row["reviewer"] = record.get("reviewer", "sanity-llm")
-            row["reviewer_short"] = {"sanity-llm": "LLM", "sanity-jev": "JEV"}.get(row["reviewer"], "?")
+            row["reviewer_short"] = {"sanity-selected": "SEL", "sanity-llm": "LLM", "sanity-jev": "JEV"}.get(row["reviewer"], "?")
+            final_verdict = record.get("final_verdict")
+            row["match"] = "—"
+            if row["reviewer"] in {"sanity-llm", "sanity-jev"} and final_verdict in {"PASS", "FAIL", "CANNOT_RUN"}:
+                row["match"] = "✓" if record.get("verdict") == final_verdict else "✗"
+            row["pick"] = "—"
+            if row["reviewer"] == "sanity-selected":
+                picks = {"llm": 0, "jev": 0, "rerun": 0}
+                agreements = 0
+                defects = 0
+                for entry in record.get("selection") or []:
+                    selected = entry.get("selected") if isinstance(entry, dict) else None
+                    if (isinstance(entry, dict) and entry.get("llm") == entry.get("jev")
+                            and selected in {"llm", "jev"}):
+                        agreements += 1
+                    elif selected in picks:
+                        picks[selected] += 1
+                    if isinstance(entry, dict) and entry.get("checker_defect") is True:
+                        defects += 1
+                terms = [f"={agreements}"]
+                terms.extend(f"{label}{picks[key]}" for key, label in (("llm", "L"), ("jev", "J"), ("rerun", "R")) if picks[key])
+                if defects:
+                    terms.append(f"D{defects}")
+                row["pick"] = " ".join(terms)
             row["completed_local"] = utc_timestamp(record["completed_at"]).astimezone().strftime("%m-%d %H:%M")
             rows.append(row)
     return rows
@@ -139,6 +171,7 @@ def main() -> None:
     parser.add_argument("--bead", required=True)
     parser.add_argument("--pr-number", required=True, type=int)
     parser.add_argument("--iteration", required=True, type=int)
+    parser.add_argument("--final-verdict", required=True, choices=("PASS", "FAIL", "CANNOT_RUN"))
     parser.add_argument("--started-at", type=float, help="Deprecated; merge vars carry reviewer timing")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--limit", type=int, default=10)
@@ -158,7 +191,8 @@ def main() -> None:
         "error": vars.get("error"),
         "task": args.task, "sprint": vars["sprint"], "phase": phase,
         "pr_number": args.pr_number, "findings": vars["findings_count"],
-        "verdict": vars["verdict"], "iteration": args.iteration,
+        "verdict": vars["verdict"], "final_verdict": args.final_verdict,
+        "iteration": args.iteration, "selection": vars.get("selection"),
         "completed_at": completed.isoformat().replace("+00:00", "Z"),
         "duration": f"{elapsed // 60}m{elapsed % 60:02d}s",
     }
@@ -176,6 +210,7 @@ RECORD_TYPES = {
     "run_id": str, "reviewer": str, "commit": str, "task": str, "sprint": str,
     "phase": str, "started_at": str, "completed_at": str, "duration": str,
     "duration_seconds": int, "pr_number": int, "iteration": int, "verdict": str,
+    "final_verdict": str, "selection": (list, type(None)),
 }
 
 
@@ -183,10 +218,13 @@ def validate_record(record):
     if not isinstance(record, dict) or set(record) != set(RECORD_TYPES) | {"findings", "error"}:
         fail("rendered record has incorrect fields")
     for field, expected in RECORD_TYPES.items():
-        if type(record[field]) is not expected or (expected is str and not record[field]):
-            fail(f"rendered record.{field} must be {expected.__name__}")
-    if record["reviewer"] not in {"sanity-llm", "sanity-jev"}:
+        exact_types = expected if isinstance(expected, tuple) else (expected,)
+        if type(record[field]) not in exact_types or (expected is str and not record[field]):
+            fail(f"rendered record.{field} must be " + " or ".join(item.__name__ for item in exact_types))
+    if record["reviewer"] not in {"sanity-llm", "sanity-jev", "sanity-selected"}:
         fail("rendered record has invalid reviewer")
+    if record["final_verdict"] not in {"PASS", "FAIL", "CANNOT_RUN"}:
+        fail("rendered record has invalid final_verdict")
     if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", record["commit"]):
         fail("rendered record.commit must be a full commit SHA")
     if record["pr_number"] < 1 or record["iteration"] < 1 or record["duration_seconds"] < 0:
@@ -204,6 +242,13 @@ def validate_record(record):
             fail("completed verdict requires integer findings and null error")
     else:
         fail("rendered record has invalid verdict")
+    if record["reviewer"] == "sanity-selected":
+        if not isinstance(record["selection"], list):
+            fail("sanity-selected record requires selection")
+        if record["final_verdict"] != record["verdict"]:
+            fail("sanity-selected final_verdict must equal verdict")
+    elif record["selection"] is not None:
+        fail("comparison record requires null selection")
     return record
 
 
@@ -234,7 +279,7 @@ def append_record(log_path, record, output, limit=10, history=()):
         fcntl.flock(lock, fcntl.LOCK_EX)
         records = load_log(log_path)
         same_run = [r for r in records if r.get("run_id") == record["run_id"]]
-        if any(any(r.get(k) != record[k] for k in ("commit", "task", "sprint", "pr_number", "iteration")) for r in same_run):
+        if any(any(r.get(k) != record[k] for k in ("commit", "task", "sprint", "pr_number", "iteration", "final_verdict")) for r in same_run):
             fail("shared run identity disagrees with existing record")
         prior = [r for r in same_run if r.get("reviewer") == record["reviewer"]]
         if prior:

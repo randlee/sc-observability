@@ -105,28 +105,25 @@ class SanitySplit(unittest.TestCase):
     def merge(self, manifest, results):
         manifest_file = self.root / "manifest.json"
         manifest_file.write_text(json.dumps(manifest))
+        completed = time.time()
         return subprocess.run([str(MERGE), str(manifest_file), "obs-x-1-sanity", "obs-x-1", "x",
-                               "--reviewer", "sanity-llm", "--started-at", str(time.time())],
+                               "--reviewer", "sanity-llm", "--started-at", str(completed), "--completed-at", str(completed)],
                               input=json.dumps(results), capture_output=True, text=True)
 
-    def test_selected_reviewers_share_assignments_and_one_lint(self):
-        manifests = []
-        for selected in ("both", "llm", "jev"):
-            out = self.run_split(None, None, None, "sprint/x", "develop", "--reviewers", selected,
-                                 lint="echo ran >> lint-count")
-            self.assertEqual(out.returncode, 0, out.stderr)
-            manifest = json.loads(out.stdout)
-            self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "0")
-            count_file = self.repo.wt / "lint-count"
-            self.assertEqual(count_file.read_text(), "ran\n")
-            count_file.unlink()
-            expected = ["sanity-llm", "sanity-jev"] if selected == "both" else [f"sanity-{selected}"]
-            self.assertEqual(manifest["reviewers"], expected)
-            self.assertEqual(manifest["operational_reviewer"], "sanity-jev" if selected == "jev" else "sanity-llm")
-            manifests.append(manifest)
-        self.assertEqual(len({m["run_id"] for m in manifests}), 3)
-        self.assertEqual(manifests[0]["assignments"], manifests[1]["assignments"])
-        self.assertEqual(manifests[1]["assignments"], manifests[2]["assignments"])
+    def test_manifest_has_fixed_reviewer_roster_and_rejects_obsolete_override(self):
+        out = self.run_split(lint="echo ran >> lint-count")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "0")
+        count_file = self.repo.wt / "lint-count"
+        self.assertEqual(count_file.read_text(), "ran\n")
+        count_file.unlink()
+        self.assertEqual(manifest["reviewers"], ["sanity-llm", "sanity-jev", "sanity-selected"])
+        self.assertEqual(manifest["operational_reviewer"], "sanity-selected")
+
+        rejected = self.run_split(None, None, None, "sprint/x", "develop", "--reviewers", "both")
+        self.assertEqual(rejected.returncode, 1)
+        self.assertIn("unrecognized arguments: --reviewers both", rejected.stderr)
 
     def test_happy_path_renders_one_assignment_per_deliverable(self):
         out = self.run_split(commit=self.repo.sha[:8])
@@ -142,6 +139,7 @@ class SanitySplit(unittest.TestCase):
         self.assertIn("pub mod retry", first["deliverable"]["text"])
         self.assertIn("in the types crate.", first["deliverable"]["text"])
         self.assertEqual(first["deliverables_total"], 2)
+        self.assertEqual(first["context"], [])
         self.assertNotIn("acceptance_criteria", first)
         self.assertNotIn("design", first)
         self.assertEqual(first["commit"], self.repo.sha)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import re
 import subprocess
 import unittest
 
@@ -129,6 +131,33 @@ class TemplateContractTests(unittest.TestCase):
                     "sc-compose", "render", "--file", str(template_path),
                     "--var-file", str(variables), "--strict"], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_sanity_assignment_context_shape_matches_reviewer_inputs(self):
+        assignment = ROOT / "templates/dev-sanity-assignment.json.j2"
+        examples = ROOT / "examples"
+        rendered_values = []
+        for fixture, expected_context in (("dev-sanity-assignment-vars.json", []),
+                                          ("dev-sanity-assignment-context-vars.json", [{"path": "docs/retry.md", "why": "The deliverable delegates retry policy here."}])):
+            with self.subTest(fixture=fixture):
+                result = subprocess.run([
+                    "sc-compose", "render", "--strict", "--file", str(assignment),
+                    "--var-file", str(examples / fixture),
+                ], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                rendered = json.loads(result.stdout)
+                self.assertEqual(rendered["context"], expected_context)
+                rendered_values.append(rendered)
+
+        expected_keys = set(rendered_values[0])
+        for reviewer in ("sc-sanity-llm.md", "sc-sanity-jev.md"):
+            with self.subTest(reviewer=reviewer):
+                text = (ROOT.parents[1] / "agents" / reviewer).read_text()
+                matched = re.search(r"## Inputs.*?```json\n(.*?)\n```", text, re.S)
+                self.assertIsNotNone(matched)
+                input_json = json.loads(matched.group(1))
+                self.assertEqual(set(input_json), expected_keys)
+                self.assertEqual(input_json["context"], [])
+                self.assertIn("Read only that evidence plus any `context` paths at the pinned commit; never request more.", text)
 
 
 if __name__ == "__main__":

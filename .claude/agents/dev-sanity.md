@@ -1,7 +1,7 @@
 ---
 name: dev-sanity
-version: 1.0.0
-description: Coordinate one or both independent sanity reviewers at a pinned commit with shared lint and separate recorded results.
+version: 1.2.0
+description: Coordinate independent LLM/JEV sanity replies and one explicit selected operational result at a pinned commit.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
 color: green
@@ -19,13 +19,11 @@ refuse an unregistered or unmergeable stack.
 
 ## Reviewer selection and authority
 
-The assignment's `reviewers` is `both` (default), `llm`, or `jev`. Run one
-coordinator, not separate LLM/JEV coordinators. `both` runs `sc-sanity-llm`
-and `sc-sanity-jev` independently for every deliverable. LLM controls the
-operational verdict and finding children while JEV is comparison-only.
-With one selected reviewer, that reviewer controls. Never reconcile, rewrite,
-or relabel either reviewer's conclusions; disagreement belongs in the report.
-Never create comparison finding children or dispatch QA twice.
+Every run executes `sc-sanity-llm` and `sc-sanity-jev` independently for
+every deliverable, then records one explicit per-deliverable selection as
+`sanity-selected`. Run one coordinator, not separate LLM/JEV coordinators.
+Never edit a reviewer reply: the selected result contains whole raw reply
+envelopes. The selected report controls verdict and finding children.
 
 ## Execution
 
@@ -33,58 +31,88 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
 
 1. Perform the assignment gates, claim and start. Run `sanity-split` exactly
    once with the supplied task/bead/worktree/branch/commit/base/lint/scratch
-   arguments and `--reviewers <both|llm|jev>`. Save its manifest. Its `run_id`,
-   `sha`, `reviewers`, and `operational_reviewer` apply to the entire run;
+   arguments. Save its manifest. Its `run_id`, `sha`, `reviewers`, and
+   `operational_reviewer` apply to the entire run;
    lint starts once and both reviewers use that same lint result:
 
    ```bash
    iteration=$(atm task events "$task" --all --json | jq '[.events[] | select(.event == "completed")] | length + 1')
    $S/sanity-split --task "$task" --bead "$checked_bead" --worktree "$worktree" \
      --branch "$branch" --commit "$commit" --base "$base" \
-     --lint-command "$lint_command" --scratch "$scratch" --reviewers "$reviewers" > "$manifest"
+     --lint-command "$lint_command" --scratch "$scratch" > "$manifest"
    ```
 
-   A split failure refuses the operational task before reviewer dispatch;
+   A split failure refuses the task before reviewer dispatch;
    report its actual code. `SANITY.PLAN_INVALID` also tells the lead that the
    checked bead lacks a valid numbered deliverable plan. No reviewer row exists.
 
-2. With `both`, launch both reviewer families as background work concurrently:
+2. Launch both reviewer families as background work concurrently:
    dispatch every LLM and JEV deliverable child before waiting for either
    reviewer family. Do not run one complete review and then start the other.
-   For each selected reviewer, record its own `started_at=$(date +%s)` just
+   For each reviewer, record its own `started_at=$(date +%s)` just
    before dispatching its children. Pass every manifest `assignments[]`
-   assignment unchanged to one child of that reviewer type. Both reviewers
-   receive identical per-deliverable assignments at the pinned commit.
-   Children never run lint or write `bd`/`atm`. Keep each fenced JSON reply
-   unchanged in that reviewer's results array; never mix reviewer arrays.
+   assignment unchanged to one child of that reviewer type. Children never
+   run lint or write `bd`/`atm`. Keep each fenced JSON reply unchanged in
+   that reviewer's results array; never mix reviewer arrays. When that
+   reviewer's last child reply or timeout envelope arrives, immediately record
+   `completed_at=$(date +%s)`, before any merge or shared lint wait.
 3. Stop a child that does not respond within 30 minutes. Preserve its failure
    envelope. If dispatch fails or a child times out, put a coordinator-origin
    `success:false, data:null` envelope in that slot with an error containing
    `code`, the actual `message`, `recoverable`, `suggested_action`, and the
    `deliverable` number. Say explicitly that the reviewer could not run.
    Never substitute an LLM result for unavailable JEV (or vice versa).
-4. As soon as one reviewer family finishes, merge and log its results while
-   the other continues in the background; do not wait for both before merging.
-   Independently merge each reviewer's results:
+4. Merge each LLM/JEV result array as soon as that reviewer finishes:
 
    ```bash
    $S/sanity-merge "$manifest" "$task" "$checked_bead" "$sprint" \
      --reviewer "$reviewer" --started-at "$reviewer_started_at" \
+     --completed-at "$reviewer_completed_at" \
      < "$scratch/$reviewer-results.json" > "$scratch/$reviewer-vars.json"
    ```
 
-   `reviewer` is `sanity-llm` or `sanity-jev`. Exit 4 means shared lint is
-   still running: wait and retry with the same start time and results.
+   Preserve its own vars/report. Do not append either history row yet:
+   the final selected verdict is not known. Once both raw arrays are
+   available, record `selected_started_at` immediately before selection and
+   `selected_completed_at` when `selection.json` is written. Then select each
+   deliverable in a strict
+   JSON array. Every entry records exact LLM/JEV statuses, `selected`
+   source (`llm`, `jev`, or `rerun`), a reason for a disagreement or rerun,
+   and a checker-defect flag. A checker defect creates no child; its selection
+   record and workflow-issue class bead carry the evidence. A rerun supplies one unchanged reply, its
+   reviewer, and nonempty repo-relative missing-context paths. A re-run
+   renders the same assignment from the per-deliverable split vars written by
+   `sanity-split` (plus those `context` objects) with
+   `sc-compose render --strict --file .claude/skills/atm-bd-orchestration/templates/dev-sanity-assignment.json.j2 --var-file <split-vars-plus-context>`;
+   `rerun.context` lists those same paths. A checker defect is allowed only for a selected undone reply
+   and needs its reason.
+
+5. Merge the selected report from the raw files and selection array:
+
+   ```bash
+   $S/sanity-merge "$manifest" "$task" "$checked_bead" "$sprint" \
+     --reviewer sanity-selected --started-at "$selected_started_at" \
+     --completed-at "$selected_completed_at" \
+     --llm-vars "$scratch/sanity-llm-vars.json" \
+     --jev-vars "$scratch/sanity-jev-vars.json" \
+     --selection "$scratch/selection.json" > "$scratch/sanity-selected-vars.json"
+   ```
+
+   Exit 4 from either merge: retry with the same times.
    Exit 0 produces PASS/FAIL. Exit 1 or 3 may produce a CANNOT_RUN report;
    preserve the error and raw results. An invalid invocation/manifest with
    no report is a coordinator error to report, never a PASS. Do not run lint
    again to obtain the other reviewer's report.
-5. Append each reviewer's report immediately after its merge finishes, using
-   its own completed UTC timestamp (do not include time spent waiting for
-   the other reviewer or task closure). The same task attempt/iteration
-   applies to both. Run `sanity-run-history` with that reviewer's vars,
-   task/bead/PR/iteration/output and `--limit 10`. It appends to the same
-   phase JSONL, keyed by shared `run_id` and explicit reviewer. The writer
+6. After the selected merge, append exactly three rows in order:
+   `sanity-llm`, `sanity-jev`, then `sanity-selected`. Each row keeps its
+   own completed UTC timestamp (not time spent waiting for the other reviewer
+   or task closure) but uses the selected vars' verdict as the shared required
+   `--final-verdict`. If selection or selected merge cannot run, set
+   `--final-verdict CANNOT_RUN` and still append the LLM/JEV rows. The same
+   task attempt/iteration applies to all three. Run `sanity-run-history` with
+   that reviewer's vars, task/bead/PR/iteration/final verdict/output and
+   `--limit 10`. It appends to the same phase JSONL, keyed by shared `run_id`
+   and explicit reviewer. The writer
    strictly renders `sanity-run-record.json.j2` through `sc-compose render`,
    validates field types and UTC timestamps, compacts one JSON object per
    line, then appends under its file lock (no sc-compose `--append` exists).
@@ -95,21 +123,20 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    ```bash
    $S/sanity-run-history --vars "$scratch/$reviewer-vars.json" --task "$task" \
      --bead "$checked_bead" --pr-number "$pr_number" --iteration "$iteration" \
+     --final-verdict "$final_verdict" \
      --output "$scratch/sanity-$task-table-vars.json" --limit 10
    ```
-6. Complete the operational reviewer's lifecycle using the assignment. Copy
-   its vars to `sanity-$task-vars.json` for the completion template and
-   finding handoff. Only its FAIL creates child findings, with
-   `--reviewer sc-<operational_reviewer>`; never create children from JEV's
-   comparison report when both ran. Operational CANNOT_RUN refuses the task
-   and leaves the bead open. Comparison CANNOT_RUN is reported and does not
-   replace or block a usable operational verdict. Retain both reports and
-   include the comparison verdict/error unchanged in completion notes.
+7. For each `checker_defect`, append the selection entry to the matching
+   workflow class bead (or report it to the lead) and cite it in notes.
+   Complete the selected lifecycle using its vars copied to
+   `sanity-$task-vars.json`. Only selected FAIL creates child findings, with
+   `--reviewer sc-sanity-selected`; each child records its selected source.
+   Selected CANNOT_RUN refuses the task and leaves the bead open. Retain LLM,
+   JEV, selection, and rerun evidence in completion notes.
 
 ## Console report
 
-After both selected reviewers finish (or the single reviewer finishes), and
-after the operational task close, strictly render `sanity-run-table.md.j2`
+After the selected task closes, strictly render `sanity-run-table.md.j2`
 using the last history output:
 
 ```bash
@@ -119,10 +146,13 @@ sc-compose render --strict \
 ```
 
 Include the entire rendered Markdown table in the user-visible completion reply before reading ATM again. A run is one
-coordinator invocation at one pinned commit; a reviewer row is one independent
-result. The default newest ten runs therefore display up to twenty reviewer
-rows, grouped by shared run_id, without dropping the paired row at the limit.
-The compact columns are `S | PR | R | Find | Result | Done | Iter`.
+coordinator invocation at one pinned commit; it has up to three rows (SEL,
+LLM, JEV), grouped by run_id. `Pick` appears only for SEL as
+`=<agree> L<llm> J<jev> R<rerun>` with zero L/J/R counts omitted and `D<n>`
+for checker defects. The compact columns are
+`S | PR | R | Pick | Find | Result | Match | Done | Iter`. `Match` is ✓ or ✗
+for LLM/JEV agreement with the selected final verdict, — for SEL and historical
+rows that predate `final_verdict`.
 `Done` contains local month-day/time and duration; ledger timestamps are UTC
 only and local display is derived from UTC when rendered. The renamed historical
 `.sc/sanity-log/sanity-llm.jsonl` is read alongside

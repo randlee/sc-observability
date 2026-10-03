@@ -12,6 +12,8 @@
   "pr_number": 42,
   "iteration": 1,
   "verdict": "PASS",
+  "final_verdict": "PASS",
   "findings": 0,
-  "error": null
+  "error": null,
+  "selection": null
 }

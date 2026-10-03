@@ -110,14 +110,8 @@ A `PASS` report (`quality-report.md.j2`) emits this shape:
 1. Initial pass: usually `FAIL` with findings.
    - If Rust best-practices review is in scope, run its open-ended pass in QA-1.
 2. Fix passes: `IN-FLIGHT` or `FAIL` while fixes are in progress.
-   - QA-2 and later rounds must not re-run subjective reviewers open-ended on
-     the same sprint branch.
-   - Dispatch a subjective reviewer only to verify explicitly assigned
-     carry-forward findings it owns, with its output scope-locked to those ids.
-   - Every prior finding remains in the merge gate until its owning reviewer
-     verifies it as fixed; do not defer unresolved findings to a later phase.
-     The only exclusion is a finding the lead upholds as `rejected: ceremony`
-     under `quality-mgr.md` "Ceremony Disputes"; record it in the next report.
+   - Dispatch only each carried finding's filing reviewer, locked to that
+     finding; no panel, no sweep, no new findings.
 3. Final pass: `PASS` with final quality report and merge recommendation.
    A plan-review round that leaves only minor findings reports
    `PASS — minor fixes required, no re-QA`, listing them.
