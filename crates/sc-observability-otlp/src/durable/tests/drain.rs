@@ -4,7 +4,10 @@ fn terminal_marks_failed() {
     let dir = tempfile::tempdir().unwrap();
     let exporter = Arc::new(ScriptedExporter::new(dir.path()));
     exporter.set_outcome(Signal::Logs, DeliveryOutcome::Fail);
-    let client = DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter).unwrap();
+    let client = conformance::open_manual(|| {
+        DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter)
+    })
+    .unwrap();
     let receipt = client.emit(log("failed")).unwrap();
     assert!(matches!(
         client.flush_submission(&receipt.submission_id, DEADLINE),
@@ -39,8 +42,28 @@ fn retryable_then_delivered() {
         inner: ScriptedExporter::new(dir.path()),
         remaining: Mutex::new(1),
     });
-    let client = DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter).unwrap();
+    let client = conformance::open_manual(|| {
+        DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone())
+    })
+    .unwrap();
     let receipt = client.emit(log("retry")).unwrap();
+    let _clock = FrozenClock::new();
+    assert!(drain_once_bounded(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs
+    ));
+    let retry_due = frozen_now()
+        .expect("manual drain freezes its first attempt")
+        .saturating_add(store::nanos(Duration::from_millis(
+            crate::constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
+        )));
+    FROZEN_NOW.set(Some(retry_due));
+    assert!(drain_once_bounded(
+        &client.owner.shared,
+        exporter.as_ref(),
+        Signal::Logs
+    ));
     assert_eq!(
         client
             .flush_submission(&receipt.submission_id, DEADLINE)
@@ -143,8 +166,12 @@ fn shutdown_deadline_does_not_join_stalled_exporter() {
     let dir = tempfile::tempdir().unwrap();
     let exporter = Arc::new(ScriptedExporter::new(dir.path()));
     exporter.set_outcome(Signal::Logs, DeliveryOutcome::Stall);
+    let mut stalled_config = config(dir.path());
+    // The exporter is deliberately held across a bounded shutdown. Keep its
+    // ownership fence alive until the explicit release and worker join finish.
+    stalled_config.lease_duration = DEADLINE.saturating_mul(2);
     let client =
-        DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone()).unwrap();
+        DurableTelemetryClient::open_with_exporter(stalled_config, exporter.clone()).unwrap();
     let receipt = client.emit(log("stall")).unwrap();
     exporter.await_stall();
     let (send, receive) = std::sync::mpsc::sync_channel(1);

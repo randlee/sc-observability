@@ -46,6 +46,9 @@ impl ScriptedStatusCollector {
                     Err(error) => panic!("accept collector request: {error}"),
                 };
                 stream
+                    .set_nonblocking(false)
+                    .expect("make accepted collector stream blocking");
+                stream
                     .set_read_timeout(Some(Duration::from_secs(3)))
                     .expect("set collector read deadline");
                 thread_paths

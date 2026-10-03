@@ -136,10 +136,12 @@ fn corrupt_and_oversized_stored_rows_do_not_starve_later_rows() {
             }
         }
         drop(db);
-        let client = DurableTelemetryClient::open_with_exporter(
-            config,
-            Arc::new(ScriptedExporter::new(dir.path())),
-        )
+        let client = conformance::open_manual(|| {
+            DurableTelemetryClient::open_with_exporter(
+                config,
+                Arc::new(ScriptedExporter::new(dir.path())),
+            )
+        })
         .unwrap();
         let good = client.emit(log("good")).unwrap();
         assert_eq!(
@@ -162,10 +164,12 @@ fn corrupt_and_oversized_stored_rows_do_not_starve_later_rows() {
 #[test]
 fn oversized_admission_is_typed_and_does_not_block_small_submission() {
     let dir = tempfile::tempdir().unwrap();
-    let client = DurableTelemetryClient::open_with_exporter(
-        config(dir.path()),
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
+    let client = conformance::open_manual(|| {
+        DurableTelemetryClient::open_with_exporter(
+            config(dir.path()),
+            Arc::new(ScriptedExporter::new(dir.path())),
+        )
+    })
     .unwrap();
     let mut huge = fixture("logs");
     huge.logs[0].record.body = Some(sc_observability_types::otlp::signals::AnyValue::String(
@@ -253,10 +257,12 @@ fn concurrent_sqlite_writer_reports_coded_lock_timeout() {
     let dir = tempfile::tempdir().unwrap();
     let config = config(dir.path());
     let store_path = config.store_path.clone();
-    let client = DurableTelemetryClient::open_with_exporter(
-        config,
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
+    let client = conformance::open_manual(|| {
+        DurableTelemetryClient::open_with_exporter(
+            config,
+            Arc::new(ScriptedExporter::new(dir.path())),
+        )
+    })
     .unwrap();
     let writer = rusqlite::Connection::open(store_path).unwrap();
     writer.execute_batch("BEGIN IMMEDIATE").unwrap();
