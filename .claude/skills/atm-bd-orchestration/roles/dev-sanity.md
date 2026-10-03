@@ -22,9 +22,10 @@ decides both:
 
 The member name is unique to the team, because Herdr agent names are global
 on the host. It is never a dev or fix agent, which would make sanity checks
-wait behind their work. The assignment selects `both` (default), `llm`, or
-`jev`; the same coordinator handles every selection. Both uses LLM for operational verdict/finding children
-and JEV for independent comparison. A single reviewer controls its own run.
+wait behind their work. Every run executes both reviewers; the manifest's
+operational reviewer (LLM) owns the verdict and finding children, and JEV is
+comparison-only. Before the close, dev-sanity triages operational findings and
+LLM/JEV disagreements; a finding judged a checker defect creates no child.
 
 ## Tasks
 
@@ -69,7 +70,7 @@ One check is one closed bead at one pinned commit, split per deliverable:
   bead's `owned_paths`, starts the lint command in the background, and
   renders one assignment per deliverable from
   `templates/dev-sanity-assignment.json.j2`.
-- The directive sends each assignment unchanged to one child of each selected
+- The directive sends each assignment unchanged to one child of each
   reviewer as fenced JSON, dispatches both reviewer families concurrently
   in the background before waiting for either, and keeps separate results.
   Merge and log each reviewer when it finishes while the other continues.
@@ -121,12 +122,12 @@ round is dispatched without the lead's ruling.
 ## Mandatory Console Report
 
 Follow the canonical [coordinator](../../../agents/dev-sanity.md): append each
-selected reviewer’s PASS/FAIL/CANNOT_RUN independently to the same ignored phase
+reviewer’s PASS/FAIL/CANNOT_RUN independently to the same ignored phase
 JSONL via `sanity-run-history`: strict sc-compose record-template render,
 typed JSON validation, compact serialization, locked append. Failed render or
 validation must append nothing; use no unsupported `--append` option. Then render
 the newest ten **runs**, grouping all reviewer rows sharing
-run_id. Default both produces up to twenty rows. Include the rendered table
+run_id. A run produces up to twenty rows. Include the rendered table
 as Markdown in the user-visible completion reply after the operational close.
 The compact columns are `S | PR | R | Find | Result | Done | Iter`; no full task
 IDs. New ledger timestamps are UTC only; local display is derived at rendering.

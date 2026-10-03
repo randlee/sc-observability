@@ -1,7 +1,7 @@
 ---
 name: dev-sanity
 version: 1.1.0
-description: Coordinate one or both independent sanity reviewers at a pinned commit with shared lint and separate recorded results.
+description: Coordinate both independent sanity reviewers at a pinned commit with shared lint and separate recorded results.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
 color: green
@@ -19,13 +19,12 @@ refuse an unregistered or unmergeable stack.
 
 ## Reviewer selection and authority
 
-The assignment's `reviewers` is `both` (default), `llm`, or `jev`. Run one
-coordinator, not separate LLM/JEV coordinators. `both` runs `sc-sanity-llm`
-and `sc-sanity-jev` independently for every deliverable. LLM controls the
-operational verdict and finding children while JEV is comparison-only.
-With one selected reviewer, that reviewer controls. Never edit a reviewer's
-reply; triage it (Execution step 4). Never create comparison finding children
-or dispatch QA twice.
+Every run executes `sc-sanity-llm` and `sc-sanity-jev` independently for
+every deliverable. Run one coordinator, not separate LLM/JEV coordinators.
+The manifest's `operational_reviewer` controls the verdict and finding
+children; the other is comparison-only. Never edit a reviewer's reply;
+triage it (Execution step 4). Never create comparison finding children or
+dispatch QA twice.
 
 ## Execution
 
@@ -33,30 +32,29 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
 
 1. Perform the assignment gates, claim and start. Run `sanity-split` exactly
    once with the supplied task/bead/worktree/branch/commit/base/lint/scratch
-   arguments and `--reviewers <both|llm|jev>`. Save its manifest. Its `run_id`,
-   `sha`, `reviewers`, and `operational_reviewer` apply to the entire run;
+   arguments. Save its manifest. Its `run_id`, `sha`, `reviewers`, and
+   `operational_reviewer` apply to the entire run;
    lint starts once and both reviewers use that same lint result:
 
    ```bash
    iteration=$(atm task events "$task" --all --json | jq '[.events[] | select(.event == "completed")] | length + 1')
    $S/sanity-split --task "$task" --bead "$checked_bead" --worktree "$worktree" \
      --branch "$branch" --commit "$commit" --base "$base" \
-     --lint-command "$lint_command" --scratch "$scratch" --reviewers "$reviewers" > "$manifest"
+     --lint-command "$lint_command" --scratch "$scratch" > "$manifest"
    ```
 
    A split failure refuses the operational task before reviewer dispatch;
    report its actual code. `SANITY.PLAN_INVALID` also tells the lead that the
    checked bead lacks a valid numbered deliverable plan. No reviewer row exists.
 
-2. With `both`, launch both reviewer families as background work concurrently:
+2. Launch both reviewer families as background work concurrently:
    dispatch every LLM and JEV deliverable child before waiting for either
    reviewer family. Do not run one complete review and then start the other.
-   For each selected reviewer, record its own `started_at=$(date +%s)` just
+   For each reviewer, record its own `started_at=$(date +%s)` just
    before dispatching its children. Pass every manifest `assignments[]`
-   assignment unchanged to one child of that reviewer type. Both reviewers
-   receive identical per-deliverable assignments at the pinned commit.
-   Children never run lint or write `bd`/`atm`. Keep each fenced JSON reply
-   unchanged in that reviewer's results array; never mix reviewer arrays.
+   assignment unchanged to one child of that reviewer type. Children never
+   run lint or write `bd`/`atm`. Keep each fenced JSON reply unchanged in
+   that reviewer's results array; never mix reviewer arrays.
 3. Stop a child that does not respond within 30 minutes. Preserve its failure
    envelope. If dispatch fails or a child times out, put a coordinator-origin
    `success:false, data:null` envelope in that slot with an error containing
@@ -110,15 +108,14 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    its vars to `sanity-$task-vars.json` for the completion template and
    finding handoff. Only its FAIL creates child findings, with
    `--reviewer sc-<operational_reviewer>`; never create children from JEV's
-   comparison report when both ran. Operational CANNOT_RUN refuses the task
+   comparison report. Operational CANNOT_RUN refuses the task
    and leaves the bead open. Comparison CANNOT_RUN is reported and does not
    replace or block a usable operational verdict. Retain both reports and
    include the comparison verdict/error unchanged in completion notes.
 
 ## Console report
 
-After both selected reviewers finish (or the single reviewer finishes), and
-after the operational task close, strictly render `sanity-run-table.md.j2`
+After both reviewers finish and the operational task closes, strictly render `sanity-run-table.md.j2`
 using the last history output:
 
 ```bash
