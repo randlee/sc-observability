@@ -71,8 +71,9 @@ Created/staged by `obs-d-14`, owned by `obs-d-18` from wave 3; after this bead c
   RoutingFailure}` remains the runtime admission/routing guard contract.
 - Focused tests assert canonical variants, stable diagnostic codes, and the
   original source context across the canonical-to-legacy compatibility
-  boundary. `crates/sc-observe/src/lib.rs` covers `LogSinkError::Flush`
-  context/source preservation; `crates/sc-observe/tests/routing_integration.rs`
+  boundary. `crates/sc-observe/src/lib.rs` sink fixtures construct
+  `LogSinkError::Flush` values and the compatibility adapter preserves their
+  context/source identity; `crates/sc-observe/tests/routing_integration.rs`
   covers typed subscriber/projector routing variants, codes, and source
   identity alongside retained compatibility fixtures. The currently published
   subscriber/projector and `LogSink` traits still expose their 1.x callback

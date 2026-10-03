@@ -12,7 +12,11 @@
 use std::path::PathBuf;
 
 use sc_observability::LogError;
+#[cfg(test)]
+use sc_observability_types::LogSinkError as LegacyLogSinkError;
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+#[cfg(test)]
+use sc_observability_types::v2::LogSinkError;
 use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
 use sc_observability_types::{DiagnosticInfo, DiagnosticSummary, LogEvent, ServiceName, ToolName};
 use sc_observability_types::{
@@ -30,6 +34,11 @@ fn legacy_init_error(error: InitError) -> LegacyInitError {
 
 fn legacy_flush_error(error: FlushError) -> LegacyFlushError {
     LegacyFlushError(error.into_context())
+}
+
+#[cfg(test)]
+pub(crate) fn legacy_log_sink_error(error: LogSinkError) -> LegacyLogSinkError {
+    LegacyLogSinkError(error.into_context())
 }
 
 fn legacy_running_flush_error(error: RunningFlushError) -> LegacyFlushError {
@@ -181,6 +190,7 @@ impl ObservabilityBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_types::v2::LogSinkError as CanonicalLogSinkError;
     use sc_observability_types::{DiagnosticInfo, ErrorCode, ErrorContext, Remediation};
 
     fn context(native_source: &'static str) -> Box<ErrorContext> {
@@ -230,6 +240,26 @@ mod tests {
         });
         assert_legacy_root_error(&shutdown, "root shutdown native source");
     }
+
+    #[test]
+    fn legacy_log_sink_error_preserves_canonical_context_and_source_identity() {
+        fn identity(context: &ErrorContext) -> (*const (), *const ()) {
+            let source = std::error::Error::source(context).expect("context keeps its source");
+            (
+                std::ptr::from_ref(context).cast::<()>(),
+                std::ptr::from_ref(source).cast::<()>(),
+            )
+        }
+
+        let context = context("root log sink native source");
+        let code = context.diagnostic().code.clone();
+        let before = identity(&context);
+        let legacy = legacy_log_sink_error(CanonicalLogSinkError::Flush { context });
+
+        assert_eq!(legacy.diagnostic().code, code);
+        assert_eq!(identity(&legacy.0), before);
+    }
+
     #[test]
     fn legacy_running_flush_error_preserves_context_and_source_identity() {
         // The proof begins at the facade input; it does not claim end-to-end

@@ -1641,13 +1641,15 @@ mod tests {
             {
                 let _ = first_flush.send(());
             }
-            Err(sc_observability_types::LogSinkError(Box::new(
-                ErrorContext::new(
-                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                    "controlled flush failure",
-                    Remediation::not_recoverable("test fixture"),
-                ),
-            )))
+            Err(crate::compat::legacy_log_sink_error(
+                sc_observability_types::v2::LogSinkError::Flush {
+                    context: Box::new(ErrorContext::new(
+                        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                        "controlled flush failure",
+                        Remediation::not_recoverable("test fixture"),
+                    )),
+                },
+            ))
         }
         fn health(&self) -> SinkHealth {
             SinkHealth {
@@ -1995,14 +1997,18 @@ mod tests {
             }
 
             fn flush(&self) -> Result<(), LogSinkError> {
-                Err(LogSinkError(Box::new(
-                    ErrorContext::new(
-                        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                        "flush failed",
-                        Remediation::not_recoverable("test sink intentionally fails flush"),
-                    )
-                    .source(Box::new(std::io::Error::other("native flush sink source"))),
-                )))
+                Err(crate::compat::legacy_log_sink_error(
+                    sc_observability_types::v2::LogSinkError::Flush {
+                        context: Box::new(
+                            ErrorContext::new(
+                                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                                "flush failed",
+                                Remediation::not_recoverable("test sink intentionally fails flush"),
+                            )
+                            .source(Box::new(std::io::Error::other("native flush sink source"))),
+                        ),
+                    },
+                ))
             }
 
             fn health(&self) -> SinkHealth {
