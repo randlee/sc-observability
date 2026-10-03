@@ -585,7 +585,6 @@ fn record_fields(args: &InstrumentArgs, params: &[Param], private: &TokenStream)
     }
     let kind_imports = has_bare.then(|| {
         quote! {
-            #[allow(unused_imports)]
             use #private::{DebugKindTag as _, SerializeKindTag as _};
         }
     });

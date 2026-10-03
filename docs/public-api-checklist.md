@@ -227,8 +227,6 @@ Internal-only:
 
 Internal-only:
 
-- [x] `SpanEmitter`
-- [x] `MetricEmitter`
 - [x] `LogExporter`
 - [x] `TraceExporter`
 - [x] `MetricExporter`

@@ -458,10 +458,9 @@ Implementation expectation:
 
 - `Observability` implements `ObservationEmitter<T>`
 
-Related crate-local sealed traits:
+Related crate-local sealed trait:
 
 - `sc-observability` owns `LogEmitter`
-- `sc-observability-otlp` owns `SpanEmitter` and `MetricEmitter`
 
 Recommended usage:
 
@@ -1888,22 +1887,6 @@ Rule:
   typestate is required here
 - `flush()` attempts export of all ready batches
 - `shutdown()` performs a final flush, drops incomplete spans, and is idempotent
-
-Crate-local direct-signal injection traits:
-
-```rust
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-pub trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_span(&self, span: SpanSignal) -> Result<(), TelemetryError>;
-}
-
-pub trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_metric(&self, metric: MetricRecord) -> Result<(), TelemetryError>;
-}
-```
 
 ### 12.4 Exporter Traits
 

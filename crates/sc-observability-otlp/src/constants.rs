@@ -100,7 +100,7 @@ pub(crate) const SDK_RETRY_JITTER_MS: u64 = 100;
 pub(crate) const PROTO_DURATION_MAX_SECONDS: i64 = 315_576_000_000;
 
 /// Fixed dispatch margin beyond a complete synchronous submission retry sequence.
-#[cfg(feature = "sync-http")]
+#[cfg(all(feature = "sync-http", any(test, feature = "durable-store")))]
 pub(crate) const SUBMISSION_DISPATCH_MARGIN: std::time::Duration =
     std::time::Duration::from_secs(1);
 

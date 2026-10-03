@@ -6,14 +6,6 @@
 //! overall retry-sequence deadline. The blocking client is owned exclusively
 //! by one private worker thread.
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "D.18 wires this staged synchronous HTTP backend into the facade after D.8"
-    )
-)]
-
 use std::fs;
 use std::future::Future;
 use std::path::PathBuf;
@@ -234,6 +226,7 @@ struct WorkerInner {
     /// has left the producer queue. Keep the caller alive through that budget
     /// plus the independently bounded lifecycle shutdown interval used as its
     /// queue/dispatch margin.
+    #[cfg(any(test, feature = "durable-store"))]
     export_result_timeout: Duration,
     #[cfg(test)]
     control_submission_observer: Option<Sender<()>>,
@@ -265,6 +258,7 @@ impl Worker {
         let worker_stop = Arc::clone(&stop);
         let flush_timeout = config.lifecycle_flush_timeout;
         let shutdown_timeout = config.lifecycle_shutdown_timeout;
+        #[cfg(any(test, feature = "durable-store"))]
         let export_result_timeout = export_result_timeout(config.retry.sequence_timeout);
         let handshake_timeout = config
             .request_timeout
@@ -311,6 +305,7 @@ impl Worker {
                     terminated: AtomicBool::new(false),
                     lifecycle_flush_timeout: flush_timeout,
                     lifecycle_shutdown_timeout: shutdown_timeout,
+                    #[cfg(any(test, feature = "durable-store"))]
                     export_result_timeout,
                     #[cfg(test)]
                     control_submission_observer,
@@ -362,6 +357,7 @@ impl Worker {
         }
     }
 
+    #[cfg(any(test, feature = "durable-store"))]
     fn export(
         &self,
         endpoint: String,
@@ -447,6 +443,7 @@ impl Worker {
 /// Bounds a synchronous submission by the worker's complete retry budget plus
 /// its finite dispatch margin. The lifecycle shutdown deadline alone is not a
 /// submission deadline: it may be intentionally shorter than a retry sequence.
+#[cfg(any(test, feature = "durable-store"))]
 pub(super) fn export_result_timeout(retry_sequence_timeout: Duration) -> Duration {
     retry_sequence_timeout.saturating_add(crate::constants::SUBMISSION_DISPATCH_MARGIN)
 }
@@ -759,6 +756,7 @@ pub(super) fn parse_retry_after(value: &str, now: SystemTime) -> Option<Duration
     date.duration_since(now).ok()
 }
 
+#[cfg(test)]
 pub(super) fn wait_cancelable(duration: Duration, cancel: &AtomicBool) -> bool {
     wait_cancelable_with_observer(duration, cancel, None)
 }
@@ -889,6 +887,7 @@ pub(crate) struct OtlpHttpExporter {
 #[derive(Debug, Clone, Copy)]
 pub(super) enum SubmissionRoute {
     Signal(Signal),
+    #[cfg(any(test, feature = "durable-store"))]
     Profiles,
 }
 
@@ -898,9 +897,11 @@ impl SubmissionRoute {
             Self::Signal(Signal::Logs) => normalize_signal_endpoint(endpoint, "logs"),
             Self::Signal(Signal::Traces) => normalize_signal_endpoint(endpoint, "traces"),
             Self::Signal(Signal::Metrics) => normalize_signal_endpoint(endpoint, "metrics"),
-            Self::Signal(Signal::Profiles) | Self::Profiles => {
+            Self::Signal(Signal::Profiles) => {
                 normalize_endpoint_path(endpoint, PROFILES_EXPORT_PATH)
             }
+            #[cfg(any(test, feature = "durable-store"))]
+            Self::Profiles => normalize_endpoint_path(endpoint, PROFILES_EXPORT_PATH),
             Self::Signal(_) => endpoint.to_owned(),
         }
     }
@@ -1087,6 +1088,7 @@ impl OtlpHttpExporter {
         )
     }
 
+    #[cfg(any(test, feature = "durable-store"))]
     pub(super) fn submit_json_blocking(
         &self,
         route: SubmissionRoute,
@@ -1247,6 +1249,7 @@ pub(crate) fn build_exporter_set(
     })
 }
 
+#[cfg(test)]
 pub(super) fn normalize_logs_endpoint(endpoint: &str) -> String {
     SubmissionRoute::Signal(Signal::Logs).endpoint(endpoint)
 }

@@ -9,21 +9,6 @@ use serde_json::Value;
 
 use crate::error_codes;
 
-/// Builds a telemetry export failure with the crate-local error code.
-#[expect(
-    dead_code,
-    reason = "crate-local export failure helper is retained for internal construction sites"
-)]
-pub(crate) fn export_failure(message: impl Into<String>) -> CanonicalTelemetryError {
-    CanonicalTelemetryError::ExportFailure(ExportError::TerminalExportFailure {
-        context: Box::new(ErrorContext::new(
-            error_codes::OTLP_EXPORT_TERMINAL,
-            message,
-            Remediation::not_recoverable("retry/export policy is owned by telemetry runtime"),
-        )),
-    })
-}
-
 /// Converts a canonical span-assembly failure into a telemetry export failure,
 /// moving the original error context unchanged.
 pub(crate) fn export_failure_from_canonical_event(
@@ -57,7 +42,7 @@ pub(crate) fn flush_lifecycle_failure(error: ExportError) -> FlushFailure {
 /// by `shutdown_flush_failure_preserves_flush_context_as_native_source`
 /// below so a regression in its error-context/source chaining is still
 /// caught even while the call site is dormant.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
     ShutdownFailure::from_context(Box::new(
         ErrorContext::new(

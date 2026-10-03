@@ -117,18 +117,17 @@ pub(crate) fn exporter_factory_prepared(
         }),
         BackendTransportBounds::Sdk => {
             let connection = prepared_backend_connection(&config.transport, bounds)?;
-            sdk_exporter_factory(config, bounds, &connection)
+            sdk_exporter_factory(bounds, &connection)
         }
         BackendTransportBounds::SyncHttp(_) => {
             let connection = prepared_backend_connection(&config.transport, bounds)?;
-            sync_http_exporter_factory(config, bounds, &connection)
+            sync_http_exporter_factory(bounds, &connection)
         }
     }
 }
 
 #[allow(unused_variables)]
 fn sdk_exporter_factory(
-    config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
@@ -184,7 +183,6 @@ fn sdk_exporter_factory(
 
 #[allow(unused_variables)]
 fn sync_http_exporter_factory(
-    config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
@@ -209,7 +207,6 @@ fn sync_http_exporter_factory(
     ))
 }
 
-#[allow(dead_code)]
 fn unsupported_protocol(
     backend: config::ExporterBackend,
     protocol: config::OtlpProtocol,

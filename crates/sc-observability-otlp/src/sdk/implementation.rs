@@ -9,14 +9,6 @@
 //! protocol selects the terminal send: `Grpc` uses the tonic clients and
 //! `HttpBinary` posts the same protobuf requests over OTLP/HTTP.
 
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "D.18 composes these crate-private scheduling primitives after the transport decision"
-    )
-)]
-
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -98,6 +90,7 @@ impl CallerRuntime {
 /// a second admission domain from being created by composition code.
 pub(crate) struct SdkAdapterSet {
     pub(crate) exporters: ExporterSet,
+    #[cfg(test)]
     pub(crate) lifecycle: LifecycleCore,
 }
 
@@ -132,6 +125,7 @@ pub(crate) fn build_exporter_set(
                 shutdown_cancel,
             }),
         },
+        #[cfg(test)]
         lifecycle,
     })
 }
