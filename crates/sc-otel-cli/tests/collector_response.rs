@@ -1,3 +1,5 @@
+#![cfg(not(feature = "test-double"))]
+
 //! Real HTTP acknowledgements must drive durable state, not merely HTTP status.
 #[path = "common/assert_result_v1.rs"]
 mod assert_result_v1;
@@ -11,14 +13,14 @@ use fixture_component::fixture_component;
 use serde_json::{Value, json};
 use std::{
     io::{BufRead, BufReader, Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener},
     process::Command,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 struct Collector {
@@ -30,13 +32,30 @@ struct Collector {
 impl Collector {
     fn start(body: String) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind collector");
+        listener
+            .set_nonblocking(true)
+            .expect("make collector listener nonblocking");
         let address = listener.local_addr().expect("collector address");
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = Arc::clone(&stop);
         let thread = thread::spawn(move || {
             let mut paths = Vec::new();
+            let deadline = Instant::now() + Duration::from_secs(20);
             loop {
-                let (mut stream, _) = listener.accept().expect("accept request");
+                if stopped.load(Ordering::Acquire) {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    panic!("collector timed out waiting for a request");
+                }
+                let (mut stream, _) = match listener.accept() {
+                    Ok(connection) => connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                    Err(error) => panic!("accept request: {error}"),
+                };
                 if stopped.load(Ordering::Acquire) {
                     break;
                 }
@@ -49,13 +68,11 @@ impl Collector {
                 let mut reader = BufReader::new(&mut stream);
                 let mut request = String::new();
                 reader.read_line(&mut request).expect("request line");
-                paths.push(
-                    request
-                        .split_whitespace()
-                        .nth(1)
-                        .expect("request path")
-                        .to_owned(),
-                );
+                let path = request
+                    .split_whitespace()
+                    .nth(1)
+                    .expect("request path")
+                    .to_owned();
                 let mut length = None;
                 loop {
                     let mut line = String::new();
@@ -74,6 +91,7 @@ impl Collector {
                     .read_exact(&mut payload)
                     .expect("complete request body");
                 let _: Value = serde_json::from_slice(&payload).expect("OTLP JSON request");
+                paths.push(path);
                 // Write headers separately: oversized-body tests may close early.
                 write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).expect("response headers");
                 let _ = stream.write_all(body.as_bytes());
@@ -88,12 +106,11 @@ impl Collector {
     }
     fn finish(&mut self) -> Vec<String> {
         self.stop.store(true, Ordering::Release);
-        TcpStream::connect(self.address).expect("wake collector");
         self.thread
             .take()
             .expect("collector thread")
             .join()
-            .expect("collector completes")
+            .expect("collector thread panicked")
     }
 }
 impl Drop for Collector {
@@ -104,13 +121,22 @@ impl Drop for Collector {
     }
 }
 
+fn scrub_telemetry_environment(command: &mut Command) -> &mut Command {
+    for (key, _) in std::env::vars_os() {
+        let name = key.to_string_lossy();
+        if name.starts_with("SC_OTEL_") || name.starts_with("OTEL_") {
+            command.env_remove(key);
+        }
+    }
+    command
+}
+
 fn emit(body: String, flag: &str, payload: &str, signal: &str, path: &str, rejected: bool) {
     let mut collector = Collector::start(body);
     let store = tempfile::tempdir().expect("fresh durable store");
-    let output = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+    let mut emit = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
+    let output = scrub_telemetry_environment(&mut emit)
         .current_dir(store.path())
-        .env_remove("SC_OTEL_TEST_DOUBLE")
-        .env_remove("SC_OTEL_AUTH_HEADER")
         .args([
             "--endpoint",
             &format!("http://{}", collector.address),
@@ -139,9 +165,9 @@ fn emit(body: String, flag: &str, payload: &str, signal: &str, path: &str, rejec
     assert_eq!(result["flush"]["still_pending"][signal], 0);
     // Reopen the store in another process: prove terminal state is persisted and
     // is not re-exported by a fresh drain owner.
-    let status = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+    let mut status_command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
+    let status = scrub_telemetry_environment(&mut status_command)
         .current_dir(store.path())
-        .env_remove("SC_OTEL_TEST_DOUBLE")
         .args([
             "--endpoint",
             &format!("http://{}", collector.address),
