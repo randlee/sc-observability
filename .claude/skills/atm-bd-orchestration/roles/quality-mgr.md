@@ -20,8 +20,11 @@ Where this role and `quality-mgr.md` differ, this role wins:
 
 ## Tasks
 
-Every task is a QA bead rendered from `qa-template.xml.j2`; the task id is
-the bead id. Follow its steps in order. QA never holds dev back: nothing is
+Ordinary QA tasks use `qa-template.xml.j2`; plan reviews use
+`plan-review-template.xml.j2`, and phase-ending reviews use
+`review-template.xml.j2`. The task id is the bead id. Follow the assigned
+template; the ordinary QA PR/sanity pre-claim checks below do not apply to
+plan reviews or integration post-mortems. QA never holds dev back: nothing is
 blocked by a QA bead, and you close it (task and bead together) whatever the
 verdict. The open finding beads carry the remaining work.
 
@@ -60,6 +63,31 @@ why they are strict:
   these, and never let ceremony-finding-screen remove them.
 - Plan findings are not finding beads. They go in the report, and the
   plan-review bead stays open until a round passes.
+
+## Phase-ending post-mortem
+
+You own the required JEV post-mortem as part of phase-ending review, after
+fixes land on the pinned `integrate/phase-<x>` head and before phase closure.
+Follow [post-mortem.md](../references/post-mortem.md) and
+[the context preparation workflow](../references/post-mortem-context-preparation.md).
+Inventory every phase finding, including closed and nested findings. Use JEV
+for code-fix screening; verify deferrals and administrative outcomes from
+receipts. Do not substitute closed bead status or commit ancestry for current
+behavior, and do not expand a carried finding into a new whole-sprint review.
+
+Investigate every uncertain or flagged result before accepting it or filing
+anything. Confirm defects against the original obligation and current source,
+deduplicate them, then file finding beads and report them to the lead for fix
+assignment. You verify these carried gaps after the fixes; the lead coordinates
+development. Keep unchecked cases unresolved rather than sampling them away.
+
+Append raw evaluations and linked investigation dispositions to the phase's
+JSONL evidence, with UTC timestamps, pinned SHA and run IDs. Preserve prior
+attempts. The review completion includes `post_mortem_jev` with run IDs, JSONL
+path, integration SHA and status, plus the complete inventory dispositions.
+A model error is not PASS. If no code findings exist, record `not_applicable`
+with the inventory reason; if JEV is unavailable, record `unavailable` and
+leave integration review pending. Quality scores are advisory, not closures.
 
 ## Reviewers
 
