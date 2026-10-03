@@ -27,7 +27,6 @@ fn register<T: JsonSchema>(
     Ok(())
 }
 type SchemaMap = Map<String, Value>;
-const SCHEMA_REGENERATION_COMMAND: &str = "cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- --output bindings/schema/v1.json --errors-output bindings/schema/errors-v1.json";
 
 fn catalogue_context() -> Box<ErrorContext> {
     Box::new(ErrorContext::new(
@@ -562,10 +561,21 @@ fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(bytes)
 }
 
-fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn Error>> {
+fn schema_regeneration_command(output: &str, errors_output: &str) -> String {
+    format!(
+        "cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- --output {output} --errors-output {errors_output}"
+    )
+}
+
+fn write_or_check(
+    path: &Path,
+    bytes: &[u8],
+    check: bool,
+    regeneration_command: &str,
+) -> Result<(), Box<dyn Error>> {
     if check {
         if std::fs::read(path)? != bytes {
-            return Err(generated_drift_error(path).into());
+            return Err(generated_drift_error(path, regeneration_command).into());
         }
     } else {
         if let Some(parent) = path.parent() {
@@ -576,9 +586,9 @@ fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn 
     Ok(())
 }
 
-fn generated_drift_error(path: &Path) -> String {
+fn generated_drift_error(path: &Path, regeneration_command: &str) -> String {
     format!(
-        "generated drift: {}; regenerate with `{SCHEMA_REGENERATION_COMMAND}`",
+        "generated drift: {}; regenerate with `{regeneration_command}`",
         path.display()
     )
 }
@@ -598,6 +608,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let output = output.ok_or("--output required")?;
     let errors_output = errors_output.ok_or("--errors-output required")?;
+    let regeneration_command = schema_regeneration_command(&output, &errors_output);
     let mut defs = Map::new();
     let mut entrypoints = Map::new();
     for (is_output, prefix) in [(false, "Input"), (true, "Output")] {
@@ -620,11 +631,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     let registry = serde_json::to_value(error_codes::REGISTRY)?;
     let canonical_error_codes = canonical_error_catalogue();
     let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":constants::WIRE_SCHEMA_VERSION,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":constants::MAX_WIRE_PAYLOAD_BYTES,"container_depth":constants::MAX_CONTAINER_DEPTH,"query_limit":constants::MAX_QUERY_LIMIT,"timeout_ms":constants::MAX_TIMEOUT_MS,"diagnostic_string_bytes":constants::MAX_DIAGNOSTIC_FIELD_BYTES,"remediation_steps":constants::MAX_REMEDIATION_STEPS},"defaults":{"query_limit":constants::DEFAULT_QUERY_LIMIT,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","canonical_error_codes":canonical_error_codes,"generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
-    write_or_check(Path::new(&output), &canonical(&schema)?, check)?;
+    write_or_check(
+        Path::new(&output),
+        &canonical(&schema)?,
+        check,
+        &regeneration_command,
+    )?;
     write_or_check(
         Path::new(&errors_output),
         &canonical(&schema["x-sc-error-registry"])?,
         check,
+        &regeneration_command,
     )?;
     Ok(())
 }
@@ -671,10 +688,17 @@ mod tests {
     }
 
     #[test]
-    fn drift_error_includes_the_schema_regeneration_command() {
-        let error = generated_drift_error(Path::new("bindings/schema/v1.json"));
-        assert!(error.contains("bindings/schema/v1.json"));
-        assert!(error.contains(SCHEMA_REGENERATION_COMMAND));
+    fn drift_error_includes_the_actual_schema_regeneration_outputs() {
+        let output = "generated/schema.json";
+        let errors_output = "generated/errors.json";
+        let command = schema_regeneration_command(output, errors_output);
+        let error = generated_drift_error(Path::new(output), &command);
+
+        assert!(error.contains(output));
+        assert!(error.contains(errors_output));
+        assert!(error.contains("--output generated/schema.json"));
+        assert!(error.contains("--errors-output generated/errors.json"));
+        assert!(!error.contains("bindings/schema/v1.json"));
     }
 
     #[test]
@@ -689,7 +713,8 @@ mod tests {
         let path = directory.join("schema.json");
         std::fs::write(&path, crlf).unwrap();
 
-        let error = write_or_check(&path, canonical, true).expect_err("CRLF must be drift");
+        let error = write_or_check(&path, canonical, true, "regenerate-schema")
+            .expect_err("CRLF must be drift");
         assert!(error.to_string().contains("generated drift"));
         assert_eq!(std::fs::read(&path).unwrap(), crlf);
 
