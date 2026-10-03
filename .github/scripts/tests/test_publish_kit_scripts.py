@@ -344,11 +344,10 @@ class ReleaseScriptTests(unittest.TestCase):
             self.assertIn('choices=["render"]', text)
 
     def test_renderer_cli_path_uses_windows_scripts_directory(self) -> None:
-        with patch.object(BOOTSTRAP.sys, "platform", "win32"):
-            self.assertEqual(
-                BOOTSTRAP.renderer_cli_path(Path("managed-venv")),
-                Path("managed-venv") / "Scripts" / "renderer",
-            )
+        self.assertEqual(
+            BOOTSTRAP.renderer_cli_path(Path("managed-venv"), platform="win32"),
+            Path("managed-venv") / "Scripts" / "renderer",
+        )
 
     def test_runtime_renderer_paths_use_the_bootstrapped_exact_pin(self) -> None:
         """Guard every package Python-renderer path against independent pins."""
