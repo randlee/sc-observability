@@ -56,7 +56,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.94.1"
-          components: rustfmt
+          components: clippy, rustfmt
       - name: Check standalone Tauri formatting
         run: cargo fmt --manifest-path bindings/tauri/Cargo.toml -- --check
       - name: Install Linux native prerequisites for Tauri
@@ -137,6 +137,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.94.1"
+          components: clippy, rustfmt
       - name: Install Linux webview and isolation dependencies
         if: runner.os == 'Linux'
         run: |

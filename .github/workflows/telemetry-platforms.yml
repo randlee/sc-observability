@@ -42,6 +42,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
           targets: ${{ matrix.target }}
       - name: Check durable dependency graph
         run: cargo check -p sc-observability-otlp --features durable-store --locked --target ${{ matrix.target }}

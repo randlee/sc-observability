@@ -19,6 +19,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - name: Run hermetic collector conformance (${{ matrix.features }})
         run: >-
           cargo test --locked -p sc-observability-otlp
@@ -39,6 +40,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - name: Define owned desktop viewer state
         run: echo "VIEWER_STATE_DIR=$RUNNER_TEMP/sc-observability-d9-viewer" >> "$GITHUB_ENV"
       - name: Read pinned viewer manifest

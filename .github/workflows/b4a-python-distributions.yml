@@ -85,6 +85,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
       - name: Build sole-helper source bundle and immutable maturin sdist
         shell: bash
@@ -123,6 +124,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - if: matrix.id == 'windows-arm64'
         name: Reject emulated Windows ARM64 build evidence
         shell: pwsh
@@ -186,6 +188,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - if: matrix.id == 'windows-arm64'
         name: Reject emulated Windows ARM64 installed cell
         shell: pwsh

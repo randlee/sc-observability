@@ -46,6 +46,7 @@ runs:
       if: ${{ inputs.build_system == 'maturin' }}
       with:
         toolchain: ${{ inputs.rust_toolchain }}
+        components: clippy, rustfmt
     - name: Select installed release Rust toolchain
       if: ${{ inputs.build_system == 'maturin' }}
       shell: bash

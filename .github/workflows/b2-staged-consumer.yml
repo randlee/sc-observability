@@ -19,6 +19,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -57,6 +58,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
