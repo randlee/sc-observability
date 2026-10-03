@@ -11,7 +11,7 @@ import os
 import stat
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 sys.path.insert(0, str(Path(__file__).parent))
 from shell_helpers import bash_command, bash_environment, bash_path
@@ -86,22 +86,22 @@ def test_gh_stub_is_written_with_lf_bytes(tmp_path: Path) -> None:
 
 def test_shell_helper_uses_git_bash_and_translates_windows_fixture_paths() -> None:
     assert bash_command(platform="darwin") == ["bash"]
-    configured = r"C:\\Program Files\\Git\\bin\\bash.exe"
+    configured = r"C:\Program Files\Git\bin\bash.exe"
     assert bash_command(
         platform="win32",
         environ={"GIT_BASH_PATH": configured},
-        exists=lambda path: str(path) == configured,
+        exists=lambda path: PureWindowsPath(path) == PureWindowsPath(configured),
     ) == [configured]
     environment = bash_environment(
-        {"PATH": r"C:\\Tools;C:\\Program Files\\Git\\bin"},
-        prepend_path=r"C:\\Temp Space\\stub-bin",
-        github_output=r"C:\\Temp Space\\github-output",
+        {"PATH": r"C:\Tools;C:\Program Files\Git\bin"},
+        prepend_path=r"C:\Temp Space\stub-bin",
+        github_output=r"C:\Temp Space\github-output",
         platform="win32",
     )
     assert environment["PATH"] == "/c/Temp Space/stub-bin:/c/Tools:/c/Program Files/Git/bin"
     assert environment["PATH"].split(":", 1)[0] == "/c/Temp Space/stub-bin"
     assert environment["GITHUB_OUTPUT"] == "/c/Temp Space/github-output"
-    assert bash_path(r"C:\\Temp Space\\stub-bin", platform="win32") == "/c/Temp Space/stub-bin"
+    assert bash_path(r"C:\Temp Space\stub-bin", platform="win32") == "/c/Temp Space/stub-bin"
 
 
 def test_shell_helper_refuses_the_windows_wsl_shim_when_git_bash_is_missing() -> None:
