@@ -2839,6 +2839,16 @@ retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
   selected backend with `ConfigFieldNotApplicable`;
 - reject a requested insecure verification override when the selected backend
   does not explicitly support it with `InsecureTransportRejected`.
+- when transport is enabled, require an endpoint; otherwise return
+  `InvalidEndpoint`.
+- when transport is enabled, require at least one of logs, traces, or metrics;
+  this temporarily retains `OTLP_TRANSPORT_CONSTRUCTION_FAILED` until a
+  dedicated public configuration code is approved.
+- require every enabled signal's batch size to be positive; this temporarily
+  retains `OTLP_TRANSPORT_CONSTRUCTION_FAILED` until a dedicated public
+  configuration code is approved.
+- require the metric export interval to be positive; otherwise return
+  `ZeroDuration` for `metrics.export_interval_ms`.
 - validate endpoint URL syntax, header/auth syntax, and credential placement;
   otherwise return `InvalidEndpoint` or `InvalidHeader` with a redacted,
   field-only payload.

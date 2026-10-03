@@ -200,7 +200,7 @@ mod tests {
             .expect_err("typed missing endpoint");
         assert_eq!(
             failure.diagnostic().code,
-            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+            error_codes::OTLP_CONFIG_INVALID_ENDPOINT
         );
     }
 
@@ -235,7 +235,7 @@ mod tests {
             .expect_err("zero interval");
         assert_eq!(
             zero_interval.diagnostic().code,
-            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+            error_codes::OTLP_CONFIG_ZERO_DURATION
         );
 
         let zero_timeout = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
@@ -444,7 +444,7 @@ mod tests {
         let failure = validate_config_typed(&zero_metrics).expect_err("zero metric interval");
         assert_eq!(
             failure.diagnostic().code,
-            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+            error_codes::OTLP_CONFIG_ZERO_DURATION
         );
     }
 

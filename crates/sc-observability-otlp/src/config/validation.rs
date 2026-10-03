@@ -43,6 +43,8 @@ pub(crate) enum OtlpConfigField {
     RetryJitterPercent,
     /// TLS certificate-verification override.
     InsecureSkipVerify,
+    /// Metric periodic export interval.
+    MetricExportInterval,
 }
 
 impl OtlpConfigField {
@@ -62,6 +64,7 @@ impl OtlpConfigField {
             Self::RetryAfterCap => "sync_http_retry.retry_after_cap_ms",
             Self::RetryJitterPercent => "sync_http_retry.retry_jitter_percent",
             Self::InsecureSkipVerify => "insecure_skip_verify",
+            Self::MetricExportInterval => "metrics.export_interval_ms",
         }
     }
 }
@@ -139,17 +142,21 @@ fn validated_telemetry_bounds_with_delays(
     config: &TelemetryConfig,
     immediate: bool,
 ) -> Result<ValidatedTransportBounds, InitFailure> {
+    // This is the complete first-failure sequence for telemetry construction.
+    // `validated_transport_bounds_with_delays` owns steps 1-7; keep the tail
+    // here so checks which require the full TelemetryConfig have one explicit
+    // position after those transport-only bounds.
+    //   8. enabled transport requires an endpoint
+    //   9. enabled transport requires at least one signal
+    //  10. every enabled signal has a positive batch size
+    //  11. metrics has a positive export interval
     let bounds = validated_transport_bounds_with_delays(&config.transport, immediate)
         .map_err(config_failure_to_init_failure)?;
     if config.transport.enabled && config.transport.endpoint.is_none() {
-        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
+        return Err(config_failure_to_init_failure(invalid_endpoint(
             "enabled telemetry requires an endpoint",
-            Remediation::recoverable(
-                "set OtelConfig.endpoint before constructing Telemetry",
-                ["disable telemetry for local-only runs if OTLP is not required"],
-            ),
-        ))));
+            "set OtelConfig.endpoint before constructing Telemetry",
+        )));
     }
     if config.transport.enabled
         && config.logs.is_none()
@@ -167,18 +174,25 @@ fn validated_telemetry_bounds_with_delays(
     }
     if config.logs.is_some_and(|cfg| cfg.batch_size == 0)
         || config.traces.is_some_and(|cfg| cfg.batch_size == 0)
-        || config
-            .metrics
-            .is_some_and(|cfg| cfg.batch_size == 0 || u64::from(cfg.export_interval_ms) == 0)
+        || config.metrics.is_some_and(|cfg| cfg.batch_size == 0)
     {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
-            "telemetry batch sizing and export intervals must be positive",
-            Remediation::recoverable(
-                "set batch sizes and export intervals above zero",
-                ["use documented defaults"],
-            ),
+            "telemetry batch sizes must be positive",
+            Remediation::recoverable("set batch sizes above zero", ["use documented defaults"]),
         ))));
+    }
+    if config
+        .metrics
+        .is_some_and(|cfg| u64::from(cfg.export_interval_ms) == 0)
+    {
+        return Err(config_failure_to_init_failure(config_failure(
+            ConfigFailureKind::ZeroDuration,
+            error_codes::OTLP_CONFIG_ZERO_DURATION,
+            "metric export interval must be greater than zero",
+            OtlpConfigField::MetricExportInterval,
+            ValueOrigin::Explicit,
+        )));
     }
     Ok(bounds)
 }

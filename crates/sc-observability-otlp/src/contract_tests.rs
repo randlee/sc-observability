@@ -4,8 +4,9 @@
 use std::sync::Arc;
 
 use super::config::{
-    BackendTransportBounds, ExporterBackend, OtelConfig, OtlpProtocol, SyncHttpRetryPolicy,
-    validated_transport_bounds,
+    BackendTransportBounds, ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint,
+    OtlpProtocol, ResourceAttributes, SyncHttpRetryPolicy, TelemetryConfig,
+    validated_telemetry_bounds, validated_transport_bounds,
 };
 use super::constants;
 use super::contracts::{CompleteSpan, ExportRecord, LogRecord};
@@ -14,6 +15,7 @@ use super::testing::{LifecycleCall, recording_exporter_set};
 use sc_observability_types::error_codes::otlp;
 use sc_observability_types::v2::MetricRecord;
 use sc_observability_types::v2::{ConfigFailure, ExportError};
+use sc_observability_types::{DiagnosticInfo, ServiceName};
 
 fn sync_http_config() -> OtelConfig {
     OtelConfig {
@@ -22,6 +24,88 @@ fn sync_http_config() -> OtelConfig {
         protocol: OtlpProtocol::HttpJson,
         ..OtelConfig::default()
     }
+}
+
+fn telemetry_config(transport: OtelConfig) -> TelemetryConfig {
+    TelemetryConfig {
+        service_name: ServiceName::new("contract-tests").expect("service name"),
+        resource: ResourceAttributes::default(),
+        transport,
+        logs: Some(LogsConfig::default()),
+        traces: None,
+        metrics: None,
+    }
+}
+
+fn configured_sync_http() -> OtelConfig {
+    OtelConfig {
+        endpoint: Some(
+            OtlpEndpoint::new_typed("https://otel.example.internal").expect("valid endpoint"),
+        ),
+        ..sync_http_config()
+    }
+}
+
+#[test]
+fn contract_tests_enabled_transport_requires_endpoint_after_transport_bounds() {
+    let error = validated_telemetry_bounds(&telemetry_config(sync_http_config()))
+        .expect_err("enabled transport without an endpoint is invalid");
+    assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_INVALID_ENDPOINT);
+}
+
+#[test]
+fn contract_tests_endpoint_presence_follows_transport_validation() {
+    let error = validated_telemetry_bounds(&telemetry_config(OtelConfig {
+        timeout_ms: Some(0_u64.into()),
+        ..sync_http_config()
+    }))
+    .expect_err("transport validation precedes endpoint presence");
+    assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_ZERO_DURATION);
+}
+
+#[test]
+fn contract_tests_telemetry_validation_tail_preserves_each_mapped_failure() {
+    let mut no_signal = telemetry_config(configured_sync_http());
+    no_signal.logs = None;
+    let error =
+        validated_telemetry_bounds(&no_signal).expect_err("an enabled transport needs a signal");
+    assert_eq!(
+        error.diagnostic().code,
+        otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+    );
+
+    let mut zero_batch = telemetry_config(configured_sync_http());
+    zero_batch.logs = Some(LogsConfig { batch_size: 0 });
+    let error =
+        validated_telemetry_bounds(&zero_batch).expect_err("signal batches must be positive");
+    assert_eq!(
+        error.diagnostic().code,
+        otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+    );
+
+    let mut zero_interval = telemetry_config(configured_sync_http());
+    zero_interval.logs = None;
+    zero_interval.metrics = Some(MetricsConfig {
+        batch_size: 1,
+        export_interval_ms: 0_u64.into(),
+    });
+    let error =
+        validated_telemetry_bounds(&zero_interval).expect_err("metric interval must be positive");
+    assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_ZERO_DURATION);
+}
+
+#[test]
+fn contract_tests_endpoint_presence_precedes_later_telemetry_tail_checks() {
+    let mut config = telemetry_config(sync_http_config());
+    config.logs = None;
+    config.metrics = Some(MetricsConfig {
+        batch_size: 1,
+        export_interval_ms: 0_u64.into(),
+    });
+
+    let error = validated_telemetry_bounds(&config)
+        .expect_err("endpoint presence precedes the metric interval tail check");
+    assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_INVALID_ENDPOINT);
 }
 
 #[test]
