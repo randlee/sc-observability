@@ -171,7 +171,9 @@ TODO-specific rule:
    - `arch-qa` from `.claude/skills/codex-orchestration/arch-qa-assignment.json.j2`
    - `ruthless-boundary-qa` from `.claude/skills/codex-orchestration/ruthless-boundary-qa-assignment.json.j2`
      per the layer fix-verification rule below
-   - `plan-scope-reviewer` on every plan round, in full, from
+   - `plan-scope-reviewer` in full on plan QA-1; on QA-2 and later, dispatch
+     it only when it filed a carried finding, locked to that finding and its
+     original acceptance criterion, from
      `.claude/skills/codex-orchestration/plan-scope-reviewer-assignment.json.j2`
      for a plan in markdown (`plan_docs` = the phase plan doc and every
      sprint doc) or
@@ -179,9 +181,8 @@ TODO-specific rule:
      for a plan in beads (`plan_docs` = the piped `bd show --json` file of
      every dev bead, `phase_root_doc` = the root's)
    - when repository policy lists them, dispatch `ceremony-qa` on plan QA-1
-     (verification-locked on later plan rounds per that rule) and
-     `ceremony-finding-screen` over every round's findings (step 8), using
-     the input contract in each agent prompt
+     only and run `ceremony-finding-screen` over round-1 findings only
+     (step 8), using the input contract in each agent prompt
    - `flaky-test-qa` from `.claude/skills/codex-orchestration/flaky-test-qa-assignment.json.j2` only when tests changed or instability is suspected
    - `schema-reviewer` from `.claude/skills/codex-orchestration/schema-reviewer-assignment.json.j2` only when repository policy declares a governed interface in scope
    - Rust reviewer assignments from `.claude/assets/sc-rust/quality-mgr/templates/` exactly as directed by `.claude/assets/sc-rust/quality-mgr/quality-mgr.rust.md`
@@ -293,18 +294,7 @@ For docs-only plan review (`review_mode: plan`):
   `rust-service-hardening-agent`, and `ceremony-qa`
 - run `schema-reviewer` only when repository policy defines a governed
   interface relevant to the plan
-- plan QA-2 and later are fix-verification rounds: run `req-qa` and
-  `arch-qa` scoped to the dispatched findings, and dispatch the subjective
-  reviewers only under the fix-round rule above, and run
-  `plan-scope-reviewer` in full again: its shape checks are recomputed from
-  the plan every round, never carried. Verdict = each dispatched finding's
-  fixed/regressed/open status plus the shape: a round whose critical path is
-  longer than the previous round's, or that added an ordering rule or moved
-  a shared file into a layer sprint, is FAIL whatever the carried findings'
-  status. Put `plan-scope-reviewer`'s `parallelism` numbers (critical path,
-  width, sprint count) in every round's report. Other new observations go in
-  debt notes and do not fail the round, except a regression introduced by
-  the fix itself
+  - plan QA-2 and later are fix-verification rounds: dispatch only each carried finding's filing reviewer, locked to that finding id and its original acceptance criterion; no other reviewer, no screen, no new findings
 - plan QA is capped at 3 rounds (`plan_qa_cycle_limit`, default 3). If round
   3 still fails, report `cap-exhausted / not converged` with the open
   findings to the lead; do not open round 4

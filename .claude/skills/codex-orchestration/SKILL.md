@@ -195,9 +195,10 @@ of the stack.
    include the phase-plan document as `sprint_doc`, and
    that plan document is the authoritative scope source for plan QA.
 4. `quality-mgr` treats `review_mode: plan` as docs-only review and launches:
-   - `plan-scope-reviewer` (every plan round in full; its shape numbers and
-     its proposed `hoist` rulings go in each report, see `quality-mgr.md`
-     "Hoist Rulings")
+   - `plan-scope-reviewer` in full on plan QA-1 (its shape numbers and its
+     proposed `hoist` rulings go in that report, see `quality-mgr.md`
+     "Hoist Rulings"); on QA-2 and later, dispatch it only for its carried
+     findings, locked to each finding's original acceptance criterion
    - `req-qa`
    - `arch-qa`
    - `ruthless-boundary-qa`
