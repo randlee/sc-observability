@@ -7,11 +7,11 @@ and other non-fix authorizations from their receipts outside JEV.
 
 ## Prepare deciding evidence
 
-Prepare one finding per request with three independent questions: whether the
-fix is present and effective, whether the fix introduces a serious issue, and
-its quality against the original scoped purpose. Use anchored quality choices
-(strong, adequate, weak, broken, insufficient evidence), not a numeric rating.
-Confidence is neither accuracy nor fix quality.
+Prepare one finding per request with atomic factual questions, one deciding
+behavior per question. Map every original acceptance obligation to a presence
+question. Ask separate questions about concrete serious issues in the affected
+fix; quality ranks are advisory, with anchored choices rather than a numeric
+score. Confidence is neither accuracy nor fix quality.
 
 Include the original defect and remedy, explicit acceptance predicates, fix receipt and current deciding functions, callers,
 and relevant tests from the pinned commit. Preserve repository, exact paths,
@@ -103,8 +103,38 @@ A manifest supplies `finding_id`, `phase`, `integration_sha`, `finding_text`,
 Use `--attempt-role context_repair` under the same run ID for improved packets.
 The default chosen-answer probability floor of 0.8 routes low-certainty answers
 to investigation; it is not a calibrated accuracy claim. `screened_present`
-requires whole-finding coverage and consistent answers. The script's summary
+describes presence screening only, not an all-clear. Check the separate
+issue/quality dispositions and `investigation_required` before accepting a row. The script's summary
 counts evaluation attempts, not unique verified findings; reconcile the ledger
 separately. This runner uses POSIX file locking and the repository's existing
 `scripts/jev_client.py`; pass global `--client` to select its absolute path
 when invoking from another directory.
+
+## Atomic question mapping (v2)
+
+Supply `questions` and matching `question_specs` to use v2. Each factual question
+has `yes`, `no`, and `insufficient` choices. Each spec identifies its `category`
+(`presence`, `issue`, or `quality`); factual specs declare `expected` (`yes` or
+`no`) from the acceptance obligation before evaluation. Presence specs list
+`obligation_ids`. Every original obligation needs a presence question for
+whole-finding support. Do not choose polarity after seeing a model answer.
+
+For example, for the obligation “rejected input leaves persisted data unchanged,”
+ask “Does the deciding path write persisted data before rejecting the input?”
+with this mapping:
+
+```json
+{"writes_before_reject": {"category": "presence", "expected": "no", "obligation_ids": ["o1"]}}
+```
+
+A negative answer can establish the fix. Ask about required behavior, not obsolete
+wording or a removed symbol. In particular, missing the literal word “reopen”
+does not establish missing conflict-resolution responsibility when the current
+assignment already directs the assignee to resolve the conflict.
+
+Quality specs list `attention_choices` such as `weak` and `broken`. Inspect
+`presence_disposition`, `issue_disposition`, `quality_disposition`, and
+`investigation_required` separately. Uncertain issue or quality answers require
+investigation even when presence is supported. Omitted categories are
+`not_evaluated`, never passed. `covered_obligation_ids` records addressed IDs,
+not successful verification. No runner output creates or closes findings.

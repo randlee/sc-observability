@@ -65,6 +65,31 @@ def safe_path(path):
   raise ValueError(f'expected exact repository-relative path: {path!r}')
  return path
 
+def validate_question_specs(questions,specs,coverage,predicates):
+ """Validate explicit v2 mapping; polarity is author-declared, never inferred."""
+ if not isinstance(specs,dict) or not specs or set(specs)!=set(questions):
+  raise ValueError('question_specs must map every question ID exactly once')
+ obligation_ids={p['id'] for p in predicates}
+ if set(coverage['obligation_ids'])!=obligation_ids:raise ValueError('predicate and coverage IDs differ')
+ covered=set()
+ for qid,spec in specs.items():
+  category=spec.get('category');ids=spec.get('obligation_ids',[])
+  if category not in ['presence','issue','quality']:raise ValueError('invalid question category')
+  if not isinstance(ids,list) or not set(ids)<=obligation_ids:raise ValueError('question refers to unknown obligation')
+  options=set(questions[qid]['criteria'])
+  if category in ['presence','issue']:
+   if options!={'yes','no','insufficient'} or spec.get('expected') not in ['yes','no']:
+    raise ValueError('factual question requires yes/no/insufficient and explicit expected polarity')
+  if category=='presence':
+   if not ids:raise ValueError('presence question must identify an original obligation')
+   covered.update(ids)
+  if category=='quality' and not set(spec.get('attention_choices',[]))<=options:
+   raise ValueError('quality attention choice is not an answer option')
+ if coverage['scope']=='whole_finding' and covered!=obligation_ids:
+  raise ValueError('whole_finding requires a presence question for every original obligation')
+ return covered
+
+
 def prepare(manifest,repo:Path,client):
  """Materialize reviewer-selected exact evidence. No fuzzy lookup or truncation."""
  for name in ['finding_id','phase','integration_sha','finding_text','acceptance_predicates','coverage','source_selections']:
@@ -103,9 +128,14 @@ def prepare(manifest,repo:Path,client):
   if not paths:raise ValueError('diff requires explicit paths')
   diffs.append({'commit':commit,'paths':paths,'text':git(repo,'show','--format=fuller',commit,'--',*paths).stdout})
  questions=manifest.get('questions',QUESTIONS)
- if set(questions)!=set(QUESTIONS):raise ValueError('exactly three question IDs required')
+ specs=manifest.get('question_specs')
+ if specs is None:
+  if set(questions)!=set(QUESTIONS):raise ValueError('v1 requires exactly three question IDs')
+ else:validate_question_specs(questions,specs,coverage,predicates)
  # Overrides are factual, symmetric questions authored from finding predicates; no model verdict is accepted as source evidence.
  state={'schema_version':SCHEMA_VERSION,'prompt_version':manifest.get('prompt_version',PROMPT_VERSION),'phase':manifest['phase'],'finding_id':manifest['finding_id'],'current_head':head,'repository':manifest.get('repository'),'pr_url':manifest.get('pr_url'),'claimed_fix_sha':fix,'finding':manifest['finding_text'],'acceptance_predicates':predicates,'coverage':coverage,'current_evidence':evidence,'searches':searches,'historical_diffs':diffs,'evaluation_kind':'finding','context_revision':manifest.get('context_revision',1)}
+ if specs is not None:
+  state['schema_version']=2;state['prompt_version']=manifest.get('prompt_version','post-mortem-jev-v2');state['question_specs']=specs
  request={'model':client.MODEL,'state':state,'questions':questions}
  client.validate_request(request) # Oversized evidence is an explicit failure, NEVER truncate.
  return request
@@ -123,6 +153,33 @@ def route(response,coverage,minimum_probability=0.8):
  if any(x['probabilities'].get(x['choice'],0)<minimum_probability for x in a.values()):return 'needs_context'
  if p=='fully_present' and s=='no_serious_issue_seen' and q in ['strong','adequate']:return 'screened_present'
  return 'needs_context'
+
+def aggregate_atomic(response,coverage,specs,predicates,minimum_probability=0.8):
+ """Keep current-fix support separate from issue/quality advice. No closures."""
+ answers=response['answers'];all_ids={p['id'] for p in predicates};covered=set()
+ presence=[];issue=[];quality=[];low=[]
+ for qid,spec in specs.items():
+  answer=answers[qid];choice=answer['choice'];prob=answer['probabilities'].get(choice,0)
+  item={'question_id':qid,'choice':choice,'chosen_probability':prob,'obligation_ids':spec.get('obligation_ids',[])}
+  cat=spec['category']
+  if cat=='presence':
+   covered.update(item['obligation_ids']);item['matches_expected']=choice==spec['expected'];presence.append(item)
+  elif cat=='issue':
+   item['matches_expected']=choice==spec['expected'];issue.append(item)
+  else:
+   item['attention']=choice in spec.get('attention_choices',[]);quality.append(item)
+  if prob<minimum_probability or choice in ['insufficient','insufficient_evidence']:low.append(qid)
+ contradicted=any(x['choice']!='insufficient' and not x['matches_expected'] and x['chosen_probability']>=minimum_probability for x in presence)
+ complete=(coverage.get('scope')=='whole_finding' and not coverage.get('limitations') and covered==all_ids and bool(presence))
+ supported=complete and all(x['matches_expected'] and x['chosen_probability']>=minimum_probability for x in presence)
+ presence_result='contradicted' if contradicted else 'supported' if supported else 'needs_context'
+ issue_flags=[x['question_id'] for x in issue if x['choice']!='insufficient' and not x['matches_expected']]
+ issue_result='flagged' if issue_flags else 'not_evaluated' if not issue else 'needs_context' if any(x['question_id'] in low for x in issue) else 'none_seen'
+ quality_flags=[x['question_id'] for x in quality if x['attention']]
+ # Low confidence in an ordinal quality rank does not erase factual presence.
+ disposition='inspect_candidate' if presence_result=='contradicted' or issue_flags or quality_flags else 'screened_present' if presence_result=='supported' else 'needs_context'
+ return {'investigation_required':bool(disposition!='screened_present' or low), 'quality_disposition':('not_evaluated' if not quality else 'flagged' if quality_flags else 'needs_context' if any(x['question_id'] in low for x in quality) else 'advisory_recorded'), 'screening_disposition':disposition,'presence_disposition':presence_result,'issue_disposition':issue_result,'quality_answers':quality,'advisory_question_ids':issue_flags+quality_flags,'uncertain_question_ids':low,'covered_obligation_ids':sorted(covered),'uncovered_obligation_ids':sorted(all_ids-covered)}
+
 
 def append_record(path:Path,row):
  path.parent.mkdir(parents=True,exist_ok=True)
@@ -156,10 +213,16 @@ def evaluate_one(path,client,output_dir,phase,run_id,attempt_role,minimum_probab
   if s.get('claimed_fix_sha') and not SHA_RE.fullmatch(s['claimed_fix_sha']):raise ValueError('fix SHA must be full 40 hex')
   coverage=s['coverage']
   if coverage.get('scope') not in ['whole_finding','subcheck'] or not isinstance(coverage.get('limitations'),list):raise ValueError('explicit source coverage required')
-  if set(request['questions'])!=set(QUESTIONS):raise ValueError('exactly three question IDs required')
+  specs=s.get('question_specs')
+  if specs is None:
+   if set(request['questions'])!=set(QUESTIONS):raise ValueError('v1 requires exactly three question IDs')
+  else:validate_question_specs(request['questions'],specs,coverage,s['acceptance_predicates'])
   row.update(finding_id=s['finding_id'],evaluation_kind='finding',repository=s.get('repository'),pr_url=s.get('pr_url'),integration_sha=s['current_head'],fix_sha=s.get('claimed_fix_sha'),model=request['model'],prompt_version=s['prompt_version'],context_revision=s.get('context_revision',1),coverage=coverage,prompt_sha256=digest(encoded(request['questions'])),evidence_sha256=digest(encoded(s['current_evidence'])),request_bytes=len(client.validate_request(request)))
   row['response']=client.evaluate(request)
-  row['screening_disposition']=route(row['response'],coverage,minimum_probability)
+  if specs is None:row['screening_disposition']=route(row['response'],coverage,minimum_probability)
+  else:
+   row['schema_version']=2;row['question_specs']=specs
+   row.update(aggregate_atomic(row['response'],coverage,specs,s['acceptance_predicates'],minimum_probability))
  except Exception as ex:
   row['error']={'type':type(ex).__name__,'code':getattr(ex,'code',None),'message':str(ex)}
   row['screening_disposition']='evaluation_error'
