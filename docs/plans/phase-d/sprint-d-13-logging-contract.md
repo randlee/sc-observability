@@ -291,7 +291,7 @@ the test to that production symbol; it must not leave a parallel verifier.
 and its other documented error variants. `obs-d-2` owns the attachment handoff and therefore
 deletes or rebinds `FixtureBridgeEventPolicy`, `FixtureBridgeEventDecision`,
 `FixturePolicyRejection`, `FixtureAttachmentOptions`, `FixtureSlotState`,
-`DetachError`, `FixtureBridgeSlot`, `FixtureLogAttachment`, `FixtureAttachmentState`,
+`FixtureDetachError`, `FixtureBridgeSlot`, `FixtureLogAttachment`, `FixtureAttachmentState`,
 `FixtureLogControl`, and `FixtureDenyPolicy`. `obs-d-3` owns the registration
 handoff and therefore deletes or rebinds `FixtureSinkContract`,
 `FixtureHarnessError`, and `FixtureSinkRegistrationError`. Its local
