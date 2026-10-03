@@ -137,7 +137,7 @@ def main() -> int:
         return 2
     output = _output_path(sys.argv[1] if len(sys.argv) > 1 else "build/otel-desktop-viewer")
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="sc-obs-d9-viewer-") as temp:
+    with tempfile.TemporaryDirectory(prefix="sc-obs-d9-viewer-", dir=output.parent) as temp:
         archive_path = Path(temp) / f"release.{entry['archive']}"
         digest = _download_archive(entry["artifact_url"], archive_path, entry["artifact_sha256"])
         staged = Path(temp) / entry["binary_name"]

@@ -147,6 +147,33 @@ class PinnedReleaseDownloadTests(unittest.TestCase):
                 downloader._output_path(str(link))
             self.assertEqual(target.read_bytes(), b"keep")
 
+    def test_main_stages_release_in_output_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            parent = Path(temp) / "destination"
+            output = parent / "viewer"
+            staged_paths: list[Path] = []
+
+            def download(_url: str, archive_path: Path, _digest: str) -> str:
+                staged_paths.append(archive_path)
+                archive_path.write_bytes(b"archive")
+                return "a" * 64
+
+            def extract(_archive_path: Path, binary_path: Path, _entry: dict[str, str]) -> str:
+                staged_paths.append(binary_path)
+                binary_path.write_bytes(b"verified viewer")
+                return "b" * 64
+
+            with mock.patch.object(downloader, "_host_platform", return_value="linux_amd64"), \
+                    mock.patch.object(downloader, "_download_archive", side_effect=download), \
+                    mock.patch.object(downloader, "_extract_binary", side_effect=extract), \
+                    mock.patch.object(downloader.sys, "argv", ["download_pinned_release.py", str(output)]):
+                self.assertEqual(downloader.main(), 0)
+
+            self.assertEqual(output.read_bytes(), b"verified viewer")
+            self.assertEqual(len(staged_paths), 2)
+            for path in staged_paths:
+                self.assertEqual(path.parent.parent, parent.resolve())
+
 
 if __name__ == "__main__":
     unittest.main()
