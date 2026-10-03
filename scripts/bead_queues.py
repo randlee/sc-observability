@@ -5,13 +5,14 @@ Shows, per lifecycle hand-off, which beads are ready and who should act:
 dev complete -> sanity, sanity PASS -> QA, sanity FAIL -> dev fix,
 QA FAIL -> fix, plus in-flight tasks, refusals and beads waiting on blockers.
 
-Usage: scripts/bead_queues.py [--phase d] [--days 14] [--json] [--all]
+Usage: scripts/bead_queues.py [--phase d] [--days 14] [--json] [--all] [--as team-lead] [--team sc-obs]
 """
 from __future__ import annotations
 
 import argparse
 import bisect
 import json
+import os
 import re
 import subprocess
 import sys
@@ -78,7 +79,10 @@ def build(args) -> dict:
     now = datetime.now(timezone.utc)
     beads = run_json(["bd", "list", "--all", "-n", "0", "--json"])
     ready = {b["id"] for b in run_json(["bd", "ready", "-n", "0", "--json"])}
-    tasks = {t["task_id"]: t for t in run_json(["atm", "task", "list", "--all", "--json"])}
+    atm = ["atm", "task", "list", "--all", "--json", "--as", args.as_actor]
+    if args.team:
+        atm += ["--team", args.team]
+    tasks = {t["task_id"]: t for t in run_json(atm)}
     by_id = {b["id"]: b for b in beads}
 
     phase_label = f"phase-{args.phase}" if args.phase else None
@@ -255,6 +259,10 @@ def main() -> None:
                    help="look-back for closed sanity PASS without a QA bead (default 14)")
     p.add_argument("--all", action="store_true", help="also list beads waiting on blockers")
     p.add_argument("--json", action="store_true", help="print the report as JSON")
+    p.add_argument("--as", dest="as_actor", default=os.environ.get("ATM_IDENTITY") or "team-lead",
+                   help="ATM identity for the read-only task list (default $ATM_IDENTITY or team-lead)")
+    p.add_argument("--team", default=os.environ.get("ATM_TEAM"),
+                   help="ATM team (default $ATM_TEAM, else the repo .atm.toml default)")
     args = p.parse_args()
     report = build(args)
     if args.json:
