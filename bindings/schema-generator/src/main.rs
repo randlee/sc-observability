@@ -562,28 +562,9 @@ fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(bytes)
 }
 
-/// Generated JSON is canonical LF text, but Windows may check it out as CRLF
-/// when no repository attribute overrides the platform's Git configuration.
-/// Accept that checkout-only conversion without accepting any content change.
-fn matches_canonical_text(actual: &[u8], canonical: &[u8]) -> bool {
-    if actual == canonical {
-        return true;
-    }
-
-    let mut normalized = Vec::with_capacity(actual.len());
-    let mut bytes = actual.iter().copied().peekable();
-    while let Some(byte) = bytes.next() {
-        if byte == b'\r' && bytes.peek() == Some(&b'\n') {
-            continue;
-        }
-        normalized.push(byte);
-    }
-    normalized == canonical
-}
-
 fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn Error>> {
     if check {
-        if !matches_canonical_text(&std::fs::read(path)?, bytes) {
+        if std::fs::read(path)? != bytes {
             return Err(generated_drift_error(path).into());
         }
     } else {
@@ -697,21 +678,23 @@ mod tests {
     }
 
     #[test]
-    fn canonical_check_accepts_crlf_checkout_conversion_but_not_content_drift() {
+    fn canonical_check_rejects_crlf_checkout_conversion_without_rewriting_file() {
         let canonical = b"{\n  \"schema_version\": 1\n}\n";
-        assert!(matches_canonical_text(canonical, canonical));
-        assert!(matches_canonical_text(
-            b"{\r\n  \"schema_version\": 1\r\n}\r\n",
-            canonical
+        let crlf = b"{\r\n  \"schema_version\": 1\r\n}\r\n";
+        let directory = std::env::temp_dir().join(format!(
+            "sc-observability-schema-generator-canonical-check-{}",
+            std::process::id()
         ));
-        assert!(!matches_canonical_text(
-            b"{\r\n  \"schema_version\": 2\r\n}\r\n",
-            canonical
-        ));
-        assert!(!matches_canonical_text(
-            b"{\r  \"schema_version\": 1\r}\r",
-            canonical
-        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("schema.json");
+        std::fs::write(&path, crlf).unwrap();
+
+        let error = write_or_check(&path, canonical, true).expect_err("CRLF must be drift");
+        assert!(error.to_string().contains("generated drift"));
+        assert_eq!(std::fs::read(&path).unwrap(), crlf);
+
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_dir(&directory).unwrap();
     }
 
     #[test]
