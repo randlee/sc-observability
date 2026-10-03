@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from datetime import datetime, timezone
 
 REFUSAL_RE = re.compile(r"^(?P<target>.+)-wf-(?P<code>[A-Z_]+)$")
@@ -42,6 +43,19 @@ def run_json(cmd: list[str]):
     if out.returncode != 0:
         sys.exit(f"{' '.join(cmd)} failed: {out.stderr.strip()}")
     return json.loads(out.stdout or "[]")
+
+
+def default_team() -> str | None:
+    """$ATM_TEAM, else [atm] default_team from the repo's .atm.toml."""
+    if os.environ.get("ATM_TEAM"):
+        return os.environ["ATM_TEAM"]
+    root = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                          capture_output=True, text=True).stdout.strip()
+    try:
+        with open(os.path.join(root or ".", ".atm.toml"), "rb") as f:
+            return tomllib.load(f).get("atm", {}).get("default_team")
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
 
 
 def stage(bead: dict) -> str:
@@ -261,8 +275,8 @@ def main() -> None:
     p.add_argument("--json", action="store_true", help="print the report as JSON")
     p.add_argument("--as", dest="as_actor", default=os.environ.get("ATM_IDENTITY") or "team-lead",
                    help="ATM identity for the read-only task list (default $ATM_IDENTITY or team-lead)")
-    p.add_argument("--team", default=os.environ.get("ATM_TEAM"),
-                   help="ATM team (default $ATM_TEAM, else the repo .atm.toml default)")
+    p.add_argument("--team", default=default_team(),
+                   help="ATM team (default $ATM_TEAM, else [atm] default_team in the repo .atm.toml)")
     args = p.parse_args()
     report = build(args)
     if args.json:
