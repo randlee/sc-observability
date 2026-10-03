@@ -1,5 +1,6 @@
 #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 use std::path::PathBuf;
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 use std::time::Duration;
 
 #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
@@ -185,40 +186,44 @@ fn validated_telemetry_bounds_with_delays(
     Ok(bounds)
 }
 
-/// A duration checked as strictly positive by ordered config validation.
+/// A duration stored after ordered config validation proves it is strictly positive.
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PositiveDuration(Duration);
 
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 impl PositiveDuration {
-    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn get(self) -> Duration {
         self.0
     }
 }
 
 /// Checked maximum number of simultaneously admitted records.
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct QueueCapacity(usize);
 
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 impl QueueCapacity {
-    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn get(self) -> usize {
         self.0
     }
 }
 
 /// Checked aggregate serialized-byte budget for admitted records.
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct QueueByteCapacity(usize);
 
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 impl QueueByteCapacity {
-    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn get(self) -> usize {
         self.0
     }
 }
 
 /// A percentage validated within zero through one hundred.
+#[cfg(any(test, feature = "sync-http"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BoundedPercent(u8);
 
@@ -266,9 +271,18 @@ pub(crate) struct ValidatedTransportBounds {
     backend: BackendTransportBounds,
 }
 
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
+struct StoredTransportValues {
+    queue_capacity: QueueCapacity,
+    queue_byte_capacity: QueueByteCapacity,
+    request_timeout: PositiveDuration,
+    lifecycle: LifecycleBounds,
+}
+
 /// Connection values admitted by the same validation path as transport
 /// bounds. Backend constructors consume this view instead of consulting
 /// ambient `OTEL_*` configuration.
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 #[derive(Debug, Clone)]
 pub(crate) struct ValidatedBackendConnection {
     #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
@@ -279,6 +293,7 @@ pub(crate) struct ValidatedBackendConnection {
     ca_file: Option<PathBuf>,
 }
 
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 impl ValidatedBackendConnection {
     #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) fn endpoint(&self) -> &OtlpEndpoint {
@@ -326,10 +341,14 @@ impl ValidatedTransportBounds {
 pub(crate) enum BackendTransportBounds {
     Disabled,
     Sdk,
+    #[cfg(any(test, feature = "sync-http"))]
     SyncHttp(RetryPolicy),
+    #[cfg(not(any(test, feature = "sync-http")))]
+    SyncHttp,
 }
 
 /// Checked synchronous HTTP retry policy produced only by ordered config validation.
+#[cfg(any(test, feature = "sync-http"))]
 #[derive(Debug)]
 pub(crate) struct RetryPolicy {
     max_retries: u32,
@@ -362,40 +381,17 @@ impl RetryPolicy {
     }
 }
 
-#[cfg(not(any(test, feature = "sync-http")))]
-impl RetryPolicy {
-    /// The unavailable synchronous transport still validates every supplied
-    /// retry value before the factory reports the missing feature.
-    pub(crate) fn discard_after_validation(&self) {
-        let Self {
-            max_retries,
-            initial_backoff,
-            max_backoff,
-            sequence_timeout,
-            retry_after_cap,
-            jitter,
-        } = self;
-        let _ = (
-            max_retries,
-            initial_backoff,
-            max_backoff,
-            sequence_timeout,
-            retry_after_cap,
-            jitter,
-        );
-    }
-}
-
 /// Internal retry delay proven either immediate by released compatibility
 /// validation or strictly positive by canonical validation.
+#[cfg(any(test, feature = "sync-http"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RetryDelay {
     Immediate,
     Positive(PositiveDuration),
 }
 
+#[cfg(any(test, feature = "sync-http"))]
 impl RetryDelay {
-    #[cfg(any(test, feature = "sync-http"))]
     pub(crate) const fn get(self) -> Duration {
         match self {
             Self::Immediate => Duration::ZERO,
@@ -450,34 +446,28 @@ fn validated_transport_bounds_with_delays(
 
     // The ordering below is normative: do not aggregate failures or move
     // checks without updating the D.21 contract tests.
-    let request_timeout = checked_duration(&timeout)?;
-    let lifecycle_flush_timeout = checked_duration(&flush)?;
-    let lifecycle_shutdown_timeout = checked_duration(&shutdown)?;
+    validate_positive_duration(&timeout)?;
+    validate_positive_duration(&flush)?;
+    validate_positive_duration(&shutdown)?;
     if shutdown.value < timeout.value {
         return Err(invalid_bound(&timeout, &shutdown));
     }
     if flush.value < timeout.value {
         return Err(invalid_bound(&timeout, &flush));
     }
-    let sync_http_retry = if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
-        Some(resolve_retry(
-            config.sync_http_retry.as_ref(),
-            &timeout,
-            immediate,
-        )?)
-    } else {
-        None
-    };
-    let (queue_capacity, queue_byte_capacity) =
-        checked_queue_bounds(&queue_capacity, &queue_byte_capacity)?;
+    #[cfg(any(test, feature = "sync-http"))]
+    let sync_http_retry = validated_sync_http_retry(config, &timeout, immediate)?;
+    #[cfg(not(any(test, feature = "sync-http")))]
+    validate_sync_http_retry(config, &timeout, immediate)?;
+    validate_queue_bounds(&queue_capacity, &queue_byte_capacity)?;
 
-    #[cfg(not(any(test, feature = "sync-http", feature = "otlp-sdk")))]
-    let _ = (
-        request_timeout.0,
-        lifecycle_flush_timeout.0,
-        lifecycle_shutdown_timeout.0,
-        queue_capacity.0,
-        queue_byte_capacity.0,
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
+    let stored = store_transport_values(
+        &timeout,
+        &flush,
+        &shutdown,
+        &queue_capacity,
+        &queue_byte_capacity,
     );
 
     let backend = if config.enabled {
@@ -491,9 +481,19 @@ fn validated_transport_bounds_with_delays(
                 }
                 BackendTransportBounds::Sdk
             }
-            ExporterBackend::SyncHttp => BackendTransportBounds::SyncHttp(
-                sync_http_retry.expect("synchronous HTTP backend resolves its retry policy"),
-            ),
+            ExporterBackend::SyncHttp => {
+                #[cfg(any(test, feature = "sync-http"))]
+                {
+                    BackendTransportBounds::SyncHttp(
+                        sync_http_retry
+                            .expect("synchronous HTTP backend resolves its retry policy"),
+                    )
+                }
+                #[cfg(not(any(test, feature = "sync-http")))]
+                {
+                    BackendTransportBounds::SyncHttp
+                }
+            }
         }
     } else {
         if let Some(field) = sync_http_retry_field {
@@ -509,26 +509,45 @@ fn validated_transport_bounds_with_delays(
     Ok(ValidatedTransportBounds {
         protocol: config.protocol,
         #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
-        queue_capacity,
+        queue_capacity: stored.queue_capacity,
         #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
-        queue_byte_capacity,
+        queue_byte_capacity: stored.queue_byte_capacity,
         #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
-        request_timeout,
+        request_timeout: stored.request_timeout,
         #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
         lifecycle: LifecycleBounds {
             #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
-            flush: lifecycle_flush_timeout,
+            flush: stored.lifecycle.flush,
             #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
-            shutdown: lifecycle_shutdown_timeout,
+            shutdown: stored.lifecycle.shutdown,
         },
         backend,
     })
 }
 
-fn checked_queue_bounds(
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
+fn store_transport_values(
+    timeout: &ResolvedField<u64>,
+    flush: &ResolvedField<u64>,
+    shutdown: &ResolvedField<u64>,
     queue_capacity: &ResolvedField<usize>,
     queue_byte_capacity: &ResolvedField<usize>,
-) -> Result<(QueueCapacity, QueueByteCapacity), ConfigFailure> {
+) -> StoredTransportValues {
+    StoredTransportValues {
+        queue_capacity: QueueCapacity(queue_capacity.value),
+        queue_byte_capacity: QueueByteCapacity(queue_byte_capacity.value),
+        request_timeout: PositiveDuration(Duration::from_millis(timeout.value)),
+        lifecycle: LifecycleBounds {
+            flush: PositiveDuration(Duration::from_millis(flush.value)),
+            shutdown: PositiveDuration(Duration::from_millis(shutdown.value)),
+        },
+    }
+}
+
+fn validate_queue_bounds(
+    queue_capacity: &ResolvedField<usize>,
+    queue_byte_capacity: &ResolvedField<usize>,
+) -> Result<(), ConfigFailure> {
     if !(1..=constants::MAX_OTLP_QUEUE_CAPACITY).contains(&queue_capacity.value) {
         return Err(config_failure(
             ConfigFailureKind::InvalidQueueCapacity,
@@ -552,10 +571,7 @@ fn checked_queue_bounds(
             queue_byte_capacity.origin,
         ));
     }
-    Ok((
-        QueueCapacity(queue_capacity.value),
-        QueueByteCapacity(queue_byte_capacity.value),
-    ))
+    Ok(())
 }
 
 /// Returns the connection values only after the transport's ordinary ordered
@@ -570,6 +586,7 @@ pub(crate) fn validated_backend_connection(
 }
 
 /// Consume checked bounds without revalidating their compatibility-only retry delays.
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 pub(crate) fn prepared_backend_connection(
     config: &OtelConfig,
     _bounds: &ValidatedTransportBounds,
@@ -662,7 +679,7 @@ fn resolve_usize(
     }
 }
 
-fn checked_duration(value: &ResolvedField<u64>) -> Result<PositiveDuration, ConfigFailure> {
+fn validate_positive_duration(value: &ResolvedField<u64>) -> Result<(), ConfigFailure> {
     if value.value == 0 {
         return Err(config_failure(
             ConfigFailureKind::ZeroDuration,
@@ -672,14 +689,45 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<PositiveDuration, Conf
             value.origin,
         ));
     }
-    Ok(PositiveDuration(Duration::from_millis(value.value)))
+    Ok(())
 }
 
-fn resolve_retry(
+#[cfg(any(test, feature = "sync-http"))]
+fn validated_sync_http_retry(
+    config: &OtelConfig,
+    timeout: &ResolvedField<u64>,
+    immediate: bool,
+) -> Result<Option<RetryPolicy>, ConfigFailure> {
+    if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
+        resolve_retry(config.sync_http_retry.as_ref(), timeout, immediate).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
+#[cfg(not(any(test, feature = "sync-http")))]
+fn validate_sync_http_retry(
+    config: &OtelConfig,
+    timeout: &ResolvedField<u64>,
+    immediate: bool,
+) -> Result<(), ConfigFailure> {
+    if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
+        validate_retry(
+            config.sync_http_retry.as_ref(),
+            timeout,
+            immediate,
+            |_, _, _, _, _, _| (),
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_retry<T>(
     raw: Option<&SyncHttpRetryPolicy>,
     timeout: &ResolvedField<u64>,
     immediate: bool,
-) -> Result<RetryPolicy, ConfigFailure> {
+    build: impl FnOnce(u32, u64, u64, u64, u64, u8) -> T,
+) -> Result<T, ConfigFailure> {
     let raw = raw.cloned().unwrap_or_default();
     let initial = resolve_duration(
         OtlpConfigField::InitialBackoff,
@@ -712,17 +760,17 @@ fn resolve_retry(
             ValueOrigin::Default
         },
     };
-    let delay = |value: &ResolvedField<u64>| {
+    let validate_delay = |value: &ResolvedField<u64>| {
         if immediate && value.value == 0 {
-            Ok(RetryDelay::Immediate)
+            Ok(())
         } else {
-            checked_duration(value).map(RetryDelay::positive)
+            validate_positive_duration(value)
         }
     };
-    let initial_backoff = delay(&initial)?;
-    let max_backoff = delay(&maximum)?;
-    let sequence_timeout = checked_duration(&sequence)?;
-    let retry_after_cap = checked_duration(&after_cap)?;
+    validate_delay(&initial)?;
+    validate_delay(&maximum)?;
+    validate_positive_duration(&sequence)?;
+    validate_positive_duration(&after_cap)?;
     if maximum.value < initial.value {
         return Err(invalid_bound(&initial, &maximum));
     }
@@ -744,16 +792,45 @@ fn resolve_retry(
             jitter.origin,
         ));
     }
-    Ok(RetryPolicy {
-        max_retries: raw
-            .max_retries
+    Ok(build(
+        raw.max_retries
             .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
-        initial_backoff,
-        max_backoff,
-        sequence_timeout,
-        retry_after_cap,
-        jitter: BoundedPercent(jitter.value),
-    })
+        initial.value,
+        maximum.value,
+        sequence.value,
+        after_cap.value,
+        jitter.value,
+    ))
+}
+
+#[cfg(any(test, feature = "sync-http"))]
+fn resolve_retry(
+    raw: Option<&SyncHttpRetryPolicy>,
+    timeout: &ResolvedField<u64>,
+    immediate: bool,
+) -> Result<RetryPolicy, ConfigFailure> {
+    validate_retry(
+        raw,
+        timeout,
+        immediate,
+        |max_retries, initial_backoff, max_backoff, sequence_timeout, retry_after_cap, jitter| {
+            let delay = |value| {
+                if immediate && value == 0 {
+                    RetryDelay::Immediate
+                } else {
+                    RetryDelay::positive(PositiveDuration(Duration::from_millis(value)))
+                }
+            };
+            RetryPolicy {
+                max_retries,
+                initial_backoff: delay(initial_backoff),
+                max_backoff: delay(max_backoff),
+                sequence_timeout: PositiveDuration(Duration::from_millis(sequence_timeout)),
+                retry_after_cap: PositiveDuration(Duration::from_millis(retry_after_cap)),
+                jitter: BoundedPercent(jitter),
+            }
+        },
+    )
 }
 
 #[derive(Clone, Copy)]

@@ -59,13 +59,6 @@ impl AdmissionCredits {
         budget.releases != generation
     }
 
-    #[cfg_attr(
-        not(any(test, feature = "durable-store")),
-        expect(
-            dead_code,
-            reason = "no-default-features has no AdmissionCredits constructor caller"
-        )
-    )]
     pub(crate) fn new(bounds: &ValidatedTransportBounds) -> Self {
         Self(Arc::new(SharedBudget {
             state: Mutex::new(Budget {
@@ -102,13 +95,6 @@ impl AdmissionCredits {
         self.reserve_inner(bytes, Some(signal))
     }
 
-    #[cfg_attr(
-        not(any(test, feature = "durable-store")),
-        expect(
-            dead_code,
-            reason = "no-default-features has no AdmissionCredits reservation caller"
-        )
-    )]
     fn reserve_inner(
         &self,
         serialized_bytes: usize,

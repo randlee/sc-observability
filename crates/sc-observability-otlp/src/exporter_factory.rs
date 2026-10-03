@@ -12,8 +12,10 @@ use serde_json::Value;
 
 use crate::config::{
     self, BackendTransportBounds, TelemetryConfig as RuntimeTelemetryConfig,
-    ValidatedBackendConnection, ValidatedTransportBounds, prepared_backend_connection,
+    ValidatedTransportBounds,
 };
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
+use crate::config::{ValidatedBackendConnection, prepared_backend_connection};
 use crate::contracts::{
     self, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, LogRecord,
     MetricExporter, TraceExporter,
@@ -99,7 +101,24 @@ pub(crate) fn exporter_factory(
     exporter_factory_prepared(config, bounds)
 }
 
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
 pub(crate) fn exporter_factory_prepared(
+    config: &RuntimeTelemetryConfig,
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
+    exporter_factory_with_enabled_backend(config, bounds)
+}
+
+#[cfg(not(any(feature = "otlp-sdk", feature = "sync-http")))]
+pub(crate) fn exporter_factory_prepared(
+    _config: &RuntimeTelemetryConfig,
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
+    exporter_factory_without_enabled_backend(bounds)
+}
+
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
+fn exporter_factory_with_enabled_backend(
     config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
 ) -> Result<ExporterSet, ConfigFailure> {
@@ -113,26 +132,52 @@ pub(crate) fn exporter_factory_prepared(
             }),
         }),
         BackendTransportBounds::Sdk => {
-            let connection = prepared_backend_connection(&config.transport, bounds)?;
-            sdk_exporter_factory(bounds, &connection)
+            #[cfg(feature = "otlp-sdk")]
+            {
+                let connection = prepared_backend_connection(&config.transport, bounds)?;
+                sdk_exporter_factory(bounds, &connection)
+            }
+            #[cfg(not(feature = "otlp-sdk"))]
+            sdk_exporter_factory(bounds)
         }
-        BackendTransportBounds::SyncHttp(retry_policy) => {
-            #[cfg(not(any(test, feature = "sync-http")))]
-            retry_policy.discard_after_validation();
-            let _ = retry_policy;
+        #[cfg(all(not(feature = "sync-http"), any(test, feature = "sync-http")))]
+        BackendTransportBounds::SyncHttp(_) => sync_http_exporter_factory(bounds),
+        #[cfg(all(not(feature = "sync-http"), not(any(test, feature = "sync-http"))))]
+        BackendTransportBounds::SyncHttp => sync_http_exporter_factory(bounds),
+        #[cfg(feature = "sync-http")]
+        BackendTransportBounds::SyncHttp(_) => {
             let connection = prepared_backend_connection(&config.transport, bounds)?;
             sync_http_exporter_factory(bounds, &connection)
         }
     }
 }
 
+#[cfg(not(any(feature = "otlp-sdk", feature = "sync-http")))]
+fn exporter_factory_without_enabled_backend(
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
+    match bounds.backend() {
+        BackendTransportBounds::Disabled => Ok(ExporterSet {
+            logs: Arc::new(DisabledLogExporter),
+            traces: Arc::new(DisabledTraceExporter),
+            metrics: Arc::new(DisabledMetricExporter),
+            lifecycle: Arc::new(DisabledLifecycle {
+                shutdown: AtomicBool::new(false),
+            }),
+        }),
+        BackendTransportBounds::Sdk => sdk_exporter_factory(bounds),
+        #[cfg(test)]
+        BackendTransportBounds::SyncHttp(_) => sync_http_exporter_factory(bounds),
+        #[cfg(not(test))]
+        BackendTransportBounds::SyncHttp => sync_http_exporter_factory(bounds),
+    }
+}
+
+#[cfg(feature = "otlp-sdk")]
 fn sdk_exporter_factory(
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
-    // The feature-disabled branch preserves the public unsupported-backend
-    // result, while enabled builds consume this validated connection below.
-    let _ = connection;
     if !matches!(
         bounds.protocol(),
         config::OtlpProtocol::Grpc | config::OtlpProtocol::HttpBinary
@@ -144,38 +189,47 @@ fn sdk_exporter_factory(
         ));
     }
 
-    #[cfg(feature = "otlp-sdk")]
-    {
-        if tokio::runtime::Handle::try_current().is_err() {
-            return Err(ConfigFailure::TokioRuntimeRequired {
-                context: Box::new(
-                    ErrorContext::new(
-                        sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED,
-                        "the OpenTelemetry SDK backend must be constructed inside a Tokio runtime",
-                        Remediation::recoverable(
-                            "construct telemetry from the host Tokio runtime",
-                            ["enable the otlp-sdk feature", "enter a Tokio runtime first"],
-                        ),
-                    )
-                    .detail(
-                        "backend",
-                        Value::String(
-                            config::ExporterBackend::OpenTelemetrySdk
-                                .stable_name()
-                                .to_owned(),
-                        ),
-                    )
-                    .detail("feature", Value::String("otlp-sdk".to_owned()))
-                    .detail("runtime", Value::String("caller-tokio".to_owned())),
-                ),
-            });
-        }
-        sdk::build_exporter_set(connection, bounds)
-            .map(|adapter| adapter.exporters)
-            .map_err(transport_construction_failure)
+    if tokio::runtime::Handle::try_current().is_err() {
+        return Err(ConfigFailure::TokioRuntimeRequired {
+            context: Box::new(
+                ErrorContext::new(
+                    sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED,
+                    "the OpenTelemetry SDK backend must be constructed inside a Tokio runtime",
+                    Remediation::recoverable(
+                        "construct telemetry from the host Tokio runtime",
+                        ["enable the otlp-sdk feature", "enter a Tokio runtime first"],
+                    ),
+                )
+                .detail(
+                    "backend",
+                    Value::String(
+                        config::ExporterBackend::OpenTelemetrySdk
+                            .stable_name()
+                            .to_owned(),
+                    ),
+                )
+                .detail("feature", Value::String("otlp-sdk".to_owned()))
+                .detail("runtime", Value::String("caller-tokio".to_owned())),
+            ),
+        });
     }
+    sdk::build_exporter_set(connection, bounds)
+        .map(|adapter| adapter.exporters)
+        .map_err(transport_construction_failure)
+}
 
-    #[cfg(not(feature = "otlp-sdk"))]
+#[cfg(not(feature = "otlp-sdk"))]
+fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
+    if !matches!(
+        bounds.protocol(),
+        config::OtlpProtocol::Grpc | config::OtlpProtocol::HttpBinary
+    ) {
+        return Err(unsupported_protocol(
+            config::ExporterBackend::OpenTelemetrySdk,
+            bounds.protocol(),
+            "Grpc, HttpBinary",
+        ));
+    }
     Err(unsupported_backend(
         config::ExporterBackend::OpenTelemetrySdk,
         "otlp-sdk",
@@ -183,13 +237,11 @@ fn sdk_exporter_factory(
     ))
 }
 
+#[cfg(feature = "sync-http")]
 fn sync_http_exporter_factory(
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
-    // See `sdk_exporter_factory`: keep the disabled-feature contract without
-    // a lint suppression while using the same connection in enabled builds.
-    let _ = connection;
     if bounds.protocol() != config::OtlpProtocol::HttpJson {
         return Err(unsupported_protocol(
             config::ExporterBackend::SyncHttp,
@@ -198,12 +250,20 @@ fn sync_http_exporter_factory(
         ));
     }
 
-    #[cfg(feature = "sync-http")]
-    {
-        sync_http::build_exporter_set(connection, bounds).map_err(transport_construction_failure)
-    }
+    sync_http::build_exporter_set(connection, bounds).map_err(transport_construction_failure)
+}
 
-    #[cfg(not(feature = "sync-http"))]
+#[cfg(not(feature = "sync-http"))]
+fn sync_http_exporter_factory(
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
+    if bounds.protocol() != config::OtlpProtocol::HttpJson {
+        return Err(unsupported_protocol(
+            config::ExporterBackend::SyncHttp,
+            bounds.protocol(),
+            "HttpJson",
+        ));
+    }
     Err(unsupported_backend(
         config::ExporterBackend::SyncHttp,
         "sync-http",
