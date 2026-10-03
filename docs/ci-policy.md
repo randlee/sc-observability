@@ -60,6 +60,31 @@ Release-only sdist/wheel distribution builds remain in their existing explicit
 release/preflight workflows; this change does not turn publication jobs into
 PR jobs or alter their triggers.
 
+## Local Windows cross-checks (cargo-xwin)
+
+Bootstrap on macOS (observed with cargo-xwin 0.23.0, rustc 1.94.1, Homebrew
+LLVM 22):
+
+```sh
+cargo install --locked cargo-xwin
+rustup target add x86_64-pc-windows-msvc
+brew install llvm   # clang-cl and llvm-lib; Apple clang has no clang-cl
+```
+
+On first use cargo-xwin downloads the MSVC CRT and Windows SDK via xwin into
+`~/Library/Caches/cargo-xwin` and accepts the Microsoft licence itself; no
+environment variable is needed. It links with the toolchain's `rust-lld` as
+`lld-link`. Run, per discovered workspace (`--manifest-path`):
+
+```sh
+cargo xwin clippy --locked --workspace --all-targets --all-features --target x86_64-pc-windows-msvc -- -D warnings
+cargo xwin test --locked --workspace --all-features --target x86_64-pc-windows-msvc --no-run
+```
+
+This proves the code compiles, passes clippy and links its test binaries for
+Windows. It does not run any test; native runtime behaviour (viewer process,
+file locks, paths, DLL loading) is checked only on the Windows CI runners.
+
 ## Release preflight
 
 B.2 (`b2-staged-consumer.yml`) and B.P2 (`bp2-staged-consumer.yml`) staged
