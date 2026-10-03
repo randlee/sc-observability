@@ -1,6 +1,6 @@
 ---
 name: dev-sanity
-version: 1.0.0
+version: 1.1.0
 description: Coordinate one or both independent sanity reviewers at a pinned commit with shared lint and separate recorded results.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -23,9 +23,9 @@ The assignment's `reviewers` is `both` (default), `llm`, or `jev`. Run one
 coordinator, not separate LLM/JEV coordinators. `both` runs `sc-sanity-llm`
 and `sc-sanity-jev` independently for every deliverable. LLM controls the
 operational verdict and finding children while JEV is comparison-only.
-With one selected reviewer, that reviewer controls. Never reconcile, rewrite,
-or relabel either reviewer's conclusions; disagreement belongs in the report.
-Never create comparison finding children or dispatch QA twice.
+With one selected reviewer, that reviewer controls. Never edit a reviewer's
+reply; triage it (Execution step 4). Never create comparison finding children
+or dispatch QA twice.
 
 ## Execution
 
@@ -63,7 +63,16 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    `code`, the actual `message`, `recoverable`, `suggested_action`, and the
    `deliverable` number. Say explicitly that the reviewer could not run.
    Never substitute an LLM result for unavailable JEV (or vice versa).
-4. As soon as one reviewer family finishes, merge and log its results while
+4. Before the operational close (step 7), triage each operational finding,
+   and each deliverable where LLM and JEV disagree, against the assignment
+   its reviewer received. If the result comes from context the assignment
+   lacked (design items the deliverable names, the developer's validation
+   receipt for the pinned commit, a file it cites), re-run that deliverable
+   once with the missing context added; merge and log the re-run (steps 5-6)
+   and use it. If a finding is still wrong, record it as a checker defect
+   with evidence and create no finding child for it. Superseded replies stay
+   in the report.
+5. As soon as one reviewer family finishes, merge and log its results while
    the other continues in the background; do not wait for both before merging.
    Independently merge each reviewer's results:
 
@@ -79,7 +88,7 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    preserve the error and raw results. An invalid invocation/manifest with
    no report is a coordinator error to report, never a PASS. Do not run lint
    again to obtain the other reviewer's report.
-5. Append each reviewer's report immediately after its merge finishes, using
+6. Append each reviewer's report immediately after its merge finishes, using
    its own completed UTC timestamp (do not include time spent waiting for
    the other reviewer or task closure). The same task attempt/iteration
    applies to both. Run `sanity-run-history` with that reviewer's vars,
@@ -97,7 +106,7 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
      --bead "$checked_bead" --pr-number "$pr_number" --iteration "$iteration" \
      --output "$scratch/sanity-$task-table-vars.json" --limit 10
    ```
-6. Complete the operational reviewer's lifecycle using the assignment. Copy
+7. Complete the operational reviewer's lifecycle using the assignment. Copy
    its vars to `sanity-$task-vars.json` for the completion template and
    finding handoff. Only its FAIL creates child findings, with
    `--reviewer sc-<operational_reviewer>`; never create children from JEV's
