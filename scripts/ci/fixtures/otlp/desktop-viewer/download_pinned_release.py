@@ -76,6 +76,8 @@ def _extract_binary(archive_path: Path, output: Path, lock: dict[str, str]) -> s
 
 def _output_path(value: str) -> Path:
     requested = Path(value).expanduser()
+    if platform.system().lower() == "windows" and requested.suffix.lower() != ".exe":
+        requested = requested.with_name(requested.name + ".exe")
     if requested.is_symlink():
         raise SystemExit(f"refusing symlink output path: {requested}")
     requested.parent.mkdir(parents=True, exist_ok=True)

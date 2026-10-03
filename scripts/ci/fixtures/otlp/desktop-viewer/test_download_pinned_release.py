@@ -83,6 +83,13 @@ class PinnedReleaseDownloadTests(unittest.TestCase):
                 downloader._output_path(str(link))
             self.assertEqual(target.read_bytes(), b"keep")
 
+    def test_windows_output_path_appends_exe_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            requested = Path(temp) / "viewer"
+            with mock.patch.object(downloader.platform, "system", return_value="Windows"):
+                self.assertEqual(downloader._output_path(str(requested)),
+                                 requested.parent.resolve() / "viewer.exe")
+
 
 if __name__ == "__main__":
     unittest.main()
