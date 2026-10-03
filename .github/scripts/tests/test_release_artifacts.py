@@ -4,7 +4,14 @@ import io
 import json
 import os
 import subprocess
-from _shell import BASH, prepend_path, write_crlf_jq, write_shell_script
+from _shell import (
+    BASH,
+    prepend_path,
+    stub_first_env,
+    write_crlf_jq,
+    write_shell_script,
+    write_tool_dir_prepending_bash,
+)
 import sys
 import tarfile
 import tomllib
@@ -457,6 +464,7 @@ def run_release_gate_readiness(
     already_published_channels: str,
     mode: str = "readiness",
     release_ref: str = "HEAD",
+    bash_command: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Exercise a release-gate mode with real scripts and deterministic Git metadata."""
     scripts_dir = tmp_path / ".github" / "scripts"
@@ -493,7 +501,7 @@ def run_release_gate_readiness(
 
     return subprocess.run(
         [
-            BASH,
+            *(bash_command or [BASH]),
             str(scripts_dir / "release_gate.sh"),
             mode,
             release_ref,
@@ -504,12 +512,20 @@ def run_release_gate_readiness(
             already_published_channels,
         ],
         cwd=tmp_path,
-        env={**os.environ, "PATH": prepend_path(bin_dir)},
+        env=stub_first_env(bin_dir),
         text=True,
         capture_output=True,
         check=False,
         timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
+
+
+@pytest.fixture(params=("bash", "git-tool-dir-prepending-bash"))
+def git_stub_bash(request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory) -> list[str]:
+    """Plain bash, and a launcher that shadows git like Git for Windows' bin/bash.exe."""
+    if request.param == "bash":
+        return [BASH]
+    return write_tool_dir_prepending_bash(tmp_path_factory.mktemp("launcher"), "git")
 
 
 def release_tag_step_shell() -> str:
@@ -531,6 +547,7 @@ def run_release_tag_step(
     candidate_is_tag_ancestor: bool,
     tag_exists: bool = True,
     target: str = "production",
+    bash_command: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run tag reuse against deterministic ancestry responses from Git."""
     bin_dir = tmp_path / "bin"
@@ -574,13 +591,9 @@ def run_release_tag_step(
         .replace("'${{ steps.release_gate.outputs.release_sha }}'", "'main-sha'")
     )
     return subprocess.run(
-        [BASH, "-c", shell],
+        [*(bash_command or [BASH]), "-c", shell],
         cwd=tmp_path,
-        env={
-            **os.environ,
-            "GITHUB_OUTPUT": str(output),
-            "PATH": prepend_path(bin_dir),
-        },
+        env={**stub_first_env(bin_dir), "GITHUB_OUTPUT": str(output)},
         text=True,
         capture_output=True,
         check=False,
@@ -2371,7 +2384,7 @@ def test_check_version_unpublished_allows_only_listed_published_channels(
 
 
 def test_release_gate_readiness_threads_preserved_channel_provenance(
-    tmp_path: Path, published_registry_url: str
+    tmp_path: Path, published_registry_url: str, git_stub_bash: list[str]
 ) -> None:
     """Readiness forwards channel-scoped retry provenance to the native checker."""
     workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
@@ -2390,12 +2403,14 @@ def test_release_gate_readiness_threads_preserved_channel_provenance(
         manifest=manifest,
         workspace=workspace,
         already_published_channels="crates_io",
+        bash_command=git_stub_bash,
     )
     unlisted = run_release_gate_readiness(
         tmp_path,
         manifest=manifest,
         workspace=workspace,
         already_published_channels="pypi",
+        bash_command=git_stub_bash,
     )
 
     assert preserved.returncode == 0, preserved.stderr
@@ -2405,7 +2420,7 @@ def test_release_gate_readiness_threads_preserved_channel_provenance(
 
 
 def test_release_gate_final_threads_preserved_channel_provenance(
-    tmp_path: Path, published_registry_url: str
+    tmp_path: Path, published_registry_url: str, git_stub_bash: list[str]
 ) -> None:
     """The root Release workflow's final gate honors prior channel success."""
     workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
@@ -2426,6 +2441,7 @@ def test_release_gate_final_threads_preserved_channel_provenance(
         mode="final",
         release_ref="origin/main",
         already_published_channels="crates_io",
+        bash_command=git_stub_bash,
     )
 
     assert preserved.returncode == 0, preserved.stderr
@@ -2435,16 +2451,26 @@ def test_release_gate_final_threads_preserved_channel_provenance(
 
 def test_release_tag_reuse_requires_verified_ancestor_and_candidate_lineage(
     tmp_path: Path,
+    git_stub_bash: list[str],
 ) -> None:
     """A recovery keeps an immutable tag only when both ancestry checks hold."""
     accepted = run_release_tag_step(
-        tmp_path / "accepted", tag_is_main_ancestor=True, candidate_is_tag_ancestor=True
+        tmp_path / "accepted",
+        tag_is_main_ancestor=True,
+        candidate_is_tag_ancestor=True,
+        bash_command=git_stub_bash,
     )
     diverged = run_release_tag_step(
-        tmp_path / "diverged", tag_is_main_ancestor=False, candidate_is_tag_ancestor=True
+        tmp_path / "diverged",
+        tag_is_main_ancestor=False,
+        candidate_is_tag_ancestor=True,
+        bash_command=git_stub_bash,
     )
     wrong_candidate = run_release_tag_step(
-        tmp_path / "wrong-candidate", tag_is_main_ancestor=True, candidate_is_tag_ancestor=False
+        tmp_path / "wrong-candidate",
+        tag_is_main_ancestor=True,
+        candidate_is_tag_ancestor=False,
+        bash_command=git_stub_bash,
     )
 
     assert accepted.returncode == 0, accepted.stderr
@@ -2458,22 +2484,28 @@ def test_release_tag_reuse_requires_verified_ancestor_and_candidate_lineage(
 
 def test_release_tag_step_emits_resolved_main_sha_for_every_output_path(
     tmp_path: Path,
+    git_stub_bash: list[str],
 ) -> None:
     """Reuse, creation, and rehearsal pin downstream checkouts to the verified SHA."""
     reused = run_release_tag_step(
-        tmp_path / "reused", tag_is_main_ancestor=True, candidate_is_tag_ancestor=True
+        tmp_path / "reused",
+        tag_is_main_ancestor=True,
+        candidate_is_tag_ancestor=True,
+        bash_command=git_stub_bash,
     )
     created = run_release_tag_step(
         tmp_path / "created",
         tag_is_main_ancestor=True,
         candidate_is_tag_ancestor=True,
         tag_exists=False,
+        bash_command=git_stub_bash,
     )
     rehearsal = run_release_tag_step(
         tmp_path / "rehearsal",
         tag_is_main_ancestor=True,
         candidate_is_tag_ancestor=True,
         target="testpypi",
+        bash_command=git_stub_bash,
     )
 
     for name, result in (("reused", reused), ("created", created), ("rehearsal", rehearsal)):
