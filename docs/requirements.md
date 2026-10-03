@@ -305,7 +305,8 @@ This crate is the observation routing layer built on top of logging.
 - OBS-024 `Observability` lifecycle behavior shall be explicit:
   - `emit()` after `shutdown()` returns `ObservationError::Shutdown`
   - `flush()` delegates to logging and active routing/projector state
-  - repeated `shutdown()` calls are idempotent and return `Ok(())`
+  - repeated `shutdown()` calls after a successful shutdown are idempotent and return `Ok(())`
+  - repeated `shutdown()` calls after a failed shutdown replay the retained terminal failure to callers
 - OBS-025 `sc-observe` shall own a crate-local sealed `ObservationEmitter<T>` trait implemented by `Observability`.
 
 ## 6. `sc-observability-otlp` Requirements
