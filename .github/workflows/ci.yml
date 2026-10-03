@@ -311,6 +311,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
+        id: windows_toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: "1.94.1"
@@ -335,22 +336,29 @@ jobs:
           key: ${{ runner.os }}-test-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check log bridge consumer crate
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         run: cargo check --locked -p sc-observability-log-consumer-check
 
       - name: Run workspace tests
-        run: cargo test --locked --workspace --all-targets
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: cargo test --locked --no-fail-fast --workspace --all-targets
 
       - name: Run OTLP feature unit tests
-        run: cargo test --locked -p sc-observability-otlp --all-features --lib
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: cargo test --locked --no-fail-fast -p sc-observability-otlp --all-features --lib
 
       - name: Run workspace doctests
-        run: cargo test --locked --workspace --doc
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: cargo test --locked --no-fail-fast --workspace --doc
 
       - name: Run imported log bridge test_hooks feature
-        run: cargo test --locked -p sc-observability-log --all-targets --features test_hooks
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: cargo test --locked --no-fail-fast -p sc-observability-log --all-targets --features test_hooks
 
       - name: Run imported log bridge release static-level-cap fixture
-        run: cargo test --locked -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: cargo test --locked --no-fail-fast -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
 
       - name: Run imported log bridge release runtime-level fixture
-        run: cargo test --locked -p sc-observability-log --release --test runtime_level_bridge
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: cargo test --locked --no-fail-fast -p sc-observability-log --release --test runtime_level_bridge
