@@ -6,12 +6,10 @@ gate, observed defect or existing regression case, and retirement condition.
 Without that record it does not run on a sprint PR. New checks require an
 identified need; historical evidence alone is not a permanent product gate.
 
-Public API governance is report-only for pull requests whose base is neither
-`develop` nor `main`. Both semver and approval checks still run; findings
-produce a warning, step-summary diff and uploaded artifact. PRs into `develop`
-or `main`, push events and manual runs are strict. There is no head-branch
-condition. API diff exit 1 means a change to assess; diff tool failures are
-blocking in strict mode. Local `just public-api` remains an explicit strict check.
+Public API governance is strict on every pull-request base, push event and
+manual run. There is no head-branch condition. API diff exit 1 means a change
+to assess; any other non-zero exit blocks. Local `just public-api` remains an
+explicit strict check.
 
 Platform qualification has a separate rule: PRs into `develop` or `main`,
 explicit dispatch and reusable/non-PR qualification run all
@@ -40,15 +38,15 @@ on PRs 233–235 are the observed reason for retiring those checks.
 | Jobs | Consumer and gate | Observed defect / existing regression | Retirement condition |
 | --- | --- | --- | --- |
 | CI: `fmt`, `clippy` | Rust maintainers; formatting and compiler lint errors | Compiler/lint failures before tests; existing workspace gate | Compiler/build tooling replaces the gate with equivalent coverage |
-| CI: `docs-consistency` | API consumers; public Rust API documentation | Rustdoc missing-doc checks | Equivalent public API documentation validation replaces the check |
+| CI: `docs-consistency` | API consumers; public Rust API documentation | Rustdoc missing-doc checks; this is the sole PR docs-consistency execution | Equivalent public API documentation validation replaces the check |
 | CI: `version-literals` | Package consumers; one coherent release train | Existing version and exact macro-pin mismatch rejection | Packages stop using a coordinated release train |
-| CI: `public-api-governance` | Integration reviewer; visible API diffs, report-only for PRs except bases develop/main | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs intermediate API reports |
+| CI: `public-api-governance` | Integration reviewer; strict API diff, semver and approval checks on every PR base, push and manual run | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs public API governance |
 | CI: `manifest-validation` | Release maintainer; publish inventory, install contract, retry correctness | `test_release_artifacts`, `test_prepare_release_staged_packages`, `test_publish_retry_idempotency` | Publish/install tooling is replaced and its coverage moves with it |
 | CI: `test` (Ubuntu) | Rust crate consumers; workspace tests, doctests and log feature fixtures | Existing runtime/bridge regression tests | Consumer contract or supported platform is retired |
 | Binding runtime: `native-contract` (Ubuntu) | Core/bridge hosts; debug and release native contract | Existing native runtime conversion, ownership and lifecycle fixtures | Native binding runtime is retired or superseded |
-| Binding schema: `binding-schema` | Generated TS/Python model consumers; DTO, schema, typing and isolated bundle | Existing schema/conversion corpus, generator drift and isolated consumer negatives | These generated bindings are retired |
+| Binding schema: `binding-schema` | Generated TS/Python model consumers; DTO, schema, typing and isolated bundle on PRs (Node 24 with source-bundle proof) | Existing schema/conversion corpus, generator drift and isolated consumer negatives | These generated bindings are retired |
 | Python binding runtime: `python-source-runtime` | Owned/attached Python users; source runtime contract | Existing Python ownership, context, timeout and teardown fixtures | Python binding or supported interpreter contract is retired |
-| TypeScript/Tauri: `schema-and-contract` | Tauri adapter consumers; schema and packaged source/JS contract | Existing schema corpus, neutral boundaries and artifact build checks | Tauri binding is retired |
+| TypeScript/Tauri: `schema-and-contract` | Tauri adapter consumers; schema and packaged source/JS contract; PRs retain dependency and repository-boundary checks while non-PR qualification also runs schema and docs consistency | Existing schema corpus, neutral boundaries and artifact build checks | Tauri binding is retired |
 | Python packaging boundaries: `boundaries` | Wheel/sdist consumers; package and platform policy | `test_python_distribution.py` | Python distribution contract is retired |
 | sc-lint preflight: `source-consumer` (Ubuntu) | Install consumers; source installer and receipt contract | Existing receipt mismatch/rejection cases | Source-installed sc-lint is no longer supported |
 

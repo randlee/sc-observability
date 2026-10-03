@@ -82,10 +82,14 @@ jobs:
         run: |
           [[ "$QUALIFICATION_SOURCE" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$QUALIFICATION_SOURCE"
-          bash scripts/ci/validate_binding_schema.sh
+          if [ "${{ github.event_name }}" != pull_request ]; then
+            bash scripts/ci/validate_binding_schema.sh
+          fi
           bash scripts/ci/validate_dependency_bans.sh
           bash scripts/ci/validate_repo_boundaries.sh
-          bash scripts/ci/validate_docs_consistency.sh
+          if [ "${{ github.event_name }}" != pull_request ]; then
+            bash scripts/ci/validate_docs_consistency.sh
+          fi
       - name: Pack the one npm artifact consumed on every platform
         shell: bash
         run: |

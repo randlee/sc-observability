@@ -9,7 +9,9 @@ on:
       - 'rust-toolchain.toml'
       - 'crates/sc-observability-types/**'
       - 'crates/sc-observability-dto/**'
+      - 'crates/**'
       - 'bindings/**'
+      - 'examples/tauri-logging/**'
       - 'scripts/*binding*'
       - '.github/workflows/binding-schema.yml'
   push:

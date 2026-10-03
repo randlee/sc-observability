@@ -73,3 +73,26 @@ detect_api_base_ref() {
 public_api_cache_dir() {
     echo "target/public-api"
 }
+
+public_api_diff_cache_is_current() {
+    local cache current_revision recorded_revision recorded_status
+    cache="$(public_api_cache_dir)"
+    current_revision="$(git rev-parse HEAD)"
+
+    [[ -f "$cache/public-api-diff.json" ]] || return 1
+    [[ -f "$cache/public-api-diff.revision" ]] || return 1
+    [[ -f "$cache/public-api-diff.exit" ]] || return 1
+
+    recorded_revision="$(<"$cache/public-api-diff.revision")"
+    recorded_status="$(<"$cache/public-api-diff.exit")"
+    [[ "$recorded_revision" == "$current_revision" ]] || return 1
+    [[ "$recorded_status" == "0" || "$recorded_status" == "1" ]]
+}
+
+record_public_api_diff_cache() {
+    local status="$1" cache
+    cache="$(public_api_cache_dir)"
+    mkdir -p "$cache"
+    git rev-parse HEAD > "$cache/public-api-diff.revision"
+    printf '%s\n' "$status" > "$cache/public-api-diff.exit"
+}
