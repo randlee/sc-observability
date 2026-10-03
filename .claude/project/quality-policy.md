@@ -23,11 +23,12 @@ their own prompts.
 - Initial implementation review (sprint QA-1): `req-qa`, `arch-qa`,
   `ruthless-boundary-qa`, `rust-qa-agent`, `rust-best-practices-agent`, and
   `rust-service-hardening-agent`
-- Fix verification (sprint QA-2 and later): `req-qa`, `arch-qa`, and
-  `rust-qa-agent`; re-dispatch `ruthless-boundary-qa`,
-  `rust-best-practices-agent`, or `rust-service-hardening-agent` only to
-  verify its own QA-1 findings, verification-locked to those ids; a reviewer
-  that raised no QA-1 findings is not re-run
+- Fix verification is separate from sprint QA rounds 1–2: dispatch only the
+  agent necessary to confirm the specific fix, normally the filing reviewer.
+  Lock it to the original finding and acceptance criterion. No automatic
+  req-qa/arch-qa/rust-qa or screening panel, no full sweep, and no new findings.
+  The verifier runs necessary focused checks and confirms original-finding
+  closure. Required CI remains a separate merge requirement.
 - Plan review QA-1: `plan-scope-reviewer`, `req-qa`, `arch-qa`,
   `ruthless-boundary-qa`, `rust-best-practices-agent`,
   `rust-service-hardening-agent`, and `ceremony-qa`. `plan-scope-reviewer`
