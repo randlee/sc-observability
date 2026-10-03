@@ -967,7 +967,7 @@ pub(super) fn is_valid_http_endpoint(value: &str) -> bool {
         && port.is_none_or(|value| !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit()))
 }
 
-pub(super) fn invalid_endpoint(message: &str, remediation: &str) -> ConfigFailure {
+pub(crate) fn invalid_endpoint(message: &str, remediation: &str) -> ConfigFailure {
     ConfigFailure::InvalidEndpoint {
         context: Box::new(
             ErrorContext::new(

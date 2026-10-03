@@ -29,7 +29,7 @@ use crate::config::{
 use crate::contracts::{self, ExportRecord, ExporterSet, LogRecord};
 #[cfg(test)]
 use crate::contracts::{LogExporter, MetricExporter, TraceExporter};
-use crate::exporter_factory::exporter_factory_prepared;
+use crate::exporter_factory::{exporter_factory_prepared, prepare_backend_connection};
 use crate::failure::{
     export_failure_from_canonical_event, flush_lifecycle_failure, shutdown_export_failure_typed,
 };
@@ -158,7 +158,9 @@ impl RuntimeTelemetry {
         config: RuntimeTelemetryConfig,
         bounds: &ValidatedTransportBounds,
     ) -> Result<Self, InitFailure> {
-        let exporters = exporter_factory_prepared(&config, bounds)
+        let connection = prepare_backend_connection(&config, bounds)
+            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+        let exporters = exporter_factory_prepared(bounds, connection.as_ref())
             .map_err(|error| InitFailure::from_context(error.into_context()))?;
         Ok(Self::new_with_validated_exporter_set(config, exporters))
     }

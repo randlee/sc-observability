@@ -12,7 +12,8 @@ use serde_json::Value;
 
 use crate::config::{
     self, BackendTransportBounds, TelemetryConfig as RuntimeTelemetryConfig,
-    ValidatedBackendConnection, ValidatedTransportBounds, prepared_backend_connection,
+    ValidatedBackendConnection, ValidatedTransportBounds, invalid_endpoint,
+    prepared_backend_connection,
 };
 use crate::contracts::{
     self, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, LogRecord,
@@ -99,12 +100,28 @@ pub(crate) fn exporter_factory(
     config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
 ) -> Result<ExporterSet, ConfigFailure> {
-    exporter_factory_prepared(config, bounds)
+    let connection = prepare_backend_connection(config, bounds)?;
+    exporter_factory_prepared(bounds, connection.as_ref())
+}
+
+/// Prepares the raw connection fields exactly once, after bounds validation.
+/// Disabled telemetry deliberately bypasses endpoint, authentication, and CA
+/// inspection because it constructs no backend connection.
+pub(crate) fn prepare_backend_connection(
+    config: &RuntimeTelemetryConfig,
+    bounds: &ValidatedTransportBounds,
+) -> Result<Option<ValidatedBackendConnection>, ConfigFailure> {
+    match bounds.backend() {
+        BackendTransportBounds::Disabled => Ok(None),
+        BackendTransportBounds::Sdk | BackendTransportBounds::SyncHttp(_) => {
+            prepared_backend_connection(&config.transport, bounds).map(Some)
+        }
+    }
 }
 
 pub(crate) fn exporter_factory_prepared(
-    config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
+    connection: Option<&ValidatedBackendConnection>,
 ) -> Result<ExporterSet, ConfigFailure> {
     match bounds.backend() {
         BackendTransportBounds::Disabled => Ok(ExporterSet {
@@ -116,19 +133,29 @@ pub(crate) fn exporter_factory_prepared(
             }),
         }),
         BackendTransportBounds::Sdk => {
-            let connection = prepared_backend_connection(&config.transport, bounds)?;
-            sdk_exporter_factory(config, bounds, &connection)
+            sdk_exporter_factory(bounds, connection.ok_or_else(missing_endpoint)?)
         }
         BackendTransportBounds::SyncHttp(_) => {
-            let connection = prepared_backend_connection(&config.transport, bounds)?;
-            sync_http_exporter_factory(config, bounds, &connection)
+            sync_http_exporter_factory(bounds, connection.ok_or_else(missing_endpoint)?)
         }
     }
 }
 
-#[allow(unused_variables)]
+fn missing_endpoint() -> ConfigFailure {
+    invalid_endpoint(
+        "enabled telemetry requires an endpoint",
+        "set OtelConfig.endpoint before constructing the backend",
+    )
+}
+
+#[cfg_attr(
+    not(feature = "otlp-sdk"),
+    expect(
+        unused_variables,
+        reason = "the prepared connection is consumed only when the otlp-sdk feature is enabled"
+    )
+)]
 fn sdk_exporter_factory(
-    config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
@@ -182,9 +209,14 @@ fn sdk_exporter_factory(
     ))
 }
 
-#[allow(unused_variables)]
+#[cfg_attr(
+    not(feature = "sync-http"),
+    expect(
+        unused_variables,
+        reason = "the prepared connection is consumed only when the sync-http feature is enabled"
+    )
+)]
 fn sync_http_exporter_factory(
-    config: &RuntimeTelemetryConfig,
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
@@ -254,5 +286,52 @@ fn unsupported_backend(
             .detail("feature", Value::String(feature.to_owned()))
             .detail("availability", Value::String(availability.to_owned())),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepared_factory_signatures_accept_validated_inputs_only() {
+        let _: fn(
+            &ValidatedTransportBounds,
+            Option<&ValidatedBackendConnection>,
+        ) -> Result<ExporterSet, ConfigFailure> = exporter_factory_prepared;
+
+        #[cfg(feature = "otlp-sdk")]
+        let _: fn(
+            &ValidatedTransportBounds,
+            &ValidatedBackendConnection,
+        ) -> Result<ExporterSet, ConfigFailure> = sdk_exporter_factory;
+
+        #[cfg(feature = "sync-http")]
+        let _: fn(
+            &ValidatedTransportBounds,
+            &ValidatedBackendConnection,
+        ) -> Result<ExporterSet, ConfigFailure> = sync_http_exporter_factory;
+    }
+
+    #[test]
+    fn enabled_bounds_without_a_prepared_connection_use_the_canonical_endpoint_failure() {
+        let mut transport = config::OtelConfig::new(
+            config::ExporterBackend::SyncHttp,
+            config::OtlpProtocol::HttpJson,
+        );
+        transport.enabled = true;
+        let bounds = config::validated_transport_bounds(&transport)
+            .expect("enabled transport bounds do not inspect the endpoint");
+
+        let Err(actual) = exporter_factory_prepared(&bounds, None) else {
+            panic!("an enabled backend requires a prepared connection");
+        };
+        let expected = missing_endpoint();
+        assert_eq!(actual.diagnostic().code, expected.diagnostic().code);
+        assert_eq!(actual.diagnostic().message, expected.diagnostic().message);
+        assert_eq!(
+            actual.diagnostic().remediation,
+            expected.diagnostic().remediation
+        );
     }
 }
