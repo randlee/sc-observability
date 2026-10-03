@@ -61,6 +61,28 @@ on PRs 233–235 are the observed reason for retiring those checks.
 - sc-lint `source-consumer` on Windows: integration proves the second
   installer platform while intermediate PRs keep Ubuntu coverage.
 
+## Duplicate-execution ownership
+
+The following map records the one retained owner for checks that formerly ran
+more than once with the same operating system, event and configuration. A
+different interpreter, profile, platform or produced artifact is not a
+duplicate and stays in its consumer gate.
+
+| Check | Retained owner | Removed same-configuration execution | Why the retained owner is distinct |
+| --- | --- | --- | --- |
+| Workspace formatting | CI `fmt` | Python binding source gate | One workspace formatting check is sufficient. |
+| Binding-runtime unit contract | Binding runtime `native-contract` | Python and TypeScript/Tauri gates | It preserves debug/release and platform proof artifacts. |
+| DTO unit tests | CI workspace `test` | Binding-schema gate | The workspace suite owns the package test. |
+| Schema generator `--check` | Binding-schema gate | Python binding source gate | The schema gate pins its generator interpreter and schema corpus. |
+| Shared Python typing helper | Binding-schema gate | Python binding source gate | The schema gate owns the shared generated-surface typing proof; B.4 keeps its CPython 3.10-specific typing checks. |
+| Binding source-bundle unit suite | Binding-schema gate | TypeScript/Tauri platform gate | The bundle evidence is produced and retained by the schema gate. |
+| Tauri unit suite on Linux | TypeScript/Tauri `schema-and-contract` | TypeScript/Tauri real-IPC Linux leg | macOS and Windows retain platform-local unit coverage. |
+| Dependency bans | CI manifest validation | Binding-schema and TypeScript/Tauri gates | CI remains the single PR owner. |
+| Repository boundaries | CI manifest validation | TypeScript/Tauri gate | CI retains the executable proving-artifact check. |
+| Binding-runtime dependency validator | Repository-boundary script | Dependency-ban script | The boundary script also runs its focused regression module. |
+| Release-artifact manifest subset | CI's installed publish-kit suite | Later `-k manifest or publish_order` subset | The installed suite is the strict superset in the same job. |
+| sc-lint receipt-rejection suite on Linux | CI's installed publish-kit suite | sc-lint preflight Ubuntu leg | Preflight retains the Windows execution that CI does not provide. |
+
 ## Release preflight
 
 B.2 (`b2-staged-consumer.yml`) and B.P2 (`bp2-staged-consumer.yml`) staged

@@ -85,8 +85,6 @@ jobs:
           if [ "${{ github.event_name }}" != pull_request ]; then
             bash scripts/ci/validate_binding_schema.sh
           fi
-          bash scripts/ci/validate_dependency_bans.sh
-          bash scripts/ci/validate_repo_boundaries.sh
           if [ "${{ github.event_name }}" != pull_request ]; then
             bash scripts/ci/validate_docs_consistency.sh
           fi

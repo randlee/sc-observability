@@ -36,6 +36,7 @@ jobs:
           python-version: "3.12"
 
       - name: Test receipt rejection cases
+        if: runner.os == 'Windows'
         run: python -m unittest discover -s .github/scripts/tests -p test_verify_sc_lint_source_receipt.py
 
       - name: Set up Rust
