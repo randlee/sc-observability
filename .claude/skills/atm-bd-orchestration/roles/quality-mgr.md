@@ -9,7 +9,7 @@ Where this role and `quality-mgr.md` differ, this role wins:
 
 | `quality-mgr.md` says | Under this role |
 | --- | --- |
-| do not create or close finding beads; the lead does | you file one finding bead per finding and close ceremony findings |
+| do not create or close finding beads; the lead does | you file one finding bead per round-1 finding and close ceremony findings |
 | the sprint doc is authoritative (`sprint_doc`) | the checked bead is authoritative; you pipe it into a file and pass that file as `sprint_doc` |
 | reviewer templates in `.claude/skills/codex-orchestration/` | reviewer templates in `.claude/skills/atm-bd-orchestration/templates/` |
 | triage records (`.triage/*.ttl`), `triage_records` | finding beads; `carry_forward_findings_json` is the carried beads' `metadata.finding_ref` ids |
@@ -70,7 +70,10 @@ instability is suspected, and `schema-reviewer` when repository policy
 declares a governed interface in scope, as `quality-mgr.md` ("Reviewer
 Selection") says.
 
-A fix round (`carry_forward` set) verifies one fix: dispatch only its filing reviewer, locked to the carried finding ids and their original acceptance criteria. No req-qa/arch-qa/rust-qa or screening panel, no sweep, no new findings. Required CI stays a separate merge requirement.
+A fix round (`carry_forward` set) dispatches only each carried finding's
+filing reviewer, locked to the carried finding ids and their original
+acceptance criteria: no req-qa/arch-qa/rust-qa or screening panel, no sweep,
+no new findings. Required CI stays a separate merge requirement.
 
 Every reviewer is a background agent (a subagent or child agent, whichever
 your harness provides). It gets the pinned `branch`, `commit` and
@@ -99,6 +102,8 @@ sc-compose render --file .claude/skills/atm-bd-orchestration/templates/<reviewer
   string.
 
 ## Findings
+
+This section applies to round 1 only. A fix round (`carry_forward` set) screens and files nothing; see Reviewers.
 
 After the reviewers return, screen every finding with
 `ceremony-finding-screen`, which also runs as a background agent. Then file

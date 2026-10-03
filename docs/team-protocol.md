@@ -168,8 +168,10 @@ The claim must succeed without force. A dev or fix branch is based only on its
 bead's declared `pr_target`; its difficulty must fit the assignee's roster
 model. Sanity refuses a stale, dirty, zero-delta, or previously PASSed check.
 QA refuses a PR whose base differs from `pr_target` or whose head differs from
-the sanity PASS commit (`SANITY_STALE`). Every refusal creates an `obs-wf`
-child outside the phase tree before the refusal task close.
+the sanity PASS commit (`SANITY_STALE`). Every refusal reuses the workflow
+class bead for its failure signature (append task id, head, command and
+evidence; cite the class id), or cites the lead message reporting a new
+signature.
 
 - A sanity PASS creates and dispatches QA immediately.
 - QA with only minor findings is PASS with those findings retained as backlog.

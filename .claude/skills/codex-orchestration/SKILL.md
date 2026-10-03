@@ -150,6 +150,7 @@ This is the lifecycle contract for development, fix, and QA work.
    - `rust-best-practices-agent`
    - `rust-service-hardening-agent`
    - `flaky-test-qa` when test instability risk is present
+   Every round-1 finding is fixed and verified before merge (0B+0I+0m, no exceptions).
 7. A fix-verification round dispatches only each carried finding's filing
    reviewer, locked to that finding id and its original acceptance criterion.
    No req-qa/arch-qa/rust-qa or screening panel, no sweep, no new findings.

@@ -143,7 +143,7 @@ git diff develop...<commit> --name-only
 `HEAD`, the current branch tip, or a newly resolved commit. Do NOT use the
 lead's `changed_files` field as a scope limiter for round 1/2.
 
-Additionally, when any reviewer surfaces a new repeatable violation pattern,
+Round 1 only: when any reviewer surfaces a new repeatable violation pattern,
 search the full assigned commit for every instance and include the complete
 list in the verdict.
 
@@ -170,7 +170,7 @@ TODO-specific rule:
    - `req-qa` from `.claude/skills/codex-orchestration/req-qa-assignment.json.j2`
    - `arch-qa` from `.claude/skills/codex-orchestration/arch-qa-assignment.json.j2`
    - `ruthless-boundary-qa` from `.claude/skills/codex-orchestration/ruthless-boundary-qa-assignment.json.j2`
-     per the subjective-review fix-round rule below
+     per the layer fix-verification rule below
    - `plan-scope-reviewer` on every plan round, in full, from
      `.claude/skills/codex-orchestration/plan-scope-reviewer-assignment.json.j2`
      for a plan in markdown (`plan_docs` = the phase plan doc and every
@@ -207,7 +207,8 @@ TODO-specific rule:
    assigned commit with `git show <commit>:<path>` or another read guaranteed
    to use that immutable tree. Never substitute the current branch tip or
    moving worktree state. Missing or stale evidence is a finding.
-   Then, every round with findings (sprint or plan QA), run
+   Then, every round with findings (sprint or plan QA), except a
+   fix-verification round, run
    `ceremony-finding-screen` (where repository policy lists it) over all of
    them and list its `ceremony` and `concern_valid_remedy_ceremony` verdicts in the report as proposed
    `rejected: ceremony` rulings for the lead (see Ceremony Disputes).
@@ -257,27 +258,17 @@ For implementation QA-1 in this Rust repo:
   `rust-qa-agent` surfaces unstable execution symptoms
 
 For a fix-verification review (independent of sprint round numbering):
-- dispatch only the reviewer necessary to confirm the original finding,
-  normally its filing agent; there is no mandatory multi-agent reviewer set
+- dispatch only its filing reviewer to confirm the original finding; there is
+  no mandatory multi-agent reviewer set
 - lock the assignment to the original finding ID and acceptance criterion
 - run only checks necessary to confirm that fix; do not expand to a sprint sweep
 - report fixed/open/regressed for the existing finding, and file no new findings
 - when fixed, reconcile the original finding's verified closure with its owner
 
-Subjective-review fix-round rule:
-- `ruthless-boundary-qa`, `rust-best-practices-agent`, and
-  `rust-service-hardening-agent` (plus `ceremony-qa` in plan QA) run
-  open-ended only on the first round — sprint QA-1, plan QA-1, and
-  phase-ending review; never rerun them open-ended during fix verification
-- in fix verification, dispatch one of these reviewers only for
-  explicitly assigned carry-forward findings it owns (its own QA-1 ids), with
-  `findings_scope_locked: true`
-- every carried finding remains part of the merge gate until its owning
-  reviewer reports it fixed; unsolicited observations from a locked round are
-  future triage input and do not expand that round's canonical finding set
-- their acceptance criteria are subjective, so they reliably surface
-  something on any diff regardless of size; an open review on a fix round
-  guarantees a new round instead of verifying the fix
+Layer fix-verification rule:
+- Dispatch only each carried finding's filing reviewer, locked to that finding
+  id and its original acceptance criterion. Do not dispatch another reviewer,
+  screen findings, or file new findings in a layer fix round.
 
 For phase-ending QA, launch the reviewers selected by repository policy and:
 - always run `req-qa`

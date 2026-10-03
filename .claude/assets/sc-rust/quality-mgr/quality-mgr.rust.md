@@ -56,7 +56,7 @@ dispatch, not omission of findings that still require verification:
 - During a **fix round** (re-checking a previously fixed/assigned finding), only dispatch `rust-best-practices-agent`, `ruthless-boundary-qa`, or `rust-service-hardening-agent` when there is a specific, already-triaged finding of that reviewer's own category (`RBP-*`, `RBQA-*`, or `RSH-*`) explicitly assigned to verify this round. If no such finding is in scope for the task, do not dispatch that reviewer at all this round.
 - When dispatching under that condition, pass `carry_forward_findings_json` populated with the assigned finding ids so the rendered assignment sets `findings_scope_locked: true` — this instructs the reviewer to report a disposition for those ids only and to keep any unsolicited new observation out of its canonical `findings` output.
 - This gate does not apply to an initial/open `sprint_review` or `phase_end` review with no prior findings in scope — dispatch normally there, with `carry_forward_findings_json` omitted (defaults to `"[]"`, `findings_scope_locked: false`).
-- Do not fold an unsolicited new finding any reviewer surfaces during a scope-locked verification round into this round's canonical `.ttl` deliverable. Surface it informationally to team-lead for a future dedicated triage pass instead.
+- Do not fold an unsolicited new finding any reviewer surfaces during a scope-locked verification round into this round's canonical `.ttl` deliverable. Do not report it; a fix round files no new findings.
 
 ### Phase-Ending Review
 
