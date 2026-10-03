@@ -1,0 +1,28 @@
+[package]
+name = "parity-conditioned-fixture"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Target-conditioned public API fixture for scripts/ci/tests/test_public_api_parity.py (ADR-022)"
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+# Every `mutate-*` feature introduces one deliberate Windows-only public API
+# difference. With none enabled the crate's public API is identical on every
+# target while its private implementation differs by platform.
+mutate-method = []
+mutate-variant = []
+mutate-field = []
+mutate-signature = []
+mutate-bound = []
+mutate-auto-trait = []
+mutate-hidden = []
+mutate-reexport = []
+# Feature-only difference: visible to the {transport} selection, hidden from
+# the default selection and from the all-features selection.
+transport = []
+transport-extra = ["transport"]

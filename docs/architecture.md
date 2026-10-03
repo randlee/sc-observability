@@ -837,6 +837,7 @@ ADR navigation index (status is recorded in each decision below):
 - [ADR-018: Dual OTLP Backends And Shared Lifecycle](#adr-018-dual-otlp-backends-and-shared-lifecycle)
 - [ADR-019: Phase D Implementation Decisions](#adr-019-phase-d-implementation-decisions)
 - [ADR-020: Compatible 1.x Adoption Of Phase D](#adr-020-compatible-1x-adoption-of-phase-d)
+- [ADR-022: Uniform Public API Across Release Targets](#adr-022-uniform-public-api-across-release-targets)
 
 ### ADR-001: Observation-First Producers
 
@@ -1654,6 +1655,96 @@ was reworded accordingly to describe the remaining validation.
 - **Consequences**: There is no second exporter: the sync-http encoders are
   extended in place. No general mapping DSL and no generated source-hash gate
   are added. Requirements: PHD-005–013.
+
+### ADR-022: Uniform Public API Across Release Targets
+
+- **Status**: Accepted (user direction, 2026-10-03). Implemented by
+  `scripts/ci/public_api_parity.py` in the recovery stage; the ADR was first
+  recorded as text only.
+- **Context**: Consumers of this cross-platform library should not need
+  platform-specific source code to access its public API. Internal OS
+  differences described in [cross-platform guidelines](cross-platform-guidelines.md)
+  do not justify different public interfaces.
+- **Decision**: For the same package version and enabled features, every
+  release target must expose the same public API: exported modules, types,
+  functions, methods, signatures (including generic bounds, lifetimes and
+  `unsafe`/`const`/`async`/ABI qualifiers), trait implementations including
+  auto-trait (`Send`, `Sync`, `Unpin`, `UnwindSafe`) and derived
+  implementations, reexports, public fields, constants, enum variants and
+  discriminants, including error variants, `#[repr]`/`#[non_exhaustive]`
+  declarations, and publicly reachable `#[doc(hidden)]` items. Platform-
+  dependent dependencies and conditional compilation must not change that
+  surface. Platform-specific implementations and private helpers remain
+  permitted, including private storage changes that keep the auto traits.
+  Blanket implementations (`impl<T> Trait for T` materialised from dependency
+  crates) are outside the compared surface: they describe which dependencies a
+  target compiles (for example `objc2` behind Tauri on macOS), not this
+  library's API, and every trait this library implements itself is compared
+  directly.
+- **Scope**: The published set is derived from `release/publish-artifacts.toml`:
+  every `publish = true` Rust package (ten packages, including the separately
+  workspaced `sc-observability-tauri` and the `_native` Python library) and
+  the union of binary `release_targets` and wheel targets (six triples:
+  `x86_64`/`aarch64` for Linux GNU, Apple Darwin and Windows MSVC). Adding
+  or removing a released package or target changes the expected set without
+  editing the check. Procedural macro crates are compiled for the build host
+  by definition; their surface is rendered once per target and must still be
+  identical.
+- **Features**: Feature selection may change the API, but the same feature
+  selection must have the same API on every release target. The check
+  compares every distinct crate-local feature set that Cargo metadata declares
+  (the ordinary default invocation plus every `--no-default-features
+  --features ...` combination, deduplicated only when the resolved set of
+  `cfg(feature)` names is identical), so a difference visible to one
+  selection cannot hide behind the default-only or all-features views. A
+  feature combination that fails to compile on a release target is an
+  extraction failure, never an exemption.
+- **Capabilities**: An operation unavailable on a release target must return
+  a documented, typed error through the common interface; it must not
+  disappear or silently report success. Identical APIs do not promise
+  identical platform capabilities, filesystem semantics, performance,
+  binary ABI, layout, target-dependent constant values, equal runtime
+  behavior, identical private implementation or equal procedural-macro
+  expansion. Document such limitations and retain platform behavior tests.
+  ADR-020's released compatibility requirements remain; semver checks
+  compare versions, this check compares targets.
+- **Verification**: One comparison, `assert_public_api_equal` in
+  `scripts/ci/public_api_parity.py compare`, consumes compiled API surfaces
+  produced by `collect`: rustdoc JSON from the exact nightly in
+  `scripts/ci/public-api-toolchain` with `--document-hidden-items`, rendered
+  to canonical rows by the pinned `public-api` library in
+  `scripts/ci/fixtures/public-api-parity/surface-renderer` (auto-trait and
+  derived implementations retained; blanket implementations omitted; function
+  parameter names, rustdoc ids, file locations and documentation prose
+  discarded; the implementation policy is part of the recorded renderer
+  identity). Each cell
+  records package, library, target, resolved features and cargo flags,
+  source commit, toolchain, rustdoc flags and renderer identity. The
+  comparison rebuilds the expected package/selection/target set from the
+  manifest and Cargo metadata, then fails on any missing or duplicate cell,
+  mismatched source commit, toolchain or renderer, failed, empty or
+  incomplete extraction (unresolved rustdoc item ids or a rustdoc format
+  other than the renderer's), selection mismatch, or any row whose
+  multiplicity differs between targets. Snapshot generation is not itself a
+  unit test; host-only snapshots, source searches for `cfg` and equal
+  per-target semver results are not proof of cross-target equality.
+  `scripts/ci/tests/test_public_api_parity.py` proves the comparator's
+  negatives and runs the real extractor over the target-conditioned fixture
+  crate in `scripts/ci/fixtures/public-api-parity/conditioned` for a Linux
+  and a Windows target: Windows-only methods, variants, fields, signature
+  and bound changes, lost `Send`/`Sync`, doc-hidden functions, reexports and
+  feature-only differences fail; private platform differences pass.
+  Authoritative six-target coverage runs on the native platform producers of
+  `.github/workflows/b4a-python-distributions.yml` (`public-api-surface`
+  job), and its `aggregate` fails on any parity problem. A full release
+  qualification therefore requires every cell from every release target;
+  local cross-documentation (for example through `cargo xwin` on macOS) is
+  early feedback, not the release evidence.
+- **Exceptions**: Any platform-dependent public API requires an explicit
+  amendment to this ADR identifying the exception and its consumer impact.
+  No checked-in snapshot, bless workflow or hash approval is introduced; the
+  recorded source commit, toolchain, target and feature identity identify
+  what was compared.
 
 ## 8. API-Design Consistency
 
