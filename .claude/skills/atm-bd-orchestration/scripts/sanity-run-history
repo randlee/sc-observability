@@ -45,6 +45,8 @@ def read_vars(path: Path) -> dict[str, object]:
     if value["reviewer"] == "sanity-selected":
         if not isinstance(selection, list):
             fail("sanity-selected requires a selection list")
+        if not selection and value["verdict"] != "CANNOT_RUN":
+            fail("sanity-selected accepts an empty selection only for CANNOT_RUN")
     elif selection is not None:
         fail("comparison reviewers require null selection")
     return value

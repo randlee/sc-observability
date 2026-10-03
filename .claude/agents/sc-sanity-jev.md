@@ -1,6 +1,6 @@
 ---
 name: sc-sanity-jev
-version: 0.4.0
+version: 0.5.0
 description: Jev-assisted dev sanity check of one numbered deliverable at an exact commit; reports whether it is done as JSON. Read-only, no lint, not QA.
 tools: Glob, Grep, LS, Read, BashOutput, Bash
 model: sonnet

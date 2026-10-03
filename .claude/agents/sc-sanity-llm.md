@@ -1,6 +1,6 @@
 ---
 name: sc-sanity-llm
-version: 0.4.0
+version: 0.5.0
 description: LLM dev sanity check of one numbered deliverable of one closed dev or fix bead at an exact commit; reports whether it is done as JSON. Read-only, no lint, not QA.
 tools: Glob, Grep, LS, Read, BashOutput, Bash
 model: sonnet

@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-jev
-version: 1.0.0
+version: 1.0.1
 description: Compatibility entry point for the shared coordinator; it records LLM/JEV evidence and an explicit selected result.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet

@@ -24,8 +24,7 @@ The member name is unique to the team, because Herdr agent names are global
 on the host. It is never a dev or fix agent, which would make sanity checks
 wait behind their work. Every run executes both reviewers and records a
 `sanity-selected` result per deliverable. The selected report owns verdict
-and finding children, but every selected reply remains an unchanged LLM, JEV,
-or explicitly rerun envelope. A checker defect creates no child.
+and finding children. A checker defect creates no child.
 
 ## Tasks
 
@@ -90,8 +89,7 @@ One check is one closed bead at one pinned commit, split per deliverable:
   identity, tested commit and caller-recorded UTC timing. Capture a reviewer
   completion timestamp at its last reply or timeout envelope, before any lint
   wait; capture the selected completion timestamp when `selection.json` is
-  written. Exit-4 retries reuse both supplied timestamps. The selected mode
-  validates source statuses and retains selection/source provenance.
+  written. Exit-4 retries reuse both supplied timestamps.
 
 The check leaves nothing in the repository: `sanity-split` writes only the
 lint log and the lint exit file under `--scratch`, the renderer's transient
@@ -134,10 +132,9 @@ JEV, and SEL PASS/FAIL/CANNOT_RUN independently, in that order, to the same igno
 JSONL via `sanity-run-history`: strict sc-compose record-template render,
 typed JSON validation, compact serialization, locked append. Failed render or
 validation must append nothing; use no unsupported `--append` option. Then render
-the newest ten **runs**, grouping all reviewer rows sharing run_id. A run
-produces up to thirty rows. Include the rendered table as Markdown in the
-user-visible completion reply after the selected close. Every new row carries
-the selected `final_verdict`; Match compares only LLM/JEV verdicts to it. The compact columns are
+the newest ten **runs**, grouping all reviewer rows sharing run_id. A run has three rows; ten runs can have thirty. Include the rendered table as Markdown in the
+user-visible completion reply after the selected close. Match: LLM/JEV verdict vs `final_verdict`.
+The compact columns are
 `S | PR | R | Pick | Find | Result | Match | Done | Iter`; no full task
 IDs. New ledger timestamps are UTC only; local display is derived at rendering.
 Legacy rows are LLM by user attestation; never rewrite historical ledgers.

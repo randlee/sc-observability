@@ -1,6 +1,6 @@
 ---
 name: dev-sanity
-version: 1.1.0
+version: 1.2.0
 description: Coordinate independent LLM/JEV sanity replies and one explicit selected operational result at a pinned commit.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -62,24 +62,7 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    `code`, the actual `message`, `recoverable`, `suggested_action`, and the
    `deliverable` number. Say explicitly that the reviewer could not run.
    Never substitute an LLM result for unavailable JEV (or vice versa).
-4. Merge each LLM/JEV result array as soon as that reviewer finishes, using
-   its existing stdin invocation with
-   `--started-at "$reviewer_started_at" --completed-at "$reviewer_completed_at"`
-   and preserving its own vars/report. Do not append either history row yet:
-   the final selected verdict is not known. Once both raw arrays are
-   available, record `selected_started_at` immediately before selection and
-   `selected_completed_at` when `selection.json` is written. Then select each
-   deliverable in a strict
-   JSON array. Every entry records exact LLM/JEV statuses, `selected`
-   source (`llm`, `jev`, or `rerun`), a reason for a disagreement or rerun,
-   and a checker-defect flag. A checker defect creates no child; its selection
-   record and workflow-issue class bead carry the evidence, and the lead may
-   reopen it. A rerun supplies one unchanged reply, its
-   reviewer, and nonempty repo-relative missing-context paths. A re-run
-   renders the same assignment with `context` set to objects for exactly the
-   repo-relative, pinned-commit paths it adds; `rerun.context` lists those
-   same paths. A checker defect is allowed only for a selected undone reply
-   and needs its reason.
+4. Merge each LLM/JEV result array as soon as that reviewer finishes:
 
    ```bash
    $S/sanity-merge "$manifest" "$task" "$checked_bead" "$sprint" \
@@ -87,20 +70,35 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
      --completed-at "$reviewer_completed_at" \
      < "$scratch/$reviewer-results.json" > "$scratch/$reviewer-vars.json"
    ```
+
+   Preserve its own vars/report. Do not append either history row yet:
+   the final selected verdict is not known. Once both raw arrays are
+   available, record `selected_started_at` immediately before selection and
+   `selected_completed_at` when `selection.json` is written. Then select each
+   deliverable in a strict
+   JSON array. Every entry records exact LLM/JEV statuses, `selected`
+   source (`llm`, `jev`, or `rerun`), a reason for a disagreement or rerun,
+   and a checker-defect flag. A checker defect creates no child; its selection
+   record and workflow-issue class bead carry the evidence. A rerun supplies one unchanged reply, its
+   reviewer, and nonempty repo-relative missing-context paths. A re-run
+   renders the same assignment from the per-deliverable split vars written by
+   `sanity-split` (plus those `context` objects) with
+   `sc-compose render --strict --file .claude/skills/atm-bd-orchestration/templates/dev-sanity-assignment.json.j2 --var-file <split-vars-plus-context>`;
+   `rerun.context` lists those same paths. A checker defect is allowed only for a selected undone reply
+   and needs its reason.
+
 5. Merge the selected report from the raw files and selection array:
 
    ```bash
    $S/sanity-merge "$manifest" "$task" "$checked_bead" "$sprint" \
      --reviewer sanity-selected --started-at "$selected_started_at" \
      --completed-at "$selected_completed_at" \
-     --llm-results "$scratch/sanity-llm-results.json" \
-     --jev-results "$scratch/sanity-jev-results.json" \
+     --llm-vars "$scratch/sanity-llm-vars.json" \
+     --jev-vars "$scratch/sanity-jev-vars.json" \
      --selection "$scratch/selection.json" > "$scratch/sanity-selected-vars.json"
    ```
 
-   Exit 4 means shared lint is still running:
-   wait and retry with the same start and completion times and unchanged
-   results.
+   Exit 4 from either merge: retry with the same times.
    Exit 0 produces PASS/FAIL. Exit 1 or 3 may produce a CANNOT_RUN report;
    preserve the error and raw results. An invalid invocation/manifest with
    no report is a coordinator error to report, never a PASS. Do not run lint
@@ -128,7 +126,9 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
      --final-verdict "$final_verdict" \
      --output "$scratch/sanity-$task-table-vars.json" --limit 10
    ```
-7. Complete the selected lifecycle using its vars copied to
+7. For each `checker_defect`, append the selection entry to the matching
+   workflow class bead (or report it to the lead) and cite it in notes.
+   Complete the selected lifecycle using its vars copied to
    `sanity-$task-vars.json`. Only selected FAIL creates child findings, with
    `--reviewer sc-sanity-selected`; each child records its selected source.
    Selected CANNOT_RUN refuses the task and leaves the bead open. Retain LLM,
@@ -136,7 +136,7 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
 
 ## Console report
 
-After both reviewers finish and the operational task closes, strictly render `sanity-run-table.md.j2`
+After the selected task closes, strictly render `sanity-run-table.md.j2`
 using the last history output:
 
 ```bash

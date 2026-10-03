@@ -136,8 +136,10 @@ def main() -> int:
     try:
         report = load_vars(args.vars, args.task, args.bead)
         if report.get("run_id"):
-            if args.reviewer != f"sc-{report['reviewer']}":
-                raise HandoffError("reviewer does not match report provenance")
+            if (report.get("reviewer") != "sanity-selected"
+                    or report.get("operational_reviewer") != "sanity-selected"
+                    or args.reviewer != "sc-sanity-selected"):
+                raise HandoffError("run reports may create children only from sanity-selected provenance")
         findings = undone_findings(report["findings"])
         selectors = {finding_key(finding): finding for finding in findings}
         if len(selectors) != len(findings):
@@ -184,9 +186,9 @@ def main() -> int:
                 priority = child_priority(severity, parent["priority"])
             except KeyError as exc:
                 raise HandoffError(f"invalid finding severity: {severity}") from exc
-            finding_reviewer = finding.get("reviewer") or (
-                "sc-sanity-llm" if args.reviewer == "sc-sanity-selected" else args.reviewer
-            )
+            finding_reviewer = finding.get("reviewer")
+            if not isinstance(finding_reviewer, str) or not finding_reviewer:
+                raise HandoffError(f"finding lacks selected reviewer: {finding!r}")
             provenance = {
                 "phase": phase, "sprint": sprint, "stack": stack,
                 "found_on_layer": layer,

@@ -1,5 +1,6 @@
 """sanity-merge accepts exactly one result per deliverable, folds in the lint result and re-checks the tree."""
 import copy
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -21,6 +22,12 @@ def without(envelope, key):
 
 def git(cwd, *argv):
     return subprocess.run(["git", "-C", str(cwd), *argv], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def reviewer_vars(run_id, reviewer, results):
+    digest = hashlib.sha256(json.dumps(results, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return {"run_id": run_id, "reviewer": reviewer, "reviewer_results": results,
+            "reviewer_results_sha256": digest}, digest
 
 
 class SanityMerge(unittest.TestCase):
@@ -89,6 +96,8 @@ class SanityMerge(unittest.TestCase):
             self.assertEqual(report["commit"], self.sha)
             self.assertEqual(report["operational_reviewer"], "sanity-llm")
             self.assertEqual(report["reviewer_results"], results)
+            self.assertEqual(report["reviewer_results_sha256"], hashlib.sha256(
+                json.dumps(results, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
             self.assertTrue(report["completed_at"].endswith("Z"))
             reports.append(report)
         self.assertEqual([r["verdict"] for r in reports], ["PASS", "FAIL"])
@@ -138,27 +147,36 @@ class SanityMerge(unittest.TestCase):
         self.write_manifest(run_id="selected-run",
                             reviewers=["sanity-llm", "sanity-jev", "sanity-selected"],
                             operational_reviewer="sanity-selected")
-        self.lint(0)
         llm_path = self.dir / "llm.json"
         jev_path = self.dir / "jev.json"
         selection_path = self.dir / "selection.json"
-        llm_path.write_text(json.dumps([self.result(1), self.result(2)]))
-        jev_path.write_text(json.dumps([self.result(1), self.result(2, [FINDING])]))
+        llm_vars, llm_sha256 = reviewer_vars("selected-run", "sanity-llm", [self.result(1), self.result(2)])
+        jev_vars, jev_sha256 = reviewer_vars("selected-run", "sanity-jev", [self.result(1), self.result(2, [FINDING])])
+        llm_path.write_text(json.dumps(llm_vars))
+        jev_path.write_text(json.dumps(jev_vars))
         selection_path.write_text(json.dumps([
             {"deliverable": 1, "llm": "done", "jev": "done", "selected": "llm",
-             "reason": "", "rerun": None, "checker_defect": False},
+             "reason": "", "rerun": None, "checker_defect": False,
+             "llm_sha256": llm_sha256, "jev_sha256": jev_sha256},
             {"deliverable": 2, "llm": "done", "jev": "undone", "selected": "jev",
-             "reason": "JEV has pinned evidence", "rerun": None, "checker_defect": False},
+             "reason": "JEV has pinned evidence", "rerun": None, "checker_defect": False,
+             "llm_sha256": llm_sha256, "jev_sha256": jev_sha256},
         ]))
         completed = time.time()
-        out = self.merge([], str(self.manifest), TASK, DEV, SPRINT,
+        selected_args = (str(self.manifest), TASK, DEV, SPRINT,
                          "--reviewer", "sanity-selected", "--started-at", str(completed - 1),
-                         "--completed-at", str(completed), "--llm-results", str(llm_path),
-                         "--jev-results", str(jev_path), "--selection", str(selection_path))
+                         "--completed-at", str(completed), "--llm-vars", str(llm_path),
+                         "--jev-vars", str(jev_path), "--selection", str(selection_path))
+        waiting = self.merge([], *selected_args)
+        self.assertEqual((waiting.returncode, waiting.stdout), (4, ""))
+        self.lint(0)
+        out = self.merge([], *selected_args)
         self.assertEqual(out.returncode, 0, out.stderr)
         vars_ = json.loads(out.stdout)
         self.assertEqual(vars_["reviewer"], "sanity-selected")
         self.assertIsInstance(vars_["selection"], list)
+        self.assertEqual(vars_["selection"][0]["llm_sha256"], llm_sha256)
+        self.assertEqual(vars_["selection"][0]["jev_sha256"], jev_sha256)
         self.render_complete(vars_, "# Dev Sanity Check FAIL")
 
     def test_rejects_multiple_or_non_skipped_findings(self):

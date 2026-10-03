@@ -84,7 +84,7 @@ class SanityHistory(unittest.TestCase):
         self.assertEqual(HISTORY.display_runs([legacy])[0]["match"], "—")
 
     def test_selected_final_verdict_must_match_and_reviewer_match_is_rendered(self):
-        selected = record(reviewer="sanity-selected", selection=[])
+        selected = record(reviewer="sanity-selected", selection=[{"deliverable": 1}])
         with self.assertRaises(SystemExit):
             HISTORY.validate_record(dict(selected, final_verdict="FAIL"))
         rows = HISTORY.display_runs([
@@ -132,20 +132,17 @@ class SanityHistory(unittest.TestCase):
                     self.assertIn("⚠ unavailable", result.stdout)
                     self.assertIn("| JEV | — |", result.stdout)
 
-    def test_assignment_selection_renders_with_default_both_and_single_reviewers(self):
+    def test_assignment_selection_renders_without_legacy_reviewers(self):
         variables = json.loads((SCRIPTS.parent / "examples/dev-sanity-template-vars.json").read_text())
-        for selection in (None, "llm", "jev"):
-            if selection is not None:
-                variables["reviewers"] = selection
-            self.output.write_text(json.dumps(variables))
-            rendered = subprocess.run(["sc-compose", "render", "--strict", "--file",
-                                       str(SCRIPTS.parent / "templates/dev-sanity-template.xml.j2"),
-                                       "--var-file", str(self.output)], capture_output=True, text=True)
-            self.assertEqual(rendered.returncode, 0, rendered.stderr)
-            self.assertIn(f"<reviewers>{selection or 'both'}</reviewers>", rendered.stdout)
-            self.assertIn("canonical coordinator", rendered.stdout)
-            self.assertIn("selected replies as the operational result", rendered.stdout)
-            self.assertIn("send identical assignments to both reviewers concurrently", rendered.stdout)
+        self.output.write_text(json.dumps(variables))
+        rendered = subprocess.run(["sc-compose", "render", "--strict", "--file",
+                                   str(SCRIPTS.parent / "templates/dev-sanity-template.xml.j2"),
+                                   "--var-file", str(self.output)], capture_output=True, text=True)
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        self.assertNotIn("<reviewers>", rendered.stdout)
+        self.assertIn("canonical coordinator", rendered.stdout)
+        self.assertIn("--llm-vars <sanity-llm-vars.json>", rendered.stdout)
+        self.assertIn("send identical assignments to both reviewers concurrently", rendered.stdout)
 
     def test_conflicting_identity_or_truncated_log_is_not_appended(self):
         HISTORY.append_record(self.log, record(), self.output)
