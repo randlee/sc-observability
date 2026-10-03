@@ -173,6 +173,20 @@ class TraitSlotContractTests(unittest.TestCase):
     def test_removable_path_is_matched_exactly(self):
         validate_trait_slot_contracts([self.row(removable_paths=[self.PATH + ".bak", "src/observation_v2.rs"])])
 
+    def test_empty_removable_paths_without_rationale_is_rejected(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"empty removable_paths.*unchanged_alias.*removal_rationale.*ProcessIdentityResolver::resolve",
+        ):
+            validate_trait_slot_contracts([self.row(removal_rationale=None)])
+
+    def test_empty_removable_paths_with_blank_rationale_is_rejected(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"empty removable_paths.*unchanged_alias.*removal_rationale.*ProcessIdentityResolver::resolve",
+        ):
+            validate_trait_slot_contracts([self.row(removal_rationale=" \t ")])
+
 
 class TraitImplContractTests(unittest.TestCase):
     def record(self, implementation, **overrides):
