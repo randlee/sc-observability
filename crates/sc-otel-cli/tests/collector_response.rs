@@ -45,9 +45,10 @@ impl Collector {
                 if stopped.load(Ordering::Acquire) {
                     break;
                 }
-                if Instant::now() >= deadline {
-                    panic!("collector timed out waiting for a request");
-                }
+                assert!(
+                    Instant::now() < deadline,
+                    "collector timed out waiting for a request"
+                );
                 let (mut stream, _) = match listener.accept() {
                     Ok(connection) => connection,
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -59,6 +60,9 @@ impl Collector {
                 if stopped.load(Ordering::Acquire) {
                     break;
                 }
+                stream
+                    .set_nonblocking(false)
+                    .expect("make accepted collector stream blocking");
                 stream
                     .set_read_timeout(Some(Duration::from_secs(10)))
                     .expect("read watchdog");
