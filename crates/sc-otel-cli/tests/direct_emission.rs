@@ -7,11 +7,8 @@ mod assert_result_v1;
 mod fixture_component;
 #[path = "common/golden_root.rs"]
 mod golden_root;
-mod common {
-    pub use super::assert_result_v1::assert_result_v1;
-    pub use super::fixture_component::fixture_component;
-}
-use common::{assert_result_v1, fixture_component};
+use assert_result_v1::assert_result_v1;
+use fixture_component::fixture_component;
 
 #[test]
 fn test_double_emits_every_signal_and_combined_stdin() {

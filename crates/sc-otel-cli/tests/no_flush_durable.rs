@@ -1,10 +1,6 @@
 #[path = "common/assert_result_v1.rs"]
 mod assert_result_v1;
-mod common {
-    pub use super::assert_result_v1::assert_result_v1;
-}
-
-use common::assert_result_v1;
+use assert_result_v1::assert_result_v1;
 use std::{net::TcpListener, process::Command};
 
 #[test]

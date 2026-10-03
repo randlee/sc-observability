@@ -8,15 +8,11 @@ mod d29_fixtures;
 mod d29_system_generated_fields;
 #[path = "common/golden_root.rs"]
 mod golden_root;
-mod common {
-    pub use super::assert_generated_value::assert_generated_value;
-    pub use super::assert_result_v1::assert_result_v1;
-    pub use super::d29_fixtures::D29_FIXTURES;
-    pub use super::d29_system_generated_fields::D29_SYSTEM_GENERATED_FIELDS;
-    pub use super::golden_root::golden_root;
-}
-
-use common::{D29_FIXTURES, D29_SYSTEM_GENERATED_FIELDS, assert_result_v1, golden_root};
+use assert_generated_value::assert_generated_value;
+use assert_result_v1::assert_result_v1;
+use d29_fixtures::D29_FIXTURES;
+use d29_system_generated_fields::D29_SYSTEM_GENERATED_FIELDS;
+use golden_root::golden_root;
 use sc_observability_types::Timestamp;
 use std::{
     fs,
@@ -134,7 +130,7 @@ fn assert_system_generated_fields(
                 let actual = record["record"]
                     .get(field)
                     .expect("generated field present");
-                common::assert_generated_value(field, actual, started, finished);
+                assert_generated_value(field, actual, started, finished);
                 record["record"][field] = expected[signal][index]["record"][field].clone();
             }
         }

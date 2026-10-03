@@ -5,10 +5,8 @@ mod assert_result_v1;
 mod fixture_component;
 #[path = "common/golden_root.rs"]
 mod golden_root;
-mod common {
-    pub use super::assert_result_v1::assert_result_v1;
-    pub use super::fixture_component::fixture_component;
-}
+use assert_result_v1::assert_result_v1;
+use fixture_component::fixture_component;
 
 use serde_json::{Value, json};
 use std::{
@@ -122,7 +120,7 @@ fn emit(body: String, flag: &str, payload: &str, signal: &str, path: &str, rejec
         .args(["emit", flag, payload])
         .output()
         .expect("real CLI runs");
-    let result = common::assert_result_v1(&output.stdout, "emit");
+    let result = assert_result_v1(&output.stdout, "emit");
     assert_eq!(
         output.status.code(),
         Some(if rejected { 7 } else { 0 }),
@@ -158,7 +156,7 @@ fn emit(body: String, flag: &str, payload: &str, signal: &str, path: &str, rejec
         .output()
         .expect("status runs");
     assert!(status.status.success(), "{status:?}");
-    let status = common::assert_result_v1(&status.stdout, "status");
+    let status = assert_result_v1(&status.stdout, "status");
     let persisted = &status["status"]["submissions"][0]["signals"][0];
     assert_eq!(persisted[0], signal);
     assert_eq!(
@@ -212,7 +210,7 @@ fn every_signal_honors_collector_partial_success_through_durable_cli() {
             "/v1development/profiles",
         ),
     ] {
-        let payload = common::fixture_component(fixture, field);
+        let payload = fixture_component(fixture, field);
         for (body, rejected) in [
             (
                 json!({"partialSuccess": {count: "1", "errorMessage": "rejected"}}).to_string(),

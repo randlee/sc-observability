@@ -5,11 +5,9 @@ mod d29_fixtures;
 mod d29_system_generated_fields;
 #[path = "common/golden_root.rs"]
 mod golden_root;
-mod common {
-    pub use super::d29_fixtures::D29_FIXTURES;
-    pub use super::d29_system_generated_fields::D29_SYSTEM_GENERATED_FIELDS;
-    pub use super::golden_root::golden_root;
-}
+use d29_fixtures::D29_FIXTURES;
+use d29_system_generated_fields::D29_SYSTEM_GENERATED_FIELDS;
+use golden_root::golden_root;
 use sc_observability_types::{
     SpanId, Timestamp, TraceId,
     otlp::submission::{IdSource, SubmissionEnvelope},
@@ -86,8 +84,8 @@ fn differences(
 #[test]
 fn generated_field_allowance_equals_executed_canonical_contract() {
     let mut found = BTreeSet::new();
-    for fixture in common::D29_FIXTURES {
-        let root = common::golden_root().join(fixture);
+    for fixture in D29_FIXTURES {
+        let root = golden_root().join(fixture);
         if !root.join("expected.envelope.json").is_file() {
             continue;
         }
@@ -117,7 +115,7 @@ fn generated_field_allowance_equals_executed_canonical_contract() {
     }
     assert_eq!(
         found,
-        common::D29_SYSTEM_GENERATED_FIELDS
+        D29_SYSTEM_GENERATED_FIELDS
             .iter()
             .map(|(s, f)| (s.to_string(), f.to_string()))
             .collect()

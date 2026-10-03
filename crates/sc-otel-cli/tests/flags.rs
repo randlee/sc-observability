@@ -12,15 +12,12 @@ mod fixture_component;
 mod golden_root;
 #[path = "common/mask_generated.rs"]
 mod mask_generated;
-mod common {
-    pub use super::assert_result_v1::assert_result_v1;
-    pub use super::d29_fixtures::D29_FIXTURES;
-    #[cfg(feature = "test-double")]
-    pub use super::fixture_component::fixture_component;
-    pub use super::golden_root::golden_root;
-    pub use super::mask_generated::mask_generated;
-}
-use common::assert_result_v1;
+use assert_result_v1::assert_result_v1;
+use d29_fixtures::D29_FIXTURES;
+#[cfg(feature = "test-double")]
+use fixture_component::fixture_component;
+use golden_root::golden_root;
+use mask_generated::mask_generated;
 
 #[test]
 fn stdin_fragment_and_profile_conflicts_are_usage_errors() {
@@ -122,11 +119,11 @@ fn flag_table_success_paths_cover_fragments_record_keys_and_repeatable_status_qu
             "--log",
             "{}",
             "--span",
-            &common::fixture_component("traces", "spans"),
+            &fixture_component("traces", "spans"),
             "--metric",
-            &common::fixture_component("metric_gauge", "metrics"),
+            &fixture_component("metric_gauge", "metrics"),
             "--profile",
-            &common::fixture_component("profiles", "profiles"),
+            &fixture_component("profiles", "profiles"),
         ])
         .output()
         .expect("combined flags run");
@@ -184,8 +181,8 @@ fn config_environment_is_resolved_for_a_valid_test_double_session() {
 
 #[test]
 fn equivalent_flag_and_stdin_input_produce_the_same_envelope_field_by_field() {
-    for fixture in common::D29_FIXTURES {
-        let path = common::golden_root().join(fixture);
+    for fixture in D29_FIXTURES {
+        let path = golden_root().join(fixture);
         if !path.join("expected.envelope.json").is_file() {
             continue;
         }
@@ -218,8 +215,8 @@ fn equivalent_flag_and_stdin_input_produce_the_same_envelope_field_by_field() {
         assert!(stdin.status.success(), "{fixture}: {stdin:?}");
         let mut flags = assert_result_v1(&flags.stdout, "validate")["envelope"].clone();
         let mut stdin = assert_result_v1(&stdin.stdout, "validate")["envelope"].clone();
-        common::mask_generated(&mut flags, &input);
-        common::mask_generated(&mut stdin, &input);
+        mask_generated(&mut flags, &input);
+        mask_generated(&mut stdin, &input);
         assert_eq!(flags, stdin, "{fixture}: every non-generated field");
     }
 }
