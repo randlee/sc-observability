@@ -218,7 +218,11 @@ def evaluate_one(path,client,output_dir,phase,run_id,attempt_role,minimum_probab
    if set(request['questions'])!=set(QUESTIONS):raise ValueError('v1 requires exactly three question IDs')
   else:validate_question_specs(request['questions'],specs,coverage,s['acceptance_predicates'])
   row.update(finding_id=s['finding_id'],evaluation_kind='finding',repository=s.get('repository'),pr_url=s.get('pr_url'),integration_sha=s['current_head'],fix_sha=s.get('claimed_fix_sha'),model=request['model'],prompt_version=s['prompt_version'],context_revision=s.get('context_revision',1),coverage=coverage,prompt_sha256=digest(encoded(request['questions'])),evidence_sha256=digest(encoded(s['current_evidence'])),request_bytes=len(client.validate_request(request)))
-  row['response']=client.evaluate(request)
+  # Scoring metadata stays in the retained local packet, never in model evidence.
+  wire_request={**request,'state':{k:v for k,v in s.items() if k!='question_specs'}}
+  row['wire_request_sha256']=digest(encoded(wire_request))
+  row['wire_request_bytes']=len(client.validate_request(wire_request))
+  row['response']=client.evaluate(wire_request)
   if specs is None:row['screening_disposition']=route(row['response'],coverage,minimum_probability)
   else:
    row['schema_version']=2;row['question_specs']=specs

@@ -1,8 +1,9 @@
-"""validate-plan's four checks on a two-sprint plan (t-2 depends on t-1), and the published bead schemas."""
+"""validate-plan's checks on a two-sprint plan (t-2 depends on t-1), and the published bead schemas."""
 from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -92,6 +93,95 @@ class ValidatePlan(unittest.TestCase):
                 with self.subTest(schema=exported.name):
                     self.assertEqual((ROOT / "schemas" / exported.name).read_text(), exported.read_text(),
                                      "run: scripts/bead_schema.py export schemas")
+
+
+FAKE_BD = """#!/usr/bin/env python3
+import json, os, sys
+beads = json.load(open(os.environ["FAKE_BD_BEADS"]))
+args = sys.argv[1:]
+if args[:1] == ["show"]:
+    ids = [a for a in args[1:] if not a.startswith("--")]
+    print(json.dumps([b for b in beads if b["id"] in ids]))
+elif args[:1] == ["list"]:
+    print(json.dumps(beads))
+elif args[:1] == ["doctor"]:
+    if os.environ.get("FAKE_BD_DOCTOR_ERR"):
+        sys.stderr.write(os.environ["FAKE_BD_DOCTOR_ERR"] + "\\n")
+        sys.exit(1)
+    print(json.dumps({"checks": [{"name": "ok", "status": "ok"}]}))
+else:
+    sys.exit("fake bd: unsupported " + " ".join(args))
+"""
+
+
+def git(cwd: Path, *args: str) -> str:
+    return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args], cwd=cwd, check=True,
+                          capture_output=True, text=True).stdout
+
+
+class LivePlan(unittest.TestCase):
+    """Without --index the plan comes from the root bead's integration branch, never from a fixed base."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        base = Path(self.tmp.name)
+        origin, self.repo, bin_dir = base / "origin.git", base / "repo", base / "bin"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
+        subprocess.run(["git", "init", "-q", "-b", "main", str(self.repo)], check=True)
+        git(self.repo, "remote", "add", "origin", str(origin))
+        config = self.repo / ".claude/project/atm-bd-orchestration.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text("plans_dir: plans\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "config")
+        git(self.repo, "push", "-q", "origin", "main")
+        # the plan exists only on the integration branch; there is no develop branch anywhere
+        git(self.repo, "checkout", "-qb", "integrate/phase-t")
+        plan = self.repo / "plans/phase-t/sprints.jsonl"
+        plan.parent.mkdir(parents=True)
+        plan.write_text("".join(json.dumps(r) + "\n" for r in PLAN))
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "plan")
+        git(self.repo, "push", "-q", "origin", "integrate/phase-t")
+        git(self.repo, "checkout", "-q", "main")
+        bin_dir.mkdir()
+        (bin_dir / "bd").write_text(FAKE_BD)
+        (bin_dir / "bd").chmod(0o755)
+        self.beads = base / "beads.json"
+        self.env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "FAKE_BD_BEADS": str(self.beads)}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_live(self, root_metadata: dict, **env: str) -> subprocess.CompletedProcess:
+        beads = copy.deepcopy(VALID)
+        beads[0]["metadata"] = root_metadata
+        self.beads.write_text(json.dumps(beads))
+        return subprocess.run([str(SCRIPT), "--root", "x-phase-t"], cwd=self.repo, env={**self.env, **env},
+                              capture_output=True, text=True)
+
+    def test_reads_the_plan_from_the_root_integration_branch(self):
+        out = self.run_live({"phase": "t", "integration_branch": "integrate/phase-t"})
+        self.assertEqual((out.returncode, out.stdout), (0, "plan valid: 2 sprints\n"), out.stderr)
+        self.assertNotIn("develop", out.stderr)
+
+    def test_root_without_integration_branch_cannot_run(self):
+        out = self.run_live({"phase": "t"})
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("x-phase-t has no metadata.integration_branch", out.stderr)
+
+    def test_plan_missing_on_the_branch_is_a_problem(self):
+        git(self.repo, "push", "-q", "origin", "main:refs/heads/integrate/phase-u")
+        out = self.run_live({"phase": "t", "integration_branch": "integrate/phase-u"})
+        self.assertEqual(out.returncode, 5)
+        self.assertIn("origin/integrate/phase-u:plans/phase-t/sprints.jsonl is missing", out.stdout)
+
+    def test_doctor_stderr_is_surfaced(self):
+        why = "proxy.doctor.unsupported: doctor is not supported in proxied-server mode"
+        out = self.run_live({"phase": "t", "integration_branch": "integrate/phase-t"}, FAKE_BD_DOCTOR_ERR=why)
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("bd doctor produced no JSON", out.stderr)
+        self.assertIn(why, out.stderr)
 
 
 if __name__ == "__main__":

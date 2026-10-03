@@ -13,8 +13,8 @@
   "finding_ref": "RQA-001",
   "title": "retry without jitter",
   "description": "Retries use a fixed delay, so many exporters retry in lockstep after a collector outage.",
-  "remedy": "Add full jitter to the retry delay in crates/sc-observability-otlp/src/sync.rs and a test for it.",
-  "evidence": "crates/sc-observability-otlp/src/sync.rs:97 `sleep(self.retry_delay)`",
+  "remedy": "Add full jitter to the retry delay in crates/example-otlp/src/sync.rs and a test for it.",
+  "evidence": "crates/example-otlp/src/sync.rs:97 `sleep(self.retry_delay)`",
   "sprint_bead": "obs-d-4",
   "requirements": [
     "NONE"

@@ -152,7 +152,11 @@ class PublicationTests(unittest.TestCase):
             run('config', 'user.email', 'test@example.invalid', cwd=repo)
             run('config', 'user.name', 'Artifact test', cwd=repo)
             (repo / 'README').write_text('base')
-            plan = repo / 'docs/plans/phase-test/sprints.jsonl'
+            # a non-default plans_dir proves both scripts read it from the repository configuration
+            config = repo / '.claude/project/atm-bd-orchestration.yaml'
+            config.parent.mkdir(parents=True)
+            config.write_text('plans_dir: work/plans\n')
+            plan = repo / 'work/plans/phase-test/sprints.jsonl'
             plan.parent.mkdir(parents=True)
             plan.write_text('["test-1", "gate", []]\n')
             run('add', 'README', str(plan.relative_to(repo)), cwd=repo)
@@ -163,11 +167,11 @@ class PublicationTests(unittest.TestCase):
             (repo / 'unrelated.txt').write_text('preserve staged work')
             run('add', 'unrelated.txt', cwd=repo)
             initial = run('rev-parse', 'HEAD', cwd=repo)
-            root = [{'id': 'root', 'metadata': {'phase': 'test', 'integration_branch': 'integrate/phase-test'}}]
+            root = [{'id': 'tp-phase-test', 'metadata': {'phase': 'test', 'integration_branch': 'integrate/phase-test'}}]
             with patch.object(artifact_check, 'run_json', return_value=root):
                 with self.assertRaisesRegex(RuntimeError, 'required phase index/HTML artifact missing'):
-                    artifact_check.check_artifact(repo, 'root', plan)
-            html = dag.html_view('<svg xmlns="http://www.w3.org/2000/svg"/>', 'test', 'root')
+                    artifact_check.check_artifact(repo, 'tp-phase-test', plan)
+            html = dag.html_view('<svg xmlns="http://www.w3.org/2000/svg"/>', 'test', 'tp-phase-test')
             result = publication.publish_artifact(repo, 'integrate/phase-test', 'test', html)
             self.assertEqual(run('rev-parse', 'HEAD', cwd=repo), initial)
             self.assertEqual(run('diff', '--cached', '--name-only', cwd=repo), 'unrelated.txt')
@@ -176,12 +180,13 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual(remote_head, result['commit'])
             changed = set(run('diff-tree', '--no-commit-id', '--name-only', '-r', result['commit'], cwd=repo).splitlines())
             self.assertEqual(changed, {result['html_path']})
+            self.assertEqual(result['html_path'], 'work/plans/phase-test/phase-test-dag.html')
             self.assertEqual(run('worktree', 'list', '--porcelain', cwd=repo).count('worktree '), 1)
             with patch.object(artifact_check, 'run_json', return_value=root):
-                artifact_check.check_artifact(repo, 'root', plan)
+                artifact_check.check_artifact(repo, 'tp-phase-test', plan)
                 plan.write_text('["test-2", "other-gate", []]\n')
                 with self.assertRaisesRegex(RuntimeError, 'phase plan differs'):
-                    artifact_check.check_artifact(repo, 'root', plan)
+                    artifact_check.check_artifact(repo, 'tp-phase-test', plan)
             # Publishing identical bytes must not create an extra commit.
             again = publication.publish_artifact(repo, 'integrate/phase-test', 'test', html)
             self.assertEqual(again['commit'], result['commit'])

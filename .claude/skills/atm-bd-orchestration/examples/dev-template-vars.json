@@ -3,10 +3,12 @@
   "sprint": "d-4",
   "stack": "phase-d",
   "pr_target": "integrate/phase-d",
-  "worktree_path": "/Users/randlee/github/sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
+  "worktree_path": "../sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
   "branch": "sprint/d-4-otlp-sync-exporter",
   "lead": "obs-lead",
   "cc": "",
-  "primary_checkout": "/Users/randlee/github/sc-observability",
-  "phase_root": "obs-phase-d"
+  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-alignment",
+  "phase_root": "obs-phase-d",
+  "test_command": "make test",
+  "policy_path": ".claude/project/quality-policy.md"
 }

@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-task
-version: 1.9.0
+version: 2.2.0
 description: lead sanity check assignment for the member that fills the dev-sanity role (resolve-role dev-sanity). task_id is the sanity check bead. The member splits the checked bead per numbered deliverable (sanity-split), runs LLM and JEV checkers per deliverable and a selected merge with lint alongside, then reports PASS or FAIL. Not QA.
 format: xml
 required_variables:
@@ -14,14 +14,9 @@ required_variables:
   - pr_number
   - pr_url
   - primary_checkout
-optional_variables:
   - lead
   - cc
   - lint_command
-defaults:
-  lead: team-lead
-  cc: team-lead
-  lint_command: "just lint"
 metadata:
   type: dev-sanity-task
   tags:

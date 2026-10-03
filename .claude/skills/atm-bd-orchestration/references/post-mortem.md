@@ -1,7 +1,7 @@
 # Phase integration post-mortem
 
-Required after sprint and fix layers land on `integrate/phase-<x>`, before
-phase closure or merge to `develop`. This replaces the TTL finding inventory
+Required after sprint and fix layers land on the phase root's `integration_branch`,
+before phase closure or the merge to the base branch. This replaces the TTL finding inventory
 from `triaging-findings`: beads and their evidence are the source of truth.
 It is part of the phase-end review, not another review of every fix layer.
 
@@ -108,4 +108,4 @@ at the new integration head; carry forward unaffected evidence only after
 checking intervening changes cannot invalidate it. A stale commit, unverified
 finding, or inventory gap cannot authorize phase closure. The lead confirms
 the report SHA equals the integration head before closing the root or merging
-to `develop`.
+to the base branch.

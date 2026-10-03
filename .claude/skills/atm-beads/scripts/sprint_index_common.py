@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import repo_config
+
 
 def run_json(repo: Path, *args: str) -> Any:
     result = subprocess.run(list(args), cwd=repo, capture_output=True, text=True)
@@ -33,22 +35,34 @@ def phase_id(root: str, record: dict) -> str:
 
 
 def phase_path(repo: Path, phase: str) -> Path:
+    """`<plans_dir>/phase-<phase>/sprints.jsonl`; plans_dir comes from the repository configuration."""
     if not re.fullmatch(r"[a-z0-9]+", phase):
         raise RuntimeError(f"invalid phase: {phase}")
-    return repo / "docs" / "plans" / f"phase-{phase}" / "sprints.jsonl"
+    return repo / repo_config.load(repo)["plans_dir"] / f"phase-{phase}" / "sprints.jsonl"
 
 
 def _phase_from_path(path: Path) -> str:
     match = re.fullmatch(r"phase-([a-z0-9]+)", path.parent.name)
     if not match:
-        raise RuntimeError("phase plan must live at docs/plans/phase-<phase>/sprints.jsonl")
+        raise RuntimeError("phase plan must live at <plans_dir>/phase-<phase>/sprints.jsonl")
     return match.group(1)
 
 
-def _dev_bead_id(sprint: str) -> str:
+def bead_prefix(root: str | None, start: Path) -> str:
+    """The bead id prefix: taken from the phase root id (`<prefix>-phase-<p>`) when one is given,
+    else `bead_prefix` from the repository configuration of the repository holding `start`."""
+    if root:
+        match = re.fullmatch(r"(.+)-phase-[a-z0-9]+", root)
+        if not match:
+            raise RuntimeError(f"root bead id {root!r} is not <prefix>-phase-<phase>")
+        return match.group(1)
+    return str(repo_config.load(repo_config.repo_root(start))["bead_prefix"])
+
+
+def _dev_bead_id(prefix: str, sprint: str) -> str:
     if not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", sprint):
         raise RuntimeError(f"invalid sprint name {sprint!r}")
-    return f"obs-{sprint}"
+    return f"{prefix}-{sprint}"
 
 
 def load_phase_plan(path: Path, root: str | None = None) -> dict:
@@ -58,6 +72,7 @@ def load_phase_plan(path: Path, root: str | None = None) -> dict:
     their existing pair-oriented interface while all persisted graph authority
     remains the compact tuple file.
     """
+    prefix: str | None = None  # read on the first row, so an empty plan fails as empty
     rows: list[dict[str, object]] = []
     seen_sprints: set[str] = set()
     seen_sanity: set[str] = set()
@@ -73,7 +88,8 @@ def load_phase_plan(path: Path, root: str | None = None) -> dict:
         sprint, sanity, depends_on = value
         if not isinstance(sprint, str) or not sprint:
             raise RuntimeError(f"{path}:{number}: sprint_name must be a nonempty string")
-        dev = _dev_bead_id(sprint)
+        prefix = prefix or bead_prefix(root, path.parent)
+        dev = _dev_bead_id(prefix, sprint)
         if not isinstance(sanity, str) or not sanity or sanity == dev:
             raise RuntimeError(f"{path}:{number}: sanity_bead_id must be a nonempty bead ID distinct from {dev}")
         if not isinstance(depends_on, list) or not all(isinstance(item, str) and item for item in depends_on):
@@ -92,10 +108,9 @@ def load_phase_plan(path: Path, root: str | None = None) -> dict:
         if unknown:
             raise RuntimeError(f"{path}: {row['sprint']} depends_on unknown sprint(s): {', '.join(sorted(unknown))}")
     phase = _phase_from_path(path)
-    # The root is supplied by the caller when known.  The filename supplies a
-    # useful default for report discovery, but root naming itself is not a
-    # duplicate field in the persisted tuple source.
-    expected_root = root or f"obs-phase-{phase}"
+    # The root is supplied by the caller when known; otherwise it is named from the
+    # configured prefix and the phase directory, never stored in the tuple file.
+    expected_root = root or f"{prefix}-phase-{phase}"
     by_sprint = {str(row["sprint"]): row for row in rows}
     normalized = []
     for row in rows:

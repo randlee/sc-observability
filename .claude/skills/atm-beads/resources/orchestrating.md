@@ -169,4 +169,4 @@ Closed beads alone do not establish that fixes landed. After integration,
 run the phase-end review and finding reconciliation in
 [`atm-bd-orchestration/references/post-mortem.md`](../../atm-bd-orchestration/references/post-mortem.md).
 Include closed finding beads and verify their resolutions at the pinned
-integration head before closing the phase or merging it to `develop`.
+integration head before closing the phase or merging it to the base branch.

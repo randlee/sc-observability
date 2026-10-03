@@ -1,6 +1,6 @@
 """Frozen phase-contract constants shared by validate-plan, the orchestration templates and the dispatch view.
 
-This module is the layer-1 interface (bead obs-bo-10, deliverable 5). Every consumer imports these names;
+This module is the layer-1 interface. Every consumer imports these names;
 no script redefines them. Changing a value here is a plan-contract change and needs a plan PR.
 """
 

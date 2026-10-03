@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 
+import repo_config
 from sprint_index_common import load_phase_plan, phase_id, run_json
 
 
@@ -43,7 +44,7 @@ def check_artifact(repo, root, expected_plan_path):
     git('check-ref-format', '--branch', branch)
     ref = f'refs/remotes/origin/{branch}'
     git('fetch', '--no-tags', 'origin', f'refs/heads/{branch}:{ref}')
-    base = f'docs/plans/phase-{phase}'
+    base = f"{repo_config.load(repo)['plans_dir']}/phase-{phase}"
     try:
         page = git('show', f'{ref}:{base}/phase-{phase}-dag.html')
         published_plan = git('show', f'{ref}:{base}/sprints.jsonl')
@@ -51,7 +52,7 @@ def check_artifact(repo, root, expected_plan_path):
         raise RuntimeError(f'{branch}: required phase index/HTML artifact missing or unreadable; run sprint-review --root {root}: {exc}') from exc
     # Validate the remote bytes without treating a Beads projection as input.
     with tempfile.TemporaryDirectory(prefix='phase-artifact-check-') as directory:
-        published_path = Path(directory) / 'docs' / 'plans' / f'phase-{phase}' / 'sprints.jsonl'
+        published_path = Path(directory) / f'phase-{phase}' / 'sprints.jsonl'
         published_path.parent.mkdir(parents=True)
         published_path.write_text(published_plan)
         load_phase_plan(published_path, root)

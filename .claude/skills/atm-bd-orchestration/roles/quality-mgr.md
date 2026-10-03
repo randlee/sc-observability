@@ -20,8 +20,11 @@ Where this role and `quality-mgr.md` differ, this role wins:
 
 ## Tasks
 
-Every task is a QA bead rendered from `qa-template.xml.j2`; the task id is
-the bead id. Follow its steps in order. QA never holds dev back: nothing is
+Ordinary QA tasks use `qa-template.xml.j2`; plan reviews use
+`plan-review-template.xml.j2`, and phase-ending reviews use
+`review-template.xml.j2`. The task id is the bead id. Follow the assigned
+template; the ordinary QA PR/sanity pre-claim checks below do not apply to
+plan reviews or integration post-mortems. QA never holds dev back: nothing is
 blocked by a QA bead, and you close it (task and bead together) whatever the
 verdict. The open finding beads carry the remaining work.
 
@@ -58,22 +61,62 @@ why they are strict:
   starts from a bead with the wrong governing ids builds against the wrong
   contract, and QA then checks against the same wrong list. Never downgrade
   these, and never let ceremony-finding-screen remove them.
-- Plan findings are not finding beads. They go in the report, and the
-  plan-review bead stays open until a round passes.
+- Plan findings are not finding beads. They go in the report, one line each
+  naming the reviewer that filed it, and the plan-review bead stays open until
+  a round passes.
+- A plan fix round (`carry_forward` set) follows "Fix verification takes
+  precedence" below: only the filing reviewer of each carried finding runs
+  (`scripts/fix-round-scope --plan`), locked to it; `req-qa` and `arch-qa` are
+  not re-run, `plan-scope-reviewer` does not run in full, there is no ceremony
+  screen and no new finding. `validate-plan` still runs, like required CI.
+
+## Phase-ending post-mortem
+
+You own the required JEV post-mortem as part of phase-ending review, after
+fixes land on the pinned head of the phase root's `integration_branch` and before phase closure.
+Follow [post-mortem.md](../references/post-mortem.md) and
+[the context preparation workflow](../references/post-mortem-context-preparation.md).
+Inventory every phase finding, including closed and nested findings. Use JEV
+for code-fix screening; verify deferrals and administrative outcomes from
+receipts. Do not substitute closed bead status or commit ancestry for current
+behavior, and do not expand a carried finding into a new whole-sprint review.
+
+Investigate every uncertain or flagged result before accepting it or filing
+anything. Confirm defects against the original obligation and current source,
+deduplicate them, then file finding beads and report them to the lead for fix
+assignment. You verify these carried gaps after the fixes; the lead coordinates
+development. Keep unchecked cases unresolved rather than sampling them away.
+
+Append raw evaluations and linked investigation dispositions to the phase's
+JSONL evidence, with UTC timestamps, pinned SHA and run IDs. Preserve prior
+attempts. The review completion includes `post_mortem_jev` with run IDs, JSONL
+path, integration SHA and status, plus the complete inventory dispositions.
+A model error is not PASS. If no code findings exist, record `not_applicable`
+with the inventory reason; if JEV is unavailable, record `unavailable` and
+leave integration review pending. Quality scores are advisory, not closures.
 
 ## Reviewers
 
-Round 1 of a layer (no `carry_forward`): `req-qa`, `arch-qa`,
-`rust-qa-agent`, `ruthless-boundary-qa`, `rust-best-practices-agent` and
-`rust-service-hardening-agent`. Add `flaky-test-qa` when tests changed or
-instability is suspected, and `schema-reviewer` when repository policy
-declares a governed interface in scope, as `quality-mgr.md` ("Reviewer
-Selection") says.
+The reviewer sets are the repository's, from its configuration, and arrive
+as `qa-template.xml.j2` variables. Round 1 of a layer (no `carry_forward`)
+runs `reviewers_round1`. Sprint rounds 1–2 remain sprint reviews with that
+set; a fix does not become a sprint review because it has a new PR or round
+number.
+
+Conditional reviewers (sprint reviews only): add any reviewer the repository
+QA policy (`policy_path`) requires for the change, for example a flaky-test
+reviewer when tests changed or a schema reviewer when a governed interface is
+in scope, as `quality-mgr.md` ("Reviewer Selection") says.
+
+### Fix verification takes precedence
 
 A fix round (`carry_forward` set) dispatches only each carried finding's
 filing reviewer, locked to the carried finding ids and their original
 acceptance criteria: no req-qa/arch-qa/rust-qa or screening panel, no sweep,
 no new findings. Required CI stays a separate merge requirement.
+
+`scripts/fix-round-scope` enforces the dispatch set and the lock; the
+assignment's step d says how.
 
 Every reviewer is a background agent (a subagent or child agent, whichever
 your harness provides). It gets the pinned `branch`, `commit` and
@@ -94,8 +137,8 @@ sc-compose render --file .claude/skills/atm-bd-orchestration/templates/<reviewer
 - `review_mode` takes the reviewer's own value. For `arch-qa` and
   `schema-reviewer` a sprint layer is `sprint_review` and the phase end is
   `phase_end`. `ruthless-boundary-qa` maps `sprint` itself.
-- `sprint_doc` goes only to the reviewers whose contract takes it (`req-qa`,
-  `arch-qa`). `ceremony-finding-screen` takes `worktree_path`, `sprint_doc`
+- `sprint_doc` goes only to the reviewers whose assignment template takes it.
+  `ceremony-finding-screen` takes `worktree_path`, `sprint_doc`
   and `findings`.
 - `carry_forward_findings_json` is a JSON array of the reviewer's own finding
   ids (`metadata.finding_ref` of the carried beads). It is never an empty
@@ -127,7 +170,7 @@ screen said. What happens next depends on the verdict:
   disappearing.
 - A round with only minor findings is PASS; its open finding beads remain
   backlog. Any blocking or important finding is FAIL and receives exactly one
-  fix round. A second FAIL is `ROUND_CAP`: stop dispatch and record the root
+  fix round, verified as "Fix verification takes precedence" says. A second FAIL is `ROUND_CAP`: stop dispatch and record the root
   cause rather than creating another fix round.
 - `difficulty` is required when rendering a finding. Copy it from the
   checked sprint/finding; never select a default. The dispatch report prints
