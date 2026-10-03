@@ -6,7 +6,7 @@
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use sc_observability_log::BridgeOptions;
+use sc_observability_log::{BridgeOptions, DetachError};
 use sc_observability_types::v2::InitError;
 use sc_observability_types::{
     ActionName, ErrorCode, ErrorContext, Level, LogEvent, OBSERVATION_ENVELOPE_VERSION,
@@ -53,23 +53,6 @@ enum FixtureSlotState {
     Closing,
 }
 
-#[derive(Debug)]
-enum FixtureDetachError {
-    Timeout(Box<ErrorContext>),
-    NotInstalled(Box<ErrorContext>),
-    ForeignLoggerInstalled(Box<ErrorContext>),
-}
-
-impl FixtureDetachError {
-    fn context(&self) -> &ErrorContext {
-        match self {
-            Self::Timeout(context)
-            | Self::NotInstalled(context)
-            | Self::ForeignLoggerInstalled(context) => context,
-        }
-    }
-}
-
 fn detach_error(
     code: &'static str,
     message: &'static str,
@@ -82,28 +65,34 @@ fn detach_error(
     ))
 }
 
-fn detach_timeout() -> FixtureDetachError {
-    FixtureDetachError::Timeout(detach_error(
-        "SC_LOG_DETACH_TIMEOUT",
-        "detach timed out",
-        Remediation::recoverable("retry detach", ["wait for drain"]),
-    ))
+fn detach_timeout() -> DetachError {
+    DetachError::Timeout {
+        context: detach_error(
+            "SC_LOG_DETACH_TIMEOUT",
+            "detach timed out",
+            Remediation::recoverable("retry detach", ["wait for drain"]),
+        ),
+    }
 }
 
-fn not_installed() -> FixtureDetachError {
-    FixtureDetachError::NotInstalled(detach_error(
-        "SC_LOG_DETACH_NOT_INSTALLED",
-        "attachment is not installed",
-        Remediation::not_recoverable("attach before using control"),
-    ))
+fn not_installed() -> DetachError {
+    DetachError::NotInstalled {
+        context: detach_error(
+            "SC_LOG_DETACH_NOT_INSTALLED",
+            "attachment is not installed",
+            Remediation::not_recoverable("attach before using control"),
+        ),
+    }
 }
 
-fn foreign_logger_installed() -> FixtureDetachError {
-    FixtureDetachError::ForeignLoggerInstalled(detach_error(
-        "SC_LOG_FOREIGN_LOGGER_INSTALLED",
-        "another logger owns the logging facade",
-        Remediation::recoverable("remove the competing logger", ["use the logger owner"]),
-    ))
+fn foreign_logger_installed() -> DetachError {
+    DetachError::ForeignLoggerInstalled {
+        context: detach_error(
+            "SC_LOG_FOREIGN_LOGGER_INSTALLED",
+            "another logger owns the logging facade",
+            Remediation::recoverable("remove the competing logger", ["use the logger owner"]),
+        ),
+    }
 }
 
 #[derive(Debug)]
@@ -197,7 +186,7 @@ impl FixtureLogAttachment {
         self.state.lock().expect("fixture state lock").entered_calls = entered_calls;
     }
 
-    fn detach(&mut self, timeout: Duration) -> Result<(), FixtureDetachError> {
+    fn detach(&mut self, timeout: Duration) -> Result<(), DetachError> {
         let mut state = self.state.lock().expect("fixture state lock");
         match state.slot {
             FixtureSlotState::Attached => state.slot = FixtureSlotState::Closing,
@@ -216,7 +205,7 @@ impl FixtureLogAttachment {
 }
 
 impl FixtureLogControl {
-    fn submit(&self) -> Result<(), FixtureDetachError> {
+    fn submit(&self) -> Result<(), DetachError> {
         let state = self.state.upgrade().ok_or_else(not_installed)?;
         let slot = state.lock().expect("fixture state lock").slot;
         if slot == FixtureSlotState::Attached {
@@ -281,9 +270,15 @@ fn contract_event() -> LogEvent {
     }
 }
 
-fn assert_detach_error(error: &FixtureDetachError, code: &str, remediation: &Remediation) {
-    let diagnostic = error.context().diagnostic();
-    assert_eq!(diagnostic.code.as_str(), code);
+fn assert_detach_error(error: &DetachError, code: &str, remediation: &Remediation) {
+    assert_eq!(error.code().as_str(), code);
+    let (DetachError::Timeout { context }
+    | DetachError::NotInstalled { context }
+    | DetachError::ForeignLoggerInstalled { context }) = error
+    else {
+        panic!("fixture constructs only the documented DetachError variants");
+    };
+    let diagnostic = context.diagnostic();
     assert_eq!(&diagnostic.remediation, remediation);
 }
 
