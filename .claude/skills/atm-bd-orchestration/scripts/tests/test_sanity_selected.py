@@ -7,6 +7,7 @@ import importlib.machinery
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -170,9 +171,41 @@ class SelectedMergeTests(unittest.TestCase):
                     "--selection", str(root / "selection.json")]
             with mock.patch.object(merge, "lint_result", return_value=(0, [], "")), \
                  mock.patch.object(merge, "verify_worktree"), \
+                 mock.patch.object(merge, "context_path_exists", return_value=True), \
                  contextlib.redirect_stdout(output):
                 self.assertEqual(merge.main(argv), 0)
             return json.loads(output.getvalue())
+
+    def test_selected_rejects_rerun_context_absent_from_manifest_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worktree = root / "worktree"
+            worktree.mkdir()
+            for command in (("git", "init", "-q", str(worktree)),
+                            ("git", "-C", str(worktree), "config", "user.email", "test@example.com"),
+                            ("git", "-C", str(worktree), "config", "user.name", "test")):
+                subprocess.run(command, check=True)
+            (worktree / "present.rs").write_text("present\n")
+            subprocess.run(("git", "-C", str(worktree), "add", "present.rs"), check=True)
+            subprocess.run(("git", "-C", str(worktree), "commit", "-qm", "pinned"), check=True)
+            sha = subprocess.run(("git", "-C", str(worktree), "rev-parse", "HEAD"), check=True,
+                                 capture_output=True, text=True).stdout.strip()
+            manifest = {"deliverables_total": 1, "sha": sha, "worktree_path": str(worktree)}
+            llm = reply(1)
+            jev = reply(1)
+            for value in (llm, jev):
+                value["data"]["commit_checked"] = sha
+            (root / "llm.json").write_text(json.dumps([llm]))
+            (root / "jev.json").write_text(json.dumps([jev]))
+            (root / "selection.json").write_text(json.dumps([{
+                "deliverable": 1, "llm": "done", "jev": "done", "selected": "rerun",
+                "reason": "Need the omitted file", "checker_defect": False,
+                "rerun": {"reviewer": "sanity-jev", "context": ["missing.rs"], "reply": jev},
+            }]))
+            args = argparse.Namespace(llm_results=root / "llm.json", jev_results=root / "jev.json",
+                                      selection=root / "selection.json")
+            with self.assertRaisesRegex(merge.Reject, "rerun context path is absent at manifest sha: missing.rs"):
+                merge.selected_results(args, manifest, "sanity", "dev")
 
     def test_checker_defect_only_is_pass_without_findings(self):
         undone = reply(1, [{"kind": "skipped", "file": "a.rs", "line": 1, "issue": "missing"}])

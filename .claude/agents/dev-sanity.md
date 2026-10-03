@@ -75,8 +75,11 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    and a checker-defect flag. A checker defect creates no child; its selection
    record and workflow-issue class bead carry the evidence, and the lead may
    reopen it. A rerun supplies one unchanged reply, its
-   reviewer, and nonempty repo-relative missing-context paths. A checker
-   defect is allowed only for a selected undone reply and needs its reason.
+   reviewer, and nonempty repo-relative missing-context paths. A re-run
+   renders the same assignment with `context` set to objects for exactly the
+   repo-relative, pinned-commit paths it adds; `rerun.context` lists those
+   same paths. A checker defect is allowed only for a selected undone reply
+   and needs its reason.
 
    ```bash
    $S/sanity-merge "$manifest" "$task" "$checked_bead" "$sprint" \
