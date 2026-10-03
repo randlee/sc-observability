@@ -1,4 +1,9 @@
 //! Count real HTTP attempts across durable flushes, including profiles.
+//!
+//! Attempt budgets are asserted on manually driven clients: a drain under the
+//! frozen test clock cannot lose its lease between the claim and the result
+//! transaction, which on a starved runner reclaims the row and charges a second
+//! attempt. Autonomous workers are used only where worker exit is the contract.
 use super::*;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -107,6 +112,10 @@ fn read_http(stream: &mut TcpStream) -> (String, Vec<u8>) {
     (path, bytes[end..end + size].to_vec())
 }
 
+fn open_real(config: TelemetryClientConfig) -> DurableTelemetryClient {
+    conformance::open_manual(|| DurableTelemetryClient::open(config)).unwrap()
+}
+
 #[test]
 fn exhausted_transport_is_terminal_across_drain_reruns_including_profiles() {
     for (name, path) in [
@@ -116,7 +125,7 @@ fn exhausted_transport_is_terminal_across_drain_reruns_including_profiles() {
         let dir = tempfile::tempdir().unwrap();
         let collector = Collector::new(None);
         let config = collector.configure(dir.path());
-        let client = DurableTelemetryClient::open(config.clone()).unwrap();
+        let client = open_real(config.clone());
         let receipt = client.emit(fixture(name)).unwrap();
         for _ in 0..2 {
             assert!(matches!(
@@ -135,10 +144,10 @@ fn exhausted_transport_is_terminal_across_drain_reruns_including_profiles() {
             status.submissions[0].signals[0].1,
             DeliveryState::Failed { attempts: 1, .. }
         ));
-        let _ = client.shutdown(DEADLINE);
+        client.shutdown(DEADLINE).unwrap();
         drop(client);
         // A new owner must not spend the exhausted network budget again.
-        let reopened = DurableTelemetryClient::open(config).unwrap();
+        let reopened = open_real(config);
         assert!(
             reopened
                 .flush_submission(&receipt.submission_id, DEADLINE)
@@ -153,7 +162,7 @@ fn exhausted_transport_is_terminal_across_drain_reruns_including_profiles() {
             collector.paths.lock().unwrap().as_slice(),
             vec![path.to_owned(); 4].as_slice()
         );
-        let _ = reopened.shutdown(DEADLINE);
+        reopened.shutdown(DEADLINE).unwrap();
     }
 }
 
@@ -162,7 +171,7 @@ fn transient_collector_failure_delivers_within_one_drain_attempt() {
     for name in ["logs", "profiles"] {
         let dir = tempfile::tempdir().unwrap();
         let collector = Collector::new(Some(1));
-        let client = DurableTelemetryClient::open(collector.configure(dir.path())).unwrap();
+        let client = open_real(collector.configure(dir.path()));
         let receipt = client.emit(fixture(name)).unwrap();
         client
             .flush_submission(&receipt.submission_id, DEADLINE)
@@ -194,52 +203,112 @@ impl SubmissionExporter for CancelledExporter {
     }
 }
 
+fn logs_row(shared: &Shared) -> (String, u32, Option<String>) {
+    shared
+        .db
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT state,attempts,claimed_by FROM signal_deliveries",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap()
+}
+
 #[test]
 fn interrupted_transport_remains_pending_for_replacement_client() {
     let dir = tempfile::tempdir().unwrap();
     let exporter = Arc::new(CancelledExporter(AtomicUsize::new(0)));
     let config = config(dir.path());
-    let client =
-        DurableTelemetryClient::open_with_exporter(config.clone(), exporter.clone()).unwrap();
+    let client = conformance::open_manual(|| {
+        DurableTelemetryClient::open_with_exporter(config.clone(), exporter.clone())
+    })
+    .unwrap();
     let receipt = client.emit(fixture("logs")).unwrap();
-    let deadline = std::time::Instant::now() + DEADLINE;
+    let shared = &client.owner.shared;
+    {
+        let _clock = FrozenClock::new();
+        assert!(
+            !drain_once_bounded(shared, exporter.as_ref(), Signal::Logs),
+            "an interrupted export is not delivery progress"
+        );
+    }
+    assert_eq!(exporter.0.load(Ordering::Acquire), 1);
+    let status = client
+        .status(StatusQuery::Submissions(vec![
+            receipt.submission_id.clone(),
+        ]))
+        .unwrap();
+    assert!(matches!(
+        status.submissions[0].signals[0].1,
+        DeliveryState::Pending
+    ));
+    assert_eq!(logs_row(shared), ("pending".to_owned(), 0, None));
+    // A manual client has no worker to release its lease on exit; perform the
+    // release the last worker owns, then stop the client without draining.
+    worker::release(shared);
+    drop(client);
+    let replacement = conformance::open_manual(|| {
+        DurableTelemetryClient::open_with_exporter(
+            config,
+            Arc::new(ScriptedExporter::new(dir.path())),
+        )
+    })
+    .unwrap();
+    assert_eq!(
+        replacement
+            .flush_submission(&receipt.submission_id, DEADLINE)
+            .unwrap()
+            .delivered
+            .logs,
+        1
+    );
+    assert_eq!(exporter.0.load(Ordering::Acquire), 1);
+    replacement.shutdown(DEADLINE).unwrap();
+}
+
+#[test]
+fn interrupted_transport_stops_only_its_signal_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let exporter = Arc::new(CancelledExporter(AtomicUsize::new(0)));
+    let client =
+        DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone()).unwrap();
+    let receipt = client.emit(fixture("logs")).unwrap();
+    let shared = &client.owner.shared;
+    // The logs worker exits after its first owned Interrupted result; the
+    // heartbeat and the three other signal workers stay live.
+    let deadline = Instant::now() + DEADLINE;
     loop {
-        let generation = client.owner.shared.generation();
-        let status = client
-            .status(StatusQuery::Submissions(vec![
-                receipt.submission_id.clone(),
-            ]))
-            .unwrap();
-        if exporter.0.load(Ordering::Acquire) == 1
-            && matches!(status.submissions[0].signals[0].1, DeliveryState::Pending)
-        {
+        let generation = shared.generation();
+        if shared.live_workers.load(Ordering::Acquire) == 4 {
             break;
         }
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        assert!(!remaining.is_zero(), "cancelled row was not restored");
-        client.owner.shared.wait_since(generation, remaining);
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        assert!(
+            !remaining.is_zero(),
+            "logs worker did not stop after the interrupted export"
+        );
+        shared.wait_since(generation, remaining);
     }
-    let attempts: u32 = client
-        .owner
-        .shared
-        .db
-        .lock()
-        .unwrap()
-        .query_row("SELECT attempts FROM signal_deliveries", [], |row| {
-            row.get(0)
-        })
+    let calls = exporter.0.load(Ordering::Acquire);
+    assert!(calls >= 1);
+    let (state, _, claimed_by) = logs_row(shared);
+    assert_eq!((state.as_str(), claimed_by), ("pending", None));
+    let status = client
+        .status(StatusQuery::Submissions(vec![receipt.submission_id]))
         .unwrap();
-    assert_eq!(attempts, 0);
-    let _ = client.shutdown(Duration::from_millis(10));
-    drop(client);
-    assert_eq!(exporter.0.load(Ordering::Acquire), 1);
-    let replacement = DurableTelemetryClient::open_with_exporter(
-        config,
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
-    .unwrap();
-    replacement
-        .flush_submission(&receipt.submission_id, DEADLINE)
-        .unwrap();
-    replacement.shutdown(DEADLINE).unwrap();
+    assert!(matches!(
+        status.submissions[0].signals[0].1,
+        DeliveryState::Pending
+    ));
+    // The pending row cannot be flushed; whether the deadline or the final store
+    // lock budget expires first depends on live worker transactions.
+    assert!(client.shutdown(Duration::from_millis(10)).is_err());
+    worker::join(shared, DEADLINE);
+    assert_eq!(
+        exporter.0.load(Ordering::Acquire),
+        calls,
+        "a stopped exporter is not called again"
+    );
 }

@@ -7,14 +7,30 @@ pub(in crate::durable) fn enabled() -> bool {
     ENABLED.get()
 }
 
+// Opens a client without autonomous workers: its drains run only inside its own
+// flush calls, on this thread, under the frozen test clock, so a lease can never
+// lapse between a claim and its result transaction.
+pub(super) fn open_manual(
+    open: impl FnOnce() -> Result<DurableTelemetryClient, TelemetryClientError>,
+) -> Result<DurableTelemetryClient, TelemetryClientError> {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            ENABLED.set(false);
+        }
+    }
+    ENABLED.set(true);
+    let _reset = Reset;
+    open()
+}
+
 pub(super) fn open_gated(
     config: TelemetryClientConfig,
     exporter: &Arc<ScriptedExporter>,
 ) -> DurableTelemetryClient {
-    ENABLED.set(true);
-    let opened = DurableTelemetryClient::open_with_exporter(config, exporter.clone());
-    ENABLED.set(false);
-    let client = opened.unwrap();
+    let client =
+        open_manual(|| DurableTelemetryClient::open_with_exporter(config, exporter.clone()))
+            .unwrap();
     *exporter.conformance_shared.lock().unwrap() = Arc::downgrade(&client.owner.shared);
     client
 }
