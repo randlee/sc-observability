@@ -69,6 +69,53 @@ class TemplateContractTests(unittest.TestCase):
                 self.assertIn("`git fetch origin && git rebase origin/{{ pr_target | string | cdata_escape }}` in the worktree", text)
                 self.assertLess(text.index("git rebase origin/"), text.index("assignment-gates.py dev"))
 
+    def test_integration_completion_requires_audit_evidence(self):
+        import json
+        import tempfile
+
+        template = ROOT / "templates/review-complete.md.j2"
+        original = json.loads((ROOT / "examples/review-complete-vars.json").read_text())
+        passed = {**original, "findings_important": 0, "verdict": "PASS", "integration_review": "integration_review_passed",
+                  "post_mortem_counts": {"total": 0, "verified_fixed": 0, "justified_nonfix": 0, "unresolved": 0},
+                  "post_mortem_md": "Empty inventory verified; no_systemic_followup"}
+        cases = [
+            (passed, True),
+            ({**passed, "findings_blocking": 1}, False),
+            ({**passed, "findings_important": 1}, False),
+            ({**passed, "findings_minor": -1}, False),
+            (original, True),
+            ({**original, "integration_review": "PASS"}, False),
+            ({**original, "post_mortem_md": "  "}, False),
+            ({k: v for k, v in original.items() if k != "integration_review"}, False),
+            ({k: v for k, v in original.items() if k != "post_mortem_md"}, False),
+            ({**passed, "post_mortem_counts": original["post_mortem_counts"]}, False),
+            ({**passed, "integration_commit": "f" * 40}, False),
+            ({**passed, "integration_commit": "short"}, False),
+            ({**passed, "verdict": "FAIL"}, False),
+            ({**passed, "post_mortem_counts": {"total": 2, "verified_fixed": 1, "justified_nonfix": 0, "unresolved": 0}}, False),
+            ({**passed, "post_mortem_counts": {"total": 0, "verified_fixed": 1, "justified_nonfix": -1, "unresolved": 0}}, False),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            variables = Path(directory) / "vars.json"
+            for values, valid in cases:
+                with self.subTest(values=values, valid=valid):
+                    variables.write_text(json.dumps(values))
+                    import sys
+                    checked = subprocess.run([
+                        sys.executable, str(ROOT / "scripts/check-review-completion.py"),
+                        str(variables)], capture_output=True, text=True)
+                    self.assertEqual(checked.returncode == 0, valid, checked.stderr)
+                    if not valid:
+                        self.assertIn("review completion:", checked.stderr)
+                        continue
+                    result = subprocess.run([
+                        "sc-compose", "render", "--file", str(template),
+                        "--var-file", str(variables), "--strict"], capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, valid, result.stderr)
+                    if valid:
+                        machine = json.loads(result.stdout.split("```json\n", 1)[1].split("```", 1)[0])
+                        self.assertEqual(machine["integration_review"], values["integration_review"])
+
     def test_assignment_examples_render_strictly(self):
         examples = ROOT / "examples"
         templates = sorted((ROOT / "templates").glob("*.j2"))
