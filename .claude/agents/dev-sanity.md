@@ -63,7 +63,9 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
 4. Once both reviewer result arrays are available, select each deliverable in
    a strict JSON array. Every entry records exact LLM/JEV statuses, `selected`
    source (`llm`, `jev`, or `rerun`), a reason for a disagreement or rerun,
-   and a checker-defect flag. A rerun supplies one unchanged reply, its
+   and a checker-defect flag. A checker defect creates no child; its selection
+   record and workflow-issue class bead carry the evidence, and the lead may
+   reopen it. A rerun supplies one unchanged reply, its
    reviewer, and nonempty repo-relative missing-context paths. A checker
    defect is allowed only for a selected undone reply and needs its reason.
 5. Merge and log the LLM/JEV comparison reports, then merge the selected

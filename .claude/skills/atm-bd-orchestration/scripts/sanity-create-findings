@@ -194,11 +194,7 @@ def main() -> int:
                 "finding_ref": ref, "sprint_bead": sprint_bead, "severity": severity,
                 "difficulty": difficulty,
             }
-            selection = next((entry for entry in report.get("selection") or []
-                              if entry.get("deliverable") == finding["deliverable"]), None)
             metadata = {**provenance, "sanity_finding": payload}
-            if isinstance(selection, dict) and selection.get("checker_defect") is True:
-                metadata.update({"checker_defect": True, "selection_reason": selection.get("reason", "")})
             description = (f"Undone deliverable D{finding['deliverable']}:\n\n{deliverable_text}\n\n## Deliverables\n1. "
                            f"{finding['issue']} ({finding['file']}:{finding['line']})"
                            "\n\n## Checker evidence\n\n```json\n" + json.dumps(payload, indent=2, sort_keys=True) + "\n```")

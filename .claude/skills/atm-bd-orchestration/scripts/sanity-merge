@@ -223,6 +223,18 @@ def selected_results(args, manifest, sanity_bead, dev_bead):
     return selected, selection, sources
 
 
+def effective_findings(by_number, selection):
+    """Checker defects retain their raw selected reply but create no finding."""
+    checker_defects = {
+        entry["deliverable"] for entry in selection or []
+        if entry.get("checker_defect") is True
+    }
+    return {
+        number: [] if number in checker_defects else findings
+        for number, findings in by_number.items()
+    }
+
+
 class TaskFailure(Exception):
     """A task-level failure: printed as `<code> fatal 0`, exit 3."""
 
@@ -379,11 +391,19 @@ def main(argv):
         print(exc.args[1], file=sys.stderr)
         return 3
 
+    report_findings = effective_findings(by_number, selection)
     blocks = []
     finding_records = []
-    for number in sorted(by_number):
-        findings = by_number[number]
-        blocks.append(f"D{number}: done" if not findings else f"D{number}:\n" + "\n".join(fmt(f) for f in findings))
+    for number in sorted(report_findings):
+        findings = report_findings[number]
+        checker_defect = selection is not None and next(
+            item for item in selection if item["deliverable"] == number
+        )["checker_defect"]
+        blocks.append(
+            f"D{number}: done (checker defect)" if checker_defect
+            else f"D{number}: done" if not findings
+            else f"D{number}:\n" + "\n".join(fmt(f) for f in findings)
+        )
         for index, finding in enumerate(findings, 1):
             finding_records.append({
                 "finding_ref": f"D{number}-F{index}", "deliverable": number,
@@ -411,7 +431,7 @@ def main(argv):
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "task_id": sanity_bead, "checked_bead": dev_bead, "sprint": sprint,
         "branch": manifest["branch"], "commit": manifest["sha"],
-        "verdict": "PASS" if all(not findings for findings in by_number.values()) and lint_exit == 0 else "FAIL",
+        "verdict": "PASS" if all(not findings for findings in report_findings.values()) and lint_exit == 0 else "FAIL",
         "findings_count": count, "findings": finding_records, "selection": selection,
         "findings_md": "\n".join(blocks), "lint_md": lint_md,
     }, sys.stdout, indent=2)

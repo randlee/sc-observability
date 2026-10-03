@@ -70,6 +70,14 @@ Verdict: **{{ verdict }}** ({{ findings_count }} findings)
 - D{{ item.deliverable }}: LLM={{ item.llm }}, JEV={{ item.jev }}, selected={{ item.selected }}, checker_defect={{ item.checker_defect }}{% if item.reason %}; {{ item.reason }}{% endif %}
 {% endfor %}
 
+## Checker Defects
+{% set checker_defects = selection | selectattr("checker_defect") | list %}
+{% for item in checker_defects %}
+- D{{ item.deliverable }}: {{ item.reason }}
+{% else %}
+- None.
+{% endfor %}
+
 ## Findings
 {{ findings_md }}
 

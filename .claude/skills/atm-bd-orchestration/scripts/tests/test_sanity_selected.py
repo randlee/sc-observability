@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import importlib.machinery
 import importlib.util
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPTS = Path(__file__).parents[1]
@@ -88,6 +91,46 @@ class SelectedMergeTests(unittest.TestCase):
             "verdict": "PASS", "findings": 0, "error": None, "selection": [],
         }
         self.assertEqual(history.validate_record(record), record)
+
+    def merged(self, llm, jev, selection):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = {
+                "run_id": "run", "reviewers": ["sanity-llm", "sanity-jev", "sanity-selected"],
+                "operational_reviewer": "sanity-selected", "deliverables_total": len(llm),
+                "sha": "a" * 40, "branch": "branch", "lint": {"command": "lint"},
+            }
+            for name, value in (("manifest.json", manifest), ("llm.json", llm), ("jev.json", jev), ("selection.json", selection)):
+                (root / name).write_text(json.dumps(value))
+            output = io.StringIO()
+            argv = ["sanity-merge", str(root / "manifest.json"), "sanity", "dev", "d",
+                    "--reviewer", "sanity-selected", "--started-at", "0",
+                    "--llm-results", str(root / "llm.json"), "--jev-results", str(root / "jev.json"),
+                    "--selection", str(root / "selection.json")]
+            with mock.patch.object(merge, "lint_result", return_value=(0, [], "")), \
+                 mock.patch.object(merge, "verify_worktree"), \
+                 contextlib.redirect_stdout(output):
+                self.assertEqual(merge.main(argv), 0)
+            return json.loads(output.getvalue())
+
+    def test_checker_defect_only_is_pass_without_findings(self):
+        undone = reply(1, [{"kind": "skipped", "file": "a.rs", "line": 1, "issue": "missing"}])
+        report = self.merged([undone], [undone], [{"deliverable": 1, "llm": "undone", "jev": "undone", "selected": "llm", "reason": "finding is a checker defect", "rerun": None, "checker_defect": True}])
+        self.assertEqual((report["verdict"], report["findings_count"], report["findings"]), ("PASS", 0, []))
+        self.assertTrue(report["selection"][0]["checker_defect"])
+
+    def test_mixed_checker_defect_and_real_finding_only_emits_real_finding(self):
+        defective = reply(1, [{"kind": "skipped", "file": "a.rs", "line": 1, "issue": "wrong"}])
+        real = reply(2, [{"kind": "skipped", "file": "b.rs", "line": 2, "issue": "missing"}])
+        report = self.merged(
+            [defective, real], [defective, real],
+            [
+                {"deliverable": 1, "llm": "undone", "jev": "undone", "selected": "llm", "reason": "wrong finding", "rerun": None, "checker_defect": True},
+                {"deliverable": 2, "llm": "undone", "jev": "undone", "selected": "jev", "reason": "", "rerun": None, "checker_defect": False},
+            ],
+        )
+        self.assertEqual((report["verdict"], report["findings_count"]), ("FAIL", 1))
+        self.assertEqual(report["findings"][0]["deliverable"], 2)
 
 
 if __name__ == "__main__":

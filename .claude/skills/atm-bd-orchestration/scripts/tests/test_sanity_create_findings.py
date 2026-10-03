@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -50,6 +52,46 @@ class ParentLayerTests(unittest.TestCase):
     def test_neither_is_a_handoff_error(self):
         with self.assertRaises(module.HandoffError):
             module.parent_layer({"phase": "d"})
+
+    def test_selected_mixed_report_creates_only_real_finding_child(self):
+        report = {
+            "task_id": "sanity", "checked_bead": "checked", "verdict": "FAIL",
+            "run_id": "run", "reviewer": "sanity-selected", "commit": "a" * 40,
+            "selection": [
+                {"deliverable": 1, "checker_defect": True},
+                {"deliverable": 2, "checker_defect": False},
+            ],
+            "findings": [{
+                "finding_ref": "D2-F1", "deliverable": 2, "kind": "skipped",
+                "file": "src/lib.rs", "line": 2, "issue": "missing",
+                "depends_on": [], "deliverable_text": "Implement D2.",
+            }],
+        }
+        parent = {"labels": ["stage:sprint"], "priority": 2, "metadata": {
+            "phase": "d", "sprint": "d-1", "stack": "stack", "layer": 1, "difficulty": "normal",
+        }}
+        with tempfile.TemporaryDirectory() as directory:
+            vars_path = Path(directory) / "vars.json"
+            vars_path.write_text(json.dumps(report))
+
+            def command(argv, actor, capture=False):
+                if argv[1] == "list":
+                    return "[]"
+                if argv[1] == "show":
+                    return json.dumps([parent])
+                if argv[1] == "create":
+                    return "child-d2"
+                if argv[1] == "update":
+                    return ""
+                raise AssertionError(argv)
+
+            with patch.object(sys, "argv", ["sanity-create-findings", "--task", "sanity", "--bead", "checked",
+                                             "--vars", str(vars_path), "--reviewer", "sc-sanity-selected", "--actor", "a"]), \
+                 patch.object(module, "command", side_effect=command) as mocked:
+                self.assertEqual(module.main(), 0)
+            creates = [call for call in mocked.call_args_list if call.args[0][1] == "create"]
+            self.assertEqual(len(creates), 1)
+            self.assertIn("D2 not done", creates[0].args[0][2])
 
 
 if __name__ == "__main__":
