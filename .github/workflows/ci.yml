@@ -208,6 +208,13 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}${{ runner.os == 'Windows' && ';' || ':' }}${{ github.workspace }}/scripts/ci
         run: python3 -m pytest scripts/ci/fixtures/otlp/grafana -q
 
+      - name: Install pinned sc-compose CLI for agent sanity tests
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cargo install --locked sc-compose --version 1.6.1 --root "${RUNNER_TEMP}/sc-compose-cli"
+          echo "${RUNNER_TEMP}/sc-compose-cli/bin" >> "$GITHUB_PATH"
+
       - name: Run agent sanity tooling tests
         if: runner.os != 'Windows'
         env:
