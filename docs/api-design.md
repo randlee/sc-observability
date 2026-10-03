@@ -182,7 +182,7 @@ Owns typed observation routing and projection.
 Owns:
 
 - `Observability`
-- observation emitter interfaces
+- typed observation admission via `Observability::emit`
 - subscriber registry
 - projector registry
 - routing from typed observations into logging outputs and generic downstream
