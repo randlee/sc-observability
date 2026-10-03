@@ -10,7 +10,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from prepare_log_staged_packages import package_command
-from _log_staging import PRIVATE_PACKAGE, PACKAGES, extract_verified, inspect_archive, sha256, verify_stage
+from _log_staging import (
+    PRIVATE_PACKAGE,
+    PACKAGES,
+    extract_verified,
+    inspect_archive,
+    sha256,
+    validate_stage_manifest,
+    verify_stage,
+)
 from validate_log_staged_consumer import validate_resolution
 from validate_public_api import approval_for
 from wait_for_registry_version import wait
@@ -83,6 +91,31 @@ class StageTests(unittest.TestCase):
 
     def test_accepts_exact_six_package_stage(self):
         verify_stage(self.root, VERSION, SOURCE)
+
+    def test_validate_stage_manifest_accepts_well_formed_top_level_fields(self):
+        validate_stage_manifest(self.manifest, VERSION, SOURCE)
+
+    def test_validate_stage_manifest_names_invalid_top_level_fields(self):
+        cases = (
+            ("schema_version", 2, "schema_version"),
+            ("candidate_version", None, "candidate_version"),
+            ("candidate_version", 5, "candidate_version"),
+            ("candidate_version", "9.9.9", "candidate_version"),
+            ("publication", "released", "publication"),
+            ("source_commit", None, "source commit"),
+            ("source_commit", "invalid", "source commit"),
+            ("packages", None, "packages"),
+            ("packages", {}, "packages"),
+        )
+        for field, value, message in cases:
+            with self.subTest(field=field, value=value):
+                manifest = json.loads(json.dumps(self.manifest))
+                if value is None:
+                    manifest.pop(field)
+                else:
+                    manifest[field] = value
+                with self.assertRaisesRegex(ValueError, message):
+                    validate_stage_manifest(manifest, VERSION, SOURCE)
 
     def test_rejects_archive_tampering(self):
         path = self.root / self.manifest['packages'][0]['archive']

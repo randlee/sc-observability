@@ -116,11 +116,14 @@ def validate_stage_manifest(
     """Validate every field consumed by stage verification and extraction."""
     if not isinstance(evidence, dict):
         raise ValueError("stage manifest must be a JSON object")
-    if (evidence.get("schema_version") != 1
-            or not isinstance(evidence.get("candidate_version"), str)
-            or (version is not None and evidence.get("candidate_version") != version)
-            or evidence.get("publication") != "pending_B.7"):
-        raise ValueError("stage schema/version/publication mismatch")
+    if evidence.get("schema_version") != 1:
+        raise ValueError("stage field schema_version must be 1")
+    if not isinstance(evidence.get("candidate_version"), str):
+        raise ValueError("stage field candidate_version must be a string")
+    if version is not None and evidence.get("candidate_version") != version:
+        raise ValueError(f"stage field candidate_version mismatch: expected {version}")
+    if evidence.get("publication") != "pending_B.7":
+        raise ValueError("stage field publication must be pending_B.7")
     if workspace_version is not None and not isinstance(workspace_version, str):
         raise ValueError("workspace candidate version mismatch")
     actual_source = evidence.get("source_commit", "")
