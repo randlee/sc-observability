@@ -189,7 +189,7 @@ jobs:
               channel_status=failure
             fi
             channel_outcomes="$(jq -c --arg channel "${channel}" --arg status "${channel_status}" '.[$channel]=$status' <<<"${channel_outcomes}")"
-          done < <(jq -r '.liveness_channel_checks[] | [.channel, .name, .kind] | @tsv' <<<"${SECRET_PLAN}")
+          done < <(jq -r '.liveness_channel_checks[] | [.channel, .name, .kind] | @tsv' <<<"${SECRET_PLAN}" | tr -d '\r')
           echo "channel_outcomes=${channel_outcomes}" >> "${GITHUB_OUTPUT}"
           if [[ "${#failures[@]}" -gt 0 ]]; then
             printf '%s\n' "${failures[@]}" >&2
@@ -366,7 +366,7 @@ jobs:
           done < <(python3 .github/scripts/release_artifacts.py public-registry-check-plan \
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
             --version '${{ steps.meta.outputs.release_version }}' \
-            | jq -r '.checks[] | [.channel, .agent, .registry, .name, .normalized_name, .expected_version, .project_lookup_url, .version_lookup_url, .version_policy] | @tsv')
+            | jq -r '.checks[] | [.channel, .agent, .registry, .name, .normalized_name, .expected_version, .project_lookup_url, .version_lookup_url, .version_policy] | @tsv' | tr -d '\r')
 
           if [[ "${#failures[@]}" -gt 0 ]]; then
             printf '%s\n' "${failures[@]}" >&2

@@ -4,7 +4,7 @@ import io
 import json
 import os
 import subprocess
-from _shell import BASH, prepend_path, write_shell_script
+from _shell import BASH, prepend_path, write_crlf_jq, write_shell_script
 import sys
 import tarfile
 import tomllib
@@ -354,8 +354,14 @@ def run_release_preflight_registry_step(
     *,
     published: bool,
     already_published_channels: str,
+    crlf_jq: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Execute a workflow registry step with deterministic registry stand-ins."""
+    """Execute a workflow registry step with deterministic registry stand-ins.
+
+    ``crlf_jq`` puts a jq on PATH that emits CRLF like native jq.exe, so the
+    step's ``read`` loop is exercised with Windows line endings on every OS.
+    """
+    path = prepend_path(write_crlf_jq(tmp_path / "crlf-bin").parent) if crlf_jq else os.environ["PATH"]
     scripts_dir = tmp_path / ".github" / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     (scripts_dir / "release_artifacts.py").write_text(
@@ -399,6 +405,7 @@ def run_release_preflight_registry_step(
         env={
             **os.environ,
             "ALREADY_PUBLISHED_CHANNELS": already_published_channels,
+            "PATH": path,
             "RELEASE_ARTIFACT_MANIFEST": str(tmp_path / "release" / "manifest.toml"),
             "SIMULATE_PUBLISHED": str(published).lower(),
         },
@@ -2289,6 +2296,7 @@ def test_release_preflight_requires_each_standardized_secret() -> None:
     assert "if result=" not in release_preflight_step_shell("unpublished", "registry_state")
 
 
+@pytest.mark.parametrize("crlf_jq", (False, True), ids=("lf-jq", "crlf-jq"))
 @pytest.mark.parametrize(
     ("published", "already_published_channels", "expected_success"),
     (
@@ -2302,6 +2310,7 @@ def test_release_preflight_registry_checks_execute_preserved_channel_exception(
     published: bool,
     already_published_channels: str,
     expected_success: bool,
+    crlf_jq: bool,
 ) -> None:
     """Run the actual unpublished and registry-state shells for retry outcomes."""
     unpublished = run_release_preflight_registry_step(
@@ -2309,12 +2318,14 @@ def test_release_preflight_registry_checks_execute_preserved_channel_exception(
         release_preflight_step_shell("unpublished", "registry_state"),
         published=published,
         already_published_channels=already_published_channels,
+        crlf_jq=crlf_jq,
     )
     registry_state = run_release_preflight_registry_step(
         tmp_path,
         release_preflight_step_shell("registry_state", "package_checks"),
         published=published,
         already_published_channels=already_published_channels,
+        crlf_jq=crlf_jq,
     )
 
     assert (unpublished.returncode == 0) is expected_success, unpublished.stderr

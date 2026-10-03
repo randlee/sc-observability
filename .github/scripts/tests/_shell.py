@@ -53,3 +53,31 @@ def write_shell_script(path: Path, text: str) -> None:
     """Write an executable shell stub with LF line endings on every OS."""
     path.write_text(text, encoding="utf-8", newline="\n")
     path.chmod(0o755)
+
+
+def write_crlf_jq(bin_dir: Path) -> Path:
+    """Install a ``jq`` that emits CRLF for ``-r`` output, like native jq.exe.
+
+    The real jq runs underneath; only raw-output lines gain a CR, which is what
+    a Windows runner hands to workflow ``read`` loops.  Tests use it on every
+    OS so a loop that forgets to strip CR fails everywhere, not only on Windows.
+    """
+    real = shutil.which("jq")
+    if real is None:
+        raise RuntimeError("jq was not found on PATH; workflow shell tests need it")
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shim = bin_dir / "jq"
+    write_shell_script(
+        shim,
+        "#!/usr/bin/env bash\n"
+        "set -o pipefail\n"
+        f"real='{Path(real).as_posix()}'\n"
+        "for argument in \"$@\"; do\n"
+        "  if [[ \"$argument\" == -r ]]; then\n"
+        "    \"$real\" \"$@\" | awk '{ printf \"%s\\r\\n\", $0 }'\n"
+        "    exit $?\n"
+        "  fi\n"
+        "done\n"
+        "exec \"$real\" \"$@\"\n",
+    )
+    return shim

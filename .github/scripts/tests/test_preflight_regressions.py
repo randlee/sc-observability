@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-from _shell import BASH
+from _shell import BASH, prepend_path, write_crlf_jq
 import sys
 import tarfile
 import urllib.error
@@ -82,17 +82,25 @@ def test_credential_redirects_and_unknown_checks_fail_closed():
         credentials.probe("crates_io", "synthetic", "https://example.invalid")
 
 
+def crlf_jq_path(tmp_path):
+    """PATH whose jq emits CRLF raw output, as native jq.exe does on Windows."""
+    return prepend_path(write_crlf_jq(tmp_path / "crlf-bin").parent)
+
+
+@pytest.mark.parametrize("crlf_jq", [False, True], ids=["lf-jq", "crlf-jq"])
 @pytest.mark.parametrize("kind,exit_code", [("crates_io", 0), ("crates_io", 1), ("unsupported", 1)])
-def test_liveness_workflow_records_every_channel_outcome(tmp_path, kind, exit_code):
+def test_liveness_workflow_records_every_channel_outcome(tmp_path, kind, exit_code, crlf_jq):
     script = tmp_path / ".github/scripts/release_credentials.py"
     script.parent.mkdir(parents=True)
-    script.write_text(f"import sys\nassert '--kind' in sys.argv\nraise SystemExit({exit_code})\n")
+    # Exact argv match: a CR left by the read loop changes --kind and fails the probe.
+    script.write_text(f"import sys\nassert sys.argv[sys.argv.index('--kind') + 1] == {kind!r}\nraise SystemExit({exit_code})\n")
     selected = step("credential_liveness")
     assert selected["env"]["CARGO_REGISTRY_TOKEN"] == "${{ secrets.CARGO_REGISTRY_TOKEN }}"
     output = tmp_path / "output"
     result = subprocess.run([BASH, "-c", selected["run"]], cwd=tmp_path, env={
         **os.environ, "SECRET_PLAN": json.dumps({"liveness_channel_checks": [{"channel": "crates_io", "name": "CARGO_REGISTRY_TOKEN", "kind": kind}]}),
         "RELEASE_ARTIFACT_MANIFEST": "unused", "GITHUB_OUTPUT": str(output),
+        "PATH": crlf_jq_path(tmp_path) if crlf_jq else os.environ["PATH"],
     }, text=True, capture_output=True, timeout=30)
     assert result.returncode == exit_code, result.stderr
     assert json.loads(output.read_text().split("=", 1)[1]) == {"crates_io": "success" if exit_code == 0 else "failure"}
