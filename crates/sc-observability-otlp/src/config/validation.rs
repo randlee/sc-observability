@@ -449,17 +449,18 @@ fn validated_transport_bounds_with_delays(
     validate_positive_duration(&timeout)?;
     validate_positive_duration(&flush)?;
     validate_positive_duration(&shutdown)?;
+    let retry = resolve_sync_http_retry_fields(config, immediate)?;
     if shutdown.value < timeout.value {
         return Err(invalid_bound(&timeout, &shutdown));
     }
     if flush.value < timeout.value {
         return Err(invalid_bound(&timeout, &flush));
     }
-    #[cfg(any(test, feature = "sync-http"))]
-    let sync_http_retry = validated_sync_http_retry(config, &timeout, immediate)?;
-    #[cfg(not(any(test, feature = "sync-http")))]
-    validate_sync_http_retry(config, &timeout, immediate)?;
     validate_queue_bounds(&queue_capacity, &queue_byte_capacity)?;
+    #[cfg(any(test, feature = "sync-http"))]
+    let sync_http_retry = validated_sync_http_retry(retry, &timeout, immediate)?;
+    #[cfg(not(any(test, feature = "sync-http")))]
+    validate_sync_http_retry(retry, &timeout)?;
 
     #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     let stored = store_transport_values(
@@ -692,42 +693,53 @@ fn validate_positive_duration(value: &ResolvedField<u64>) -> Result<(), ConfigFa
     Ok(())
 }
 
-#[cfg(any(test, feature = "sync-http"))]
-fn validated_sync_http_retry(
+fn resolve_sync_http_retry_fields(
     config: &OtelConfig,
-    timeout: &ResolvedField<u64>,
     immediate: bool,
-) -> Result<Option<RetryPolicy>, ConfigFailure> {
+) -> Result<Option<ResolvedRetryFields>, ConfigFailure> {
     if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
-        resolve_retry(config.sync_http_retry.as_ref(), timeout, immediate).map(Some)
+        resolve_retry_fields(config.sync_http_retry.as_ref(), immediate).map(Some)
     } else {
         Ok(None)
     }
 }
 
-#[cfg(not(any(test, feature = "sync-http")))]
-fn validate_sync_http_retry(
-    config: &OtelConfig,
+#[cfg(any(test, feature = "sync-http"))]
+fn validated_sync_http_retry(
+    retry: Option<ResolvedRetryFields>,
     timeout: &ResolvedField<u64>,
     immediate: bool,
+) -> Result<Option<RetryPolicy>, ConfigFailure> {
+    retry
+        .map(|retry| resolve_retry(retry, timeout, immediate))
+        .transpose()
+}
+
+#[cfg(not(any(test, feature = "sync-http")))]
+fn validate_sync_http_retry(
+    retry: Option<ResolvedRetryFields>,
+    timeout: &ResolvedField<u64>,
 ) -> Result<(), ConfigFailure> {
-    if config.enabled && matches!(config.backend, ExporterBackend::SyncHttp) {
-        validate_retry(
-            config.sync_http_retry.as_ref(),
-            timeout,
-            immediate,
-            |_, _, _, _, _, _| (),
-        )?;
+    if let Some(retry) = retry {
+        validate_retry(retry, timeout, |_, _, _, _, _, _| ())?;
     }
     Ok(())
 }
 
-fn validate_retry<T>(
+/// Resolved retry durations, checked positive before lifecycle ordering.
+struct ResolvedRetryFields {
+    max_retries: u32,
+    initial: ResolvedField<u64>,
+    maximum: ResolvedField<u64>,
+    sequence: ResolvedField<u64>,
+    after_cap: ResolvedField<u64>,
+    jitter: ResolvedField<u8>,
+}
+
+fn resolve_retry_fields(
     raw: Option<&SyncHttpRetryPolicy>,
-    timeout: &ResolvedField<u64>,
     immediate: bool,
-    build: impl FnOnce(u32, u64, u64, u64, u64, u8) -> T,
-) -> Result<T, ConfigFailure> {
+) -> Result<ResolvedRetryFields, ConfigFailure> {
     let raw = raw.cloned().unwrap_or_default();
     let initial = resolve_duration(
         OtlpConfigField::InitialBackoff,
@@ -771,6 +783,32 @@ fn validate_retry<T>(
     validate_delay(&maximum)?;
     validate_positive_duration(&sequence)?;
     validate_positive_duration(&after_cap)?;
+    Ok(ResolvedRetryFields {
+        max_retries: raw
+            .max_retries
+            .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
+        initial,
+        maximum,
+        sequence,
+        after_cap,
+        jitter,
+    })
+}
+
+/// Retry ordering follows lifecycle and queue validation in the public contract.
+fn validate_retry<T>(
+    retry: ResolvedRetryFields,
+    timeout: &ResolvedField<u64>,
+    build: impl FnOnce(u32, u64, u64, u64, u64, u8) -> T,
+) -> Result<T, ConfigFailure> {
+    let ResolvedRetryFields {
+        max_retries,
+        initial,
+        maximum,
+        sequence,
+        after_cap,
+        jitter,
+    } = retry;
     if maximum.value < initial.value {
         return Err(invalid_bound(&initial, &maximum));
     }
@@ -793,8 +831,7 @@ fn validate_retry<T>(
         ));
     }
     Ok(build(
-        raw.max_retries
-            .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
+        max_retries,
         initial.value,
         maximum.value,
         sequence.value,
@@ -805,14 +842,13 @@ fn validate_retry<T>(
 
 #[cfg(any(test, feature = "sync-http"))]
 fn resolve_retry(
-    raw: Option<&SyncHttpRetryPolicy>,
+    retry: ResolvedRetryFields,
     timeout: &ResolvedField<u64>,
     immediate: bool,
 ) -> Result<RetryPolicy, ConfigFailure> {
     validate_retry(
-        raw,
+        retry,
         timeout,
-        immediate,
         |max_retries, initial_backoff, max_backoff, sequence_timeout, retry_after_cap, jitter| {
             let delay = |value| {
                 if immediate && value == 0 {
@@ -977,7 +1013,7 @@ pub(super) fn is_valid_http_endpoint(value: &str) -> bool {
         let Some((host, port)) = bracketed.split_once(']') else {
             return false;
         };
-        return !host.is_empty()
+        return host.parse::<std::net::Ipv6Addr>().is_ok()
             && (port.is_empty()
                 || port.strip_prefix(':').is_some_and(|value| {
                     !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit())
