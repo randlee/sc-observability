@@ -24,12 +24,18 @@ def git_bash_path(
         return Path("bash")
 
     environment = os.environ if environ is None else environ
-    candidates: list[Path] = []
     if configured := environment.get("GIT_BASH_PATH"):
-        candidates.append(Path(configured))
+        candidate = Path(configured)
+        if not (Path.is_file if exists is None else exists)(candidate):
+            raise RuntimeError(f"configured GIT_BASH_PATH is not a file: {candidate}")
+        return candidate
+
+    candidates: list[Path] = []
     for variable in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"):
         if root := environment.get(variable):
             candidates.append(Path(root) / "Git" / "bin" / "bash.exe")
+    if root := environment.get("LOCALAPPDATA"):
+        candidates.append(Path(root) / "Programs" / "Git" / "bin" / "bash.exe")
     path_exists = Path.is_file if exists is None else exists
     for candidate in candidates:
         if path_exists(candidate):
@@ -40,9 +46,14 @@ def git_bash_path(
     )
 
 
-def bash_command(**kwargs: object) -> list[str]:
+def bash_command(
+    *,
+    environ: Mapping[str, str] | None = None,
+    platform: str | None = None,
+    exists: Callable[[Path], bool] | None = None,
+) -> list[str]:
     """Return the shell command, choosing Git Bash instead of the WSL shim."""
-    return [str(git_bash_path(**kwargs))]
+    return [str(git_bash_path(environ=environ, platform=platform, exists=exists))]
 
 
 def bash_path(path: Path | str, *, platform: str | None = None) -> str:
@@ -51,6 +62,8 @@ def bash_path(path: Path | str, *, platform: str | None = None) -> str:
     if not _windows(platform):
         return value
     native = PureWindowsPath(value)
+    if native.drive.startswith("\\\\"):
+        raise ValueError(f"UNC paths are not supported by Git Bash fixtures: {value}")
     if not native.drive:
         return value.replace("\\", "/")
     relative = native.relative_to(native.anchor).as_posix()
@@ -74,7 +87,15 @@ def bash_environment(
 ) -> dict[str, str]:
     """Build Git-Bash-ready environment variables for fixture subprocesses."""
     environment = dict(os.environ if base is None else base)
-    path = bash_path_list(environment.get("PATH", ""), platform=platform)
+    path_value = environment.get("PATH")
+    if path_value is None:
+        path_value = next(
+            (value for key, value in environment.items() if key.casefold() == "path"), ""
+        )
+    for key in tuple(environment):
+        if key.casefold() == "path" and key != "PATH":
+            del environment[key]
+    path = bash_path_list(path_value, platform=platform)
     if prepend_path is not None:
         prefix = bash_path(prepend_path, platform=platform)
         path = f"{prefix}:{path}" if path else prefix

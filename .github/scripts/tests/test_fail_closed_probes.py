@@ -113,6 +113,57 @@ def test_shell_helper_refuses_the_windows_wsl_shim_when_git_bash_is_missing() ->
         raise AssertionError("Windows shell selection accepted an unconfigured bash executable")
 
 
+def test_shell_helper_rejects_a_missing_explicit_git_bash_path() -> None:
+    configured = r"C:\Missing\Git\bin\bash.exe"
+    try:
+        bash_command(
+            platform="win32",
+            environ={"GIT_BASH_PATH": configured},
+            exists=lambda _path: False,
+        )
+    except RuntimeError as error:
+        assert configured in str(error)
+    else:
+        raise AssertionError("missing GIT_BASH_PATH did not fail closed")
+
+
+def test_shell_helper_uses_ordered_system_then_per_user_git_bash_candidates() -> None:
+    environment = {
+        "ProgramW6432": r"C:\Program Files",
+        "ProgramFiles": r"D:\Program Files",
+        "ProgramFiles(x86)": r"E:\Program Files (x86)",
+        "LOCALAPPDATA": r"F:\Users\tester\AppData\Local",
+    }
+    first = Path(environment["ProgramW6432"]) / "Git" / "bin" / "bash.exe"
+    selected = bash_command(
+        platform="win32",
+        environ=environment,
+        exists=lambda path: PureWindowsPath(path) == PureWindowsPath(first),
+    )
+    assert selected == [str(first)]
+
+    per_user = Path(environment["LOCALAPPDATA"]) / "Programs" / "Git" / "bin" / "bash.exe"
+    selected = bash_command(
+        platform="win32",
+        environ=environment,
+        exists=lambda path: PureWindowsPath(path) == PureWindowsPath(per_user),
+    )
+    assert selected == [str(per_user)]
+
+
+def test_shell_helper_rejects_unc_paths_and_normalizes_path_key_case() -> None:
+    try:
+        bash_path(r"\\server\share\fixture", platform="win32")
+    except ValueError as error:
+        assert "UNC" in str(error)
+    else:
+        raise AssertionError("UNC fixture path was accepted")
+
+    environment = bash_environment({"Path": r"C:\Tools"}, platform="win32")
+    assert environment["PATH"] == "/c/Tools"
+    assert "Path" not in environment
+
+
 # --- GitHub Release probe (verify-published-release, issue #40) -------------
 
 
