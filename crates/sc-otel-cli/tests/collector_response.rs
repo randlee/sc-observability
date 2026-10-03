@@ -13,7 +13,7 @@ use fixture_component::fixture_component;
 use serde_json::{Value, json};
 use std::{
     io::{BufRead, BufReader, Read, Write},
-    net::{SocketAddr, TcpListener},
+    net::{SocketAddr, TcpListener, TcpStream},
     process::Command,
     sync::{
         Arc,
@@ -31,6 +31,10 @@ struct Collector {
 
 impl Collector {
     fn start(body: String) -> Self {
+        Self::start_with_request_deadline(body, Duration::from_secs(20))
+    }
+
+    fn start_with_request_deadline(body: String, request_deadline: Duration) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind collector");
         listener
             .set_nonblocking(true)
@@ -40,7 +44,7 @@ impl Collector {
         let stopped = Arc::clone(&stop);
         let thread = thread::spawn(move || {
             let mut paths = Vec::new();
-            let deadline = Instant::now() + Duration::from_secs(20);
+            let deadline = Instant::now() + request_deadline;
             loop {
                 if stopped.load(Ordering::Acquire) {
                     break;
@@ -99,6 +103,10 @@ impl Collector {
                 // Write headers separately: oversized-body tests may close early.
                 write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).expect("response headers");
                 let _ = stream.write_all(body.as_bytes());
+                break;
+            }
+            while !stopped.load(Ordering::Acquire) {
+                thread::sleep(Duration::from_millis(10));
             }
             paths
         });
@@ -265,4 +273,20 @@ fn unreadable_or_oversized_acknowledgements_never_become_delivered_or_retried() 
     ] {
         emit(body, "--log", "{}", "logs", "/v1/logs", true);
     }
+}
+
+#[test]
+fn collector_deadline_stops_after_serving_the_expected_request() {
+    let mut collector =
+        Collector::start_with_request_deadline("{}".to_owned(), Duration::from_secs(1));
+    let mut stream = TcpStream::connect(collector.address).expect("connect collector");
+    stream
+        .write_all(b"POST /v1/logs HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{}")
+        .expect("write request");
+    let mut response = String::new();
+    stream.read_to_string(&mut response).expect("read response");
+    assert!(response.starts_with("HTTP/1.1 200 OK"));
+
+    thread::sleep(Duration::from_millis(1100));
+    assert_eq!(collector.finish(), vec!["/v1/logs"]);
 }
