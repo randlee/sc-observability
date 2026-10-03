@@ -74,6 +74,42 @@ def test_uses_ordered_system_then_per_user_git_bash_candidates() -> None:
     assert selected == [str(per_user)]
 
 
+def test_uses_each_middle_git_bash_fallback_and_first_available_candidate() -> None:
+    environment = {
+        "ProgramW6432": r"C:\Program Files",
+        "ProgramFiles": r"D:\Program Files",
+        "ProgramFiles(x86)": r"E:\Program Files (x86)",
+        "LOCALAPPDATA": r"F:\Users\tester\AppData\Local",
+    }
+    program_files = Path(environment["ProgramFiles"]) / "Git" / "bin" / "bash.exe"
+    program_files_x86 = (
+        Path(environment["ProgramFiles(x86)"]) / "Git" / "bin" / "bash.exe"
+    )
+    first = Path(environment["ProgramW6432"]) / "Git" / "bin" / "bash.exe"
+
+    selected = bash_command(
+        platform="win32",
+        environ=environment,
+        exists=lambda path: PureWindowsPath(path) == PureWindowsPath(program_files),
+    )
+    assert selected == [str(program_files)]
+
+    selected = bash_command(
+        platform="win32",
+        environ=environment,
+        exists=lambda path: PureWindowsPath(path) == PureWindowsPath(program_files_x86),
+    )
+    assert selected == [str(program_files_x86)]
+
+    selected = bash_command(
+        platform="win32",
+        environ=environment,
+        exists=lambda path: PureWindowsPath(path)
+        in {PureWindowsPath(first), PureWindowsPath(program_files_x86)},
+    )
+    assert selected == [str(first)]
+
+
 def test_rejects_unc_paths_and_normalizes_path_key_case() -> None:
     try:
         bash_path(r"\\server\share\fixture", platform="win32")
