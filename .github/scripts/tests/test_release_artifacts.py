@@ -15,6 +15,8 @@ from threading import Thread
 
 import pytest
 
+from shell_helpers import bash_command, bash_environment
+
 
 # Local fixture commands should finish quickly; bound hangs on every platform.
 TEST_COMMAND_TIMEOUT_SECONDS = 30
@@ -393,14 +395,14 @@ def run_release_preflight_registry_step(
         encoding="utf-8",
     )
     return subprocess.run(
-        ["bash", "-c", shell.replace("'${{ steps.meta.outputs.release_version }}'", "'1.5.0'")],
+        [*bash_command(), "-c", shell.replace("'${{ steps.meta.outputs.release_version }}'", "'1.5.0'")],
         cwd=tmp_path,
-        env={
+        env=bash_environment({
             **os.environ,
             "ALREADY_PUBLISHED_CHANNELS": already_published_channels,
             "RELEASE_ARTIFACT_MANIFEST": str(tmp_path / "release" / "manifest.toml"),
             "SIMULATE_PUBLISHED": str(published).lower(),
-        },
+        }),
         text=True,
         capture_output=True,
         check=False,
@@ -567,13 +569,12 @@ def run_release_tag_step(
         .replace("'${{ steps.release_gate.outputs.release_sha }}'", "'main-sha'")
     )
     return subprocess.run(
-        ["bash", "-c", shell],
+        [*bash_command(), "-c", shell],
         cwd=tmp_path,
-        env={
+        env=bash_environment({
             **os.environ,
             "GITHUB_OUTPUT": str(output),
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        },
+        }, github_output=output, prepend_path=bin_dir),
         text=True,
         capture_output=True,
         check=False,
@@ -664,9 +665,12 @@ def run_release_tag_step_in_git_fixture(repository: Path) -> subprocess.Complete
         )
     )
     return subprocess.run(
-        ["bash", "-c", shell],
+        [*bash_command(), "-c", shell],
         cwd=repository,
-        env={**os.environ, "GITHUB_OUTPUT": str(repository / "github-output")},
+        env=bash_environment(
+            {**os.environ, "GITHUB_OUTPUT": str(repository / "github-output")},
+            github_output=repository / "github-output",
+        ),
         text=True,
         capture_output=True,
         check=False,
@@ -707,9 +711,13 @@ def run_release_preflight_channel_results_shell(
         "GITHUB_STEP_SUMMARY": str(output.with_name("summary.md")),
     }
     return subprocess.run(
-        ["bash", "-c", shell],
+        [*bash_command(), "-c", shell],
         cwd=repo_root(),
-        env=environment,
+        env=bash_environment(
+            environment,
+            github_output=output,
+            github_step_summary=output.with_name("summary.md"),
+        ),
         text=True,
         capture_output=True,
         check=False,

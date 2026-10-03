@@ -83,6 +83,8 @@ def bash_environment(
     *,
     prepend_path: Path | str | None = None,
     github_output: Path | str | None = None,
+    github_env: Path | str | None = None,
+    github_step_summary: Path | str | None = None,
     platform: str | None = None,
 ) -> dict[str, str]:
     """Build Git-Bash-ready environment variables for fixture subprocesses."""
@@ -102,4 +104,10 @@ def bash_environment(
     environment["PATH"] = path
     if github_output is not None:
         environment["GITHUB_OUTPUT"] = bash_path(github_output, platform=platform)
+    if github_env is not None:
+        environment["GITHUB_ENV"] = bash_path(github_env, platform=platform)
+    if github_step_summary is not None:
+        environment["GITHUB_STEP_SUMMARY"] = bash_path(
+            github_step_summary, platform=platform
+        )
     return environment
