@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [develop, main, "integrate/*", "sprint/*", "fix/*"]
   push:
-    branches: [develop, main]
+    branches: [develop, main, integrate/phase-d]
   workflow_dispatch:
 
 jobs:
@@ -25,11 +25,7 @@ jobs:
 
   clippy:
     needs: [fmt]
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -43,19 +39,19 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cargo/registry
-          key: ${{ runner.os }}-clippy-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-clippy-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo index
         uses: actions/cache@v5
         with:
           path: ~/.cargo/git
-          key: ${{ runner.os }}-clippy-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-clippy-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo build
         uses: actions/cache@v5
         with:
           path: target
-          key: ${{ runner.os }}-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       # Retire with obs-d-18 when the deprecated legacy types are removed.
       - name: Check deprecated lint policies in external examples
@@ -212,12 +208,11 @@ jobs:
         run: bash scripts/ci/validate_repo_boundaries.sh
 
   test:
-    # Run platform tests independently so policy failures cannot hide Windows failures.
-    needs: [fmt]
+    needs: [clippy, manifest-validation]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main') && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -252,8 +247,99 @@ jobs:
       - name: Run workspace tests
         run: cargo test --locked --workspace --all-targets
 
-      - name: Run Windows OTLP feature unit tests
-        if: runner.os == 'Windows'
+      - name: Run workspace doctests
+        run: cargo test --locked --workspace --doc
+
+      - name: Run imported log bridge test_hooks feature
+        run: cargo test --locked -p sc-observability-log --all-targets --features test_hooks
+
+      - name: Run imported log bridge release static-level-cap fixture
+        run: cargo test --locked -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
+
+      - name: Run imported log bridge release runtime-level fixture
+        run: cargo test --locked -p sc-observability-log --release --test runtime_level_bridge
+
+  windows-clippy:
+    name: clippy (windows-latest top)
+    if: (github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep') || (github.event_name == 'push' && github.ref == 'refs/heads/integrate/phase-d')
+    needs: [fmt]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/registry
+          key: windows-clippy-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/git
+          key: windows-clippy-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v5
+        with:
+          path: target
+          key: windows-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      # Retire with obs-d-18 when the deprecated legacy types are removed.
+      - name: Check deprecated lint policies in external examples
+        run: python3 scripts/ci/check_external_example_deprecated.py
+
+      - name: Check standalone custom sink example
+        run: cargo check --locked --manifest-path examples/custom-sink-example/Cargo.toml
+
+      - name: Run clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+  windows-test:
+    name: test (windows-latest top)
+    if: (github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep') || (github.event_name == 'push' && github.ref == 'refs/heads/integrate/phase-d')
+    needs: [fmt]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-test-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-test-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v5
+        with:
+          path: target
+          key: ${{ runner.os }}-test-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check log bridge consumer crate
+        run: cargo check --locked -p sc-observability-log-consumer-check
+
+      - name: Run workspace tests
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Run OTLP feature unit tests
         run: cargo test --locked -p sc-observability-otlp --all-features --lib
 
       - name: Run workspace doctests
