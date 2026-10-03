@@ -12,6 +12,7 @@ mod backpressure;
 mod capability;
 pub(super) mod conformance;
 mod drain;
+pub(super) mod loopback;
 mod regressions;
 mod retry_ownership;
 mod schema;

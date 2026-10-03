@@ -2,73 +2,14 @@
 //!
 //! Attempt budgets are asserted through the scripted exporter seam, while the
 //! real collector test checks only that each signal reaches its intended route.
+use super::loopback::ScriptedStatusCollector;
 use super::*;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
     mpsc,
 };
 use std::time::Duration;
-
-struct Collector {
-    address: std::net::SocketAddr,
-    stop: Arc<AtomicBool>,
-    paths: Arc<Mutex<Vec<String>>>,
-    worker: Option<std::thread::JoinHandle<()>>,
-}
-impl Collector {
-    fn new(recover_after: Option<usize>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let address = listener.local_addr().unwrap();
-        let stop = Arc::new(AtomicBool::new(false));
-        let calls = Arc::new(AtomicUsize::new(0));
-        let paths = Arc::new(Mutex::new(Vec::new()));
-        let (thread_stop, thread_calls, thread_paths) =
-            (stop.clone(), calls.clone(), paths.clone());
-        let worker = std::thread::spawn(move || {
-            loop {
-                if thread_stop.load(Ordering::Acquire) {
-                    break;
-                }
-                let (mut stream, _) = match listener.accept() {
-                    Ok(connection) => connection,
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(1));
-                        continue;
-                    }
-                    Err(error) => panic!("accept collector request: {error}"),
-                };
-                stream.set_read_timeout(Some(DEADLINE)).unwrap();
-                let (path, _) = read_http(&mut stream);
-                thread_paths.lock().unwrap().push(path);
-                let call = thread_calls.fetch_add(1, Ordering::AcqRel) + 1;
-                let status = if recover_after.is_some_and(|failed| call > failed) {
-                    "200 OK"
-                } else {
-                    "503 Service Unavailable"
-                };
-                write!(
-                    stream,
-                    "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
-                .unwrap();
-            }
-        });
-        Self {
-            address,
-            stop,
-            paths,
-            worker: Some(worker),
-        }
-    }
-    fn configure(&self, path: &Path) -> TelemetryClientConfig {
-        let mut config = retry_config(path);
-        config.endpoint = format!("http://{}", self.address);
-        config
-    }
-}
 
 fn retry_config(path: &Path) -> TelemetryClientConfig {
     let mut config = config(path);
@@ -81,8 +22,8 @@ fn retry_config(path: &Path) -> TelemetryClientConfig {
     config
 }
 
-fn assert_real_http_smoke(collector: &Collector, name: &str, path: &str) {
-    let paths = collector.paths.lock().unwrap();
+fn assert_real_http_smoke(collector: &ScriptedStatusCollector, name: &str, path: &str) {
+    let paths = collector.paths();
     assert!(!paths.is_empty(), "{name} reached the real collector");
     assert!(
         paths.iter().all(|actual| actual == path),
@@ -175,22 +116,13 @@ fn scripted_retry_attempt_budgets_are_exact_for_logs_and_profiles() {
     }
 }
 
-impl Drop for Collector {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Release);
-        if !std::thread::panicking()
-            && let Some(worker) = self.worker.take()
-        {
-            worker.join().expect("collector worker exits");
-        }
-    }
-}
-
 #[test]
 fn collector_drop_does_not_depend_on_a_wake_connection() {
-    let mut collector = Collector::new(None);
+    let mut collector = ScriptedStatusCollector::start(vec![], "503 Service Unavailable");
     let closed_listener = TcpListener::bind("127.0.0.1:0").expect("reserve closed wake address");
-    collector.address = closed_listener.local_addr().expect("closed wake address");
+    collector.set_address_for_drop_regression(
+        closed_listener.local_addr().expect("closed wake address"),
+    );
     drop(closed_listener);
 
     let (completed, dropped) = mpsc::channel();
@@ -203,42 +135,6 @@ fn collector_drop_does_not_depend_on_a_wake_connection() {
         .expect("collector drops without a wake connection");
 }
 
-fn read_http(stream: &mut TcpStream) -> (String, Vec<u8>) {
-    let mut bytes = Vec::new();
-    let mut buffer = [0; 4096];
-    let end = loop {
-        let count = stream.read(&mut buffer).unwrap();
-        assert!(count > 0);
-        bytes.extend_from_slice(&buffer[..count]);
-        if let Some(index) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
-            break index + 4;
-        }
-    };
-    let headers = std::str::from_utf8(&bytes[..end]).unwrap();
-    let path = headers
-        .lines()
-        .next()
-        .unwrap()
-        .split_whitespace()
-        .nth(1)
-        .unwrap()
-        .to_owned();
-    let size: usize = headers
-        .lines()
-        .find_map(|line| {
-            let (key, value) = line.split_once(':')?;
-            key.eq_ignore_ascii_case("content-length")
-                .then(|| value.trim().parse().unwrap())
-        })
-        .unwrap();
-    while bytes.len() < end + size {
-        let count = stream.read(&mut buffer).unwrap();
-        assert!(count > 0);
-        bytes.extend_from_slice(&buffer[..count]);
-    }
-    (path, bytes[end..end + size].to_vec())
-}
-
 fn open_real(config: TelemetryClientConfig) -> DurableTelemetryClient {
     conformance::open_manual(|| DurableTelemetryClient::open(config)).unwrap()
 }
@@ -247,8 +143,10 @@ fn open_real(config: TelemetryClientConfig) -> DurableTelemetryClient {
 fn real_http_smoke_delivers_logs_and_profiles_without_counting_retries() {
     for name in ["logs", "profiles"] {
         let dir = tempfile::tempdir().unwrap();
-        let collector = Collector::new(Some(1));
-        let client = open_real(collector.configure(dir.path()));
+        let collector = ScriptedStatusCollector::start(vec!["503 Service Unavailable"], "200 OK");
+        let mut config = retry_config(dir.path());
+        config.endpoint = collector.endpoint();
+        let client = open_real(config);
         let receipt = client.emit(fixture(name)).unwrap();
         client
             .flush_submission(&receipt.submission_id, DEADLINE)
