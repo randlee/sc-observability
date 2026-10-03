@@ -62,13 +62,14 @@ Read the current affected source and focused check before marking verified.
 Record the repository for every SHA. For another repository, use its relevant
 integration source and receipt; do not classify its SHA as missing here.
 
-Partition large inventories into disjoint batches (for example, 15 findings)
-for read-only workers when delegation is authorized. Give each worker the
-pinned head, original finding/remedy, closure notes and a fixed question:
-"Does the recorded resolution hold here? Give source/check evidence, or the
-exact missing evidence." Reconcile returned IDs against the entire inventory.
-An ancestor SHA still requires this check. Sampling cannot produce a PASS;
-a time-limited partial run reports its unchecked IDs as unresolved.
+Use JEV to screen straightforward fixed-code determinations, following
+[post-mortem-jev.md](post-mortem-jev.md). Quality-mgr prepares the evidence,
+checks coverage, and investigates unsure or flagged results before filing
+beads or reporting defects to the lead. JEV results are not finding beads.
+When delegation is authorized, workers may prepare disjoint evidence packets;
+quality-mgr reconciles their IDs against the entire inventory. An ancestor SHA
+still requires current-source verification. Sampling cannot produce a phase
+PASS; an incomplete run retains its unchecked IDs as unresolved.
 
 For administrative closures or evidence held outside git, read the bead's
 notes and filing-reviewer receipt, or request that receipt from the owner.
