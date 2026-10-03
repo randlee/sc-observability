@@ -561,9 +561,29 @@ fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
     bytes.push(b'\n');
     Ok(bytes)
 }
+
+/// Generated JSON is canonical LF text, but Windows may check it out as CRLF
+/// when no repository attribute overrides the platform's Git configuration.
+/// Accept that checkout-only conversion without accepting any content change.
+fn matches_canonical_text(actual: &[u8], canonical: &[u8]) -> bool {
+    if actual == canonical {
+        return true;
+    }
+
+    let mut normalized = Vec::with_capacity(actual.len());
+    let mut bytes = actual.iter().copied().peekable();
+    while let Some(byte) = bytes.next() {
+        if byte == b'\r' && bytes.peek() == Some(&b'\n') {
+            continue;
+        }
+        normalized.push(byte);
+    }
+    normalized == canonical
+}
+
 fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn Error>> {
     if check {
-        if std::fs::read(path)? != bytes {
+        if !matches_canonical_text(&std::fs::read(path)?, bytes) {
             return Err(generated_drift_error(path).into());
         }
     } else {
@@ -674,6 +694,24 @@ mod tests {
         let error = generated_drift_error(Path::new("bindings/schema/v1.json"));
         assert!(error.contains("bindings/schema/v1.json"));
         assert!(error.contains(SCHEMA_REGENERATION_COMMAND));
+    }
+
+    #[test]
+    fn canonical_check_accepts_crlf_checkout_conversion_but_not_content_drift() {
+        let canonical = b"{\n  \"schema_version\": 1\n}\n";
+        assert!(matches_canonical_text(canonical, canonical));
+        assert!(matches_canonical_text(
+            b"{\r\n  \"schema_version\": 1\r\n}\r\n",
+            canonical
+        ));
+        assert!(!matches_canonical_text(
+            b"{\r\n  \"schema_version\": 2\r\n}\r\n",
+            canonical
+        ));
+        assert!(!matches_canonical_text(
+            b"{\r  \"schema_version\": 1\r}\r",
+            canonical
+        ));
     }
 
     #[test]
