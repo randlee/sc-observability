@@ -36,11 +36,11 @@ read the pinned PASS commit with `bd show "$CHECKED_BEAD" --json | jq -r
 must equal `metadata.pr_target`, its head must equal the sanity PASS commit,
 and the QA worktree HEAD must equal that PR head. Otherwise refuse
 `SANITY_STALE`; no layer or quick fix lacking QA PASS at that pinned head is
-mergeable. Before the refusal message or task close, strictly render
-`templates/workflow-issue-bead.json.j2` with id `$TASK_ID-wf-SANITY_STALE`,
-`bd import <scratch>/$TASK_ID-wf-SANITY_STALE.json`, and include the created id
-in the refusal. The same render/import-before-refusal rule applies to any
-other QA cannot-run path.
+mergeable. Reuse an existing workflow class bead for the same failure signature:
+append the task id, head, command and failure evidence, and cite the class id in
+the refusal. If no class matches, report the signature to the lead for
+classification and cite that message instead; do not create a per-task shadow
+or delay the refusal.
 
 ## Plan Review
 
