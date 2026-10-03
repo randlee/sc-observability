@@ -37,6 +37,8 @@ Existing wrappers often combine integration with unit, lint, schema, release or 
 
 ## Concrete platform work
 
-The existing viewer manifest contains only a macOS arm64 v0.5.0 artifact. e-1 owns acquiring and hash-pinning valid Linux/Windows assets plus executable selection for both viewer suites. Missing upstream assets require an explicit blocker/decision, never a mock or silent skip. e-2 fixes POSIX-only virtualenv and executable paths. e-7 adapts the bundled binding consumer's Darwin/Linux-only sandbox using existing cross-platform isolation support inside its own adapter. No developer GUI launches are permitted; actual viewer/webview execution is confined to CI.
+The existing viewer manifest contains only a macOS arm64 v0.5.0 artifact. e-1 extends the existing d-32 viewer_harness.py and release.json rather than introducing another fixture. It preserves the required v0.5.0 pin and supplies a macOS/Windows/Linux artifact URL, SHA-256 checksum and executable table for both viewer suites. Missing upstream assets require an explicit blocker/decision, never a mock or silent skip. e-2 fixes POSIX-only virtualenv and executable paths. e-7 adapts the bundled binding consumer's Darwin/Linux-only sandbox using existing cross-platform isolation support inside its own adapter. No developer GUI launches are permitted; actual viewer/webview execution is confined to CI.
 
 No new product feature, publication, API governance, exhaustive interpreter/architecture matrix, generic unit/lint duplication, or sc-lint design is included. Native Windows execution is evidence; xwin alone is not.
+
+Reused runtime-level behavior tests run only in this on-demand integration workflow. ADR-013 publisher-run release qualification remains separate; these jobs do not become per-PR gates or replace that qualification.
