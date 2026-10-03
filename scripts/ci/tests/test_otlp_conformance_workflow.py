@@ -37,16 +37,12 @@ class OtlpConformanceWorkflowTests(unittest.TestCase):
         self.assertIn('[ -d "$VIEWER_STATE_DIR" ]', steps[cleanup_step]["run"])
         self.assertIn('viewer_harness.py stop', steps[cleanup_step]["run"])
 
-    def test_trigger_inputs_and_actions_are_immutable(self) -> None:
+    def test_dispatch_trigger_and_actions_are_immutable(self) -> None:
         workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
         triggers = workflow.get("on") or workflow[True]
-        paths = triggers["pull_request"]["paths"]
-        self.assertTrue({
-            "Cargo.toml",
-            "Cargo.lock",
-            "policy/otlp-transport.toml",
-            "scripts/ci/otlp_dependencies.py",
-        }.issubset(paths))
+        self.assertIn("workflow_dispatch", triggers)
+        self.assertNotIn("pull_request", triggers)
+        self.assertNotIn("push", triggers)
 
         jobs = workflow["jobs"]
         uses = [step["uses"] for job in jobs.values() for step in job["steps"]

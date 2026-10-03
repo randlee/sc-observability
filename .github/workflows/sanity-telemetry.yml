@@ -4,7 +4,6 @@ permissions:
 on:
   pull_request:
     branches: ["sprint/*", "integrate/*", "fix/*"]
-    paths: ["scripts/sanity-telemetry/**", "bindings/python/sc-observability-py/**", ".sc/telemetry.yaml", ".gitignore", ".github/workflows/sanity-telemetry.yml"]
   workflow_dispatch:
 jobs:
   importer:
@@ -12,6 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+          components: rustfmt, clippy
       - uses: actions/setup-python@v5
         with: {python-version: '3.10'}
       - run: pip install maturin

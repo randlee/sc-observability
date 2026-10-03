@@ -43,23 +43,27 @@ on PRs 233–235 are the observed reason for retiring those checks.
 | CI: `public-api-governance` | Integration reviewer; strict API diff, semver and approval checks on every PR base, push and manual run | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs public API governance |
 | CI: `manifest-validation` | Release maintainer; publish inventory, install contract, retry correctness | `test_release_artifacts`, `test_prepare_release_staged_packages`, `test_publish_retry_idempotency` | Publish/install tooling is replaced and its coverage moves with it |
 | CI: `test` (Ubuntu) | Rust crate consumers; workspace tests, doctests and log feature fixtures | Existing runtime/bridge regression tests | Consumer contract or supported platform is retired |
-| Binding runtime: `native-contract` (Ubuntu) | Core/bridge hosts; debug and release native contract | Existing native runtime conversion, ownership and lifecycle fixtures | Native binding runtime is retired or superseded |
-| Binding schema: `binding-schema` | Generated TS/Python model consumers; DTO, schema, typing and isolated bundle on PRs (Node 24 with source-bundle proof) | Existing schema/conversion corpus, generator drift and isolated consumer negatives | These generated bindings are retired |
-| Python binding runtime: `python-source-runtime` | Owned/attached Python users; source runtime contract | Existing Python ownership, context, timeout and teardown fixtures | Python binding or supported interpreter contract is retired |
-| TypeScript/Tauri: `schema-and-contract` | Tauri adapter consumers; schema and packaged source/JS contract; PRs retain dependency and repository-boundary checks while non-PR qualification also runs schema and docs consistency | Existing schema corpus, neutral boundaries and artifact build checks | Tauri binding is retired |
+| Binding runtime: `native-contract` (dispatch) | Core/bridge hosts; debug and release native contract | Existing native runtime conversion, ownership and lifecycle fixtures | Native binding runtime is retired or superseded |
+| Binding schema: `binding-schema` (dispatch) | Generated TS/Python model consumers; DTO, schema, typing and isolated bundle | Existing schema/conversion corpus, generator drift and isolated consumer negatives | These generated bindings are retired |
+| Python binding runtime: `python-source-runtime` (dispatch) | Owned/attached Python users; source runtime contract | Existing Python ownership, context, timeout and teardown fixtures | Python binding or supported interpreter contract is retired |
+| TypeScript/Tauri: `schema-and-contract` (dispatch) | Tauri adapter consumers; schema and packaged source/JS contract; non-PR qualification also runs schema and docs consistency; dependency bans and repository boundaries are owned by CI manifest validation and do not run in this gate | Existing schema corpus, neutral boundaries and artifact build checks | Tauri binding is retired |
 | Python packaging boundaries: `boundaries` | Wheel/sdist consumers; package and platform policy | `test_python_distribution.py` | Python distribution contract is retired |
-| sc-lint preflight: `source-consumer` (Ubuntu) | Install consumers; source installer and receipt contract | Existing receipt mismatch/rejection cases | Source-installed sc-lint is no longer supported |
+| sc-lint preflight: `source-consumer` (dispatch) | Install consumers; source installer and receipt contract | Existing receipt mismatch/rejection cases | Source-installed sc-lint is no longer supported |
 
 ## Integration-only platform work
 
-- CI `test` and binding-runtime `native-contract`: Windows/macOS coverage
-  qualifies the composed integration instead of every intermediate layer.
-- Binding-runtime `packaged-consumer` and `complete-gate`: the macOS sandbox
-  proof and all-platform aggregation need the full platform run.
-- TypeScript/Tauri `real-ipc-artifacts` and `all-platforms`: real webview IPC
-  and all-platform aggregation qualify integration/release artifacts.
-- sc-lint `source-consumer` on Windows: integration proves the second
-  installer platform while intermediate PRs keep Ubuntu coverage.
+- CI `test`: Windows/macOS coverage qualifies the composed integration instead
+  of every intermediate layer.
+- Binding-runtime `native-contract`, `packaged-consumer`, and `complete-gate`:
+  phase-end dispatch runs the macOS sandbox proof and all-platform aggregation.
+- TypeScript/Tauri `real-ipc-artifacts` and `all-platforms`: phase-end dispatch
+  runs real webview IPC and all-platform aggregation.
+- sc-lint `source-consumer`: phase-end dispatch proves both installer platforms.
+- Binding runtime, schema, Python runtime, TypeScript/Tauri, OTLP conformance,
+  sc-lint source-preflight, and telemetry end-to-end are dispatch-only during
+  Phase D; the phase-end `just integrate` owner runs their retained
+  qualification. CI no longer runs the external OTLP SDK fixture or the
+  desktop-viewer harness.
 
 ## Duplicate-execution ownership
 
@@ -71,11 +75,11 @@ duplicate and stays in its consumer gate.
 | Check | Retained owner | Removed same-configuration execution | Why the retained owner is distinct |
 | --- | --- | --- | --- |
 | Workspace formatting | CI `fmt` | Python binding source gate | One workspace formatting check is sufficient. |
-| Binding-runtime unit contract | Binding runtime `native-contract` | Python and TypeScript/Tauri gates | It preserves debug/release and platform proof artifacts. |
+| Binding-runtime unit contract | Binding runtime `native-contract` | Python and TypeScript/Tauri gates | It owns the native-contract suite; the TypeScript/Tauri platform gate independently produces its platform evidence. |
 | DTO unit tests | CI workspace `test` | Binding-schema gate | The workspace suite owns the package test. |
 | Schema generator `--check` | Binding-schema gate | Python binding source gate | The schema gate pins its generator interpreter and schema corpus. |
 | Shared Python typing helper | Binding-schema gate | Python binding source gate | The schema gate owns the shared generated-surface typing proof; B.4 keeps its CPython 3.10-specific typing checks. |
-| Binding source-bundle unit suite | Binding-schema gate | TypeScript/Tauri platform gate | The bundle evidence is produced and retained by the schema gate. |
+| Binding source-bundle unit suite | Binding-schema gate on Linux | TypeScript/Tauri platform gate on macOS and Windows | Linux owns the schema-gate execution; macOS and Windows retain platform-local execution. |
 | Tauri unit suite on Linux | TypeScript/Tauri `schema-and-contract` | TypeScript/Tauri real-IPC Linux leg | macOS and Windows retain platform-local unit coverage. |
 | Dependency bans | CI manifest validation | Binding-schema and TypeScript/Tauri gates | CI remains the single PR owner. |
 | Repository boundaries | CI manifest validation | TypeScript/Tauri gate | CI retains the executable proving-artifact check. |

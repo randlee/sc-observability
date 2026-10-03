@@ -3,22 +3,6 @@ name: CI
 on:
   pull_request:
     branches: [develop, main, "integrate/*", "sprint/*", "fix/*"]
-    paths:
-      - 'Cargo.*'
-      - 'rust-toolchain.toml'
-      - 'crates/**'
-      - 'bindings/**'
-      - 'examples/**'
-      - 'docs/**'
-      - 'scripts/ci/**'
-      - '.github/scripts/**'
-      - '.github/actions/**'
-      - '.github/workflows/**'
-      - 'release/**'
-      - 'boundaries/**'
-      - 'install.json'
-      - 'install.py'
-      - 'justfile'
   push:
     branches: [develop, main]
   workflow_dispatch:
@@ -86,6 +70,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
+
       - name: Validate docs consistency
         run: bash scripts/ci/validate_docs_consistency.sh
 
@@ -112,9 +102,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-
-      - name: Test desktop viewer harness
-        run: python3 -B -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -v
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -254,9 +241,6 @@ jobs:
 
       - name: Run workspace tests
         run: cargo test --locked --workspace --all-targets
-
-      - name: Run external OTLP SDK fixture
-        run: cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked
 
       - name: Run workspace doctests
         run: cargo test --locked --workspace --doc

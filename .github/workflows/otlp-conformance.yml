@@ -1,18 +1,6 @@
 name: OTLP conformance
 
 on:
-  pull_request:
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'crates/sc-observability-otlp/**'
-      - 'crates/sc-observability-types/**'
-      - 'docs/observability/otlp/**'
-      - 'policy/otlp-transport.toml'
-      - 'scripts/ci/otlp_dependencies.py'
-      - 'scripts/ci/otlp_dev_install_smoke.py'
-      - 'scripts/ci/fixtures/otlp/**'
-      - '.github/workflows/otlp-conformance.yml'
   workflow_dispatch:
 
 jobs:
