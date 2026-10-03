@@ -18,10 +18,7 @@ use crate::contracts::{
     self, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, LogRecord,
     MetricExporter, TraceExporter,
 };
-#[allow(
-    unused_imports,
-    reason = "transport construction failures are mapped only by enabled backends"
-)]
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
 use crate::legacy_projection::transport_construction_failure;
 #[cfg(feature = "otlp-sdk")]
 use crate::sdk;
@@ -119,18 +116,23 @@ pub(crate) fn exporter_factory_prepared(
             let connection = prepared_backend_connection(&config.transport, bounds)?;
             sdk_exporter_factory(bounds, &connection)
         }
-        BackendTransportBounds::SyncHttp(_) => {
+        BackendTransportBounds::SyncHttp(retry_policy) => {
+            #[cfg(not(any(test, feature = "sync-http")))]
+            retry_policy.discard_after_validation();
+            let _ = retry_policy;
             let connection = prepared_backend_connection(&config.transport, bounds)?;
             sync_http_exporter_factory(bounds, &connection)
         }
     }
 }
 
-#[allow(unused_variables)]
 fn sdk_exporter_factory(
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
+    // The feature-disabled branch preserves the public unsupported-backend
+    // result, while enabled builds consume this validated connection below.
+    let _ = connection;
     if !matches!(
         bounds.protocol(),
         config::OtlpProtocol::Grpc | config::OtlpProtocol::HttpBinary
@@ -181,11 +183,13 @@ fn sdk_exporter_factory(
     ))
 }
 
-#[allow(unused_variables)]
 fn sync_http_exporter_factory(
     bounds: &ValidatedTransportBounds,
     connection: &ValidatedBackendConnection,
 ) -> Result<ExporterSet, ConfigFailure> {
+    // See `sdk_exporter_factory`: keep the disabled-feature contract without
+    // a lint suppression while using the same connection in enabled builds.
+    let _ = connection;
     if bounds.protocol() != config::OtlpProtocol::HttpJson {
         return Err(unsupported_protocol(
             config::ExporterBackend::SyncHttp,

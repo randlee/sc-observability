@@ -1,5 +1,6 @@
 //! Crate-private OTLP exporter contracts.
 
+#[cfg(any(test, feature = "durable-store"))]
 pub(crate) mod credits;
 #[cfg(any(feature = "durable-store", all(test, feature = "sync-http")))]
 pub(crate) mod profiles;
@@ -11,16 +12,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::lifecycle::LifecycleHealth;
-#[cfg_attr(
-    not(any(feature = "sync-http", feature = "otlp-sdk")),
-    allow(
-        unused_imports,
-        reason = "D.21 contracts are consumed by enabled backends"
-    )
-)]
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
+pub(crate) use sc_observability_types::otlp::OtlpResource as Resource;
 pub(crate) use sc_observability_types::otlp::{
     OtlpCompleteSpan as CompleteSpan, OtlpInstrumentationScope as InstrumentationScope,
-    OtlpLogRecord as LogRecord, OtlpRecord as ExportRecord, OtlpResource as Resource,
+    OtlpLogRecord as LogRecord, OtlpRecord as ExportRecord,
 };
 use sc_observability_types::v2::{ExportError, MetricRecord};
 

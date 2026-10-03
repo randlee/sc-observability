@@ -47,6 +47,7 @@ use sc_observability_types::{ErrorContext, Remediation};
 pub(crate) struct SignalArray<T>([T; 4]);
 
 impl<T> SignalArray<T> {
+    #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
     pub(crate) const fn new(values: [T; 4]) -> Self {
         Self(values)
     }
@@ -60,6 +61,7 @@ impl<T> SignalArray<T> {
         Self::index(signal).map(|index| &self.0[index])
     }
 
+    #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
     pub(crate) fn get_mut(&mut self, signal: Signal) -> Option<&mut T> {
         Self::index(signal).map(|index| &mut self.0[index])
     }

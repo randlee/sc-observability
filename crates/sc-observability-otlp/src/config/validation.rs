@@ -1,9 +1,11 @@
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 use std::path::PathBuf;
 use std::time::Duration;
 
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
+use super::types::{AuthHeader, OtlpEndpoint};
 use super::types::{
-    AuthHeader, ExporterBackend, OtelConfig, OtlpEndpoint, OtlpProtocol, SyncHttpRetryPolicy,
-    TelemetryConfig,
+    ExporterBackend, OtelConfig, OtlpProtocol, SyncHttpRetryPolicy, TelemetryConfig,
 };
 use crate::{constants, error_codes};
 use sc_observability_types::typed::InitFailure;
@@ -188,13 +190,7 @@ fn validated_telemetry_bounds_with_delays(
 pub(crate) struct PositiveDuration(Duration);
 
 impl PositiveDuration {
-    #[cfg_attr(
-        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
-        expect(
-            dead_code,
-            reason = "validated durations are retained for configuration precedence without a compiled backend reader"
-        )
-    )]
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn get(self) -> Duration {
         self.0
     }
@@ -205,6 +201,7 @@ impl PositiveDuration {
 pub(crate) struct QueueCapacity(usize);
 
 impl QueueCapacity {
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn get(self) -> usize {
         self.0
     }
@@ -215,6 +212,7 @@ impl QueueCapacity {
 pub(crate) struct QueueByteCapacity(usize);
 
 impl QueueByteCapacity {
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn get(self) -> usize {
         self.0
     }
@@ -224,10 +222,7 @@ impl QueueByteCapacity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BoundedPercent(u8);
 
-#[cfg_attr(
-    all(not(test), not(feature = "sync-http")),
-    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
+#[cfg(any(test, feature = "sync-http"))]
 impl BoundedPercent {
     pub(crate) const fn get(self) -> u8 {
         self.0
@@ -235,30 +230,22 @@ impl BoundedPercent {
 }
 
 /// Positive lifecycle deadlines, both at least the request timeout.
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 #[derive(Debug)]
 pub(crate) struct LifecycleBounds {
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     flush: PositiveDuration,
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     shutdown: PositiveDuration,
 }
 
+#[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
 impl LifecycleBounds {
-    #[cfg_attr(
-        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
-        expect(
-            dead_code,
-            reason = "validated lifecycle deadline accessor is consumed by compiled backend paths"
-        )
-    )]
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn flush(&self) -> PositiveDuration {
         self.flush
     }
-    #[cfg_attr(
-        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
-        expect(
-            dead_code,
-            reason = "validated lifecycle deadline accessor is consumed by compiled backend paths"
-        )
-    )]
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn shutdown(&self) -> PositiveDuration {
         self.shutdown
     }
@@ -268,9 +255,13 @@ impl LifecycleBounds {
 #[derive(Debug)]
 pub(crate) struct ValidatedTransportBounds {
     protocol: OtlpProtocol,
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     queue_capacity: QueueCapacity,
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     queue_byte_capacity: QueueByteCapacity,
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     request_timeout: PositiveDuration,
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     lifecycle: LifecycleBounds,
     backend: BackendTransportBounds,
 }
@@ -280,56 +271,26 @@ pub(crate) struct ValidatedTransportBounds {
 /// ambient `OTEL_*` configuration.
 #[derive(Debug, Clone)]
 pub(crate) struct ValidatedBackendConnection {
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(
-            dead_code,
-            reason = "D.21 connection endpoint is consumed by enabled backends"
-        )
-    )]
+    #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
     endpoint: OtlpEndpoint,
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(
-            dead_code,
-            reason = "D.21 connection auth is consumed by enabled backends"
-        )
-    )]
+    #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
     auth_header: Option<AuthHeader>,
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(
-            dead_code,
-            reason = "D.21 connection CA is consumed by enabled backends"
-        )
-    )]
+    #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
     ca_file: Option<PathBuf>,
 }
 
 impl ValidatedBackendConnection {
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(
-            dead_code,
-            reason = "D.21 endpoint view is consumed by enabled backends"
-        )
-    )]
+    #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) fn endpoint(&self) -> &OtlpEndpoint {
         &self.endpoint
     }
 
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(dead_code, reason = "D.21 auth view is consumed by enabled backends")
-    )]
+    #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) fn auth_header(&self) -> Option<&AuthHeader> {
         self.auth_header.as_ref()
     }
 
-    #[cfg_attr(
-        not(any(feature = "sync-http", feature = "otlp-sdk")),
-        allow(dead_code, reason = "D.21 CA view is consumed by enabled backends")
-    )]
+    #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) fn ca_file(&self) -> Option<&PathBuf> {
         self.ca_file.as_ref()
     }
@@ -339,29 +300,19 @@ impl ValidatedTransportBounds {
     pub(crate) const fn protocol(&self) -> OtlpProtocol {
         self.protocol
     }
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn queue_capacity(&self) -> QueueCapacity {
         self.queue_capacity
     }
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn queue_byte_capacity(&self) -> QueueByteCapacity {
         self.queue_byte_capacity
     }
-    #[cfg_attr(
-        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
-        allow(
-            dead_code,
-            reason = "D.21 request timeout is consumed by enabled backends"
-        )
-    )]
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn request_timeout(&self) -> PositiveDuration {
         self.request_timeout
     }
-    #[cfg_attr(
-        all(not(test), not(any(feature = "sync-http", feature = "otlp-sdk"))),
-        expect(
-            dead_code,
-            reason = "validated lifecycle bounds accessor is consumed by compiled backend paths"
-        )
-    )]
+    #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
     pub(crate) const fn lifecycle(&self) -> &LifecycleBounds {
         &self.lifecycle
     }
@@ -371,13 +322,6 @@ impl ValidatedTransportBounds {
 }
 
 /// Backend-specific state; SDK and disabled transports cannot carry retry policy.
-#[cfg_attr(
-    all(not(test), not(feature = "sync-http")),
-    allow(
-        dead_code,
-        reason = "D.21 synchronous HTTP retry state is consumed by the synchronous HTTP backend"
-    )
-)]
 #[derive(Debug)]
 pub(crate) enum BackendTransportBounds {
     Disabled,
@@ -396,10 +340,7 @@ pub(crate) struct RetryPolicy {
     jitter: BoundedPercent,
 }
 
-#[cfg_attr(
-    not(feature = "sync-http"),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
+#[cfg(any(test, feature = "sync-http"))]
 impl RetryPolicy {
     pub(crate) const fn max_retries(&self) -> u32 {
         self.max_retries
@@ -418,6 +359,30 @@ impl RetryPolicy {
     }
     pub(crate) const fn jitter(&self) -> BoundedPercent {
         self.jitter
+    }
+}
+
+#[cfg(not(any(test, feature = "sync-http")))]
+impl RetryPolicy {
+    /// The unavailable synchronous transport still validates every supplied
+    /// retry value before the factory reports the missing feature.
+    pub(crate) fn discard_after_validation(&self) {
+        let Self {
+            max_retries,
+            initial_backoff,
+            max_backoff,
+            sequence_timeout,
+            retry_after_cap,
+            jitter,
+        } = self;
+        let _ = (
+            max_retries,
+            initial_backoff,
+            max_backoff,
+            sequence_timeout,
+            retry_after_cap,
+            jitter,
+        );
     }
 }
 
@@ -445,6 +410,7 @@ impl RetryDelay {
 
 /// Resolves defaults and validates a transport in the documented first-failure
 /// order. This is crate-visible for backend factories and contract tests.
+#[cfg(any(test, feature = "durable-store", feature = "sdk-test-support"))]
 pub(crate) fn validated_transport_bounds(
     config: &OtelConfig,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
@@ -505,6 +471,15 @@ fn validated_transport_bounds_with_delays(
     let (queue_capacity, queue_byte_capacity) =
         checked_queue_bounds(&queue_capacity, &queue_byte_capacity)?;
 
+    #[cfg(not(any(test, feature = "sync-http", feature = "otlp-sdk")))]
+    let _ = (
+        request_timeout.0,
+        lifecycle_flush_timeout.0,
+        lifecycle_shutdown_timeout.0,
+        queue_capacity.0,
+        queue_byte_capacity.0,
+    );
+
     let backend = if config.enabled {
         match config.backend {
             ExporterBackend::OpenTelemetrySdk => {
@@ -533,11 +508,17 @@ fn validated_transport_bounds_with_delays(
 
     Ok(ValidatedTransportBounds {
         protocol: config.protocol,
+        #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
         queue_capacity,
+        #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
         queue_byte_capacity,
+        #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
         request_timeout,
+        #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
         lifecycle: LifecycleBounds {
+            #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
             flush: lifecycle_flush_timeout,
+            #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
             shutdown: lifecycle_shutdown_timeout,
         },
         backend,
@@ -580,10 +561,7 @@ fn checked_queue_bounds(
 /// Returns the connection values only after the transport's ordinary ordered
 /// validation has succeeded. Enabled factories need an explicit endpoint and
 /// must never reconstruct it from environment defaults.
-#[allow(
-    dead_code,
-    reason = "D.18 consumes the validated SDK connection view during facade composition"
-)]
+#[cfg(any(feature = "sdk-test-support", all(test, feature = "otlp-sdk")))]
 pub(crate) fn validated_backend_connection(
     config: &OtelConfig,
 ) -> Result<ValidatedBackendConnection, ConfigFailure> {
@@ -596,15 +574,26 @@ pub(crate) fn prepared_backend_connection(
     config: &OtelConfig,
     _bounds: &ValidatedTransportBounds,
 ) -> Result<ValidatedBackendConnection, ConfigFailure> {
+    #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
     let endpoint = config.endpoint.clone().ok_or_else(|| {
         invalid_endpoint(
             "enabled telemetry requires an endpoint",
             "set OtelConfig.endpoint before constructing the backend",
         )
     })?;
+    #[cfg(not(any(feature = "sync-http", feature = "otlp-sdk")))]
+    if config.endpoint.is_none() {
+        return Err(invalid_endpoint(
+            "enabled telemetry requires an endpoint",
+            "set OtelConfig.endpoint before constructing the backend",
+        ));
+    }
     Ok(ValidatedBackendConnection {
+        #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
         endpoint,
+        #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
         auth_header: config.auth_header.clone(),
+        #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
         ca_file: config.ca_file.clone(),
     })
 }
