@@ -70,9 +70,7 @@ instability is suspected, and `schema-reviewer` when repository policy
 declares a governed interface in scope, as `quality-mgr.md` ("Reviewer
 Selection") says.
 
-A fix round (`carry_forward` set) reviews one small fix layer: `req-qa`,
-`arch-qa` and `rust-qa-agent`, plus a subjective reviewer only for a carried
-finding it owns, scope-locked to those ids.
+A fix round (`carry_forward` set) verifies one fix: dispatch only its filing reviewer, locked to the carried finding ids and their original acceptance criteria. No req-qa/arch-qa/rust-qa or screening panel, no sweep, no new findings. Required CI stays a separate merge requirement.
 
 Every reviewer is a background agent (a subagent or child agent, whichever
 your harness provides). It gets the pinned `branch`, `commit` and
