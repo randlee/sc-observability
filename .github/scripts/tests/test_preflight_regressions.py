@@ -13,7 +13,6 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-sys.path.insert(0, str(Path(__file__).parent))
 from shell_helpers import bash_command, bash_environment
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
