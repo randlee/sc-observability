@@ -31,5 +31,6 @@
   "parent": "obs-phase-d",
   "adrs": [
     "NONE"
-  ]
+  ],
+  "difficulty": "normal"
 }

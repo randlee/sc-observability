@@ -29,5 +29,6 @@
     "ADR-011",
     "ADR-012",
     "ADR-017"
-  ]
+  ],
+  "difficulty": "fast"
 }
