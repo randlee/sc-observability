@@ -105,25 +105,6 @@ pub struct Logger<State = Running> {
     shutdown: PhantomData<State>,
 }
 
-/// Crate-local sealing boundary for producer injection traits.
-pub(crate) mod sealed_emitters {
-    pub(crate) trait Sealed {}
-}
-
-/// Crate-local producer injection contract for logging-only code.
-#[allow(
-    dead_code,
-    reason = "crate-local emitter injection is consumed by internal producers rather than the public facade"
-)]
-#[allow(
-    deprecated,
-    reason = "the retained crate-local contract preserves its released EventError signature"
-)]
-pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
-    /// Admits one event through the released logger boundary.
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
-}
-
 /// Opt-in canonical logging facade for the compatible transition.
 ///
 /// This namespace exposes the canonical error contracts without creating a
@@ -1517,23 +1498,16 @@ mod tests {
         assert!(logger.emit(event).is_err());
     }
 
-    fn emit_from_injected_producer<E: LogEmitter>(
-        emitter: &E,
-        event: LogEvent,
-    ) -> Result<(), EventError> {
-        emitter.emit_log(event)
-    }
-
     #[test]
-    fn crate_local_log_emitter_injection_admits_events_and_preserves_event_errors() {
+    fn logger_emit_admits_events_and_preserves_event_errors() {
         let root = temp_path("injected-log-emitter");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         let mut event = log_event(service_name());
         event.request_id = Some(correlation_id("injected-producer"));
-        emit_from_injected_producer(&logger, event).expect("injected producer admission");
-        logger.flush().expect("flush injected event");
+        logger.emit(event).expect("logger admission");
+        logger.flush().expect("flush emitted event");
 
         let snapshot = logger
             .query(&query_all(LogOrder::OldestFirst))
@@ -1541,12 +1515,13 @@ mod tests {
         assert_eq!(
             request_ids(&snapshot),
             ["injected-producer"],
-            "injected producer event must be queryable through the logger"
+            "emitted event must be queryable through the logger"
         );
 
         let mut invalid = log_event(service_name());
         invalid.version = SchemaVersion::new("v0").expect("valid test schema value");
-        let error = emit_from_injected_producer(&logger, invalid)
+        let error = logger
+            .emit(invalid)
             .expect_err("invalid input retains the released EventError mapping");
         assert_eq!(error.0.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
     }
@@ -2025,7 +2000,7 @@ mod tests {
         assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
         assert_eq!(timeout.message, "writer thread did not stop within 10ms");
         // Shutdown consumes Logger<Running>. The returned Logger<Stopped>
-        // exposes this diagnostic through health, not through LogEmitter.
+        // exposes this diagnostic through health, not through Logger::emit.
         assert!(
             signal.is_active(),
             "shutdown returned before the blocked writer left its maintenance pass"

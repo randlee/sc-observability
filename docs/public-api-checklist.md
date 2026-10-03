@@ -148,10 +148,6 @@ Note:
 - [x] `LogFilter`
 - [x] `SinkRegistration`
 
-Internal-only:
-
-- [x] `LogEmitter`
-
 ### Phase A Planned Public Additions
 
 - [x] `Logger<Running>`
@@ -196,13 +192,8 @@ Phase-A rule:
 - [x] `ObservabilityBuilder::with_observability_health_provider(...)`
 - [x] `Observability`
 
-Internal-only:
-
-- [x] `ObservationEmitter<T>`
-
 ### Finalized Public Rules
 
-- `ObservationEmitter<T>` is intentionally per-type
 - registration is construction-time only
 - routing order is deterministic
 - `ObservabilityConfig` does not own OTLP configuration

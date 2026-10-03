@@ -602,18 +602,6 @@ impl Logger<Running> {
     }
 }
 
-impl crate::sealed_emitters::Sealed for Logger<Running> {}
-
-#[expect(
-    deprecated,
-    reason = "the crate-local compatibility emitter delegates through the retained legacy emit boundary"
-)]
-impl crate::LogEmitter for Logger<Running> {
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
-        self.emit(event)
-    }
-}
-
 fn legacy_init(error: CanonicalInitError) -> InitError {
     InitFailure::from_context(error.into_context()).into()
 }

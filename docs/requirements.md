@@ -84,7 +84,6 @@ This crate owns shared neutral contracts only.
 - TYP-019 `SpanState` serialization shall be derived from typestate at export/serialization time and shall not be a producer-facing mutable field. The `SpanStarted` and `SpanEnded` marker structs are the span-state mechanism; no additional producer-facing state type is required.
 - TYP-020 `Observable` shall remain an open trait for consumer-owned payload types.
 - TYP-021 `ObservationSubscriber<T>`, `ObservationFilter<T>`, `LogProjector<T>`, `SpanProjector<T>`, and `MetricProjector<T>` shall remain open extension points.
-- TYP-022 Crate-local emitter traits that are sealed to their implementing facade types shall be owned by the crate that implements them rather than by `sc-observability-types`.
 - TYP-023 Traits used behind `Arc<dyn ...>` shall remain object-safe, with `T` fixed at each usage site.
 - TYP-024 Traits used in concurrent routing or injection contexts shall be `Send + Sync`.
 - TYP-025 `ToolName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the top-level tool or executable identity used for config and path derivation.
@@ -165,7 +164,7 @@ This crate is the lightweight logging layer.
     `Logger::shutdown()` returns
   - `Logger<Stopped>` remains usable for health inspection only
   - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
-- LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
+- LOG-024 `Logger::emit` shall remain the retained logger entry point for event admission and preserve its `EventError` behavior.
 - LOG-025 `Logger` shall expose a synchronous historical query API `query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>`.
 - LOG-026 `Logger` shall expose a synchronous follow/tail API `follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>`.
 - LOG-027 `LogFollowSession` shall expose synchronous polling and shall not require an async runtime, background task, or file watcher to deliver new records.
@@ -307,7 +306,6 @@ This crate is the observation routing layer built on top of logging.
   - `flush()` delegates to logging and active routing/projector state
   - repeated `shutdown()` calls after a successful shutdown are idempotent and return `Ok(())`
   - repeated `shutdown()` calls after a failed shutdown replay the retained terminal failure to callers
-- OBS-025 `sc-observe` shall own a crate-local sealed `ObservationEmitter<T>` trait implemented by `Observability`.
 
 ## 6. `sc-observability-otlp` Requirements
 
