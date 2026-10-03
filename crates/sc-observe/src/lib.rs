@@ -992,11 +992,11 @@ mod tests {
         SubscriberFailure, TypedObservationSubscriber, legacy_subscriber,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, DiagnosticInfo, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-        MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity,
-        ProjectionError, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
-        SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
-        TraceContext, TraceId,
+        ActionName, Diagnostic, DiagnosticInfo, ErrorCode, Level, LogEvent, LogSinkError,
+        MetricKind, MetricName, MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber,
+        ProcessIdentity, ProjectionError, SpanId, SpanProjector, SpanRecord, SpanSignal,
+        SpanStarted, SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState,
+        Timestamp, TraceContext, TraceId,
     };
     use serde_json::Map;
     use std::sync::mpsc;
@@ -1641,14 +1641,15 @@ mod tests {
             {
                 let _ = first_flush.send(());
             }
-            Err(crate::compat::legacy_log_sink_error(
+            Err(LogSinkError(
                 sc_observability_types::v2::LogSinkError::Flush {
                     context: Box::new(ErrorContext::new(
                         sc_observability::error_codes::LOGGER_FLUSH_FAILED,
                         "controlled flush failure",
                         Remediation::not_recoverable("test fixture"),
                     )),
-                },
+                }
+                .into_context(),
             ))
         }
         fn health(&self) -> SinkHealth {
@@ -1987,8 +1988,6 @@ mod tests {
     #[test]
     #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
     fn flush_failure_reports_the_same_diagnostic_per_facade() {
-        use sc_observability_types::LogSinkError;
-
         struct SourceFailSink;
 
         impl LogSink for SourceFailSink {
@@ -1997,7 +1996,7 @@ mod tests {
             }
 
             fn flush(&self) -> Result<(), LogSinkError> {
-                Err(crate::compat::legacy_log_sink_error(
+                Err(LogSinkError(
                     sc_observability_types::v2::LogSinkError::Flush {
                         context: Box::new(
                             ErrorContext::new(
@@ -2007,7 +2006,8 @@ mod tests {
                             )
                             .source(Box::new(std::io::Error::other("native flush sink source"))),
                         ),
-                    },
+                    }
+                    .into_context(),
                 ))
             }
 
