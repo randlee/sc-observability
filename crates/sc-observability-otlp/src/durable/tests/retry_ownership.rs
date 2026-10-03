@@ -1,168 +1,152 @@
-//! Count real HTTP attempts across durable flushes, including profiles.
+//! Exercise durable retry ownership across real and scripted exporters, including profiles.
+//!
+//! Attempt budgets are asserted through the scripted exporter seam, while the
+//! real collector test checks only that each signal reaches its intended route.
+use super::loopback::ScriptedStatusCollector;
 use super::*;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::net::TcpListener;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    mpsc,
+};
+use std::time::Duration;
 
-struct Collector {
-    address: std::net::SocketAddr,
-    stop: Arc<AtomicBool>,
-    calls: Arc<AtomicUsize>,
-    paths: Arc<Mutex<Vec<String>>>,
-    worker: Option<std::thread::JoinHandle<()>>,
+fn retry_config(path: &Path) -> TelemetryClientConfig {
+    let mut config = config(path);
+    let mut retry = SyncHttpRetryPolicyDto::default();
+    retry.max_retries = Some(3);
+    retry.initial_backoff_ms = Some(1);
+    retry.max_backoff_ms = Some(1);
+    retry.retry_jitter_percent = Some(0);
+    config.sync_http_retry = Some(retry);
+    config
 }
-impl Collector {
-    fn new(recover_after: Option<usize>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = listener.local_addr().unwrap();
-        let stop = Arc::new(AtomicBool::new(false));
-        let calls = Arc::new(AtomicUsize::new(0));
-        let paths = Arc::new(Mutex::new(Vec::new()));
-        let (thread_stop, thread_calls, thread_paths) =
-            (stop.clone(), calls.clone(), paths.clone());
-        let worker = std::thread::spawn(move || {
-            loop {
-                let (mut stream, _) = listener.accept().unwrap();
-                if thread_stop.load(Ordering::Acquire) {
-                    break;
-                }
-                stream.set_read_timeout(Some(DEADLINE)).unwrap();
-                let (path, _) = read_http(&mut stream);
-                thread_paths.lock().unwrap().push(path);
-                let call = thread_calls.fetch_add(1, Ordering::AcqRel) + 1;
-                let status = if recover_after.is_some_and(|failed| call > failed) {
-                    "200 OK"
-                } else {
-                    "503 Service Unavailable"
-                };
-                write!(
-                    stream,
-                    "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
-                .unwrap();
-            }
-        });
+
+fn assert_real_http_smoke(collector: &ScriptedStatusCollector, name: &str, path: &str) {
+    let paths = collector.paths();
+    assert!(!paths.is_empty(), "{name} reached the real collector");
+    assert!(
+        paths.iter().all(|actual| actual == path),
+        "{name} only used the expected OTLP route: {paths:?}"
+    );
+}
+
+struct RetryableThenOkExporter {
+    retryable_before_success: usize,
+    calls: AtomicUsize,
+}
+impl RetryableThenOkExporter {
+    fn new(retryable_before_success: usize) -> Self {
         Self {
-            address,
-            stop,
-            calls,
-            paths,
-            worker: Some(worker),
-        }
-    }
-    fn configure(&self, path: &Path) -> TelemetryClientConfig {
-        let mut config = config(path);
-        config.endpoint = format!("http://{}", self.address);
-        let mut retry = SyncHttpRetryPolicyDto::default();
-        retry.max_retries = Some(3);
-        retry.initial_backoff_ms = Some(1);
-        retry.max_backoff_ms = Some(1);
-        retry.retry_jitter_percent = Some(0);
-        config.sync_http_retry = Some(retry);
-        config
-    }
-}
-impl Drop for Collector {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Release);
-        let _ = TcpStream::connect(self.address);
-        if let Some(worker) = self.worker.take() {
-            worker.join().unwrap();
+            retryable_before_success,
+            calls: AtomicUsize::new(0),
         }
     }
 }
-fn read_http(stream: &mut TcpStream) -> (String, Vec<u8>) {
-    let mut bytes = Vec::new();
-    let mut buffer = [0; 4096];
-    let end = loop {
-        let count = stream.read(&mut buffer).unwrap();
-        assert!(count > 0);
-        bytes.extend_from_slice(&buffer[..count]);
-        if let Some(index) = bytes.windows(4).position(|part| part == b"\r\n\r\n") {
-            break index + 4;
+impl SubmissionExporter for RetryableThenOkExporter {
+    fn export(&self, _: Signal, _: &[SubmissionEnvelope]) -> Result<(), SubmissionExportFailure> {
+        let call = self.calls.fetch_add(1, Ordering::AcqRel);
+        if call < self.retryable_before_success {
+            return Err(SubmissionExportFailure::Retryable(export_error()));
         }
-    };
-    let headers = std::str::from_utf8(&bytes[..end]).unwrap();
-    let path = headers
-        .lines()
-        .next()
-        .unwrap()
-        .split_whitespace()
-        .nth(1)
-        .unwrap()
-        .to_owned();
-    let size: usize = headers
-        .lines()
-        .find_map(|line| {
-            let (key, value) = line.split_once(':')?;
-            key.eq_ignore_ascii_case("content-length")
-                .then(|| value.trim().parse().unwrap())
-        })
-        .unwrap();
-    while bytes.len() < end + size {
-        let count = stream.read(&mut buffer).unwrap();
-        assert!(count > 0);
-        bytes.extend_from_slice(&buffer[..count]);
+        Ok(())
     }
-    (path, bytes[end..end + size].to_vec())
 }
 
 #[test]
-fn exhausted_transport_is_terminal_across_drain_reruns_including_profiles() {
-    for (name, path) in [
-        ("logs", "/v1/logs"),
-        ("profiles", "/v1development/profiles"),
+fn scripted_retry_attempt_budgets_are_exact_for_logs_and_profiles() {
+    for (name, retryable_before_success, expected_calls) in [
+        ("logs", 1, 2),
+        ("profiles", 1, 2),
+        ("logs", usize::MAX, 4),
+        ("profiles", usize::MAX, 4),
     ] {
         let dir = tempfile::tempdir().unwrap();
-        let collector = Collector::new(None);
-        let config = collector.configure(dir.path());
-        let client = DurableTelemetryClient::open(config.clone()).unwrap();
+        let exporter = Arc::new(RetryableThenOkExporter::new(retryable_before_success));
+        let client =
+            DurableTelemetryClient::open_with_exporter(retry_config(dir.path()), exporter.clone())
+                .unwrap();
         let receipt = client.emit(fixture(name)).unwrap();
-        for _ in 0..2 {
+
+        let result = client.flush_submission(&receipt.submission_id, DEADLINE);
+        if retryable_before_success == usize::MAX {
             assert!(matches!(
-                client.flush_submission(&receipt.submission_id, DEADLINE),
+                result,
                 Err(TelemetryClientError::Delivery(
                     DeliveryError::TerminalFailure { .. }
                 ))
             ));
+            assert!(matches!(
+                client
+                    .status(StatusQuery::Submissions(vec![
+                        receipt.submission_id.clone()
+                    ]))
+                    .unwrap()
+                    .submissions[0]
+                    .signals[0]
+                    .1,
+                DeliveryState::Failed { attempts: 4, .. }
+            ));
+            assert!(
+                client
+                    .flush_submission(&receipt.submission_id, DEADLINE)
+                    .is_err(),
+                "a terminal scripted retry budget is not spent again"
+            );
+        } else {
+            result.unwrap();
+            assert!(matches!(
+                client
+                    .status(StatusQuery::Submissions(vec![
+                        receipt.submission_id.clone()
+                    ]))
+                    .unwrap()
+                    .submissions[0]
+                    .signals[0]
+                    .1,
+                DeliveryState::Delivered { attempts: 2, .. }
+            ));
         }
-        let status = client
-            .status(StatusQuery::Submissions(vec![
-                receipt.submission_id.clone(),
-            ]))
-            .unwrap();
-        assert!(matches!(
-            status.submissions[0].signals[0].1,
-            DeliveryState::Failed { attempts: 1, .. }
-        ));
-        let _ = client.shutdown(DEADLINE);
-        drop(client);
-        // A new owner must not spend the exhausted network budget again.
-        let reopened = DurableTelemetryClient::open(config).unwrap();
-        assert!(
-            reopened
-                .flush_submission(&receipt.submission_id, DEADLINE)
-                .is_err()
-        );
         assert_eq!(
-            collector.calls.load(Ordering::Acquire),
-            4,
-            "{name} transport attempt budget"
+            exporter.calls.load(Ordering::Acquire),
+            expected_calls,
+            "{name} scripted durable attempt budget"
         );
-        assert_eq!(
-            collector.paths.lock().unwrap().as_slice(),
-            vec![path.to_owned(); 4].as_slice()
-        );
-        let _ = reopened.shutdown(DEADLINE);
+        client.shutdown(DEADLINE).unwrap();
     }
 }
 
 #[test]
-fn transient_collector_failure_delivers_within_one_drain_attempt() {
+fn collector_drop_does_not_depend_on_a_wake_connection() {
+    let mut collector = ScriptedStatusCollector::start(vec![], "503 Service Unavailable");
+    let closed_listener = TcpListener::bind("127.0.0.1:0").expect("reserve closed wake address");
+    collector.set_address_for_drop_regression(
+        closed_listener.local_addr().expect("closed wake address"),
+    );
+    drop(closed_listener);
+
+    let (completed, dropped) = mpsc::channel();
+    std::thread::spawn(move || {
+        drop(collector);
+        completed.send(()).expect("report collector drop");
+    });
+    dropped
+        .recv_timeout(Duration::from_secs(1))
+        .expect("collector drops without a wake connection");
+}
+
+fn open_real(config: TelemetryClientConfig) -> DurableTelemetryClient {
+    conformance::open_manual(|| DurableTelemetryClient::open(config)).unwrap()
+}
+
+#[test]
+fn real_http_smoke_delivers_logs_and_profiles_without_counting_retries() {
     for name in ["logs", "profiles"] {
         let dir = tempfile::tempdir().unwrap();
-        let collector = Collector::new(Some(1));
-        let client = DurableTelemetryClient::open(collector.configure(dir.path())).unwrap();
+        let collector = ScriptedStatusCollector::start(vec!["503 Service Unavailable"], "200 OK");
+        let mut config = retry_config(dir.path());
+        config.endpoint = collector.endpoint();
+        let client = open_real(config);
         let receipt = client.emit(fixture(name)).unwrap();
         client
             .flush_submission(&receipt.submission_id, DEADLINE)
@@ -174,7 +158,12 @@ fn transient_collector_failure_delivers_within_one_drain_attempt() {
             status.submissions[0].signals[0].1,
             DeliveryState::Delivered { attempts: 1, .. }
         ));
-        assert_eq!(collector.calls.load(Ordering::Acquire), 2);
+        let path = if name == "logs" {
+            "/v1/logs"
+        } else {
+            "/v1development/profiles"
+        };
+        assert_real_http_smoke(&collector, name, path);
         client.shutdown(DEADLINE).unwrap();
     }
 }
@@ -194,52 +183,112 @@ impl SubmissionExporter for CancelledExporter {
     }
 }
 
+fn logs_row(shared: &Shared) -> (String, u32, Option<String>) {
+    shared
+        .db
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT state,attempts,claimed_by FROM signal_deliveries",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap()
+}
+
 #[test]
 fn interrupted_transport_remains_pending_for_replacement_client() {
     let dir = tempfile::tempdir().unwrap();
     let exporter = Arc::new(CancelledExporter(AtomicUsize::new(0)));
     let config = config(dir.path());
-    let client =
-        DurableTelemetryClient::open_with_exporter(config.clone(), exporter.clone()).unwrap();
+    let client = conformance::open_manual(|| {
+        DurableTelemetryClient::open_with_exporter(config.clone(), exporter.clone())
+    })
+    .unwrap();
     let receipt = client.emit(fixture("logs")).unwrap();
-    let deadline = std::time::Instant::now() + DEADLINE;
+    let shared = &client.owner.shared;
+    {
+        let _clock = FrozenClock::new();
+        assert!(
+            !drain_once_bounded(shared, exporter.as_ref(), Signal::Logs),
+            "an interrupted export is not delivery progress"
+        );
+    }
+    assert_eq!(exporter.0.load(Ordering::Acquire), 1);
+    let status = client
+        .status(StatusQuery::Submissions(vec![
+            receipt.submission_id.clone(),
+        ]))
+        .unwrap();
+    assert!(matches!(
+        status.submissions[0].signals[0].1,
+        DeliveryState::Pending
+    ));
+    assert_eq!(logs_row(shared), ("pending".to_owned(), 0, None));
+    // A manual client has no worker to release its lease on exit; perform the
+    // release the last worker owns, then stop the client without draining.
+    worker::release(shared);
+    drop(client);
+    let replacement = conformance::open_manual(|| {
+        DurableTelemetryClient::open_with_exporter(
+            config,
+            Arc::new(ScriptedExporter::new(dir.path())),
+        )
+    })
+    .unwrap();
+    assert_eq!(
+        replacement
+            .flush_submission(&receipt.submission_id, DEADLINE)
+            .unwrap()
+            .delivered
+            .logs,
+        1
+    );
+    assert_eq!(exporter.0.load(Ordering::Acquire), 1);
+    replacement.shutdown(DEADLINE).unwrap();
+}
+
+#[test]
+fn interrupted_transport_stops_only_its_signal_worker() {
+    let dir = tempfile::tempdir().unwrap();
+    let exporter = Arc::new(CancelledExporter(AtomicUsize::new(0)));
+    let client =
+        DurableTelemetryClient::open_with_exporter(config(dir.path()), exporter.clone()).unwrap();
+    let receipt = client.emit(fixture("logs")).unwrap();
+    let shared = &client.owner.shared;
+    // The logs worker exits after its first owned Interrupted result; the
+    // heartbeat and the three other signal workers stay live.
+    let deadline = Instant::now() + DEADLINE;
     loop {
-        let generation = client.owner.shared.generation();
-        let status = client
-            .status(StatusQuery::Submissions(vec![
-                receipt.submission_id.clone(),
-            ]))
-            .unwrap();
-        if exporter.0.load(Ordering::Acquire) == 1
-            && matches!(status.submissions[0].signals[0].1, DeliveryState::Pending)
-        {
+        let generation = shared.generation();
+        if shared.live_workers.load(Ordering::Acquire) == 4 {
             break;
         }
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        assert!(!remaining.is_zero(), "cancelled row was not restored");
-        client.owner.shared.wait_since(generation, remaining);
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        assert!(
+            !remaining.is_zero(),
+            "logs worker did not stop after the interrupted export"
+        );
+        shared.wait_since(generation, remaining);
     }
-    let attempts: u32 = client
-        .owner
-        .shared
-        .db
-        .lock()
-        .unwrap()
-        .query_row("SELECT attempts FROM signal_deliveries", [], |row| {
-            row.get(0)
-        })
+    let calls = exporter.0.load(Ordering::Acquire);
+    assert!(calls >= 1);
+    let (state, _, claimed_by) = logs_row(shared);
+    assert_eq!((state.as_str(), claimed_by), ("pending", None));
+    let status = client
+        .status(StatusQuery::Submissions(vec![receipt.submission_id]))
         .unwrap();
-    assert_eq!(attempts, 0);
-    let _ = client.shutdown(Duration::from_millis(10));
-    drop(client);
-    assert_eq!(exporter.0.load(Ordering::Acquire), 1);
-    let replacement = DurableTelemetryClient::open_with_exporter(
-        config,
-        Arc::new(ScriptedExporter::new(dir.path())),
-    )
-    .unwrap();
-    replacement
-        .flush_submission(&receipt.submission_id, DEADLINE)
-        .unwrap();
-    replacement.shutdown(DEADLINE).unwrap();
+    assert!(matches!(
+        status.submissions[0].signals[0].1,
+        DeliveryState::Pending
+    ));
+    // The pending row cannot be flushed; whether the deadline or the final store
+    // lock budget expires first depends on live worker transactions.
+    assert!(client.shutdown(Duration::from_millis(10)).is_err());
+    worker::join(shared, DEADLINE);
+    assert_eq!(
+        exporter.0.load(Ordering::Acquire),
+        calls,
+        "a stopped exporter is not called again"
+    );
 }

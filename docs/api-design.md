@@ -182,7 +182,7 @@ Owns typed observation routing and projection.
 Owns:
 
 - `Observability`
-- observation emitter interfaces
+- typed observation admission via `Observability::emit`
 - subscriber registry
 - projector registry
 - routing from typed observations into logging outputs and generic downstream
@@ -425,57 +425,19 @@ Rules:
   health
 - it does not replace `LoggingHealthReport` or `TelemetryHealthReport`
 
-### 7.4 Producer Injection Traits
+### 7.4 Producer Entry Points
 
-Producer crates should depend on narrow injected interfaces rather than always
-depending on the concrete service types directly.
+Producer code uses the concrete facades that own its admission behavior:
 
-One implementation-readiness correction is important here:
+- typed observations call `Observability::emit`
+- logging-only code calls `Logger::emit`
+- telemetry-specific code uses its telemetry-local signal entry points when it
+  intentionally produces projected signals
 
-- open cross-crate traits remain in `sc-observability-types`
-- sealed emitter traits must be crate-local to the crate that implements them
-
-That split is necessary because a trait cannot be both sealed in the base crate
-and implemented by public facade types in downstream crates without weakening
-the seal.
-
-`sc-observe` therefore owns the producer-facing sealed observation emitter:
-
-```rust
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-pub trait ObservationEmitter<T>: sealed_emitters::Sealed + Send + Sync
-where
-    T: Observable,
-{
-    fn emit(&self, observation: Observation<T>) -> Result<(), ObservationError>;
-}
-```
-
-Implementation expectation:
-
-- `Observability` implements `ObservationEmitter<T>`
-
-Related crate-local sealed traits:
-
-- `sc-observability` owns `LogEmitter`
-- `sc-observability-otlp` owns `SpanEmitter` and `MetricEmitter`
-
-Recommended usage:
-
-- most application code should inject `ObservationEmitter<T>` for its typed
-  observations
-- logging-only code may inject `LogEmitter`
-- telemetry-specific code may inject telemetry-local signal emitter traits when
-  it is intentionally producing projected signals
-- `ObservationEmitter<T>` is intentionally per-type. Callers hold one handle
-  per observation type; a single type-erased emitter for heterogeneous events
-  is not supported by design.
-
-`ObservationEmitter<T>` is sealed inside `sc-observe`; it is not intended for
-external implementation. Adding methods is non-breaking.
+The former crate-local sealed emitter traits had no supported consumers and are
+not retained as injection contracts. Open cross-crate extension points remain
+in `sc-observability-types` where their consumer-owned implementations are part
+of the supported API.
 
 ### 7.5 `Observable`
 
@@ -1544,17 +1506,8 @@ pub enum TryLogError {
 }
 ```
 
-Crate-local producer injection trait:
-
-```rust
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-pub trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
-}
-```
+`Logger::emit` is the retained logger admission entry point and preserves the
+released `EventError` contract.
 
 ### 11.7 `LogSink`
 
@@ -1888,22 +1841,6 @@ Rule:
   typestate is required here
 - `flush()` attempts export of all ready batches
 - `shutdown()` performs a final flush, drops incomplete spans, and is idempotent
-
-Crate-local direct-signal injection traits:
-
-```rust
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-pub trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_span(&self, span: SpanSignal) -> Result<(), TelemetryError>;
-}
-
-pub trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_metric(&self, metric: MetricRecord) -> Result<(), TelemetryError>;
-}
-```
 
 ### 12.4 Exporter Traits
 

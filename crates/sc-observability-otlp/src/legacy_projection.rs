@@ -7,7 +7,9 @@ use std::collections::BTreeMap;
 
 use crate::contracts::{ExportRecord, LogRecord};
 use sc_observability_types::otlp::{OtlpInstrumentationScope, OtlpLogRecord, OtlpResource};
-use sc_observability_types::v2::{ConfigFailure, ExportError};
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
+use sc_observability_types::v2::ConfigFailure;
+use sc_observability_types::v2::ExportError;
 use sc_observability_types::{
     ErrorContext, LogEvent, MetricRecord, Remediation, ServiceName, SpanSignal,
 };
@@ -178,7 +180,7 @@ fn transport_error(message: &str) -> ExportError {
         )),
     }
 }
-#[allow(dead_code)]
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
 pub(super) fn transport_construction_failure(error: ExportError) -> ConfigFailure {
     ConfigFailure::TransportConstructionFailed {
         context: Box::new(

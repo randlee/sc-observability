@@ -46,6 +46,7 @@ impl fmt::Debug for SyncHttpSubmissionExporter {
             .finish()
     }
 }
+#[cfg(feature = "durable-store")]
 pub(crate) fn exporter_for(
     config: SyncHttpConfig,
     bounds: ValidatedTransportBounds,
@@ -102,6 +103,7 @@ impl SubmissionExporter for SyncHttpSubmissionExporter {
         self.export_encoded(route, envelopes, encode)
     }
 
+    #[cfg(feature = "durable-store")]
     fn cancel(&self) {
         self.exporter.cancel_submission();
     }

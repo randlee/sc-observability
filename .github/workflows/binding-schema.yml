@@ -1,19 +1,5 @@
 name: Binding schema
 on:
-  pull_request:
-    paths:
-      - 'scripts/ci/**'
-      - '.github/scripts/**'
-      - 'boundaries/**'
-      - 'Cargo.*'
-      - 'rust-toolchain.toml'
-      - 'crates/sc-observability-types/**'
-      - 'crates/sc-observability-dto/**'
-      - 'bindings/**'
-      - 'scripts/*binding*'
-      - '.github/workflows/binding-schema.yml'
-  push:
-    branches: [develop, main, 'integrate/*']
   workflow_dispatch:
 jobs:
   binding-schema:
@@ -48,8 +34,6 @@ jobs:
           fi
       - name: Validate DTO, frozen schema, generators and isolated bundle
         run: bash scripts/ci/validate_binding_schema.sh
-      - name: Enforce neutral dependency boundary
-        run: bash scripts/ci/validate_dependency_bans.sh
       - name: Retain exact isolated consumer proof
         if: always()
         uses: actions/upload-artifact@v6

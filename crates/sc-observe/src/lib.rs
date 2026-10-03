@@ -944,35 +944,6 @@ impl ObservabilityBuilder {
     }
 }
 
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-/// `ObservationEmitter<T>` is intentionally per-type -- callers hold one handle
-/// per observation type. A single type-erased emitter for heterogeneous events
-/// is not supported by design.
-#[expect(
-    dead_code,
-    reason = "crate-local observation emitter trait is intentionally retained for injection"
-)]
-pub(crate) trait ObservationEmitter<T>: sealed_emitters::Sealed + Send + Sync
-where
-    T: Observable,
-{
-    fn emit(&self, observation: Observation<T>) -> Result<(), ObservationError>;
-}
-
-impl sealed_emitters::Sealed for Observability {}
-
-impl<T> ObservationEmitter<T> for Observability
-where
-    T: Observable,
-{
-    fn emit(&self, observation: Observation<T>) -> Result<(), ObservationError> {
-        Observability::emit(self, observation)
-    }
-}
-
 #[cfg(test)]
 #[allow(
     deprecated,

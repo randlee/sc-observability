@@ -1,8 +1,14 @@
 #![cfg(feature = "test-double")]
 
 use std::process::Command;
-mod common;
-use common::{assert_result_v1, fixture_component};
+#[path = "common/assert_result_v1.rs"]
+mod assert_result_v1;
+#[path = "common/fixture_component.rs"]
+mod fixture_component;
+#[path = "common/golden_root.rs"]
+mod golden_root;
+use assert_result_v1::assert_result_v1;
+use fixture_component::fixture_component;
 
 #[test]
 fn test_double_emits_every_signal_and_combined_stdin() {

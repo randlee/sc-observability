@@ -105,25 +105,6 @@ pub struct Logger<State = Running> {
     shutdown: PhantomData<State>,
 }
 
-/// Crate-local sealing boundary for producer injection traits.
-pub(crate) mod sealed_emitters {
-    pub(crate) trait Sealed {}
-}
-
-/// Crate-local producer injection contract for logging-only code.
-#[allow(
-    dead_code,
-    reason = "crate-local emitter injection is consumed by internal producers rather than the public facade"
-)]
-#[allow(
-    deprecated,
-    reason = "the retained crate-local contract preserves its released EventError signature"
-)]
-pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
-    /// Admits one event through the released logger boundary.
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
-}
-
 /// Opt-in canonical logging facade for the compatible transition.
 ///
 /// This namespace exposes the canonical error contracts without creating a
@@ -929,36 +910,30 @@ mod tests {
         )
     }
 
-    #[cfg(unix)]
-    fn unix_file_identity(path: &Path) -> crate::query::FileIdentity {
+    fn file_identity(path: &Path) -> crate::query::FileIdentity {
         crate::query::file_identity_for_path(path)
     }
 
-    #[cfg(unix)]
-    fn recreate_with_distinct_unix_identity(active_path: &Path) {
-        // Keep the old inode allocated while installing the replacement. This
-        // makes a distinct identity deterministic instead of depending on the
-        // filesystem's inode-reuse timing after unlink.
-        let retained_previous = fs::File::open(active_path).expect("open active log");
-        let previous_identity = unix_file_identity(active_path);
-        fs::remove_file(active_path).expect("remove active log");
-        fs::File::create(active_path).expect("recreate active log");
+    fn recreate_with_distinct_identity(active_path: &Path) {
+        let replacement_path = active_path.with_extension("replacement");
+        let previous_identity = file_identity(active_path);
+        fs::File::create(&replacement_path).expect("create replacement log");
+        let replacement_identity = file_identity(&replacement_path);
         assert_ne!(
-            unix_file_identity(active_path),
-            previous_identity,
-            "retained old inode makes replacement identity distinct"
+            replacement_identity, previous_identity,
+            "replacement created while the active log exists has distinct identity"
         );
-        drop(retained_previous);
-    }
 
-    #[cfg(not(unix))]
-    fn recreate_with_distinct_unix_identity(active_path: &Path) {
-        // Non-Unix follow tests only verify that truncate/recreate remains
-        // callable. Identity-distinctness is intentionally not asserted here,
-        // and both cfg variants must stay behaviorally aligned when this helper
-        // changes.
+        // The sink opens the active path only while writing, so removing the
+        // path before installing the already-created replacement works on
+        // both Unix and Windows without depending on rename-overwrite rules.
         fs::remove_file(active_path).expect("remove active log");
-        fs::File::create(active_path).expect("recreate active log");
+        fs::rename(&replacement_path, active_path).expect("install replacement log");
+        assert_ne!(
+            file_identity(active_path),
+            previous_identity,
+            "installed replacement identity remains distinct"
+        );
     }
 
     fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
@@ -1517,23 +1492,16 @@ mod tests {
         assert!(logger.emit(event).is_err());
     }
 
-    fn emit_from_injected_producer<E: LogEmitter>(
-        emitter: &E,
-        event: LogEvent,
-    ) -> Result<(), EventError> {
-        emitter.emit_log(event)
-    }
-
     #[test]
-    fn crate_local_log_emitter_injection_admits_events_and_preserves_event_errors() {
+    fn logger_emit_admits_events_and_preserves_event_errors() {
         let root = temp_path("injected-log-emitter");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         let mut event = log_event(service_name());
         event.request_id = Some(correlation_id("injected-producer"));
-        emit_from_injected_producer(&logger, event).expect("injected producer admission");
-        logger.flush().expect("flush injected event");
+        logger.emit(event).expect("logger admission");
+        logger.flush().expect("flush emitted event");
 
         let snapshot = logger
             .query(&query_all(LogOrder::OldestFirst))
@@ -1541,12 +1509,13 @@ mod tests {
         assert_eq!(
             request_ids(&snapshot),
             ["injected-producer"],
-            "injected producer event must be queryable through the logger"
+            "emitted event must be queryable through the logger"
         );
 
         let mut invalid = log_event(service_name());
         invalid.version = SchemaVersion::new("v0").expect("valid test schema value");
-        let error = emit_from_injected_producer(&logger, invalid)
+        let error = logger
+            .emit(invalid)
             .expect_err("invalid input retains the released EventError mapping");
         assert_eq!(error.0.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
     }
@@ -2025,7 +1994,7 @@ mod tests {
         assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
         assert_eq!(timeout.message, "writer thread did not stop within 10ms");
         // Shutdown consumes Logger<Running>. The returned Logger<Stopped>
-        // exposes this diagnostic through health, not through LogEmitter.
+        // exposes this diagnostic through health, not through Logger::emit.
         assert!(
             signal.is_active(),
             "shutdown returned before the blocked writer left its maintenance pass"
@@ -3306,10 +3275,6 @@ mod tests {
         );
     }
 
-    // This test exercises the Unix-specific replacement helper above. Windows
-    // follow identity now uses filesystem identity metadata, but the distinct-
-    // inode recreation harness remains Unix-only.
-    #[cfg_attr(windows, ignore)]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
@@ -3361,7 +3326,7 @@ mod tests {
                 .contains("truncation")
         );
 
-        recreate_with_distinct_unix_identity(&active_path);
+        recreate_with_distinct_identity(&active_path);
         logger
             .emit(log_event_with_request(service_name(), "after-recreate", 20))
             .expect("emit after recreate");

@@ -13,12 +13,16 @@ python3 scripts/ci/validate_typescript_control_flow.py
 if [[ ${1:-} != '--platform' ]]; then
   bash scripts/ci/validate_binding_schema.sh
 fi
-python3 -m unittest discover -s scripts/ci/tests -p test_binding_source_bundle.py
 python3 -m unittest discover -s scripts/ci/tests -p test_tauri_platform_evidence.py
 python3 -m unittest discover -s scripts/ci/tests -p test_tauri_network_scope.py
 python3 -m unittest discover -s scripts/ci/tests -p test_windows_proof_supervisor.py
+# schema-and-contract already runs this exact Tauri unit suite on Linux. Keep
+# platform-local unit coverage where that Ubuntu artifact cannot provide it.
+if [[ "${1:-}" != '--platform' || "${RUNNER_OS:-}" != Linux ]]; then
+  python3 -m unittest discover -s scripts/ci/tests -p test_binding_source_bundle.py
+  cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test
+fi
 python3 scripts/ci/validate_binding_runtime.py --platform-only --evidence target/tauri-qualification/native-runtime
-cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test
 qualification_args=(--evidence target/tauri-qualification)
 if [[ -n ${TAURI_NPM_ARCHIVE:-} ]]; then
   qualification_args+=(--npm-archive "$TAURI_NPM_ARCHIVE" --npm-manifest "$TAURI_NPM_MANIFEST")

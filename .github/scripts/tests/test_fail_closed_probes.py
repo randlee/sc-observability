@@ -12,6 +12,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+from shell_helpers import bash_command, bash_environment, bash_path
+
 
 REPO_ROOT = next(
     path for path in Path(__file__).resolve().parents if (path / "install.py").is_file()
@@ -39,7 +41,7 @@ def write_gh_stub(tmp_path: Path, body: str) -> Path:
     bin_dir = tmp_path / "stub-bin"
     bin_dir.mkdir(exist_ok=True)
     stub = bin_dir / "gh"
-    stub.write_text("#!/usr/bin/env bash\n" + body, encoding="utf-8")
+    stub.write_text("#!/usr/bin/env bash\n" + body, encoding="utf-8", newline="\n")
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
     return bin_dir
 
@@ -48,21 +50,24 @@ def run_probe_script(
     tmp_path: Path, script: str, stub_body: str, env: dict[str, str]
 ) -> tuple[subprocess.CompletedProcess[str], dict[str, str]]:
     bin_dir = write_gh_stub(tmp_path, stub_body)
+    script_path = tmp_path / "probe.sh"
+    script_path.write_text(script, encoding="utf-8", newline="\n")
     output_file = tmp_path / "github-output"
     output_file.write_text("", encoding="utf-8")
     result = subprocess.run(
-        ["bash"],
-        input=script,
+        [*bash_command(), bash_path(script_path)],
         text=True,
         capture_output=True,
         check=False,
-        env={
+        env=bash_environment(
+            {
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "GH_TOKEN": "stub-token",
-            "GITHUB_OUTPUT": str(output_file),
             **env,
-        },
+            },
+            prepend_path=bin_dir,
+            github_output=output_file,
+        ),
     )
     outputs = dict(
         line.split("=", 1)
@@ -70,6 +75,11 @@ def run_probe_script(
         if "=" in line
     )
     return result, outputs
+
+
+def test_gh_stub_is_written_with_lf_bytes(tmp_path: Path) -> None:
+    bin_dir = write_gh_stub(tmp_path, 'printf "%s\\n" stubbed\n')
+    assert b"\r" not in (bin_dir / "gh").read_bytes()
 
 
 # --- GitHub Release probe (verify-published-release, issue #40) -------------

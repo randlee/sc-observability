@@ -27,8 +27,10 @@ use std::time::{Duration, Instant};
 use crate::config::ValidatedTransportBounds;
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
 use crate::constants::MAX_OTLP_RECORD_BYTES;
+#[cfg(test)]
+use crate::contracts::ExporterSet;
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
-use crate::contracts::{ExporterSet, LifecycleFuture};
+use crate::contracts::LifecycleFuture;
 #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
 use crate::error_codes;
 use sc_observability_types::DiagnosticSummary;
@@ -45,6 +47,7 @@ use sc_observability_types::{ErrorContext, Remediation};
 pub(crate) struct SignalArray<T>([T; 4]);
 
 impl<T> SignalArray<T> {
+    #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
     pub(crate) const fn new(values: [T; 4]) -> Self {
         Self(values)
     }
@@ -58,6 +61,7 @@ impl<T> SignalArray<T> {
         Self::index(signal).map(|index| &self.0[index])
     }
 
+    #[cfg(any(test, feature = "otlp-sdk", feature = "sync-http"))]
     pub(crate) fn get_mut(&mut self, signal: Signal) -> Option<&mut T> {
         Self::index(signal).map(|index| &mut self.0[index])
     }
@@ -241,10 +245,7 @@ impl LifecycleCore {
     /// Constructs the state machine from D.21's validated, backend-neutral
     /// bounds.  Exporter preflight is intentionally performed before any
     /// state becomes visible to callers.
-    #[allow(
-        dead_code,
-        reason = "only unused in the lib build; the unified lifecycle test binary uses it, making #[expect] unfulfilled under --all-targets"
-    )]
+    #[cfg(test)]
     pub(crate) fn new(
         exporters: ExporterSet,
         bounds: &ValidatedTransportBounds,

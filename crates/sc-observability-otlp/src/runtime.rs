@@ -739,40 +739,6 @@ impl ObservabilityHealthProvider for RuntimeTelemetry {
     }
 }
 
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-#[expect(
-    dead_code,
-    reason = "crate-local span emitter trait is intentionally retained for direct telemetry injection"
-)]
-pub(crate) trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError>;
-}
-
-#[expect(
-    dead_code,
-    reason = "crate-local metric emitter trait is intentionally retained for direct telemetry injection"
-)]
-pub(crate) trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_metric(&self, metric: CanonicalMetricRecord) -> Result<(), CanonicalTelemetryError>;
-}
-
-impl sealed_emitters::Sealed for RuntimeTelemetry {}
-
-impl SpanEmitter for RuntimeTelemetry {
-    fn emit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError> {
-        RuntimeTelemetry::emit_span(self, &span)
-    }
-}
-
-impl MetricEmitter for RuntimeTelemetry {
-    fn emit_metric(&self, metric: CanonicalMetricRecord) -> Result<(), CanonicalTelemetryError> {
-        RuntimeTelemetry::emit_metric(self, &metric)
-    }
-}
-
 /// Canonical admission check for the state-transition `entity_id`.
 fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
     let Some(entity_id) = event

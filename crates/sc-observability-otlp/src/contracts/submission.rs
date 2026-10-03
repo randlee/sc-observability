@@ -14,6 +14,7 @@ pub(crate) trait SubmissionExporter: Send + Sync {
     ///
     /// This crate-private default preserves the test seam for exporters that
     /// have no cancellable transport operation.
+    #[cfg(feature = "durable-store")]
     fn cancel(&self) {}
 }
 #[derive(Debug)]

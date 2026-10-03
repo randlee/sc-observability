@@ -76,6 +76,8 @@ def _extract_binary(archive_path: Path, output: Path, lock: dict[str, str]) -> s
 
 def _output_path(value: str) -> Path:
     requested = Path(value).expanduser()
+    if platform.system().lower() == "windows" and requested.suffix.lower() != ".exe":
+        requested = requested.with_name(requested.name + ".exe")
     if requested.is_symlink():
         raise SystemExit(f"refusing symlink output path: {requested}")
     requested.parent.mkdir(parents=True, exist_ok=True)
@@ -94,12 +96,13 @@ def main() -> int:
               file=sys.stderr)
         return 2
     output = _output_path(sys.argv[1] if len(sys.argv) > 1 else "build/otel-desktop-viewer")
-    output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="sc-obs-d9-viewer-") as temp:
         archive_path = Path(temp) / "release.tar.gz"
         digest = _download_archive(lock["artifact_url"], archive_path, lock["artifact_sha256"])
         staged = Path(temp) / lock["binary_name"]
         binary_digest = _extract_binary(archive_path, staged, lock)
+        # _output_path owns normal validation and parent creation. Recheck at
+        # publication to reject a symlink swapped in during the download.
         if output.is_symlink():
             raise SystemExit(f"refusing symlink output path: {output}")
         # Publish with an atomic rename so a failed verification never leaves a

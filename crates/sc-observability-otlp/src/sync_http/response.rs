@@ -54,7 +54,9 @@ fn parse(bytes: &[u8], route: SubmissionRoute) -> Result<(), ExportError> {
         SubmissionRoute::Signal(Signal::Logs) => "rejectedLogRecords",
         SubmissionRoute::Signal(Signal::Traces) => "rejectedSpans",
         SubmissionRoute::Signal(Signal::Metrics) => "rejectedDataPoints",
-        SubmissionRoute::Signal(Signal::Profiles) | SubmissionRoute::Profiles => "rejectedProfiles",
+        SubmissionRoute::Signal(Signal::Profiles) => "rejectedProfiles",
+        #[cfg(any(test, feature = "durable-store"))]
+        SubmissionRoute::Profiles => "rejectedProfiles",
         SubmissionRoute::Signal(_) => {
             return Err(failure("unsupported OTLP response signal", None));
         }

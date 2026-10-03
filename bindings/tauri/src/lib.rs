@@ -1094,7 +1094,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "tauri")]
+    #[cfg(feature = "test")]
     #[test]
     fn mock_ipc_returns_wire_envelope_from_registered_command() {
         let policy = AdapterPolicy {

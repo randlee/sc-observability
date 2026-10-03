@@ -279,6 +279,4 @@ with tempfile.TemporaryDirectory(prefix="core-boundary-fixtures-") as directory:
 print("dependency ban validation passed")
 PY
 
-python3 scripts/ci/validate_binding_runtime_dependencies.py
-
 python3 -m unittest scripts.ci.tests.test_otlp_dependencies

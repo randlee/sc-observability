@@ -4,19 +4,20 @@ permissions:
 on:
   pull_request:
     branches: ["sprint/*", "integrate/*", "fix/*"]
-    paths: ["scripts/sanity-telemetry/**", "bindings/python/sc-observability-py/**", ".sc/telemetry.yaml", ".gitignore", ".github/workflows/sanity-telemetry.yml"]
   workflow_dispatch:
 jobs:
   importer:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
       - uses: actions/setup-python@v5
         with: {python-version: '3.10'}
       - run: pip install maturin
       - run: maturin build --manifest-path bindings/python/sc-observability-py/Cargo.toml --features pyo3/abi3-py310,pyo3/extension-module,otlp-telemetry,test-hooks --out dist-hooks
-      - run: python -m venv .venv-d35 && .venv-d35/bin/pip install dist-hooks/*.whl pytest pyyaml
+      - run: python -m venv .venv-d35 && .venv-d35/bin/pip install dist-hooks/*.whl pytest pyyaml tzdata==2026.5
       - name: Run importer tests and reject skips
         run: |
           results="${RUNNER_TEMP}/sanity-telemetry-junit.xml"

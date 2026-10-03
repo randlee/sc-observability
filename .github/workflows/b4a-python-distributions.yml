@@ -85,6 +85,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
       - name: Build sole-helper source bundle and immutable maturin sdist
         shell: bash
@@ -123,6 +124,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - if: matrix.id == 'windows-arm64'
         name: Reject emulated Windows ARM64 build evidence
         shell: pwsh
@@ -186,6 +188,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - if: matrix.id == 'windows-arm64'
         name: Reject emulated Windows ARM64 installed cell
         shell: pwsh
@@ -231,9 +234,60 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  public-api-surface:
+    # ADR-022: one native producer per release platform renders the compiled
+    # public API of every published crate for every feature selection; the
+    # aggregate compares the six surfaces.
+    timeout-minutes: 120
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_commit }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - if: runner.os == 'Linux'
+        uses: ./.github/actions/install-linux-native-deps
+      - if: matrix.id == 'windows-arm64'
+        name: Reject emulated Windows ARM64 API extraction
+        shell: pwsh
+        run: python scripts/ci/python_arm64.py
+      - name: Install the pinned rustdoc nightly and the fixture targets
+        shell: bash
+        run: |
+          toolchain="$(cat scripts/ci/public-api-toolchain)"
+          rustup toolchain install "$toolchain" --profile minimal
+          rustup target add --toolchain "$toolchain" x86_64-unknown-linux-gnu x86_64-pc-windows-msvc
+      - name: Prove the extractor detects target-conditioned API mutations
+        shell: bash
+        env:
+          CI: '1'
+        run: python -m unittest discover -s scripts/ci/tests -p test_public_api_parity.py -v
+      - name: Render the compiled public API of every published crate for this release target
+        shell: bash
+        run: |
+          python scripts/ci/public_api_parity.py collect --platform-id "${{ matrix.id }}" \
+            --output "$RUNNER_TEMP/b4a-public-api"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: b4a-public-api-${{ matrix.id }}
+          path: ${{ runner.temp }}/b4a-public-api/
+          if-no-files-found: error
+          retention-days: 90
+
   aggregate:
     if: always()
-    needs: [plan, sdist, wheel, installed-suite]
+    needs: [plan, sdist, wheel, installed-suite, public-api-surface]
     outputs:
       source_commit: ${{ needs.plan.outputs.source_commit }}
       inventory_sha256: ${{ steps.qualify.outputs.sha256 }}
@@ -246,11 +300,27 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
       - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
       - uses: actions/download-artifact@v7
         with:
           pattern: b4a-*
           path: ${{ runner.temp }}/b4a-evidence
+      - name: Require an identical public API across all release targets (ADR-022)
+        shell: bash
+        run: |
+          python scripts/ci/public_api_parity.py compare --evidence "$RUNNER_TEMP/b4a-evidence" \
+            --source-commit "${{ needs.plan.outputs.source_commit }}" \
+            --report "$RUNNER_TEMP/b4a-public-api-parity/report.json"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: b4a-public-api-parity-report
+          path: ${{ runner.temp }}/b4a-public-api-parity/
+          if-no-files-found: error
+          retention-days: 90
       - name: Require all policy cells against the same wheels and sdist
         id: qualify
         shell: bash

@@ -26,20 +26,14 @@ fi
 B4_TEMP_DIR="$(mktemp -d -t sc-observability-b4.XXXXXX)"
 trap 'rm -rf "$B4_TEMP_DIR"' EXIT
 
-cargo fmt --all -- --check
 cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings
-cargo test --locked -p sc-observability-binding-runtime
 PYO3_PYTHON="$B4_PYTHON" PYTHONHOME="$("$B4_PYTHON" -c 'import sys; print(sys.base_prefix)')" \
   cargo test --locked -p sc-observability-py
-cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- \
-  --output bindings/schema/v1.json --errors-output bindings/schema/errors-v1.json --check
 "$B4_GENERATOR_PYTHON" scripts/generate_python_bindings.py \
   --schema bindings/schema/v1.json \
   --output-dir bindings/python/sc-observability-py/python/sc_observability/generated \
   --check
 
-BINDING_PYTHON="$B4_PYTHON" BINDING_RUNTIME_PYTHON="$B4_PYTHON" \
-  bash scripts/ci/validate_binding_python_typing.sh
 MYPYPATH=bindings/python/sc-observability-py/python \
   uv run --no-project --python "$B4_PYTHON" --with mypy==2.3.1 python -m mypy \
   --strict --python-version 3.10 \

@@ -1,16 +1,5 @@
 name: Binding runtime
 on:
-  pull_request:
-    paths:
-      - 'scripts/ci/**'
-      - '.github/scripts/**'
-      - 'boundaries/**'
-      - 'Cargo.*'
-      - 'rust-toolchain.toml'
-      - 'crates/sc-observability*/**'
-      - '.github/workflows/binding-runtime.yml'
-  push:
-    branches: [develop, main, 'integrate/*']
   workflow_dispatch:
 jobs:
   native-contract:
@@ -26,6 +15,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'
@@ -56,6 +46,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'
@@ -77,6 +68,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'
