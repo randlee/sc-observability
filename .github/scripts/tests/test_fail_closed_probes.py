@@ -8,10 +8,9 @@ executes it against a stubbed `gh`, asserting that only a confirmed 404
 from __future__ import annotations
 
 import os
-import stat
 import subprocess
 from pathlib import Path
-from _shell import BASH
+from _shell import BASH, prepend_path, write_shell_script
 
 
 REPO_ROOT = next(
@@ -40,8 +39,7 @@ def write_gh_stub(tmp_path: Path, body: str) -> Path:
     bin_dir = tmp_path / "stub-bin"
     bin_dir.mkdir(exist_ok=True)
     stub = bin_dir / "gh"
-    stub.write_text("#!/usr/bin/env bash\n" + body, encoding="utf-8")
-    stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+    write_shell_script(stub, "#!/usr/bin/env bash\n" + body)
     return bin_dir
 
 
@@ -59,7 +57,7 @@ def run_probe_script(
         check=False,
         env={
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "PATH": prepend_path(bin_dir),
             "GH_TOKEN": "stub-token",
             "GITHUB_OUTPUT": str(output_file),
             **env,

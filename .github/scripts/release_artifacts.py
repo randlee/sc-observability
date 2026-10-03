@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 from release_python import cmd_python_wheel_matrix, wheel_targets, verify_platforms, explicit_asset_patterns
-
 import re
 import shutil
 import tarfile
@@ -37,6 +36,7 @@ from release_manifest import (
     manifest_rust_toolchain,
     manifest_workspace_toml,
     package_name,
+    use_lf_stdout,
     cmd_package_check_plan,
     workspace_members,
     workspace_version,
@@ -854,6 +854,7 @@ def cmd_cargo_build_bin_args(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    use_lf_stdout()
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
 

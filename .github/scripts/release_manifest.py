@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import tomllib
 import urllib.parse
 from pathlib import Path, PurePosixPath
@@ -13,6 +14,19 @@ SUPPORTED_SCHEMA_VERSION = 1
 # Single source for the release Rust toolchain when the manifest does not
 # declare [project].rust_toolchain; workflows read it via `build-plan`.
 DEFAULT_RUST_TOOLCHAIN = "1.94.1"
+
+
+def use_lf_stdout(stream=None) -> None:
+    """Emit LF-only lines so a bash `read` never keeps a CR in its last field.
+
+    Windows Python text stdout translates newlines to CRLF; workflow shells
+    split CLI output into fields, so the CR would corrupt values such as a
+    Cargo manifest path.
+    """
+    stream = sys.stdout if stream is None else stream
+    reconfigure = getattr(stream, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(newline="\n")
 
 
 def _require_keys(entry: dict, required: tuple[str, ...], label: str) -> None:

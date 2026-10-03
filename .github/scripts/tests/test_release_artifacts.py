@@ -4,7 +4,7 @@ import io
 import json
 import os
 import subprocess
-from _shell import BASH
+from _shell import BASH, prepend_path, write_shell_script
 import sys
 import tarfile
 import tomllib
@@ -465,23 +465,24 @@ def run_release_gate_readiness(
         "release_python.py",
         "release_gate.sh",
     ):
+        # LF keeps the copied release_gate.sh byte-identical on Windows.
         (scripts_dir / script_name).write_text(
-            (scripts_root() / script_name).read_text(encoding="utf-8"), encoding="utf-8"
+            (scripts_root() / script_name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+            newline="\n",
         )
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
-    git = bin_dir / "git"
-    git.write_text(
+    write_shell_script(
+        bin_dir / "git",
         "#!/usr/bin/env bash\n"
         "case \"$1\" in\n"
         "  fetch|merge-base) exit 0 ;;\n"
         "  rev-parse) printf '%s\\n' deadbeef ;;\n"
         "  *) exit 1 ;;\n"
         "esac\n",
-        encoding="utf-8",
     )
-    git.chmod(0o755)
 
     return subprocess.run(
         [
@@ -496,7 +497,7 @@ def run_release_gate_readiness(
             already_published_channels,
         ],
         cwd=tmp_path,
-        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"},
+        env={**os.environ, "PATH": prepend_path(bin_dir)},
         text=True,
         capture_output=True,
         check=False,
@@ -527,8 +528,8 @@ def run_release_tag_step(
     """Run tag reuse against deterministic ancestry responses from Git."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(parents=True)
-    git = bin_dir / "git"
-    git.write_text(
+    write_shell_script(
+        bin_dir / "git",
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         "case \"$1\" in\n"
@@ -557,9 +558,7 @@ def run_release_tag_step(
         "  tag|push) exit 0 ;;\n"
         "  *) exit 1 ;;\n"
         "esac\n",
-        encoding="utf-8",
     )
-    git.chmod(0o755)
     output = tmp_path / "github-output"
     shell = (
         release_tag_step_shell()
@@ -573,7 +572,7 @@ def run_release_tag_step(
         env={
             **os.environ,
             "GITHUB_OUTPUT": str(output),
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "PATH": prepend_path(bin_dir),
         },
         text=True,
         capture_output=True,
@@ -825,6 +824,63 @@ def test_package_check_plan_skips_registry_verification_only_for_earlier_release
         "sc-composer|verify|",
         "sc-compose|no_verify|sc-composer",
     ]
+
+
+def test_prepend_path_uses_native_separator() -> None:
+    """Stub directories join PATH with the separator native processes split on."""
+    joined = prepend_path(Path("stub-bin"), f"first{os.pathsep}second")
+
+    assert joined.split(os.pathsep) == [str(Path("stub-bin")), "first", "second"]
+    assert prepend_path("stub-bin", "") == "stub-bin"
+
+
+def test_write_shell_script_emits_lf_only(tmp_path: Path) -> None:
+    """Shell stubs keep LF line endings even where text mode would write CRLF."""
+    stub = tmp_path / "git"
+    write_shell_script(stub, "#!/usr/bin/env bash\ncase \"$1\" in\n  *) exit 0 ;;\nesac\n")
+
+    assert b"\r" not in stub.read_bytes()
+    assert stub.read_bytes().count(b"\n") == 4
+
+
+def test_package_check_plan_stdout_is_lf_only_for_bash_read(tmp_path: Path) -> None:
+    """Raw stdout bytes carry no CR, so `read` never puts one in the manifest field."""
+    workspace, manifest = write_repo_fixture(tmp_path, manifest_wheels=["ubuntu-latest"])
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(scripts_root() / "release_artifacts.py"),
+            "package-check-plan",
+            "--include-manifest",
+            "--workspace-toml",
+            str(workspace),
+            "--manifest",
+            str(manifest),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert b"\r" not in result.stdout
+    assert result.stdout.decode("utf-8").splitlines()[0].endswith("|crates/sc-composer/Cargo.toml")
+
+
+def test_use_lf_stdout_overrides_crlf_translation() -> None:
+    """A stream configured like Windows text stdout emits LF after the override."""
+    sys.path.insert(0, str(scripts_root()))
+    from release_manifest import use_lf_stdout
+
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="utf-8", newline="\r\n")
+    use_lf_stdout(stream)
+    print("pkg|verify||dep/Cargo.toml", file=stream)
+    stream.flush()
+
+    assert raw.getvalue() == b"pkg|verify||dep/Cargo.toml\n"
 
 
 def test_package_check_plan_keeps_full_verification_for_nonrelease_dependencies(

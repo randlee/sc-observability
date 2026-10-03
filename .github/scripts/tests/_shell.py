@@ -36,3 +36,20 @@ def _resolve_bash() -> str:
 
 
 BASH = _resolve_bash()
+
+
+def prepend_path(directory: str | Path, path: str | None = None) -> str:
+    """Return a PATH value that searches ``directory`` first.
+
+    Native Windows processes use ``;`` between PATH entries; Git for Windows
+    bash converts that form to its own ``:`` list on startup.  Joining with
+    ``:`` on Windows yields one unusable entry, so stubs are never found.
+    """
+    current = os.environ.get("PATH", "") if path is None else path
+    return f"{directory}{os.pathsep}{current}" if current else str(directory)
+
+
+def write_shell_script(path: Path, text: str) -> None:
+    """Write an executable shell stub with LF line endings on every OS."""
+    path.write_text(text, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
