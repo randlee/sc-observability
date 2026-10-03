@@ -180,7 +180,7 @@ class ReleaseScriptTests(unittest.TestCase):
 
             result = subprocess.run(
                 [
-                    "bash",
+                    *bash_command(),
                     str(SCRIPTS / "release_gate.sh"),
                     "final",
                     "origin/main",
