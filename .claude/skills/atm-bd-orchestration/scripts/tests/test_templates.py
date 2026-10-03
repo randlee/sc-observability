@@ -116,6 +116,25 @@ class TemplateContractTests(unittest.TestCase):
                         machine = json.loads(result.stdout.split("```json\n", 1)[1].split("```", 1)[0])
                         self.assertEqual(machine["integration_review"], values["integration_review"])
 
+    def test_review_completion_requires_jev_execution_receipt(self):
+        import json
+        import tempfile
+        values = json.loads((ROOT / "examples/review-complete-vars.json").read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "vars.json"
+            for include in (True, False):
+                candidate = dict(values)
+                if not include:
+                    del candidate["post_mortem_jev"]
+                path.write_text(json.dumps(candidate))
+                result = subprocess.run([
+                    "sc-compose", "render", "--file", str(ROOT / "templates/review-complete.md.j2"),
+                    "--var-file", str(path), "--strict"], capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, include, result.stderr)
+                if include:
+                    machine = json.loads(result.stdout.split("```json\n", 1)[1].split("```", 1)[0])
+                    self.assertEqual(machine["post_mortem_jev"], candidate["post_mortem_jev"])
+
     def test_assignment_examples_render_strictly(self):
         examples = ROOT / "examples"
         templates = sorted((ROOT / "templates").glob("*.j2"))

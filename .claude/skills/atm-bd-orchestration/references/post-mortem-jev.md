@@ -5,6 +5,8 @@ investigation on exceptions. This verifies carried findings at the pinned
 integration commit; it does not restart a whole-bead QA sweep. Verify deferrals
 and other non-fix authorizations from their receipts outside JEV.
 
+Start with [the bead-context collector and preparation workflow](post-mortem-context-preparation.md).
+
 ## Prepare deciding evidence
 
 Prepare one finding per request with atomic factual questions, one deciding

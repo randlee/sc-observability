@@ -17,5 +17,14 @@
     "verified_fixed": 0,
     "justified_nonfix": 0,
     "unresolved": 1
+  },
+  "post_mortem_jev": {
+    "status": "completed",
+    "run_ids": [
+      "example-phase-review"
+    ],
+    "jsonl_path": ".sc/qa-logs/post-mortem-jev-phase-d.jsonl",
+    "integration_sha": "9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5",
+    "reason": ""
   }
 }

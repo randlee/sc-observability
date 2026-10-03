@@ -254,6 +254,7 @@ run `bd sync`.
 
 ### Phase-End Review
 
+Quality-mgr runs the required JEV screening and investigated post-mortem.
 Read [references/post-mortem.md](references/post-mortem.md). The phase-end
 review includes a reconciliation of every finding bead, including closed
 ones, against the final integration source. Assign `branch` =
