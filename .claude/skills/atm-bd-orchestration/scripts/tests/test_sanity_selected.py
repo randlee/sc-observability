@@ -104,7 +104,7 @@ class SelectedMergeTests(unittest.TestCase):
                 (root / name).write_text(json.dumps(value))
             output = io.StringIO()
             argv = ["sanity-merge", str(root / "manifest.json"), "sanity", "dev", "d",
-                    "--reviewer", "sanity-selected", "--started-at", "0",
+                    "--reviewer", "sanity-selected", "--started-at", "0", "--completed-at", "1",
                     "--llm-results", str(root / "llm.json"), "--jev-results", str(root / "jev.json"),
                     "--selection", str(root / "selection.json")]
             with mock.patch.object(merge, "lint_result", return_value=(0, [], "")), \

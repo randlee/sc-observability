@@ -87,8 +87,11 @@ One check is one closed bead at one pinned commit, split per deliverable:
   pinned SHA, checks that the worktree is still at that SHA and clean,
   folds in the lint exit code and diagnostics, and writes each reviewer’s
   verdict and report vars separately, carrying the shared run_id, reviewer
-  identity, tested commit and own UTC timing. The selected mode validates
-  source statuses and retains selection/source provenance.
+  identity, tested commit and caller-recorded UTC timing. Capture a reviewer
+  completion timestamp at its last reply or timeout envelope, before any lint
+  wait; capture the selected completion timestamp when `selection.json` is
+  written. Exit-4 retries reuse both supplied timestamps. The selected mode
+  validates source statuses and retains selection/source provenance.
 
 The check leaves nothing in the repository: `sanity-split` writes only the
 lint log and the lint exit file under `--scratch`, the renderer's transient

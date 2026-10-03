@@ -105,8 +105,9 @@ class SanitySplit(unittest.TestCase):
     def merge(self, manifest, results):
         manifest_file = self.root / "manifest.json"
         manifest_file.write_text(json.dumps(manifest))
+        completed = time.time()
         return subprocess.run([str(MERGE), str(manifest_file), "obs-x-1-sanity", "obs-x-1", "x",
-                               "--reviewer", "sanity-llm", "--started-at", str(time.time())],
+                               "--reviewer", "sanity-llm", "--started-at", str(completed), "--completed-at", str(completed)],
                               input=json.dumps(results), capture_output=True, text=True)
 
     def test_selected_reviewers_share_assignments_and_one_lint(self):

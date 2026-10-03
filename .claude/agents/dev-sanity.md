@@ -53,7 +53,9 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    before dispatching its children. Pass every manifest `assignments[]`
    assignment unchanged to one child of that reviewer type. Children never
    run lint or write `bd`/`atm`. Keep each fenced JSON reply unchanged in
-   that reviewer's results array; never mix reviewer arrays.
+   that reviewer's results array; never mix reviewer arrays. When that
+   reviewer's last child reply or timeout envelope arrives, immediately record
+   `completed_at=$(date +%s)`, before any merge or shared lint wait.
 3. Stop a child that does not respond within 30 minutes. Preserve its failure
    envelope. If dispatch fails or a child times out, put a coordinator-origin
    `success:false, data:null` envelope in that slot with an error containing
@@ -61,9 +63,13 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    `deliverable` number. Say explicitly that the reviewer could not run.
    Never substitute an LLM result for unavailable JEV (or vice versa).
 4. Merge each LLM/JEV result array as soon as that reviewer finishes, using
-   its existing stdin invocation and preserving its own vars/report. Do not
-   append either history row yet: the final selected verdict is not known.
-   Once both raw arrays are available, select each deliverable in a strict
+   its existing stdin invocation with
+   `--started-at "$reviewer_started_at" --completed-at "$reviewer_completed_at"`
+   and preserving its own vars/report. Do not append either history row yet:
+   the final selected verdict is not known. Once both raw arrays are
+   available, record `selected_started_at` immediately before selection and
+   `selected_completed_at` when `selection.json` is written. Then select each
+   deliverable in a strict
    JSON array. Every entry records exact LLM/JEV statuses, `selected`
    source (`llm`, `jev`, or `rerun`), a reason for a disagreement or rerun,
    and a checker-defect flag. A checker defect creates no child; its selection
@@ -71,18 +77,27 @@ With `S=.claude/skills/atm-bd-orchestration/scripts`:
    reopen it. A rerun supplies one unchanged reply, its
    reviewer, and nonempty repo-relative missing-context paths. A checker
    defect is allowed only for a selected undone reply and needs its reason.
+
+   ```bash
+   $S/sanity-merge "$manifest" "$task" "$checked_bead" "$sprint" \
+     --reviewer "$reviewer" --started-at "$reviewer_started_at" \
+     --completed-at "$reviewer_completed_at" \
+     < "$scratch/$reviewer-results.json" > "$scratch/$reviewer-vars.json"
+   ```
 5. Merge the selected report from the raw files and selection array:
 
    ```bash
    $S/sanity-merge "$manifest" "$task" "$checked_bead" "$sprint" \
      --reviewer sanity-selected --started-at "$selected_started_at" \
+     --completed-at "$selected_completed_at" \
      --llm-results "$scratch/sanity-llm-results.json" \
      --jev-results "$scratch/sanity-jev-results.json" \
      --selection "$scratch/selection.json" > "$scratch/sanity-selected-vars.json"
    ```
 
    Exit 4 means shared lint is still running:
-   wait and retry with the same start time and unchanged results.
+   wait and retry with the same start and completion times and unchanged
+   results.
    Exit 0 produces PASS/FAIL. Exit 1 or 3 may produce a CANNOT_RUN report;
    preserve the error and raw results. An invalid invocation/manifest with
    no report is a coordinator error to report, never a PASS. Do not run lint

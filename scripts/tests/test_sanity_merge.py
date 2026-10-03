@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).parents[2]
@@ -76,11 +77,11 @@ class SanityMerge(unittest.TestCase):
                             operational_reviewer="sanity-llm")
         self.lint(0)
         reports = []
-        for reviewer, start, findings in (("sanity-llm", "1700000000", []),
-                                          ("sanity-jev", "1700000010", [FINDING])):
+        for reviewer, start, completed, findings in (("sanity-llm", "1700000000", "1700000003", []),
+                                                     ("sanity-jev", "1700000000", "1700000021", [FINDING])):
             results = [self.result(1), self.result(2, findings)]
             out = self.merge(results, str(self.manifest), TASK, DEV, SPRINT,
-                             "--reviewer", reviewer, "--started-at", start)
+                             "--reviewer", reviewer, "--started-at", start, "--completed-at", completed)
             self.assertEqual(out.returncode, 0, out.stderr)
             report = json.loads(out.stdout)
             self.assertEqual(report["run_id"], "shared-run")
@@ -91,15 +92,15 @@ class SanityMerge(unittest.TestCase):
             self.assertTrue(report["completed_at"].endswith("Z"))
             reports.append(report)
         self.assertEqual([r["verdict"] for r in reports], ["PASS", "FAIL"])
-        self.assertNotEqual(reports[0]["started_at"], reports[1]["started_at"])
-        self.assertGreater(reports[0]["duration_seconds"], reports[1]["duration_seconds"])
+        self.assertNotEqual(reports[0]["completed_at"], reports[1]["completed_at"])
+        self.assertEqual([r["duration_seconds"] for r in reports], [3, 21])
 
     def test_single_jev_and_cannot_run_are_never_relabelled(self):
         self.write_manifest(run_id="jev-run", reviewers=["sanity-jev"], operational_reviewer="sanity-jev")
         self.lint(0)
         results = [self.result(1), self.failure(code="JEV.UNAVAILABLE")]
         out = self.merge(results, str(self.manifest), TASK, DEV, SPRINT,
-                         "--reviewer", "sanity-jev", "--started-at", "1700000000")
+                         "--reviewer", "sanity-jev", "--started-at", "1700000000", "--completed-at", "1700000001")
         self.assertEqual(out.returncode, 3, out.stderr)
         report = json.loads(out.stdout)
         self.assertEqual(report["verdict"], "CANNOT_RUN")
@@ -108,7 +109,7 @@ class SanityMerge(unittest.TestCase):
         self.assertEqual(report["operational_reviewer"], "sanity-jev")
         self.assertEqual(report["reviewer_results"], results)
         rejected = self.merge([self.result(1), self.result(2)], str(self.manifest), TASK, DEV, SPRINT,
-                              "--reviewer", "sanity-llm", "--started-at", "1700000000")
+                              "--reviewer", "sanity-llm", "--started-at", "1700000000", "--completed-at", "1700000001")
         self.assertEqual(rejected.returncode, 1)
         self.assertEqual(rejected.stdout, "")
 
@@ -203,6 +204,33 @@ class SanityMerge(unittest.TestCase):
     def test_lint_still_running(self):
         out = self.merge([self.result(1), self.result(2)])
         self.assertEqual((out.returncode, out.stderr.strip()), (4, "lint still running"))
+
+    def test_completed_at_is_required_validated_and_stable_across_exit_four_retry(self):
+        self.write_manifest(run_id="timed-run", reviewers=["sanity-llm"], operational_reviewer="sanity-llm")
+        results = [self.result(1), self.result(2)]
+        prefix = (str(self.manifest), TASK, DEV, SPRINT, "--reviewer", "sanity-llm", "--started-at", "1700000000")
+        missing = self.merge(results, *prefix)
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("--started-at/--completed-at", missing.stderr)
+        backwards = self.merge(results, *prefix, "--completed-at", "1699999999")
+        self.assertEqual(backwards.returncode, 1)
+        self.assertIn("must not precede", backwards.stderr)
+        future = self.merge(results, *prefix, "--completed-at", str(time.time() + 60))
+        self.assertEqual(future.returncode, 1)
+        self.assertIn("more than five seconds", future.stderr)
+        retry_args = (*prefix, "--completed-at", "1700000005")
+        first = self.merge(results, *retry_args)
+        self.assertEqual((first.returncode, first.stdout), (4, ""))
+        self.lint(0)
+        retry = self.merge(results, *retry_args)
+        self.assertEqual(retry.returncode, 0, retry.stderr)
+        report = json.loads(retry.stdout)
+        self.assertEqual((report["completed_at"], report["duration_seconds"]), ("2023-11-14T22:13:25Z", 5))
+        later = self.merge(results, *prefix, "--completed-at", "1700000012")
+        self.assertEqual(later.returncode, 0, later.stderr)
+        later_report = json.loads(later.stdout)
+        self.assertNotEqual(later_report["completed_at"], report["completed_at"])
+        self.assertEqual(later_report["duration_seconds"], 12)
 
     def test_lint_unavailable(self):
         for state in ("timeout", "cancelled", "error"):

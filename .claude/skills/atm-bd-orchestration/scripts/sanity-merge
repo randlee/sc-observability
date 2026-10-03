@@ -3,14 +3,14 @@
 
 Usage:
   sanity-merge <manifest.json> <sanity bead> <dev bead> <sprint>
-    --reviewer sanity-llm|sanity-jev --started-at <epoch> < results.json
-    --reviewer sanity-selected --started-at <epoch> --llm-results <file>
+    --reviewer sanity-llm|sanity-jev --started-at <epoch> --completed-at <epoch> < results.json
+    --reviewer sanity-selected --started-at <epoch> --completed-at <epoch> --llm-results <file>
     --jev-results <file> --selection <file>
 
 `manifest.json` is what `sanity-split` printed. stdin is a JSON array holding
 the unchanged JSON reply of every child of one selected reviewer, one per
 deliverable. Run once per reviewer against the same manifest/lint. New manifests
-require explicit reviewer and its dispatch start time; old manifests retain the
+require explicit reviewer and its dispatch start and completion times; old manifests retain the
 legacy invocation contract. New reviewer reports include shared run_id, commit,
 reviewer, UTC timing and raw reviewer_results. Cannot-run emits CANNOT_RUN JSON
 with null findings and the original error (exit 1/3); exit 4 has no report yet.
@@ -37,6 +37,7 @@ Exit codes (the message is printed on stderr):
 import argparse
 from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -312,6 +313,7 @@ def main(argv):
         parser.add_argument(name)
     parser.add_argument("--reviewer", choices=("sanity-llm", "sanity-jev", "sanity-selected"))
     parser.add_argument("--started-at", type=float)
+    parser.add_argument("--completed-at", type=float)
     parser.add_argument("--llm-results")
     parser.add_argument("--jev-results")
     parser.add_argument("--selection")
@@ -326,16 +328,16 @@ def main(argv):
     def metadata():
         if not args.reviewer:
             return {}
-        completed = datetime.now(timezone.utc)
+        completed = datetime.fromtimestamp(args.completed_at, timezone.utc)
         return {"run_id": manifest["run_id"], "reviewer": args.reviewer,
                 "operational_reviewer": manifest["operational_reviewer"],
                 "started_at": datetime.fromtimestamp(args.started_at, timezone.utc).isoformat().replace("+00:00", "Z"),
                 "completed_at": completed.isoformat().replace("+00:00", "Z"),
-                "duration_seconds": max(0, round(completed.timestamp() - args.started_at)),
+                "duration_seconds": round(args.completed_at - args.started_at),
                 "reviewer_results": results, "selection": selection}
 
     def unavailable(code, message, legacy_status=None):
-        if args.reviewer and manifest and manifest.get("run_id") and args.started_at is not None:
+        if args.reviewer and manifest and manifest.get("run_id") and args.started_at is not None and args.completed_at is not None:
             json.dump({**metadata(), "task_id": sanity_bead, "checked_bead": dev_bead,
                        "sprint": sprint, "branch": manifest["branch"], "commit": manifest["sha"],
                        "verdict": "CANNOT_RUN", "findings_count": None,
@@ -347,10 +349,20 @@ def main(argv):
     try:
         manifest = load_manifest(manifest_path)
         if manifest.get("run_id") and not args.reviewer:
-            raise Reject("a run manifest requires --reviewer and --started-at")
-        if args.reviewer and (args.reviewer not in manifest.get("reviewers", []) or args.started_at is None):
-            print("reviewer must be selected in manifest and --started-at is required", file=sys.stderr)
+            raise Reject("a run manifest requires --reviewer, --started-at, and --completed-at")
+        if args.reviewer and (args.reviewer not in manifest.get("reviewers", []) or args.started_at is None or args.completed_at is None):
+            print("reviewer must be selected in manifest and --started-at/--completed-at are required", file=sys.stderr)
             return 1
+        if args.reviewer:
+            if not math.isfinite(args.started_at) or not math.isfinite(args.completed_at):
+                print("--started-at and --completed-at must be finite epoch values", file=sys.stderr)
+                return 1
+            if args.completed_at < args.started_at:
+                print("--completed-at must not precede --started-at", file=sys.stderr)
+                return 1
+            if args.completed_at > datetime.now(timezone.utc).timestamp() + 5:
+                print("--completed-at must not be more than five seconds in the future", file=sys.stderr)
+                return 1
         selected_mode = args.reviewer == "sanity-selected"
         if selected_mode:
             if not all((args.llm_results, args.jev_results, args.selection)):
