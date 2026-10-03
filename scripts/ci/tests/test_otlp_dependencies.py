@@ -46,6 +46,40 @@ class TransportPolicyTests(unittest.TestCase):
     def test_reviewed_manifest(self):
         self.assertIn("opentelemetry-otlp", validate_transport_dependencies(self.root))
 
+    def test_sc_observe_dev_dependency_is_allowed(self):
+        validate_transport_dependencies(self.root)
+
+    def test_sc_observe_regular_dependency_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "[dependencies]\n",
+            "[dependencies]\nsc-observe.workspace = true\n",
+        )
+        with self.assertRaises(SystemExit) as raised:
+            validate_transport_dependencies(self.root)
+        self.assertEqual(
+            str(raised.exception),
+            "OTLP dependency sc-observe: dev-only; it must not appear in [dependencies]",
+        )
+
+    def test_sc_observe_regular_dependency_without_dev_declaration_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "sc-observe.workspace = true\n",
+            "",
+        )
+        self.replace(
+            MANIFEST,
+            "[dependencies]\n",
+            "[dependencies]\nsc-observe.workspace = true\n",
+        )
+        with self.assertRaises(SystemExit) as raised:
+            validate_transport_dependencies(self.root)
+        self.assertEqual(
+            str(raised.exception),
+            "OTLP dependency sc-observe: dev-only; it must not appear in [dependencies]",
+        )
+
     def test_test_collector_router_must_remain_dev_only(self):
         self.replace(
             MANIFEST,
