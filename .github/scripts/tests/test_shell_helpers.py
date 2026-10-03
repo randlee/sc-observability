@@ -105,7 +105,15 @@ def test_uses_each_middle_git_bash_fallback_and_first_available_candidate() -> N
         platform="win32",
         environ=environment,
         exists=lambda path: PureWindowsPath(path)
-        in {PureWindowsPath(first), PureWindowsPath(program_files_x86)},
+        in {PureWindowsPath(program_files), PureWindowsPath(program_files_x86)},
+    )
+    assert selected == [str(program_files)]
+
+    selected = bash_command(
+        platform="win32",
+        environ=environment,
+        exists=lambda path: PureWindowsPath(path)
+        in {PureWindowsPath(first), PureWindowsPath(program_files)},
     )
     assert selected == [str(first)]
 
