@@ -99,9 +99,9 @@ or ATM.
 ## Stack Discipline
 
 Every bead declares its immutable `metadata.pr_target`. A dev or fix branch
-is cut from `origin/<pr_target>` and rebases only onto that branch. The lead
-opens the PR against that same target after sanity PASS; a passed sanity is
-frozen and a later change is a new fix bead with its own sanity. Sprint work
+is cut from `origin/<pr_target>` and rebases only onto that branch. At
+dev-complete, before the sanity dispatch, the lead opens the PR (never a
+draft) against that same target; a passed sanity is frozen and a later change is a new fix bead with its own sanity. Sprint work
 does not wait for QA: the next sprint is dispatched as soon as its sanity
 blockers PASS. QA and fixes interleave by priority (blocking P1, sprint and
 important P2, minor P4).
@@ -221,7 +221,7 @@ Then, on each task close:
 | --- | --- |
 | plan-review PASS | nothing when the bead closed: the root sprints are now ready. With minor findings the bead is assigned to you still open: fix each listed bead with `bd update`, then `bd close <root>-plan-qa --reason "minor fixes applied"` |
 | plan-review FAIL | have the author fix the listed beads, run `validate-plan` again, then dispatch the next round |
-| dev-complete | nothing: the sanity check is now ready |
+| dev-complete | open the PR (never a draft) against `pr_target`, then dispatch the now-ready sanity check |
 | sanity check PASS | verify the branch base is its declared `pr_target`, then create and dispatch the QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (a child of the checked bead). For a finding, the QA dispatch sets `checked_bead` = the finding (it carries its own requirements and ADRs), `sprint_bead` = its `metadata.sprint_bead`, `carry_forward` = the finding id, and `round` = the `metadata.round` of the QA bead it was `discovered-from`, + 1, or 1 when it came from the phase-end review |
 | sanity check FAIL | one coordinator runs assignment-selected `both` (default), `llm`, or `jev` with shared lint and separate logged reviewer results; both uses LLM as operational authority and JEV as comparison-only; only the operational reviewer creates finding children; sanity answers only whether a numbered deliverable is written; requirements and quality are QA. The sanity member creates one child finding bead for every undone deliverable under `<checked bead>` at `clamp(parent priority - 1, P1, P4)`, so it ranks ahead of the parent's peers, never one for lint; it does not edit the parent. It copies phase/sprint/stack/layer provenance and uses only `phase-<phase>`, `stage:finding`, and `stack:<stack>` labels. The hierarchy is the parent closure gate (`bd` rejects parent-to-child `blocks` edges); it adds `blocks` edges only between those new beads, where one fix depends on another. Each child stores the exact structured report data. On a first FAIL the lead reopens the checked bead and assigns it with [`dev-fix.xml.j2`](templates/dev-fix.xml.j2). When the children are excessive, the lead first verifies against the branch that each one's work is really not done and closes, with a reason, any that judges correctness or quality (that is QA). The lead may overrule, amend, split, or reassign children, but does not recreate them. After the second FAIL for the same checked bead, before dispatching a fix the lead diffs flagged files versus the last PASS, checks the branch base for foreign commits, then rules; report `SANITY.ROUND_CAP` with undone deliverable numbers and do not run a third round without that ruling. The parent cannot close until every child closes. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
 | qa-complete | quality-mgr files finding beads, applies the ceremony screen, and reports the verdict. |
