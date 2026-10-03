@@ -2831,6 +2831,8 @@ retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
 - `lifecycle_shutdown_timeout_ms >= timeout_ms`;
 - `lifecycle_flush_timeout_ms >= timeout_ms`;
 - `queue_capacity` is in `1..=65_536`, otherwise `InvalidQueueCapacity`;
+- `queue_byte_capacity` is in `1..=64 MiB`, otherwise
+  `InvalidQueueByteCapacity`;
 - for sync-http, `max_backoff_ms >= initial_backoff_ms`;
 - for sync-http, `retry_sequence_timeout_ms >= timeout_ms`;
 - for sync-http, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;

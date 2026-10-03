@@ -13,6 +13,7 @@ use super::contracts::{CompleteSpan, ExportRecord, LogRecord};
 use super::contracts::{ExporterSet, LogExporter, MetricExporter, TraceExporter};
 use super::testing::{LifecycleCall, recording_exporter_set};
 use sc_observability_types::error_codes::otlp;
+use sc_observability_types::typed::{ClassifiedError, InitFailureKind};
 use sc_observability_types::v2::MetricRecord;
 use sc_observability_types::v2::{ConfigFailure, ExportError};
 use sc_observability_types::{DiagnosticInfo, ServiceName};
@@ -106,6 +107,64 @@ fn contract_tests_endpoint_presence_precedes_later_telemetry_tail_checks() {
     let error = validated_telemetry_bounds(&config)
         .expect_err("endpoint presence precedes the metric interval tail check");
     assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_INVALID_ENDPOINT);
+}
+
+#[test]
+fn contract_tests_insecure_override_precedes_missing_endpoint() {
+    let error = validated_telemetry_bounds(&telemetry_config(OtelConfig {
+        insecure_skip_verify: true,
+        ..sync_http_config()
+    }))
+    .expect_err("transport security validation precedes endpoint presence");
+
+    assert_eq!(error.kind(), InitFailureKind::Unclassified);
+    assert_eq!(
+        error.diagnostic().code,
+        otlp::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED
+    );
+}
+
+#[test]
+fn contract_tests_missing_endpoint_precedes_no_signal() {
+    let mut config = telemetry_config(sync_http_config());
+    config.logs = None;
+
+    let error = validated_telemetry_bounds(&config)
+        .expect_err("endpoint presence precedes signal availability");
+
+    assert_eq!(error.kind(), InitFailureKind::Unclassified);
+    assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_INVALID_ENDPOINT);
+}
+
+#[test]
+fn contract_tests_missing_endpoint_precedes_zero_signal_batch() {
+    let mut config = telemetry_config(sync_http_config());
+    config.logs = Some(LogsConfig { batch_size: 0 });
+
+    let error = validated_telemetry_bounds(&config)
+        .expect_err("endpoint presence precedes signal batch validation");
+
+    assert_eq!(error.kind(), InitFailureKind::Unclassified);
+    assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_INVALID_ENDPOINT);
+}
+
+#[test]
+fn contract_tests_zero_metric_batch_precedes_zero_metric_interval() {
+    let mut config = telemetry_config(configured_sync_http());
+    config.logs = None;
+    config.metrics = Some(MetricsConfig {
+        batch_size: 0,
+        export_interval_ms: 0_u64.into(),
+    });
+
+    let error = validated_telemetry_bounds(&config)
+        .expect_err("metric batch validation precedes metric interval validation");
+
+    assert_eq!(error.kind(), InitFailureKind::ExporterInitialization);
+    assert_eq!(
+        error.diagnostic().code,
+        otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED
+    );
 }
 
 #[test]
