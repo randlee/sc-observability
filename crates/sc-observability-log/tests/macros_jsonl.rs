@@ -79,10 +79,14 @@ impl serde::Serialize for Both {
 }
 
 /// Implements only `Debug`: records the Debug string.
-#[derive(Debug)]
-#[allow(dead_code, reason = "read through Debug only")]
 struct DebugOnly {
     b: i64,
+}
+
+impl fmt::Debug for DebugOnly {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DebugOnly").field("b", &self.b).finish()
+    }
 }
 
 /// A `Serialize` impl that fails.

@@ -1,5 +1,15 @@
 //! Execute canonical.rs with two distinguishable `IdSource` implementations: only generated fields change.
-mod common;
+#[path = "common/d29_fixtures.rs"]
+mod d29_fixtures;
+#[path = "common/d29_system_generated_fields.rs"]
+mod d29_system_generated_fields;
+#[path = "common/golden_root.rs"]
+mod golden_root;
+mod common {
+    pub use super::d29_fixtures::D29_FIXTURES;
+    pub use super::d29_system_generated_fields::D29_SYSTEM_GENERATED_FIELDS;
+    pub use super::golden_root::golden_root;
+}
 use sc_observability_types::{
     SpanId, Timestamp, TraceId,
     otlp::submission::{IdSource, SubmissionEnvelope},

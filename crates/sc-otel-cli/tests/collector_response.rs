@@ -1,5 +1,14 @@
 //! Real HTTP acknowledgements must drive durable state, not merely HTTP status.
-mod common;
+#[path = "common/assert_result_v1.rs"]
+mod assert_result_v1;
+#[path = "common/fixture_component.rs"]
+mod fixture_component;
+#[path = "common/golden_root.rs"]
+mod golden_root;
+mod common {
+    pub use super::assert_result_v1::assert_result_v1;
+    pub use super::fixture_component::fixture_component;
+}
 
 use serde_json::{Value, json};
 use std::{

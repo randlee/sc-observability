@@ -1,4 +1,20 @@
-mod common;
+#[path = "common/assert_generated_value.rs"]
+mod assert_generated_value;
+#[path = "common/assert_result_v1.rs"]
+mod assert_result_v1;
+#[path = "common/d29_fixtures.rs"]
+mod d29_fixtures;
+#[path = "common/d29_system_generated_fields.rs"]
+mod d29_system_generated_fields;
+#[path = "common/golden_root.rs"]
+mod golden_root;
+mod common {
+    pub use super::assert_generated_value::assert_generated_value;
+    pub use super::assert_result_v1::assert_result_v1;
+    pub use super::d29_fixtures::D29_FIXTURES;
+    pub use super::d29_system_generated_fields::D29_SYSTEM_GENERATED_FIELDS;
+    pub use super::golden_root::golden_root;
+}
 
 use common::{D29_FIXTURES, D29_SYSTEM_GENERATED_FIELDS, assert_result_v1, golden_root};
 use sc_observability_types::Timestamp;

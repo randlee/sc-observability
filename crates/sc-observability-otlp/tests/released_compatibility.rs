@@ -9,8 +9,8 @@ use sc_observability_otlp::{
 };
 use sc_observability_types::{
     ActionName, Diagnostic, DiagnosticInfo, DurationMs, ErrorCode, EventError, FlushError,
-    InitError, Level, LogEvent, Observable, ProcessIdentity, Remediation, SchemaVersion,
-    ServiceName, ShutdownError, SpanSignal, TargetCategory, TelemetryError, Timestamp,
+    InitError, Level, LogEvent, ProcessIdentity, Remediation, SchemaVersion, ServiceName,
+    ShutdownError, SpanSignal, TargetCategory, TelemetryError, Timestamp,
 };
 use serde_json::Map;
 use std::sync::Arc;
@@ -50,12 +50,10 @@ fn event() -> LogEvent {
     }
 }
 
-#[allow(dead_code)]
-fn released_projector_signature<T: Observable>(
-    telemetry: Arc<Telemetry>,
-) -> sc_observability_otlp::TelemetryProjectors<T> {
-    sc_observability_otlp::TelemetryProjectors::new(telemetry)
-}
+struct SignatureObservable;
+
+const _: fn(Arc<Telemetry>) -> sc_observability_otlp::TelemetryProjectors<SignatureObservable> =
+    sc_observability_otlp::TelemetryProjectors::new;
 
 #[test]
 fn released_struct_literals_and_result_signatures_remain_source_compatible() {

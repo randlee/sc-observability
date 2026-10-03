@@ -1,5 +1,25 @@
 use std::process::Command;
-mod common;
+#[path = "common/assert_result_v1.rs"]
+mod assert_result_v1;
+#[path = "common/d29_fixtures.rs"]
+mod d29_fixtures;
+#[path = "common/d29_system_generated_fields.rs"]
+mod d29_system_generated_fields;
+#[cfg(feature = "test-double")]
+#[path = "common/fixture_component.rs"]
+mod fixture_component;
+#[path = "common/golden_root.rs"]
+mod golden_root;
+#[path = "common/mask_generated.rs"]
+mod mask_generated;
+mod common {
+    pub use super::assert_result_v1::assert_result_v1;
+    pub use super::d29_fixtures::D29_FIXTURES;
+    #[cfg(feature = "test-double")]
+    pub use super::fixture_component::fixture_component;
+    pub use super::golden_root::golden_root;
+    pub use super::mask_generated::mask_generated;
+}
 use common::assert_result_v1;
 
 #[test]
