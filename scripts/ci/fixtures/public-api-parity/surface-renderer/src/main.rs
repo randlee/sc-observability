@@ -1,10 +1,9 @@
 //! Render a rustdoc JSON document into the public API rows compared by
 //! `scripts/ci/public_api_parity.py` (ADR-022).
 //!
-//! The renderer keeps auto-trait and auto-derived implementations and omits
-//! blanket implementations (`impl<T> Trait for T` materialised from whichever
-//! dependency crates a target happens to compile, e.g. `objc2` behind Tauri on
-//! macOS; they describe the dependency set, not the published API). It
+//! The renderer keeps blanket, auto-trait and auto-derived implementations.
+//! Trait availability on an exported type is part of its public surface even
+//! when the trait comes from a platform-selected dependency. It
 //! refuses rustdoc JSON whose `format_version` differs from the pinned
 //! `rustdoc-types` schema, and reports every referenced item id that the
 //! document neither defines nor names through its external `paths` table, so
@@ -53,7 +52,7 @@ struct ImplPolicy {
 }
 
 const IMPL_POLICY: ImplPolicy = ImplPolicy {
-    blanket: false,
+    blanket: true,
     auto_trait: true,
     auto_derived: true,
 };
@@ -64,8 +63,12 @@ const RUSTDOC_TYPES_VERSION: &str = "0.59.0";
 fn render(path: &PathBuf) -> Result<Rendering, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("cannot read rustdoc JSON {}: {error}", path.display()))?;
-    let header: FormatHeader = serde_json::from_str(&text)
-        .map_err(|error| format!("rustdoc JSON {} lacks a format_version: {error}", path.display()))?;
+    let header: FormatHeader = serde_json::from_str(&text).map_err(|error| {
+        format!(
+            "rustdoc JSON {} lacks a format_version: {error}",
+            path.display()
+        )
+    })?;
     if header.format_version != rustdoc_types::FORMAT_VERSION {
         return Err(format!(
             "rustdoc JSON format_version {} differs from the pinned rustdoc-types format {}; \
@@ -74,8 +77,12 @@ fn render(path: &PathBuf) -> Result<Rendering, String> {
             rustdoc_types::FORMAT_VERSION
         ));
     }
-    let krate: Crate = serde_json::from_str(&text)
-        .map_err(|error| format!("rustdoc JSON {} does not deserialize: {error}", path.display()))?;
+    let krate: Crate = serde_json::from_str(&text).map_err(|error| {
+        format!(
+            "rustdoc JSON {} does not deserialize: {error}",
+            path.display()
+        )
+    })?;
     let api = public_api::Builder::from_rustdoc_json(path)
         .omit_blanket_impls(!IMPL_POLICY.blanket)
         .omit_auto_trait_impls(!IMPL_POLICY.auto_trait)
@@ -83,7 +90,12 @@ fn render(path: &PathBuf) -> Result<Rendering, String> {
         .include_function_parameter_names(false)
         .sorted(true)
         .build()
-        .map_err(|error| format!("public-api rendering failed for {}: {error}", path.display()))?;
+        .map_err(|error| {
+            format!(
+                "public-api rendering failed for {}: {error}",
+                path.display()
+            )
+        })?;
     let mut unresolved_item_ids = Vec::new();
     let mut external_item_ids = 0usize;
     let mut seen = std::collections::BTreeSet::new();

@@ -27,6 +27,7 @@ MUTATIONS = {
     'mutate-field': 'windows_only_field',
     'mutate-signature': 'open(',
     'mutate-bound': 'Sync',
+    'mutate-blanket': 'PlatformExtension',
     'mutate-auto-trait': 'impl core::marker::Send for parity_conditioned_fixture::Handle',
     'mutate-hidden': '__support_windows_only',
     'mutate-reexport': 'WindowsAlias',
@@ -48,7 +49,7 @@ def make_cell(package='demo', selection_id='none', target='x86_64-unknown-linux-
                                         'flags': [] if selection_id == 'none' else ['--no-default-features', '--features', selection_id.replace('+', ',')]},
         'source_commit': 'a' * 40, 'toolchain': 'nightly-2026-06-29', 'rustdoc_args': list(parity.RUSTDOC_ARGS),
         'renderer': {'public_api': '0.52.2', 'rustdoc_types': '0.59.0', 'format_version': 59,
-                     'impls': {'blanket': False, 'auto_trait': True, 'auto_derived': True}},
+                     'impls': {'blanket': True, 'auto_trait': True, 'auto_derived': True}},
         'status': 'ok', 'rows': ['pub fn demo::one()', 'pub struct demo::Two'] if rows is None else rows,
         'row_count': 2 if rows is None else len(rows), 'unresolved_item_ids': [], 'external_item_ids': 0, 'log': '',
     }
@@ -258,13 +259,36 @@ class ComparatorTests(unittest.TestCase):
             (cell_dir / 'none.json').write_text(json.dumps({'schema': 1, 'package': 'demo'}))
             with self.assertRaisesRegex(parity.ParityError, 'lacks'):
                 parity.load_cells(evidence)
-            (cell_dir / 'none.json').write_text(json.dumps(make_cell()))
+            cell = make_cell()
+            cell['rows_sha256'] = parity.rows_digest(cell['rows'])
+            (cell_dir / 'none.json').write_text(json.dumps(cell))
             (cell_dir / 'producer.json').write_text('{}')
             (evidence / 'b4a-wheel-linux-x86_64' / 'build-result.json').parent.mkdir(parents=True)
             (evidence / 'b4a-wheel-linux-x86_64' / 'build-result.json').write_text('{"unrelated": true}')
             cells = parity.load_cells(evidence)
             self.assertEqual(len(cells), 1)
             self.assertEqual(cells[0]['package'], 'demo')
+
+    def test_identically_truncated_surfaces_fail_integrity(self):
+        for cell in self.cells:
+            cell['rows_sha256'] = parity.rows_digest(cell['rows'])
+            cell['rows'] = cell['rows'][:1]
+        self.assert_fails(self.cells, 'row count or digest differs')
+
+    def test_stale_toolchain_and_flags_fail_even_when_all_cells_agree(self):
+        for cell in self.cells:
+            cell['toolchain'] = 'nightly-2020-01-01'
+            cell['rustdoc_args'] = ['--output-format', 'json']
+        self.assert_fails(self.cells, 'pinned toolchain')
+        self.assert_fails(self.cells, 'required rustdoc flags')
+
+    def test_crate_type_mismatch_fails(self):
+        self.cells[0]['crate_types'] = ['proc-macro']
+        self.assert_fails(self.cells, 'crate types differ')
+
+    def test_rows_digest_preserves_multiplicity_but_ignores_order(self):
+        self.assertEqual(parity.rows_digest(['b', 'a']), parity.rows_digest(['a', 'b']))
+        self.assertNotEqual(parity.rows_digest(['a']), parity.rows_digest(['a', 'a']))
 
     def test_row_differences_report_multiplicity(self):
         self.assertEqual(parity.row_differences(['a', 'a', 'b'], ['a', 'c']), ['- a', '- b', '+ c'])
@@ -342,14 +366,14 @@ class RealExtractionTests(unittest.TestCase):
         self.assertNotIn('windows_only_method', '\n'.join(rows))
         self.assertTrue(any('#[non_exhaustive] pub enum parity_conditioned_fixture::OpenError' in row for row in rows))
         self.assertFalse(any('helper' in row for row in rows))
-        # Blanket impls come from whichever dependency crates a target compiles; they are not rendered.
+        # Blanket trait availability on exported types is part of their public surface.
         blanket = [row for row in rows if 'core::convert::From<T>' in row or 'core::any::Any' in row
                    or 'core::borrow::Borrow<T>' in row]
-        self.assertEqual(blanket, [])
+        self.assertTrue(blanket)
 
     def test_renderer_policy_mismatch_fails(self):
         cells = [self.extract(target, self.selections['none']) for target in FIXTURE_TARGETS]
-        cells[1]['renderer'] = {**cells[1]['renderer'], 'impls': {**cells[1]['renderer']['impls'], 'blanket': True}}
+        cells[1]['renderer'] = {**cells[1]['renderer'], 'impls': {**cells[1]['renderer']['impls'], 'blanket': False}}
         with self.assertRaisesRegex(parity.ParityError, 'disagree on renderer'):
             parity.assert_public_api_equal(cells, self.inventory(['none']), commit=self.commit)
 
@@ -441,7 +465,7 @@ class RealExtractionTests(unittest.TestCase):
         self.assertEqual(cell['status'], 'ok', cell['log'])
         self.assertEqual(cell['renderer']['public_api'], '0.52.2')
         self.assertEqual(cell['renderer']['format_version'], 59)
-        self.assertEqual(cell['renderer']['impls'], {'blanket': False, 'auto_trait': True, 'auto_derived': True})
+        self.assertEqual(cell['renderer']['impls'], {'blanket': True, 'auto_trait': True, 'auto_derived': True})
         self.assertEqual(cell['toolchain'], self.toolchain)
         self.assertEqual(cell['unresolved_item_ids'], [])
         self.assertGreater(cell['external_item_ids'], 0)

@@ -34,7 +34,7 @@ RUSTDOC_ARGS = ('-Z', 'unstable-options', '--output-format', 'json', '--document
 LIBRARY_KINDS = {'lib', 'rlib', 'dylib', 'cdylib', 'proc-macro'}
 REQUIRED_CELL_KEYS = (
     'schema', 'package', 'lib_name', 'crate_types', 'target', 'selection', 'source_commit',
-    'toolchain', 'rustdoc_args', 'renderer', 'status', 'rows',
+    'toolchain', 'rustdoc_args', 'renderer', 'status', 'rows', 'row_count', 'rows_sha256',
 )
 LOG_TAIL = 4000
 
@@ -313,7 +313,7 @@ def extract_surface(*, package: str, cargo_toml: Path, lib_name: str, crate_type
     cell['external_item_ids'] = rendering['external_item_ids']
     cell['rows'] = rendering['rows']
     cell['row_count'] = len(rendering['rows'])
-    cell['rows_sha256'] = hashlib.sha256('\n'.join(rendering['rows']).encode()).hexdigest()
+    cell['rows_sha256'] = rows_digest(rendering['rows'])
     if rendering['unresolved_item_ids']:
         cell['status'] = 'incomplete-extraction'
     elif not rendering['rows']:
@@ -398,6 +398,11 @@ def cell_key(cell: dict) -> tuple[str, str, str]:
     return cell['package'], cell['selection']['id'], cell['target']
 
 
+def rows_digest(rows: list[str]) -> str:
+    """Order-independent integrity check that preserves duplicate rows."""
+    return hashlib.sha256(json.dumps(sorted(rows), ensure_ascii=True).encode()).hexdigest()
+
+
 def row_differences(reference: list[str], candidate: list[str]) -> list[str]:
     """Rows whose multiplicity differs; `-` only in the reference, `+` only in the candidate."""
     before, after = Counter(reference), Counter(candidate)
@@ -435,6 +440,9 @@ def assert_public_api_equal(cells: list[dict], expected: dict, *, commit: str | 
             problems.append(f'{label}: status {cell["status"]}: {failure_summary(cell.get("log", ""))}')
         elif not cell['rows']:
             problems.append(f'{label}: extraction produced no public API rows')
+        if cell['status'] == 'ok' and 'rows_sha256' in cell:
+            if cell.get('row_count') != len(cell['rows']) or cell['rows_sha256'] != rows_digest(cell['rows']):
+                problems.append(f'{label}: row count or digest differs from recorded extraction')
         if cell.get('unresolved_item_ids'):
             problems.append(f'{label}: unresolved rustdoc item ids {cell["unresolved_item_ids"]}')
 
@@ -448,6 +456,10 @@ def assert_public_api_equal(cells: list[dict], expected: dict, *, commit: str | 
     for name, values in identities.items():
         if len(values) != 1:
             problems.append(f'cells disagree on {name}: {sorted(map(str, values))}')
+    if identities['toolchain'] != {pinned_toolchain()}:
+        problems.append('cells do not use the pinned toolchain')
+    if identities['rustdoc_args'] != {RUSTDOC_ARGS}:
+        problems.append('cells do not use the required rustdoc flags')
     if commit is not None and identities['source_commit'] != {commit}:
         problems.append(f'cells were extracted from {sorted(identities["source_commit"])}, expected {commit}')
 
@@ -466,6 +478,8 @@ def assert_public_api_equal(cells: list[dict], expected: dict, *, commit: str | 
         selection = next(item for item in package['selections'] if item['id'] == key[1])
         if cell['selection'].get('resolved') != selection['resolved'] or cell['selection'].get('flags') != selection['flags']:
             problems.append(f'{key[0]} [{key[1]}] {key[2]}: selection {cell["selection"]} differs from expected {selection}')
+        if cell['crate_types'] != package['crate_types']:
+            problems.append(f'{key[0]} [{key[1]}] {key[2]}: crate types differ from expected')
         if cell['lib_name'] != package['lib_name']:
             problems.append(f'{key[0]} [{key[1]}] {key[2]}: library {cell["lib_name"]} differs from {package["lib_name"]}')
 

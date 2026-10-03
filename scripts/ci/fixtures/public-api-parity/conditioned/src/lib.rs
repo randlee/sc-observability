@@ -121,3 +121,11 @@ fn windows_private_helper() -> &'static str {
     let _ = &inner::Thing;
     "windows"
 }
+
+/// A public trait whose blanket implementation is deliberately target-conditioned.
+pub trait PlatformExtension {
+    fn platform_extension(&self) {}
+}
+
+#[cfg(all(windows, feature = "mutate-blanket"))]
+impl<T> PlatformExtension for T {}

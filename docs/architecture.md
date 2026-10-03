@@ -1676,11 +1676,10 @@ was reworded accordingly to describe the remaining validation.
   dependent dependencies and conditional compilation must not change that
   surface. Platform-specific implementations and private helpers remain
   permitted, including private storage changes that keep the auto traits.
-  Blanket implementations (`impl<T> Trait for T` materialised from dependency
-  crates) are outside the compared surface: they describe which dependencies a
-  target compiles (for example `objc2` behind Tauri on macOS), not this
-  library's API, and every trait this library implements itself is compared
-  directly.
+  Blanket implementations are retained: a trait supplied by a platform-selected
+  dependency can still change the traits available to consumers of an exported
+  type. Such a difference must be reported and resolved, not hidden by excluding
+  that implementation class.
 - **Scope**: The published set is derived from `release/publish-artifacts.toml`:
   every `publish = true` Rust package (ten packages, including the separately
   workspaced `sc-observability-tauri` and the `_native` Python library) and
@@ -1713,8 +1712,8 @@ was reworded accordingly to describe the remaining validation.
   produced by `collect`: rustdoc JSON from the exact nightly in
   `scripts/ci/public-api-toolchain` with `--document-hidden-items`, rendered
   to canonical rows by the pinned `public-api` library in
-  `scripts/ci/fixtures/public-api-parity/surface-renderer` (auto-trait and
-  derived implementations retained; blanket implementations omitted; function
+  `scripts/ci/fixtures/public-api-parity/surface-renderer` (blanket, auto-trait and
+  derived implementations retained; function
   parameter names, rustdoc ids, file locations and documentation prose
   discarded; the implementation policy is part of the recorded renderer
   identity). Each cell
@@ -1732,7 +1731,7 @@ was reworded accordingly to describe the remaining validation.
   negatives and runs the real extractor over the target-conditioned fixture
   crate in `scripts/ci/fixtures/public-api-parity/conditioned` for a Linux
   and a Windows target: Windows-only methods, variants, fields, signature
-  and bound changes, lost `Send`/`Sync`, doc-hidden functions, reexports and
+  and bound changes, blanket implementations, lost `Send`/`Sync`, doc-hidden functions, reexports and
   feature-only differences fail; private platform differences pass.
   Authoritative six-target coverage runs on the native platform producers of
   `.github/workflows/b4a-python-distributions.yml` (`public-api-surface`
