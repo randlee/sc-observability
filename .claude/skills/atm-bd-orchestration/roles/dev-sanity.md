@@ -57,10 +57,11 @@ commit. Each failure is a refusal, not a best-effort check:
 5. `bd history "$TASK_ID"` must contain no earlier PASS; otherwise refuse
    `SANITY_FROZEN`.
 
-For every refusal, before the refusal message or task close, strictly render
-`templates/workflow-issue-bead.json.j2` with id `$TASK_ID-wf-$CODE`, import it
-with `bd import <scratch>/$TASK_ID-wf-$CODE.json`, and name that workflow issue
-id in the refusal.
+For every refusal, reuse an existing workflow class bead for the same failure
+signature: append the task id, head, command and failure evidence, and cite the
+class id in the refusal. If no class matches, report the signature to the lead
+for classification and cite that message instead; do not create a per-task
+shadow or delay the refusal.
 
 One check is one closed bead at one pinned commit, split per deliverable:
 

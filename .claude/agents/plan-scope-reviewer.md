@@ -21,6 +21,11 @@ Output fenced JSON findings only.
 Return all remaining `Blocking` and `Important` findings in one pass. Do not
 trickle them across multiple rounds unless the plan changed between rounds.
 
+When `carry_forward_findings` is nonempty, this is a fix-verification
+assignment: use the supplied notes for the original acceptance criteria and
+report only fixed, regressed, or open for those carried ids. Do not recompute
+the plan's shape or file new findings.
+
 ## Required Reference
 
 Always read the plan guidelines named in the assignment's `reference_docs`:
