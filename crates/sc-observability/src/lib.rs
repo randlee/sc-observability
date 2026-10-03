@@ -910,36 +910,30 @@ mod tests {
         )
     }
 
-    #[cfg(unix)]
-    fn unix_file_identity(path: &Path) -> crate::query::FileIdentity {
+    fn file_identity(path: &Path) -> crate::query::FileIdentity {
         crate::query::file_identity_for_path(path)
     }
 
-    #[cfg(unix)]
-    fn recreate_with_distinct_unix_identity(active_path: &Path) {
-        // Keep the old inode allocated while installing the replacement. This
-        // makes a distinct identity deterministic instead of depending on the
-        // filesystem's inode-reuse timing after unlink.
-        let retained_previous = fs::File::open(active_path).expect("open active log");
-        let previous_identity = unix_file_identity(active_path);
-        fs::remove_file(active_path).expect("remove active log");
-        fs::File::create(active_path).expect("recreate active log");
+    fn recreate_with_distinct_identity(active_path: &Path) {
+        let replacement_path = active_path.with_extension("replacement");
+        let previous_identity = file_identity(active_path);
+        fs::File::create(&replacement_path).expect("create replacement log");
+        let replacement_identity = file_identity(&replacement_path);
         assert_ne!(
-            unix_file_identity(active_path),
-            previous_identity,
-            "retained old inode makes replacement identity distinct"
+            replacement_identity, previous_identity,
+            "replacement created while the active log exists has distinct identity"
         );
-        drop(retained_previous);
-    }
 
-    #[cfg(not(unix))]
-    fn recreate_with_distinct_unix_identity(active_path: &Path) {
-        // Non-Unix follow tests only verify that truncate/recreate remains
-        // callable. Identity-distinctness is intentionally not asserted here,
-        // and both cfg variants must stay behaviorally aligned when this helper
-        // changes.
+        // The sink opens the active path only while writing, so removing the
+        // path before installing the already-created replacement works on
+        // both Unix and Windows without depending on rename-overwrite rules.
         fs::remove_file(active_path).expect("remove active log");
-        fs::File::create(active_path).expect("recreate active log");
+        fs::rename(&replacement_path, active_path).expect("install replacement log");
+        assert_ne!(
+            file_identity(active_path),
+            previous_identity,
+            "installed replacement identity remains distinct"
+        );
     }
 
     fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
@@ -3281,10 +3275,6 @@ mod tests {
         );
     }
 
-    // This test exercises the Unix-specific replacement helper above. Windows
-    // follow identity now uses filesystem identity metadata, but the distinct-
-    // inode recreation harness remains Unix-only.
-    #[cfg_attr(windows, ignore)]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
@@ -3336,7 +3326,7 @@ mod tests {
                 .contains("truncation")
         );
 
-        recreate_with_distinct_unix_identity(&active_path);
+        recreate_with_distinct_identity(&active_path);
         logger
             .emit(log_event_with_request(service_name(), "after-recreate", 20))
             .expect("emit after recreate");
