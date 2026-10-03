@@ -213,7 +213,17 @@ class ShellGateIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.temporary.cleanup)
-        cls.root = Path(cls.temporary.name)
+        cls.root = Path(cls.temporary.name) / "checkout"
+        # Let Git create the shared-object linkage. Writing an alternates file
+        # ourselves from a platform-formatted objects path worked on Unix but
+        # did not give Git for Windows a usable alternate object database.
+        # A shared local clone is network-free and still fails the pinned
+        # baseline check if the source clone does not contain that commit.
+        subprocess.run(
+            ["git", "clone", "--shared", "--quiet", str(ROOT), str(cls.root)],
+            check=True,
+            timeout=60,
+        )
         tracked = subprocess.run(
             ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True, timeout=60
         ).stdout.decode().split("\0")
@@ -223,14 +233,6 @@ class ShellGateIntegrationTests(unittest.TestCase):
                 target = cls.root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
-        # The copy borrows this repository's objects so nested checks can read
-        # pinned history, such as the released baseline, without a network clone.
-        objects = subprocess.run(
-            ["git", "rev-parse", "--path-format=absolute", "--git-path", "objects"],
-            cwd=ROOT, check=True, capture_output=True, text=True, timeout=60,
-        ).stdout.strip()
-        subprocess.run(["git", "init", "-q", str(cls.root)], check=True, timeout=60)
-        (cls.root / ".git/objects/info/alternates").write_text(objects + "\n")
         cls.manifest = (cls.root / MANIFEST).read_text()
         cls.core_boundary_manifest = (cls.root / CORE_BOUNDARY_MANIFEST).read_text()
 
