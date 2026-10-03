@@ -146,3 +146,6 @@ approvals and architecture records describe the acceptance gates at that time;
 they do not require restoring these retired gates. The Phase D OTLP
 transplant provenance manifest and its validator were retired with the
 `sync-http` rename; OTLP-023 no longer requires them.
+OTLP-023 is enforced by the d-8 adapter tests in
+`crates/sc-observability-otlp/src/sync_http/tests.rs` and
+`crates/sc-observability-otlp/src/sync_http/submission/tests/roundtrip.rs`.
