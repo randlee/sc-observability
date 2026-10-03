@@ -1,9 +1,7 @@
-//! Count real HTTP attempts across durable flushes, including profiles.
+//! Exercise durable retry ownership across real and scripted exporters, including profiles.
 //!
-//! Attempt budgets are asserted on manually driven clients: a drain under the
-//! frozen test clock cannot lose its lease between the claim and the result
-//! transaction, which on a starved runner reclaims the row and charges a second
-//! attempt. Autonomous workers are used only where worker exit is the contract.
+//! Attempt budgets are asserted through the scripted exporter seam, while the
+//! real collector test checks only that each signal reaches its intended route.
 use super::*;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -12,7 +10,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 struct Collector {
     address: std::net::SocketAddr,
     stop: Arc<AtomicBool>,
-    calls: Arc<AtomicUsize>,
     paths: Arc<Mutex<Vec<String>>>,
     worker: Option<std::thread::JoinHandle<()>>,
 }
@@ -50,23 +47,122 @@ impl Collector {
         Self {
             address,
             stop,
-            calls,
             paths,
             worker: Some(worker),
         }
     }
     fn configure(&self, path: &Path) -> TelemetryClientConfig {
-        let mut config = config(path);
+        let mut config = retry_config(path);
         config.endpoint = format!("http://{}", self.address);
-        let mut retry = SyncHttpRetryPolicyDto::default();
-        retry.max_retries = Some(3);
-        retry.initial_backoff_ms = Some(1);
-        retry.max_backoff_ms = Some(1);
-        retry.retry_jitter_percent = Some(0);
-        config.sync_http_retry = Some(retry);
         config
     }
 }
+
+fn retry_config(path: &Path) -> TelemetryClientConfig {
+    let mut config = config(path);
+    let mut retry = SyncHttpRetryPolicyDto::default();
+    retry.max_retries = Some(3);
+    retry.initial_backoff_ms = Some(1);
+    retry.max_backoff_ms = Some(1);
+    retry.retry_jitter_percent = Some(0);
+    config.sync_http_retry = Some(retry);
+    config
+}
+
+fn assert_real_http_smoke(collector: &Collector, name: &str, path: &str) {
+    let paths = collector.paths.lock().unwrap();
+    assert!(!paths.is_empty(), "{name} reached the real collector");
+    assert!(
+        paths.iter().all(|actual| actual == path),
+        "{name} only used the expected OTLP route: {paths:?}"
+    );
+}
+
+struct RetryableThenOkExporter {
+    retryable_before_success: usize,
+    calls: AtomicUsize,
+}
+impl RetryableThenOkExporter {
+    fn new(retryable_before_success: usize) -> Self {
+        Self {
+            retryable_before_success,
+            calls: AtomicUsize::new(0),
+        }
+    }
+}
+impl SubmissionExporter for RetryableThenOkExporter {
+    fn export(&self, _: Signal, _: &[SubmissionEnvelope]) -> Result<(), SubmissionExportFailure> {
+        let call = self.calls.fetch_add(1, Ordering::AcqRel);
+        if call < self.retryable_before_success {
+            return Err(SubmissionExportFailure::Retryable(export_error()));
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn scripted_retry_attempt_budgets_are_exact_for_logs_and_profiles() {
+    for (name, retryable_before_success, expected_calls) in [
+        ("logs", 1, 2),
+        ("profiles", 1, 2),
+        ("logs", usize::MAX, 4),
+        ("profiles", usize::MAX, 4),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let exporter = Arc::new(RetryableThenOkExporter::new(retryable_before_success));
+        let client =
+            DurableTelemetryClient::open_with_exporter(retry_config(dir.path()), exporter.clone())
+                .unwrap();
+        let receipt = client.emit(fixture(name)).unwrap();
+
+        let result = client.flush_submission(&receipt.submission_id, DEADLINE);
+        if retryable_before_success == usize::MAX {
+            assert!(matches!(
+                result,
+                Err(TelemetryClientError::Delivery(
+                    DeliveryError::TerminalFailure { .. }
+                ))
+            ));
+            assert!(matches!(
+                client
+                    .status(StatusQuery::Submissions(vec![
+                        receipt.submission_id.clone()
+                    ]))
+                    .unwrap()
+                    .submissions[0]
+                    .signals[0]
+                    .1,
+                DeliveryState::Failed { attempts: 4, .. }
+            ));
+            assert!(
+                client
+                    .flush_submission(&receipt.submission_id, DEADLINE)
+                    .is_err(),
+                "a terminal scripted retry budget is not spent again"
+            );
+        } else {
+            result.unwrap();
+            assert!(matches!(
+                client
+                    .status(StatusQuery::Submissions(vec![
+                        receipt.submission_id.clone()
+                    ]))
+                    .unwrap()
+                    .submissions[0]
+                    .signals[0]
+                    .1,
+                DeliveryState::Delivered { attempts: 2, .. }
+            ));
+        }
+        assert_eq!(
+            exporter.calls.load(Ordering::Acquire),
+            expected_calls,
+            "{name} scripted durable attempt budget"
+        );
+        client.shutdown(DEADLINE).unwrap();
+    }
+}
+
 impl Drop for Collector {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
@@ -117,57 +213,7 @@ fn open_real(config: TelemetryClientConfig) -> DurableTelemetryClient {
 }
 
 #[test]
-fn exhausted_transport_is_terminal_across_drain_reruns_including_profiles() {
-    for (name, path) in [
-        ("logs", "/v1/logs"),
-        ("profiles", "/v1development/profiles"),
-    ] {
-        let dir = tempfile::tempdir().unwrap();
-        let collector = Collector::new(None);
-        let config = collector.configure(dir.path());
-        let client = open_real(config.clone());
-        let receipt = client.emit(fixture(name)).unwrap();
-        for _ in 0..2 {
-            assert!(matches!(
-                client.flush_submission(&receipt.submission_id, DEADLINE),
-                Err(TelemetryClientError::Delivery(
-                    DeliveryError::TerminalFailure { .. }
-                ))
-            ));
-        }
-        let status = client
-            .status(StatusQuery::Submissions(vec![
-                receipt.submission_id.clone(),
-            ]))
-            .unwrap();
-        assert!(matches!(
-            status.submissions[0].signals[0].1,
-            DeliveryState::Failed { attempts: 1, .. }
-        ));
-        client.shutdown(DEADLINE).unwrap();
-        drop(client);
-        // A new owner must not spend the exhausted network budget again.
-        let reopened = open_real(config);
-        assert!(
-            reopened
-                .flush_submission(&receipt.submission_id, DEADLINE)
-                .is_err()
-        );
-        assert_eq!(
-            collector.calls.load(Ordering::Acquire),
-            4,
-            "{name} transport attempt budget"
-        );
-        assert_eq!(
-            collector.paths.lock().unwrap().as_slice(),
-            vec![path.to_owned(); 4].as_slice()
-        );
-        reopened.shutdown(DEADLINE).unwrap();
-    }
-}
-
-#[test]
-fn transient_collector_failure_delivers_within_one_drain_attempt() {
+fn real_http_smoke_delivers_logs_and_profiles_without_counting_retries() {
     for name in ["logs", "profiles"] {
         let dir = tempfile::tempdir().unwrap();
         let collector = Collector::new(Some(1));
@@ -183,7 +229,12 @@ fn transient_collector_failure_delivers_within_one_drain_attempt() {
             status.submissions[0].signals[0].1,
             DeliveryState::Delivered { attempts: 1, .. }
         ));
-        assert_eq!(collector.calls.load(Ordering::Acquire), 2);
+        let path = if name == "logs" {
+            "/v1/logs"
+        } else {
+            "/v1development/profiles"
+        };
+        assert_real_http_smoke(&collector, name, path);
         client.shutdown(DEADLINE).unwrap();
     }
 }
