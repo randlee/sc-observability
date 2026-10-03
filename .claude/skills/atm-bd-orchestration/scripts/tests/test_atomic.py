@@ -1,5 +1,8 @@
 import copy
+import sys
 import unittest
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parents[1]))
 import test_post_mortem_jev as legacy
 FakeClient = legacy.FakeClient
 import post_mortem_jev as m

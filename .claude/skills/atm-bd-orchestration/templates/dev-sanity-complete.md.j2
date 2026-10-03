@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-complete
-version: 1.0.1
+version: 1.2.0
 description: Sanity check report; the body of `atm task close <task-id> completed`. PASS closes the sanity check bead; FAIL leaves it open and the lead reopens the checked bead with these findings.
 format: markdown
 required_variables:
@@ -24,6 +24,7 @@ defaults:
   reviewer: "sanity-llm"
   notes_md: ""
   finding_bead_ids: []
+  selection: []
 metadata:
   type: dev-sanity-complete
   tags:
@@ -58,9 +59,23 @@ Verdict: **{{ verdict }}** ({{ findings_count }} findings)
   "commit": {{ commit | tojson }},
   "verdict": {{ verdict | tojson }},
   "findings": {{ findings_count }},
+  "selection": {{ (selection or []) | tojson }},
   "finding_bead_ids": {{ finding_bead_ids | tojson }}
 }
 ```
+
+## Selection
+{% for item in selection or [] %}
+- D{{ item.deliverable }}: LLM={{ item.llm }}, JEV={{ item.jev }}, selected={{ item.selected }}, checker_defect={{ item.checker_defect }}{% if item.reason %}; {{ item.reason }}{% endif %}
+{% endfor %}
+
+## Checker Defects
+{% set checker_defects = (selection or []) | selectattr("checker_defect") | list %}
+{% for item in checker_defects %}
+- D{{ item.deliverable }}: {{ item.reason }}
+{% else %}
+- None.
+{% endfor %}
 
 ## Findings
 {{ findings_md }}
