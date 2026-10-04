@@ -23,6 +23,18 @@ class RunnerTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.output = Path(self.temporary.name)
 
+    def evidence(self, **overrides):
+        evidence = {
+            "status": "passed",
+            "source_commit": "a" * 40,
+            "archives": {"sc-observability": "archive-sha"},
+            "dependency_provenance": [{"name": "sc-observability", "source": None}],
+        }
+        evidence.update(overrides)
+        path = self.output / "evidence.json"
+        path.write_text(json.dumps(evidence))
+        return path
+
     def test_four_named_independent_cases_are_recorded(self) -> None:
         calls = []
 
@@ -30,7 +42,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(command)
             return subprocess.CompletedProcess(command, 0, "ok\n", "")
 
-        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run.subprocess, "run", side_effect=execute):
+        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("a" * 40, self.output))
         self.assertEqual(6, len(calls))
         summary = json.loads((self.output / "summary.json").read_text())
@@ -45,7 +57,7 @@ class RunnerTests(unittest.TestCase):
             exit_code = 1 if len(calls) == 1 else 0
             return subprocess.CompletedProcess(command, exit_code, "", "failure\n" if exit_code else "")
 
-        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run.subprocess, "run", side_effect=execute):
+        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(1, run.run("b" * 40, self.output))
         self.assertEqual(6, len(calls))
         summary = json.loads((self.output / "summary.json").read_text())
@@ -59,7 +71,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(command)
             return subprocess.CompletedProcess(command, 0, "ok\n", "")
 
-        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run.platform, "system", return_value="Windows"), patch.object(run.subprocess, "run", side_effect=execute):
+        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.platform, "system", return_value="Windows"), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("c" * 40, self.output))
 
         supervised = [command for command in calls if run.WINDOWS_SUPERVISOR in command]
@@ -70,6 +82,28 @@ class RunnerTests(unittest.TestCase):
             {"scripts/ci/validate_binding_bundle.py", "scripts/ci/validate_binding_runtime.py"},
             {command[6] for command in supervised},
         )
+
+    def test_origin_evidence_requires_passed_status(self) -> None:
+        with self.assertRaisesRegex(ValueError, "status"):
+            run.checked_origin(self.evidence(status="failed"), "a" * 40)
+
+    def test_origin_evidence_requires_candidate_source(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source commit"):
+            run.checked_origin(self.evidence(source_commit="b" * 40), "a" * 40)
+
+    def test_origin_evidence_requires_archives(self) -> None:
+        with self.assertRaisesRegex(ValueError, "archives"):
+            run.checked_origin(self.evidence(archives={}), "a" * 40)
+
+    def test_origin_evidence_rejects_outside_first_party_resolution(self) -> None:
+        with self.assertRaisesRegex(ValueError, "outside artifacts"):
+            run.checked_origin(
+                self.evidence(
+                    dependency_provenance=None,
+                    dependency_resolution={"sc-observability": {"source": "registry+https://example.invalid"}},
+                ),
+                "a" * 40,
+            )
 
     def test_source_mismatch_is_rejected_before_cases(self) -> None:
         with patch.object(run.subprocess, "check_output", return_value="b" * 40 + "\n"), self.assertRaisesRegex(ValueError, "does not match"):

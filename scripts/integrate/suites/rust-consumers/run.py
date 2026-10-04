@@ -41,7 +41,40 @@ def windows_supervised_command(command: list[str], evidence_dir: Path) -> list[s
     return [sys.executable, WINDOWS_SUPERVISOR, "--evidence", str(evidence_dir), "--", *command]
 
 
-def record_case(name: str, commands: list[list[str]], output_dir: Path) -> bool:
+def checked_origin(evidence_path: Path, source_sha: str) -> dict[str, object]:
+    """Reject consumer evidence that does not prove staged first-party origins."""
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    if evidence.get("status") != "passed":
+        raise ValueError(f"{evidence_path.name}: evidence status is not passed")
+    if evidence.get("source_commit") != source_sha:
+        raise ValueError(f"{evidence_path.name}: source commit does not match candidate")
+    archives = evidence.get("archives")
+    if not isinstance(archives, dict) or not archives:
+        raise ValueError(f"{evidence_path.name}: expected staged archives are missing")
+    provenance = evidence.get("dependency_provenance")
+    if provenance is None:
+        provenance = evidence.get("dependency_resolution")
+    if isinstance(provenance, list):
+        resolved = {item.get("name"): item for item in provenance if isinstance(item, dict)}
+    elif isinstance(provenance, dict):
+        resolved = provenance
+    else:
+        raise ValueError(f"{evidence_path.name}: dependency origin evidence is missing")
+    missing = sorted(set(archives) - set(resolved))
+    if missing:
+        raise ValueError(f"{evidence_path.name}: expected archives are not resolved: {', '.join(missing)}")
+    outside = sorted(name for name in archives if not isinstance(resolved[name], dict) or resolved[name].get("source") is not None)
+    if outside:
+        raise ValueError(f"{evidence_path.name}: first-party dependencies resolved outside artifacts: {', '.join(outside)}")
+    return {
+        "status": "passed",
+        "source_commit": source_sha,
+        "archives": dict(archives),
+        "first_party_resolution": {name: resolved[name] for name in sorted(archives)},
+    }
+
+
+def record_case(name: str, commands: list[list[str]], output_dir: Path, evidence_path: Path, source_sha: str) -> tuple[bool, dict[str, object]]:
     """Run every command for one consumer and retain complete command output."""
     log_path = output_dir / f"{name}.log"
     records = []
@@ -63,12 +96,18 @@ def record_case(name: str, commands: list[list[str]], output_dir: Path) -> bool:
             log.write(result.stderr)
             records.append({"command": executed_command, "exit_code": result.returncode})
             passed = passed and result.returncode == 0
+    origin: dict[str, object]
+    try:
+        origin = checked_origin(evidence_path, source_sha)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        passed = False
+        origin = {"status": "failed", "error": str(error)}
     (output_dir / f"{name}.json").write_text(
-        json.dumps({"case": name, "status": "passed" if passed else "failed", "commands": records}, indent=2)
+        json.dumps({"case": name, "status": "passed" if passed else "failed", "commands": records, "origin": origin}, indent=2)
         + "\n",
         encoding="utf-8",
     )
-    return passed
+    return passed, origin
 
 
 def run(source_sha: str, output_dir: Path) -> int:
@@ -93,9 +132,20 @@ def run(source_sha: str, output_dir: Path) -> int:
             [python, "scripts/ci/validate_log_staged_consumer.py", "--version", version, "--result-file", str(output_dir / "log-bridge-evidence.json")],
         ],
     }
-    outcomes = {name: record_case(name, commands, output_dir) for name, commands in cases.items()}
+    evidence_paths = {
+        "core": output_dir / "core-evidence.json",
+        "binding-bridge": output_dir / "binding-runtime-evidence.json",
+        "runtime-level": output_dir / "runtime-level-evidence.json",
+        "log-bridge": output_dir / "log-bridge-evidence.json",
+    }
+    results = {
+        name: record_case(name, commands, output_dir, evidence_paths[name], source_sha)
+        for name, commands in cases.items()
+    }
+    outcomes = {name: result[0] for name, result in results.items()}
+    origins = {name: result[1] for name, result in results.items()}
     (output_dir / "summary.json").write_text(
-        json.dumps({"source_sha": source_sha, "candidate_version": version, "outcomes": outcomes}, indent=2) + "\n",
+        json.dumps({"source_sha": source_sha, "candidate_version": version, "outcomes": outcomes, "origins": origins}, indent=2) + "\n",
         encoding="utf-8",
     )
     return 0 if all(outcomes.values()) else 1
