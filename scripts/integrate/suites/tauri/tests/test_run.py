@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 RUNNER = Path(__file__).resolve().parents[1] / "run.py"
@@ -22,10 +22,11 @@ class TauriRunnerTests(unittest.TestCase):
     def test_command_uses_npm_cmd_on_windows(self):
         cwd = Path("/tmp")
         with patch.object(tauri_runner.os, "name", "nt"), \
-                patch.object(tauri_runner.subprocess, "run") as run:
-            tauri_runner.command(["npm", "ci", "--ignore-scripts"], cwd=cwd)
-        run.assert_called_once_with(
-            ["npm.cmd", "ci", "--ignore-scripts"], cwd=cwd, env=None, check=True
+                patch.object(tauri_runner.subprocess, "Popen") as popen:
+            popen.return_value.wait.return_value = 0
+            tauri_runner.command(["npm", "ci", "--ignore-scripts"], cwd=cwd, timeout=1, step="npm ci")
+        popen.assert_called_once_with(
+            ["npm.cmd", "ci", "--ignore-scripts"], cwd=cwd, env=None, start_new_session=False
         )
 
     def test_local_execution_is_rejected_before_any_desktop_work(self):
@@ -69,6 +70,23 @@ class TauriRunnerTests(unittest.TestCase):
                     tauri_runner.run_qualification("Windows", {}, evidence, output)
             self.assertEqual('{"exit": 1}\n', (output / "qualification" / "windows-supervisor.json").read_text())
 
+    def test_qualification_timeout_kills_the_process_group_and_retains_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "target" / "tauri-qualification"
+            evidence.mkdir(parents=True)
+            (evidence / "viewer.log").write_text("timed out\n")
+            output = root / "output"
+            process = Mock(pid=42)
+            process.wait.side_effect = [subprocess.TimeoutExpired(["proof"], 1), 0]
+            with patch.object(tauri_runner.subprocess, "Popen", return_value=process), \
+                    patch.object(tauri_runner.os, "name", "posix"), \
+                    patch.object(tauri_runner.os, "killpg") as killpg:
+                with self.assertRaisesRegex(RuntimeError, "Tauri qualification timed out after 1800s"):
+                    tauri_runner.run_qualification("Linux", {}, evidence, output)
+            killpg.assert_called_once_with(42, tauri_runner.signal.SIGKILL)
+            self.assertEqual("timed out\n", (output / "qualification" / "viewer.log").read_text())
+
     def test_artifacts_are_immutable_and_tied_to_selected_source(self):
         sha = "b" * 40
         with tempfile.TemporaryDirectory() as temporary:
@@ -77,7 +95,7 @@ class TauriRunnerTests(unittest.TestCase):
             typescript.mkdir(parents=True)
             archive = root / "artifacts/npm/sc-observability-1.0.0.tgz"
 
-            def fake_command(arguments, *, cwd, env=None):
+            def fake_command(arguments, *, cwd, timeout, step, env=None):
                 if arguments[:2] == ["npm", "pack"]:
                     archive.parent.mkdir(parents=True, exist_ok=True)
                     archive.write_bytes(b"immutable archive")

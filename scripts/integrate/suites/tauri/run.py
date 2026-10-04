@@ -14,17 +14,35 @@ import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path, PureWindowsPath
 
 
 ROOT = Path(__file__).resolve().parents[4]
+SETUP_TIMEOUT_SECONDS = 10 * 60
+QUALIFICATION_TIMEOUT_SECONDS = 30 * 60
 
 
-def command(arguments: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> None:
+def command(arguments: list[str], *, cwd: Path, timeout: int, step: str,
+            env: dict[str, str] | None = None) -> None:
+    """Run one bounded command, killing its POSIX process group on expiry."""
     executable = "npm.cmd" if os.name == "nt" and arguments[0] == "npm" else arguments[0]
-    subprocess.run([executable, *arguments[1:]], cwd=cwd, env=env, check=True)
+    process = subprocess.Popen(
+        [executable, *arguments[1:]], cwd=cwd, env=env, start_new_session=os.name != "nt"
+    )
+    try:
+        exit_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        if os.name == "nt":
+            process.kill()
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+        raise RuntimeError(f"{step} timed out after {timeout}s") from error
+    if exit_code:
+        raise subprocess.CalledProcessError(exit_code, arguments)
 
 
 def platform_name() -> str:
@@ -51,14 +69,16 @@ def prepare_platform(name: str) -> None:
     """Install only the CI runner dependencies required by the existing proof."""
     if name != "Linux":
         return
-    command(["sudo", "apt-get", "update"], cwd=ROOT)
+    command(["sudo", "apt-get", "update"], cwd=ROOT, timeout=SETUP_TIMEOUT_SECONDS,
+            step="apt-get update")
     command([
         "sudo", "apt-get", "install", "-y", "libgtk-3-dev", "libwebkit2gtk-4.1-dev",
         "libayatana-appindicator3-dev", "librsvg2-dev", "patchelf", "xvfb", "bubblewrap",
-    ], cwd=ROOT)
+    ], cwd=ROOT, timeout=SETUP_TIMEOUT_SECONDS, step="apt-get install")
     apparmor = Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")
     if apparmor.exists():
-        command(["sudo", "sysctl", "-w", "kernel.apparmor_restrict_unprivileged_userns=0"], cwd=ROOT)
+        command(["sudo", "sysctl", "-w", "kernel.apparmor_restrict_unprivileged_userns=0"], cwd=ROOT,
+                timeout=SETUP_TIMEOUT_SECONDS, step="AppArmor user namespace setup")
 
 
 def prepare_artifacts(source_sha: str, artifacts: Path) -> tuple[Path, Path, Path]:
@@ -66,9 +86,12 @@ def prepare_artifacts(source_sha: str, artifacts: Path) -> tuple[Path, Path, Pat
     npm = artifacts / "npm"
     bundle = artifacts / "rust-bundle"
     npm.mkdir(parents=True)
-    command(["npm", "ci", "--ignore-scripts"], cwd=ROOT / "bindings" / "typescript")
-    command(["npm", "run", "build"], cwd=ROOT / "bindings" / "typescript")
-    command(["npm", "pack", "--pack-destination", str(npm)], cwd=ROOT / "bindings" / "typescript")
+    command(["npm", "ci", "--ignore-scripts"], cwd=ROOT / "bindings" / "typescript",
+            timeout=SETUP_TIMEOUT_SECONDS, step="npm ci")
+    command(["npm", "run", "build"], cwd=ROOT / "bindings" / "typescript",
+            timeout=SETUP_TIMEOUT_SECONDS, step="npm build")
+    command(["npm", "pack", "--pack-destination", str(npm)], cwd=ROOT / "bindings" / "typescript",
+            timeout=SETUP_TIMEOUT_SECONDS, step="npm pack")
     archives = list(npm.glob("*.tgz"))
     if len(archives) != 1:
         raise RuntimeError("expected exactly one packaged TypeScript archive")
@@ -82,7 +105,7 @@ def prepare_artifacts(source_sha: str, artifacts: Path) -> tuple[Path, Path, Pat
     command([
         sys.executable, "scripts/ci/build_binding_source_bundle.py",
         "--root-manifest", "bindings/tauri/Cargo.toml", "--output", str(bundle),
-    ], cwd=ROOT)
+    ], cwd=ROOT, timeout=SETUP_TIMEOUT_SECONDS, step="Rust source bundle")
     return archive, manifest, bundle
 
 
@@ -111,7 +134,8 @@ def run_qualification(name: str, env: dict[str, str], evidence: Path, output_dir
     report and diagnostics even when the helper exits non-zero.
     """
     try:
-        command(qualification_command(name), cwd=ROOT, env=env)
+        command(qualification_command(name), cwd=ROOT, env=env,
+                timeout=QUALIFICATION_TIMEOUT_SECONDS, step="Tauri qualification")
     finally:
         retain_qualification_evidence(evidence, output_dir)
 
