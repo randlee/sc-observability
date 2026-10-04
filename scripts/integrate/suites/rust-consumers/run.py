@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import subprocess
 import sys
 import tomllib
@@ -11,6 +12,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[4]
+WINDOWS_SUPERVISOR = "scripts/ci/supervise_windows_proof.py"
+WINDOWS_SANDBOX_VALIDATORS = {
+    "scripts/ci/validate_binding_bundle.py",
+    "scripts/ci/validate_binding_runtime.py",
+}
 
 
 def candidate_version() -> str:
@@ -26,6 +32,15 @@ def verify_source(source_sha: str) -> None:
         raise ValueError(f"checkout HEAD {head} does not match source-sha {source_sha}")
 
 
+def windows_supervised_command(command: list[str], evidence_dir: Path) -> list[str]:
+    """Run Sandbox-dependent validator commands under the existing Windows supervisor."""
+    if platform.system() != "Windows" or len(command) < 2 or command[1] not in WINDOWS_SANDBOX_VALIDATORS:
+        return command
+    if command[1].endswith("validate_binding_runtime.py") and "--consumer-only" not in command:
+        return command
+    return [sys.executable, WINDOWS_SUPERVISOR, "--evidence", str(evidence_dir), "--", *command]
+
+
 def record_case(name: str, commands: list[list[str]], output_dir: Path) -> bool:
     """Run every command for one consumer and retain complete command output."""
     log_path = output_dir / f"{name}.log"
@@ -33,19 +48,20 @@ def record_case(name: str, commands: list[list[str]], output_dir: Path) -> bool:
     passed = True
     with log_path.open("w", encoding="utf-8") as log:
         for command in commands:
+            executed_command = windows_supervised_command(command, output_dir / f"{name}-windows-supervisor")
             try:
-                result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, timeout=900)
+                result = subprocess.run(executed_command, cwd=ROOT, text=True, capture_output=True, timeout=900)
             except subprocess.TimeoutExpired as error:
                 result = subprocess.CompletedProcess(
-                    command,
+                    executed_command,
                     124,
                     error.stdout or "",
                     error.stderr or f"command exceeded 900 seconds: {command}\n",
                 )
-            log.write("$ " + " ".join(command) + "\n")
+            log.write("$ " + " ".join(executed_command) + "\n")
             log.write(result.stdout)
             log.write(result.stderr)
-            records.append({"command": command, "exit_code": result.returncode})
+            records.append({"command": executed_command, "exit_code": result.returncode})
             passed = passed and result.returncode == 0
     (output_dir / f"{name}.json").write_text(
         json.dumps({"case": name, "status": "passed" if passed else "failed", "commands": records}, indent=2)

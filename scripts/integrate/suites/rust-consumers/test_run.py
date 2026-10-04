@@ -52,6 +52,25 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse(summary["outcomes"]["core"])
         self.assertTrue(summary["outcomes"]["log-bridge"])
 
+    def test_windows_sandbox_validators_use_existing_supervisor(self) -> None:
+        calls = []
+
+        def execute(command, **_kwargs):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, "ok\n", "")
+
+        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run.platform, "system", return_value="Windows"), patch.object(run.subprocess, "run", side_effect=execute):
+            self.assertEqual(0, run.run("c" * 40, self.output))
+
+        supervised = [command for command in calls if run.WINDOWS_SUPERVISOR in command]
+        self.assertEqual(3, len(supervised))
+        self.assertTrue(all(command[:2] == [run.sys.executable, run.WINDOWS_SUPERVISOR] for command in supervised))
+        self.assertTrue(all(command[4] == "--" for command in supervised))
+        self.assertEqual(
+            {"scripts/ci/validate_binding_bundle.py", "scripts/ci/validate_binding_runtime.py"},
+            {command[6] for command in supervised},
+        )
+
     def test_source_mismatch_is_rejected_before_cases(self) -> None:
         with patch.object(run.subprocess, "check_output", return_value="b" * 40 + "\n"), self.assertRaisesRegex(ValueError, "does not match"):
             run.verify_source("a" * 40)
