@@ -65,6 +65,15 @@ def verify_source_sha(source_sha: str) -> None:
         raise SuiteError(f"checkout HEAD {head} does not match source-sha {source_sha}")
 
 
+def timeout_output_text(output: str | bytes | None) -> str:
+    """Normalize captured timeout output for the text receipt."""
+    if output is None:
+        return ""
+    if isinstance(output, bytes):
+        return output.decode(errors="replace")
+    return output
+
+
 def run_case(name: str, command: list[str], *, environment: dict[str, str], output: Path) -> bool:
     """Run one bounded corpus entry and retain its entire cargo/test receipt."""
     log = output / f"{name}.log"
@@ -81,8 +90,8 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
     except subprocess.TimeoutExpired as error:
         with log.open("w", encoding="utf-8") as receipt:
             receipt.write("$ " + " ".join(command) + "\n")
-            receipt.write(error.stdout or "")
-            receipt.write(error.stderr or "")
+            receipt.write(timeout_output_text(error.stdout))
+            receipt.write(timeout_output_text(error.stderr))
             receipt.write(f"timeout={CASE_TIMEOUT_SECONDS}\n")
         print(f"collector case {name}: timed out; inspect {log}", file=sys.stderr)
         return False

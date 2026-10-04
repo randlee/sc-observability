@@ -45,6 +45,26 @@ class CollectorRunnerTests(unittest.TestCase):
                 "$ cargo\nstdout\nstderr\nexit=7\n",
             )
 
+    def test_timeout_receipt_normalizes_bytes_and_runs_later_cases(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            timeout = subprocess.TimeoutExpired(
+                ["cargo"], runner.CASE_TIMEOUT_SECONDS, output=b"partial\xff output\n", stderr=None
+            )
+            completed = subprocess.CompletedProcess(["cargo"], 0, "later output\n", "")
+            with (
+                mock.patch.object(runner, "verify_source_sha"),
+                mock.patch.object(runner.subprocess, "run", side_effect=[timeout, completed, completed, completed]),
+            ):
+                self.assertFalse(runner.run("a" * 40, Path(temporary)))
+            output = Path(temporary)
+            self.assertEqual(
+                (output / "sync-http-full-stack.log").read_text(),
+                "$ cargo test --locked -p sc-observability-otlp --test full_stack_integration --features sync-http\n"
+                "partial\ufffd output\n"
+                f"timeout={runner.CASE_TIMEOUT_SECONDS}\n",
+            )
+            self.assertIn("later output\nexit=0\n", (output / "canonical-ingress.log").read_text())
+
     def test_run_executes_later_cases_after_an_earlier_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             calls: list[str] = []
