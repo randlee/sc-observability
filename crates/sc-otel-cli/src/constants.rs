@@ -43,55 +43,41 @@ pub(crate) const TEST_DOUBLE_ENV: &str = "SC_OTEL_TEST_DOUBLE";
 #[cfg(feature = "test-double")]
 pub(crate) const TEST_DOUBLE_RECORD_ENV: &str = "SC_OTEL_TEST_DOUBLE_RECORD";
 
-#[derive(Clone, Copy)]
-pub(crate) enum CommandName {
-    Validate,
-    Emit,
-    Flush,
-    Status,
-}
-impl CommandName {
-    #[cfg(test)]
-    pub(crate) const ALL: [Self; 4] = [Self::Validate, Self::Emit, Self::Flush, Self::Status];
-
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Validate => "validate",
-            Self::Emit => "emit",
-            Self::Flush => "flush",
-            Self::Status => "status",
+// Keep the enum, its string mapping, and test-only contract list in one
+// declaration. A new variant therefore cannot be added without updating the
+// values exposed by the versioned result contract.
+macro_rules! stable_contract_enum {
+    ($name:ident { $($variant:ident => $value:literal),+ $(,)? }) => {
+        #[derive(Clone, Copy)]
+        pub(crate) enum $name {
+            $($variant),+
         }
-    }
-}
 
-#[derive(Clone, Copy)]
-pub(crate) enum OutcomeState {
-    Validated,
-    Status,
-    Rejected,
-    AdmittedPending,
-    AdmittedDelivered,
-    AdmittedFailed,
-}
-impl OutcomeState {
-    #[cfg(test)]
-    pub(crate) const ALL: [Self; 6] = [
-        Self::Validated,
-        Self::Status,
-        Self::Rejected,
-        Self::AdmittedPending,
-        Self::AdmittedDelivered,
-        Self::AdmittedFailed,
-    ];
+        impl $name {
+            #[cfg(test)]
+            pub(crate) const ALL: &[Self] = &[$(Self::$variant),+];
 
-    pub(crate) const fn as_str(self) -> &'static str {
-        match self {
-            Self::Validated => "validated",
-            Self::Status => "status",
-            Self::Rejected => "rejected",
-            Self::AdmittedPending => "admitted_pending",
-            Self::AdmittedDelivered => "admitted_delivered",
-            Self::AdmittedFailed => "admitted_failed",
+            pub(crate) const fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $value),+
+                }
+            }
         }
-    }
+    };
 }
+
+stable_contract_enum!(CommandName {
+    Validate => "validate",
+    Emit => "emit",
+    Flush => "flush",
+    Status => "status",
+});
+
+stable_contract_enum!(OutcomeState {
+    Validated => "validated",
+    Status => "status",
+    Rejected => "rejected",
+    AdmittedPending => "admitted_pending",
+    AdmittedDelivered => "admitted_delivered",
+    AdmittedFailed => "admitted_failed",
+});

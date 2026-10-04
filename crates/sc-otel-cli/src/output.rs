@@ -230,12 +230,12 @@ pub(crate) fn result_contract() -> Value {
             "schema": { "type": "string", "const": constants::RESULT_SCHEMA },
             "command": {
                 "type": "string",
-                "enum": constants::CommandName::ALL.map(CommandName::as_str),
+                "enum": constants::CommandName::ALL.iter().copied().map(CommandName::as_str).collect::<Vec<_>>(),
             },
             "exit_code": { "type": "integer", "enum": constants::EXIT_CODE_MEANINGS.iter().map(|(code, _)| code).collect::<Vec<_>>() },
             "state": {
                 "type": "string",
-                "enum": constants::OutcomeState::ALL.map(OutcomeState::as_str),
+                "enum": constants::OutcomeState::ALL.iter().copied().map(OutcomeState::as_str).collect::<Vec<_>>(),
             },
             "receipt": { "type": ["object", "null"], "rust_type": "AdmissionReceipt" },
             "flush": { "type": ["object", "null"], "rust_type": "FlushReport" },
