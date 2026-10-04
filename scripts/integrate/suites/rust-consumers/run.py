@@ -70,7 +70,8 @@ def run(source_sha: str, output_dir: Path) -> int:
             [python, "scripts/ci/validate_binding_runtime.py", "--consumer-only", "--consumer-evidence", str(output_dir / "binding-runtime-evidence.json")],
         ],
         "runtime-level": [
-            [python, "scripts/ci/validate_runtime_level_staged_consumer.py", "--version", version, "--result-file", str(output_dir / "runtime-level-evidence.json")],
+            [python, "scripts/ci/build_binding_source_bundle.py", "--root-manifest", "crates/sc-observability/Cargo.toml", "--output", str(output_dir / "runtime-level-bundle")],
+            [python, "scripts/ci/validate_binding_bundle.py", "--bundle", str(output_dir / "runtime-level-bundle"), "--evidence", str(output_dir / "runtime-level-evidence.json"), "--consumer-source", "scripts/ci/fixtures/runtime-level-consumer/candidate.rs", "--expected-marker", ""],
         ],
         "log-bridge": [
             [python, "scripts/ci/validate_log_staged_consumer.py", "--version", version, "--result-file", str(output_dir / "log-bridge-evidence.json")],

@@ -32,7 +32,7 @@ class RunnerTests(unittest.TestCase):
 
         with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("a" * 40, self.output))
-        self.assertEqual(5, len(calls))
+        self.assertEqual(6, len(calls))
         summary = json.loads((self.output / "summary.json").read_text())
         self.assertEqual({"core", "binding-bridge", "runtime-level", "log-bridge"}, set(summary["outcomes"]))
         self.assertTrue(all(summary["outcomes"].values()))
@@ -47,7 +47,7 @@ class RunnerTests(unittest.TestCase):
 
         with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(1, run.run("b" * 40, self.output))
-        self.assertEqual(5, len(calls))
+        self.assertEqual(6, len(calls))
         summary = json.loads((self.output / "summary.json").read_text())
         self.assertFalse(summary["outcomes"]["core"])
         self.assertTrue(summary["outcomes"]["log-bridge"])
