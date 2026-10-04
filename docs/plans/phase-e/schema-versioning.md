@@ -4,7 +4,7 @@ User-authorized addition: retain versioned public contracts and detect changes t
 
 ## Version rules
 
-Keep released snapshots immutable. A contract change requires a new versioned snapshot and an explicit current-version selection. Package/API versions, wire-format versions and SQLite migration versions have separate lifecycles. Keep existing wire identifiers and backwards-readable configuration. Historical snapshots are retained, not regenerated to silence a failure.
+Keep accepted/merged snapshots immutable, including prerelease versions. A contract change requires a new versioned snapshot and an explicit current-version selection. Package/API versions, wire-format versions and SQLite migration versions have separate lifecycles. Keep existing wire identifiers and backwards-readable configuration. Historical snapshots are retained, not regenerated to silence a failure.
 
 Generated snapshots must represent actual current code. A comparison of two checked-in files cannot prove the code matches, nor can a single-platform extraction prove parity. Reuse existing generators and serializers. The complete sprint API check must meet the user's under-one-minute requirement; measure generation and comparison, and expose compilation cost rather than hiding it. The Rust extraction approach remains an implementation feasibility question; do not quietly substitute stale evidence.
 
@@ -38,15 +38,17 @@ existing identifier where present; otherwise the owning parser's test selects a
 literal contract version (initially 1), without adding a field to user files.
 SQLite continues to select through `PRAGMA user_version`.
 
-The existing release tag/commit supplies the immutable historical baseline:
-released snapshot files cannot be edited or deleted. A changed API under a
-released package version must bump that package version and add its snapshot;
+Supply an existing local accepted/merged baseline commit (the release tag/commit
+where applicable): its historical snapshot files cannot be edited or deleted. A changed API under an
+accepted package version must bump that package version and add its snapshot;
 independent wire/config changes must select a new contract version and retain
-prior files. An unreleased candidate snapshot may be corrected before release.
+prior files. Only an initial draft that has not been accepted/merged may be corrected in place.
+An accepted prerelease snapshot is immutable too; its next contract change
+requires a new version.
 The first snapshot capture establishes the current implementation baseline,
 not invented historical snapshots. Tests compare generated current code to the
-selected snapshot and check retained released files against that explicit git
-release baseline. No mutable CI baseline refresh or registry service is added.
+selected snapshot and check retained released files against that explicit local git
+accepted baseline. No mutable CI baseline refresh or registry service is added.
 
 ## API verification feasibility and ADR-022
 
