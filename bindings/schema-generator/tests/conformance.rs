@@ -58,6 +58,50 @@ fn selected_v1_contracts_match_current_dto_and_error_definitions() {
 }
 
 #[test]
+fn selected_v1_contract_history_matches_the_accepted_local_baseline() {
+    // This is the accepted Phase E base for the initial binding snapshots.
+    // Keep it local and pinned: v1 is history, not an editable current source.
+    let accepted_baseline = "51be650a08e2a118039eb62ae0f1af7cdc78789a";
+    let repository_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+    for (contract_name, filename) in [
+        ("binding schema", "v1.json"),
+        ("binding error catalogue", "errors-v1.json"),
+    ] {
+        let repository_path = format!("bindings/schema/{filename}");
+        let baseline_spec = format!("{accepted_baseline}:{repository_path}");
+        let baseline = Command::new("git")
+            .current_dir(&repository_root)
+            .args(["show", baseline_spec.as_str()])
+            .output()
+            .expect("read accepted local schema baseline with git show");
+        assert!(
+            baseline.status.success(),
+            "immutable history check: {contract_name} v1 cannot read accepted baseline \
+             {accepted_baseline}:{repository_path}: {}",
+            String::from_utf8_lossy(&baseline.stderr),
+        );
+
+        let selected = fs::read(selected_v1_path(filename)).unwrap_or_else(|error| {
+            panic!(
+                "immutable history check: {contract_name} v1 retained file \
+                 {repository_path} is missing ({error}); v1 is immutable and an intentional \
+                 contract change requires a new v2 snapshot"
+            )
+        });
+        assert!(
+            selected == baseline.stdout,
+            "immutable history check: {contract_name} v1 differs from accepted baseline \
+             {accepted_baseline}:{repository_path}; changed snapshot content (current {} bytes, \
+             accepted {} bytes) must be captured in a new v2 snapshot instead of overwriting \
+             retained v1",
+            selected.len(),
+            baseline.stdout.len(),
+        );
+    }
+}
+
+#[test]
 fn selected_v1_contract_mismatches_name_contract_version_and_changed_field() {
     let directory = temporary_contract_directory("selected-v1-mismatch");
     let schema = directory.join("v1.json");
