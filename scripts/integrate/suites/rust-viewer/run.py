@@ -59,7 +59,12 @@ def verify_source_sha(source_sha: str) -> None:
 
 
 def reserved_ports() -> tuple[int, int, int]:
-    """Choose three distinct local ports; the harness rechecks them before use."""
+    """Choose three distinct local ports for the harness to recheck before use.
+
+    The sockets are necessarily released before the harness can bind them, so
+    another process can still take one in that interval.  The harness reports
+    that race as an occupied port; this runner surfaces it without retrying.
+    """
     listeners: list[socket.socket] = []
     try:
         for _ in range(3):
@@ -106,6 +111,22 @@ def invoke_harness(arguments: list[str], *, environment: dict[str, str], timeout
     """Run the shared read-only harness and retain its command receipt."""
     return run_checked([sys.executable, str(HARNESS), *arguments], environment=environment,
                        timeout=timeout, log=log)
+
+
+def start_viewer(arguments: list[str], *, environment: dict[str, str], log: Path) -> None:
+    """Start the viewer, translating the unavoidable reservation race clearly."""
+    try:
+        invoke_harness(arguments, environment=environment, timeout=START_TIMEOUT_SECONDS, log=log)
+    except SuiteError as error:
+        try:
+            port_taken = "one or more selected ports are occupied" in log.read_text(encoding="utf-8")
+        except OSError:
+            port_taken = False
+        if port_taken:
+            raise SuiteError(
+                f"a selected viewer port was taken after reservation; no retry is attempted; inspect {log}"
+            ) from error
+        raise
 
 
 def factory_test_command(test_name: str) -> list[str]:
@@ -175,7 +196,7 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
     }
     primary_error: OSError | SuiteError | None = None
     try:
-        invoke_harness(start, environment=environment, timeout=START_TIMEOUT_SECONDS, log=setup_log)
+        start_viewer(start, environment=environment, log=setup_log)
         backend_environment = environment | {
             "D9_VIEWER_SYNC_HTTP_ADDRESS": f"{HOST}:{http}",
             "D9_VIEWER_SDK_ADDRESS": f"{HOST}:{grpc}",

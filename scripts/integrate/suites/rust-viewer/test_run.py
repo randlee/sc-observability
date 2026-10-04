@@ -59,6 +59,19 @@ class RustViewerRunnerTests(unittest.TestCase):
                 )
             self.assertEqual(log.read_text(), "$ command\nout\nerr\nexit=0\n")
 
+    def test_start_viewer_reports_a_port_taken_after_reservation_without_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "setup.log"
+            log.write_text("one or more selected ports are occupied\n")
+            with mock.patch.object(
+                runner, "invoke_harness", side_effect=runner.SuiteError("command exited 1")
+            ) as invoke:
+                with self.assertRaisesRegex(runner.SuiteError, "taken after reservation; no retry"):
+                    runner.start_viewer(["start"], environment={}, log=log)
+            invoke.assert_called_once_with(
+                ["start"], environment={}, timeout=runner.START_TIMEOUT_SECONDS, log=log
+            )
+
     def test_backend_failure_records_both_backend_outcomes_before_reraising(self) -> None:
         source_sha = "a" * 40
         with tempfile.TemporaryDirectory() as temporary:
