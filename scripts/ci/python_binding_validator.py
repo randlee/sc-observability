@@ -25,6 +25,9 @@ class BindingValidationError(ValueError):
     """A declared Python binding validation input is invalid."""
 
 
+INTERPRETER_PROBE_TIMEOUT_SECONDS = 2 * 60
+
+
 def venv_python(venv: Path, *, platform_name: str | None = None) -> Path:
     """Return the platform-native Python executable for a virtual environment."""
     if (platform_name or os.name) == "nt":
@@ -36,30 +39,42 @@ def _prepend_path(current: str | None, directory: str) -> str:
     return directory if not current else directory + os.pathsep + current
 
 
-def embedded_environment_updates(python: Path, *, platform_name: str | None = None) -> dict[str, str]:
+def checked_output(command: list[str], *, timeout: int = INTERPRETER_PROBE_TIMEOUT_SECONDS) -> str:
+    """Run one interpreter probe with a finite deadline and useful failure."""
+    try:
+        return subprocess.check_output(command, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        raise BindingValidationError(f"timed out after {timeout}s: {command!r}") from error
+
+
+def embedded_environment_updates(
+        python: Path, *, platform_name: str | None = None,
+        timeout: int = INTERPRETER_PROBE_TIMEOUT_SECONDS) -> dict[str, str]:
     """Return the interpreter and loader variables required by a Rust host."""
-    base_prefix = subprocess.check_output(
-        [str(python), "-I", "-c", "import sys; print(sys.base_prefix)"], text=True
+    base_prefix = checked_output(
+        [str(python), "-I", "-c", "import sys; print(sys.base_prefix)"], timeout=timeout
     ).strip()
     updates = {"PYO3_PYTHON": str(python), "PYTHONHOME": base_prefix}
     selected_platform = platform_name or sys.platform
     if selected_platform in ("nt", "windows"):
         updates["PATH"] = _prepend_path(os.environ.get("PATH"), base_prefix)
     elif selected_platform.startswith("linux"):
-        libdir = subprocess.check_output(
+        libdir = checked_output(
             [str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR') or '')"],
-            text=True,
+            timeout=timeout,
         ).strip()
         if libdir:
             updates["LD_LIBRARY_PATH"] = _prepend_path(os.environ.get("LD_LIBRARY_PATH"), libdir)
     return updates
 
 
-def embedded_environment(python: Path, *, platform_name: str | None = None) -> dict[str, str]:
+def embedded_environment(
+        python: Path, *, platform_name: str | None = None,
+        timeout: int = INTERPRETER_PROBE_TIMEOUT_SECONDS) -> dict[str, str]:
     """Configure the selected interpreter for the Rust-host embedded executable."""
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)
-    environment.update(embedded_environment_updates(python, platform_name=platform_name))
+    environment.update(embedded_environment_updates(python, platform_name=platform_name, timeout=timeout))
     return environment
 
 

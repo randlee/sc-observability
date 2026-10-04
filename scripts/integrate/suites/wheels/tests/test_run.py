@@ -54,11 +54,12 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertEqual(environment["PYTHONHOME"], "/opt/python")
         self.assertEqual(environment["LD_LIBRARY_PATH"], f"/opt/python/lib{os.pathsep}/existing")
 
-    @mock.patch.object(run.subprocess, "check_output")
-    def test_verify_source_sha_rejects_a_different_checkout(self, check_output: mock.Mock) -> None:
-        check_output.return_value = "a" * 40 + "\n"
+    @mock.patch.object(run, "run_checked")
+    def test_verify_source_sha_rejects_a_different_checkout(self, checked: mock.Mock) -> None:
+        checked.return_value = "a" * 40 + "\n"
         with self.assertRaisesRegex(run.SuiteError, "does not match"):
             run.verify_source_sha("b" * 40)
+        self.assertEqual(checked.call_args.args[0], ["git", "rev-parse", "HEAD"])
 
     @mock.patch.object(run, "run_checked")
     @mock.patch.object(run.python_binding_validator, "maturin_build_command")
@@ -156,6 +157,7 @@ class WheelsRunnerTests(unittest.TestCase):
         package = Path("/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/__init__.py")
         run.run_embedded_host(Path("/tmp/e5-venv/bin/python"), package)
         self.assertEqual(environment.call_args.args[0], Path("/tmp/e5-venv/bin/python"))
+        self.assertEqual(environment.call_args.kwargs["timeout"], run.RUNTIME_TIMEOUT_SECONDS)
         self.assertEqual(
             checked.call_args.kwargs["environment"]["SC_OBSERVABILITY_ATTACHED_PACKAGE"],
             str(package),
@@ -163,6 +165,13 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertEqual(checked.call_args.kwargs["environment"]["PYTHONDEVMODE"], "1")
         self.assertEqual(checked.call_args.kwargs["environment"]["PYTHONASYNCIODEBUG"], "1")
         self.assertEqual(checked.call_args.kwargs["environment"]["PYTHONWARNINGS"], "error")
+
+    @mock.patch.object(run.python_binding_validator, "embedded_environment", side_effect=run.python_binding_validator.BindingValidationError("probe timed out"))
+    def test_embedded_host_converts_a_bounded_interpreter_probe_failure_to_suite_error(
+            self, environment: mock.Mock) -> None:
+        with self.assertRaisesRegex(run.SuiteError, "probe timed out"):
+            run.run_embedded_host(Path("/tmp/venv/bin/python"), Path("/tmp/package.py"))
+        self.assertEqual(environment.call_args.kwargs["timeout"], run.RUNTIME_TIMEOUT_SECONDS)
 
     def test_run_composes_result_and_attaches_the_venv_interpreter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

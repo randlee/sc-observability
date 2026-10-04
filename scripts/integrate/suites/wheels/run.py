@@ -224,7 +224,12 @@ def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
 
 def run_embedded_host(python: Path, package: Path) -> None:
     """Run the Rust-host proof against the installed binding package file."""
-    environment = python_binding_validator.embedded_environment(python)
+    try:
+        environment = python_binding_validator.embedded_environment(
+            python, timeout=RUNTIME_TIMEOUT_SECONDS
+        )
+    except python_binding_validator.BindingValidationError as error:
+        raise SuiteError(str(error)) from error
     environment["SC_OBSERVABILITY_ATTACHED_PACKAGE"] = str(package)
     environment.update({
         "PYTHONDEVMODE": "1",
@@ -243,7 +248,7 @@ def verify_source_sha(source_sha: str) -> None:
     """Reject a runner invocation that is not bound to its checked-out candidate."""
     if len(source_sha) != 40 or any(character not in "0123456789abcdef" for character in source_sha.lower()):
         raise SuiteError("source-sha must be a full 40-hex commit")
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    head = run_checked(["git", "rev-parse", "HEAD"], cwd=ROOT).strip()
     if head != source_sha.lower():
         raise SuiteError(f"checkout HEAD {head} does not match source-sha {source_sha}")
 

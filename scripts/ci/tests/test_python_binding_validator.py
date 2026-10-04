@@ -33,6 +33,13 @@ class PythonBindingValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.BindingValidationError, "escaped the venv"):
             validator.installed_origins(installed)
 
+    @mock.patch.object(validator.subprocess, "check_output")
+    def test_interpreter_probe_has_a_deadline_and_reports_timeout(self, check_output: mock.Mock) -> None:
+        check_output.side_effect = validator.subprocess.TimeoutExpired(["python"], 17)
+        with self.assertRaisesRegex(validator.BindingValidationError, "timed out after 17s"):
+            validator.checked_output(["python"], timeout=17)
+        self.assertEqual(check_output.call_args.kwargs["timeout"], 17)
+
 
 if __name__ == "__main__":
     unittest.main()
