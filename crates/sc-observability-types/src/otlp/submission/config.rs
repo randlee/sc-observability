@@ -621,7 +621,7 @@ mod tests {
         }
 
         let current = serde_json::to_value(TelemetryFileConfig {
-            base_dir: Default::default(),
+            base_dir: std::path::PathBuf::default(),
             service: Some("schema-test".into()),
             otlp: Some(FileOtlp {
                 endpoint: Some("http://localhost:4318".into()),
