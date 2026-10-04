@@ -148,7 +148,8 @@ def installed_artifacts(tmp_path_factory: pytest.TempPathFactory) -> dict[str, P
     root = tmp_path_factory.mktemp("installed-telemetry")
     venv = root / "venv"
     run_process([sys.executable, "-m", "venv", str(venv)], timeout=INSTALL_TIMEOUT_SECONDS, check=True)
-    python = venv / "bin" / "python"
+    windows = os.name == "nt"
+    python = venv / ("Scripts/python.exe" if windows else "bin/python")
     run_process(
         [str(python), "-m", "pip", "install", "--upgrade", "pip==25.3", "maturin==1.10.2"],
         timeout=INSTALL_TIMEOUT_SECONDS,
@@ -175,7 +176,8 @@ def installed_artifacts(tmp_path_factory: pytest.TempPathFactory) -> dict[str, P
         timeout=BUILD_TIMEOUT_SECONDS,
         check=True,
     )
-    return {"root": root, "python": python, "cli": cli_root / "bin" / "sc-otel"}
+    cli = cli_root / "bin" / ("sc-otel.exe" if windows else "sc-otel")
+    return {"root": root, "python": python, "cli": cli}
 
 
 @pytest.fixture
