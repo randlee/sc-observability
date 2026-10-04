@@ -99,6 +99,8 @@ fn command_contract_for(command: &clap::Command) -> Value {
     let mut arguments = command
         .get_arguments()
         .map(|argument| {
+            let action = argument.get_action();
+            let num_args = effective_num_args(argument);
             let mut conflicts = command
                 .get_arg_conflicts_with(argument)
                 .into_iter()
@@ -131,9 +133,24 @@ fn command_contract_for(command: &clap::Command) -> Value {
                 .collect::<Vec<_>>();
             allowed_values.sort();
             allowed_values.dedup();
+            let value_names = argument.get_value_names().map(|names| {
+                names
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            });
+            let requires = required_groups_for(command, argument);
             let mut contract = json!({
                 "id": argument.get_id().as_str(),
                 "flags": flags,
+                "action": format!("{action:?}"),
+                "num_args": {
+                    "min": num_args.min_values(),
+                    "max": num_args.max_values(),
+                },
+                "global": argument.is_global_set(),
+                "value_name": value_names,
+                "requires": requires,
                 "required": argument.is_required_set(),
                 "default_values": argument.get_default_values().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>(),
                 "allowed_values": allowed_values,
@@ -143,10 +160,9 @@ fn command_contract_for(command: &clap::Command) -> Value {
                 contract["value_constraint"] = json!(constraint);
             }
             contract
-        })
+    })
         .collect::<Vec<_>>();
     arguments.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
-
     let mut groups = command
         .get_groups()
         .map(|group| {
@@ -174,10 +190,42 @@ fn command_contract_for(command: &clap::Command) -> Value {
 
     json!({
         "name": command.get_name(),
+        "aliases": command.get_all_aliases().collect::<Vec<_>>(),
         "arguments": arguments,
         "groups": groups,
         "subcommands": subcommands,
     })
+}
+
+#[cfg(test)]
+fn effective_num_args(argument: &clap::Arg) -> clap::builder::ValueRange {
+    argument.get_num_args().unwrap_or_else(|| {
+        if argument.get_action().takes_values() {
+            clap::builder::ValueRange::SINGLE
+        } else {
+            clap::builder::ValueRange::EMPTY
+        }
+    })
+}
+
+/// Clap exposes this CLI's required relationships as required argument groups.
+/// Project a member's group identity beside the group definition so a group
+/// membership change also identifies the affected argument.
+#[cfg(test)]
+fn required_groups_for(command: &clap::Command, argument: &clap::Arg) -> Vec<String> {
+    let mut groups = command
+        .get_groups()
+        .filter_map(|group| {
+            let group = group.clone();
+            (group.is_required_set()
+                && group
+                    .get_args()
+                    .any(|member| member.as_str() == argument.get_id().as_str()))
+            .then(|| group.get_id().as_str().to_owned())
+        })
+        .collect::<Vec<_>>();
+    groups.sort();
+    groups
 }
 
 /// Captures validation supplied by clap's configured parser without creating a
@@ -342,8 +390,11 @@ mod contract_tests {
             changed_command["subcommands"][1]["arguments"][0]["value_constraint"].is_string(),
             "timeout parser constraint was not projected: {changed_command}"
         );
-        changed_command["subcommands"][1]["arguments"][0]["value_constraint"] =
-            serde_json::json!("timeout accepts any string");
+        assert!(
+            changed_command["subcommands"][1]["arguments"][0]["action"].is_string(),
+            "argument action was not projected: {changed_command}"
+        );
+        changed_command["subcommands"][1]["arguments"][0]["action"] = serde_json::json!("Append");
         let command_error = assert_contract(
             "sc-otel.commands",
             COMMAND_VERSION,
@@ -352,10 +403,7 @@ mod contract_tests {
         )
         .expect_err("changed argument must reject the selected command contract");
         assert!(command_error.contains("sc-otel.commands contract version 1.5.0 changed fields"));
-        assert!(
-            command_error.contains("value_constraint"),
-            "{command_error}"
-        );
+        assert!(command_error.contains("action"), "{command_error}");
         assert!(command_error.contains("new versioned snapshot"));
 
         let result_version = crate::constants::RESULT_SCHEMA
