@@ -89,4 +89,39 @@ mod tests {
             Err(TelemetryConfigError::ConfigFile { .. })
         ));
     }
+
+    #[test]
+    fn telemetry_yaml_schema_preserves_unknown_consumer_keys_and_existing_loader_rejections() {
+        let schema: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schema/config/telemetry/v1.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(schema["x-sc-observability"]["selected_version"], 1);
+        assert_eq!(schema["additionalProperties"], true);
+        assert_eq!(schema["properties"]["otlp"]["additionalProperties"], true);
+        assert_eq!(schema["properties"]["store"]["additionalProperties"], true);
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("telemetry.yaml");
+        std::fs::write(
+            &path,
+            "service: schema-test\nconsumer_extension: keep-me\notlp:\n  endpoint: http://collector:4318\nstore:\n  path: relative.db\n  consumer_extension: keep-me\n",
+        )
+        .unwrap();
+        let loaded = load_telemetry_file(&path).unwrap();
+        let overrides = ConfigOverrides::default();
+        let resolved =
+            resolve_config(ConfigSources::new(&overrides, Some(&loaded), &|_| None)).unwrap();
+        assert_eq!(resolved.store_path, directory.path().join("relative.db"));
+        assert_eq!(resolved.request_timeout, std::time::Duration::from_secs(10));
+
+        std::fs::write(&path, "store: not-a-mapping\n").unwrap();
+        assert!(matches!(
+            load_telemetry_file(&path),
+            Err(TelemetryConfigError::ConfigFile { .. })
+        ));
+    }
 }

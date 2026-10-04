@@ -1,7 +1,7 @@
 //! Field-specific configuration precedence without file or environment discovery.
 use super::{TelemetryConfigError, error_codes, errors::context};
 use crate::constants;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{fmt, path::PathBuf, time::Duration};
 
 /// Secret value; Debug and Display never reveal its contents.
@@ -43,7 +43,7 @@ pub enum ExporterBackendId {
 }
 /// Explicit behavior when the durable byte bound is reached.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiskBoundPolicy {
     /// Reject new admissions without deleting pending work.
@@ -141,7 +141,7 @@ pub struct SyncHttpRetryPolicyDto {
 }
 /// Core YAML keys; consumer-owned keys are deliberately ignored.
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct TelemetryFileConfig {
     /// Set by the loader to the containing directory, never read from YAML.
     #[serde(skip)]
@@ -155,7 +155,7 @@ pub struct TelemetryFileConfig {
 }
 /// Core OTLP file keys.
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FileOtlp {
     /// Base endpoint URL.
     pub endpoint: Option<String>,
@@ -164,7 +164,7 @@ pub struct FileOtlp {
 }
 /// Core durable store file keys.
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FileStore {
     /// Store path, relative to YAML directory when not absolute.
     pub path: Option<PathBuf>,
@@ -561,11 +561,109 @@ impl TelemetryClientConfig {
 #[cfg(test)]
 mod tests {
     use super::{
-        ConfigOverrides, ConfigSources, Secret, SyncHttpRetryPolicyDto, TelemetryClientConfig,
-        TelemetryConfigError, resolve_config,
+        ConfigOverrides, ConfigSources, DiskBoundPolicy, FileOtlp, FileStore, Secret,
+        SyncHttpRetryPolicyDto, TelemetryClientConfig, TelemetryConfigError, TelemetryFileConfig,
+        resolve_config,
     };
     use crate::constants;
-    use std::time::Duration;
+    use std::{collections::BTreeSet, fs, path::Path, time::Duration};
+
+    const TELEMETRY_SCHEMA_VERSION: u64 = 1;
+
+    fn selected_telemetry_schema() -> serde_json::Value {
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schema/config/telemetry/v1.json");
+        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    fn object_keys(value: &serde_json::Value, path: &str) -> BTreeSet<String> {
+        value
+            .pointer(path)
+            .and_then(serde_json::Value::as_object)
+            .unwrap_or_else(|| panic!("expected object at {path}"))
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    fn schema_mismatch(path: &str) -> String {
+        format!(
+            "telemetry YAML v{TELEMETRY_SCHEMA_VERSION} contract mismatch; changed fields: {path}; \\
+             selected v{TELEMETRY_SCHEMA_VERSION} is immutable, so an intentional contract change \\
+             requires schema/config/telemetry/v{}.json rather than overwriting v{TELEMETRY_SCHEMA_VERSION}",
+            TELEMETRY_SCHEMA_VERSION + 1,
+        )
+    }
+
+    fn changed_key_path(
+        expected: &BTreeSet<String>,
+        actual: &BTreeSet<String>,
+        root: &str,
+    ) -> String {
+        expected
+            .symmetric_difference(actual)
+            .next()
+            .map_or_else(|| root.to_owned(), |field| format!("{root}/{field}"))
+    }
+
+    fn assert_selected_telemetry_schema_is_current(
+        schema: &serde_json::Value,
+    ) -> Result<(), String> {
+        if schema.pointer("/x-sc-observability/contract")
+            != Some(&serde_json::Value::String("telemetry-yaml".into()))
+        {
+            return Err(schema_mismatch("/x-sc-observability/contract"));
+        }
+        if schema.pointer("/x-sc-observability/selected_version")
+            != Some(&serde_json::Value::from(TELEMETRY_SCHEMA_VERSION))
+        {
+            return Err(schema_mismatch("/x-sc-observability/selected_version"));
+        }
+
+        let current = serde_json::to_value(TelemetryFileConfig {
+            base_dir: Default::default(),
+            service: Some("schema-test".into()),
+            otlp: Some(FileOtlp {
+                endpoint: Some("http://localhost:4318".into()),
+                timeout_ms: Some(1),
+            }),
+            store: Some(FileStore {
+                path: Some("telemetry.db".into()),
+                max_bytes: Some(1),
+                disk_bound_policy: Some(DiskBoundPolicy::EvictOldest),
+                delivered_retention_hours: Some(1),
+            }),
+        })
+        .unwrap();
+        let selected_root = object_keys(schema, "/properties");
+        let actual_root = object_keys(&current, "");
+        if selected_root != actual_root {
+            return Err(schema_mismatch(&changed_key_path(
+                &selected_root,
+                &actual_root,
+                "/properties",
+            )));
+        }
+        for field in ["otlp", "store"] {
+            let selected = object_keys(schema, &format!("/properties/{field}/properties"));
+            let actual = object_keys(&current, &format!("/{field}"));
+            if selected != actual {
+                return Err(schema_mismatch(&changed_key_path(
+                    &selected,
+                    &actual,
+                    &format!("/properties/{field}/properties"),
+                )));
+            }
+        }
+        if schema.pointer("/properties/store/properties/disk_bound_policy/enum")
+            != Some(&serde_json::json!(["reject_new", "evict_oldest"]))
+        {
+            return Err(schema_mismatch(
+                "/properties/store/properties/disk_bound_policy/enum",
+            ));
+        }
+        Ok(())
+    }
 
     fn valid() -> TelemetryClientConfig {
         let overrides = ConfigOverrides {
@@ -734,5 +832,78 @@ mod tests {
             }
             other => panic!("expected overflow, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn telemetry_yaml_selected_v1_schema_matches_parser_fields_defaults_and_enum_values() {
+        let schema = selected_telemetry_schema();
+        assert_selected_telemetry_schema_is_current(&schema).unwrap();
+        let file: TelemetryFileConfig = serde_json::from_value(serde_json::json!({
+            "service": "schema-test",
+            "otlp": {"endpoint": "http://collector:4318", "timeout_ms": 1234},
+            "store": {
+                "path": "relative.db",
+                "max_bytes": 8192,
+                "disk_bound_policy": "evict_oldest",
+                "delivered_retention_hours": 48
+            }
+        }))
+        .unwrap();
+        let overrides = ConfigOverrides::default();
+        let resolved =
+            resolve_config(ConfigSources::new(&overrides, Some(&file), &|_| None)).unwrap();
+        assert_eq!(resolved.service_name, "schema-test");
+        assert_eq!(resolved.endpoint, "http://collector:4318");
+        assert_eq!(resolved.request_timeout, Duration::from_millis(1234));
+        assert_eq!(resolved.max_store_bytes, 8192);
+        assert_eq!(resolved.disk_bound_policy, DiskBoundPolicy::EvictOldest);
+        assert_eq!(resolved.delivered_retention, Duration::from_secs(48 * 3600));
+
+        let defaults: TelemetryFileConfig =
+            serde_json::from_value(serde_json::json!({"store": {"path": "store.db"}})).unwrap();
+        let defaults =
+            resolve_config(ConfigSources::new(&overrides, Some(&defaults), &|_| None)).unwrap();
+        assert_eq!(defaults.service_name, constants::TELEMETRY_DEFAULT_SERVICE);
+        assert_eq!(defaults.endpoint, constants::TELEMETRY_DEFAULT_ENDPOINT);
+        assert_eq!(
+            defaults.request_timeout,
+            constants::TELEMETRY_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            defaults.max_store_bytes,
+            constants::TELEMETRY_MAX_STORE_BYTES
+        );
+        assert_eq!(defaults.disk_bound_policy, DiskBoundPolicy::RejectNew);
+        assert_eq!(
+            schema.pointer("/properties/service/default"),
+            Some(&serde_json::Value::String(
+                constants::TELEMETRY_DEFAULT_SERVICE.into()
+            ))
+        );
+        assert_eq!(
+            schema.pointer("/properties/otlp/properties/timeout_ms/default"),
+            Some(&serde_json::Value::from(10_000))
+        );
+        assert_eq!(
+            schema.pointer("/properties/store/properties/max_bytes/default"),
+            Some(&serde_json::Value::from(
+                constants::TELEMETRY_MAX_STORE_BYTES
+            ))
+        );
+    }
+
+    #[test]
+    fn telemetry_yaml_schema_mismatch_names_contract_version_changed_field_and_new_version_remedy()
+    {
+        let mut schema = selected_telemetry_schema();
+        schema["properties"]
+            .as_object_mut()
+            .unwrap()
+            .remove("service");
+        let error = assert_selected_telemetry_schema_is_current(&schema).unwrap_err();
+        assert!(error.contains("telemetry YAML v1"), "{error}");
+        assert!(error.contains("/properties/service"), "{error}");
+        assert!(error.contains("immutable"), "{error}");
+        assert!(error.contains("schema/config/telemetry/v2.json"), "{error}");
     }
 }

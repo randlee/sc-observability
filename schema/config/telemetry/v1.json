@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SC Observability telemetry YAML",
+  "type": "object",
+  "properties": {
+    "service": {
+      "type": "string",
+      "default": "unknown_service"
+    },
+    "otlp": {
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "default": "http://localhost:4318"
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10000
+        }
+      },
+      "additionalProperties": true
+    },
+    "store": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 268435456
+        },
+        "disk_bound_policy": {
+          "type": "string",
+          "enum": [
+            "reject_new",
+            "evict_oldest"
+          ],
+          "default": "reject_new"
+        },
+        "delivered_retention_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 24
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true,
+  "x-sc-observability": {
+    "contract": "telemetry-yaml",
+    "selected_version": 1,
+    "unknown_consumer_keys": "accepted"
+  }
+}
