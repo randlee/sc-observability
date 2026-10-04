@@ -1,0 +1,25 @@
+name: Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Comma-separated suite selectors
+        type: string
+        default: wheel-cli-viewer,rust-viewer,collector,wheels,tauri,rust-consumers
+      os:
+        description: Comma-separated OS selectors
+        type: string
+        default: macos,windows,linux
+      dispatch_id:
+        description: Optional command correlation ID
+        type: string
+
+# This default-branch file only registers manual dispatch. Selecting the E-1
+# implementation branch uses its full workflow and runner at that branch SHA.
+jobs:
+  registration:
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "Integration workflow registration only"
