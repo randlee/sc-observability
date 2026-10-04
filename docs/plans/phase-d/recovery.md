@@ -7,8 +7,8 @@ The order is **remove duplicate execution → fix known issues locally → enabl
 ## Execution rules
 
 - aobs maintains scope and beads. Team-lead dispatches development and coordinates focused sanity/QA. Quality-mgr approves scope and verifies fixes.
-- Use a separate branch for each fix scope. Keep today's CI platform coverage unchanged throughout stages 1 and 2. Run relevant local tests and Windows-target compilation/clippy through xwin on macOS; xwin does not execute Windows tests.
-- Before every commit and push, run all locally executable test/check commands from pull-request workflows, plus xwin on macOS, and retain each command and exit code. This includes documentation-only changes. Fix scoped failures; report unrelated failures with base-versus-head evidence. Never push red silently. Remote CI does not gate starting the next scoped task; Windows runtime execution remains deferred to stage 3.
+- Use a separate branch for each fix scope. Keep today's CI platform coverage unchanged throughout stages 1 and 2. Run validation relevant to the change and any tests explicitly requested by the operator. For changes affecting Windows compilation, run Windows-target compilation/clippy through xwin on macOS; xwin does not execute Windows tests.
+- Fix scoped failures; report unrelated failures with base-versus-head evidence. Never push red silently. Remote CI does not gate starting the next scoped task; Windows runtime execution remains deferred to stage 3.
 - Remove only genuinely dead code, including suppressed dead code. Preserve live code under supported features, platforms, tests, and macros. Remove unjustified suppressions without deleting live behavior or adding dummy uses.
 - Fix a missed issue in its owning layer and rebase descendants. Do not build an append-only chain of fixes for red CI.
 
