@@ -280,7 +280,7 @@ class PlanCli(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.write_plan(ROWS[:1])
         result = self.run_cli('--ci')
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 5)
         self.assertIn('sprint set differs', result.stdout + result.stderr)
 
     def test_selected_phase_ignores_other_config_and_current_path(self):

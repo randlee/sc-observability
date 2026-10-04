@@ -96,7 +96,7 @@ Only the plan gate runs `validate-plan --root <root> --refresh` and writes HTML.
 Assignment checks are read-only and need no renderer; pre-import `--file`/`--beads` never render.
 The phase's own tracked TOML is authoritative; `current-phase.toml` cannot override its path.
 `validate-plan --ci` checks schema and committed HTML sprint membership without a database.
-Any nonzero exit blocks plan approval; see [Validation](../SKILL.md#validation) for the five exit-5 cases.
+Any nonzero exit blocks plan approval; see [Validation](../SKILL.md#validation) for the five live exit-5 cases and offline artifact failures.
 Bead schema, sanity discovery, doctor, ATM evidence, and rendering issues are nonfatal warnings.
 Commit configuration, plan, and regenerated diagram together before approval.
 
@@ -109,7 +109,7 @@ Commit configuration, plan, and regenerated diagram together before approval.
 | `design` | phase-level architecture decisions, the boundaries in scope, retained gates |
 | `acceptance_criteria` | the phase-level gates |
 | `plan_scope`, `parent` | `feature` under the Development epic, or `epic` with no parent |
-| `integration_branch` | required: `integration_branch_pattern` from the repository configuration with `{phase}` = `<x>`; validate-plan, sprint-review and every gate read the plan from this branch |
+| `integration_branch` | required: `integration_branch_pattern` from the repository configuration with `{phase}` = `<x>`; must match the phase TOML; the tracked plan is read from the current checkout |
 
 ## Sprint Dev Bead
 

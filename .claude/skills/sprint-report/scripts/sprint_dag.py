@@ -350,8 +350,7 @@ def open_wyvern(artifact):
     return True
 
 
-def generate(repo, index, counts, phase, output=None, open_image=False, open_view=False,
-             publish_branch=None):
+def generate(repo, index, counts, phase, output=None, open_image=False, open_view=False):
     if not (RENDERER / 'node_modules/@viz-js/viz').exists():
         raise RuntimeError(f'DAG renderer dependencies missing; run npm ci --prefix {RENDERER}')
     phase = str(phase).removeprefix('phase-')
@@ -384,11 +383,6 @@ def generate(repo, index, counts, phase, output=None, open_image=False, open_vie
         print('sprint-report: some ATM evidence unavailable; affected states are unconfirmed (see state JSON)', file=sys.stderr)
     for suffix in ('.svg', '.html', '.png', '-state.json'):
         print(path(suffix))
-    if publish_branch is not None:
-        from phase_artifact import publish_artifact
-        published = publish_artifact(repo, publish_branch, phase, path('.html').read_text())
-        path('-published.json').write_text(json.dumps(published, indent=2) + '\n')
-        print(f"Published {published['html_path']} on {publish_branch} at {published['commit'][:12]}")
     if open_image:
         if sys.platform == 'darwin':
             subprocess.run(['open', '-a', 'Preview', str(path('.png'))], check=True)

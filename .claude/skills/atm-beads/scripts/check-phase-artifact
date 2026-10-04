@@ -61,7 +61,7 @@ def check_artifact(repo, root, expected_plan_path):
         page = git('show', f'{ref}:{html_path}')
         published_plan = git('show', f'{ref}:{plan_path}')
     except RuntimeError as exc:
-        raise RuntimeError(f'{branch}: required phase index/HTML artifact missing or unreadable; run sprint-review --root {root}: {exc}') from exc
+        raise RuntimeError(f'{branch}: required phase index/HTML artifact missing or unreadable; run validate-plan --root {root} --refresh, then review and commit the local artifacts through the normal plan workflow: {exc}') from exc
     # Validate the remote bytes without treating a Beads projection as input.
     with tempfile.TemporaryDirectory(prefix='phase-artifact-check-') as directory:
         published_path = Path(directory) / f'phase-{phase}' / 'sprints.jsonl'
@@ -73,11 +73,11 @@ def check_artifact(repo, root, expected_plan_path):
         else:
             load_phase_plan(published_path, root)
     if published_plan != expected_plan_path.read_text():
-        raise RuntimeError(f'{branch}: published phase plan differs from current plan; run sprint-review --root {root}')
+        raise RuntimeError(f'{branch}: published phase plan differs from current plan; run validate-plan --root {root} --refresh, then review and commit the local artifacts through the normal plan workflow')
     artifact = Artifact()
     artifact.feed(page)
     if not artifact.svg or artifact.root != root:
-        raise RuntimeError(f'{branch}: phase HTML must embed SVG and identify root {root}; run sprint-review --root {root}')
+        raise RuntimeError(f'{branch}: phase HTML must embed SVG and identify root {root}; run validate-plan --root {root} --refresh, then review and commit the local artifacts through the normal plan workflow')
 
 
 def main():

@@ -87,14 +87,15 @@ The live DAG is `<plans_dir>/<phase>-dag.html`, beside the plan; commit both wit
 The phase's own TOML is authoritative; `current-phase.toml` never overrides its plan path.
 `--ci` checks plan schema and committed HTML sprint membership without Beads or ATM.
 
-Exit 5 reports only these contract problems on stdout as `<bead>: <problem>`:
+Live validation exits 5 for these contract problems on stdout as `<bead>: <problem>`:
 - invalid plan schema;
 - planned sprint without a bead;
 - sprint bead under the root absent from the plan;
 - configured integration branch differs from root `metadata.integration_branch`;
 - a declared dependency lacks an edge to predecessor sanity or sprint.
 
-Exit 2 means validation cannot run, including unavailable Beads, unreadable output, or missing/malformed phase TOML.
+Offline `--ci` also exits 5 for invalid HTML structure or a plan/HTML sprint-set mismatch.
+Exit 2 means validation cannot run, including unavailable Beads, unreadable files/output, or missing/malformed phase TOML.
 Every nonzero exit blocks plan approval; report every printed contract problem.
 Other checks, including bead schema, sanity labels/count, doctor, ATM evidence, and DAG rendering, emit nonfatal warnings.
 The implementation and shared contract are in `scripts/validate-plan` and `scripts/plan_contract.py`.
