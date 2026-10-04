@@ -50,11 +50,12 @@ class TauriRunnerTests(unittest.TestCase):
         )
 
     def test_windows_uses_process_supervisor(self):
-        self.assertEqual(
-            [tauri_runner.sys.executable, "scripts/ci/supervise_windows_proof.py", "--", "bash",
-             "scripts/ci/validate_typescript_bindings.sh", "--platform"],
-            tauri_runner.qualification_command("Windows"),
-        )
+        with patch.dict(tauri_runner.os.environ, {"ProgramFiles": r"D:\Git Tools"}, clear=True):
+            self.assertEqual(
+                [tauri_runner.sys.executable, "scripts/ci/supervise_windows_proof.py", "--",
+                 r"D:\Git Tools\Git\bin\bash.exe", "scripts/ci/validate_typescript_bindings.sh", "--platform"],
+                tauri_runner.qualification_command("Windows"),
+            )
 
     def test_failed_qualification_retains_helper_evidence_before_reraising(self):
         with tempfile.TemporaryDirectory() as temporary:

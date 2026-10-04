@@ -16,7 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -91,7 +91,9 @@ def qualification_command(name: str) -> list[str]:
     if name == "Linux":
         return ["xvfb-run", "-a", *base]
     if name == "Windows":
-        return [sys.executable, "scripts/ci/supervise_windows_proof.py", "--", *base]
+        git_bash = str(PureWindowsPath(os.environ.get("ProgramFiles", r"C:\Program Files")) /
+                       "Git" / "bin" / "bash.exe")
+        return [sys.executable, "scripts/ci/supervise_windows_proof.py", "--", git_bash, *base[1:]]
     return base
 
 
