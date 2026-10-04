@@ -118,7 +118,10 @@ def qualification_command(name: str) -> list[str]:
 def retain_qualification_evidence(evidence: Path, output_dir: Path) -> None:
     """Copy helper diagnostics before a failed qualification escapes the runner."""
     if evidence.is_dir():
-        shutil.copytree(evidence, output_dir / "qualification", dirs_exist_ok=True)
+        try:
+            shutil.copytree(evidence, output_dir / "qualification", dirs_exist_ok=True)
+        except (OSError, shutil.Error) as error:
+            print(f"tauri integration: could not retain qualification evidence: {error}", file=sys.stderr)
 
 
 def run_qualification(name: str, env: dict[str, str], evidence: Path, output_dir: Path) -> None:

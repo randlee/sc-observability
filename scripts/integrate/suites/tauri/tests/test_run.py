@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -69,6 +70,22 @@ class TauriRunnerTests(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     tauri_runner.run_qualification("Windows", {}, evidence, output)
             self.assertEqual('{"exit": 1}\n', (output / "qualification" / "windows-supervisor.json").read_text())
+
+    def test_retention_copy_error_does_not_mask_the_qualification_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "target" / "tauri-qualification"
+            evidence.mkdir(parents=True)
+            output = root / "output"
+            stderr = io.StringIO()
+            primary = subprocess.CalledProcessError(17, ["proof"])
+            with patch.object(tauri_runner, "command", side_effect=primary), \
+                    patch.object(tauri_runner.shutil, "copytree", side_effect=OSError("locked")), \
+                    patch.object(tauri_runner.sys, "stderr", stderr):
+                with self.assertRaises(subprocess.CalledProcessError) as raised:
+                    tauri_runner.run_qualification("Windows", {}, evidence, output)
+            self.assertIs(primary, raised.exception)
+            self.assertIn("could not retain qualification evidence: locked", stderr.getvalue())
 
     def test_qualification_timeout_kills_the_process_group_and_retains_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
