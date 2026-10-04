@@ -131,7 +131,15 @@ IMPORT_AND_RUNTIME_PROBE = r'''
 import json
 import pathlib
 import sys
-from sc_observability import LogEvent, LoggerConfig, LogQuery, Ok, create_logger
+from sc_observability import (
+    LogEvent,
+    LoggerConfig,
+    LogQuery,
+    Ok,
+    Telemetry,
+    TelemetryErr,
+    create_logger,
+)
 import sc_observability
 import sc_observability._native as native
 
@@ -154,6 +162,55 @@ for result in (
 ):
     if not isinstance(result, Ok):
         raise SystemExit(f"owned runtime returned an untagged failure: {result!r}")
+
+# The candidate wheel is built with ``otlp-telemetry``.  Exercise that
+# feature through its installed public facade rather than test-only hooks.
+if not callable(getattr(native, "open", None)):
+    raise SystemExit("candidate wheel omitted the otlp-telemetry native factory")
+opened = Telemetry.open(
+    store_path="telemetry-store",
+    endpoint="http://127.0.0.1:9",
+    service_name="e5-installed-wheel-telemetry",
+)
+if not isinstance(opened, Ok):
+    raise SystemExit(f"installed telemetry did not return a tagged Ok: {opened!r}")
+telemetry = opened.value
+submission = {
+    "version": 1,
+    "record_key": "e5-installed-wheel-telemetry",
+    "resource": {
+        "attributes": {"service.name": "e5-installed-wheel-telemetry"},
+        "dropped_attributes_count": 0,
+        "entity_refs": [],
+        "schema_url": None,
+    },
+    "scope": {
+        "name": "e5.wheels",
+        "version": None,
+        "attributes": {},
+        "dropped_attributes_count": 0,
+        "schema_url": None,
+    },
+    "logs": [{
+        "time": "2026-10-04T00:00:00Z",
+        "body": "installed telemetry",
+        "attributes": {},
+    }],
+    "spans": [],
+    "metrics": [],
+}
+receipt = telemetry.emit(submission)
+if not isinstance(receipt, Ok):
+    raise SystemExit(f"installed telemetry submit did not return a tagged Ok: {receipt!r}")
+for operation, result in (
+    ("flush", telemetry.flush(timeout_s=0.1)),
+    ("status", telemetry.status()),
+    ("shutdown", telemetry.shutdown(timeout_s=0.1)),
+):
+    if not isinstance(result, (Ok, TelemetryErr)):
+        raise SystemExit(f"installed telemetry {operation} returned an untyped outcome: {result!r}")
+if not isinstance(telemetry.flush(timeout_s=float("nan")), TelemetryErr):
+    raise SystemExit("installed telemetry invalid timeout did not return TelemetryErr")
 print(json.dumps({key: str(value) for key, value in origins.items()}, sort_keys=True))
 '''
 
@@ -223,6 +280,7 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
             "clean_install": "passed",
             "installed_origin": "passed",
             "owned_typed_runtime": "passed",
+            "installed_telemetry_lifecycle": "passed",
             "rust_host_attached_python": "passed",
         },
     }
