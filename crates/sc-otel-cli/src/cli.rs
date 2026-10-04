@@ -256,19 +256,26 @@ fn parser_constraint(command: &clap::Command, argument: &clap::Arg) -> Option<St
 #[cfg(test)]
 mod contract_tests {
     use super::command_contract;
-    use crate::output::result_contract;
+    use crate::{
+        constants::{
+            COMMAND_CONTRACT_VERSION, SNAPSHOT_HISTORY_BASELINE,
+            UNACCEPTED_INITIAL_COMMAND_SNAPSHOT, UNACCEPTED_INITIAL_RESULT_SNAPSHOT,
+        },
+        output::result_contract,
+    };
     use serde_json::Value;
     use std::{
         path::{Path, PathBuf},
         process::Command,
     };
 
-    const COMMAND_VERSION: &str = env!("CARGO_PKG_VERSION");
-    const INITIAL_BASELINE: &str = "51be650a";
-
     fn snapshot(path: impl AsRef<Path>) -> Value {
         let contents = std::fs::read_to_string(path).expect("checked-in contract snapshot exists");
         snapshot_json(&contents)
+    }
+
+    fn snapshot_bytes(path: impl AsRef<Path>) -> Vec<u8> {
+        std::fs::read(path).expect("checked-in contract snapshot exists")
     }
 
     fn snapshot_json(contents: &str) -> Value {
@@ -280,6 +287,12 @@ mod contract_tests {
             .join("../../schema/cli/sc-otel")
             .join(kind)
             .join(format!("{version}.json"))
+    }
+
+    fn repository_path(path: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
     }
 
     fn changed_fields(expected: &Value, actual: &Value, path: &str, changes: &mut Vec<String>) {
@@ -330,34 +343,123 @@ mod contract_tests {
         ))
     }
 
-    fn assert_initial_history(path: &str, expected: &Value) {
+    fn resolve_history_baseline() -> String {
         let output = Command::new("git")
-            .args(["show", &format!("{INITIAL_BASELINE}:{path}")])
+            .args([
+                "rev-parse",
+                "--verify",
+                &format!("{SNAPSHOT_HISTORY_BASELINE}^{{commit}}"),
+            ])
             .output()
-            .expect("local git is available for snapshot history");
+            .expect("git must be available for contract snapshot history checks");
+        assert!(
+            output.status.success(),
+            "cannot resolve contract snapshot baseline {SNAPSHOT_HISTORY_BASELINE}: {}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let resolved = String::from_utf8(output.stdout)
+            .expect("git revision output is UTF-8")
+            .trim()
+            .to_owned();
+        assert_eq!(
+            resolved, SNAPSHOT_HISTORY_BASELINE,
+            "contract snapshot baseline must be a full, exact commit SHA"
+        );
+        resolved
+    }
+
+    fn is_unaccepted_initial_draft(path: &str) -> bool {
+        matches!(
+            path,
+            UNACCEPTED_INITIAL_COMMAND_SNAPSHOT | UNACCEPTED_INITIAL_RESULT_SNAPSHOT
+        )
+    }
+
+    fn assert_initial_history(path: &str, expected: &[u8]) {
+        let baseline = resolve_history_baseline();
+        let output = Command::new("git")
+            .args(["show", &format!("{baseline}:{path}")])
+            .output()
+            .expect("git must be available for contract snapshot history checks");
         if output.status.success() {
-            let baseline =
-                snapshot_json(std::str::from_utf8(&output.stdout).expect("baseline is UTF-8"));
             assert_eq!(
-                baseline, *expected,
-                "accepted baseline changed at {path}; add a new versioned snapshot instead"
+                output.stdout, expected,
+                "accepted baseline bytes changed at {path}; add a new versioned snapshot instead"
             );
         } else {
+            let path_in_baseline = Command::new("git")
+                .args(["ls-tree", "--name-only", "-r", &baseline, "--", path])
+                .output()
+                .expect("git must be available for contract snapshot history checks");
             assert!(
-                !Path::new(path).is_absolute(),
-                "snapshot paths are repository-relative for git history checks"
+                path_in_baseline.status.success(),
+                "cannot inspect contract snapshot baseline {baseline}: {}",
+                String::from_utf8_lossy(&path_in_baseline.stderr),
+            );
+            assert!(
+                path_in_baseline.stdout.is_empty() && is_unaccepted_initial_draft(path),
+                "cannot read retained contract snapshot {path} from {baseline}: {}",
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+    }
+
+    fn assert_retained_snapshot_history(kind: &str) {
+        let baseline = resolve_history_baseline();
+        let snapshot_directory = format!("schema/cli/sc-otel/{kind}");
+        let retained_paths = Command::new("git")
+            .args([
+                "ls-tree",
+                "--name-only",
+                "-r",
+                &baseline,
+                "--",
+                &snapshot_directory,
+            ])
+            .output()
+            .expect("git must be available for contract snapshot history checks");
+        assert!(
+            retained_paths.status.success(),
+            "cannot inspect retained contract snapshots in {baseline}: {}",
+            String::from_utf8_lossy(&retained_paths.stderr),
+        );
+
+        for path in String::from_utf8(retained_paths.stdout)
+            .expect("git path output is UTF-8")
+            .lines()
+            .filter(|path| {
+                Path::new(path)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+            })
+        {
+            let expected = snapshot_bytes(repository_path(path));
+            let actual = Command::new("git")
+                .args(["show", &format!("{baseline}:{path}")])
+                .output()
+                .expect("git must be available for contract snapshot history checks");
+            assert!(
+                actual.status.success(),
+                "cannot read retained contract snapshot {path} from {baseline}: {}",
+                String::from_utf8_lossy(&actual.stderr),
+            );
+            assert_eq!(
+                actual.stdout, expected,
+                "accepted baseline bytes changed at {path}; add a new versioned snapshot instead"
             );
         }
     }
 
     #[test]
     fn current_command_tree_matches_selected_manifest_version() {
-        let path = format!("schema/cli/sc-otel/commands/{COMMAND_VERSION}.json");
-        let expected = snapshot(snapshot_path("commands", COMMAND_VERSION));
-        assert_initial_history(&path, &expected);
+        let path = format!("schema/cli/sc-otel/commands/{COMMAND_CONTRACT_VERSION}.json");
+        let expected_path = snapshot_path("commands", COMMAND_CONTRACT_VERSION);
+        let expected = snapshot(&expected_path);
+        assert_retained_snapshot_history("commands");
+        assert_initial_history(&path, &snapshot_bytes(&expected_path));
         assert_contract(
             "sc-otel.commands",
-            COMMAND_VERSION,
+            COMMAND_CONTRACT_VERSION,
             &expected,
             &command_contract(),
         )
@@ -371,8 +473,10 @@ mod contract_tests {
             .next()
             .expect("result schema identity has a version");
         let path = format!("schema/cli/sc-otel/results/{result_version}.json");
-        let expected = snapshot(snapshot_path("results", result_version));
-        assert_initial_history(&path, &expected);
+        let expected_path = snapshot_path("results", result_version);
+        let expected = snapshot(&expected_path);
+        assert_retained_snapshot_history("results");
+        assert_initial_history(&path, &snapshot_bytes(&expected_path));
         assert_contract(
             "sc-otel.result",
             result_version,
@@ -384,7 +488,7 @@ mod contract_tests {
 
     #[test]
     fn changed_command_or_result_is_rejected_with_versioned_remedy() {
-        let expected = snapshot(snapshot_path("commands", COMMAND_VERSION));
+        let expected = snapshot(snapshot_path("commands", COMMAND_CONTRACT_VERSION));
         let mut changed_command = command_contract();
         assert!(
             changed_command["subcommands"][1]["arguments"][0]["value_constraint"].is_string(),
@@ -397,7 +501,7 @@ mod contract_tests {
         changed_command["subcommands"][1]["arguments"][0]["action"] = serde_json::json!("Append");
         let command_error = assert_contract(
             "sc-otel.commands",
-            COMMAND_VERSION,
+            COMMAND_CONTRACT_VERSION,
             &expected,
             &changed_command,
         )

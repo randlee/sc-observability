@@ -12,6 +12,16 @@ pub(crate) const RESULT_SCHEMA: &str = "sc-otel.result/v1";
 pub(crate) const ERROR_INVALID_JSON: &str = "SC_OBSERVABILITY_SUBMIT_INVALID_JSON";
 pub(crate) const ERROR_INTERNAL: &str = "SC_OBSERVABILITY_CLI_INTERNAL";
 
+#[cfg(test)]
+pub(crate) const COMMAND_CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+#[cfg(test)]
+pub(crate) const SNAPSHOT_HISTORY_BASELINE: &str = "51be650a08e2a118039eb62ae0f1af7cdc78789a";
+#[cfg(test)]
+pub(crate) const UNACCEPTED_INITIAL_COMMAND_SNAPSHOT: &str =
+    "schema/cli/sc-otel/commands/1.5.0.json";
+#[cfg(test)]
+pub(crate) const UNACCEPTED_INITIAL_RESULT_SNAPSHOT: &str = "schema/cli/sc-otel/results/v1.json";
+
 /// The stable meanings for machine-readable process exits.
 ///
 /// This table is consumed both by the renderer contract and its versioned
