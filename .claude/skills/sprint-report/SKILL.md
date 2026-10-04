@@ -184,10 +184,12 @@ temporary file and run the same command from the repository root.
 
 ## Configured phase index
 
-For phases using `.atm-bd/<phase>.toml`, `sprints` names the canonical JSONL
-file (sc-obs: `docs/plans/phase-e.jsonl`). Each line is `{"sprint":"<bead-id>"}`.
-The index locks membership; dependencies, sanity identities and live state are
-queried from Beads. The DAG HTML is co-located with the index, with `-dag.html`
-replacing `.jsonl`. `validate-plan` refreshes it automatically before approval;
-CI compares its sprint nodes to the index without querying Beads. Historical
-phases retain their tuple-file lookup until migrated.
+Tracked `.atm-bd/<phase>.toml` names `root`, `sprints = "<plans_dir>/<phase>.jsonl"`, and `integration_branch`.
+Each line has `sprint` and optional `depends_on`, with no other fields.
+The plan locks sprint membership and records only dependencies that completely block execution.
+Validation accepts each declared dependency as an edge to predecessor sanity or sprint.
+Sanity identities and live state are queried from Beads.
+The plan gate uses `validate-plan --root <root> --refresh` to write `<plans_dir>/<phase>-dag.html`.
+Assignment checks never write HTML or require a renderer; pre-import inputs never render.
+CI compares committed HTML sprint membership with the plan without querying Beads.
+Historical phases retain their tuple-file lookup until migrated.

@@ -1,4 +1,6 @@
 """Canonical sprint membership; bead data is queried, never serialized here."""
+from plan_contract import (DEV_LABEL, SPRINT_LABEL, SANITY_LABEL, FIX_LABEL, FINDING_LABEL,
+                           BLOCKS_RELATION, PARENT_CHILD_RELATION, PROBLEM_LINE)
 import json
 from pathlib import Path
 import re
@@ -12,15 +14,35 @@ def load(path):
         if not line.strip():
             continue
         row = json.loads(line)
-        if not isinstance(row, dict) or set(row) != {'sprint'}:
-            raise ValueError(f'{path}:{number}: expected sprint only')
+        if not isinstance(row, dict) or not {'sprint'} <= set(row) or set(row) - {'sprint', 'depends_on'}:
+            raise ValueError(f'{path}:{number}: expected sprint and optional depends_on')
         bid = row['sprint']
         if not isinstance(bid, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', bid) or bid in seen:
             raise ValueError(f'{path}:{number}: invalid or duplicate sprint id')
+        dependencies = row.get('depends_on', [])
+        if not isinstance(dependencies, list) or any(not isinstance(d, str) for d in dependencies) or len(set(dependencies)) != len(dependencies):
+            raise ValueError(f'{path}:{number}: invalid depends_on')
         seen.add(bid)
         rows.append(row)
     if not rows:
         raise ValueError(f'{path}: empty plan')
+    for row in rows:
+        if any(d not in seen or d == row['sprint'] for d in row.get('depends_on', [])):
+            raise ValueError(f"{row['sprint']}: unknown or self dependency")
+    visiting, visited = set(), set()
+    by_id = {r['sprint']: r for r in rows}
+    def visit(bid):
+        if bid in visiting:
+            raise ValueError(f'{bid}: cyclic depends_on')
+        if bid in visited:
+            return
+        visiting.add(bid)
+        for dep in by_id[bid].get('depends_on', []):
+            visit(dep)
+        visiting.remove(bid)
+        visited.add(bid)
+    for bid in by_id:
+        visit(bid)
     return rows
 
 
@@ -33,40 +55,35 @@ def index(rows, beads, root):
     gates = {}
     for row in rows:
         dev = row['sprint']
-        matches = [b['id'] for b in beads if 'stage:dev-sanity' in (b.get('labels') or [])
-                   and (b.get('metadata') or {}).get('dev_bead') == dev
-                   and dev in deps(b, 'blocks')]
+        matches = [b['id'] for b in beads if (SANITY_LABEL in (b.get('labels') or []) or b['id'] in {dev + '-sanity', dev + '.sanity'})
+                   and dev in deps(b, BLOCKS_RELATION)]
         if len(matches) != 1:
             raise ValueError(f'{dev}: expected one sanity bead, found {matches}')
         gates[dev] = matches[0]
     return {'root_bead_id': root, 'sprints': [
         {'dev_bead_id': r['sprint'], 'sanity_bead_id': gates[r['sprint']],
-         'depends_on_sanity_bead_ids': sorted(deps(next((b for b in beads if b['id'] == r['sprint']), {}), 'blocks') & set(gates.values()))} for r in rows]}
+         'depends_on_sanity_bead_ids': sorted(deps(next((b for b in beads if b['id'] == r['sprint']), {}), BLOCKS_RELATION) & set(gates.values()))} for r in rows]}
 
 
-def alignment(rows, beads, root, runtime):
-    from bead_schema import problems, SprintBead, SanityBead
+def alignment(rows, beads, root, runtime=None):
     by_id = {b['id']: b for b in beads}
     planned = {r['sprint'] for r in rows}
     def is_sprint(b):
         labels = set(b.get('labels') or [])
-        parent = b.get('parent') or next(iter(deps(b, 'parent-child')), None)
-        return parent == root and bool(labels & {'stage:dev', 'stage:sprint'}) and not (
-            labels & {'stage:fix', 'stage:finding'} or b.get('issue_type') == 'bug')
+        parent = b.get('parent') or next(iter(deps(b, PARENT_CHILD_RELATION)), None)
+        return parent == root and bool(labels & {DEV_LABEL, SPRINT_LABEL}) and not (
+            labels & {FIX_LABEL, FINDING_LABEL} or b.get('issue_type') == 'bug')
     actual = {b['id'] for b in beads if is_sprint(b)}
     for bid in sorted(actual - planned):
-        yield f'{bid}: extra live sprint; replan required'
-    for bid in sorted(planned - actual):
-        yield f'{bid}: missing live sprint under {root}'
-    for row in runtime['sprints']:
-        for bid, model in ((row['dev_bead_id'], SprintBead), (row['sanity_bead_id'], SanityBead)):
-            if bid in by_id:
-                yield from problems(by_id[bid], model)
-    since = by_id.get(root, {}).get('created_at', '')
-    for b in beads:
-        if (b.get('status') != 'closed' and not b.get('parent') and not deps(b, 'parent-child')
-                and b.get('issue_type') != 'epic' and b.get('created_at', '') >= since):
-            yield f"{b['id']}: task at the top level; parent it under its epic"
+        yield PROBLEM_LINE.format(bead=bid, message='extra live sprint; replan required')
+    for bid in sorted(planned - set(by_id)):
+        yield PROBLEM_LINE.format(bead=bid, message=f'missing live sprint under {root}')
+    for row in rows:
+        for predecessor in row.get('depends_on', []):
+            gates = {b['id'] for b in beads if predecessor in deps(b, BLOCKS_RELATION)
+                     and (SANITY_LABEL in (b.get('labels') or []) or b['id'] in {predecessor + '-sanity', predecessor + '.sanity'})}
+            if not deps(by_id.get(row['sprint'], {}), BLOCKS_RELATION) & (gates | {predecessor}):
+                yield PROBLEM_LINE.format(bead=row['sprint'], message=f'depends_on {predecessor} lacks edge to predecessor sanity or sprint')
 
 
 def annotate(svg, runtime):

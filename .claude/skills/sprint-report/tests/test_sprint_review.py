@@ -142,6 +142,12 @@ assert.deepEqual(run(null, {}, false).messages, []);
 
 class PublicationTests(unittest.TestCase):
     def test_publish_and_validate_remote_artifact_without_touching_source_checkout(self):
+        self.check_publication(False)
+
+    def test_configured_artifact_ignores_other_config_and_parses_plan_offline(self):
+        self.check_publication(True)
+
+    def check_publication(self, configured):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             remote, repo = base / 'remote.git', base / 'repo'
@@ -156,9 +162,15 @@ class PublicationTests(unittest.TestCase):
             config = repo / '.claude/project/atm-bd-orchestration.yaml'
             config.parent.mkdir(parents=True)
             config.write_text('plans_dir: work/plans\n')
-            plan = repo / 'work/plans/phase-test/sprints.jsonl'
+            plan = repo / ('work/plans/phase-test.jsonl' if configured else 'work/plans/phase-test/sprints.jsonl')
             plan.parent.mkdir(parents=True)
-            plan.write_text('["test-1", "gate", []]\n')
+            plan.write_text('{"sprint":"tp-test-1"}\n' if configured else '["test-1", "gate", []]\n')
+            if configured:
+                (repo / '.atm-bd').mkdir()
+                (repo / '.atm-bd/phase-test.toml').write_text(
+                    'root="tp-phase-test"\nsprints="work/plans/phase-test.jsonl"\n'
+                    'integration_branch="integrate/phase-test"\n')
+                (repo / '.atm-bd/phase-unrelated.toml').write_text('malformed = [')
             run('add', 'README', str(plan.relative_to(repo)), cwd=repo)
             run('commit', '-m', 'base', cwd=repo)
             run('remote', 'add', 'origin', str(remote), cwd=repo)
@@ -171,7 +183,10 @@ class PublicationTests(unittest.TestCase):
             with patch.object(artifact_check, 'run_json', return_value=root):
                 with self.assertRaisesRegex(RuntimeError, 'required phase index/HTML artifact missing'):
                     artifact_check.check_artifact(repo, 'tp-phase-test', plan)
-            html = dag.html_view('<svg xmlns="http://www.w3.org/2000/svg"/>', 'test', 'tp-phase-test')
+            svg = ('<svg xmlns="http://www.w3.org/2000/svg" data-phase-root="tp-phase-test">'
+                   '<g class="node" data-kind="sprint" data-sprint="tp-test-1">'
+                   '<title>tp-test-1</title></g></svg>') if configured else '<svg xmlns="http://www.w3.org/2000/svg"/>'
+            html = dag.html_view(svg, 'test', 'tp-phase-test')
             result = publication.publish_artifact(repo, 'integrate/phase-test', 'test', html)
             self.assertEqual(run('rev-parse', 'HEAD', cwd=repo), initial)
             self.assertEqual(run('diff', '--cached', '--name-only', cwd=repo), 'unrelated.txt')
@@ -180,11 +195,11 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual(remote_head, result['commit'])
             changed = set(run('diff-tree', '--no-commit-id', '--name-only', '-r', result['commit'], cwd=repo).splitlines())
             self.assertEqual(changed, {result['html_path']})
-            self.assertEqual(result['html_path'], 'work/plans/phase-test/phase-test-dag.html')
+            self.assertEqual(result['html_path'], 'work/plans/phase-test-dag.html' if configured else 'work/plans/phase-test/phase-test-dag.html')
             self.assertEqual(run('worktree', 'list', '--porcelain', cwd=repo).count('worktree '), 1)
             with patch.object(artifact_check, 'run_json', return_value=root):
                 artifact_check.check_artifact(repo, 'tp-phase-test', plan)
-                plan.write_text('["test-2", "other-gate", []]\n')
+                plan.write_text('{"sprint":"tp-test-2"}\n' if configured else '["test-2", "other-gate", []]\n')
                 with self.assertRaisesRegex(RuntimeError, 'phase plan differs'):
                     artifact_check.check_artifact(repo, 'tp-phase-test', plan)
             # Publishing identical bytes must not create an extra commit.

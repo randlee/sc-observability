@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tomllib
 import xml.etree.ElementTree as ET
 
 HERE = Path(__file__).resolve().parent
@@ -14,36 +15,78 @@ sys.path.insert(0, str(HERE.parents[1] / 'sprint-report/scripts'))
 from phase_config import load as load_config, select
 from locked_plan import load, index, alignment, annotate, check_html
 from sprint_index_common import run_json, phase_id
+from plan_contract import EXIT_VALID, EXIT_CANNOT_RUN, EXIT_PROBLEMS, PROBLEM_LINE
 
 
-def validate(repo, config, ci=False, root=None, explicit_index=None, source=None, no_doctor=False):
+def warn(message):
+    print(f'warning: {message}', file=sys.stderr)
+
+
+def validate(repo, config, ci=False, root=None, explicit_index=None, source=None, no_doctor=False, refresh=False):
+    if Path(config).name == 'current-phase.toml':
+        config = select(repo, root)
     configured_root, plan, diagram = load_config(repo, config)
     if root and root != configured_root:
         raise ValueError(f'{config}: root does not match --root {root}')
     if explicit_index and (repo / explicit_index).resolve() != plan:
         raise ValueError(f'{config}: --index differs from configured plan path')
-    if ci and Path(config).name == 'current-phase.toml':
-        raise ValueError('CI must use tracked phase config, not current-phase.toml')
-    rows = load(plan)
+    try:
+        rows = load(plan)
+    except ValueError as exc:
+        print(PROBLEM_LINE.format(bead=configured_root, message=f'invalid plan schema: {exc}'))
+        return EXIT_PROBLEMS
     if ci:
-        check_html(rows, diagram.read_text(), configured_root)
-        print(f'plan/DAG sprint set valid: {plan.relative_to(repo)} (live bead alignment is local only)')
-        return 0
+        try:
+            check_html(rows, diagram.read_text(), configured_root)
+        except (ValueError, OSError, ET.ParseError) as exc:
+            print(PROBLEM_LINE.format(bead=configured_root, message=str(exc)))
+            return EXIT_CANNOT_RUN
+        print(f'plan/DAG sprint set valid: {plan.relative_to(repo)}')
+        return EXIT_VALID
     beads = source if source is not None else run_json(repo, 'bd', 'list', '--all', '-n', '0', '--json')
-    if not any(b.get('id') == configured_root for b in beads):
-        raise ValueError(f'phase root missing: {configured_root}')
-    # Report missing sprints before discovering their sanity gates.
-    missing = {r['sprint'] for r in rows} - {b['id'] for b in beads}
-    if missing:
-        raise ValueError('missing live sprint(s): ' + ', '.join(sorted(missing)))
-    runtime = index(rows, beads, configured_root)
-    errors = list(alignment(rows, beads, configured_root, runtime))
+    if not isinstance(beads, list) or any(not isinstance(b, dict) or not isinstance(b.get('id'), str) for b in beads):
+        raise ValueError('bd output must be an array of bead objects with string ids')
+    errors = list(alignment(rows, beads, configured_root))
+    config_path = Path(config) if Path(config).is_absolute() else repo / config
+    integration = tomllib.loads(config_path.read_text())['integration_branch']
+    root_bead = next((b for b in beads if b['id'] == configured_root), {})
+    if integration != (root_bead.get('metadata') or {}).get('integration_branch'):
+        errors.append(PROBLEM_LINE.format(bead=configured_root, message='integration_branch differs from root metadata.integration_branch'))
+    try:
+        from bead_schema import problems, SprintBead
+        for bead in beads:
+            if bead['id'] in {r['sprint'] for r in rows}:
+                for problem in problems(bead, SprintBead):
+                    warn(problem)
+    except Exception as exc:
+        warn(f'bead schema: {exc}')
     if not no_doctor:
-        doctor = run_json(repo, 'bd', 'doctor', '--json')
-        errors += [f"bd doctor: {c['name']}: {c.get('message', '')}" for c in doctor['checks'] if c.get('status') == 'error']
+        try:
+            doctor = subprocess.run(['bd', 'doctor', '--json'], cwd=repo, capture_output=True, text=True)
+            if doctor.stderr:
+                print(doctor.stderr, end='', file=sys.stderr)
+            if doctor.returncode:
+                warn(f'bd doctor exited {doctor.returncode}: {doctor.stdout}')
+            else:
+                for check in json.loads(doctor.stdout).get('checks', []):
+                    if check.get('status') != 'ok':
+                        warn(f"bd doctor: {check.get('name')}: {check.get('message', '')}")
+        except Exception as exc:
+            warn(f'bd doctor: {exc}')
     if errors:
-        print('\n'.join(errors), file=sys.stderr)
-        return 5
+        print('\n'.join(errors))
+        return EXIT_PROBLEMS
+    if refresh and source is None:
+        try:
+            refresh_dag(repo, rows, beads, configured_root, diagram)
+        except Exception as exc:
+            warn(f'DAG rendering: {exc}')
+    print(f'plan valid: {len(rows)} sprints')
+    return EXIT_VALID
+
+
+def refresh_dag(repo, rows, beads, configured_root, diagram):
+    runtime = index(rows, beads, configured_root)
     from sprint_dag import build_graph, collect_state, states, qa_states, dot_source, render, overlay, html_view
     # Normalize bd list/show edge spellings for the existing live DAG renderer.
     normalized = {b['id']: {**b, 'dependencies': [
@@ -51,6 +94,8 @@ def validate(repo, config, ci=False, root=None, explicit_index=None, source=None
         for e in b.get('dependencies', [])]} for b in beads}
     graph = build_graph(runtime, normalized)
     snapshot = collect_state(repo, graph, normalized, {})
+    for key, error in snapshot.get('errors', {}).items():
+        warn(f'ATM evidence {key}: {error}')
     icons, qa = states(graph, snapshot, runtime), qa_states(graph, normalized, runtime)
     with tempfile.TemporaryDirectory(prefix='validate-plan-') as directory:
         dot, svg = Path(directory) / 'plan.dot', Path(directory) / 'plan.svg'
@@ -59,12 +104,16 @@ def validate(repo, config, ci=False, root=None, explicit_index=None, source=None
         rendered = overlay(svg.read_text(), icons, snapshot['captured_at'], qa)
         html = html_view(annotate(rendered, runtime), phase_id(configured_root, {}), configured_root)
     check_html(rows, html, configured_root)
-    with tempfile.NamedTemporaryFile(mode='w', dir=diagram.parent, delete=False) as stream:
-        stream.write(html)
-        staged = Path(stream.name)
-    staged.replace(diagram)
-    print(f'plan valid: {len(rows)} sprints; DAG refreshed: {diagram.relative_to(repo)}')
-    return 0
+    staged = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', dir=diagram.parent, delete=False) as stream:
+            staged = Path(stream.name)
+            stream.write(html)
+        staged.replace(diagram)
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+    print(f'DAG refreshed: {diagram.relative_to(repo)}')
 
 
 def main():
@@ -78,9 +127,10 @@ def main():
     sources.add_argument('--beads', type=Path, help='test input JSON array; not proof of live bead alignment')
     parser.add_argument('--no-doctor', action='store_true')
     parser.add_argument('--ci', action='store_true')
+    parser.add_argument('--refresh', action='store_true', help='plan gate only: regenerate live DAG')
     args = parser.parse_args()
     repo = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()).resolve()
-    if args.ci and any((args.file, args.beads, args.no_doctor, args.scope)):
+    if args.ci and any((args.file, args.beads, args.no_doctor, args.scope, args.refresh)):
         parser.error('--ci validates committed plans only; live/import options are not allowed')
     source = None
     if args.file:
@@ -95,19 +145,21 @@ def main():
             raise ValueError('no tracked .atm-bd/<phase>.toml plan configurations')
     else:
         configs = [args.config or select(repo, args.root)]
-    failed = False
+    result = EXIT_VALID
     for config in configs:
         try:
-            failed |= validate(repo, config, args.ci, args.root, args.index, source, args.no_doctor) != 0
-        except (OSError, ValueError, RuntimeError, KeyError, ET.ParseError, subprocess.CalledProcessError) as exc:
+            code = validate(repo, config, args.ci, args.root, args.index, source, args.no_doctor, args.refresh)
+            if code:
+                result = code
+        except Exception as exc:
             print(f'validate-plan: {exc}', file=sys.stderr)
-            failed = True
-    return 5 if failed else 0
+            return EXIT_CANNOT_RUN
+    return result
 
 
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
+    except Exception as exc:
         print(f'validate-plan: {exc}', file=sys.stderr)
-        sys.exit(2)
+        sys.exit(EXIT_CANNOT_RUN)

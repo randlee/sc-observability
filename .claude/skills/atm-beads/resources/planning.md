@@ -25,8 +25,7 @@ rather than reaching an agent:
 | sprint dev bead | [`sprint-bead.json.j2`](../templates/sprint-bead.json.j2) | `<prefix>-<x>-<n>` |
 | sprint sanity check | [`dev-sanity-bead.json.j2`](../templates/dev-sanity-bead.json.j2) | `<dev id>-sanity` |
 
-1. Run `bd doctor --json`. Any check with `"status": "error"` stops the
-   plan; report it to lead.
+1. Run `bd doctor --json`; report its warnings without turning them into plan contract failures.
 2. Write one vars file per bead (examples in [`../examples/`](../examples/))
    and render each strictly into one JSONL file:
 
@@ -42,7 +41,8 @@ rather than reaching an agent:
 3. Write the phase definition by hand:
    `<plan-folder>/phase-<x>.jsonl` has one
    `{ "sprint": "<bead-id>" }` record per sprint
-   (see "Phase definition" below).
+   (see "Phase definition" below). Write tracked `.atm-bd/<phase>.toml` with
+   `root`, `sprints`, and `integration_branch` before pre-import validation.
 4. Validate the rendered plan against it. This step is mandatory:
 
    ```bash
@@ -51,10 +51,10 @@ rather than reaching an agent:
    ```
 
    `--root` is the id of the phase root in `plan.jsonl`. Exit 5 lists every
-   problem. Fix them all and render again.
+   contract problem. Fix them all and render again. `--file` and `--beads` never render HTML.
 5. `bd import --dry-run -i <scratch>/plan.jsonl`, then `bd import -i
    <scratch>/plan.jsonl`. Create the plan-review bead. Run `validate-plan
-   --root <root>` against live beads; it regenerates the live-state HTML beside
+   --root <root> --refresh` at the plan gate against live beads; it regenerates the live-state HTML beside
    the configured plan. Commit the tracked `.atm-bd/<phase>.toml`, canonical
    plan and diagram together before requesting review. No viewer or push is
    performed by validation.
@@ -66,21 +66,20 @@ Keep `<scratch>` outside the repository.
 
 ## Phase definition (configured plan JSONL)
 
-`<plan-folder>/phase-<x>.jsonl` is the authored, committed graph authority.
-Planning five sprints creates five sprint beads and their sanity beads. Each line
-contains only a sprint bead id. Beads owns all content, dependencies and state.
-The phase root and plan location live in `.atm-bd/<phase>.toml`.
+`<plans_dir>/<phase>.jsonl` locks the committed sprint set.
+The phase TOML names `root`, `sprints`, and `integration_branch`.
+Each line permits only `sprint` and optional `depends_on`:
 
 ```jsonl
-{"sprint": "obs-e-1"}
-{"sprint": "obs-e-3"}
+{"sprint": "<first-sprint>"}
+{"sprint": "<dependent-sprint>", "depends_on": ["<first-sprint>"]}
 ```
 
-The index locks membership. A missing or extra live sprint fails validation;
-finding and fix beads do not change the sprint set. Adding/removing a sprint
-requires updating the plan and beads, validating, and plan review. Dependency
-edges are not locked or validated by this initial contract. The DAG skill
-queries the bead dependencies and state to draw the current graph.
+Optimize for parallel execution; dependencies must completely block the dependent sprint.
+Guidance edges and waves never appear in the plan file.
+Default dependent dev to predecessor sanity; use a sprint-bead edge only on user request.
+Validation accepts an edge to either predecessor sanity or sprint.
+Adding or removing a sprint requires replanning; finding/fix beads do not alter the sprint set.
 
 Hierarchy:
 
@@ -92,17 +91,14 @@ Hierarchy:
   sanity beads. No `validates` or `caused-by` edge to the sprint: bd allows one
   edge type per pair, and the parent link is the membership.
 
-`phase-<x>-dag.html` is the generated plan-review artifact beside the plan.
-Configure `root` and `sprints = "<plan-folder>/phase-<x>.jsonl"` in tracked
-`.atm-bd/<phase>.toml`. Optional untracked `.atm-bd/current-phase.toml` selects
-local work; CI ignores it. `validate-plan` checks live beads then refreshes HTML.
-`validate-plan --ci` checks tracked plan files and HTML sprint-set alignment without
-Beads or ATM. Only the local run proves live bead alignment.
-
-Adding/removing a sprint requires editing the canonical plan, running validation,
-committing the regenerated diagram, and plan review. Bead-only membership
-changes fail. Finding/fix beads are not sprints. CI compares rendered sprint
-nodes with the plan; live bead alignment is verified locally.
+The generated DAG is `<plans_dir>/<phase>-dag.html`, beside the plan.
+Only the plan gate runs `validate-plan --root <root> --refresh` and writes HTML.
+Assignment checks are read-only and need no renderer; pre-import `--file`/`--beads` never render.
+The phase's own tracked TOML is authoritative; `current-phase.toml` cannot override its path.
+`validate-plan --ci` checks schema and committed HTML sprint membership without a database.
+Any nonzero exit blocks plan approval; see [Validation](../SKILL.md#validation) for the five exit-5 cases.
+Bead schema, sanity discovery, doctor, ATM evidence, and rendering issues are nonfatal warnings.
+Commit configuration, plan, and regenerated diagram together before approval.
 
 ## Phase Root
 
@@ -123,9 +119,9 @@ nodes with the plan; live bead alignment is verified locally.
 | `description` | goal, deliverables, required work, and what the sprint does not close |
 | `design` | public contract, types, code samples, exact targets |
 | `acceptance_criteria` | acceptance criteria and the validation commands |
-| `assignee` | the ATM identity that owns it (`my-dev`); must be in `atm members` |
+| `assignee` | leave unset during planning; choose an available eligible agent at dispatch |
 | `parent` | the phase root |
-| `blocked_by` | the **sanity check** bead of each prerequisite sprint (`obs-d-4-sanity`), never its dev bead |
+| `blocked_by` | the sanity check bead of a hard prerequisite by default; use its sprint bead only on user request |
 
 Its labels (`phase-<x>`, `stage:dev`, `stack:<stack>`, `train:<t>` when
 set) and metadata come from these required vars:
@@ -145,8 +141,9 @@ set) and metadata come from these required vars:
 | `requirements` | every REQ id that governs the work (`LOG-001`, `OTLP-008`, `ATM-BASE-3`, `NFR-…`), or exactly `["NONE"]` |
 | `adrs` | every ADR that governs the work (`ADR-011`), or exactly `["NONE"]` |
 
-Optional: `model_class` (`astra`, `terra`, `luna`), `release_train`,
-`priority`.
+Set `difficulty` to `hard`, `normal`, or `fast`; do not name agents or model classes in plans.
+The lead chooses concrete agents at dispatch so parallel sprints can use available workers.
+Optional: `release_train`, `priority`.
 
 `requirements` and `adrs` are never left empty. The dev reads each listed id
 before coding, QA checks the change against each one, and plan review
@@ -175,10 +172,10 @@ Branch and id naming follows the repository's "Plan Naming" in its QA policy
 
 ## Dev Sanity Check Bead
 
-One per sprint: `dev_bead` = the sprint's dev bead, `assignee` = the
-member of the `dev-sanity` role (`scripts/resolve-role dev-sanity`). It is blocked by its dev bead, and later sprints
-wait on it rather than on the dev bead, so a sprint's dependents start only
-after its work passes the sanity check. See [`dev-sanity.md`](dev-sanity.md).
+One per sprint: `dev_bead` = the sprint's dev bead; leave `assignee` unset until dispatch.
+Resolve the `dev-sanity` role when dispatching. The sanity bead blocks on its dev bead.
+A hard-dependent sprint blocks on predecessor sanity by default; a user-requested sprint edge is also accepted.
+See [`dev-sanity.md`](dev-sanity.md).
 
 ## Stack
 
@@ -204,4 +201,4 @@ until it exits 0. What it checks is listed once, in the header of
 the models in [`scripts/bead_schema.py`](../scripts/bead_schema.py). Everything
 else in this file (governing ids exist and govern the work, `owned_paths`
 of concurrent sprints are disjoint, `relation`, `layer` and `pr_target` agree,
-assignees are ATM members) is checked by plan review, not by the script.
+difficulty is hard/normal/fast and named agents are absent) is checked by plan review, not by the script.
