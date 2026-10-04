@@ -13,12 +13,12 @@ Generated snapshots must represent actual current code. A comparison of two chec
 | Sprint | Contract | Storage / existing source |
 | --- | --- | --- |
 | e-8 | Rust, Python and TypeScript public APIs | `schema/api/<surface>/<version>.json`; existing API tools |
-| e-9 | Binding/IPC payloads and errors | `schema/bindings/`; existing binding schema generator and v1 contracts |
+| e-9 | Binding/IPC payloads and errors | Existing canonical `bindings/schema/`, retaining immutable versions there |
 | e-10 | CLI command syntax and JSON responses | `schema/cli/sc-otel/commands/` and `results/`; clap and actual response types |
 | e-11 | Public configuration/input formats | `schema/config/<format>/<version>.json`; existing parsers/defaults |
 | e-12 | Durable SQLite storage | Immutable SQL/migrations alongside the existing durable-store implementation |
 
-These do not depend on e-1 or each other. Resolve overlapping existing-source edits at publication rather than impose new prerequisite chains. Each has its normal dev/sanity/QA records. e-8 reuses `obs-phase-e-api-governance-replacement` rather than duplicating that placeholder.
+These do not depend on e-1 or each other. Each has a disjoint file fence in its authoritative bead: e-11 owns public configuration parsers/tests; e-12 owns storage schema/opening/tests, not the configuration loader. No broad shared durable-directory ownership is permitted. Shared files have one owner, not publication-time conflict resolution as a substitute. Each has its normal dev/sanity/QA records. The existing e-8 placeholder is renamed to `obs-e-8`, not duplicated.
 
 ## CLI tooling
 
@@ -26,6 +26,58 @@ Use clap's `CommandFactory` and built command introspection (`get_subcommands`, 
 
 ## Existing compatibility to preserve
 
-Binding schemas already identify v1, CLI results use `sc-otel.result/v1`, and durable SQLite uses `PRAGMA user_version = 1` with newer-schema rejection. Preserve these baselines. Move binding schema ownership only with its consumer paths updated; retain compatibility references as required, never two editable sources. Do not copy upstream-owned OTLP schemas. Database work adds neither a cache nor seven-day retention and invents no migration merely to demonstrate machinery.
+Binding schemas already identify v1, CLI results use `sc-otel.result/v1`, and durable SQLite uses `PRAGMA user_version = 1` with newer-schema rejection. Preserve these baselines. Keep canonical binding schema paths unchanged, including existing generation-manifest and caller contracts; retain immutable versions in `bindings/schema/` without relocating callers or creating a second editable source. Do not copy upstream-owned OTLP schemas. Database work adds neither a cache nor seven-day retention and invents no migration merely to demonstrate machinery.
 
 Implementation tests must detect a deliberate contract mismatch and retain valid current behavior. No new dashboards, approval certificates, standalone CI jobs, or exhaustive release matrix. Snapshot history is necessary contract data; the plan itself retires once implemented.
+
+## Selected versions and history checks
+
+Public API snapshots use the owning published package version from its existing
+package manifest, separately per language surface. Wire/config schemas use their
+existing identifier where present; otherwise the owning parser's test selects a
+literal contract version (initially 1), without adding a field to user files.
+SQLite continues to select through `PRAGMA user_version`.
+
+The existing release tag/commit supplies the immutable historical baseline:
+released snapshot files cannot be edited or deleted. A changed API under a
+released package version must bump that package version and add its snapshot;
+independent wire/config changes must select a new contract version and retain
+prior files. An unreleased candidate snapshot may be corrected before release.
+The first snapshot capture establishes the current implementation baseline,
+not invented historical snapshots. Tests compare generated current code to the
+selected snapshot and check retained released files against that explicit git
+release baseline. No mutable CI baseline refresh or registry service is added.
+
+## API verification feasibility and ADR-022
+
+e-8 owns the ADR-022 verification amendment for the user's snapshot decision.
+It retains uniform public interfaces for the same release target/features and
+released compatibility. The fast unit comparison must obtain its current
+surface from current source/compiled exports, with deterministic normalization;
+comparing two stored snapshots is insufficient. Its first implementation step is a bounded prototype using the existing
+`public_api_parity.py` extractor and local build artifacts on current source;
+e-8 measures the complete path on this repository: total fresh
+verification must be under one minute, including any compilation it needs.
+Include source invalidation in that measurement. Separately record extraction, compilation and comparison durations; cached
+results cannot conceal a stale source revision. If no authoritative method
+meets the budget, e-8 acceptance fails: report the concrete result for a user
+decision before replacing it with a weaker test. Independent sprints continue;
+this plan does not claim the prototype has already demonstrated feasibility. Do not add another automatic extraction job.
+
+Existing native release producers provide full release-target/feature parity
+proof; the fast local unit comparison cannot claim it. Reuse the existing
+comparator and release machinery; the amendment distinguishes these proofs
+without reducing the common-API contract or adding an exhaustive new matrix.
+
+## Configuration compatibility
+
+e-11 covers telemetry YAML (`TelemetryFileConfig`, loaded by
+`durable/config_file.rs`) and the importer YAML supplied through `--config`
+(`scripts/sanity-telemetry/import_sanity.py`, `load_config`/`sources`).
+Capture actual accepted fields, defaults and unknown-key rules for both.
+Importer invalid source kinds and duplicate paths remain rejected. In-memory
+configuration types belong to e-8, and CLI result schemas to e-10. In particular,
+`durable/config_file.rs` intentionally ignores consumer-specific YAML keys;
+its versioning tests must preserve that behavior, not turn it into strict
+unknown-key rejection. Invalid-value cases follow existing parser rejection.
+Internal temporary files and upstream-owned OTLP wire schemas stay excluded.
