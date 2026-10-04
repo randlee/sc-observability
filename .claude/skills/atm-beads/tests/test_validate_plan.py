@@ -1,6 +1,7 @@
 """Locked plan membership, live edge alignment, and offline diagram checks."""
 import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -10,11 +11,11 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 sys.path.insert(0, str(ROOT.parent / 'sprint-report/scripts'))
-from locked_plan import load, index, alignment, annotate, check_html, metrics
+from locked_plan import load, index, alignment, annotate, check_html
 from phase_config import load as config_load
 from sprint_dag import plan_graph, dot_source, render, html_view
 
-ROWS = [{'sprint': 'x-t-1', 'depends_on': []}, {'sprint': 'x-t-2', 'depends_on': ['x-t-1']}]
+ROWS = [{'sprint': 'x-t-1'}, {'sprint': 'x-t-2'}]
 
 
 def sprint(bid, dependencies):
@@ -70,13 +71,12 @@ class PlanValidation(unittest.TestCase):
         # Existing sanity cannot mask a missing dev.
         self.assertTrue(any('missing live sprint' in e for e in self.check([b for b in BEADS if b['id'] != 'x-t-2'])))
 
-    def test_missing_or_extra_edge_rejected(self):
-        for target, deps, phrase in [('x-t-2', [], 'missing sprint dependency'),
-                                     ('x-t-1', ['x-t-2-sanity'], 'extra sprint dependency')]:
-            beads = copy.deepcopy(BEADS)
-            next(b for b in beads if b['id'] == target)['dependencies'] = [
-                {'type': 'blocks', 'depends_on_id': d} for d in deps]
-            self.assertTrue(any(phrase in e for e in self.check(beads)))
+    def test_live_edges_are_not_locked_by_plan(self):
+        beads = copy.deepcopy(BEADS)
+        beads[3]['dependencies'] = []
+        self.assertEqual(self.check(beads), [])
+        runtime = index(ROWS, beads, 'x-phase-t')
+        self.assertEqual(runtime['sprints'][1]['depends_on_sanity_bead_ids'], [])
 
     def test_finding_fix_and_operational_gate_do_not_expand_sprints(self):
         beads = copy.deepcopy(BEADS)
@@ -84,18 +84,6 @@ class PlanValidation(unittest.TestCase):
                   {'id': 'fix', 'parent': 'x-t-1', 'labels': ['stage:dev']}]
         beads[1]['dependencies'].append({'type': 'blocks', 'depends_on_id': 'plan-review'})
         self.assertEqual(self.check(beads), [])
-
-    def test_cross_sprint_qa_and_container_edges_rejected(self):
-        beads = copy.deepcopy(BEADS)
-        beads.append({'id': 'x-t-1-qa', 'parent': 'x-t-1', 'labels': ['stage:qa']})
-        for target in ('x-t-1-qa', 'x-t-1'):
-            beads[3]['dependencies'][0]['depends_on_id'] = target
-            self.assertTrue(any('cross-sprint' in e for e in self.check(beads)))
-
-    def test_parallel_width_and_critical_path(self):
-        rows = self.parse([{'sprint': 'a', 'depends_on': []}, {'sprint': 'b', 'depends_on': []},
-                           {'sprint': 'c', 'depends_on': ['a']}, {'sprint': 'd', 'depends_on': ['a']}])
-        self.assertEqual(metrics(rows), (2, 3))
 
     def test_config_colocation_and_path_escape(self):
         cfg = self.directory / 'config.toml'
@@ -119,13 +107,47 @@ class PlanValidation(unittest.TestCase):
         html = html_view(annotate(svg.read_text(), runtime), 't', 'x-phase-t')
         check_html(ROWS, html, 'x-phase-t')
         check_html(ROWS, html + '<!-- status timestamp changed -->', 'x-phase-t')
-        changed = [ROWS[0], {'sprint': 'x-t-2', 'depends_on': []}]
-        with self.assertRaisesRegex(ValueError, 'edges differ'):
-            check_html(changed, html, 'x-phase-t')
         with self.assertRaisesRegex(ValueError, 'sprint set differs'):
             check_html(ROWS[:1], html, 'x-phase-t')
         with self.assertRaisesRegex(ValueError, 'root differs'):
             check_html(ROWS, html, 'wrong-root')
+
+    def test_cli_refresh_and_offline_ci_without_services(self):
+        repo = self.directory / 'repo'
+        repo.mkdir()
+        subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+        (repo / '.atm-bd').mkdir()
+        (repo / 'plans').mkdir()
+        (repo / '.atm-bd/t.toml').write_text('root="x-phase-t"\nsprints="plans/t.jsonl"\n')
+        (repo / 'plans/t.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in ROWS))
+        bead_file = self.directory / 'beads.json'
+        bead_file.write_text(json.dumps(BEADS))
+        bin_dir = self.directory / 'bin'
+        bin_dir.mkdir()
+        (bin_dir / 'atm').write_text('#!/bin/sh\nexit 1\n')
+        (bin_dir / 'atm').chmod(0o755)
+        (bin_dir / 'bd').write_text('#!/bin/sh\nif [ "$1" = blocked ]; then echo "[]"; else exit 99; fi\n')
+        (bin_dir / 'bd').chmod(0o755)
+        env = {**os.environ, 'PATH': str(bin_dir) + os.pathsep + os.environ['PATH']}
+        command = [sys.executable, str(ROOT/'scripts/validate-plan'), '--config', '.atm-bd/t.toml']
+        result = subprocess.run(command + ['--beads', str(bead_file), '--no-doctor'], cwd=repo, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        html = repo / 'plans/t-dag.html'
+        self.assertTrue(html.exists())
+        # CI must not query either service; both now fail every invocation.
+        (bin_dir/'bd').write_text('#!/bin/sh\nexit 99\n')
+        result = subprocess.run(command + ['--ci'], cwd=repo, env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        saved = html.read_text()
+        changed = ROWS[:1]
+        (repo/'plans/t.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in changed))
+        result = subprocess.run(command + ['--ci'], cwd=repo, env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('sprint set differs', result.stderr)
+        result = subprocess.run(command + ['--beads', str(bead_file), '--no-doctor'], cwd=repo, env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('extra live sprint', result.stderr)
+        self.assertEqual(html.read_text(), saved)  # invalid plan does not publish an artifact
 
     def test_schemas_unchanged(self):
         subprocess.run([sys.executable, str(ROOT/'scripts/bead_schema.py'), 'export', str(self.directory)], check=True)

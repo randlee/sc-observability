@@ -144,7 +144,7 @@ A gate and its edges are created only on the user's explicit instruction for
 that gate.
 
 Human gates require explicit user agreement recorded on the gate bead or phase
-root; the canonical configured plan JSONL contains only planned sprint dependencies.
+root; the configured plan JSONL contains only sprint bead ids.
 
 ### Parallel Quick Fix
 
@@ -206,7 +206,7 @@ No dev bead is dispatched until the plan passes review.
    `docs/plans/phase-e-dag.html` in the same folder. Any nonzero exit blocks
    approval. Commit the tracked phase config, plan and regenerated diagram
    together on the review branch. Validation never pushes or opens a viewer.
-   CI checks tracked configs, plan structure and HTML sprint/edge alignment;
+   CI checks tracked configs, plan structure and HTML sprint-set alignment;
    live bead alignment is checked locally, not by CI.
 
 3. Dispatch it with

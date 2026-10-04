@@ -375,7 +375,8 @@ def generate(repo, index, counts, phase, output=None, open_image=False, open_vie
         render('layout', path('.dot'), path('-layout.svg'))
     svg = overlay(path('-layout.svg').read_text(), icons, snapshot['captured_at'], qa)
     path('.svg').write_text(svg)
-    path('.html').write_text(html_view(svg, phase, index['root_bead_id']))
+    from locked_plan import annotate
+    path('.html').write_text(html_view(annotate(svg, index), phase, index['root_bead_id']))
     render('png', path('.svg'), path('.png'))
     for suffix, data in [('-data.json', graph), ('-state.json', snapshot), ('-icons.json', icons)]:
         path(suffix).write_text(json.dumps(data, indent=2) + '\n')

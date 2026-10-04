@@ -64,7 +64,7 @@ Read only the one the current job needs.
 
 Every phase plan has a tracked `.atm-bd/<phase>.toml` configuration naming
 its `root` and `sprints` JSONL path. In sc-obs this is `docs/plans/phase-e.jsonl`.
-Each line names a sprint bead and its `depends_on` sprint ids; sanity ids and
+Each line names a sprint bead only; sanity ids and
 all state are queried from Beads. `validate-plan` regenerates the co-located
 `phase-e-dag.html` before approval. Commit configuration, plan and diagram
 on the reviewed branch. No separate renderer invocation is required.
@@ -92,7 +92,7 @@ Tracked `.atm-bd/<phase>.toml` supplies `root` and `sprints` (for example
 `docs/plans/phase-e.jsonl`). `validate-plan --config <file>` verifies live
 beads and refreshes `phase-e-dag.html` in that same folder. Nonzero blocks
 plan approval. Commit config, plan, and HTML together. `--ci` reads tracked
-phase configs and checks plan structure and HTML sprint/edge alignment
+phase configs and checks plan structure and HTML sprint-set alignment
 without Beads/ATM; it does not prove live bead alignment. The untracked
-`current-phase.toml` is only a local convenience. Sprint membership/edge
+`current-phase.toml` is only a local convenience. Sprint membership
 changes require replanning and plan review, not bead-only edits.

@@ -178,7 +178,7 @@ screen said. What happens next depends on the verdict:
   checked sprint/finding; never select a default. The dispatch report prints
   `UNCLASSIFIED` and no agent for a live bead missing it.
 - A blocking finding never adds a dependency to another planned sprint. The
-  canonical configured plan JSONL plan is the sole source of those edges; file and
+  configured plan JSONL locks sprint membership; dependency state lives in Beads; file and
   dispatch the finding's own remediation through its normal finding/fix flow.
 - Findings are `parallel_safe` by default. Set `blocked_by` only to another finding
   of this round, when its fix needs that one's fix first.

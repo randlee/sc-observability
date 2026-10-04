@@ -41,7 +41,7 @@ rather than reaching an agent:
 
 3. Write the phase definition by hand:
    `<plan-folder>/phase-<x>.jsonl` has one
-   `{ "sprint": "<bead-id>", "depends_on": [] }` record per sprint
+   `{ "sprint": "<bead-id>" }` record per sprint
    (see "Phase definition" below).
 4. Validate the rendered plan against it. This step is mandatory:
 
@@ -68,25 +68,19 @@ Keep `<scratch>` outside the repository.
 
 `<plan-folder>/phase-<x>.jsonl` is the authored, committed graph authority.
 Planning five sprints creates five sprint beads and their sanity beads. Each line
-contains only the sprint bead id and locked sprint dependencies; Beads owns all
-content and state. The phase root and plan location live in `.atm-bd/<phase>.toml`.
+contains only a sprint bead id. Beads owns all content, dependencies and state.
+The phase root and plan location live in `.atm-bd/<phase>.toml`.
 
 ```jsonl
-{"sprint": "obs-e-1", "depends_on": []}
-{"sprint": "obs-e-3", "depends_on": ["obs-e-1"]}
+{"sprint": "obs-e-1"}
+{"sprint": "obs-e-3"}
 ```
 
-`depends_on` names prerequisite sprint ids. The dependent's dev bead blocks
-on the predecessor's sanity bead, never its QA bead or sprint container.
-Gate ids are queried from Beads. No root, title, status, sanity id, finding or
-fix is serialized in the plan. Unknown ids, duplicate edges and cycles fail.
-Validation reports critical-path length and maximum parallel width.
-
-The file is never generated from beads and beads are never generated from the
-file. A plan change is one planner transaction: change the beads, edit the
-file, commit both. `validate-plan --root <root>` checks the sprint and
-sanity beads against it (see `SKILL.md`, Validation). It must stay green from
-plan approval to phase end; every template runs it before a claim.
+The index locks membership. A missing or extra live sprint fails validation;
+finding and fix beads do not change the sprint set. Adding/removing a sprint
+requires updating the plan and beads, validating, and plan review. Dependency
+edges are not locked or validated by this initial contract. The DAG skill
+queries the bead dependencies and state to draw the current graph.
 
 Hierarchy:
 
@@ -102,14 +96,13 @@ Hierarchy:
 Configure `root` and `sprints = "<plan-folder>/phase-<x>.jsonl"` in tracked
 `.atm-bd/<phase>.toml`. Optional untracked `.atm-bd/current-phase.toml` selects
 local work; CI ignores it. `validate-plan` checks live beads then refreshes HTML.
-`validate-plan --ci` checks tracked plan files and HTML sprint/edge alignment without
+`validate-plan --ci` checks tracked plan files and HTML sprint-set alignment without
 Beads or ATM. Only the local run proves live bead alignment.
 
-Adding/removing a sprint or changing a sprint prerequisite requires editing the
-canonical plan, running validation, committing the regenerated diagram, and
-plan review. Bead-only sprint changes fail. Finding/fix beads are not sprints.
-The DAG skill queries Beads for live status. CI compares rendered sprint nodes
-and edges with the plan, ignoring status overlays and timestamps.
+Adding/removing a sprint requires editing the canonical plan, running validation,
+committing the regenerated diagram, and plan review. Bead-only membership
+changes fail. Finding/fix beads are not sprints. CI compares rendered sprint
+nodes with the plan; live bead alignment is verified locally.
 
 ## Phase Root
 

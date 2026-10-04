@@ -26,8 +26,19 @@ def publish_artifact(repo, branch, phase, html):
     ref = f'refs/remotes/origin/{branch}'
     git(repo, 'fetch', '--no-tags', 'origin', f'refs/heads/{branch}:{ref}')
     head = git(repo, 'rev-parse', ref)
-    relative = Path(repo_config.load(Path(repo))['plans_dir']) / f'phase-{phase}'
-    html_path = relative / f'phase-{phase}-dag.html'
+    from phase_config import load
+    from sprint_index_common import phase_id
+    configs = [load(repo, p) for p in (Path(repo) / '.atm-bd').glob('*.toml')
+               if p.name != 'current-phase.toml']
+    matching = [item for item in configs if phase_id(item[0], {}) == phase]
+    if len(matching) > 1:
+        raise RuntimeError('multiple configurations for this phase')
+    if matching:
+        html_path = matching[0][2].relative_to(Path(repo).resolve())
+        relative = html_path.parent
+    else:  # historical phases predating the configured sprint index
+        relative = Path(repo_config.load(Path(repo))['plans_dir']) / f'phase-{phase}'
+        html_path = relative / f'phase-{phase}-dag.html'
     with tempfile.TemporaryDirectory(prefix='sprint-report-artifact-') as directory:
         checkout = Path(directory) / 'checkout'
         git(repo, 'worktree', 'add', '--detach', str(checkout), head)

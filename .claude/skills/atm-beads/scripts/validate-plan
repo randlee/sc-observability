@@ -12,7 +12,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1] / 'sprint-report/scripts'))
 from phase_config import load as load_config, select
-from locked_plan import load, index, alignment, annotate, check_html, metrics
+from locked_plan import load, index, alignment, annotate, check_html
 from sprint_index_common import run_json, phase_id
 
 
@@ -25,11 +25,9 @@ def validate(repo, config, ci=False, root=None, explicit_index=None, source=None
     if ci and Path(config).name == 'current-phase.toml':
         raise ValueError('CI must use tracked phase config, not current-phase.toml')
     rows = load(plan)
-    length, width = metrics(rows)
-    print(f'critical path: {length} sprint(s); maximum parallel width: {width}')
     if ci:
         check_html(rows, diagram.read_text(), configured_root)
-        print(f'plan/DAG structure valid: {plan.relative_to(repo)} (live bead alignment is local only)')
+        print(f'plan/DAG sprint set valid: {plan.relative_to(repo)} (live bead alignment is local only)')
         return 0
     beads = source if source is not None else run_json(repo, 'bd', 'list', '--all', '-n', '0', '--json')
     if not any(b.get('id') == configured_root for b in beads):

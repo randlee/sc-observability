@@ -181,3 +181,13 @@ temporary file and run the same command from the repository root.
 | Blocked | 🚧 | | 🚧 |
 | Merged | | | 🏁 |
 | Ready to merge | | | 🚀 |
+
+## Configured phase index
+
+For phases using `.atm-bd/<phase>.toml`, `sprints` names the canonical JSONL
+file (sc-obs: `docs/plans/phase-e.jsonl`). Each line is `{"sprint":"<bead-id>"}`.
+The index locks membership; dependencies, sanity identities and live state are
+queried from Beads. The DAG HTML is co-located with the index, with `-dag.html`
+replacing `.jsonl`. `validate-plan` refreshes it automatically before approval;
+CI compares its sprint nodes to the index without querying Beads. Historical
+phases retain their tuple-file lookup until migrated.
