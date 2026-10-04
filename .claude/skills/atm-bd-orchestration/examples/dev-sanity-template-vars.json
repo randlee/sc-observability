@@ -24,6 +24,6 @@
   ],
   "files_outside_owned_paths": [],
   "base_sha": "sprint/d-3-otlp-config",
-  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-alignment",
+  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-0.8.0",
   "lint_command": "make lint"
 }
