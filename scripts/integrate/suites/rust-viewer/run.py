@@ -50,7 +50,7 @@ class SuiteError(RuntimeError):
 
 
 def verify_source_sha(source_sha: str) -> None:
-    """Bind the suite execution to exactly the checked-out candidate commit."""
+    """Defend direct entrypoint use by binding it to the checked-out commit."""
     if len(source_sha) != 40 or any(char not in "0123456789abcdef" for char in source_sha.lower()):
         raise SuiteError("source-sha must be a full 40-hex commit")
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -141,6 +141,7 @@ def cleanup_viewer(state: Path, *, environment: dict[str, str], output: Path) ->
 def run(source_sha: str, output: Path) -> dict[str, object]:
     """Run each public factory and its readback under an owned pinned viewer."""
     verify_source_sha(source_sha)
+    source_commit = source_sha.lower()
     output.mkdir(parents=True, exist_ok=True)
     environment = os.environ | {"CI": "1", "GITHUB_ACTIONS": "true"}
     setup_log = output / "setup.log"
@@ -167,7 +168,7 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
     result: dict[str, object] = {
         "schema_version": 1,
         "status": "failed",
-        "source_commit": source_sha,
+        "source_commit": source_commit,
         "viewer": pinned,
         "backends": results,
         "cleanup": {"status": "pending", "log": str(output / "cleanup.log")},

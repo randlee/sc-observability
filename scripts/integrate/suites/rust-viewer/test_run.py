@@ -104,7 +104,7 @@ class RustViewerRunnerTests(unittest.TestCase):
             self.assertEqual(1, len(stops))
 
     def test_successful_run_writes_the_complete_result_schema_and_stops_viewer(self) -> None:
-        source_sha = "c" * 40
+        source_sha = "C" * 40
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
             stops: list[list[str]] = []
@@ -131,7 +131,7 @@ class RustViewerRunnerTests(unittest.TestCase):
 
             self.assertEqual({"schema_version", "status", "source_commit", "viewer", "backends", "cleanup"}, result.keys())
             self.assertEqual("passed", result["status"])
-            self.assertEqual(source_sha, result["source_commit"])
+            self.assertEqual(source_sha.lower(), result["source_commit"])
             self.assertEqual(set(runner.TESTS), result["backends"].keys())
             self.assertTrue(all(outcome["status"] == "passed" for outcome in result["backends"].values()))
             self.assertEqual("passed", result["cleanup"]["status"])
