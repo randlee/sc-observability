@@ -4,99 +4,89 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ActionName, ErrorCode, StateName, TargetCategory, ValueValidationError, error_codes};
 
-/// Validated 32-character lowercase hexadecimal trace identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TraceId(String);
+macro_rules! validated_hex_id_type {
+    ($name:ident, $doc:literal, $length:expr, $code:expr) => {
+        #[doc = $doc]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[serde(try_from = "String")]
+        pub struct $name(String);
+
+        impl $name {
+            /// Creates a validated lowercase hexadecimal identifier.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ValueValidationError`] when the identifier does not
+            /// have the required lowercase hexadecimal shape.
+            pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
+                let value = value.into();
+                validate_lower_hex(&value, $length, $code)?;
+                Ok(Self(value))
+            }
+
+            /// Returns the underlying lowercase hexadecimal identifier.
+            #[must_use]
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = ValueValidationError;
+
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                Self::new(value)
+            }
+        }
+    };
+}
+
+validated_hex_id_type!(
+    TraceId,
+    "Validated 32-character lowercase hexadecimal trace identifier.",
+    crate::constants::TRACE_ID_LEN,
+    &error_codes::TRACE_ID_INVALID
+);
+validated_hex_id_type!(
+    SpanId,
+    "Validated 16-character lowercase hexadecimal span identifier.",
+    crate::constants::SPAN_ID_LEN,
+    &error_codes::SPAN_ID_INVALID
+);
 
 impl TraceId {
-    /// Creates a validated lowercase hexadecimal trace identifier.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ValueValidationError`] when the trace identifier is not a
-    /// 32-character lowercase hexadecimal value.
-    pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
-        let value = value.into();
-        validate_lower_hex(
-            &value,
-            crate::constants::TRACE_ID_LEN,
-            &error_codes::TRACE_ID_INVALID,
-        )?;
-        Ok(Self(value))
-    }
-
-    /// Returns the underlying lowercase hexadecimal trace identifier.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
+    /// Formats a nonzero integer as a valid identifier; zero-padded lowercase
+    /// hex of `TRACE_ID_LEN` digits always satisfies `validate_lower_hex`.
+    pub(crate) fn from_nonzero(value: std::num::NonZeroU128) -> Self {
+        Self(format!(
+            "{:0width$x}",
+            value.get(),
+            width = crate::constants::TRACE_ID_LEN
+        ))
     }
 }
-
-impl fmt::Display for TraceId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl AsRef<str> for TraceId {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl TryFrom<String> for TraceId {
-    type Error = ValueValidationError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(value)
-    }
-}
-
-/// Validated 16-character lowercase hexadecimal span identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SpanId(String);
 
 impl SpanId {
-    /// Creates a validated lowercase hexadecimal span identifier.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ValueValidationError`] when the span identifier is not a
-    /// 16-character lowercase hexadecimal value.
-    pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
-        let value = value.into();
-        validate_lower_hex(
-            &value,
-            crate::constants::SPAN_ID_LEN,
-            &error_codes::SPAN_ID_INVALID,
-        )?;
-        Ok(Self(value))
-    }
-
-    /// Returns the underlying lowercase hexadecimal span identifier.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for SpanId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl AsRef<str> for SpanId {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl TryFrom<String> for SpanId {
-    type Error = ValueValidationError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(value)
+    /// Formats a nonzero integer as a valid identifier; zero-padded lowercase
+    /// hex of `SPAN_ID_LEN` digits always satisfies `validate_lower_hex`.
+    pub(crate) fn from_nonzero(value: std::num::NonZeroU64) -> Self {
+        Self(format!(
+            "{:0width$x}",
+            value.get(),
+            width = crate::constants::SPAN_ID_LEN
+        ))
     }
 }
 
@@ -196,5 +186,26 @@ mod tests {
         let uppercase_span =
             SpanId::new("0123456789ABCDEf").expect_err("uppercase span id should fail");
         assert_eq!(uppercase_span.code(), &error_codes::SPAN_ID_INVALID);
+    }
+
+    #[test]
+    fn nonzero_constructors_always_yield_valid_identifiers() {
+        use std::num::{NonZeroU64, NonZeroU128};
+        for value in [NonZeroU128::MIN, NonZeroU128::MAX] {
+            let id = TraceId::from_nonzero(value);
+            assert_eq!(TraceId::new(id.as_str()), Ok(id));
+        }
+        assert_eq!(
+            TraceId::from_nonzero(NonZeroU128::MIN).as_str(),
+            "00000000000000000000000000000001"
+        );
+        for value in [NonZeroU64::MIN, NonZeroU64::MAX] {
+            let id = SpanId::from_nonzero(value);
+            assert_eq!(SpanId::new(id.as_str()), Ok(id));
+        }
+        assert_eq!(
+            SpanId::from_nonzero(NonZeroU64::MAX).as_str(),
+            "ffffffffffffffff"
+        );
     }
 }

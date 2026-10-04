@@ -54,6 +54,7 @@ examples/tauri-logging/src-tauri/permissions/
 # hand-carried, never a versioned artifact. Lives locally per checkout only.
 .sc/qa-log/
 .sc/sanity-log/
+.sc/telemetry-state/
 
 # atm-bd-orchestration: per-checkout current phase (formula overrides in .atm-bd/formula/ stay tracked)
 .atm-bd/current-phase.toml

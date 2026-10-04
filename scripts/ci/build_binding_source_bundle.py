@@ -48,7 +48,7 @@ def manifests_confined(root):
 def registry_identities(lock):
     return sorted(({'name':p['name'],'version':p['version'],'source':p['source'],'checksum':p['checksum']} for p in lock['package'] if p.get('source','').startswith('registry+')),key=lambda p:(p['name'],p['version'],p['source']))
 
-def reviewed_registry_closure(lock, roots):
+def lock_closure(lock, roots):
     packages=lock['package'];selected=set()
     def follow(package):
         identity=(package['name'],package['version'],package.get('source'))
@@ -64,11 +64,51 @@ def reviewed_registry_closure(lock, roots):
         matches=[p for p in packages if p['name']==name and p['version']==version and p.get('source') is None]
         if len(matches)!=1:raise BundleError('BUNDLE_STALE_LOCK',f'missing source-lock package: {name} {version}')
         follow(matches[0])
-    return registry_identities({'package':[p for p in packages if (p['name'],p['version'],p.get('source')) in selected]})
+    return [p for p in packages if (p['name'],p['version'],p.get('source')) in selected]
 
-def verify_registry_selection(source_lock, staged_lock, roots):
-    expected=reviewed_registry_closure(tomllib.loads(source_lock.read_text(encoding='utf-8')),roots)
-    actual=registry_identities(tomllib.loads(staged_lock.read_text(encoding='utf-8')))
+def required_registry_dependencies(source_lock, roots, required_dependencies):
+    """Return reviewed registry identities required by packaged manifests."""
+    packages=source_lock['package'];required=[]
+    for root in roots:
+        names=required_dependencies.get(root,set())
+        if not names:continue
+        matches=[package for package in packages if package['name']==root[0] and package['version']==root[1] and package.get('source') is None]
+        if len(matches)!=1:raise BundleError('BUNDLE_STALE_LOCK',f'missing source-lock package: {root[0]} {root[1]}')
+        for dependency in matches[0].get('dependencies',[]):
+            name=dependency.split(' ',1)[0]
+            if name not in names:continue
+            parts=dependency.split(' ',2);version=parts[1] if len(parts)>1 and not parts[1].startswith('(') else None
+            source=parts[-1].strip('()') if len(parts)>1 and parts[-1].startswith('(') else None
+            resolved=[package for package in packages if package['name']==name and (version is None or package['version']==version) and (source is None or package.get('source')==source)]
+            if len(resolved)!=1:raise BundleError('BUNDLE_STALE_LOCK',f'ambiguous source-lock dependency: {dependency}')
+            if resolved[0].get('source','').startswith('registry+'):required.append(resolved[0])
+    return registry_identities({'package':required})
+
+def reviewed_registry_closure(source_lock, staged_lock, roots, required_dependencies=None):
+    """Return the reviewed identities for the staged package closure.
+
+    A workspace lock can include optional feature edges selected by unrelated
+    members.  The staged lock is authoritative for which dependencies the
+    isolated packaged consumer resolves, but each selected registry identity
+    must still be byte-for-byte reviewed in the source lock.
+    """
+    reviewed={
+        (entry['name'],entry['version'],entry['source'],entry['checksum']):entry
+        for entry in registry_identities({'package':lock_closure(source_lock,roots)})
+    }
+    selected=registry_identities({'package':lock_closure(staged_lock,roots)})
+    missing=[entry for entry in selected if (entry['name'],entry['version'],entry['source'],entry['checksum']) not in reviewed]
+    if missing:raise BundleError('BUNDLE_REGISTRY_DRIFT','staged registry selection contains an unreviewed identity')
+    required=required_registry_dependencies(source_lock,roots,required_dependencies or {})
+    absent=[entry for entry in required if entry not in selected]
+    if absent:raise BundleError('BUNDLE_REGISTRY_DRIFT','staged registry selection omits a required reviewed dependency')
+    return selected
+
+def verify_registry_selection(source_lock, staged_lock, roots, required_dependencies=None):
+    source=tomllib.loads(source_lock.read_text(encoding='utf-8'))
+    staged=tomllib.loads(staged_lock.read_text(encoding='utf-8'))
+    expected=reviewed_registry_closure(source,staged,roots,required_dependencies)
+    actual=registry_identities(staged)
     if expected!=actual:raise BundleError('BUNDLE_REGISTRY_DRIFT','staged registry name/version/source/checksum closure differs from reviewed source lock')
     return expected
 
@@ -101,12 +141,29 @@ def dependency_requirements(document, workspace=None):
             for name,spec in table.get(section,{}).items():
                 if isinstance(spec,str):spec={'version':spec}
                 if spec.get('workspace'):
+                    optional=spec.get('optional',False)
                     inherited=(workspace or {}).get('dependencies',{}).get(name)
                     if inherited is None:raise BundleError('BUNDLE_MISSING_VERSION',f'unresolved workspace dependency: {name}')
                     spec={'version':inherited} if isinstance(inherited,str) else inherited
+                    if optional:spec={**spec,'optional':optional}
                 if not isinstance(spec.get('version'),str) or not spec['version'].strip():raise BundleError('BUNDLE_MISSING_VERSION',f'{target}/{section}/{name} requires a publishable version')
-                result[f'{target}/{section}/{name}']={'package':spec.get('package',name),'version':spec['version']}
+                result[f'{target}/{section}/{name}']={'package':spec.get('package',name),'version':spec['version'],'optional':bool(spec.get('optional',False))}
     return result
+
+def required_dependency_names(document, workspace=None):
+    required=set();tables=[('',document),*document.get('target',{}).items()]
+    for _,table in tables:
+        for section in ('dependencies','build-dependencies'):
+            for name,spec in table.get(section,{}).items():
+                if isinstance(spec,str):spec={'version':spec}
+                if spec.get('workspace'):
+                    optional=spec.get('optional',False)
+                    inherited=(workspace or {}).get('dependencies',{}).get(name)
+                    if inherited is None:raise BundleError('BUNDLE_MISSING_VERSION',f'unresolved workspace dependency: {name}')
+                    spec={'version':inherited} if isinstance(inherited,str) else inherited
+                    if optional:spec={**spec,'optional':optional}
+                if not spec.get('optional',False):required.add(spec.get('package',name))
+    return required
 
 def verify_bundle(root):
     root=root.resolve()
@@ -126,13 +183,15 @@ def verify_bundle(root):
         file=safe(root,relative)
         if not file.is_file():raise BundleError('BUNDLE_MISSING_MEMBER',relative)
         if digest(file)!=expected:raise BundleError('BUNDLE_STALE_LOCK' if relative=='Cargo.lock' else 'BUNDLE_CHECKSUM_MISMATCH',relative)
-    expected=verify_registry_selection(root/'reviewed-source.lock',root/'Cargo.lock',[(p['name'],p['version']) for p in manifest['packages']])
-    if manifest.get('registry_selection')!=expected:raise BundleError('BUNDLE_REGISTRY_DRIFT','manifest selection differs from frozen locks')
+    normalized={}
     for entry in manifest['packages']:
-        normalized=tomllib.loads((safe(root,entry['root'])/'Cargo.toml').read_text(encoding='utf-8'))
-        if normalized['package']['name']!=entry['name'] or normalized['package']['version']!=entry['version']:raise BundleError('BUNDLE_INVALID_MANIFEST','extracted package identity drift')
-        actual=dependency_requirements(normalized)
-        if actual!=entry['reviewed_requirements']:raise BundleError('BUNDLE_REQUIREMENT_DRIFT',entry['name'])
+        package=tomllib.loads((safe(root,entry['root'])/'Cargo.toml').read_text(encoding='utf-8'))
+        if package['package']['name']!=entry['name'] or package['package']['version']!=entry['version']:raise BundleError('BUNDLE_INVALID_MANIFEST','extracted package identity drift')
+        if dependency_requirements(package)!=entry['reviewed_requirements']:raise BundleError('BUNDLE_REQUIREMENT_DRIFT',entry['name'])
+        normalized[(entry['name'],entry['version'])]=package
+    required={identity:required_dependency_names(package) for identity,package in normalized.items()}
+    expected=verify_registry_selection(root/'reviewed-source.lock',root/'Cargo.lock',[(p['name'],p['version']) for p in manifest['packages']],required)
+    if manifest.get('registry_selection')!=expected:raise BundleError('BUNDLE_REGISTRY_DRIFT','manifest selection differs from frozen locks')
     return manifest
 
 def command(arguments,cwd,**kwargs):
@@ -231,6 +290,7 @@ def build(root_manifest,output):
     (output/'package.log').write_text('\n'.join(package_log))
     archives=output/'archives';archives.mkdir();packages_dir=output/'packages';packages_dir.mkdir()
     entries=[]
+    required={}
     qualified_stage=source_root/'docs/plans/phase-b/evidence/b2-final/stage'
     qualified={}
     if qualified_stage.exists():
@@ -249,6 +309,7 @@ def build(root_manifest,output):
         if normalized['package']['name']!=package['name'] or normalized['package']['version']!=package['version']:raise BundleError('BUNDLE_INVALID_MANIFEST','archive package identity mismatch')
         requirements=reviewed_requirements[str(Path(package['manifest_path']).resolve())]
         if dependency_requirements(normalized)!=requirements:raise BundleError('BUNDLE_REQUIREMENT_DRIFT',package['name'])
+        required[(package['name'],package['version'])]=required_dependency_names(normalized)
         entries.append({'reviewed_requirements':requirements,'name':package['name'],'version':package['version'],'archive':archive.relative_to(output).as_posix(),'archive_sha256':digest(archive),'root':f'packages/{stem}','provenance':'qualified-B.2-archive' if staged else 'unpublished-cargo-package','qualified_source_commit':source_sha if staged else None})
     shutil.rmtree(build_target)
     patches='\n'.join(f'{p["name"]} = {{ path = "{p["root"]}" }}' for p in entries)
@@ -267,7 +328,7 @@ def build(root_manifest,output):
     shutil.copyfile(source/'Cargo.lock',output/'reviewed-source.lock')
     shutil.copyfile(source/'Cargo.lock',output/'Cargo.lock')
     command(['cargo','metadata','--offline','--format-version','1'],output)
-    registry_selection=verify_registry_selection(output/'reviewed-source.lock',output/'Cargo.lock',[(p['name'],p['version']) for p in entries])
+    registry_selection=verify_registry_selection(output/'reviewed-source.lock',output/'Cargo.lock',[(p['name'],p['version']) for p in entries],required)
     vendor_config=command(['cargo','vendor','--locked','vendor'],output)
     (output/'.cargo').mkdir();(output/'.cargo/config.toml').write_text(vendor_config)
     command(['cargo','metadata','--locked','--offline','--format-version','1'],output)

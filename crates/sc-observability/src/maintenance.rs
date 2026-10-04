@@ -5,11 +5,10 @@ use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use sc_observability_types::typed::ClassifiedError;
 use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport,
-    MaintenanceWorkerState, Remediation, Timestamp, WriterState,
+    DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport, MaintenanceWorkerState,
+    Remediation, Timestamp, WriterState,
 };
 
 use crate::sinks::JsonlFileSink;
@@ -164,7 +163,7 @@ impl WriterRuntime {
                 ),
             )
         })?;
-        match rx.recv() {
+        match rx.recv_timeout(self.join_timeout) {
             Ok(Ok(())) => Ok(()),
             Ok(Err(summary)) => Err(FlushFailure::logger_flush(
                 "writer flush failed",
@@ -177,7 +176,21 @@ impl WriterRuntime {
                 ),
             )
             .cause(summary.message.clone())),
-            Err(_) => Err(FlushFailure::writer_degraded(
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(FlushFailure::writer_degraded(
+                format!(
+                    "writer thread did not complete flush within {}ms",
+                    self.join_timeout.as_millis()
+                ),
+                Remediation::recoverable(
+                    "inspect logger writer-thread health",
+                    [
+                        "inspect logger.health().writer_state",
+                        "inspect logger.health().last_writer_error",
+                        "retry the flush after the writer recovers",
+                    ],
+                ),
+            )),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(FlushFailure::writer_degraded(
                 "writer thread disconnected during flush",
                 Remediation::recoverable(
                     "inspect logger writer-thread health",
@@ -242,15 +255,11 @@ impl WriterRuntime {
             }
         }
 
-        if self.join_handle.join().is_err() {
+        if !timed_out && self.join_handle.join().is_err() {
             self.writer_tracker
                 .record_writer_failure(&ErrorContext::new(
                     error_codes::LOGGER_WRITER_DEGRADED,
-                    if timed_out {
-                        "writer thread panicked after exceeding the shutdown timeout"
-                    } else {
-                        "writer thread panicked during shutdown"
-                    },
+                    "writer thread panicked during shutdown",
                     Remediation::recoverable(
                         "restart the logger runtime",
                         [
@@ -272,6 +281,11 @@ impl WriterRuntime {
         self.maintenance_tracker
             .as_ref()
             .is_some_and(|tracker| tracker.pass_active())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_pass_signal(&self) -> Option<&Arc<TestPassDelaySignal>> {
+        self.test_pass_signal.as_ref()
     }
 }
 
@@ -320,7 +334,9 @@ pub(crate) struct WriterTracker {
     queue_capacity: u64,
     queue_high_water_mark: AtomicU64,
     queue_full_drops_total: AtomicU64,
+    // MUTEX: The writer changes state on failures and shutdown; read-mostly health snapshots use this RwLock without gaining a global snapshot.
     state: RwLock<WriterState>,
+    // MUTEX: Failures replace the latest diagnostic while health snapshots clone it read-mostly; this RwLock covers only this field.
     last_error: RwLock<Option<DiagnosticSummary>>,
     shutdown_timeout_recorded: AtomicBool,
 }
@@ -442,8 +458,11 @@ impl WriterTracker {
 /// updates occur on the writer thread without a single global snapshot lock.
 pub(crate) struct MaintenanceTracker {
     pass_active: AtomicBool,
+    // MUTEX: The writer updates this after each pass and health snapshots read it read-mostly; this lock does not make the whole report atomic.
     last_pass_at: RwLock<Option<Timestamp>>,
+    // MUTEX: Failure writes replace the latest diagnostic while health snapshots clone it read-mostly; this lock covers only this field.
     last_error: RwLock<Option<DiagnosticSummary>>,
+    // MUTEX: Maintenance transitions update this state while health reads it frequently; this RwLock does not make the report atomic.
     state: RwLock<MaintenanceWorkerState>,
     rotated_files_total: AtomicU64,
     pruned_files_total: AtomicU64,
@@ -586,7 +605,6 @@ fn writer_worker(
                                 &writer_tracker,
                                 dropped_events_total.as_ref(),
                                 last_error.as_ref(),
-                                &mut pending_flush,
                             );
                             flush_sinks(
                                 &sinks,
@@ -621,7 +639,6 @@ fn writer_worker(
                         &writer_tracker,
                         dropped_events_total.as_ref(),
                         last_error.as_ref(),
-                        &mut pending_flush,
                     );
                     flush_sinks(
                         &sinks,
@@ -638,7 +655,6 @@ fn writer_worker(
                     &writer_tracker,
                     dropped_events_total.as_ref(),
                     last_error.as_ref(),
-                    &mut pending_flush,
                 );
                 flush_sinks(
                     &sinks,
@@ -664,7 +680,6 @@ fn writer_worker(
                     &writer_tracker,
                     dropped_events_total.as_ref(),
                     last_error.as_ref(),
-                    &mut pending_flush,
                 );
                 flush_sinks(
                     &sinks,
@@ -710,12 +725,8 @@ fn flush_batch(
     writer_tracker: &WriterTracker,
     dropped_events_total: &AtomicU64,
     last_error: &Mutex<Option<DiagnosticSummary>>,
-    pending_flush: &mut Vec<mpsc::Sender<Result<(), DiagnosticSummary>>>,
 ) {
     if batch.is_empty() {
-        if !pending_flush.is_empty() {
-            flush_sinks(sinks, writer_tracker, last_error, pending_flush);
-        }
         return;
     }
 
@@ -748,10 +759,6 @@ fn flush_batch(
             }
         }
         writer_tracker.record_write_completion(1);
-    }
-
-    if !pending_flush.is_empty() {
-        flush_sinks(sinks, writer_tracker, last_error, pending_flush);
     }
 }
 
@@ -841,6 +848,7 @@ pub(crate) struct TestPassDelaySignal {
     released: AtomicBool,
     wait_timed_out: AtomicBool,
     shutdown_timeout_recorded: AtomicBool,
+    level_stopping: AtomicBool,
     gate: Mutex<()>,
     changed: Condvar,
 }
@@ -942,6 +950,16 @@ impl TestPassDelaySignal {
 
     pub(crate) fn shutdown_timeout_recorded(&self) -> bool {
         self.shutdown_timeout_recorded.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn record_level_stopping(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
+        self.level_stopping.store(true, Ordering::SeqCst);
+        self.changed.notify_all();
+    }
+
+    pub(crate) fn level_stopping(&self) -> bool {
+        self.level_stopping.load(Ordering::SeqCst)
     }
 
     pub(crate) fn wait_for_state(

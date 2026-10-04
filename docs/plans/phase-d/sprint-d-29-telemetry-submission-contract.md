@@ -136,7 +136,7 @@ and the OTLP/JSON export is d-34's (wave-5 ruling R20).
    [PHD-013]
 2. Add the neutral signal types in `crates/sc-observability-types/src/otlp/signals/`,
    declared from `src/otlp/mod.rs`, with validating constructors, serde that
-   deserializes through those constructors, and `From` conversions from
+   deserializes through those constructors, and `TryFrom` conversions from
    `LogEvent`, `SpanRecord<SpanEnded>`, v2 `MetricRecord`, `OtlpResource` and
    `OtlpInstrumentationScope`. Add no variant or field to any existing type.
    [PHD-005, PHD-006, PHD-013]
@@ -346,8 +346,8 @@ pub struct InstrumentationScope {
     pub dropped_attributes_count: u32,
     pub schema_url: Option<String>,
 }
-impl From<OtlpResource> for Resource { /* field move */ }
-impl From<OtlpInstrumentationScope> for InstrumentationScope { /* field move */ }
+impl TryFrom<OtlpResource> for Resource { type Error = SignalValidationError; /* checked attribute conversion */ }
+impl TryFrom<OtlpInstrumentationScope> for InstrumentationScope { type Error = SignalValidationError; /* checked attribute conversion */ }
 
 #[non_exhaustive]
 pub struct ResourceRecord<T> { pub resource: Resource, pub scope: InstrumentationScope, pub record: T }
@@ -500,6 +500,13 @@ Outside a profiles payload they fail envelope validation with
 **bytes.** `AnyValue::Bytes` serializes as lowercase hex in the neutral JSON.
 d-34 encodes it as base64 `bytesValue` in OTLP/JSON. Profile IDs, trace IDs
 and span IDs use the existing hex newtypes.
+
+**Conversion amendment (lead ruling 2026-10-01, `01M3VWCCBHT906CNTV50SVGPZ7`).**
+Conversions from `LogEvent`, `SpanRecord<SpanEnded>`, v2 `MetricRecord`,
+`OtlpResource` and `OtlpInstrumentationScope` use `TryFrom` with
+`SignalValidationError::Validation` at the exact offending attribute path.
+Existing null attributes are rejected, never dropped or coerced. Unsigned
+values remain `AnyValue::UInt`; the envelope applies the uint range policy.
 
 ### Input value forms
 
@@ -1128,17 +1135,29 @@ d-33 and d-34 may change only the items listed in their docs.
 
 | File | Item | d-29 change |
 | --- | --- | --- |
-| `src/lifecycle.rs` | `pub(crate) enum SignalKind` | Add `Profiles` (index 3). `LifecycleHealth.dropped_by_signal`/`degraded_by_signal` and the `CoreState` per-signal arrays grow from 3 to 4. `dropped_total()` keeps its meaning. Existing `lifecycle_tests.rs` pass unchanged. |
+| `src/lifecycle.rs` | `pub(crate) enum SignalKind` | Add `Profiles` (index 3). `LifecycleHealth.dropped_by_signal`/`degraded_by_signal` and the `CoreState` per-signal arrays grow from 3 to 4. `dropped_total()` keeps its meaning. Existing lifecycle tests unchanged except a 4th zero Profiles slot (lead `01M3VYE3D296E5M322VBAJKBF0`); SDK helper per-signal return types widen to four under `01M3VYFVM5W64ZWPXCCJ51T9M3`. |
 | `src/contracts.rs` | module list | Two lines: `pub(crate) mod profiles;` and `pub(crate) mod submission;` (additive; d-18 fence, P2). `ExporterSet` is unchanged: it has nine construction sites, some inside the d-18 fence. |
 | `src/contracts/profiles.rs` (new) | `pub(crate) trait ProfileExporter<T>: Send + Sync { fn export_profiles(&self, batch: &[T]) -> Result<(), ExportError>; }` | Same shape as `LogExporter`/`TraceExporter`/`MetricExporter`. d-34 implements it for the sync-http exporter, and `SyncHttpSubmissionExporter::export` dispatches profiles through it. |
 | `src/contracts/submission.rs` (new) | `pub(crate) trait SubmissionExporter: Send + Sync { fn export(&self, signal: Signal, envelopes: &[SubmissionEnvelope]) -> Result<(), SubmissionExportFailure>; }` and `pub(crate) enum SubmissionExportFailure { Retryable(ExportError), Terminal(ExportError) }` | The only call the d-33 drain makes. `Retryable` leaves the row for retry; `Terminal` marks it failed. d-33 tests through a `ScriptedExporter`; d-34 implements the production exporter. |
 | `src/contracts/credits.rs` | `impl AdmissionCredits { pub(crate) fn wait_for_release(&self, timeout: Duration) -> bool; }` | Signature only; the stub returns `false` (no release observed). d-33 implements it (the budget's `Condvar`, `CreditLease::drop` notification and their tests). |
 | `src/sync_http/mod.rs` | module list | One line: `#[cfg(feature = "durable-store")] pub(crate) mod submission;`. |
-| `src/sync_http/submission.rs` (new, staged) | `pub(crate) struct SyncHttpSubmissionExporter`, `pub(crate) fn exporter_for(config: SyncHttpConfig) -> Arc<dyn SubmissionExporter>` | `exporter_for` wraps the existing sync-http exporter. The staged `export` returns `SubmissionExportFailure::Terminal` with `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, so nothing reports false success before d-34 lands. d-34 implements it. |
+| `src/sync_http/submission.rs` (new, staged) | `pub(crate) struct SyncHttpSubmissionExporter`, `pub(crate) fn exporter_for(config: SyncHttpConfig, bounds: ValidatedTransportBounds) -> Arc<dyn SubmissionExporter>` | `exporter_for` stages both the validated worker config and transport bounds; D34 wraps the existing sync-http exporter without changing this signature. The staged `export` returns `SubmissionExportFailure::Terminal` with `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, so nothing reports false success before d-34 lands. d-34 implements it. |
 | `src/durable/adapter.rs` (staged) | `pub(crate) fn otel_config_from(config: &TelemetryClientConfig) -> Result<OtelConfig, TelemetryConfigError>;` | Signature only; the stub body returns `TelemetryConfigError::InvalidField { field: "otlp" }`. d-33 implements it and then calls the existing `SyncHttpConfig::from_otel(&OtelConfig)`. Mapping: `backend` → `ExporterBackend`, `endpoint`, `auth_header`, `request_timeout` → `timeout_ms`, `sync_http_retry` → `SyncHttpRetryPolicy` field for field. |
-| `src/durable/mod.rs` (staged) | `DurableTelemetryClient::open` | Evaluates `adapter::otel_config_from` and, on success, `exporter_for(SyncHttpConfig::from_otel(..))`, discards both and returns `AdmissionError::StoreUnavailable`, so neither staged function is dead code under `durable-store`. d-33 implements it. |
+| `src/durable/mod.rs` (staged) | `DurableTelemetryClient::open` | Evaluates `adapter::otel_config_from` and, on success, `exporter_for(worker, bounds)` from the destructured `SyncHttpConfig::from_otel(..)` result, discards both and returns `AdmissionError::StoreUnavailable`, so neither staged function is dead code under `durable-store`. d-33 implements it. |
 | `src/constants.rs` | wave-5 entries | `DRAIN_BATCH_SIZE`, the lease renewal divisor, the store `busy_timeout` (5000 ms) and `PROFILES_EXPORT_PATH = "/v1development/profiles"` (ADR-005). |
 | `src/error_codes.rs` | wave-5 entries | `SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED`, added to the crate's enumerable registry. |
+
+Lead correction (2026-10-01, `01M3VY0G7ABHB7QBG5GBKYJWYA`):
+`SyncHttpConfig::from_otel` was test-gated. D29 changes only that gate to
+`cfg(any(test, feature = "durable-store"))`, preserving its existing body and
+`(SyncHttpConfig, ValidatedTransportBounds)` result; callers destructure it.
+The related imports of `OtelConfig`, `prepared_backend_connection`, and
+`validated_transport_bounds` receive the same gate; `ExporterBackend` and
+`OtlpProtocol` remain test-only (lead `01M3VY4ZQK7NR2NKTV0BHNJ2GG`).
+Finally `config/mod.rs` reexports `validated_transport_bounds` under that gate,
+leaving `validate_config_typed` test-only (lead `01M3VY7JWH90RDXYDQV8GNYT0J`).
+These are the only three gate adjustments; validation bodies are unchanged.
+Lead `01M3VYZAQDEPX67M2180KKGH45` freezes `exporter_for(config, bounds)` now so D33 and D34 can implement in parallel without changing their shared call signature. The staged wrapper retains both and always returns terminal UNWIRED.
 
 ### Dependency set
 
@@ -1232,14 +1251,16 @@ through `durable-store`, and that `durable-store` includes `sync-http`. The
 `sc-otel-cli` edges are checked by the cargo-tree criteria below.
 
 Boundary allowlists: `types.toml` `allowed_dependents` += `sc-otel-cli`,
-`allowed_dependencies` += `uuid` (optional, `test-double`),
+
 `allowed_test_double_paths` += `crates/sc-observability-types/src/otlp/submission/testing/**`;
 `otlp.toml` `allowed_dependents` += `sc-observability-py`, `sc-otel-cli`;
 `python.toml` `allowed_dependencies` += `sc-observability-otlp`; new
 `boundaries/sc-otel-cli/cli.toml` with `allowed_dependencies` =
-[`sc-observability-types`, `sc-observability-otlp`, `clap`, `serde_json`],
-`forbidden_edges` = [`sc-observe`, `pyo3`, `agent-team-mail-*`] and
+[`sc-observability-types`, `sc-observability-otlp`],
+`forbidden_edges` = `[{ from = "sc-otel-cli", to = "sc-observe" }]` and
 `allowed_dependents` = [].
+
+Boundary `allowed_dependencies` are first-party only; external pins are enforced by policy rows, the manifest test and cargo-tree checks (lead `01M3VYV0BND025EZH744N0SD9D`).
 
 ### Platform matrix and dependency audit
 
@@ -1284,7 +1305,7 @@ is proven by d-30 through `b4a-python-distributions.yml`.
   deserialization (not only `try_new`); exemplars;
   `ProfilesDictionary::validate_references` accepting a valid set and rejecting
   an out-of-range index, including an out-of-range `StringIndex` and
-  `AttributeKey::Index`; `TraceState` grammar; and `From` conversions from
+  `AttributeKey::Index`; `TraceState` grammar; and `TryFrom` conversions from
   `LogEvent`, `SpanRecord<SpanEnded>`, v2 `MetricRecord`, `OtlpResource` and
   `OtlpInstrumentationScope`.
 - [ ] boundary:BOUNDARY-ScObservabilityTypes (D3, D4):
@@ -1393,8 +1414,8 @@ cargo test -p sc-observability-otlp --features durable-store --locked --test con
 cargo test -p sc-observability-otlp --locked --test contract_manifest durable_store_binding
 cargo tree -p sc-otel-cli -e normal --depth 1 --prefix none --format '{p}'
 cargo tree -p sc-otel-cli -e normal,build --all-features --prefix none --format '{p}'
-cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories
-cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features check --config policy/deny-durable-store.toml licenses bans advisories
+cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store --config policy/deny-durable-store.toml check licenses bans advisories
+cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --config policy/deny-durable-store.toml check licenses bans advisories
 bash scripts/ci/validate_repo_boundaries.sh
 bash scripts/ci/validate_dependency_bans.sh
 bash scripts/ci/validate_docs_consistency.sh
@@ -1428,3 +1449,35 @@ change. d-32 re-runs the D18 gate against the signed record.
   `Cargo.lock` or `policy/otlp-transport.toml`. Everything they use is in
   "Dependency set". A missing dependency is a contract defect, routed to the
   lead.
+
+### Compiler diagnostic fixture amendment (2026-10-01)
+
+Lead approval 01M3VZ3XAV749YN0HVRA0T9XE5 permits only the four-line
+rustc help/note insertion in
+`crates/sc-observability-log/tests/ui/fixture_attachment_no_owner_authority.stderr`.
+The new `TelemetryClient::shutdown` trait adds a compiler suggestion; all four
+E0599 errors and their rejected authority operations remain unchanged.
+
+### CI boundary schema amendment (2026-10-01)
+
+Lead ruling `01M3WFKN13MNAX7JZKY6KZD6WQ` corrects the CLI boundary
+`forbidden_edges` to workspace-package `{ from, to }` objects, as required
+by CI-pinned sc-lint `ba2d9bf622c1604e3f017c728040906b90e71bce`.
+The edge prohibits `sc-otel-cli` from depending on `sc-observe`. External
+`pyo3` and `agent-team-mail-*` exclusions remain in dependency policy and
+cargo-deny checks, rather than the first-party boundary table.
+
+### Scoped sc-lint directives (2026-10-01)
+
+Rand’s ruling relayed in `01M3WG0WNAM8Y0667TGQD6X2BY` adds the published
+`sc-lint-attributes = "=0.4.0"` dependency to types and OTLP only.
+`cycle.recursive_value_container` is allowed on `KeyValues` and `AnyValue`
+because OTLP requires their recursive representation; the checker requires
+all owners in this component to carry the directive.
+`cycle.type_method_self_loop` is allowed only on the two client `open` methods
+and the test-double `with_script` constructor, which return `Self`.
+The dependency validators admit this compile-time attribute dependency; the
+workspace and two standalone consumer-example lockfiles include its closure
+so their existing `--locked` checks remain reproducible. Existing cargo-deny
+license rules already cover it and require no change.
+No data shapes or public signatures change.

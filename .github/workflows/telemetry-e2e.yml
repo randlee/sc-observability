@@ -1,0 +1,54 @@
+name: Telemetry end-to-end
+
+on:
+  workflow_dispatch:
+
+jobs:
+  telemetry-e2e:
+    name: installed wheel and CLI telemetry e2e (macOS arm64)
+    runs-on: macos-14
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: "1.94.1"
+          components: clippy, rustfmt
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Install pinned cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.19.4
+      - name: Download verified pinned desktop viewer
+        run: >-
+          python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py
+          "$RUNNER_TEMP/otel-desktop-viewer"
+      - name: Run real installed-artifact composition suite
+        env:
+          TELEMETRY_E2E_VIEWER_BINARY: ${{ runner.temp }}/otel-desktop-viewer
+        run: python3 -m pip install pytest==8.4.2 pytest-timeout==2.4.0 && python3 -m pytest -q tests/telemetry-e2e
+      - name: Capture error migration and cargo-deny evidence
+        if: always()
+        run: |
+          mkdir -p target/telemetry-e2e/evidence
+          set +e
+          python3 scripts/ci/validate_error_migration.py > target/telemetry-e2e/evidence/error-migration.log 2>&1
+          error_migration=$?
+          printf 'exit=%s\n' "$error_migration" >> target/telemetry-e2e/evidence/error-migration.log
+          cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store check --config policy/deny-durable-store.toml licenses bans advisories > target/telemetry-e2e/evidence/cargo-deny.log 2>&1
+          deny_otlp=$?
+          printf 'exit=%s\n' "$deny_otlp" >> target/telemetry-e2e/evidence/cargo-deny.log
+          cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features check --config policy/deny-durable-store.toml licenses bans advisories >> target/telemetry-e2e/evidence/cargo-deny.log 2>&1
+          deny_cli=$?
+          printf 'exit=%s\n' "$deny_cli" >> target/telemetry-e2e/evidence/cargo-deny.log
+          test "$error_migration" -eq 0 -a "$deny_otlp" -eq 0 -a "$deny_cli" -eq 0
+      - name: Upload telemetry evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: telemetry-e2e-evidence-${{ github.run_id }}-${{ github.sha }}
+          path: target/telemetry-e2e/evidence
+          if-no-files-found: error
+          retention-days: 14

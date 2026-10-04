@@ -87,6 +87,24 @@ Use obs-d-12's frozen canonical error projection and stable operational wire env
 
 PHD-001/PHD-002 and ADR-019 govern the canonical language error projection and integration handoff consumed by this sprint.
 
+### Binding admission and observation policy
+
+`decode_event` and `decode_query` retain the shared DTO boundary: canonical
+JSON is limited to 65,536 UTF-8 bytes and a container depth of 32 during
+adapter validation. Tauri's IPC layer deserializes command arguments into
+`serde_json::Value` before invoking a `#[tauri::command]` handler. As a result,
+Tauri's `max_request_bytes` check limits the value accepted for adapter
+processing; it cannot limit the raw IPC payload or memory used by that earlier
+deserialization. Enforcing a cap before deserialization would require support
+or a patch in Tauri's transport. Python's `AdapterPolicy` exposes
+caller-selected values at or below the shared ceilings for event/query inputs
+plus a query observation timeout (default 2,000 ms). Tauri keeps its existing
+`AdapterPolicy` admission fields and offers `AdapterSettings` for the same
+query-timeout choice without breaking existing host policy literals. Tauri
+validates an allowlist fan-out of at most 64 targets and treats the configured
+query timeout as one aggregate deadline, passing only its remaining budget to
+every target observation.
+
 ## Handoff from obs-d-12
 
 obs-d-12 freezes canonical errors and wire-projection specifications in docs/api-design.md. obs-d-20 consumes them after obs-d-12-sanity, with types/registry source read-only.

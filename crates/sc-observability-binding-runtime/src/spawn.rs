@@ -17,11 +17,17 @@ pub(crate) fn spawn(
     {
         return Err(std::io::Error::other("injected helper spawn failure"));
     }
+    // Count the helper in the parent before spawn so `wait_live` can never
+    // observe a spawned-but-not-yet-running helper (and the coordinator
+    // reference it holds) as already gone. The guard drops when the helper
+    // body finishes, or with the closure if spawning fails.
+    #[cfg(test)]
+    let live = Live::new();
     std::thread::Builder::new()
         .name(name.into())
         .spawn(move || {
             #[cfg(test)]
-            let _live = Live::new();
+            let _live = live;
             run();
         })
 }
@@ -54,6 +60,7 @@ pub(crate) fn fail_at(at: usize) {
 }
 
 #[cfg(test)]
+// MUTEX: coordinates the LIVE count predicate with Condvar notifications so wait_live cannot miss a transition.
 static LIVE_GATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[cfg(test)]
 static LIVE_CHANGED: std::sync::Condvar = std::sync::Condvar::new();

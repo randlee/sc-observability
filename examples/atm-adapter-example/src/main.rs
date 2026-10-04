@@ -1,31 +1,33 @@
 //! Runnable ATM adapter example built on the shared observability crates.
+#![deny(deprecated)]
 
 mod constants;
 
-use std::env;
 use std::collections::HashMap;
+use std::env;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use sc_observability::RetainedLogPolicy;
-use sc_observability_otlp::{
-    AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
-    TelemetryConfig,
-    TelemetryConfigBuilder, TracesConfig,
+use sc_observability_otlp::v2::{
+    AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
+    ResourceAttributes, Telemetry, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
+};
+use sc_observability_types::v2::{
+    AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint, LogProjector,
+    MetricProjector, MetricRecord, MetricValue, ProjectionError, ProjectionRegistration, SpanEvent,
+    SpanProjector, SpanRecord, SpanSignal, SpanStarted, SpanStatus,
+    TraceContext as CanonicalTraceContext, TraceFlags,
 };
 use sc_observability_types::{
-    ActionName, CorrelationId, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-    MetricRecord, MetricUnit, LoggingHealthReport, Observation, ObservabilityHealthReport,
-    OutcomeLabel, ProcessIdentity, ProjectionRegistration, Remediation,
-    SchemaVersion, ServiceName, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
-    SpanStatus, StateName, StateTransition, TargetCategory, TelemetryHealthReport, TraceContext,
-    TraceId,
-    OBSERVATION_ENVELOPE_VERSION,
+    ActionName, CorrelationId, Diagnostic, ErrorCode, Level, LogEvent, LoggingHealthReport,
+    MetricName, MetricUnit, OBSERVATION_ENVELOPE_VERSION, ObservabilityHealthReport, Observable,
+    Observation, OutcomeLabel, ProcessIdentity, Remediation, SchemaVersion, ServiceName, SpanId,
+    StateName, StateTransition, TargetCategory, TelemetryHealthReport, TraceContext, TraceId,
 };
-use sc_observability_types::typed::ProjectionFailure;
-use sc_observe::{Observability, ObservabilityConfig};
+use sc_observe::v2::{Observability, ObservabilityConfig};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AgentContext {
@@ -88,10 +90,9 @@ static ATM_EVENTS_TOTAL: LazyLock<MetricName> =
     LazyLock::new(|| MetricName::new("atm.events_total").expect("valid metric"));
 static ATM_TOOL_USE_DURATION_MS: LazyLock<MetricName> =
     LazyLock::new(|| MetricName::new("atm.tool_use_duration_ms").expect("valid metric"));
-static OBSERVATION_VERSION: LazyLock<SchemaVersion> =
-    LazyLock::new(|| {
-        SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version")
-    });
+static OBSERVATION_VERSION: LazyLock<SchemaVersion> = LazyLock::new(|| {
+    SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version")
+});
 static SUBAGENT_ENTITY_TARGET: LazyLock<TargetCategory> =
     LazyLock::new(|| TargetCategory::new("subagent").expect("valid target category"));
 static SUBAGENT_IDLE_STATE: LazyLock<StateName> =
@@ -136,13 +137,14 @@ fn build_observability(
     log_root: PathBuf,
     mode: RunMode,
 ) -> Result<AtmHealthProjection, Box<dyn std::error::Error>> {
-    let observability_config = ObservabilityConfig {
-        tool_name: sc_observability_types::ToolName::new("atm").expect("valid tool name"),
+    let mut observability_config = ObservabilityConfig::default_for(
+        sc_observability_types::ToolName::new("atm").expect("valid tool name"),
         log_root,
-        env_prefix: sc_observability_types::EnvPrefix::new("ATM").expect("valid prefix"),
-        queue_capacity: 1024,
-        retained_log_policy: RetainedLogPolicy::default(),
-    };
+    )?;
+    observability_config.env_prefix =
+        sc_observability_types::EnvPrefix::new("ATM").expect("valid prefix");
+    observability_config.queue_capacity = 1024;
+    observability_config.retained_log_policy = RetainedLogPolicy::default();
 
     let telemetry_config = telemetry_config_from_env(service.clone())?;
     let telemetry = Arc::new(Telemetry::new_typed(telemetry_config)?);
@@ -150,35 +152,35 @@ fn build_observability(
     let runtime = Observability::builder(observability_config)
         .register_projection(
             ProjectionRegistration::new()
-                .with_log_projector(sc_observability_types::typed::legacy_log_projector(Arc::new(AttachedLogProjector {
+                .with_log_projector(Arc::new(AttachedLogProjector {
                     telemetry: telemetry.clone(),
                     inner: Arc::new(AtmLogProjector),
-                })))
-                .with_span_projector(sc_observability_types::typed::legacy_span_projector(Arc::new(AttachedSpanProjector {
+                }))
+                .with_span_projector(Arc::new(AttachedSpanProjector {
                     telemetry: telemetry.clone(),
                     inner: Arc::new(AtmSpanProjector::default()),
-                })))
-                .with_metric_projector(sc_observability_types::typed::legacy_metric_projector(Arc::new(AttachedMetricProjector {
+                }))
+                .with_metric_projector(Arc::new(AttachedMetricProjector {
                     telemetry: telemetry.clone(),
                     inner: Arc::new(AtmMetricProjector),
-                }))),
+                })),
         )
-        .build_typed()?;
+        .build()?;
 
     emit_example_sequence(&runtime, service, mode)?;
-    runtime.flush_typed()?;
+    runtime.flush()?;
     telemetry.flush_typed()?;
 
     match mode {
         RunMode::Normal => {
             telemetry.shutdown_typed()?;
-            runtime.shutdown_typed()?;
+            runtime.shutdown()?;
         }
         RunMode::FailOpen => {
             // OTLP-009: this path intentionally leaves one started span without a
             // matching end so shutdown drops it and records fail-open export loss.
             let _ = telemetry.shutdown_typed();
-            runtime.shutdown_typed()?;
+            runtime.shutdown()?;
         }
     }
 
@@ -285,24 +287,22 @@ fn telemetry_config_from_env(
     let insecure_skip_verify = parse_bool_env("ATM_OTEL_INSECURE_SKIP_VERIFY")?.unwrap_or(false);
     let debug_local_export = parse_bool_env("ATM_OTEL_DEBUG_LOCAL_EXPORT")?.unwrap_or(false);
 
+    let mut transport = OtelConfig::default();
+    transport.enabled = endpoint.is_some();
+    transport.endpoint = endpoint;
+    transport.protocol = protocol;
+    transport.auth_header = auth_header;
+    transport.ca_file = ca_file;
+    transport.insecure_skip_verify = insecure_skip_verify;
+    transport.timeout_ms = Some(constants::OTLP_TIMEOUT_MS.into());
+    transport.debug_local_export = debug_local_export;
+
     Ok(TelemetryConfigBuilder::new(service)
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
-        .with_transport(OtelConfig {
-            enabled: endpoint.is_some(),
-            endpoint,
-            protocol,
-            auth_header,
-            ca_file,
-            insecure_skip_verify,
-            timeout_ms: constants::OTLP_TIMEOUT_MS.into(),
-            debug_local_export,
-            max_retries: constants::OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS.into(),
-            max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS.into(),
-        })
-        .with_resource(sc_observability_otlp::ResourceAttributes {
+        .with_transport(transport)
+        .with_resource(ResourceAttributes {
             attributes: [
                 ("service.namespace".to_string(), json!("atm")),
                 ("service.name".to_string(), json!("atm")),
@@ -350,100 +350,91 @@ fn project_health(
             .last_error
             .as_ref()
             .map(|summary| summary.message.clone())
-            .or_else(|| telemetry.last_error.as_ref().map(|summary| summary.message.clone())),
+            .or_else(|| {
+                telemetry
+                    .last_error
+                    .as_ref()
+                    .map(|summary| summary.message.clone())
+            }),
     }
 }
 
-struct AttachedLogProjector<T> {
+struct AttachedLogProjector<T: Observable> {
     telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::typed::TypedLogProjector<T>>,
+    inner: Arc<dyn LogProjector<T>>,
 }
 
-impl<T> sc_observability_types::typed::TypedLogProjector<T> for AttachedLogProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
-    fn project_logs(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<LogEvent>, ProjectionFailure> {
+impl<T: Observable> LogProjector<T> for AttachedLogProjector<T> {
+    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
         let events = self.inner.project_logs(observation)?;
         for event in &events {
             self.telemetry
                 .emit_log(event)
-                .map_err(telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_error)?;
         }
         Ok(events)
     }
 }
 
-struct AttachedSpanProjector<T> {
+struct AttachedSpanProjector<T: Observable> {
     telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::typed::TypedSpanProjector<T>>,
+    inner: Arc<dyn SpanProjector<T>>,
 }
 
-impl<T> sc_observability_types::typed::TypedSpanProjector<T> for AttachedSpanProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
+impl<T: Observable> SpanProjector<T> for AttachedSpanProjector<T> {
     fn project_spans(
         &self,
         observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionFailure> {
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
         let spans = self.inner.project_spans(observation)?;
         for span in &spans {
             self.telemetry
                 .emit_span(span)
-                .map_err(telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_error)?;
         }
         Ok(spans)
     }
 }
 
-struct AttachedMetricProjector<T> {
+struct AttachedMetricProjector<T: Observable> {
     telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::typed::TypedMetricProjector<T>>,
+    inner: Arc<dyn MetricProjector<T>>,
 }
 
-impl<T> sc_observability_types::typed::TypedMetricProjector<T> for AttachedMetricProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
+impl<T: Observable> MetricProjector<T> for AttachedMetricProjector<T> {
     fn project_metrics(
         &self,
         observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
+    ) -> Result<Vec<MetricRecord>, ProjectionError> {
         let metrics = self.inner.project_metrics(observation)?;
         for metric in &metrics {
             self.telemetry
                 .emit_metric(metric)
-                .map_err(telemetry_to_projection_failure)?;
+                .map_err(canonical_telemetry_to_projection_error)?;
         }
         Ok(metrics)
     }
 }
 
-fn telemetry_to_projection_failure(
-    error: sc_observability_types::TelemetryError,
-) -> ProjectionFailure {
-    match error {
-        sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionFailure::from_context(Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::ErrorCode::new_static("SC_ATM_EXAMPLE_SHUTDOWN"),
-                "telemetry runtime is shut down",
-                Remediation::not_recoverable("do not project telemetry after shutdown"),
-            )))
-        }
-        sc_observability_types::TelemetryError::ExportFailure(context) => {
-            ProjectionFailure::from_context(context)
-        }
+// Move the canonical telemetry context through the projector boundary unchanged.
+fn canonical_telemetry_to_projection_error(
+    error: sc_observability_otlp::v2::TelemetryError,
+) -> ProjectionError {
+    ProjectionError::Projection {
+        context: error.into_context(),
     }
 }
 
-fn validation_to_projection_failure(
+fn adapter_error(context: sc_observability_types::ErrorContext) -> ProjectionError {
+    ProjectionError::Projection {
+        context: Box::new(context),
+    }
+}
+
+fn validation_to_projection_error(
     error: sc_observability_types::ValueValidationError,
-) -> ProjectionFailure {
-    ProjectionFailure::from_context(Box::new(
+) -> ProjectionError {
+    adapter_error(
         sc_observability_types::ErrorContext::new(
             ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_INVALID_VALUE"),
             "ATM adapter example generated an invalid shared observability value",
@@ -454,7 +445,25 @@ fn validation_to_projection_failure(
         )
         .cause(error.to_string())
         .source(Box::new(error)),
-    ))
+    )
+}
+
+fn metric_model_to_projection_error(
+    error: sc_observability_types::v2::MetricModelError,
+) -> ProjectionError {
+    let cause = error.to_string();
+    adapter_error(
+        sc_observability_types::ErrorContext::new(
+            ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_INVALID_METRIC"),
+            "ATM adapter example generated an invalid canonical metric",
+            Remediation::recoverable(
+                "fix the adapter metric mapping so it builds a valid canonical metric",
+                ["regenerate the example observation with a valid metric input"],
+            ),
+        )
+        .cause(cause)
+        .source(Box::new(error)),
+    )
 }
 
 fn parse_mode() -> RunMode {
@@ -477,11 +486,11 @@ fn temp_log_root() -> PathBuf {
 
 struct AtmLogProjector;
 
-impl sc_observability_types::typed::TypedLogProjector<AgentInfoEvent> for AtmLogProjector {
+impl LogProjector<AgentInfoEvent> for AtmLogProjector {
     fn project_logs(
         &self,
         observation: &Observation<AgentInfoEvent>,
-    ) -> Result<Vec<LogEvent>, ProjectionFailure> {
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
         Ok(vec![LogEvent {
             version: OBSERVATION_VERSION.clone(),
             timestamp: observation.timestamp,
@@ -495,7 +504,7 @@ impl sc_observability_types::typed::TypedLogProjector<AgentInfoEvent> for AtmLog
             request_id: None,
             correlation_id: Some(
                 CorrelationId::new(observation.payload.context.session_id.clone())
-                    .map_err(validation_to_projection_failure)?,
+                    .map_err(validation_to_projection_error)?,
             ),
             outcome: outcome(&observation.payload.event)?,
             diagnostic: None,
@@ -507,17 +516,19 @@ impl sc_observability_types::typed::TypedLogProjector<AgentInfoEvent> for AtmLog
 
 #[derive(Default)]
 struct AtmSpanProjector {
+    // Shared across calls so each end event can recover its matching start timestamp.
     started: Mutex<HashMap<String, sc_observability_types::Timestamp>>,
 }
 
-impl sc_observability_types::typed::TypedSpanProjector<AgentInfoEvent> for AtmSpanProjector {
+impl SpanProjector<AgentInfoEvent> for AtmSpanProjector {
     fn project_spans(
         &self,
         observation: &Observation<AgentInfoEvent>,
-    ) -> Result<Vec<SpanSignal>, ProjectionFailure> {
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
         let Some(trace) = &observation.trace else {
             return Ok(Vec::new());
         };
+        let canonical_trace = canonical_trace(trace);
 
         let signals = match &observation.payload.event {
             HookEventKind::SubagentStart { .. } => {
@@ -529,19 +540,21 @@ impl sc_observability_types::typed::TypedSpanProjector<AgentInfoEvent> for AtmSp
                     observation.timestamp,
                     observation.service.clone(),
                     SUBAGENT_RUN_ACTION.clone(),
-                    trace.clone(),
-                    common_fields(&observation.payload),
+                    canonical_trace,
+                    canonical_fields(&observation.payload),
                 ))]
             }
-            HookEventKind::ToolUse { tool, duration_ms, .. } => vec![SpanSignal::Event(SpanEvent {
+            HookEventKind::ToolUse {
+                tool, duration_ms, ..
+            } => vec![SpanSignal::Event(SpanEvent {
                 timestamp: observation.timestamp,
-                trace: trace.clone(),
+                trace: canonical_trace,
                 name: TOOL_USE_ACTION.clone(),
-                attributes: Map::from_iter([
-                    ("tool".to_string(), Value::from(tool.clone())),
+                attributes: Attributes::from([
+                    ("tool".to_string(), AttributeValue::String(tool.clone())),
                     (
                         "duration_ms".to_string(),
-                        Value::from(duration_ms.unwrap_or_default()),
+                        AttributeValue::UInt(duration_ms.unwrap_or_default()),
                     ),
                 ]),
                 diagnostic: None,
@@ -553,14 +566,12 @@ impl sc_observability_types::typed::TypedSpanProjector<AgentInfoEvent> for AtmSp
                     .expect("started span map poisoned")
                     .remove(&trace_key(trace))
                     .ok_or_else(|| {
-                        ProjectionFailure::from_context(Box::new(
-                            sc_observability_types::ErrorContext::new(
-                                ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_MISSING_START"),
-                                "subagent end arrived without a matching recorded start",
-                                Remediation::recoverable(
-                                    "emit subagent.start before subagent.end",
-                                    ["preserve the trace context across the span lifecycle"],
-                                ),
+                        adapter_error(sc_observability_types::ErrorContext::new(
+                            ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_MISSING_START"),
+                            "subagent end arrived without a matching recorded start",
+                            Remediation::recoverable(
+                                "emit subagent.start before subagent.end",
+                                ["preserve the trace context across the span lifecycle"],
                             ),
                         ))
                     })?;
@@ -572,8 +583,8 @@ impl sc_observability_types::typed::TypedSpanProjector<AgentInfoEvent> for AtmSp
                         start_timestamp,
                         observation.service.clone(),
                         SUBAGENT_RUN_ACTION.clone(),
-                        trace.clone(),
-                        common_fields(&observation.payload),
+                        canonical_trace,
+                        canonical_fields(&observation.payload),
                     )
                     .with_diagnostic(Diagnostic {
                         timestamp: observation.timestamp,
@@ -598,37 +609,61 @@ impl sc_observability_types::typed::TypedSpanProjector<AgentInfoEvent> for AtmSp
 
 struct AtmMetricProjector;
 
-impl sc_observability_types::typed::TypedMetricProjector<AgentInfoEvent> for AtmMetricProjector {
+impl MetricProjector<AgentInfoEvent> for AtmMetricProjector {
     fn project_metrics(
         &self,
         observation: &Observation<AgentInfoEvent>,
-    ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
+    ) -> Result<Vec<MetricRecord>, ProjectionError> {
         let mut metrics = Vec::new();
 
-        metrics.push(MetricRecord {
-            timestamp: observation.timestamp,
-            service: observation.service.clone(),
-            name: ATM_EVENTS_TOTAL.clone(),
-            kind: MetricKind::Counter,
-            value: 1.0,
-            unit: Some(METRIC_UNIT_COUNT.clone()),
-            attributes: common_fields(&observation.payload),
-        });
+        metrics.push(
+            MetricRecord::try_new(
+                observation.timestamp,
+                observation.service.clone(),
+                ATM_EVENTS_TOTAL.clone(),
+                MetricValue::Sum {
+                    value: finite(1.0)?,
+                    monotonic: true,
+                    temporality: AggregationTemporality::Cumulative,
+                    start_time: observation.timestamp,
+                },
+            )
+            .map_err(metric_model_to_projection_error)?
+            .with_unit(Some(METRIC_UNIT_COUNT.clone()))
+            .with_attributes(canonical_fields(&observation.payload)),
+        );
 
         if let HookEventKind::ToolUse { duration_ms, .. } = &observation.payload.event {
-            metrics.push(MetricRecord {
-                timestamp: observation.timestamp,
-                service: observation.service.clone(),
-                name: ATM_TOOL_USE_DURATION_MS.clone(),
-                kind: MetricKind::Histogram,
-                value: duration_ms.unwrap_or_default() as f64,
-                unit: Some(METRIC_UNIT_MILLISECONDS.clone()),
-                attributes: common_fields(&observation.payload),
-            });
+            metrics.push(
+                MetricRecord::try_new(
+                    observation.timestamp,
+                    observation.service.clone(),
+                    ATM_TOOL_USE_DURATION_MS.clone(),
+                    MetricValue::Histogram {
+                        point: tool_duration_sample(duration_ms.unwrap_or_default())?,
+                        temporality: AggregationTemporality::Cumulative,
+                        start_time: observation.timestamp,
+                    },
+                )
+                .map_err(metric_model_to_projection_error)?
+                .with_unit(Some(METRIC_UNIT_MILLISECONDS.clone()))
+                .with_attributes(canonical_fields(&observation.payload)),
+            );
         }
 
         Ok(metrics)
     }
+}
+
+/// One tool-use duration as a valid one-sample histogram: a single bucket
+/// with no explicit bounds holding the sample, whose sum is the duration.
+fn tool_duration_sample(duration_ms: u64) -> Result<HistogramPoint, ProjectionError> {
+    HistogramPoint::try_new(Vec::new(), vec![1], 1, finite(duration_ms as f64)?)
+        .map_err(metric_model_to_projection_error)
+}
+
+fn finite(value: f64) -> Result<FiniteF64, ProjectionError> {
+    FiniteF64::new(value).map_err(validation_to_projection_error)
 }
 
 fn action_name(event: &HookEventKind) -> ActionName {
@@ -649,12 +684,10 @@ fn log_message(event: &HookEventKind) -> String {
     }
 }
 
-fn outcome(
-    event: &HookEventKind,
-) -> Result<Option<OutcomeLabel>, ProjectionFailure> {
+fn outcome(event: &HookEventKind) -> Result<Option<OutcomeLabel>, ProjectionError> {
     match event {
         HookEventKind::SubagentEnd { outcome } => Ok(Some(
-            OutcomeLabel::new(outcome.clone()).map_err(validation_to_projection_failure)?,
+            OutcomeLabel::new(outcome.clone()).map_err(validation_to_projection_error)?,
         )),
         _ => Ok(None),
     }
@@ -664,7 +697,7 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
     match event {
         HookEventKind::SubagentStart { .. } => Some(StateTransition {
             entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
-            entity_id: Some("subagent-7".to_string()),
+            entity_id: Some(String::from("subagent-7")),
             from_state: SUBAGENT_IDLE_STATE.clone(),
             to_state: SUBAGENT_RUNNING_STATE.clone(),
             reason: None,
@@ -672,7 +705,7 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
         }),
         HookEventKind::SubagentEnd { .. } => Some(StateTransition {
             entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
-            entity_id: Some("subagent-7".to_string()),
+            entity_id: Some(String::from("subagent-7")),
             from_state: SUBAGENT_RUNNING_STATE.clone(),
             to_state: SUBAGENT_COMPLETED_STATE.clone(),
             reason: None,
@@ -684,8 +717,14 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
 
 fn common_fields(payload: &AgentInfoEvent) -> Map<String, Value> {
     Map::from_iter([
-        ("team".to_string(), Value::from(payload.context.team.clone())),
-        ("agent_id".to_string(), Value::from(payload.context.agent_id.clone())),
+        (
+            "team".to_string(),
+            Value::from(payload.context.team.clone()),
+        ),
+        (
+            "agent_id".to_string(),
+            Value::from(payload.context.agent_id.clone()),
+        ),
         (
             "subagent_id".to_string(),
             payload
@@ -702,6 +741,44 @@ fn common_fields(payload: &AgentInfoEvent) -> Map<String, Value> {
     ])
 }
 
+fn canonical_fields(payload: &AgentInfoEvent) -> Attributes {
+    Attributes::from([
+        (
+            "team".to_string(),
+            AttributeValue::String(payload.context.team.clone()),
+        ),
+        (
+            "agent_id".to_string(),
+            AttributeValue::String(payload.context.agent_id.clone()),
+        ),
+        (
+            "subagent_id".to_string(),
+            payload
+                .context
+                .subagent_id
+                .clone()
+                .map_or(AttributeValue::Null, AttributeValue::String),
+        ),
+        (
+            "session_id".to_string(),
+            AttributeValue::String(payload.context.session_id.clone()),
+        ),
+    ])
+}
+
+/// The observation envelope carries no trace flags, so the canonical default applies.
+fn canonical_trace(trace: &TraceContext) -> CanonicalTraceContext {
+    let canonical = CanonicalTraceContext::new(
+        trace.trace_id.clone(),
+        trace.span_id.clone(),
+        TraceFlags::default(),
+    );
+    match trace.parent_span_id.clone() {
+        Some(parent) => canonical.with_parent(parent),
+        None => canonical,
+    }
+}
+
 fn trace_key(trace: &TraceContext) -> String {
     format!("{}:{}", trace.trace_id.as_str(), trace.span_id.as_str())
 }
@@ -709,6 +786,7 @@ fn trace_key(trace: &TraceContext) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_types::Timestamp;
     use time::Duration;
 
     fn service_name() -> ServiceName {
@@ -767,9 +845,124 @@ mod tests {
         match &end_signals[0] {
             SpanSignal::Ended(span) => {
                 assert_eq!(span.timestamp(), Timestamp::UNIX_EPOCH);
-                assert_eq!(span.duration_ms().map(u64::from), Some(250));
+                assert_eq!(u64::from(span.duration_ms()), 250);
             }
             other => panic!("expected ended span, got {other:?}"),
         }
+    }
+
+    fn tool_use(duration_ms: u64) -> Observation<AgentInfoEvent> {
+        let mut tool = Observation::new(
+            service_name(),
+            AgentInfoEvent {
+                context: base_context(),
+                event: HookEventKind::ToolUse {
+                    tool: "read_file".to_string(),
+                    args: vec!["docs/agent.md".to_string()],
+                    duration_ms: Some(duration_ms),
+                },
+            },
+        );
+        tool.trace = Some(base_trace());
+        tool
+    }
+
+    #[test]
+    fn tool_duration_is_one_canonical_histogram_sample() {
+        let metrics = AtmMetricProjector
+            .project_metrics(&tool_use(24))
+            .expect("tool metrics");
+
+        let duration = metrics
+            .iter()
+            .find(|metric| metric.name() == &*ATM_TOOL_USE_DURATION_MS)
+            .expect("tool duration metric");
+        let MetricValue::Histogram { point, .. } = duration.value() else {
+            panic!("tool duration is a histogram: {duration:?}");
+        };
+        assert!(point.explicit_bounds().is_empty());
+        assert_eq!(point.bucket_counts(), &[1]);
+        assert_eq!(point.count(), 1);
+        assert_eq!(point.sum().get(), 24.0);
+        assert_eq!(duration.unit(), Some(&*METRIC_UNIT_MILLISECONDS));
+
+        let events = metrics
+            .iter()
+            .find(|metric| metric.name() == &*ATM_EVENTS_TOTAL)
+            .expect("event counter");
+        assert!(matches!(
+            events.value(),
+            MetricValue::Sum {
+                monotonic: true,
+                temporality: AggregationTemporality::Cumulative,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn attached_projectors_forward_canonical_models_unchanged() {
+        let config = TelemetryConfigBuilder::new(service_name())
+            .enable_logs(LogsConfig::default())
+            .enable_traces(TracesConfig::default())
+            .enable_metrics(MetricsConfig::default())
+            .build_typed()
+            .expect("telemetry config");
+        let telemetry = Arc::new(Telemetry::new_typed(config).expect("telemetry"));
+        let observation = tool_use(24);
+        let attached_metrics = AttachedMetricProjector {
+            telemetry: telemetry.clone(),
+            inner: Arc::new(AtmMetricProjector),
+        };
+        let attached_spans = AttachedSpanProjector {
+            telemetry: telemetry.clone(),
+            inner: Arc::new(AtmSpanProjector::default()),
+        };
+
+        assert_eq!(
+            attached_metrics
+                .project_metrics(&observation)
+                .expect("canonical metric calls"),
+            AtmMetricProjector
+                .project_metrics(&observation)
+                .expect("direct metrics")
+        );
+        let spans = attached_spans
+            .project_spans(&observation)
+            .expect("canonical span calls");
+        let [SpanSignal::Event(event)] = spans.as_slice() else {
+            panic!("tool use projects one span event: {spans:?}");
+        };
+        assert_eq!(event.trace, canonical_trace(&base_trace()));
+        assert_eq!(
+            event.attributes.get("duration_ms"),
+            Some(&AttributeValue::UInt(24))
+        );
+        let health = telemetry.health();
+        assert_eq!(health.dropped_exports_total, 0, "{health:?}");
+        assert!(health.last_error.is_none(), "{health:?}");
+    }
+
+    #[test]
+    fn missing_start_keeps_its_native_diagnostic() {
+        let projector = AtmSpanProjector::default();
+        let mut end = Observation::new(
+            service_name(),
+            AgentInfoEvent {
+                context: base_context(),
+                event: HookEventKind::SubagentEnd {
+                    outcome: "success".to_string(),
+                },
+            },
+        );
+        end.trace = Some(base_trace());
+
+        let error = projector
+            .project_spans(&end)
+            .expect_err("no recorded start");
+        assert_eq!(
+            error.diagnostic().code,
+            ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_MISSING_START")
+        );
     }
 }

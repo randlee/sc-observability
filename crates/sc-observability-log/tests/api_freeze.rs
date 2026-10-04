@@ -14,8 +14,72 @@ use sc_observability_log::{
     ShutdownError, WaitError,
 };
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "the owned signature pins exhaustive released variants"
+)]
+fn released_init_error(error: InitError) {
+    match error {
+        InitError::AlreadyInitialized
+        | InitError::ForeignLoggerInstalled
+        | InitError::UnsupportedLevel { .. }
+        | InitError::IdentityResolution { .. }
+        | InitError::Logger { .. }
+        | InitError::RuntimeStart { .. } => {}
+    }
+}
+
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "the owned signature pins exhaustive released variants"
+)]
+fn released_flush_error(error: FlushError) {
+    match error {
+        FlushError::TimedOut { .. }
+        | FlushError::Logger { .. }
+        | FlushError::HelperSpawn { .. }
+        | FlushError::HelperLost { .. }
+        | FlushError::InProgress
+        | FlushError::NotRunning { .. } => {}
+    }
+}
+
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "the owned signature pins exhaustive released variants"
+)]
+fn released_shutdown_error(error: ShutdownError) {
+    match error {
+        ShutdownError::TimedOut { .. }
+        | ShutdownError::FinalFlush { .. }
+        | ShutdownError::HelperSpawn { .. }
+        | ShutdownError::HelperLost { .. } => {}
+    }
+}
+
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "the owned signature pins exhaustive released variants"
+)]
+fn released_emit_error(error: EmitError) {
+    match error {
+        EmitError::InvalidField { .. }
+        | EmitError::InvalidEvent { .. }
+        | EmitError::QueueFull { .. }
+        | EmitError::WriterDegraded { .. }
+        | EmitError::ShutdownTimedOut { .. }
+        | EmitError::NotRunning { .. }
+        | EmitError::Reentrant
+        | EmitError::Panicked => {}
+    }
+}
+
 #[test]
 fn bp3_public_api_is_frozen() {
+    let _: fn(InitError) = released_init_error;
+    let _: fn(FlushError) = released_flush_error;
+    let _: fn(ShutdownError) = released_shutdown_error;
+    let _: fn(EmitError) = released_emit_error;
     let _: fn(LoggerConfig, BridgeOptions) -> Result<LogGuard, InitError> =
         sc_observability_log::init;
     let _: fn(&LogGuard) -> LogControl = LogGuard::control;

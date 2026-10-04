@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "sc-observability"
-version = "1.4.0"
+version = "1.5.0"
 description = "Typed Python runtime bindings for sc-observability"
 requires-python = ">=3.10"
 license = "MIT"
@@ -22,5 +22,5 @@ classifiers = [
 [tool.maturin]
 module-name = "sc_observability._native"
 python-source = "python"
-features = ["pyo3/abi3-py310", "pyo3/extension-module"]
+features = ["pyo3/abi3-py310", "pyo3/extension-module", "otlp-telemetry"]
 locked = true

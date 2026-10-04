@@ -13,7 +13,7 @@ constructor = "none"
 roots = []
 [dependencies]
 allowed_dependents = ["rust-python-logging"]
-allowed_dependencies = ["sc-observability", "sc-observability-binding-runtime", "sc-observability-dto", "sc-observability-types"]
+allowed_dependencies = ["sc-observability-otlp", "sc-observability", "sc-observability-binding-runtime", "sc-observability-dto", "sc-observability-types"]
 forbidden_edges = []
 [references]
 scope = "outside_owner_crate"

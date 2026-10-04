@@ -15,6 +15,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - name: Real identity and descendant preflight
         shell: pwsh
         run: python scripts/ci/windows_identity_preflight.py

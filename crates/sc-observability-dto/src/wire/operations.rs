@@ -88,12 +88,12 @@ pub enum LevelRequestDto {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Failure {
+pub enum Failure<D = Diagnostic> {
     /// Wire validation.
     Validation {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
         /// Wire field.
         field: String,
     },
@@ -101,13 +101,13 @@ pub enum Failure {
     QueueFull {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
     },
     /// Wire below baseline.
     BelowBaseline {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
         /// Wire requested.
         requested: LevelFilterDto,
         /// Wire configured.
@@ -117,7 +117,7 @@ pub enum Failure {
     UnsupportedLevel {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
         /// Wire requested.
         requested: LevelFilterDto,
         /// Wire available.
@@ -127,31 +127,31 @@ pub enum Failure {
     PermissionDenied {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
     },
     /// Wire closed.
     Closed {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
     },
     /// Wire unavailable.
     Unavailable {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
     },
     /// Wire io.
     Io {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
     },
     /// Wire timeout.
     Timeout {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
         /// Wire operation.
         operation: String,
     },
@@ -159,7 +159,7 @@ pub enum Failure {
     Cancelled {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
         /// Wire operation.
         operation: String,
     },
@@ -167,7 +167,7 @@ pub enum Failure {
     UnsupportedVersion {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
         /// Wire received.
         received: u32,
     },
@@ -175,21 +175,40 @@ pub enum Failure {
     Internal {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
     },
     /// Wire unknown remote.
     UnknownRemote {
         #[serde(flatten)]
         /// Wire diagnostic.
-        diagnostic: Box<Diagnostic>,
+        diagnostic: Box<D>,
         /// Wire remote kind.
         remote_kind: String,
     },
 }
 
-impl Failure {
+impl<D> Failure<D> {
+    /// Serde tags accepted by the version-one failure representation.
+    ///
+    /// Kept with the enum so legacy and canonical decoders share one authority.
+    pub const KNOWN_KINDS: &[&str] = &[
+        "validation",
+        "queue_full",
+        "below_baseline",
+        "unsupported_level",
+        "permission_denied",
+        "closed",
+        "unavailable",
+        "io",
+        "timeout",
+        "cancelled",
+        "unsupported_version",
+        "internal",
+        "unknown_remote",
+    ];
+
     /// Returns the original diagnostic without parsing display text.
-    pub fn diagnostic(&self) -> &Diagnostic {
+    pub fn diagnostic(&self) -> &D {
         match self {
             Self::Validation { diagnostic, .. }
             | Self::QueueFull { diagnostic, .. }
@@ -228,7 +247,7 @@ pub enum ResultDto<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum WireEnvelope<T> {
+pub enum WireEnvelope<T, D = Diagnostic> {
     /// Wire ok.
     Ok {
         /// Active variant schema version.
@@ -243,7 +262,7 @@ pub enum WireEnvelope<T> {
         #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
         schema_version: u32,
         /// Active variant error.
-        error: Failure,
+        error: Failure<D>,
     },
 }
 
@@ -294,7 +313,7 @@ pub struct FlushRequest {
     /// Wire schema version.
     pub schema_version: u32,
     /// timeout ms.
-    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = 60000)))]
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = crate::constants::MAX_TIMEOUT_MS)))]
     /// Wire timeout ms.
     pub timeout_ms: u32,
 }
@@ -375,7 +394,7 @@ pub enum ClientOutcome {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 pub struct ClientStatus {
     /// Number of outstanding operations, bounded by client admission.
-    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = 256)))]
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = crate::constants::MAX_CLIENT_IN_FLIGHT)))]
     /// Wire in flight.
     pub in_flight: u32,
     /// Saturating counters for every declared failure kind.
@@ -456,3 +475,15 @@ pub struct FailureCountsDto {
     /// Wire unknown remote.
     pub unknown_remote: DecimalDto,
 }
+
+/// Additive failure view over the shared wire representation.
+///
+/// It has the same tagged JSON shape as [`Failure`] while retaining canonical
+/// diagnostic cause, documentation, and details fields.
+pub type CanonicalFailureDto = Failure<super::events::CanonicalDiagnosticDto>;
+
+/// Additive envelope view over the shared wire representation.
+///
+/// This alias preserves the canonical envelope's JSON discriminants and its
+/// richer diagnostic payload without maintaining a second enum definition.
+pub type CanonicalWireEnvelope<T> = WireEnvelope<T, super::events::CanonicalDiagnosticDto>;

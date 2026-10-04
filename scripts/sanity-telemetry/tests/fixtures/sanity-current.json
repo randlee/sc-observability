@@ -1,0 +1,1 @@
+{"run_id":"run-pair","reviewer":"sanity-llm","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","task":"obs-d-35","sprint":"d-35","phase":"phase-d","started_at":"2026-10-01T11:59:00.000000000Z","completed_at":"2026-10-01T12:00:00.123456789Z","duration_seconds":60,"pr_number":12,"iteration":1,"verdict":"PASS","findings":0,"error":null}

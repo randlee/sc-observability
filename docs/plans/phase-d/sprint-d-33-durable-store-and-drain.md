@@ -89,14 +89,21 @@ exporting through the d-29 `SubmissionExporter` seam.
    `duplicate = true`. Enforce reject-newer schema and envelope versions.
    Implement the d-29 flush result rules. Implement
    `durable::adapter::otel_config_from`; `open` builds the production
-   exporter with `exporter_for(SyncHttpConfig::from_otel(..))` and calls the
+   exporter with `exporter_for(worker, bounds)` from the destructured `SyncHttpConfig::from_otel(..)` result and calls the
    crate-private `open_with_exporter(config, Arc<dyn SubmissionExporter>)`.
    [PHD-005, PHD-007, PHB-010]
 2. Implement the drain worker and multi-process ownership: drain lease with
    expiry, row claims, `SubmissionExportFailure::Retryable` → `retry` with
    `next_attempt_at` (bounded by `SyncHttpRetryPolicy`), `Terminal` →
    `failed`, at-least-once delivery with the duplicate window documented
-   below, and resumption after a crash or exit. [PHD-008, PHB-011]
+   below, and resumption after a crash or exit. The transport owns the network
+   retry budget: completed `RetryAttemptsExhausted` and `RetryDeadlineExhausted`
+   results are terminal to the drain and must not start another transport
+   sequence. Explicit transport shutdown returns interrupted rows to pending
+   without charging a persisted attempt and stops that signal worker; after
+   client shutdown releases the lease, a replacement client can reclaim them.
+   Process interruption retains the existing lease-expiry recovery behavior.
+   [PHD-008, PHB-011]
 3. Implement the layering and backpressure: store → drain worker →
    `AdmissionCredits::reserve` → `SubmissionExporter::export`. Implement
    `AdmissionCredits::wait_for_release` (staged by d-29 as a signature only):
@@ -190,6 +197,13 @@ The signatures are in the d-29 doc and are not restated here.
 - **Claims.** Only the lease holder claims rows. It sets `state='claimed'`,
   `claimed_by` and `claim_expires_at = lease expiry`. After a batch completes,
   rows move to `delivered`, `retry` (with `next_attempt_at`) or `failed`.
+- **Retry.** The d-34 transport owns in-sequence retry, including
+  `retry_jitter_percent`, `retry_after_cap_ms` and
+  `retry_sequence_timeout_ms`. Durable scheduling deliberately ignores those
+  three fields. Durable owns only the bounded, persisted retry count and
+  exponential backoff, computed from the configured `initial_backoff_ms` and
+  `max_backoff_ms`, which default to `DEFAULT_OTLP_INITIAL_BACKOFF_MS` and
+  `DEFAULT_OTLP_MAX_BACKOFF_MS`.
 - **Takeover.** Claims held by an expired holder are reset to `pending` when
   the lease is taken over.
 - **Flush and shutdown.** Scope and results follow the d-29 flush rules.
@@ -248,7 +262,7 @@ All `durable::` tests below run with
   - `retryable_then_delivered` and `terminal_marks_failed`
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D3): `durable::tests::backpressure`
   covers backend saturation. `backend_queue_full_pauses_no_eviction`: with
-  credits exhausted, store rows stay pending and are never evicted, and they
+  credits exhausted, selected store rows stay claimed and are never evicted, and they
   drain after release. It also covers `disk_bound_reject_new`,
   `disk_bound_evict_oldest_counted` and `retention_purges_delivered_only`.
 - [ ] boundary:BOUNDARY-ScObservabilityOtlp (D3): with `durable-store` and

@@ -7,6 +7,8 @@ import sys
 import tempfile
 import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
+sys.path.insert(0, str(Path('scripts/ci').resolve()))
+from boundary_policy import is_first_party_dependency, validate_first_party_dependencies
 from release_manifest import workspace_members
 
 def is_release_manifest(path: Path, workspace_toml: Path):
@@ -56,7 +58,19 @@ def assert_no_banned_dependencies(path: Path, workspace_document=None):
     if banned:
         raise SystemExit(f"forbidden boundary dependencies in {path}: {banned}")
 
-CORE_BOUNDARY_FORBIDDEN = {"schemars", "sc-observability-dto"}
+CORE_BOUNDARY_FORBIDDEN = {"schemars"}
+
+CORE_BOUNDARY_MANIFESTS = {
+    "sc-observability-types": root / "crates/sc-observability-types/Cargo.toml",
+    "sc-observability": root / "crates/sc-observability/Cargo.toml",
+    "sc-observe": root / "crates/sc-observe/Cargo.toml",
+    "sc-observability-otlp": root / "crates/sc-observability-otlp/Cargo.toml",
+    "sc-observability-dto": root / "crates/sc-observability-dto/Cargo.toml",
+    "sc-observability-log": root / "crates/sc-observability-log/Cargo.toml",
+    "sc-observability-log-macros": root / "crates/sc-observability-log-macros/Cargo.toml",
+    "sc-observability-log-consumer-check": root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+    "sc-otel-cli": root / "crates/sc-otel-cli/Cargo.toml",
+}
 
 def assert_no_core_boundary_dependencies(path: Path):
     forbidden = sorted(section_deps(path, "dependencies") & CORE_BOUNDARY_FORBIDDEN)
@@ -89,9 +103,14 @@ obs_test_deps = section_deps(root / "crates/sc-observability/Cargo.toml", "dev-d
 observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
 observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
 otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
-otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
-if obs_runtime_deps != {"serde", "serde_json", "sc-observability-types", "thiserror"}:
+for package, manifest_path in CORE_BOUNDARY_MANIFESTS.items():
+    try:
+        validate_first_party_dependencies(root, package, dependency_names(manifest_path))
+    except ValueError as error:
+        raise SystemExit(error) from error
+
+if obs_runtime_deps - {dependency for dependency in obs_runtime_deps if is_first_party_dependency(dependency)} != {"serde", "serde_json", "thiserror"}:
     raise SystemExit(
         "sc-observability runtime dependency set drifted from allowed baseline: "
         f"{sorted(obs_runtime_deps)}"
@@ -101,13 +120,13 @@ if obs_target_runtime_deps != {"cfg(windows)": {"windows-sys"}}:
         "sc-observability target-specific runtime dependency set drifted from allowed baseline: "
         f"{obs_target_runtime_deps}"
     )
-if obs_test_deps - {"temp-env", "tempfile"}:
+if obs_test_deps - {"temp-env", "tempfile", "trybuild"}:
     raise SystemExit(
         "sc-observability test dependency set drifted from allowed baseline: "
-        f"{sorted(obs_test_deps - {'temp-env', 'tempfile'})}"
+        f"{sorted(obs_test_deps - {'temp-env', 'tempfile', 'trybuild'})}"
     )
 
-if observe_runtime_deps != {"sc-observability-types", "sc-observability"}:
+if observe_runtime_deps - {dependency for dependency in observe_runtime_deps if is_first_party_dependency(dependency)}:
     raise SystemExit(
         "sc-observe runtime dependency set drifted from allowed baseline: "
         f"{sorted(observe_runtime_deps)}"
@@ -120,21 +139,22 @@ if observe_test_deps - {"serde_json"}:
     )
 
 required_otlp = {
+    "sc-lint-attributes",
     "serde_json",
     "thiserror",
-    "sc-observability-types",
 }
-allowed_otlp = required_otlp | {"sc-observability"}
-if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
+# ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
+sys.path.insert(0, str(root / "scripts/ci"))
+from otlp_dependencies import validate_transport_dependencies
+transport_names = validate_transport_dependencies(root)
+otlp_external_runtime_deps = otlp_runtime_deps - {
+    dependency for dependency in otlp_runtime_deps if is_first_party_dependency(dependency)
+}
+allowed_otlp = required_otlp | transport_names
+if not required_otlp.issubset(otlp_external_runtime_deps) or not otlp_external_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependency set drifted from allowed baseline: "
         f"{sorted(otlp_runtime_deps)}"
-    )
-
-if otlp_test_deps - {"sc-observe"}:
-    raise SystemExit(
-        "sc-observability-otlp test dependency set drifted from allowed baseline: "
-        f"{sorted(otlp_test_deps - {'sc-observe'})}"
     )
 
 for path in [
@@ -147,7 +167,11 @@ for path in [
         raise SystemExit(f"OTLP/OpenTelemetry dependency found outside sc-observability-otlp: {path}")
 
 dto = load_toml(root / "crates/sc-observability-dto/Cargo.toml")
-if set(dto["dependencies"]) != {"sc-observability-types", "serde", "serde_json", "schemars"}:
+dto_external_dependencies = {
+    dependency for dependency in dto["dependencies"]
+    if not is_first_party_dependency(dependency)
+}
+if dto_external_dependencies != {"serde", "serde_json", "schemars"}:
     raise SystemExit("DTO dependency closure drifted")
 if dto["dependencies"]["schemars"] != {"version": "=1.2.2", "optional": True} or dto["features"].get("schema-gen") != ["dep:schemars"]:
     raise SystemExit("DTO schema tooling must remain optional and exactly pinned")
@@ -161,6 +185,7 @@ boundary_manifests = [
     root / "crates/sc-observability-log/Cargo.toml",
     root / "crates/sc-observability-log-macros/Cargo.toml",
     root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+    root / "crates/sc-otel-cli/Cargo.toml",
 ]
 for path in boundary_manifests:
     assert_no_banned_dependencies(path)
@@ -254,4 +279,4 @@ with tempfile.TemporaryDirectory(prefix="core-boundary-fixtures-") as directory:
 print("dependency ban validation passed")
 PY
 
-python3 scripts/ci/validate_binding_runtime_dependencies.py
+python3 -m unittest scripts.ci.tests.test_otlp_dependencies

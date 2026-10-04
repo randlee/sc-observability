@@ -167,6 +167,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
+          components: clippy, rustfmt
           targets: ${{ matrix.target }}
 
       - name: Ensure cross-compilation target
@@ -269,6 +270,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.release-plan.outputs.rust_toolchain }}
+          components: clippy, rustfmt
 
       - name: Install Linux native build deps
         uses: ./.github/actions/install-linux-native-deps

@@ -1,0 +1,30 @@
+[package]
+name = "sc-otel-cli"
+publish = false
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Telemetry submission command-line client"
+
+[[bin]]
+name = "sc-otel"
+path = "src/main.rs"
+
+[features]
+test-double = ["sc-observability-types/test-double"]
+
+[dependencies]
+sc-observability-types.workspace = true
+sc-observability-otlp = { workspace = true, features = ["durable-store"] }
+clap.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

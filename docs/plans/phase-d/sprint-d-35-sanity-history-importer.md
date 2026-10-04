@@ -77,7 +77,8 @@ wheel.
 4. Add `scripts/sanity-telemetry/display.py::format_local(ts, tz)` for local
    display only. [PHD-011]
 5. Add `.github/workflows/sanity-telemetry.yml` (`ubuntu-24.04`): on
-   `pull_request` to `sprint/*` and `integrate/*` with a path filter on
+   `pull_request` to `sprint/*`, `integrate/*`, and `fix/*` (so stacked fix
+   PRs run against their declared fix-layer base) with a path filter on
    `scripts/sanity-telemetry/**`, `bindings/python/sc-observability-py/**`
    and the workflow itself, plus `workflow_dispatch`. It builds the d-30
    test-hooks wheel and runs the importer tests. [PHD-009, PHD-011]

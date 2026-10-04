@@ -19,6 +19,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -28,7 +29,6 @@ jobs:
             --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
           python3 scripts/ci/validate_version_literals.py
           python3 -m unittest discover -s scripts/ci/tests -p 'test_log_staging.py'
-          python3 -m unittest discover -s scripts/ci/tests -p 'test_generation_provenance.py'
       - name: Build and verify all six immutable Cargo packages
         run: |
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
@@ -58,6 +58,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

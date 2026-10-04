@@ -43,7 +43,20 @@ D.21 owns manifests, allowlists, OTLP registry re-exports, module declarations, 
 
 D.7 owns only `sdk/implementation.rs`, `sdk/tests.rs`, `examples/otlp-sdk/Cargo.toml`, and `examples/otlp-sdk/src/**`. D.21 owns and stubs `sdk/mod.rs`, the feature/dependency declarations, config, contracts, and shared `ExporterLifecycle`; D.7 must consume them unchanged. D.6 owns the shared lifecycle barrier, shutdown ordering, and admission control. D.7 calls that core and owns only SDK provider/batch-processor behavior.
 
-The adapter delegates retry exclusively to the pinned official SDK, sets validated builder values explicitly, never lets ambient `OTEL_*` defaults override them, and never creates a hidden runtime or substitutes no-op. It preserves D.12 typed terminal/deadline/accounting results at its supported external consumer boundary; expected failures remain results rather than panics or false success (ADR-014).
+The approved adapter retains lossless raw tonic transport because the pinned official SDK does not expose the required pre-aggregated metric construction. It applies the pinned SDK's gRPC retry classification and bounded retry limits locally, using the existing validated lifecycle shutdown deadline; this is the conservative-A bridge pending a public lossless SDK path. It sets validated builder values explicitly, never lets ambient `OTEL_*` defaults override them, and never creates a hidden runtime or substitutes no-op. It preserves D.12 typed terminal/deadline/accounting results at its supported external consumer boundary; expected failures remain results rather than panics or false success (ADR-014).
+
+## Implementation matrix (reissued completion)
+
+| Deliverable | Concrete source | Evidence |
+| --- | --- | --- |
+| D1: pinned, caller-owned SDK transport | `sdk/implementation.rs`: `SdkTerminal` owns per-signal generated tonic clients; `sdk/mod.rs` re-exports the crate-private constructor | `cargo test -p sc-observability-otlp --lib sdk::tests --features otlp-sdk --locked` |
+| D2: lossless neutral signal projection | `project_logs`, `project_spans`, and `project_metrics` emit OTLP protobuf collector requests after resource/scope grouping | `sdk::tests::{resource_grouping_keeps_each_resource_and_its_record_order,metric_projection_keeps_resource_scope_and_histogram_distribution}` |
+| D3: one D.6 admission/lifecycle domain | `LifecycleCore::from_backend` owns only the terminal backend; `build_exporter_set` creates that core before adapters, and adapters admit then schedule via the caller Tokio handle | `sdk::tests::sdk_constructor_builds_one_shared_admission_core_from_explicit_connection` and lifecycle regression suite |
+| D4: hosted consumer handoff | `examples/otlp-sdk` remains the Tokio-hosted configuration consumer; the crate-private constructor is activated by the reviewed `sdk-test-support` fixture seam, while D.18 owns production-facade activation | `cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked` runs signal, pressure, host-lifecycle, and held-request request-deadline fixtures |
+
+The generated-client transport remains feature-isolated under the reviewed
+ADR-019 allowlist. D.18 retains root-facade activation and D.9 retains
+collector equivalence; neither is claimed by this matrix.
 
 ## Handoff from obs-d-21 (wave 1)
 
@@ -61,7 +74,7 @@ batch-processor behavior.
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability-otlp --lib sdk::tests --features otlp-sdk --locked` runs all signal mappings, retry-deadline/terminal, explicit-config-vs-env, queue-pressure, shutdown and caller-runtime teardown tests (D1–D3).
-- [ ] `cargo check --manifest-path examples/otlp-sdk/Cargo.toml --locked` passes the Tokio-hosted 2.0 consumer against contract interfaces (D4).
+- [ ] `cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked` runs the external Tokio-hosted D4 fixture (non-zero test count), including signal mappings, queue pressure, async completion, host-runtime teardown, and a held-request assertion of the configured request deadline.
 - [ ] This sprint does not close real shared-core composition or dual collector equivalence; D.18/D.9 do.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

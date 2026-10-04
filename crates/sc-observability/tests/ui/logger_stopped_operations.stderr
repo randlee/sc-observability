@@ -1,0 +1,32 @@
+error[E0599]: no method named `log` found for struct `sc_observability::Logger<sc_observability::Stopped>` in the current scope
+ --> tests/ui/logger_stopped_operations.rs:8:20
+  |
+8 |     let _ = logger.log(event);
+  |                    ^^^ method not found in `sc_observability::Logger<sc_observability::Stopped>`
+  |
+  = note: the method was found for
+          - `sc_observability::Logger`
+
+error[E0599]: no method named `flush` found for struct `sc_observability::Logger<sc_observability::Stopped>` in the current scope
+ --> tests/ui/logger_stopped_operations.rs:9:20
+  |
+9 |     let _ = logger.flush();
+  |                    ^^^^^ method not found in `sc_observability::Logger<sc_observability::Stopped>`
+  |
+  = note: the method was found for
+          - `sc_observability::Logger`
+
+error[E0599]: no method named `query` found for struct `sc_observability::Logger<sc_observability::Stopped>` in the current scope
+  --> tests/ui/logger_stopped_operations.rs:10:20
+   |
+10 |     let _ = logger.query(&query);
+   |                    ^^^^^ method not found in `sc_observability::Logger<sc_observability::Stopped>`
+   |
+   = note: the method was found for
+           - `sc_observability::Logger`
+
+error[E0599]: no method named `shutdown` found for struct `sc_observability::Logger<sc_observability::Stopped>` in the current scope
+  --> tests/ui/logger_stopped_operations.rs:11:20
+   |
+11 |     let _ = logger.shutdown();
+   |                    ^^^^^^^^ private field, not a method

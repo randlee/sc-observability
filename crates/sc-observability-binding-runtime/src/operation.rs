@@ -1,6 +1,7 @@
 //! Saved completion is independent of observer and callback ownership.
 use crate::{
     callback::{Dispatcher, Job, ObserverPermit},
+    constants::{MAX_OBSERVATION_TIMEOUT, OPERATION_OBSERVER_CAPACITY},
     error,
     sync::{Signal, lock},
     timer::TimerService,
@@ -110,16 +111,16 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
             return Some(if value.at <= deadline {
                 value.result.clone()
             } else {
-                Err(error::timeout())
+                Err(error::observer_timeout())
             });
         }
-        (Instant::now() >= deadline).then(|| Err(error::timeout()))
+        (Instant::now() >= deadline).then(|| Err(error::observer_timeout()))
     }
     fn permit(&self) -> Result<ObserverPermit, Failure> {
         self.inner
             .count
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
-                (n < 64).then_some(n + 1)
+                (n < OPERATION_OBSERVER_CAPACITY).then_some(n + 1)
             })
             .map_err(|_| error::waiters_full())?;
         Ok(ObserverPermit(self.inner.count.clone()))
@@ -173,7 +174,7 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
         &self,
         timeout: Duration,
     ) -> impl Future<Output = Result<T, Failure>> + Send + 'static {
-        let deadline = Instant::now() + timeout.min(Duration::from_secs(60));
+        let deadline = Instant::now() + timeout.min(MAX_OBSERVATION_TIMEOUT);
         let registration = error::duration(timeout).and_then(|()| {
             if self.observed(deadline).is_some() {
                 Ok(None)
@@ -198,14 +199,18 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
         let permit = self.permit()?;
         let dispatcher = self.inner.dispatcher.upgrade().ok_or_else(error::closed)?;
         let published = self.inner.published.clone();
-        let job = dispatcher.reserve(
-            permit,
-            Box::new(move || {
-                if let Some(value) = published.get() {
-                    callback(value.result.clone());
-                }
-            }),
-        )?;
+        let job = dispatcher
+            .reserve(
+                permit,
+                Box::new(move || {
+                    if let Some(value) = published.get() {
+                        callback(value.result.clone());
+                    }
+                }),
+            )
+            .map_err(|error| {
+                crate::conversion::canonical(&error, error.failure_classification())
+            })?;
         let id = self.inner.next.fetch_add(1, Ordering::SeqCst);
         {
             let mut observers = lock(&self.inner.observers);

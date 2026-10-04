@@ -12,7 +12,7 @@ constructor = "none"
 [composition]
 roots = []
 [dependencies]
-allowed_dependents = []
+allowed_dependents = ["sc-observability-py", "sc-otel-cli"]
 allowed_dependencies = ["sc-observability", "sc-observability-types", "sc-observe"]
 forbidden_edges = []
 [references]

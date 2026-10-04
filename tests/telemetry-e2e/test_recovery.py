@@ -1,0 +1,274 @@
+"""Durable-store failure and recovery cases through installed `sc-otel`."""
+from __future__ import annotations
+
+import json
+import socket
+from pathlib import Path
+
+import pytest
+
+from conftest import (
+    CaptureCollector,
+    GOLDENS,
+    PinnedViewer,
+    loopback_endpoint,
+    reserve_loopback_sockets,
+    run_cli,
+    run_installed_python,
+)
+from test_viewer_readback import _HIGH, _LOW, _row, _wait_for
+
+
+def _config(path: Path, endpoint: str) -> Path:
+    path.write_text(
+        "\n".join((
+            "service: telemetry-e2e-recovery",
+            "otlp:", f"  endpoint: {endpoint}", "  timeout_ms: 100",
+            "store:", "  path: shared.sqlite", "  max_bytes: 10485760", "",
+        )),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _log_payload(body: str) -> str:
+    """Create one public log envelope whose decoded body is unambiguous."""
+    payload = json.loads((GOLDENS / "logs/input.json").read_text(encoding="utf-8"))
+    payload["logs"][0]["body"] = body
+    return json.dumps(payload)
+
+
+def _python_emit_script(config: Path) -> str:
+    return f"""\
+import json
+import sys
+from sc_observability import Ok
+from sc_observability.telemetry import Telemetry
+
+opened = Telemetry.open(config={str(config)!r})
+assert isinstance(opened, Ok), opened
+with opened.value as telemetry:
+    admitted = telemetry.emit(json.load(sys.stdin))
+    assert isinstance(admitted, Ok), admitted
+    delivered = telemetry.flush_submission(admitted.value.submission_id, timeout_s=10)
+    assert isinstance(delivered, Ok), delivered
+"""
+
+
+def _viewer_log(viewer: dict[str, str], body: str) -> dict[str, object]:
+    """Read one exact decoded log through the existing bounded viewer helper."""
+    rows = _wait_for(viewer, "searchLogs", [_LOW, _HIGH], lambda value: _row(value, body) is not None)
+    row = _row(rows, body)
+    assert row is not None
+    log_id = row["id"]
+    assert isinstance(log_id, str)
+    detail = _wait_for(
+        viewer,
+        "getLog",
+        [log_id],
+        lambda value: isinstance(value, dict) and value.get("body") == body,
+    )
+    assert isinstance(detail, dict)
+    assert detail["body"] == body
+    return detail
+
+
+def test_reserved_loopback_sockets_are_distinct_and_held() -> None:
+    """The harness must not expose a probe-and-close port allocation race."""
+    reserved = reserve_loopback_sockets(3)
+    try:
+        ports = [int(port.getsockname()[1]) for port in reserved]
+        assert len(set(ports)) == 3
+        for port in ports:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as contender:
+                with pytest.raises(OSError):
+                    contender.bind(("127.0.0.1", port))
+    finally:
+        for port in reserved:
+            port.close()
+
+
+def test_offline_terminal_then_new_submission_recovers(
+    installed_artifacts: dict[str, Path], tmp_path: Path,
+) -> None:
+    """A terminal offline submission is not replayed; a new one can recover."""
+    reserved, = reserve_loopback_sockets(1)
+    config = _config(tmp_path / "telemetry.yaml", loopback_endpoint(reserved))
+    payload = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
+    collector: CaptureCollector | None = None
+    try:
+        offline = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
+                          cwd=tmp_path, input=payload)
+        assert offline.returncode == 7, offline.stdout + offline.stderr
+        terminal = json.loads(offline.stdout)
+        assert terminal["state"] == "admitted_failed", terminal
+        assert terminal["receipt"] is not None, terminal
+        assert terminal["flush"]["failed"]["logs"] == 1, terminal
+
+        collector = CaptureCollector.from_socket(reserved)
+        collector.start()
+        recovered = run_cli(installed_artifacts, "--config", str(config), "emit", "--stdin",
+                            cwd=tmp_path, input=payload)
+        assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+        result = json.loads(recovered.stdout)
+        assert result["state"] == "admitted_delivered", result
+        collector.wait_for("/v1/logs")
+    finally:
+        if collector is None:
+            reserved.close()
+        else:
+            collector.stop()
+
+
+def test_viewer_restart_no_loss(
+    installed_artifacts: dict[str, Path], pinned_viewer: PinnedViewer, tmp_path: Path,
+) -> None:
+    """Pinned viewer state retains installed Python and CLI records across restart."""
+    config = _config(tmp_path / "telemetry.yaml", pinned_viewer["otlp"])
+    python_body = "viewer-restart-python"
+    cli_body = "viewer-restart-cli"
+    post_restart_body = "viewer-restart-cli-after-restart"
+
+    python = run_installed_python(
+        installed_artifacts,
+        _python_emit_script(config),
+        cwd=tmp_path,
+        input=_log_payload(python_body),
+    )
+    assert python.returncode == 0, python.stdout + python.stderr
+    cli = run_cli(
+        installed_artifacts,
+        "--config",
+        str(config),
+        "emit",
+        "--stdin",
+        cwd=tmp_path,
+        input=_log_payload(cli_body),
+    )
+    assert cli.returncode == 0, cli.stdout + cli.stderr
+
+    before_restart = {
+        python_body: _viewer_log(pinned_viewer, python_body),
+        cli_body: _viewer_log(pinned_viewer, cli_body),
+    }
+    pinned_viewer.restart()
+    assert _viewer_log(pinned_viewer, python_body) == before_restart[python_body]
+    assert _viewer_log(pinned_viewer, cli_body) == before_restart[cli_body]
+
+    post_restart = run_cli(
+        installed_artifacts,
+        "--config",
+        str(config),
+        "emit",
+        "--stdin",
+        cwd=tmp_path,
+        input=_log_payload(post_restart_body),
+    )
+    assert post_restart.returncode == 0, post_restart.stdout + post_restart.stderr
+    assert _viewer_log(pinned_viewer, post_restart_body)["body"] == post_restart_body
+
+
+def test_partial_signal_failure_retains_the_failed_signal(
+    installed_artifacts: dict[str, Path], telemetry_config: Path, collector: CaptureCollector, tmp_path: Path,
+) -> None:
+    """A profile 503 must not erase already-delivered log records or hide status."""
+    collector.statuses["/v1development/profiles"] = 503
+    payload = {
+        "version": 1,
+        "logs": json.loads((GOLDENS / "logs/input.json").read_text())["logs"],
+        "profiles": json.loads((GOLDENS / "profiles/input.json").read_text())["profiles"],
+    }
+    emitted = run_cli(installed_artifacts, "--config", str(telemetry_config), "emit", "--stdin",
+                      cwd=tmp_path, input=json.dumps(payload))
+    assert emitted.returncode == 7, emitted.stdout + emitted.stderr
+    result = json.loads(emitted.stdout)
+    assert result["state"] == "admitted_failed", result
+    assert result["flush"]["delivered"]["logs"] == 1, result
+    assert result["flush"]["failed"]["profiles"] == 1, result
+    collector.wait_for("/v1/logs")
+    collector.wait_for("/v1development/profiles")
+    status = run_cli(installed_artifacts, "--config", str(telemetry_config), "status", cwd=tmp_path)
+    assert status.returncode == 0, status.stdout + status.stderr
+    report = json.loads(status.stdout)["status"]
+    assert report is not None
+    assert report["failed"]["profiles"] == 1, report
+
+
+def test_context_exit_retains_delivery_failure_as_a_tagged_result(
+    installed_artifacts: dict[str, Path], dead_collector_endpoint: str, tmp_path: Path,
+) -> None:
+    """A down collector is a delivery result, never an exception from ``with``."""
+    config = _config(tmp_path / "telemetry.yaml", dead_collector_endpoint)
+    source = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
+    script = f"""\
+import json
+import sys
+from sc_observability import Ok
+from sc_observability.telemetry import Telemetry, TelemetryErr
+
+opened = Telemetry.open(config={str(config)!r})
+assert isinstance(opened, Ok), opened
+telemetry = opened.value
+with telemetry:
+    admitted = telemetry.emit(json.load(sys.stdin))
+    assert isinstance(admitted, Ok), admitted
+assert isinstance(telemetry.last_shutdown, TelemetryErr), telemetry.last_shutdown
+assert telemetry.last_shutdown.error.kind == "delivery"
+print(telemetry.last_shutdown.error.code)
+"""
+    exited = run_installed_python(installed_artifacts, script, cwd=tmp_path, input=source)
+    assert exited.returncode == 0, exited.stdout + exited.stderr
+    assert "DELIVERY" in exited.stdout
+
+
+def test_killed_python_admission_is_retained_for_recovery(
+    installed_artifacts: dict[str, Path], dead_collector_endpoint: str, tmp_path: Path,
+) -> None:
+    """A process death preserves the submission identity and its recovery record."""
+    config = _config(tmp_path / "telemetry.yaml", dead_collector_endpoint)
+    source = (GOLDENS / "logs/input.json").read_text(encoding="utf-8")
+    script = f"""\
+import json
+import os
+import sys
+from sc_observability import Ok
+from sc_observability.telemetry import Telemetry
+
+opened = Telemetry.open(config={str(config)!r})
+assert isinstance(opened, Ok), opened
+admitted = opened.value.emit(json.load(sys.stdin))
+assert isinstance(admitted, Ok), admitted
+# Deliberately bypass normal cleanup: the next process must own recovery.
+print(admitted.value.submission_id, flush=True)
+os._exit(0)
+"""
+    killed = run_installed_python(installed_artifacts, script, cwd=tmp_path, input=source)
+    assert killed.returncode == 0, killed.stdout + killed.stderr
+    submission_id = killed.stdout.strip()
+    assert submission_id, killed.stderr
+    recovery = f"""\
+import json
+import os
+from sc_observability import Ok
+from sc_observability.telemetry import Telemetry
+
+opened = Telemetry.open(config={str(config)!r})
+assert isinstance(opened, Ok), opened
+status = opened.value.status(submissions=[{submission_id!r}])
+assert isinstance(status, Ok), status
+delivery = status.value.submissions[0]
+assert delivery.submission_id == {submission_id!r}, delivery
+signal, state = delivery.signals[0]
+assert signal == "logs", delivery
+# A prior process may have claimed its admission before dying, but neither
+# pending nor claimed work has been delivered or discarded.
+report = dict(state)
+assert report["state"] in {{"pending", "claimed"}}, delivery
+print(json.dumps(report), flush=True)
+# Avoid a second process's shutdown flush: expired-lease takeover is covered
+# deterministically by durable::tests::drain::lease_expiry_takeover.
+os._exit(0)
+"""
+    retained = run_installed_python(installed_artifacts, recovery, cwd=tmp_path)
+    assert retained.returncode == 0, retained.stdout + retained.stderr
+    assert json.loads(retained.stdout)["state"] in {"pending", "claimed"}

@@ -12,11 +12,14 @@ from pathlib import Path
 
 import tomli_w
 from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source, runtime_options, fault_paths
+from python_arm64 import apply_windows_arm64_overlay
+from stage_python_conformance import stage_conformance
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
 QUALIFICATION_HELPERS = (
     '_python_distribution.py', '_python_sandbox.py', '_windows_identity.py',
+    'python_arm64.py',
     'supervise_windows_proof.py', 'validate_python_distribution.py',
     'build_binding_source_bundle.py', '_hashing.py', '_log_staging.py',
     'python-packaging-requirements.txt',
@@ -104,6 +107,7 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     for relative in ('python', 'tests', 'examples'):
         if (project / relative).is_dir():
             copy_tracked_tree(source, PROJECT / relative, staging / relative)
+    stage_conformance(source, staging / 'tests')
     shutil.copyfile(source / 'LICENSE', staging / 'LICENSE')
     (staging / 'qualification-suite.json').write_text(json.dumps(suite, indent=2) + '\n')
     embedding = confined(source, suite['embedding_manifest'])
@@ -168,7 +172,12 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     qualification.mkdir(exist_ok=True)
     for filename in QUALIFICATION_HELPERS:
         shutil.copyfile(source / 'scripts/ci' / filename, qualification / filename)
-    shutil.copyfile(source / 'release/python-platform-policy.json', qualification / 'platform-policy.json')
+    policy = json.loads((source / 'release/python-platform-policy.json').read_text())
+    try:
+        apply_windows_arm64_overlay(policy)
+    except RuntimeError as error:
+        raise DistributionError(str(error)) from error
+    (qualification / 'platform-policy.json').write_text(json.dumps(policy, indent=2) + '\n')
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'Cargo.lock')
     run(['cargo', 'metadata', '--offline', '--format-version', '1'], staging, log)
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'embedding/Cargo.lock')

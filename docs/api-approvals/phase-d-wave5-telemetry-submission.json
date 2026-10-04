@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.5.0",
+  "source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+  "crates": {
+    "sc-observability-types": {
+      "status": "approved",
+      "reviewer": "Rand",
+      "scope": [
+        "public-api"
+      ],
+      "api_sha256": "7f7474098a900cee54db486479d2edbcae228bad9b12816e938fd0a6fbbec88c",
+      "evidence": {
+        "command": "python3 scripts/ci/validate_public_api.py diff",
+        "report": "target/public-api/public-api-diff.json",
+        "approved_source_commit": "7ff4a771e496ff88d2922c92d3da2bec816c18df",
+        "verified_source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+        "api_hash_matches_approved_source": true
+      }
+    },
+    "sc-observability": {
+      "status": "approved",
+      "reviewer": "Rand",
+      "scope": [
+        "public-api"
+      ],
+      "api_sha256": "8022656e9c95d4c39cb97933dbba470f18bc781ba2d6ccd7ad8d30a3bc1d35a2",
+      "evidence": {
+        "command": "python3 scripts/ci/validate_public_api.py diff",
+        "report": "target/public-api/public-api-diff.json",
+        "approved_source_commit": "7ff4a771e496ff88d2922c92d3da2bec816c18df",
+        "verified_source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+        "api_hash_matches_approved_source": true
+      }
+    },
+    "sc-observe": {
+      "status": "approved",
+      "reviewer": "Rand",
+      "scope": [
+        "public-api"
+      ],
+      "api_sha256": "74b8ac5ea3fd1dbfdd75d289304ca50565199f3b4285da01c1ae20733af0ca4e",
+      "evidence": {
+        "command": "python3 scripts/ci/validate_public_api.py diff",
+        "report": "target/public-api/public-api-diff.json",
+        "approved_source_commit": "7ff4a771e496ff88d2922c92d3da2bec816c18df",
+        "verified_source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+        "api_hash_matches_approved_source": true
+      }
+    },
+    "sc-observability-otlp": {
+      "status": "approved",
+      "reviewer": "Rand",
+      "scope": [
+        "public-api"
+      ],
+      "api_sha256": "b82d3ee25b4234e470b1acd88ee765838af2ebb843aa4dfe470789d0b50cb00f",
+      "evidence": {
+        "command": "python3 scripts/ci/validate_public_api.py diff",
+        "report": "target/public-api/public-api-diff.json",
+        "approved_source_commit": "7ff4a771e496ff88d2922c92d3da2bec816c18df",
+        "verified_source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+        "api_hash_matches_approved_source": true
+      }
+    },
+    "sc-observability-log": {
+      "status": "approved",
+      "reviewer": "Rand",
+      "scope": [
+        "public-api"
+      ],
+      "api_sha256": "d9d0b813c3d49f96f98f8494fb0c59c89156175a22d8dd8fe106c8fae17e46ae",
+      "evidence": {
+        "command": "python3 scripts/ci/validate_public_api.py diff",
+        "report": "target/public-api/public-api-diff.json",
+        "approved_source_commit": "7ff4a771e496ff88d2922c92d3da2bec816c18df",
+        "verified_source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+        "api_hash_matches_approved_source": true
+      }
+    },
+    "sc-observability-dto": {
+      "status": "approved",
+      "reviewer": "Rand",
+      "scope": [
+        "public-api"
+      ],
+      "api_sha256": "517560b0e286ac48bfabccb8eb1f9e303e49f4909fc75f320d61a7c360cd0d6c",
+      "evidence": {
+        "command": "python3 scripts/ci/validate_public_api.py diff",
+        "report": "target/public-api/public-api-diff.json",
+        "approved_source_commit": "7ff4a771e496ff88d2922c92d3da2bec816c18df",
+        "verified_source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+        "api_hash_matches_approved_source": true
+      }
+    },
+    "sc-observability-binding-runtime": {
+      "status": "approved",
+      "reviewer": "Rand",
+      "scope": [
+        "public-api"
+      ],
+      "api_sha256": "c1b89aede96ac4235f46cfb95cda114679d0feac9bd804f0b54f354a7f84b4e2",
+      "evidence": {
+        "command": "python3 scripts/ci/validate_public_api.py diff",
+        "report": "target/public-api/public-api-diff.json",
+        "approved_source_commit": "7ff4a771e496ff88d2922c92d3da2bec816c18df",
+        "verified_source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+        "api_hash_matches_approved_source": true
+      }
+    },
+    "sc-observability-py": {
+      "status": "approved",
+      "reviewer": "Rand",
+      "scope": [
+        "public-api"
+      ],
+      "api_sha256": "7945854ed22cd6a4353601bc922be0552dcad7b52d7b41253154c48037ea0835",
+      "evidence": {
+        "command": "python3 scripts/ci/validate_public_api.py diff",
+        "report": "target/public-api/public-api-diff.json",
+        "approved_source_commit": "7ff4a771e496ff88d2922c92d3da2bec816c18df",
+        "verified_source_commit": "de74eb58989510505f7fc093a4b183a1bb568829",
+        "api_hash_matches_approved_source": true
+      }
+    }
+  },
+  "approval_scope": "Eight changed crate public-api diff hashes at PR #844, verified identical at the rebased source. This approval does not waive semver or execution failures.",
+  "approval_message": {
+    "reviewer": "Rand",
+    "decision": "Approve",
+    "received_at": "2026-10-02T14:34:00Z",
+    "relayed_by": "omega-prime",
+    "message_id": "01M3YGKBWCTVHHXZ2TX187D2H6",
+    "team_lead_message_id": "01M3YGN4BYEQJPX8FG9DK172NT"
+  },
+  "contract_rulings": [
+    {
+      "message_id": "01M3VWCCBHT906CNTV50SVGPZ7",
+      "reviewer": "team-lead@sc-obs",
+      "scope": "Use TryFrom with SignalValidationError for LogEvent, SpanRecord<SpanEnded>, v2::MetricRecord, OtlpResource and OtlpInstrumentationScope. Null attributes are rejected at the exact path; UInt is preserved until envelope range validation."
+    }
+  ],
+  "closeout": "User approval recorded for the eight public-api hashes. Separate feature-public-api hashes from the earlier D29 record are not signed by this approval.",
+  "prior_feature_evidence": {
+    "sc-observability-types": {
+      "status": "pending-user-approval",
+      "feature_api_sha256": {
+        "test-double": "f10e9d3b8efeb377e76aa9ef4d0b9a02b85a8abe5a14336d5ba7c7319150e3d6"
+      },
+      "source_commit": "26adc9ad36d165a8e7ba89e213bde500f320503d"
+    },
+    "sc-observability-otlp": {
+      "status": "pending-user-approval",
+      "feature_api_sha256": {
+        "durable-store": "6038b669caada8ce683667b03e5509af51a19e8c80b4d3614a45f4951cac603e"
+      },
+      "source_commit": "26adc9ad36d165a8e7ba89e213bde500f320503d"
+    },
+    "sc-observability-py": {
+      "status": "pending-user-approval",
+      "feature_api_sha256": {
+        "otlp-telemetry": "0edea4fce1a4d9a76efea8bc97639c5cc0f8fc5e645b4ad4f26d06a9f1e3c996"
+      },
+      "source_commit": "26adc9ad36d165a8e7ba89e213bde500f320503d"
+    }
+  }
+}

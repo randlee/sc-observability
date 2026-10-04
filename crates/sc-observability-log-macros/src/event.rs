@@ -74,7 +74,6 @@ pub(crate) fn expand(spec: &EventSpec, source: LevelSource<'_>) -> TokenStream {
         .any(|field| matches!(field.value, FieldValue::Bare(_)));
     let kind_imports = has_bare.then(|| {
         quote! {
-            #[allow(unused_imports)]
             use #private::{DebugKindTag as _, SerializeKindTag as _};
         }
     });

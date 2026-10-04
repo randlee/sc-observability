@@ -1,14 +1,26 @@
 import {
+  CANONICAL_ERROR_CODES,
   createClient,
   createTauriTransport,
+  canonicalErrorCode,
+  canonicalErrorNameForCode,
+  canonicalErrorNamesForCode,
   encodeEvent,
   encodeValue,
+  MAX_CONTAINER_DEPTH,
+  MAX_WIRE_PAYLOAD_BYTES,
   parseWireEnvelope,
   SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
   SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
   type JsonTransport,
   type Result,
 } from "./index";
+import { validate } from "./generated/index";
+
+declare function require(id: string): unknown;
+const { readFileSync } = require("node:fs") as {
+  readFileSync(path: string, encoding: "utf8"): string;
+};
 
 declare const process: { exitCode: number };
 
@@ -28,12 +40,115 @@ const transport: JsonTransport = {
 };
 
 async function main(): Promise<void> {
+  const conversionCases = JSON.parse(
+    readFileSync("../../bindings/conformance/v1/conversion-cases.json", "utf8"),
+  ) as Array<Record<string, unknown>>;
+  for (const testCase of conversionCases.filter((item) => item.operation === "canonical_envelope")) {
+    if (testCase.result === "decoded") {
+      assert(
+        validate("OutputCanonicalWireEnvelopeAdmissionDto", testCase.expected),
+        `${String(testCase.id)} did not match its generated canonical envelope model`,
+      );
+      const expected = testCase.expected as {
+        kind: string;
+        error?: { kind: string; remote_kind?: string; cause?: string; docs?: string; details?: Record<string, unknown> };
+      };
+      if (expected.kind !== "error" || !expected.error) {
+        throw new Error(`${String(testCase.id)} lacked an error envelope`);
+      }
+      if (testCase.id === "canonical-envelope-unknown-error-kind") {
+        assert(expected.error.kind === "unknown_remote" &&
+          expected.error.remote_kind === "future_export_failure",
+        "unknown canonical failure kind was not retained as unknown_remote");
+      }
+      if (testCase.id === "canonical-envelope-typed-queue-full-context") {
+        assert(expected.error.kind === "queue_full" && expected.error.cause === "bounded cause" &&
+          expected.error.docs === "https://example.test/recovery" &&
+          expected.error.details?.depth !== undefined,
+        "typed operational failure lost cause/docs/details");
+      }
+    } else {
+      assert(
+        !validate("InputCanonicalWireEnvelopeAdmissionDto", testCase.value),
+        `${String(testCase.id)} malformed envelope unexpectedly matched its generated input model`,
+      );
+      assert(
+        validate("OutputFailure", testCase.expected_error),
+        `${String(testCase.id)} failure did not match its generated failure model`,
+      );
+    }
+  }
+
+  assert(canonicalErrorCode("EventError::Validation") === "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID",
+    "canonical v2 event name did not retain its stable code");
+  assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED") === "IdentityError::Process",
+    "unambiguous canonical code did not resolve to its variant name");
+  assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID") === undefined,
+    "ambiguous canonical code was falsely resolved to one variant");
+  const expectedCanonicalCatalogue = [
+    ["IdentityError::Process", "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"],
+    ["InitError::Configuration", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["InitError::Runtime", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["EventError::Validation", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["EventError::Routing", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["FlushError::Drain", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["ShutdownError::Timeout", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["ShutdownError::Drain", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["ProjectionError::Projection", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["SubscriberError::Subscriber", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["LogSinkError::Write", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["LogSinkError::Flush", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
+    ["ConfigFailure::ZeroDuration", "OTLP_CONFIG_ZERO_DURATION"],
+    ["ConfigFailure::DurationOverflow", "OTLP_CONFIG_DURATION_OVERFLOW"],
+    ["ConfigFailure::InvalidBoundOrdering", "OTLP_CONFIG_BOUND_ORDER"],
+    ["ConfigFailure::InvalidJitterPercent", "OTLP_CONFIG_JITTER_PERCENT"],
+    ["ConfigFailure::InvalidQueueCapacity", "OTLP_CONFIG_QUEUE_CAPACITY"],
+    ["ConfigFailure::InvalidQueueByteCapacity", "OTLP_CONFIG_QUEUE_BYTE_CAPACITY"],
+    ["ConfigFailure::ConfigFieldNotApplicable", "OTLP_CONFIG_FIELD_NOT_APPLICABLE"],
+    ["ConfigFailure::InsecureTransportRejected", "OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED"],
+    ["ConfigFailure::InvalidEndpoint", "OTLP_CONFIG_INVALID_ENDPOINT"],
+    ["ConfigFailure::InvalidHeader", "OTLP_CONFIG_INVALID_HEADER"],
+    ["ConfigFailure::TransportConstructionFailed", "OTLP_TRANSPORT_CONSTRUCTION_FAILED"],
+    ["ConfigFailure::UnsupportedBackend", "OTLP_UNSUPPORTED_BACKEND"],
+    ["ConfigFailure::UnsupportedProtocol", "OTLP_UNSUPPORTED_PROTOCOL"],
+    ["ConfigFailure::TokioRuntimeRequired", "OTLP_TOKIO_RUNTIME_REQUIRED"],
+    ["MetricModelError::InvalidHistogram", "SC_METRIC_INVALID_HISTOGRAM"],
+    ["MetricModelError::InvalidTemporality", "SC_METRIC_INVALID_TEMPORALITY"],
+    ["MetricModelError::InvalidInterval", "SC_METRIC_INVALID_INTERVAL"],
+  ];
+  assert(
+    JSON.stringify(Object.entries(CANONICAL_ERROR_CODES)) === JSON.stringify(expectedCanonicalCatalogue),
+    "generated canonical catalogue key/value order diverged from the native variant contract",
+  );
+  const ambiguousNames = canonicalErrorNamesForCode("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID");
+  assert(ambiguousNames.length === 11 && ambiguousNames.includes("InitError::Configuration") &&
+    ambiguousNames.includes("InitError::Runtime") && ambiguousNames.includes("EventError::Routing") &&
+    ambiguousNames.includes("EventError::Validation") && ambiguousNames.includes("FlushError::Drain") &&
+    ambiguousNames.includes("ShutdownError::Timeout") && ambiguousNames.includes("ShutdownError::Drain") &&
+    ambiguousNames.includes("ProjectionError::Projection") && ambiguousNames.includes("SubscriberError::Subscriber") &&
+    ambiguousNames.includes("LogSinkError::Write") && ambiguousNames.includes("LogSinkError::Flush"),
+  "ambiguous canonical code did not retain all candidate variants");
   const maximum = encodeValue(18446744073709551615n);
   assert(maximum.kind === "ok" && maximum.value.kind === "integer" && maximum.value.value === "18446744073709551615", "maximum u64 was not encoded losslessly");
   const negative = encodeValue(-9223372036854775808n);
   assert(negative.kind === "ok" && negative.value.kind === "integer" && negative.value.value === "-9223372036854775808", "minimum i64 was not encoded losslessly");
   assert(encodeValue(Number.MAX_SAFE_INTEGER + 1).kind === "error", "unsafe integral number was accepted");
   assert(encodeValue(Number.NaN).kind === "error", "NaN was accepted");
+  assert(MAX_WIRE_PAYLOAD_BYTES === 65_536, "generated request limit differs from the shared DTO limit");
+  assert(MAX_CONTAINER_DEPTH === 32, "generated depth limit differs from the shared DTO limit");
+  const encodedStringOverhead = JSON.stringify({ kind: "string", value: "" }).length;
+  const payloadAtLimit = "x".repeat(MAX_WIRE_PAYLOAD_BYTES - encodedStringOverhead);
+  assert(encodeValue(payloadAtLimit).kind === "ok", "generated byte limit rejected an exact-limit value");
+  assert(encodeValue(`${payloadAtLimit}x`).kind === "error", "generated byte limit accepted an oversized value");
+  const nestedArrays = (depth: number): never => {
+    let nested: unknown = null;
+    for (let level = 0; level < depth; level += 1) nested = [nested];
+    return nested as never;
+  };
+  assert(encodeValue(nestedArrays(MAX_CONTAINER_DEPTH)).kind === "ok",
+    "generated depth limit rejected a value at the boundary");
+  assert(encodeValue(nestedArrays(MAX_CONTAINER_DEPTH + 1)).kind === "error",
+    "generated depth limit accepted a value beyond the boundary");
   assert(encodeValue({ "sc_observability::binding::language": "forged" }).kind === "error", "reserved provenance key was accepted");
   const cyclic: { self?: unknown } = {};
   cyclic.self = cyclic;
@@ -64,6 +179,81 @@ async function main(): Promise<void> {
     }
   }
 
+  const wireFailure = (kind: string, code: string, extra: Record<string, unknown> = {}) => ({
+    schema_version: 1,
+    kind: "error",
+    error: {
+      kind,
+      at: new Date().toISOString(),
+      code,
+      message: `${kind} fixture`,
+      remediation: { kind: "recoverable", steps: ["retry the operation"] },
+      ...extra,
+    },
+  });
+  const failedAdmission = createClient({
+    request: async (operation) => {
+      assert(operation === "try_log", "admission fixture received the wrong operation");
+      return { kind: "ok", value: wireFailure("queue_full", "SC_OBSERVABILITY_LOGGER_QUEUE_FULL") };
+    },
+  });
+  let admissionFailureKind: string | undefined;
+  assert(failedAdmission.kind === "ok" && event.kind === "ok", "admission failure fixture setup failed");
+  if (failedAdmission.kind === "ok" && event.kind === "ok") {
+    const result = await failedAdmission.value.tryLog(event.value);
+    if (result.kind === "error") admissionFailureKind = result.error.kind;
+    assert(result.kind === "error" && result.error.kind === "queue_full",
+      "failed admission was not retained as queue_full");
+  }
+  const failedFlush = createClient({
+    request: async (operation) => {
+      assert(operation === "flush", "flush fixture received the wrong operation");
+      return { kind: "ok", value: wireFailure("io", "SC_LOG_QUERY_IO") };
+    },
+  });
+  assert(failedFlush.kind === "ok", "flush failure fixture setup failed");
+  if (failedFlush.kind === "ok") {
+    const result = await failedFlush.value.flush(100);
+    assert(result.kind === "error" && result.error.kind === "io" && admissionFailureKind === "queue_full",
+    "flush/persistence failure was conflated with admission failure");
+  }
+
+  const cancelled = createClient({
+    request: async (operation) => {
+      assert(operation === "flush", "cancellation fixture received the wrong operation");
+      return { kind: "ok", value: wireFailure("cancelled", "SC_OBSERVABILITY_LEVEL_STOPPING", { operation: "flush" }) };
+    },
+  });
+  assert(cancelled.kind === "ok", "cancellation fixture setup failed");
+  if (cancelled.kind === "ok") {
+    const result = await cancelled.value.flush(100);
+    assert(result.kind === "error" && result.error.kind === "cancelled" && result.error.operation === "flush",
+      "cancellation was not retained as a distinct typed outcome");
+  }
+  let releaseCompletion!: () => void;
+  const nativeCompletion = createClient({
+    request: async (operation) => {
+      assert(operation === "flush", "completion fixture received the wrong operation");
+      return new Promise<Result<unknown>>((resolve) => {
+        releaseCompletion = () => resolve({ kind: "ok", value: { schema_version: 1, kind: "ok", value: { kind: "completed" } } });
+      });
+    },
+  });
+  assert(nativeCompletion.kind === "ok", "native completion fixture setup failed");
+  if (nativeCompletion.kind === "ok") {
+    const completion = nativeCompletion.value.flush(100);
+    const pending = nativeCompletion.value.client_status();
+    assert(pending.kind === "ok" && pending.value.in_flight === 1,
+      "native completion did not retain the bounded observation state");
+    releaseCompletion();
+    const result = await completion;
+    assert(result.kind === "ok" && result.value.kind === "completed",
+      "native completion was not returned after observation");
+    const recovered = nativeCompletion.value.client_status();
+    assert(recovered.kind === "ok" && recovered.value.in_flight === 0,
+      "native completion did not release the observation reservation");
+  }
+
   const invoked: string[] = [];
   const tauriTransport = createTauriTransport(async (command, args) => {
     invoked.push(command);
@@ -75,6 +265,8 @@ async function main(): Promise<void> {
     const result = await tauriTransport.value.request("try_log", { schema_version: 1, event: event.value });
     assert(result.kind === "ok" && invoked[0] === "plugin:sc-observability|sc_observability_try_log", "Tauri command mapping failed");
   }
+  assert(invoked.every((command) => !/shutdown|level|reset|elevate/i.test(command)),
+    "binding transport exposed a host shutdown or level mutation command");
 
   let queryCalls = 0;
   const queryClient = createClient({

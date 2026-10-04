@@ -11,13 +11,11 @@
 
 use std::borrow::Cow;
 
-#[allow(
-    deprecated,
-    reason = "the copied log-facade bridge preserves its legacy identity resolver boundary"
-)]
+use sc_observability_types::typed::IdentityFailure;
+use sc_observability_types::v2::IdentityError as CanonicalIdentityError;
 use sc_observability_types::{
-    ActionName, ErrorContext, IdentityError, Level, LogEvent, Observation, ProcessIdentity,
-    ProcessIdentityPolicy, Remediation, ServiceName, TargetCategory,
+    ActionName, ErrorContext, Level, LogEvent, Observation, ProcessIdentity, ProcessIdentityPolicy,
+    Remediation, ServiceName, TargetCategory,
 };
 use serde_json::{Map, Value};
 
@@ -169,65 +167,69 @@ pub fn field_key_label(raw: &str) -> Result<Cow<'_, str>, LabelError> {
 /// resolves it and stamps every `LogEvent.identity` with the cached value. Every
 /// failure carries the stable code `SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED`
 /// and a remediation for its own path; a resolver's error is kept as the source.
-#[allow(
-    deprecated,
-    reason = "the copied log-facade bridge preserves its legacy identity resolver boundary"
-)]
 pub(crate) fn resolve_identity(
     policy: &ProcessIdentityPolicy,
-) -> Result<ProcessIdentity, IdentityError> {
+) -> Result<ProcessIdentity, CanonicalIdentityError> {
     match policy {
         ProcessIdentityPolicy::Auto => resolve_auto_identity(hostname::get),
         ProcessIdentityPolicy::Fixed { hostname, pid } => Ok(ProcessIdentity {
             hostname: hostname.clone(),
             pid: *pid,
         }),
-        ProcessIdentityPolicy::Resolver(resolver) => resolver.resolve().map_err(|source| {
-            IdentityError(Box::new(
-                ErrorContext::new(
-                    crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED,
-                    "the configured ProcessIdentityResolver failed",
-                    Remediation::recoverable(
-                        "fix the ProcessIdentityResolver",
-                        [
-                            "or use ProcessIdentityPolicy::Auto or Fixed",
-                            "call sc_observability_log::init again",
-                        ],
+        ProcessIdentityPolicy::Resolver(resolver) => {
+            resolver
+                .resolve()
+                .map_err(|source| CanonicalIdentityError::Process {
+                    context: Box::new(
+                        ErrorContext::new(
+                            crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED,
+                            "the configured ProcessIdentityResolver failed",
+                            Remediation::recoverable(
+                                "fix the ProcessIdentityResolver",
+                                [
+                                    "or use ProcessIdentityPolicy::Auto or Fixed",
+                                    "call sc_observability_log::init again",
+                                ],
+                            ),
+                        )
+                        // The released root error's context moves unchanged into the
+                        // canonical error kept as the source.
+                        .source(Box::new(
+                            CanonicalIdentityError::Process {
+                                context: IdentityFailure::from(source).into_context(),
+                            },
+                        )),
                     ),
-                )
-                .source(Box::new(source)),
-            ))
-        }),
+                })
+        }
     }
 }
 
 /// Resolves `ProcessIdentityPolicy::Auto` with `hostname_of` (production: `hostname::get`).
 ///
 /// A failed or empty hostname lookup is an error; the pid is the current process id.
-#[allow(
-    deprecated,
-    reason = "the copied log-facade bridge preserves its legacy identity resolver boundary"
-)]
 fn resolve_auto_identity(
     hostname_of: impl FnOnce() -> std::io::Result<std::ffi::OsString>,
-) -> Result<ProcessIdentity, IdentityError> {
-    let hostname = hostname_of().map_err(|source| {
-        IdentityError(Box::new(
+) -> Result<ProcessIdentity, CanonicalIdentityError> {
+    let hostname = hostname_of().map_err(|source| CanonicalIdentityError::Process {
+        context: Box::new(
             ErrorContext::new(
                 crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED,
                 "automatic hostname resolution failed",
                 auto_hostname_remediation(),
             )
             .source(Box::new(source)),
-        ))
+        ),
     })?;
     let hostname = hostname.to_string_lossy().into_owned();
     if hostname.is_empty() {
-        return Err(IdentityError(Box::new(ErrorContext::new(
-            crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED,
-            "automatic hostname resolution returned an empty hostname",
-            auto_hostname_remediation(),
-        ))));
+        return Err(CanonicalIdentityError::Process {
+            context: Box::new(ErrorContext::new(
+                crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED,
+                "automatic hostname resolution returned an empty hostname",
+                auto_hostname_remediation(),
+            )),
+        });
     }
     Ok(ProcessIdentity {
         hostname: Some(hostname),
@@ -408,16 +410,11 @@ pub(crate) fn assemble_event(
 }
 
 #[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "legacy identity wrapper assertions cover the copied bridge compatibility contract"
-)]
 mod tests {
     use std::sync::Arc;
 
-    use sc_observability_types::{
-        ErrorCode, ErrorContext, ProcessIdentityResolver, Remediation, constants,
-    };
+    use sc_observability_types::v2::{IdentityError, ProcessIdentityResolver};
+    use sc_observability_types::{ErrorCode, ErrorContext, Remediation, constants};
 
     use super::*;
 
@@ -731,11 +728,13 @@ mod tests {
     struct FailingResolver;
     impl ProcessIdentityResolver for FailingResolver {
         fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
-            Err(IdentityError(Box::new(ErrorContext::new(
-                ErrorCode::new_static("TEST_RESOLVER_FAILED"),
-                "resolver failed",
-                Remediation::not_recoverable("test"),
-            ))))
+            Err(IdentityError::Process {
+                context: Box::new(ErrorContext::new(
+                    ErrorCode::new_static("TEST_RESOLVER_FAILED"),
+                    "resolver failed",
+                    Remediation::not_recoverable("test"),
+                )),
+            })
         }
     }
 
@@ -767,19 +766,19 @@ mod tests {
 
     #[test]
     fn identity_resolver_ok_and_err() {
-        let ok = ProcessIdentityPolicy::Resolver(Arc::new(OkResolver));
+        let ok = ProcessIdentityPolicy::v2_resolver(Arc::new(OkResolver));
         assert_eq!(
             resolve_identity(&ok).unwrap().hostname.as_deref(),
             Some("resolved")
         );
-        let failing = ProcessIdentityPolicy::Resolver(Arc::new(FailingResolver));
+        let failing = ProcessIdentityPolicy::v2_resolver(Arc::new(FailingResolver));
         let error = resolve_identity(&failing).unwrap_err();
         assert_eq!(
-            error.0.diagnostic().code,
+            error.diagnostic().code,
             crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED
         );
         assert_eq!(
-            error.0.diagnostic().remediation,
+            error.diagnostic().remediation,
             Remediation::recoverable(
                 "fix the ProcessIdentityResolver",
                 [
@@ -789,21 +788,18 @@ mod tests {
             )
         );
         // The resolver's own error is kept as the source.
-        let source = std::error::Error::source(&*error.0)
+        let source = std::error::Error::source(error.context())
             .and_then(|source| source.downcast_ref::<IdentityError>())
             .unwrap();
-        assert_eq!(source.0.diagnostic().code.as_str(), "TEST_RESOLVER_FAILED");
+        assert_eq!(source.diagnostic().code.as_str(), "TEST_RESOLVER_FAILED");
     }
 
     fn assert_auto_hostname_failure(error: &IdentityError) {
         assert_eq!(
-            error.0.diagnostic().code,
+            error.diagnostic().code,
             crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED
         );
-        assert_eq!(
-            error.0.diagnostic().remediation,
-            auto_hostname_remediation()
-        );
+        assert_eq!(error.diagnostic().remediation, auto_hostname_remediation());
     }
 
     #[test]
@@ -811,7 +807,7 @@ mod tests {
         let error =
             resolve_auto_identity(|| Err(std::io::Error::other("no hostname"))).unwrap_err();
         assert_auto_hostname_failure(&error);
-        assert!(std::error::Error::source(&*error.0).is_some());
+        assert!(std::error::Error::source(&error).is_some());
     }
 
     #[test]

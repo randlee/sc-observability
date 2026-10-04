@@ -4,9 +4,10 @@ use crate::{
     timer::TimerService,
 };
 use arc_swap::{ArcSwap, ArcSwapOption};
-use sc_observability::{LevelOwner, Logger, Running};
+use sc_observability::v2::Logger;
+use sc_observability::{LevelOwner, Running};
 use sc_observability_dto::{self as dto, CompletionDto, Failure, LogHealthDto, LogSnapshotDto};
-use sc_observability_types::{self as native, DiagnosticInfo};
+use sc_observability_types as native;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -15,10 +16,11 @@ use std::time::Duration;
 pub(crate) enum Backend {
     Core {
         logger: ArcSwapOption<Logger<Running>>,
+        // MUTEX: serializes Core level-owner updates; contention reports dispatch-full and poison reports an internal failure.
         level: Mutex<LevelOwner>,
         stamp: dto::EventStamp,
     },
-    Bridge(sc_observability_log::LogControl),
+    Bridge(sc_observability_log::v2::LogControl),
 }
 enum Work {
     Query(Box<native::LogQuery>, Operation<LogSnapshotDto>),
@@ -36,7 +38,7 @@ pub(crate) struct Coordinator {
     active: AtomicUsize,
     failed: AtomicBool,
     // MUTEX: bounded queue/slot bookkeeping and worker sleep predicates only;
-    // native calls and notifications execute outside this critical section.
+    // native calls run outside it, while Condvar notifications run inside it.
     queue: Mutex<Queue>,
     changed: Condvar,
     operation_exited: AtomicBool,
@@ -63,6 +65,7 @@ enum Start {
     Abort,
 }
 struct StartGate {
+    // MUTEX: shares the one startup outcome with Condvar waiters; sync::lock recovers poisoned bookkeeping.
     state: Mutex<Start>,
     changed: Condvar,
 }
@@ -124,7 +127,8 @@ impl Coordinator {
                     for helper in helpers {
                         let _ = helper.join();
                     }
-                    return Err(error::start_failed(cause.to_string()));
+                    let typed = error::init_runtime(cause.to_string(), Box::new(cause));
+                    return Err(conversion::canonical(&typed, conversion::Kind::Unavailable));
                 }
             }
         }
@@ -205,9 +209,9 @@ impl Coordinator {
                 let event = conversion::event(event, stamp, origin)?;
                 let logger = logger.load_full().ok_or_else(error::closed)?;
                 logger
-                    .try_log_with_outcome_typed(event)
+                    .try_log_with_outcome(event)
                     .map(conversion::admission)
-                    .map_err(conversion::core_admission)
+                    .map_err(|error| conversion::core_admission(&error))
             }
             Backend::Bridge(control) => {
                 // Conversion-only envelope is discarded; the bridge supplies its
@@ -235,11 +239,14 @@ impl Coordinator {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &self.backend {
                 Backend::Core { logger, .. } => {
                     let logger = logger.load_full().ok_or_else(error::closed)?;
-                    dto::from_core_health(logger.health(), logger.level_state())
+                    Ok(dto::from_canonical_core_health(
+                        logger.health(),
+                        logger.level_state(),
+                    ))
                 }
-                Backend::Bridge(control) => {
-                    conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)
-                }
+                Backend::Bridge(control) => Ok(conversion::bridge_health(
+                    control.health().map_err(conversion::bridge_control)?,
+                )),
             }))
             .unwrap_or_else(|_| Err(error::internal("native health panicked")));
         if let Ok(health) = &result {
@@ -346,10 +353,15 @@ impl Coordinator {
                             Backend::Core { logger, .. } => logger
                                 .load_full()
                                 .ok_or_else(error::closed)?
-                                .flush_typed()
-                                .map_err(|error| conversion::core_flush(&error))?,
+                                .flush()
+                                .map_err(|error| {
+                                    let (typed, kind) = conversion::core_flush(error);
+                                    conversion::canonical(&typed, kind)
+                                })?,
                             Backend::Bridge(control) => {
-                                control.flush(timeout).map_err(conversion::bridge_flush)?;
+                                control
+                                    .flush(timeout)
+                                    .map_err(|error| conversion::bridge_flush(&error))?;
                             }
                         }
                         Ok(CompletionDto::Completed)
@@ -402,24 +414,35 @@ impl Coordinator {
         let result =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &self.backend {
                 Backend::Core { logger, .. } => {
-                    let logger = logger
-                        .swap(None)
-                        .ok_or_else(|| error::internal("core owner already consumed"))?;
+                    let logger = logger.swap(None).ok_or_else(|| {
+                        let error = error::shutdown_drain("core owner already consumed");
+                        conversion::canonical(&error, conversion::Kind::Internal)
+                    })?;
                     let logger = Arc::try_unwrap(logger).map_err(|_| {
-                        error::internal("active native reference survived admission drain")
+                        let error = error::shutdown_drain(
+                            "active native reference survived admission drain",
+                        );
+                        conversion::canonical(&error, conversion::Kind::Internal)
                     })?;
                     let stopped = logger.shutdown();
-                    dto::from_core_health(stopped.health(), stopped.level_state())
+                    Ok(dto::from_canonical_core_health(
+                        stopped.health(),
+                        stopped.level_state(),
+                    ))
                 }
-                Backend::Bridge(control) => {
-                    conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)
-                }
+                Backend::Bridge(control) => Ok(conversion::bridge_health(
+                    control.health().map_err(conversion::bridge_control)?,
+                )),
             }))
-            .unwrap_or_else(|_| Err(error::internal("native shutdown panicked")));
+            .unwrap_or_else(|_| {
+                let error = error::shutdown_drain("native shutdown panicked");
+                Err(conversion::canonical(&error, conversion::Kind::Internal))
+            });
         let result = if self.failed.load(Ordering::SeqCst) {
-            Err(error::internal(
-                "helper failure prevents confirmed shutdown",
-            ))
+            let error = error::shutdown_drain("helper failure prevents confirmed shutdown");
+            #[cfg(test)]
+            self.record_shutdown_source_chain(&error);
+            Err(conversion::canonical(&error, conversion::Kind::Internal))
         } else {
             result
         };
@@ -428,6 +451,16 @@ impl Coordinator {
         }
         self.shutdown.complete(result, || {});
         self.dispatcher.close();
+    }
+    #[cfg(test)]
+    fn record_shutdown_source_chain(&self, error: &native::v2::ShutdownError) {
+        let mut chain = Vec::new();
+        let mut source = std::error::Error::source(error);
+        while let Some(cause) = source {
+            chain.push(cause.to_string());
+            source = std::error::Error::source(cause);
+        }
+        *lock(&self.hooks.shutdown_source_chain) = Some(chain);
     }
     pub(crate) fn level(
         &self,
@@ -468,12 +501,15 @@ impl Coordinator {
 }
 
 pub(crate) fn core(config: sc_observability::LoggerConfig) -> Result<Arc<Coordinator>, Failure> {
-    core_from_factory(|| core_parts(config))
+    core_from_factory(|| {
+        core_parts(config)
+            .map_err(|error| conversion::canonical(&error, conversion::Kind::Unavailable))
+    })
 }
 
 fn core_parts(
     mut config: sc_observability::LoggerConfig,
-) -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), Failure> {
+) -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), native::v2::InitError> {
     let stamp = dto::EventStamp {
         service: config.service_name.clone(),
         timestamp: native::Timestamp::now_utc(),
@@ -483,9 +519,13 @@ fn core_parts(
                 hostname: hostname.clone(),
                 pid: *pid,
             },
-            native::ProcessIdentityPolicy::Resolver(resolver) => resolver
-                .resolve()
-                .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?,
+            native::ProcessIdentityPolicy::Resolver(resolver) => {
+                resolver
+                    .resolve()
+                    .map_err(|e| native::v2::InitError::Configuration {
+                        context: native::typed::IdentityFailure::from(e).into_context(),
+                    })?
+            }
         },
     };
     // Resolve once: native diagnostic events and producer events share the
@@ -494,8 +534,10 @@ fn core_parts(
         hostname: stamp.identity.hostname.clone(),
         pid: stamp.identity.pid,
     };
-    let (logger, level) = Logger::new_with_level_owner_typed(config)
-        .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?;
+    let (logger, level) =
+        Logger::new_with_level_owner(config).map_err(|error| native::v2::InitError::Runtime {
+            context: error.into_context(),
+        })?;
     Ok((stamp, logger, level))
 }
 
@@ -511,7 +553,7 @@ fn core_from_factory(
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let (stamp, logger, level) = build()?;
-        let health = dto::from_core_health(logger.health(), logger.level_state())?;
+        let health = dto::from_canonical_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: ArcSwapOption::from(Some(Arc::new(logger))),
@@ -523,11 +565,11 @@ fn core_from_factory(
     })
 }
 pub(crate) fn bridge(
-    control: sc_observability_log::LogControl,
+    control: sc_observability_log::v2::LogControl,
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let health =
-            conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)?;
+            conversion::bridge_health(control.health().map_err(conversion::bridge_control)?);
         Ok((Backend::Bridge(control), health))
     })
 }
@@ -535,8 +577,17 @@ pub(crate) fn bridge(
 #[cfg(test)]
 #[derive(Default)]
 pub(crate) struct TestHooks {
+    // MUTEX: publishes the optional admission gate; callers clone it before
+    // waiting outside the lock.
     pub(crate) admission: Mutex<Option<Arc<crate::tests::Gate>>>,
+    // MUTEX: publishes the optional query gate; callers clone it before
+    // waiting outside the lock.
     pub(crate) query: Mutex<Option<Arc<crate::tests::Gate>>>,
+    // MUTEX: publishes the optional flush gate; callers clone it before
+    // waiting outside the lock.
     pub(crate) flush: Mutex<Option<Arc<crate::tests::Gate>>>,
     pub(crate) crash: AtomicBool,
+    // MUTEX: stores the shutdown source chain for later test inspection; the
+    // shared lock helper recovers poison.
+    pub(crate) shutdown_source_chain: Mutex<Option<Vec<String>>>,
 }

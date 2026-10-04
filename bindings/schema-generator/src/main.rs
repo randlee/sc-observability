@@ -1,5 +1,12 @@
 //! Deterministic canonical schema compiler. Rust DTOs are the sole shape authority.
 use sc_observability_dto::*;
+use sc_observability_types::{
+    ErrorCode, ErrorContext, Remediation,
+    v2::{
+        ConfigFailure, EventError, FlushError, IdentityError, InitError, LogSinkError,
+        MetricModelError, ProjectionError, ShutdownError, SubscriberError,
+    },
+};
 use schemars::{
     JsonSchema,
     generate::{SchemaGenerator, SchemaSettings},
@@ -20,6 +27,227 @@ fn register<T: JsonSchema>(
     Ok(())
 }
 type SchemaMap = Map<String, Value>;
+
+fn catalogue_context() -> Box<ErrorContext> {
+    Box::new(ErrorContext::new(
+        ErrorCode::new_static("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"),
+        "catalogue generation context",
+        Remediation::not_recoverable("catalogue generation does not execute an operation"),
+    ))
+}
+
+fn canonical_error_catalogue() -> Vec<Value> {
+    let entries = [
+        (
+            "IdentityError::Process",
+            IdentityError::Process {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "InitError::Configuration",
+            InitError::Configuration {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "InitError::Runtime",
+            InitError::Runtime {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "EventError::Validation",
+            EventError::Validation {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "EventError::Routing",
+            EventError::Routing {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "FlushError::Drain",
+            FlushError::Drain {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ShutdownError::Timeout",
+            ShutdownError::Timeout {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ShutdownError::Drain",
+            ShutdownError::Drain {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ProjectionError::Projection",
+            ProjectionError::Projection {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "SubscriberError::Subscriber",
+            SubscriberError::Subscriber {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "LogSinkError::Write",
+            LogSinkError::Write {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "LogSinkError::Flush",
+            LogSinkError::Flush {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::ZeroDuration",
+            ConfigFailure::ZeroDuration {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::DurationOverflow",
+            ConfigFailure::DurationOverflow {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::InvalidBoundOrdering",
+            ConfigFailure::InvalidBoundOrdering {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::InvalidJitterPercent",
+            ConfigFailure::InvalidJitterPercent {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::InvalidQueueCapacity",
+            ConfigFailure::InvalidQueueCapacity {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::InvalidQueueByteCapacity",
+            ConfigFailure::InvalidQueueByteCapacity {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::ConfigFieldNotApplicable",
+            ConfigFailure::ConfigFieldNotApplicable {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::InsecureTransportRejected",
+            ConfigFailure::InsecureTransportRejected {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::InvalidEndpoint",
+            ConfigFailure::InvalidEndpoint {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::InvalidHeader",
+            ConfigFailure::InvalidHeader {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::TransportConstructionFailed",
+            ConfigFailure::TransportConstructionFailed {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::UnsupportedBackend",
+            ConfigFailure::UnsupportedBackend {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::UnsupportedProtocol",
+            ConfigFailure::UnsupportedProtocol {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "ConfigFailure::TokioRuntimeRequired",
+            ConfigFailure::TokioRuntimeRequired {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "MetricModelError::InvalidHistogram",
+            MetricModelError::InvalidHistogram {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "MetricModelError::InvalidTemporality",
+            MetricModelError::InvalidTemporality {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+        (
+            "MetricModelError::InvalidInterval",
+            MetricModelError::InvalidInterval {
+                context: catalogue_context(),
+            }
+            .code(),
+        ),
+    ];
+    entries
+        .into_iter()
+        .map(|(name, code)| json!({"name": name, "code": code.as_str()}))
+        .collect()
+}
+
 fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
     let settings = SchemaSettings::draft2020_12();
     let mut generator = (if output {
@@ -123,7 +351,76 @@ fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
         &mut entries,
         "WireEnvelopeClientStatus",
     )?;
-    Ok((generator.take_definitions(true), entries))
+    register::<CanonicalDiagnosticDto>(&mut generator, &mut entries, "CanonicalDiagnosticDto")?;
+    register::<CanonicalFailureDto>(&mut generator, &mut entries, "CanonicalFailureDto")?;
+    register::<TraceContextV2Dto>(&mut generator, &mut entries, "TraceContextV2Dto")?;
+    register::<SpanLinkDto>(&mut generator, &mut entries, "SpanLinkDto")?;
+    register::<SpanKindDto>(&mut generator, &mut entries, "SpanKindDto")?;
+    register::<AggregationTemporalityDto>(
+        &mut generator,
+        &mut entries,
+        "AggregationTemporalityDto",
+    )?;
+    register::<HistogramPointDto>(&mut generator, &mut entries, "HistogramPointDto")?;
+    register::<MetricValueDto>(&mut generator, &mut entries, "MetricValueDto")?;
+    register::<MetricRecordDto>(&mut generator, &mut entries, "MetricRecordDto")?;
+    register::<SpanStatusDto>(&mut generator, &mut entries, "SpanStatusDto")?;
+    register::<SpanRecordDto>(&mut generator, &mut entries, "SpanRecordDto")?;
+    register::<SpanEventDto>(&mut generator, &mut entries, "SpanEventDto")?;
+    register::<SpanSignalDto>(&mut generator, &mut entries, "SpanSignalDto")?;
+    register::<CanonicalWireEnvelope<AdmissionDto>>(
+        &mut generator,
+        &mut entries,
+        "CanonicalWireEnvelopeAdmissionDto",
+    )?;
+    let mut defs = generator.take_definitions(true);
+    // Public schema names survive internal aliases to shared generic DTOs.
+    for (entrypoint, public_name) in [
+        ("CanonicalFailureDto", "CanonicalFailureDto"),
+        ("CanonicalWireEnvelopeAdmissionDto", "CanonicalWireEnvelope"),
+    ] {
+        let reference = entries[entrypoint]["$ref"]
+            .as_str()
+            .ok_or_else(|| format!("missing definition reference for {entrypoint}"))?
+            .to_owned();
+        let generated_name = reference
+            .strip_prefix("#/$defs/")
+            .ok_or_else(|| format!("entrypoint {entrypoint}: non-local reference {reference:?}"))?;
+        if generated_name == public_name {
+            continue;
+        }
+        if defs.contains_key(public_name) {
+            return Err(format!("public schema name collision: {public_name}").into());
+        }
+        let definition = defs
+            .remove(generated_name)
+            .ok_or_else(|| format!("missing definition: {generated_name}"))?;
+        defs.insert(public_name.into(), definition);
+        let public_reference = format!("#/$defs/{public_name}");
+        for node in defs.values_mut().chain(entries.values_mut()) {
+            rename_reference(node, &reference, &public_reference);
+        }
+    }
+    Ok((defs, entries))
+}
+fn rename_reference(value: &mut Value, old: &str, new: &str) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                if key == "$ref" && child.as_str() == Some(old) {
+                    *child = Value::String(new.into());
+                } else {
+                    rename_reference(child, old, new);
+                }
+            }
+        }
+        Value::Array(values) => {
+            for child in values {
+                rename_reference(child, old, new);
+            }
+        }
+        _ => {}
+    }
 }
 fn input_strict(value: &mut Value, output: bool) {
     if let Some(map) = value.as_object_mut()
@@ -163,6 +460,16 @@ fn prefix_refs(value: &mut Value, prefix: &str) -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
+
+fn prefix_definition_refs(
+    definition_name: &str,
+    value: &mut Value,
+    prefix: &str,
+) -> Result<(), Box<dyn Error>> {
+    prefix_refs(value, prefix)
+        .map_err(|error| format!("schema definition {definition_name}: {error}").into())
+}
+
 fn supported(node: &Value, defs: &Map<String, Value>) -> Result<(), Box<dyn Error>> {
     if node.is_boolean() {
         return Ok(());
@@ -228,15 +535,47 @@ fn supported(node: &Value, defs: &Map<String, Value>) -> Result<(), Box<dyn Erro
     }
     Ok(())
 }
+
+fn validate_named_schema(
+    name: &str,
+    node: &Value,
+    defs: &Map<String, Value>,
+) -> Result<(), Box<dyn Error>> {
+    supported(node, defs).map_err(|error| format!("schema {name}: {error}").into())
+}
+
+fn insert_definition(
+    defs: &mut SchemaMap,
+    name: String,
+    value: Value,
+) -> Result<(), Box<dyn Error>> {
+    if defs.insert(name.clone(), value).is_some() {
+        return Err(format!("duplicate schema name: {name}").into());
+    }
+    Ok(())
+}
+
 fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut bytes = serde_json::to_vec_pretty(value)?;
     bytes.push(b'\n');
     Ok(bytes)
 }
-fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn Error>> {
+
+fn schema_regeneration_command(output: &str, errors_output: &str) -> String {
+    format!(
+        "cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- --output {output} --errors-output {errors_output}"
+    )
+}
+
+fn write_or_check(
+    path: &Path,
+    bytes: &[u8],
+    check: bool,
+    regeneration_command: &str,
+) -> Result<(), Box<dyn Error>> {
     if check {
         if std::fs::read(path)? != bytes {
-            return Err(format!("generated drift: {}", path.display()).into());
+            return Err(generated_drift_error(path, regeneration_command).into());
         }
     } else {
         if let Some(parent) = path.parent() {
@@ -246,6 +585,14 @@ fn write_or_check(path: &Path, bytes: &[u8], check: bool) -> Result<(), Box<dyn 
     }
     Ok(())
 }
+
+fn generated_drift_error(path: &Path, regeneration_command: &str) -> String {
+    format!(
+        "generated drift: {}; regenerate with `{regeneration_command}`",
+        path.display()
+    )
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut output = None;
     let mut errors_output = None;
@@ -261,32 +608,274 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let output = output.ok_or("--output required")?;
     let errors_output = errors_output.ok_or("--errors-output required")?;
+    let regeneration_command = schema_regeneration_command(&output, &errors_output);
     let mut defs = Map::new();
     let mut entrypoints = Map::new();
     for (is_output, prefix) in [(false, "Input"), (true, "Output")] {
         let (definitions, entries) = definitions(is_output)?;
         for (name, mut value) in definitions {
+            let definition_name = format!("{prefix}{name}");
             input_strict(&mut value, is_output);
-            prefix_refs(&mut value, prefix)?;
-            if defs.insert(format!("{prefix}{name}"), value).is_some() {
-                return Err("duplicate schema name".into());
-            }
+            prefix_definition_refs(&definition_name, &mut value, prefix)?;
+            insert_definition(&mut defs, definition_name, value)?;
         }
         for (name, mut value) in entries {
-            prefix_refs(&mut value, prefix)?;
-            entrypoints.insert(format!("{prefix}{name}"), value);
+            let entrypoint_name = format!("{prefix}{name}");
+            prefix_definition_refs(&entrypoint_name, &mut value, prefix)?;
+            entrypoints.insert(entrypoint_name, value);
         }
     }
-    for node in defs.values().chain(entrypoints.values()) {
-        supported(node, &defs)?;
+    for (name, node) in defs.iter().chain(entrypoints.iter()) {
+        validate_named_schema(name, node, &defs)?;
     }
     let registry = serde_json::to_value(error_codes::REGISTRY)?;
-    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":1,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":65536,"container_depth":32,"query_limit":1000,"timeout_ms":60000,"diagnostic_string_bytes":4096,"remediation_steps":32},"defaults":{"query_limit":100,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
-    write_or_check(Path::new(&output), &canonical(&schema)?, check)?;
+    let canonical_error_codes = canonical_error_catalogue();
+    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":constants::WIRE_SCHEMA_VERSION,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":constants::MAX_WIRE_PAYLOAD_BYTES,"container_depth":constants::MAX_CONTAINER_DEPTH,"query_limit":constants::MAX_QUERY_LIMIT,"timeout_ms":constants::MAX_TIMEOUT_MS,"diagnostic_string_bytes":constants::MAX_DIAGNOSTIC_FIELD_BYTES,"remediation_steps":constants::MAX_REMEDIATION_STEPS},"defaults":{"query_limit":constants::DEFAULT_QUERY_LIMIT,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","canonical_error_codes":canonical_error_codes,"generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
+    write_or_check(
+        Path::new(&output),
+        &canonical(&schema)?,
+        check,
+        &regeneration_command,
+    )?;
     write_or_check(
         Path::new(&errors_output),
         &canonical(&schema["x-sc-error-registry"])?,
         check,
+        &regeneration_command,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reference_errors_include_the_schema_definition_name() {
+        for (reference, expected) in [
+            (Value::Null, "non-string reference"),
+            (
+                Value::String("https://example.com/schema".into()),
+                "non-local reference",
+            ),
+        ] {
+            let mut schema = json!({"$ref": reference});
+            let error = prefix_definition_refs("InputExample", &mut schema, "Input")
+                .expect_err("invalid reference should fail")
+                .to_string();
+            assert!(error.contains("schema definition InputExample"));
+            assert!(error.contains(expected));
+        }
+    }
+
+    #[test]
+    fn invalid_schema_errors_include_the_schema_name() {
+        let error = validate_named_schema("InputExample", &json!("invalid"), &SchemaMap::new())
+            .expect_err("scalar schema nodes are unsupported")
+            .to_string();
+        assert!(error.contains("schema InputExample"));
+        assert!(error.contains("schema node must be object or boolean"));
+    }
+
+    #[test]
+    fn duplicate_schema_error_includes_the_duplicate_name() {
+        let mut defs = SchemaMap::new();
+        insert_definition(&mut defs, "InputExample".into(), json!({"type":"object"})).unwrap();
+        let error = insert_definition(&mut defs, "InputExample".into(), json!({"type":"string"}))
+            .expect_err("duplicate schema names should fail")
+            .to_string();
+        assert!(error.contains("duplicate schema name: InputExample"));
+    }
+
+    #[test]
+    fn drift_error_includes_the_actual_schema_regeneration_outputs() {
+        let output = "generated/schema.json";
+        let errors_output = "generated/errors.json";
+        let command = schema_regeneration_command(output, errors_output);
+        let error = generated_drift_error(Path::new(output), &command);
+
+        assert!(error.contains(output));
+        assert!(error.contains(errors_output));
+        assert!(error.contains("--output generated/schema.json"));
+        assert!(error.contains("--errors-output generated/errors.json"));
+        assert!(!error.contains("bindings/schema/v1.json"));
+    }
+
+    #[test]
+    fn canonical_check_rejects_crlf_checkout_conversion_without_rewriting_file() {
+        let canonical = b"{\n  \"schema_version\": 1\n}\n";
+        let crlf = b"{\r\n  \"schema_version\": 1\r\n}\r\n";
+        let directory = std::env::temp_dir().join(format!(
+            "sc-observability-schema-generator-canonical-check-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("schema.json");
+        std::fs::write(&path, crlf).unwrap();
+
+        let error = write_or_check(&path, canonical, true, "regenerate-schema")
+            .expect_err("CRLF must be drift");
+        assert!(error.to_string().contains("generated drift"));
+        assert_eq!(std::fs::read(&path).unwrap(), crlf);
+
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_dir(&directory).unwrap();
+    }
+
+    #[test]
+    fn canonical_error_catalogue_uses_native_variant_codes_in_order() {
+        let catalogue = canonical_error_catalogue();
+        assert_eq!(catalogue.len(), 29);
+        let entries: Vec<(&str, &str)> = catalogue
+            .iter()
+            .map(|entry| {
+                (
+                    entry["name"].as_str().expect("catalogue name"),
+                    entry["code"].as_str().expect("catalogue code"),
+                )
+            })
+            .collect();
+        assert_eq!(
+            entries,
+            vec![
+                (
+                    "IdentityError::Process",
+                    "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"
+                ),
+                (
+                    "InitError::Configuration",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "InitError::Runtime",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "EventError::Validation",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "EventError::Routing",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "FlushError::Drain",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "ShutdownError::Timeout",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "ShutdownError::Drain",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "ProjectionError::Projection",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "SubscriberError::Subscriber",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "LogSinkError::Write",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                (
+                    "LogSinkError::Flush",
+                    "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+                ),
+                ("ConfigFailure::ZeroDuration", "OTLP_CONFIG_ZERO_DURATION"),
+                (
+                    "ConfigFailure::DurationOverflow",
+                    "OTLP_CONFIG_DURATION_OVERFLOW"
+                ),
+                (
+                    "ConfigFailure::InvalidBoundOrdering",
+                    "OTLP_CONFIG_BOUND_ORDER"
+                ),
+                (
+                    "ConfigFailure::InvalidJitterPercent",
+                    "OTLP_CONFIG_JITTER_PERCENT"
+                ),
+                (
+                    "ConfigFailure::InvalidQueueCapacity",
+                    "OTLP_CONFIG_QUEUE_CAPACITY"
+                ),
+                (
+                    "ConfigFailure::InvalidQueueByteCapacity",
+                    "OTLP_CONFIG_QUEUE_BYTE_CAPACITY"
+                ),
+                (
+                    "ConfigFailure::ConfigFieldNotApplicable",
+                    "OTLP_CONFIG_FIELD_NOT_APPLICABLE"
+                ),
+                (
+                    "ConfigFailure::InsecureTransportRejected",
+                    "OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED"
+                ),
+                (
+                    "ConfigFailure::InvalidEndpoint",
+                    "OTLP_CONFIG_INVALID_ENDPOINT"
+                ),
+                ("ConfigFailure::InvalidHeader", "OTLP_CONFIG_INVALID_HEADER"),
+                (
+                    "ConfigFailure::TransportConstructionFailed",
+                    "OTLP_TRANSPORT_CONSTRUCTION_FAILED"
+                ),
+                (
+                    "ConfigFailure::UnsupportedBackend",
+                    "OTLP_UNSUPPORTED_BACKEND"
+                ),
+                (
+                    "ConfigFailure::UnsupportedProtocol",
+                    "OTLP_UNSUPPORTED_PROTOCOL"
+                ),
+                (
+                    "ConfigFailure::TokioRuntimeRequired",
+                    "OTLP_TOKIO_RUNTIME_REQUIRED"
+                ),
+                (
+                    "MetricModelError::InvalidHistogram",
+                    "SC_METRIC_INVALID_HISTOGRAM"
+                ),
+                (
+                    "MetricModelError::InvalidTemporality",
+                    "SC_METRIC_INVALID_TEMPORALITY"
+                ),
+                (
+                    "MetricModelError::InvalidInterval",
+                    "SC_METRIC_INVALID_INTERVAL"
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn variant_code_is_not_reclassified_from_diagnostic_context() {
+        let validation = EventError::Validation {
+            context: Box::new(ErrorContext::new(
+                ErrorCode::new_static("CONTEXT_A"),
+                "first context",
+                Remediation::not_recoverable("fixture"),
+            )),
+        };
+        let routing = EventError::Routing {
+            context: Box::new(ErrorContext::new(
+                ErrorCode::new_static("CONTEXT_B"),
+                "second context",
+                Remediation::not_recoverable("fixture"),
+            )),
+        };
+        assert_ne!(
+            validation.context().diagnostic().code.as_str(),
+            routing.context().diagnostic().code.as_str()
+        );
+        assert_eq!(validation.code(), routing.code());
+        assert_eq!(
+            validation.code().as_str(),
+            "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
+        );
+    }
 }

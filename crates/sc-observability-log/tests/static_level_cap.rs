@@ -1,6 +1,10 @@
 //! Release-build evidence that an executable static facade cap rejects an
 //! unavailable startup baseline before it creates a usable bridge.
-#![cfg(feature = "static_level_cap_test")]
+// `log::STATIC_MAX_LEVEL` is profile-dependent: this fixture intentionally
+// proves the `Info` cap supplied by `release_max_level_info`, so it must only
+// compile in a release profile.  Running it in debug would correctly expose
+// a `Trace` cap and make the release assertion meaningless.
+#![cfg(all(feature = "static_level_cap_test", not(debug_assertions)))]
 #![allow(
     clippy::expect_used,
     clippy::unwrap_used,
@@ -26,13 +30,18 @@ fn capped_release_rejects_trace_before_install_then_allows_info() {
     );
     capped.level = LevelFilter::Trace;
     capped.enable_console_sink = false;
+    let error = sc_observability_log::init(capped, options.clone()).unwrap_err();
     assert!(matches!(
-        sc_observability_log::init(capped, options.clone()),
-        Err(InitError::UnsupportedLevel {
+        error,
+        InitError::UnsupportedLevel {
             configured: LevelFilter::Trace,
-            available: LevelFilter::Info,
-        })
+            available: LevelFilter::Info
+        }
     ));
+    assert_eq!(
+        error.code().as_str(),
+        "SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL"
+    );
 
     let mut supported = LoggerConfig::default_for(
         ServiceName::new("static-cap").unwrap(),

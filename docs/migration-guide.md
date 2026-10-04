@@ -92,35 +92,38 @@ For consumers that export to OTLP:
 3. Attach OTLP by wrapping projector implementations locally, following the
    pattern used by `examples/atm-adapter-example`.
 
-## Typed Error Adoption (B.1e warning rollout)
+## Phase D compatible 1.x migration
 
-The additive typed error methods and B.1e warning rollout were implemented and
-validated on the current stack. B.2 qualified the result before B.7
-publication. For exact old/new symbols, nine wrapper families, typed kind matching,
-source retention, custom-trait adapters, rollback and narrow warning policy,
-use the [typed error migration reference](../.claude/skills/sc-observability-adopting/references/migrate-error-api.md)
-and its [source inventory](plans/phase-b/warning-inventory-b-1e.md).
+Phase D ships as the next compatible 1.x release. The released 1.4.1 API is
+retained, so no source change is required; start with
+[Adopting the compatible 1.x release](migration/compatible-1x.md), then use
+[the compatible 1.x migration reference](migration.md) and
+[the nine-family error migration](migrate-error-api.md) for named cause
+variants, source/remediation retention, custom sinks/projectors, config
+defaults and signal serde.
 
-`LoggerBuilder::build`, `Logger::new_with_level_owner` and
-`LoggerBuilder::build_with_level_owner` remain supported without method-level
-deprecation; their `_typed` methods are additive. `Logger::emit` retains its
-existing v1.2.0 warning and behavior; new migration guidance uses
-`log_typed()` for blocking admission and `try_log_typed()` for nonblocking
-admission. The corrected telemetry projector path
-uses explicit `sc_observability_types::typed::legacy_*` adapters with the
-unchanged `with_log_projector`, `with_span_projector` and
-`with_metric_projector` methods; no `with_typed_*` builders exist.
+`sc_observability_dto::from_core_health` keeps its released
+`Result<LogHealthDto, Failure>` signature and always returns `Ok`. The new
+`sc_observability_dto::from_canonical_core_health` is the explicit infallible
+projection that returns `LogHealthDto` directly. Both produce the same DTO.
 
-This guide does not promise warning-free legacy compilation under
-`-D deprecated`, introduce a removal schedule or claim that B.2/B.7 remain open
-completion gates.
+Removing deprecated API belongs only to a future, separately authorized major
+release. Until then the released items, their `*_typed` counterparts and the
+opt-in `v2` modules coexist.
+
+Before rollout, run the public-API semver gate against 1.4.1, which accepts
+no enumerated breaks for a compatible 1.x release, plus real bindings/schema
+composition and default/all-features workspace tests. A scoped DTO pass does
+not authorize final baseline generation or publication.
 
 ## Breaking API Renames
 
 The production-readiness review approved these source-breaking API updates:
 
-1. The sealed telemetry-health provider trait now uses the
-   `ObservabilityHealthProvider` name.
+1. The telemetry-health provider trait now uses the
+   `ObservabilityHealthProvider` name. Workspace-owned implementations are
+   supported; external implementations are possible but unsupported, with no
+   compatibility guarantee for their implementation hooks.
 2. `ObservabilityBuilder` now exposes
    `with_observability_health_provider(...)`.
 3. `ObservationSubscriber<T>` implementations now provide

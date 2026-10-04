@@ -270,7 +270,7 @@ pub fn to_core_query(dto: LogQueryDto)
 pub fn from_core_snapshot(value: sc_observability_types::LogSnapshot)
     -> Result<LogSnapshotDto, Failure>;
 pub fn from_core_health(value: sc_observability_types::LoggingHealthReport,
-    level: sc_observability_types::LevelState) -> Result<LogHealthDto, Failure>;
+    level: sc_observability_types::LevelState) -> LogHealthDto;
 pub fn from_level_change(value: sc_observability_types::LevelChange)
     -> Result<LevelChangeDto, Failure>;
 pub fn from_level_error(value: sc_observability_types::LevelChangeError) -> Failure;

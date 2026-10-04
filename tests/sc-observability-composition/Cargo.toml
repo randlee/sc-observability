@@ -1,0 +1,20 @@
+[package]
+name = "sc-observability-composition"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dev-dependencies]
+sc-observability.workspace = true
+sc-observability-log.workspace = true
+sc-observe.workspace = true
+sc-observability-otlp = { workspace = true, features = ["otlp-sdk", "sync-http"] }
+sc-observability-types.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tonic.workspace = true
+opentelemetry-proto.workspace = true
+
+[lints]
+workspace = true

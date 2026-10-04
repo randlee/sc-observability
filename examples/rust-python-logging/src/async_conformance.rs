@@ -119,7 +119,7 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
                 Some(Arc::new(backend))
             }
             "bridge" => {
-                let guard = sc_observability_log::init(
+                let guard = sc_observability_log::v2::init(
                     config,
                     sc_observability_log::BridgeOptions {
                         default_action: sc_observability_types::ActionName::new("async.host")
@@ -128,7 +128,7 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
                     },
                 )
                 .map_err(failure)?;
-                let backend = sc_observability_binding_runtime::bridge_backend(guard.control())
+                let backend = sc_observability_binding_runtime::bridge_backend_v2(guard.control())
                     .map_err(failure)?;
                 bridge_owner = Some(guard);
                 Some(Arc::new(backend))
@@ -214,7 +214,7 @@ pub fn finalize(mode: &str) -> Result<(), String> {
     let mut core_owner = None;
     let mut bridge_owner = None;
     let backend: Arc<dyn HostLoggingBackend> = if mode == "bridge" {
-        let guard = sc_observability_log::init(
+        let guard = sc_observability_log::v2::init(
             config,
             sc_observability_log::BridgeOptions {
                 default_action: sc_observability_types::ActionName::new("finalize.host")
@@ -223,7 +223,7 @@ pub fn finalize(mode: &str) -> Result<(), String> {
             },
         )
         .map_err(|e| format!("{e:?}"))?;
-        let backend = sc_observability_binding_runtime::bridge_backend(guard.control())
+        let backend = sc_observability_binding_runtime::bridge_backend_v2(guard.control())
             .map_err(|e| format!("{e:?}"))?;
         bridge_owner = Some(guard);
         Arc::new(backend)

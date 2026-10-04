@@ -7,12 +7,205 @@ use crate::{
 use sc_observability_dto as dto;
 use sc_observability_types as native;
 use std::future::Future;
+use std::io::Read;
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Barrier, Condvar, Mutex, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
-use std::time::Instant;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+
+const CONTRACT_CASE_DEADLINE: Duration = Duration::from_secs(60);
+const HUNG_CHILD_DEADLINE: Duration = Duration::from_millis(250);
+const CHILD_START_DEADLINE: Duration = Duration::from_secs(10);
+const CHILD_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const HUNG_CHILD_SLEEP: Duration = Duration::from_secs(60);
+const CHILD_OUTPUT_CHUNK_SIZE: usize = 4096;
+
+struct ChildRun {
+    status: ExitStatus,
+    stdout: String,
+    stderr: String,
+    elapsed: Duration,
+    timed_out: bool,
+}
+
+struct ReapOnDrop {
+    child: Option<Child>,
+}
+
+impl ReapOnDrop {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+
+    fn child_mut(&mut self) -> &mut Child {
+        self.child
+            .as_mut()
+            .expect("child remains guarded until it is reaped")
+    }
+
+    fn try_wait(&mut self) -> std::io::Result<Option<ExitStatus>> {
+        let status = self.child_mut().try_wait()?;
+        if status.is_some() {
+            self.child = None;
+        }
+        Ok(status)
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        self.child_mut().kill()
+    }
+
+    fn wait(&mut self) -> std::io::Result<ExitStatus> {
+        let status = self.child_mut().wait()?;
+        self.child = None;
+        Ok(status)
+    }
+}
+
+impl Drop for ReapOnDrop {
+    fn drop(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+fn capture_output(reader: JoinHandle<std::io::Result<Vec<u8>>>) -> String {
+    match reader.join() {
+        Ok(Ok(bytes)) => String::from_utf8_lossy(&bytes).into_owned(),
+        Ok(Err(error)) => format!("<capture failed: {error}>"),
+        Err(_) => "<capture thread panicked>".into(),
+    }
+}
+
+fn read_child_output(
+    mut reader: impl Read,
+    readiness_marker: Option<Vec<u8>>,
+    ready: &mpsc::Sender<()>,
+) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let mut chunk = [0; CHILD_OUTPUT_CHUNK_SIZE];
+    let mut marker = readiness_marker;
+    loop {
+        let count = reader.read(&mut chunk)?;
+        if count == 0 {
+            return Ok(bytes);
+        }
+        bytes.extend_from_slice(&chunk[..count]);
+        if marker
+            .as_ref()
+            .is_some_and(|needle| bytes.windows(needle.len()).any(|window| window == needle))
+        {
+            let _ = ready.send(());
+            marker = None;
+        }
+    }
+}
+
+fn run_test_child(
+    test_name: &str,
+    env_name: &str,
+    env_value: &str,
+    deadline: Duration,
+    readiness_marker: Option<&str>,
+) -> ChildRun {
+    let mut child = ReapOnDrop::new(
+        Command::new(std::env::current_exe().expect("test executable path"))
+            .args(["--exact", test_name, "--nocapture"])
+            .env(env_name, env_value)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|error| panic!("spawn {test_name} ({env_value}): {error}")),
+    );
+    let stdout = child.child_mut().stdout.take().expect("piped child stdout");
+    let stderr = child.child_mut().stderr.take().expect("piped child stderr");
+    let (ready_sender, ready_receiver) = mpsc::channel();
+    let stdout_marker = readiness_marker.map(|marker| marker.as_bytes().to_vec());
+    let stderr_ready_sender = ready_sender.clone();
+    let stdout_reader =
+        thread::spawn(move || read_child_output(stdout, stdout_marker, &ready_sender));
+    let stderr_reader =
+        thread::spawn(move || read_child_output(stderr, None, &stderr_ready_sender));
+
+    if readiness_marker.is_some() {
+        let startup = Instant::now();
+        loop {
+            if let Some(status) = child.try_wait().expect("poll child during startup") {
+                return ChildRun {
+                    status,
+                    stdout: capture_output(stdout_reader),
+                    stderr: capture_output(stderr_reader),
+                    elapsed: startup.elapsed(),
+                    timed_out: false,
+                };
+            }
+            if ready_receiver.recv_timeout(CHILD_POLL_INTERVAL).is_ok() {
+                break;
+            }
+            if startup.elapsed() >= CHILD_START_DEADLINE {
+                let kill_result = child.kill();
+                let status = child
+                    .wait()
+                    .expect("reap child that missed startup deadline");
+                let (stdout, stderr) =
+                    (capture_output(stdout_reader), capture_output(stderr_reader));
+                return ChildRun {
+                    status,
+                    stdout,
+                    stderr: format!(
+                        "{stderr}\nchild did not emit readiness marker before {CHILD_START_DEADLINE:?}; kill={kill_result:?}"
+                    ),
+                    elapsed: startup.elapsed(),
+                    timed_out: true,
+                };
+            }
+        }
+    }
+
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().expect("poll child process") {
+            return ChildRun {
+                status,
+                stdout: capture_output(stdout_reader),
+                stderr: capture_output(stderr_reader),
+                elapsed: started.elapsed(),
+                timed_out: false,
+            };
+        }
+        if started.elapsed() >= deadline {
+            let kill_result = child.kill();
+            let status = child.wait().expect("reap timed-out child process");
+            let (stdout, stderr) = (capture_output(stdout_reader), capture_output(stderr_reader));
+            return ChildRun {
+                status,
+                stdout,
+                stderr: if let Err(error) = kill_result {
+                    format!("{stderr}\nfailed to kill timed-out child: {error}")
+                } else {
+                    stderr
+                },
+                elapsed: started.elapsed(),
+                timed_out: true,
+            };
+        }
+        thread::sleep(CHILD_POLL_INTERVAL);
+    }
+}
+
+fn child_diagnostics(run: &ChildRun) -> String {
+    format!(
+        "elapsed={:?} timed_out={} status={} stdout={} stderr={}",
+        run.elapsed, run.timed_out, run.status, run.stdout, run.stderr
+    )
+}
 
 pub(crate) struct Gate {
+    // MUTEX: updates arrivals and the release predicate together for Condvar waiters.
     state: Mutex<(usize, bool)>,
     changed: Condvar,
 }
@@ -97,10 +290,113 @@ fn stop(owner: &CoreLoggerOwner) {
     crate::spawn::wait_live(1);
 }
 fn code<T>(result: Result<T, Failure>, expected: &str) {
+    let kind = match expected {
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT => "validation",
+        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL
+        | dto::error_codes::SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS
+        | dto::error_codes::SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS
+        | dto::error_codes::SC_OBSERVABILITY_BINDING_DISPATCH_FULL => "queue_full",
+        dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED
+        | dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL => "unavailable",
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT => "timeout",
+        value
+            if value
+                == sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT
+                    .as_str() =>
+        {
+            "timeout"
+        }
+        value
+            if value
+                == sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
+                    .as_str() =>
+        {
+            "queue_full"
+        }
+        _ => panic!("missing DTO assertion for {expected}"),
+    };
     match result {
-        Err(error) => assert_eq!(error.diagnostic().code, expected),
+        Err(error) => {
+            assert_eq!(error.diagnostic().code, expected);
+            let wire = serde_json::to_value(&error).expect("failure serializes to its tagged DTO");
+            assert_eq!(wire["kind"], kind, "{expected} must retain its DTO kind");
+            assert!(
+                serde_json::to_value(error.diagnostic()).expect("diagnostic serializes")
+                    ["remediation"]
+                    .is_object(),
+                "{expected} must retain remediation in its DTO"
+            );
+            if kind == "timeout" {
+                assert!(
+                    wire["operation"].is_string(),
+                    "{expected} timeout must retain an operation string"
+                );
+            } else {
+                assert!(
+                    wire.get("operation").is_none(),
+                    "{expected} non-timeout must not invent an operation string"
+                );
+            }
+        }
         Ok(_) => panic!("expected {expected}"),
     }
+}
+
+fn assert_failure<T>(
+    result: Result<T, Failure>,
+    expected_code: &str,
+    expected_kind: &str,
+    expected_operation: Option<&str>,
+) {
+    match result {
+        Err(error) => {
+            assert_eq!(error.diagnostic().code, expected_code);
+            let wire = serde_json::to_value(&error).expect("failure serializes to its tagged DTO");
+            assert!(
+                serde_json::to_value(error.diagnostic())
+                    .expect("diagnostic serializes")
+                    .get("remediation")
+                    .is_some(),
+                "{expected_code} must retain remediation in its DTO"
+            );
+            assert!(
+                wire["kind"].is_string() && wire["kind"] == expected_kind,
+                "{expected_code} must retain its tagged DTO failure kind {expected_kind}"
+            );
+            assert_eq!(
+                wire.get("operation").and_then(serde_json::Value::as_str),
+                expected_operation,
+                "{expected_code} must retain its exact DTO operation disposition"
+            );
+        }
+        Ok(_) => panic!("expected {expected_code}"),
+    }
+}
+
+fn assert_canonical_context<T>(error: &T, expected_code: &str, source_depth: usize)
+where
+    T: native::DiagnosticInfo + std::error::Error + 'static,
+{
+    assert_eq!(
+        native::DiagnosticInfo::diagnostic(error).code.as_str(),
+        expected_code
+    );
+    assert!(
+        serde_json::to_value(native::DiagnosticInfo::diagnostic(error))
+            .expect("canonical diagnostic serializes")["remediation"]
+            .is_object(),
+        "{expected_code} must preserve remediation"
+    );
+    let mut source = std::error::Error::source(error);
+    for _ in 0..source_depth {
+        source = std::error::Error::source(
+            source.expect("canonical error must preserve its Error::source chain"),
+        );
+    }
+    assert!(
+        source.is_none(),
+        "{expected_code} retained an unexpected source-chain depth"
+    );
 }
 
 const CASES: &[&str] = &[
@@ -111,7 +407,6 @@ const CASES: &[&str] = &[
     "worker1_rollback",
     "worker2_rollback",
     "worker3_rollback",
-    "core_start_rollback",
     "concurrent_timer",
     "observer_bounds",
     "callback_bounds",
@@ -127,9 +422,17 @@ const CASES: &[&str] = &[
     "bridge_native_timeout",
     "bridge_external_overlap",
     "bridge_churn",
+    "bridge_canonical_v2",
     "last_handle_teardown",
     "bridge_observers_callbacks",
     "native_diagnostic_fidelity",
+    "d15_callback_fixture",
+    "d15_conversion_fixture",
+    "d15_coordinator_fixture",
+    "d15_operation_fixture",
+    "d15_spawn_fixture",
+    "d15_sync_fixture",
+    "d15_timer_fixture",
 ];
 
 #[test]
@@ -139,9 +442,11 @@ fn contract_matrix() {
             "timer_poison" => {
                 crate::timer::poison_initialization();
                 let (_root, config) = config();
-                code(
+                assert_failure(
                     create_core_backend(config),
                     dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                    "internal",
+                    None,
                 );
                 crate::spawn::wait_live(0);
             }
@@ -151,7 +456,6 @@ fn contract_matrix() {
             "worker1_rollback" => spawn_rollback(1),
             "worker2_rollback" => spawn_rollback(2),
             "worker3_rollback" => spawn_rollback(3),
-            "core_start_rollback" => core_start_rollback(),
             "concurrent_timer" => concurrent_timer(),
             "observer_bounds" => observer_bounds(),
             "callback_bounds" => callback_bounds(),
@@ -167,32 +471,83 @@ fn contract_matrix() {
             "bridge_native_timeout" => bridge_timeout(false),
             "bridge_external_overlap" => bridge_timeout(true),
             "bridge_churn" => bridge_churn(),
+            "bridge_canonical_v2" => bridge_canonical_v2(),
             "last_handle_teardown" => last_handle_teardown(),
             "bridge_observers_callbacks" => bridge_observers_callbacks(),
             "native_diagnostic_fidelity" => native_diagnostic_fidelity(),
+            "d15_callback_fixture" => d15_callback_fixture(),
+            "d15_conversion_fixture" => d15_conversion_fixture(),
+            "d15_coordinator_fixture" => d15_coordinator_fixture(),
+            "d15_operation_fixture" => d15_operation_fixture(),
+            "d15_spawn_fixture" => d15_spawn_fixture(),
+            "d15_sync_fixture" => d15_sync_fixture(),
+            "d15_timer_fixture" => d15_timer_fixture(),
             _ => panic!("unknown contract case {case}"),
         }
         println!("BINDING_CASE_PASS {case}");
         return;
     }
     for case in CASES {
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "tests::contract_matrix", "--nocapture"])
-            .env("SC_BINDING_RUNTIME_CASE", case)
-            .output()
-            .unwrap();
+        let output = run_test_child(
+            "tests::contract_matrix",
+            "SC_BINDING_RUNTIME_CASE",
+            case,
+            CONTRACT_CASE_DEADLINE,
+            None,
+        );
+        assert!(
+            !output.timed_out,
+            "contract case {case} exceeded {CONTRACT_CASE_DEADLINE:?}; {}",
+            child_diagnostics(&output)
+        );
         assert!(
             output.status.success(),
-            "case {case}: stdout={} stderr={}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            "contract case {case} failed; {}",
+            child_diagnostics(&output)
         );
         assert!(
-            String::from_utf8_lossy(&output.stdout).contains(&format!("BINDING_CASE_PASS {case}"))
+            output.stdout.contains(&format!("BINDING_CASE_PASS {case}")),
+            "contract case {case} omitted its pass marker; {}",
+            child_diagnostics(&output)
         );
-        print!("{}", String::from_utf8_lossy(&output.stdout));
+        print!("{}", output.stdout);
     }
 }
+
+#[test]
+fn contract_matrix_timeout_kills_and_reaps_child() {
+    if let Ok(marker) = std::env::var("SC_BINDING_RUNTIME_HANG") {
+        print!("{marker}");
+        std::io::Write::flush(&mut std::io::stdout()).expect("flush hung-child readiness marker");
+        loop {
+            thread::sleep(HUNG_CHILD_SLEEP);
+        }
+    }
+
+    let output = run_test_child(
+        "tests::contract_matrix_timeout_kills_and_reaps_child",
+        "SC_BINDING_RUNTIME_HANG",
+        "CONTRACT_CHILD_READY",
+        HUNG_CHILD_DEADLINE,
+        Some("CONTRACT_CHILD_READY"),
+    );
+    assert!(
+        output.timed_out,
+        "hung contract child was not stopped at its deadline; {}",
+        child_diagnostics(&output)
+    );
+    assert!(
+        !output.status.success(),
+        "killed hung contract child unexpectedly succeeded; {}",
+        child_diagnostics(&output)
+    );
+    assert!(
+        output.stdout.contains("CONTRACT_CHILD_READY"),
+        "hung-child regression did not observe the synchronized readiness marker; {}",
+        child_diagnostics(&output)
+    );
+}
+
 fn spawn_rollback(index: usize) {
     crate::spawn::fail_at(index);
     let (root, config) = config();
@@ -207,14 +562,6 @@ fn spawn_rollback(index: usize) {
     );
     crate::spawn::wait_live(usize::from(index != 0));
     crate::spawn::fail_at(usize::MAX);
-    let (_root, owner, _backend) = core();
-    stop(&owner);
-}
-fn core_start_rollback() {
-    let (_root, mut config) = config();
-    config.queue_capacity = 0;
-    assert!(create_core_backend(config).is_err());
-    crate::spawn::wait_live(1);
     let (_root, owner, _backend) = core();
     stop(&owner);
 }
@@ -249,6 +596,7 @@ fn concurrent_timer() {
     assert_eq!(crate::timer::shared().unwrap().entries(), 0);
 }
 struct Notify {
+    // MUTEX: couples the wake predicate to Condvar sleep/reset to avoid lost test-waker notifications.
     state: Mutex<bool>,
     changed: Condvar,
 }
@@ -308,9 +656,11 @@ fn observer_bounds() {
     drop(futures);
     assert_eq!(operation.observer_count(), 0);
     assert_eq!(crate::timer::shared().unwrap().entries(), 0);
-    code(
+    assert_failure(
         operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        "timeout",
+        Some("native_operation"),
     );
     code(
         ready(operation.completion(Duration::from_nanos(1))),
@@ -487,6 +837,130 @@ impl sc_observability::LogSink for HeldSink {
         }
     }
 }
+
+struct BlockingWriteSink {
+    gate: Arc<Gate>,
+}
+
+#[allow(
+    deprecated,
+    reason = "test sink preserves the public legacy LogSink trait"
+)]
+impl sc_observability::LogSink for BlockingWriteSink {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
+        self.gate.arrive();
+        Ok(())
+    }
+
+    fn health(&self) -> native::SinkHealth {
+        native::SinkHealth {
+            name: native::SinkName::new("blocking-write").unwrap(),
+            state: native::SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+struct FlushFailSink;
+
+#[allow(
+    deprecated,
+    reason = "test sink preserves the public legacy LogSink trait"
+)]
+impl sc_observability::LogSink for FlushFailSink {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
+        Ok(())
+    }
+
+    fn flush(&self) -> Result<(), native::LogSinkError> {
+        Err(native::LogSinkError(Box::new(native::ErrorContext::new(
+            sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+            "test sink intentionally fails flush",
+            native::Remediation::recoverable("retry after repairing the sink", ["retry"]),
+        ))))
+    }
+
+    fn health(&self) -> native::SinkHealth {
+        native::SinkHealth {
+            name: native::SinkName::new("flush-fail").unwrap(),
+            state: native::SinkHealthState::DegradedDropping,
+            last_error: None,
+        }
+    }
+}
+
+fn core_with_sink(
+    config: sc_observability::LoggerConfig,
+    sink: Arc<dyn sc_observability::LogSink>,
+) -> (CoreLoggerOwner, CoreLoggerBackend) {
+    let stamp = dto::EventStamp {
+        service: config.service_name.clone(),
+        timestamp: native::Timestamp::now_utc(),
+        identity: native::ProcessIdentity::default(),
+    };
+    let shared = Coordinator::create(|| {
+        let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
+        builder.register_sink(sc_observability::SinkRegistration::new(sink));
+        let (logger, level) = builder.build_with_level_owner().unwrap();
+        let health = dto::from_canonical_core_health(logger.health(), logger.level_state());
+        Ok((
+            Backend::Core {
+                logger: arc_swap::ArcSwapOption::from(Some(Arc::new(logger))),
+                level: Mutex::new(level),
+                stamp,
+            },
+            health,
+        ))
+    })
+    .unwrap();
+    let owner = CoreLoggerOwner {
+        shared: shared.clone(),
+    };
+    let backend = CoreLoggerBackend { shared };
+    (owner, backend)
+}
+
+fn core_admission_and_flush_faults() {
+    let (_root, mut logger_config) = config();
+    logger_config.queue_capacity = 1;
+    let gate = Gate::new();
+    let _release = Release(gate.clone());
+    let (owner, backend) = core_with_sink(
+        logger_config,
+        Arc::new(BlockingWriteSink { gate: gate.clone() }),
+    );
+
+    assert!(matches!(
+        backend.try_log(event(), ProducerOrigin::RustHost),
+        Ok(AdmissionDto::Accepted)
+    ));
+    gate.entered(1);
+    assert!(matches!(
+        backend.try_log(event(), ProducerOrigin::RustHost),
+        Ok(AdmissionDto::Accepted)
+    ));
+    assert_failure(
+        backend.try_log(event(), ProducerOrigin::RustHost),
+        sc_observability::error_codes::LOGGER_QUEUE_FULL.as_str(),
+        "queue_full",
+        None,
+    );
+    gate.release();
+    stop(&owner);
+
+    let (_root, config) = config();
+    let (owner, backend) = core_with_sink(config, Arc::new(FlushFailSink));
+    let flush = backend.start_flush(Duration::from_secs(1)).unwrap();
+    assert_failure(
+        flush.wait(Duration::from_secs(2)),
+        sc_observability::error_codes::LOGGER_FLUSH_FAILED.as_str(),
+        "io",
+        None,
+    );
+    let _ = owner.shutdown(Duration::from_secs(2));
+    crate::spawn::wait_live(1);
+}
+
 fn core_sink_and_shutdown() {
     let (_root, config) = config();
     let gate = Gate::new();
@@ -502,10 +976,10 @@ fn core_sink_and_shutdown() {
         identity: native::ProcessIdentity::default(),
     };
     let shared = Coordinator::create(|| {
-        let mut builder = sc_observability::Logger::builder_typed(config).unwrap();
+        let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
         builder.register_sink(sc_observability::SinkRegistration::new(sink.clone()));
-        let (logger, level) = builder.build_with_level_owner_typed().unwrap();
-        let health = dto::from_core_health(logger.health(), logger.level_state()).unwrap();
+        let (logger, level) = builder.build_with_level_owner().unwrap();
+        let health = dto::from_canonical_core_health(logger.health(), logger.level_state());
         Ok((
             Backend::Core {
                 logger: arc_swap::ArcSwapOption::from(Some(Arc::new(logger))),
@@ -550,6 +1024,45 @@ fn core_sink_and_shutdown() {
     crate::spawn::wait_live(1);
     assert!(sink.flushes.load(Ordering::SeqCst) >= 1);
 }
+
+fn core_shutdown_timeout_admission_failure() {
+    let error = native::v2::EventError::classified_routing(
+        Box::new(native::ErrorContext::new(
+            sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+            "writer thread did not stop within 10ms",
+            native::Remediation::recoverable(
+                "wait for the writer thread to recover",
+                ["retry after shutdown"],
+            ),
+        )),
+        native::v2::FailureClassification::timeout("shutdown"),
+    );
+
+    assert_failure(
+        Err::<(), _>(crate::conversion::core_admission(&error)),
+        sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT.as_str(),
+        "timeout",
+        Some("shutdown"),
+    );
+
+    let error = sc_observability_log::v2::EmitError::ShutdownTimedOut {
+        diagnostic: native::OperationDiagnostic {
+            code: sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+            message: "writer thread did not stop within 10ms".into(),
+            remediation: native::Remediation::recoverable(
+                "wait for the writer thread to recover",
+                ["retry after shutdown"],
+            ),
+            at: native::Timestamp::now_utc(),
+        },
+    };
+    assert_failure(
+        Err::<(), _>(crate::conversion::bridge_admission(error)),
+        sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT.as_str(),
+        "timeout",
+        Some("shutdown"),
+    );
+}
 fn admission32(close: bool) {
     let (_root, owner, backend) = core();
     let gate = Gate::new();
@@ -585,7 +1098,7 @@ fn admission32(close: bool) {
     }
     stop(&owner);
 }
-fn failed_helper() {
+fn failed_shutdown() -> Failure {
     let (_root, owner, backend) = core();
     backend.shared.hooks.crash.store(true, Ordering::SeqCst);
     let op = backend.start_query(query()).unwrap();
@@ -593,11 +1106,30 @@ fn failed_helper() {
         op.wait(Duration::from_secs(2)),
         Err(Failure::Internal { .. })
     ));
-    assert!(matches!(
-        owner.shutdown(Duration::from_secs(2)),
-        Err(Failure::Internal { .. })
-    ));
+    let failure = owner
+        .shutdown(Duration::from_secs(2))
+        .expect_err("crashed helper must fail the real shutdown path");
+    let source_chain = lock(&backend.shared.hooks.shutdown_source_chain)
+        .take()
+        .expect("typed shutdown error was observed before DTO conversion");
+    assert!(
+        source_chain.is_empty(),
+        "shutdown drain source chain changed: {source_chain:?}"
+    );
+    assert_eq!(
+        failure.diagnostic().message,
+        "helper failure prevents confirmed shutdown"
+    );
     crate::spawn::wait_live(1);
+    failure
+}
+fn failed_helper() {
+    assert_failure(
+        Err::<(), _>(failed_shutdown()),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+        "internal",
+        None,
+    );
 }
 fn bridge_host() -> (tempfile::TempDir, sc_observability_log::LogGuard) {
     let (root, mut config) = config();
@@ -619,6 +1151,8 @@ fn bridge_timeout(external: bool) {
     let stdout = std::io::stdout();
     let held = stdout.lock();
     backend.try_log(event(), ProducerOrigin::RustHost).unwrap();
+    let (completed_tx, completed_rx) = mpsc::sync_channel(1);
+    sc_observability_log::notify_next_flush_complete(completed_tx);
     if external {
         assert!(matches!(
             control.flush(Duration::from_millis(1)),
@@ -637,16 +1171,19 @@ fn bridge_timeout(external: bool) {
         sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS.as_str(),
     );
     drop(held);
-    // These are explicit new host requests; the adapter itself never retries or
-    // retrieves the previous native result. Retry only the documented overlap.
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        let result = backend
-            .start_flush(Duration::from_secs(1))
-            .unwrap()
-            .wait(Duration::from_secs(2));
-        match result{Ok(_)=>break,Err(error)if error.diagnostic().code==sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS.as_str()=>{assert!(Instant::now()<deadline);std::thread::yield_now();},other=>panic!("new bridge barrier: {other:?}")}
-    }
+    // Completion is the native single-flight release, not the observer deadline.
+    // The bound is only a hang watchdog; no new flush is used to poll progress.
+    assert!(
+        completed_rx
+            .recv_timeout(CONTRACT_CASE_DEADLINE)
+            .expect("native flush completion notification"),
+        "native flush completion was notified before its in-flight flag cleared"
+    );
+    backend
+        .start_flush(Duration::from_secs(1))
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .expect("one new flush after native completion");
     drop(backend);
     crate::spawn::wait_live(1);
     host.shutdown(Duration::from_secs(2)).unwrap();
@@ -665,21 +1202,287 @@ fn bridge_churn() {
     }
     host.shutdown(Duration::from_secs(2)).unwrap();
 }
+fn bridge_canonical_v2() {
+    let (root, mut config) = config();
+    config.enable_console_sink = true;
+    let host = sc_observability_log::v2::init(
+        config,
+        sc_observability_log::BridgeOptions {
+            default_action: native::ActionName::new("bridge.canonical").unwrap(),
+            parse_bracket_action: false,
+        },
+    )
+    .unwrap();
+    let control = host.control();
+    let backend = bridge_backend_v2(control.clone()).unwrap();
+
+    backend.try_log(event(), ProducerOrigin::RustHost).unwrap();
+    backend
+        .start_query(query())
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .unwrap();
+    backend
+        .start_flush(Duration::from_secs(2))
+        .unwrap()
+        .wait(Duration::from_secs(2))
+        .unwrap();
+    control.flush(Duration::from_secs(2)).unwrap();
+    assert!(control.health().is_ok());
+
+    drop(backend);
+    crate::spawn::wait_live(1);
+    host.shutdown(Duration::from_secs(2)).unwrap();
+    drop(root);
+}
 fn native_diagnostic_fidelity() {
+    // These are transparent cross-crate fixtures. Real producer coverage for
+    // these values lives in the log crate; this table proves both DTO and the
+    // existing runtime conversion project the same native-owned category.
+    for (code, classification, expected_kind) in [
+        (
+            "SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED",
+            native::FailureClassification::Unavailable,
+            "unavailable",
+        ),
+        (
+            "SC_OBSERVABILITY_LOG_HELPER_LOST",
+            native::FailureClassification::Internal,
+            "internal",
+        ),
+    ] {
+        let diagnostic = native::OperationDiagnostic {
+            code: native::ErrorCode::new_static(code),
+            message: format!("exact native message for {code}"),
+            remediation: native::Remediation::recoverable("first", ["second"]),
+            at: native::Timestamp::UNIX_EPOCH,
+        };
+        let error = native::v2::FlushError::classified_drain(
+            Box::new(native::ErrorContext::new(
+                diagnostic.code.clone(),
+                diagnostic.message.clone(),
+                diagnostic.remediation.clone(),
+            )),
+            classification,
+        );
+        let canonical = dto::CanonicalFailureDto::try_from(&error).expect("DTO projection");
+        let runtime = crate::conversion::bridge_flush(&error);
+        assert_eq!(
+            serde_json::to_value(&canonical).expect("DTO serialization")["kind"],
+            expected_kind,
+            "canonical DTO kind for {code}"
+        );
+        assert_eq!(
+            serde_json::to_value(&runtime).expect("runtime serialization")["kind"],
+            expected_kind,
+            "runtime conversion kind for {code}"
+        );
+        assert_eq!(runtime.diagnostic().code, diagnostic.code.as_str());
+        assert_eq!(runtime.diagnostic().message, diagnostic.message);
+        assert_eq!(
+            runtime.diagnostic().remediation,
+            diagnostic.remediation.into()
+        );
+    }
+
     let diagnostic = native::OperationDiagnostic {
-        code: native::ErrorCode::new_static("SC_NATIVE_FIXTURE"),
-        message: "exact native message".into(),
-        remediation: native::Remediation::recoverable("first", ["second"]),
+        code: native::error_codes::DIAGNOSTIC_INVALID,
+        message: "exact unclassified drain message".into(),
+        remediation: native::Remediation::recoverable("inspect the export cause", ["retry later"]),
         at: native::Timestamp::UNIX_EPOCH,
     };
-    let failure = crate::conversion::bridge_flush(sc_observability_log::FlushError::Logger {
-        diagnostic: diagnostic.clone(),
-    });
-    assert!(matches!(failure, Failure::Io { .. }));
-    assert_eq!(failure.diagnostic(), &dto::Diagnostic::from(diagnostic));
-    let golden: serde_json::Value =
-        serde_json::from_str(include_str!("../tests/native-diagnostic.json")).unwrap();
-    assert_eq!(serde_json::to_value(failure).unwrap(), golden);
+    let error = native::v2::FlushError::Drain {
+        context: Box::new(
+            native::ErrorContext::new(
+                diagnostic.code.clone(),
+                diagnostic.message.clone(),
+                diagnostic.remediation.clone(),
+            )
+            .source(Box::new(native::v2::ExportError::QueueFull {
+                context: Box::new(native::ErrorContext::new(
+                    native::error_codes::otlp::OTLP_QUEUE_FULL,
+                    "export queue is full",
+                    native::Remediation::recoverable("reduce export load", ["retry later"]),
+                )),
+            })),
+        ),
+    };
+    let canonical = dto::CanonicalFailureDto::try_from(&error).expect("DTO projection");
+    let runtime = crate::conversion::bridge_flush(&error);
+
+    assert_eq!(
+        serde_json::to_value(&canonical).expect("DTO serialization")["kind"],
+        "queue_full",
+        "canonical DTO derives kind from the unclassified drain's export cause"
+    );
+    assert_eq!(
+        serde_json::to_value(&runtime).expect("runtime serialization")["kind"],
+        "queue_full",
+        "runtime conversion derives kind from the unclassified drain's export cause"
+    );
+    assert_eq!(runtime.diagnostic().code, diagnostic.code.as_str());
+    assert_eq!(runtime.diagnostic().message, diagnostic.message);
+    assert_eq!(
+        runtime.diagnostic().remediation,
+        diagnostic.remediation.clone().into()
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.code,
+        diagnostic.code.as_str()
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.message,
+        diagnostic.message
+    );
+    assert_eq!(
+        canonical.diagnostic().diagnostic.remediation,
+        diagnostic.remediation.into()
+    );
+}
+
+fn d15_callback_fixture() {
+    let cases = [
+        (
+            crate::error::subscriber_closed("callback registration is closed"),
+            dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+            "closed",
+        ),
+        (
+            crate::error::subscriber_waiters_full("callback registration capacity is occupied"),
+            dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
+            "queue_full",
+        ),
+    ];
+    for (error, code, wire_kind) in cases {
+        assert_canonical_context(&error, code, 0);
+        let registry = dto::error_codes::REGISTRY
+            .iter()
+            .find(|entry| entry.code == code)
+            .expect("subscriber code is registered");
+        assert_eq!(
+            error.diagnostic().remediation,
+            native::Remediation::recoverable(registry.remediation, std::iter::empty::<String>()),
+        );
+        let dto_projection = dto::CanonicalFailureDto::try_from(&error)
+            .expect("native subscriber error projects into the canonical DTO");
+        let runtime_projection =
+            crate::conversion::canonical(&error, error.failure_classification());
+        assert_eq!(
+            serde_json::to_value(&runtime_projection).expect("runtime projection serializes"),
+            serde_json::to_value(dto_projection).expect("DTO projection serializes"),
+            "runtime conversion delegates the subscriber's native classification to the DTO helper"
+        );
+        assert_failure(Err::<(), _>(runtime_projection), code, wire_kind, None);
+    }
+
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> = pending(&backend);
+    stop(&owner);
+    assert_failure(
+        operation.subscribe(Box::new(|_| panic!("closed callback was retained"))),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+        "closed",
+        None,
+    );
+    callback_bounds();
+}
+
+fn d15_conversion_fixture() {
+    let (_root, config) = config();
+    let stamp = dto::EventStamp {
+        service: config.service_name,
+        timestamp: native::Timestamp::now_utc(),
+        identity: native::ProcessIdentity::default(),
+    };
+    let mut invalid_target = event();
+    invalid_target.target = "invalid target".into();
+    let mut invalid_action = event();
+    invalid_action.action = "invalid action".into();
+    let mut invalid_fields = event();
+    invalid_fields.fields.insert(
+        "sc_observability.binding.language".into(),
+        dto::ValueDto::String {
+            value: "forged".into(),
+        },
+    );
+
+    for (invalid, expected_field) in [
+        (invalid_target, "target"),
+        (invalid_action, "action"),
+        (invalid_fields, "fields.sc_observability.binding.language"),
+    ] {
+        let actual = crate::conversion::event(invalid, stamp.clone(), ProducerOrigin::RustHost)
+            .expect_err("runtime conversion preserves the DTO failure");
+        assert!(matches!(
+            actual,
+            Failure::Validation { diagnostic, field }
+                if field == expected_field && !diagnostic.at.is_empty()
+        ));
+    }
+}
+
+fn d15_coordinator_fixture() {
+    core_admission_and_flush_faults();
+    core_sink_and_shutdown();
+    core_shutdown_timeout_admission_failure();
+}
+
+fn d15_operation_fixture() {
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> =
+        Operation::new(&backend.shared.dispatcher, &crate::timer::shared().unwrap());
+    assert_failure(
+        operation.wait(Duration::ZERO),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        "timeout",
+        Some("native_operation"),
+    );
+    stop(&owner);
+    observer_bounds();
+}
+
+fn d15_spawn_fixture() {
+    let error = crate::error::init_runtime(
+        "helper startup failed",
+        Box::new(std::io::Error::other("native startup source")),
+    );
+    assert_canonical_context(
+        &error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED,
+        1,
+    );
+    assert_failure(
+        Err::<(), _>(crate::conversion::canonical(
+            &error,
+            crate::conversion::Kind::Unavailable,
+        )),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED,
+        "unavailable",
+        None,
+    );
+    spawn_rollback(0);
+}
+
+fn d15_sync_fixture() {
+    assert_failure(
+        Err::<(), _>(failed_shutdown()),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+        "internal",
+        None,
+    );
+}
+
+fn d15_timer_fixture() {
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> =
+        Operation::new(&backend.shared.dispatcher, &crate::timer::shared().unwrap());
+    assert_failure(
+        operation.wait(Duration::ZERO),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        "timeout",
+        Some("native_operation"),
+    );
+    stop(&owner);
 }
 
 fn cross_logger_cancellation() {

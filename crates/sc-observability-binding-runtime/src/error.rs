@@ -1,4 +1,6 @@
+use crate::constants::{MAX_OBSERVATION_TIMEOUT, MAX_OBSERVATION_TIMEOUT_MS};
 use sc_observability_dto::{Failure, boundary_diagnostic, error_codes as codes};
+use sc_observability_types::{self as native, ErrorCode, ErrorContext, Remediation};
 use std::time::Duration;
 
 pub(crate) fn internal(message: impl Into<String>) -> Failure {
@@ -24,16 +26,10 @@ pub(crate) fn full(code: &str) -> Failure {
 pub(crate) fn waiters_full() -> Failure {
     full(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL)
 }
-pub(crate) fn start_failed(message: impl Into<String>) -> Failure {
-    Failure::Unavailable {
-        diagnostic: boundary_diagnostic(
-            codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED,
-            message,
-        )
-        .into(),
-    }
-}
-pub(crate) fn timeout() -> Failure {
+/// The sole binding-local observation timeout.  Query, flush and shutdown
+/// observers share one wire contract (code, message, remediation and the
+/// `native_operation` disposition), so no caller selects a per-operation form.
+pub(crate) fn observer_timeout() -> Failure {
     Failure::Timeout {
         diagnostic: boundary_diagnostic(
             codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
@@ -43,11 +39,89 @@ pub(crate) fn timeout() -> Failure {
         operation: "native_operation".into(),
     }
 }
+
+fn context(
+    code: ErrorCode,
+    message: impl Into<String>,
+    remediation: Remediation,
+) -> Box<ErrorContext> {
+    Box::new(ErrorContext::new(code, message, remediation))
+}
+
+pub(crate) fn init_runtime(
+    message: impl Into<String>,
+    source: Box<dyn std::error::Error + Send + Sync + 'static>,
+) -> native::v2::InitError {
+    let context = context(
+        ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED),
+        message,
+        Remediation::recoverable(
+            "restore thread or runtime resources and retry initialization",
+            std::iter::empty::<String>(),
+        ),
+    );
+    let context = Box::new((*context).source(source));
+    native::v2::InitError::Runtime { context }
+}
+
+pub(crate) fn init_runtime_internal(message: impl Into<String>) -> native::v2::InitError {
+    native::v2::InitError::Runtime {
+        context: context(
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_INTERNAL),
+            message,
+            Remediation::not_recoverable(
+                "restart the binding runtime after resolving the poisoned state",
+            ),
+        ),
+    }
+}
+
+fn registry_remediation(code: &'static str) -> Remediation {
+    let entry = codes::REGISTRY
+        .iter()
+        .find(|entry| entry.code == code)
+        .expect("binding runtime codes are registered by the DTO boundary");
+    Remediation::recoverable(entry.remediation, std::iter::empty::<String>())
+}
+
+pub(crate) fn subscriber_closed(message: impl Into<String>) -> native::v2::SubscriberError {
+    native::v2::SubscriberError::classified_subscriber(
+        context(
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_CLOSED),
+            message,
+            registry_remediation(codes::SC_OBSERVABILITY_BINDING_CLOSED),
+        ),
+        native::v2::FailureClassification::Closed,
+    )
+}
+
+pub(crate) fn subscriber_waiters_full(message: impl Into<String>) -> native::v2::SubscriberError {
+    native::v2::SubscriberError::classified_subscriber(
+        context(
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL),
+            message,
+            registry_remediation(codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL),
+        ),
+        native::v2::FailureClassification::QueueFull,
+    )
+}
+
+pub(crate) fn shutdown_drain(message: impl Into<String>) -> native::v2::ShutdownError {
+    native::v2::ShutdownError::classified_drain(
+        context(
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_INTERNAL),
+            message,
+            Remediation::not_recoverable("inspect the retained shutdown diagnostic"),
+        ),
+        native::v2::FailureClassification::Internal,
+    )
+}
+
 pub(crate) fn duration(value: Duration) -> Result<(), Failure> {
-    if value > Duration::from_secs(60) || !value.subsec_nanos().is_multiple_of(1_000_000) {
+    if value > MAX_OBSERVATION_TIMEOUT || !value.subsec_nanos().is_multiple_of(1_000_000) {
         return Err(sc_observability_dto::invalid_input(
             "timeout_ms",
-            "timeout must be integral milliseconds in 0..60000",
+            format!("timeout must be integral milliseconds in 0..{MAX_OBSERVATION_TIMEOUT_MS}"),
         ));
     }
     Ok(())

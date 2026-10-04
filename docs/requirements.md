@@ -84,7 +84,6 @@ This crate owns shared neutral contracts only.
 - TYP-019 `SpanState` serialization shall be derived from typestate at export/serialization time and shall not be a producer-facing mutable field. The `SpanStarted` and `SpanEnded` marker structs are the span-state mechanism; no additional producer-facing state type is required.
 - TYP-020 `Observable` shall remain an open trait for consumer-owned payload types.
 - TYP-021 `ObservationSubscriber<T>`, `ObservationFilter<T>`, `LogProjector<T>`, `SpanProjector<T>`, and `MetricProjector<T>` shall remain open extension points.
-- TYP-022 Crate-local emitter traits that are sealed to their implementing facade types shall be owned by the crate that implements them rather than by `sc-observability-types`.
 - TYP-023 Traits used behind `Arc<dyn ...>` shall remain object-safe, with `T` fixed at each usage site.
 - TYP-024 Traits used in concurrent routing or injection contexts shall be `Send + Sync`.
 - TYP-025 `ToolName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the top-level tool or executable identity used for config and path derivation.
@@ -100,7 +99,7 @@ This crate owns shared neutral contracts only.
 - TYP-035 `sc-observability-types` shall own `QueryError` with variants `InvalidQuery`, `Io`, `Decode`, `Unavailable`, and `Shutdown`.
 - TYP-036 `QueryError` shall map to stable error codes `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`, `SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN`.
 - TYP-037 `sc-observability-types` shall own `QueryHealthReport` and `QueryHealthState` as the shared health contract for log query/follow availability.
-- TYP-038 `sc-observability-types` shall own `ObservabilityHealthProvider` as a sealed shared telemetry-health trait reserved for workspace-owned implementations.
+- TYP-038 `sc-observability-types` shall own `ObservabilityHealthProvider` as a shared telemetry-health trait supported for workspace-owned implementations. External implementations are technically possible but unsupported and undertaken at the implementor's own risk; compatibility for external implementations is not guaranteed. The hidden implementation hooks do not enforce compiler-level sealing.
 - TYP-039 `sc-observability-types` shall not expose concrete logging runtime
   behavior such as `Logger`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
   built-in sink implementations, or sink-configuration toggles. Downstream
@@ -165,7 +164,7 @@ This crate is the lightweight logging layer.
     `Logger::shutdown()` returns
   - `Logger<Stopped>` remains usable for health inspection only
   - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
-- LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
+- LOG-024 `Logger::emit` shall remain the retained logger entry point for event admission and preserve its `EventError` behavior.
 - LOG-025 `Logger` shall expose a synchronous historical query API `query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>`.
 - LOG-026 `Logger` shall expose a synchronous follow/tail API `follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>`.
 - LOG-027 `LogFollowSession` shall expose synchronous polling and shall not require an async runtime, background task, or file watcher to deliver new records.
@@ -305,8 +304,8 @@ This crate is the observation routing layer built on top of logging.
 - OBS-024 `Observability` lifecycle behavior shall be explicit:
   - `emit()` after `shutdown()` returns `ObservationError::Shutdown`
   - `flush()` delegates to logging and active routing/projector state
-  - repeated `shutdown()` calls are idempotent and return `Ok(())`
-- OBS-025 `sc-observe` shall own a crate-local sealed `ObservationEmitter<T>` trait implemented by `Observability`.
+  - repeated `shutdown()` calls after a successful shutdown are idempotent and return `Ok(())`
+  - repeated `shutdown()` calls after a failed shutdown replay the retained terminal failure to callers
 
 ## 6. `sc-observability-otlp` Requirements
 
@@ -358,7 +357,7 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - concurrent or repeated async shutdown callers share one completion; calls
     made after terminal completion are idempotent and return `Ok(())`, so only
     the first/in-flight caller set observes a terminal failure
-  - the synchronous legacy backend retains final-result
+  - the synchronous HTTP backend retains final-result
     `flush_typed()`/`shutdown_typed()` compatibility on plain threads; it
     returns `BlockingBackendInAsyncContext` before buffer/state mutation when
     called from an entered Tokio runtime
@@ -370,11 +369,11 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
     false success, and accounts admitted-but-incomplete records as dropped
   - incomplete spans are dropped only at shutdown/final flush
 - OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
-- OTLP-023 Restored legacy exporter code, tests, dashboards, and operational
-  recipes shall be traceable to an immutable source commit and Git blob in an
-  in-repository provenance manifest. Import validation shall verify destination
-  dispositions/hashes and reject scratch paths, ATM dependencies/labels, and
-  stale source-repository names from shipped output.
+- OTLP-023 The synchronous HTTP/JSON backend (feature `sync-http`) is a
+  first-class supported backend for callers without an async runtime. Its code,
+  tests, dashboards, and operational recipes shall be maintained in this
+  repository and shall not ship scratch paths, ATM dependencies/labels, or
+  stale source-repository names.
 - OTLP-024 The supported Grafana/LogQL operational recipes shall be translated
   to the current neutral resource/attribute schema, tested against the same
   hermetic collector corpus as both exporters, and stored under
@@ -401,7 +400,7 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - NFR-007 Backend sink/export failures shall be fail-open.
 - NFR-008 Each crate section in this document shall remain readable in isolation without requiring upward-layer concepts to understand lower-layer behavior.
 - NFR-009 The workspace shall enforce layering and repo-boundary rules in CI, including dependency bans against `agent-team-mail-*` and banned crate edges that violate the approved stack.
-- NFR-010 The workspace shall enforce basic docs consistency checks in CI so the approved crate layering does not drift out of sync across requirements, architecture, and API design documents.
+- NFR-010 Changes to approved crate layering shall be reviewed for consistency across requirements, architecture, and API design documents. CI shall enforce missing-doc checks for the public Rust API; literal documentation phrases are not a CI contract.
 - NFR-011 The workspace shall enforce version-literal consistency in CI for the
   maintained files covered by the validation script: Cargo package tables,
   internal workspace dependency version pins that reference local crate paths,
@@ -410,8 +409,7 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - NFR-012 Public API surface changes to `sc-observability` shall be
   accompanied by updates to the normative docs and shall pass the CI public-API
   governance checks introduced in sprint A.2 before merge.
-  This blocking merge gate applies to merges into `develop` or `main`; PRs into
-  `integrate/*` and stack layers run these checks in report mode.
+  This blocking merge gate is strict on every PR base, push and manual run.
 
 ## 8. Source Organization Requirements
 
@@ -591,9 +589,9 @@ BTIT integration tests; current Phase D work also has no publication authority.
   CI runtime/action versions already adopted elsewhere in this repository.
   Phase C shall treat a `../sc-publish` revision with current, compatible
   action-runtime pins as a named execution prerequisite for the sprint that
-  installs the shared package, verified by an added workflow action-runtime
-  validation gate — not recorded as an accepted regression closed out by a
-  follow-up ticket.
+  installs the shared package, verified when adopting the reviewed upstream
+  revision — not recorded as an accepted regression closed out by a follow-up
+  ticket.
 
 ## 12. Phase D — Compatible 1.x Adoption
 

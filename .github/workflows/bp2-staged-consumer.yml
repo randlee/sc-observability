@@ -10,7 +10,9 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
       - name: Verify qualification metadata and fixture formatting
         run: |
           python3 scripts/ci/validate_runtime_level_qualification_metadata.py
@@ -45,7 +47,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
       - name: Download the shared immutable candidate
         uses: actions/download-artifact@v7
         with:

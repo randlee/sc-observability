@@ -85,6 +85,22 @@ fn every_registered_type_agrees_with_serde_and_frozen_expectations() {
             "ResultDtoClientStatus" => roundtrip::<ResultDto<ClientStatus>>(value),
             "WireEnvelopeClientOutcome" => roundtrip::<WireEnvelope<ClientOutcome>>(value),
             "WireEnvelopeClientStatus" => roundtrip::<WireEnvelope<ClientStatus>>(value),
+            "CanonicalDiagnosticDto" => roundtrip::<CanonicalDiagnosticDto>(value),
+            "CanonicalFailureDto" => roundtrip::<CanonicalFailureDto>(value),
+            "TraceContextV2Dto" => roundtrip::<TraceContextV2Dto>(value),
+            "SpanLinkDto" => roundtrip::<SpanLinkDto>(value),
+            "SpanKindDto" => roundtrip::<SpanKindDto>(value),
+            "AggregationTemporalityDto" => roundtrip::<AggregationTemporalityDto>(value),
+            "HistogramPointDto" => roundtrip::<HistogramPointDto>(value),
+            "MetricValueDto" => roundtrip::<MetricValueDto>(value),
+            "MetricRecordDto" => roundtrip::<MetricRecordDto>(value),
+            "SpanStatusDto" => roundtrip::<SpanStatusDto>(value),
+            "SpanRecordDto" => roundtrip::<SpanRecordDto>(value),
+            "SpanEventDto" => roundtrip::<SpanEventDto>(value),
+            "SpanSignalDto" => roundtrip::<SpanSignalDto>(value),
+            "CanonicalWireEnvelopeAdmissionDto" => {
+                roundtrip::<CanonicalWireEnvelope<AdmissionDto>>(value)
+            }
             _ => panic!("unregistered fixture type: {name}"),
         };
         assert_eq!(actual, case["serde_output"], "{}", case["id"]);
@@ -97,9 +113,51 @@ fn semantic_negatives_have_exact_failure_kinds_and_codes() {
         serde_json::from_str(include_str!("../../conformance/v1/conversion-cases.json")).unwrap();
     for case in cases {
         let value = case["value"].clone();
+        if case["operation"] == "canonical_envelope" {
+            match case["result"].as_str().unwrap() {
+                "decoded" => {
+                    let decoded = decode_canonical_envelope::<AdmissionDto>(value)
+                        .unwrap_or_else(|error| panic!("{}: {error:?}", case["id"]));
+                    assert_eq!(
+                        serde_json::to_value(decoded).unwrap(),
+                        case["expected"],
+                        "{}",
+                        case["id"]
+                    );
+                }
+                "rejected" => {
+                    let error = decode_canonical_envelope::<AdmissionDto>(value)
+                        .expect_err("malformed canonical envelope must be rejected");
+                    assert_eq!(error.diagnostic().code, case["expected_error"]["code"]);
+                    assert_eq!(
+                        serde_json::to_value(error).unwrap()["kind"],
+                        case["expected_error"]["kind"]
+                    );
+                }
+                result => panic!("unknown canonical-envelope result: {result}"),
+            }
+            continue;
+        }
         let error = match case["operation"].as_str().unwrap() {
-            "event" => decode_event(value).unwrap_err(),
-            "query" => decode_query(value).unwrap_err(),
+            "metric" => decode_metric(value).unwrap_err(),
+            "span" => decode_span(value).unwrap_err(),
+            "event" => decode_event(value)
+                .and_then(|event| {
+                    to_core_event(
+                        event,
+                        EventStamp {
+                            service: serde_json::from_value(serde_json::json!("conformance"))
+                                .unwrap(),
+                            timestamp: serde_json::from_value(serde_json::json!(
+                                "1970-01-01T00:00:00Z"
+                            ))
+                            .unwrap(),
+                            identity: Default::default(),
+                        },
+                    )
+                })
+                .unwrap_err(),
+            "query" => decode_query(value).and_then(to_core_query).unwrap_err(),
             "level" => decode_level_request(value).unwrap_err(),
             "timeout" => decode_timeout(value).unwrap_err(),
             "envelope" => decode_envelope::<AdmissionDto>(value).unwrap_err(),

@@ -23,6 +23,6 @@ fn main() {
     let service = config.service_name_typed().expect("typed service");
     let mut logger_config = LoggerConfig::default_for(service, root);
     logger_config.enable_file_sink = false;
-    logger_config.enable_console_sink = false;
+    logger_config.enable_console_sink = true;
     legacy_boundary(logger_config);
 }

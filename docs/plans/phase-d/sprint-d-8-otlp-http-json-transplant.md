@@ -87,6 +87,7 @@ are authorized deltas—not claims about the legacy implementation:
 | capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.21's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
 | `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
 | per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
+| installed ATM/sc-compose dev binaries, app-local canonical/`.otel.jsonl` mirrors, and command-outage behavior | application-owned dev-install environment; retain as D9 provenance only, outside D8 transport behavior and D9 no-atm-core runtime coverage | `changed: application-owned-dev-install-environment` |
 
 The no-redesign rule applies to payload encoding, endpoints, client/auth/CA
 construction, request execution, maximum attempts, and the exponential/cap
@@ -209,7 +210,7 @@ legacy-worker behavior.
 - [ ] Deliverable 2: loopback tests externally verify the retained request behavior and exactly the four authorized deltas: retry classification, bounded Retry-After/jitter, shutdown cancellation, and sequence deadline.
 - [ ] Deliverable 3: `cargo test -p sc-observability-otlp --features legacy-http-json --locked` proves D.12 neutral payload/typed results and D.21 config consumption without new error mappings or inline retry constants.
 - [ ] Deliverable 4: external saturation tests prove nonblocking record/byte admission, capacity-one control progress, ordered barrier completion, bounded construction, and exact-once worker exit/drop accounting through D.6’s lifecycle core.
-- [ ] Deliverable 5: external fixtures prove plain-thread operation, entered-Tokio rejection, async responsiveness, cancellation, bounded Retry-After parsing, and response-loss accounting.
+- [ ] Deliverable 5: external fixtures prove plain-thread operation, entered-Tokio rejection, async responsiveness, cancellation, retry bounds, bounded Retry-After parsing, and response-loss accounting.
 - [ ] Deliverable 6: existing dependency/boundary validation proves the legacy-only build excludes the official SDK/tonic and consumes the D.21 allowlist unchanged.
 - [ ] This sprint does not close production composition or collector equivalence; D.18 and D.9 own those outcomes.
 - [ ] RSH-005: a deterministic slow-initializer fixture delays legacy worker construction and proves the finite construction handshake returns the specified typed failure or publishes a ready handle; it never waits on scheduler speed.

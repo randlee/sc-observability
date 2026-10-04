@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import npm_release as npm
 from release_manifest import _public_registry_checks, load_channel_contracts
+from shell_helpers import bash_command, bash_environment
 from test_install import INSTALL, InstallValuesTests
 
 
@@ -320,8 +321,11 @@ def test_download_step_requires_immutable_release(tmp_path, immutable, expected)
     gh = tmp_path / 'gh'
     gh.write_text('#!/bin/sh\nif [ "$1" = api ]; then\n  printf \'%s\\n\' \'{"immutable":' + str(immutable).lower() + ',"draft":false}\'\nelse\n  touch downloaded\nfi\n')
     gh.chmod(0o755)
-    env = {**os.environ, 'PATH': str(tmp_path) + os.pathsep + os.environ['PATH'], 'RELEASE_TAG': 'v1.2.3', 'RELEASE_REPOSITORY': 'example/project'}
-    result = subprocess.run(['bash', '-c', step['run']], cwd=tmp_path, env=env, capture_output=True)
+    env = bash_environment(
+        {**os.environ, 'RELEASE_TAG': 'v1.2.3', 'RELEASE_REPOSITORY': 'example/project'},
+        prepend_path=tmp_path,
+    )
+    result = subprocess.run([*bash_command(), '-c', step['run']], cwd=tmp_path, env=env, capture_output=True)
     assert result.returncode == expected
     assert (tmp_path / 'downloaded').exists() is immutable
 

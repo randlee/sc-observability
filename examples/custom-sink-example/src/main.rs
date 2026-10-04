@@ -1,13 +1,14 @@
+#![deny(deprecated)]
+
 use std::io::{self, Write};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use sc_observability::v2::{LogSink, LogSinkError, LoggerBuilder};
 use sc_observability::{
-    ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent,
-    LogFilter, LogSink, LogSinkError, LoggerBuilder, LoggerConfig, OutcomeLabel,
-    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState,
-    SinkName, SinkRegistration, TargetCategory, Timestamp, WriterState,
-    OBSERVATION_ENVELOPE_VERSION,
+    ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent, LogFilter,
+    LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity,
+    Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName,
+    SinkRegistration, TargetCategory, Timestamp, WriterState,
 };
 use serde_json::json;
 
@@ -48,6 +49,12 @@ struct AuditSink {
     health: Mutex<SinkHealth>,
 }
 
+#[derive(Clone, Copy)]
+enum SinkOperation {
+    Write,
+    Flush,
+}
+
 impl AuditSink {
     fn new() -> Self {
         Self {
@@ -59,25 +66,39 @@ impl AuditSink {
         }
     }
 
-    fn mark_failure<E>(&self, error: E) -> LogSinkError
+    fn mark_failure<E>(&self, error: E, operation: SinkOperation) -> LogSinkError
     where
         E: std::error::Error + Send + Sync + 'static,
     {
         let message = error.to_string();
         let context = ErrorContext::new(
-            sc_observability::error_codes::LOGGER_SINK_WRITE_FAILED,
-            "custom sink write failed",
+            match operation {
+                SinkOperation::Write => sc_observability::error_codes::LOGGER_SINK_WRITE_FAILED,
+                SinkOperation::Flush => sc_observability::error_codes::LOGGER_MAINTENANCE_FAILED,
+            },
+            match operation {
+                SinkOperation::Write => "custom sink write failed",
+                SinkOperation::Flush => "custom sink flush failed",
+            },
             Remediation::recoverable(
-                "inspect stderr output permissions and retry the custom sink write",
-                ["retry the write"],
+                "inspect stderr output permissions and retry the custom sink operation",
+                ["retry the sink operation"],
             ),
         )
-        .cause(message);
+        .cause(message)
+        .source(Box::new(error));
 
         let mut health = self.health.lock().expect("custom sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
         health.last_error = Some(DiagnosticSummary::from(context.diagnostic()));
-        LogSinkError(Box::new(context))
+        match operation {
+            SinkOperation::Write => LogSinkError::Write {
+                context: Box::new(context),
+            },
+            SinkOperation::Flush => LogSinkError::Flush {
+                context: Box::new(context),
+            },
+        }
     }
 }
 
@@ -91,8 +112,18 @@ impl LogSink for AuditSink {
             event.action.as_str(),
             event.message.as_deref().unwrap_or("<no-message>")
         )
-        .map_err(|err| self.mark_failure(err))?;
+        .map_err(|err| self.mark_failure(err, SinkOperation::Write))?;
+        let mut health = self.health.lock().expect("custom sink health poisoned");
+        health.state = SinkHealthState::Healthy;
+        health.last_error = None;
+        Ok(())
+    }
 
+    fn flush(&self) -> Result<(), LogSinkError> {
+        io::stderr()
+            .lock()
+            .flush()
+            .map_err(|err| self.mark_failure(err, SinkOperation::Flush))?;
         let mut health = self.health.lock().expect("custom sink health poisoned");
         health.state = SinkHealthState::Healthy;
         health.last_error = None;
@@ -161,12 +192,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("custom-sink-example")?;
     let root = std::env::temp_dir().join("sc-observability-custom-sink-example");
     let mut builder =
-        LoggerBuilder::new(LoggerConfig::default_for(service.clone(), PathBuf::from(root)))?;
+        LoggerBuilder::new(LoggerConfig::default_for(service.clone(), root))?;
 
     builder.register_sink(
-        SinkRegistration::new(Arc::new(AuditSink::new())).with_filter(Arc::new(AuditOnly)),
+        SinkRegistration::typed(Arc::new(AuditSink::new())).with_filter(Arc::new(AuditOnly)),
     );
-    let logger = builder.build();
+    let logger = builder.build()?;
 
     logger.log(build_event(
         service.clone(),
@@ -202,7 +233,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 json!(health.active_log_path.display().to_string()),
             ),
             (FIELD_QUEUE_DEPTH.to_string(), json!(health.queue_depth)),
-            (FIELD_QUEUE_CAPACITY.to_string(), json!(health.queue_capacity)),
+            (
+                FIELD_QUEUE_CAPACITY.to_string(),
+                json!(health.queue_capacity),
+            ),
             (
                 FIELD_QUEUE_HIGH_WATER.to_string(),
                 json!(health.queue_high_water_mark),
@@ -211,7 +245,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 FIELD_QUEUE_FULL_DROPS.to_string(),
                 json!(health.queue_full_drops_total),
             ),
-            (FIELD_STATE.to_string(), json!(format!("{:?}", health.state))),
+            (
+                FIELD_STATE.to_string(),
+                json!(format!("{:?}", health.state)),
+            ),
             (
                 FIELD_WRITER_STATE.to_string(),
                 json!(format!("{:?}", health.writer_state)),
@@ -254,7 +291,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             serde_json::Map::from_iter([
                 (
                     FIELD_WRITER_ERROR_CODE.to_string(),
-                    json!(error.code.as_ref().map(|code| code.as_str()).unwrap_or("<no-code>")),
+                    json!(
+                        error
+                            .code
+                            .as_ref()
+                            .map(|code| code.as_str())
+                            .unwrap_or("<no-code>")
+                    ),
                 ),
                 (
                     FIELD_WRITER_ERROR_MESSAGE.to_string(),
@@ -277,7 +320,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             MESSAGE_SINK_HEALTH,
             serde_json::Map::from_iter([
                 (FIELD_SINK_NAME.to_string(), json!(sink.name.as_str())),
-                (FIELD_SINK_STATE.to_string(), json!(format!("{:?}", sink.state))),
+                (
+                    FIELD_SINK_STATE.to_string(),
+                    json!(format!("{:?}", sink.state)),
+                ),
             ]),
         ))?;
     }

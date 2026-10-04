@@ -1,0 +1,13 @@
+[
+  {
+    "CommitHash": "3u3344jqhhfjm4krld8r9nomfkevrf0j",
+    "Committer": "beads",
+    "CommitDate": "2026-09-27T21:50:14.851Z",
+    "Issue": {
+      "id": "obs-d-21-qa-f22-sanity",
+      "description": "Sanity check of obs-d-21-qa-f22 (sprint d-21).\n\nVerify that the work is done:\n\n- the agent did not skip anything;\n- there are no obvious errors;\n- lint passes.\n\nThis is not QA.",
+      "notes": "Refusal reproduced: generated .beads.gate.lock only. Same frozen check eligible for retry; no PASS claimed.",
+      "status": "open"
+    }
+  }
+]

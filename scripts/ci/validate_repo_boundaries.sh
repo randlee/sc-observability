@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+python3 -m unittest discover -s scripts/ci/tests -p test_compat_registry.py -v
+
 python3 - <<'PY'
 from pathlib import Path
+import json
 import re
 import subprocess
 import sys
 import tomllib
 sys.path.insert(0, str(Path('.github/scripts').resolve()))
+sys.path.insert(0, str(Path('scripts/ci').resolve()))
+from boundary_policy import is_first_party_dependency, validate_first_party_dependencies
 from release_manifest import workspace_members
+from compatibility_registry import (
+    validate_compatibility_source_boundary,
+    validate_contract_signatures,
+    validate_trait_slot_contracts,
+)
 
 def is_release_manifest(path: Path, workspace_toml: Path):
     data = load_toml(path)
@@ -34,6 +44,19 @@ def section_deps(path: Path, section: str):
     data = load_toml(path)
     return set(data.get(section, {}).keys())
 
+def dependency_names(path: Path):
+    document = load_toml(path)
+    names = set()
+    for table in [document, *document.get("target", {}).values()]:
+        for section in ("dependencies", "build-dependencies", "dev-dependencies"):
+            for alias, declaration in table.get(section, {}).items():
+                specification = declaration if isinstance(declaration, dict) else {}
+                if specification.get("workspace"):
+                    specification = workspace["workspace"]["dependencies"].get(alias, {})
+                    specification = specification if isinstance(specification, dict) else {}
+                names.add(specification.get("package", alias))
+    return names
+
 workspace = load_toml(root / "Cargo.toml")
 artifacts = load_toml(root / "release/publish-artifacts.toml")
 required_manifests = {crate["cargo_toml"] for crate in artifacts["crates"]}
@@ -46,19 +69,43 @@ missing = sorted(path for path in required_manifests
 if missing:
     raise SystemExit(f"missing workspace members or standalone manifests: {missing}")
 
+for package, manifest_path in {
+    "sc-observability-types": root / "crates/sc-observability-types/Cargo.toml",
+    "sc-observability": root / "crates/sc-observability/Cargo.toml",
+    "sc-observe": root / "crates/sc-observe/Cargo.toml",
+    "sc-observability-otlp": root / "crates/sc-observability-otlp/Cargo.toml",
+    "sc-observability-dto": root / "crates/sc-observability-dto/Cargo.toml",
+    "sc-observability-log": root / "crates/sc-observability-log/Cargo.toml",
+    "sc-observability-log-macros": root / "crates/sc-observability-log-macros/Cargo.toml",
+    "sc-observability-log-consumer-check": root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+    "sc-otel-cli": root / "crates/sc-otel-cli/Cargo.toml",
+}.items():
+    try:
+        validate_first_party_dependencies(root, package, dependency_names(manifest_path))
+    except ValueError as error:
+        raise SystemExit(error) from error
+
 obs_deps = package_deps(root / "crates/sc-observability/Cargo.toml")
 observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
 observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
 otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
-otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
 if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
 if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-required_otlp = {"serde_json", "thiserror", "sc-observability-types"}
-allowed_otlp = required_otlp | {"sc-observability"}
-if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
+required_otlp = {"serde_json", "thiserror", "sc-lint-attributes"}
+# ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
+sys.path.insert(0, str(root / "scripts/ci"))
+from otlp_dependencies import validate_composition_harness, validate_transport_dependencies
+transport_names = validate_transport_dependencies(root)
+validate_composition_harness(root)
+otlp_external_runtime_deps = {
+    dependency for dependency in otlp_runtime_deps
+    if not is_first_party_dependency(dependency)
+}
+allowed_otlp = required_otlp | transport_names
+if not required_otlp.issubset(otlp_external_runtime_deps) or not otlp_external_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependencies drifted from allowed baseline"
     )
@@ -67,38 +114,23 @@ if observe_test_deps - {"serde_json"}:
         "sc-observe dev-dependencies drifted from allowed baseline: "
         f"{sorted(observe_test_deps - {'serde_json'})}"
     )
-if otlp_test_deps - {"sc-observe"}:
-    raise SystemExit(
-        "sc-observability-otlp dev-dependencies drifted from allowed baseline"
-    )
 
 for path in root.rglob("Cargo.toml"):
     text = path.read_text(encoding="utf-8")
     if "agent-team-mail-" in text:
         raise SystemExit(f"agent-team-mail dependency reference found in {path}")
 
-# B.1: the macros crate must never acquire a dependency back to the bridge it
-# expands for, and no existing core crate may gain `log` or a dependency on
-# the copied bridge/macros/consumer-check crates (sprint-b-1-copy.md AC3).
-log_macros_deps = package_deps(root / "crates/sc-observability-log-macros/Cargo.toml")
-if "sc-observability-log" in log_macros_deps:
-    raise SystemExit("sc-observability-log-macros must not depend on sc-observability-log")
-
-copied_crate_names = {
-    "sc-observability-log",
-    "sc-observability-log-macros",
-    "sc-observability-log-consumer-check",
-}
+# The manifest-driven first-party policy above covers the former copied
+# bridge/macros/consumer-check and macro-to-bridge prohibitions. Keep the
+# external `log` crate boundary independently because it is not represented
+# by a first-party allowed_dependencies entry.
 for crate_path in [
     root / "crates/sc-observability-types/Cargo.toml",
     root / "crates/sc-observability/Cargo.toml",
     root / "crates/sc-observe/Cargo.toml",
     root / "crates/sc-observability-otlp/Cargo.toml",
 ]:
-    core_deps = package_deps(crate_path)
-    if core_deps & copied_crate_names:
-        raise SystemExit(f"{crate_path} must not depend on the copied bridge/macros/consumer-check crates")
-    if "log" in core_deps:
+    if "log" in package_deps(crate_path):
         raise SystemExit(f"{crate_path} must not depend on the `log` crate")
 
 shared_crate_roots = [
@@ -111,6 +143,7 @@ shared_crate_roots = [
     root / "crates/sc-observability-log",
     root / "crates/sc-observability-log-macros",
     root / "crates/sc-observability-log-consumer-check",
+    root / "crates/sc-otel-cli",
 ]
 
 source_files = []
@@ -120,6 +153,61 @@ for crate_root in shared_crate_roots:
             p for p in crate_root.rglob("*")
             if p.suffix in {".rs", ".toml"} and p.is_file()
         )
+
+# D22 compatible-contract boundary. The one source-audited registry is the
+# authority for released-path exceptions while facades are progressively moved
+# into `src/compat`. Canonical source may never reach back into that module;
+# roots may re-export compat owners only when a registry exception records it.
+registry_path = root / "docs/compatibility/registry.json"
+if not registry_path.exists():
+    raise SystemExit("docs/compatibility/registry.json is missing")
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+if registry.get("registry_version") != 2:
+    raise SystemExit("compatibility registry version is missing or unsupported")
+if registry.get("baseline", {}).get("commit") != "c578912653233c7dc678fefe5af575118dbbaaa1":
+    raise SystemExit("compatibility registry baseline is not the pinned v1.4.1 audit")
+symbols = registry.get("symbols", [])
+required_record_fields = {
+    "symbol",
+    "baseline_signature",
+    "canonical_signature",
+    "obligations",
+    "treatment",
+    "conversion",
+    "removable_paths",
+}
+required_symbol_fields = {"area", "kind", "status", "canonical"} | required_record_fields
+if len(symbols) != 58 or len({row.get("symbol") for row in symbols}) != 58:
+    raise SystemExit("compatibility registry must contain each of the 58 audited symbols once")
+if any(not required_symbol_fields.issubset(row) for row in symbols):
+    raise SystemExit("compatibility registry has an incomplete symbol row")
+if {row["status"] for row in symbols} - {"restored_root", "canonical_routed", "pending_d23_wrapper"}:
+    raise SystemExit("compatibility registry has an unknown disposition")
+allowed_treatments = {"unchanged_alias", "existing_pair", "new_adapter", "restoration"}
+all_contract_rows = symbols + registry.get("method_contracts", []) + registry.get("trait_slot_contracts", [])
+if len(registry.get("method_contracts", [])) != 143:
+    raise SystemExit("compatibility registry must contain all 143 audited inherent/free callables")
+if len({row.get("symbol") for row in registry["method_contracts"]}) != 143:
+    raise SystemExit("compatibility callable records must have unique symbols")
+if len(registry.get("trait_slot_contracts", [])) != 12:
+    raise SystemExit("compatibility registry must contain all 12 audited trait slots")
+if len({row.get("symbol") for row in registry["trait_slot_contracts"]}) != 12:
+    raise SystemExit("compatibility trait-slot records must have unique symbols")
+if any(not required_record_fields.issubset(row) for row in all_contract_rows):
+    raise SystemExit("compatibility registry has an incomplete contract record")
+if {row["treatment"] for row in all_contract_rows} - allowed_treatments:
+    raise SystemExit("compatibility registry has an unknown four-way treatment")
+try:
+    validate_contract_signatures(all_contract_rows)
+    validate_trait_slot_contracts(registry["trait_slot_contracts"])
+except ValueError as error:
+    raise SystemExit(error) from error
+if any(row["canonical_signature"] is None and row["treatment"] != "restoration" for row in all_contract_rows):
+    raise SystemExit("missing canonical signatures must be explicit restoration records")
+try:
+    validate_compatibility_source_boundary(root, source_files, registry)
+except ValueError as error:
+    raise SystemExit(error) from error
 
 for path in source_files:
     text = path.read_text(encoding="utf-8")
@@ -189,7 +277,14 @@ if not (root / "examples/atm-adapter-example/Cargo.toml").exists():
     raise SystemExit("examples/atm-adapter-example/Cargo.toml is missing")
 
 subprocess.run(
-    ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml"],
+    ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml", "--locked"],
+    cwd=root,
+    check=True,
+)
+
+# D.17's existing consumer migration replaces the temporary expected-failure gate.
+subprocess.run(
+    ["cargo", "check", "--manifest-path", "examples/custom-sink-example/Cargo.toml", "--locked"],
     cwd=root,
     check=True,
 )
@@ -199,3 +294,4 @@ PY
 
 python3 scripts/ci/validate_binding_runtime_dependencies.py
 PYTHONPATH=scripts/ci python3 -m unittest scripts/ci/test_binding_runtime_dependencies.py
+python3 -m unittest scripts.ci.tests.test_boundary_policy

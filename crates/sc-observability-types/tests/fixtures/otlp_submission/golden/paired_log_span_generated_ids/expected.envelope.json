@@ -1,0 +1,74 @@
+{
+  "logs": [
+    {
+      "record": {
+        "attributes": [],
+        "body": null,
+        "dropped_attributes_count": 0,
+        "event_name": null,
+        "flags": 0,
+        "observed_time": "$GENERATED_NOW",
+        "severity_number": 0,
+        "severity_text": null,
+        "span_id": "$GENERATED_SPAN_ID",
+        "time": null,
+        "trace_id": "$GENERATED_TRACE_ID"
+      },
+      "resource": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "entity_refs": [],
+        "schema_url": null
+      },
+      "scope": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "name": "",
+        "schema_url": null,
+        "version": null
+      }
+    }
+  ],
+  "metrics": [],
+  "profiles": null,
+  "record_key": null,
+  "spans": [
+    {
+      "record": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "dropped_events_count": 0,
+        "dropped_links_count": 0,
+        "end_time": "1970-01-01T00:00:01.000000000Z",
+        "events": [],
+        "flags": 0,
+        "kind": "unspecified",
+        "links": [],
+        "name": "check",
+        "parent_span_id": null,
+        "span_id": "$GENERATED_SPAN_ID",
+        "start_time": "1970-01-01T00:00:00.000000000Z",
+        "status": {
+          "code": "unset",
+          "message": null
+        },
+        "trace_id": "$GENERATED_TRACE_ID",
+        "trace_state": null
+      },
+      "resource": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "entity_refs": [],
+        "schema_url": null
+      },
+      "scope": {
+        "attributes": [],
+        "dropped_attributes_count": 0,
+        "name": "",
+        "schema_url": null,
+        "version": null
+      }
+    }
+  ],
+  "version": 1
+}
