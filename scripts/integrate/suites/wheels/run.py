@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import traceback
@@ -73,18 +75,14 @@ def build_wheel(output: Path) -> Path:
     return wheels[0]
 
 
-IMPORT_AND_RUNTIME_PROBE = r'''
+IMPORT_AND_TELEMETRY_PROBE = r'''
 import json
 import pathlib
 import sys
 from sc_observability import (
-    LogEvent,
-    LoggerConfig,
-    LogQuery,
     Ok,
     Telemetry,
     TelemetryErr,
-    create_logger,
 )
 import sc_observability
 import sc_observability._native as native
@@ -93,18 +91,6 @@ origins = {
     "package": pathlib.Path(sc_observability.__file__).resolve(),
     "native": pathlib.Path(native.__file__).resolve(),
 }
-created = create_logger(LoggerConfig(service="e5-installed-wheel", log_root="."))
-if not isinstance(created, Ok):
-    raise SystemExit(f"owned logger was not a tagged Ok: {created!r}")
-logger = created.value
-for result in (
-    logger.log(LogEvent(level="info", target="e5.wheels", action="installed-runtime")),
-    logger.flush(),
-    logger.query(LogQuery(action="installed-runtime")),
-    logger.shutdown(),
-):
-    if not isinstance(result, Ok):
-        raise SystemExit(f"owned runtime returned an untagged failure: {result!r}")
 
 # The candidate wheel is built with ``otlp-telemetry``.  Exercise that
 # feature through its installed public facade rather than test-only hooks.
@@ -158,8 +144,55 @@ print(json.dumps({"prefix": sys.prefix, **{key: str(value) for key, value in ori
 '''
 
 
+def strict_runtime_environment() -> dict[str, str]:
+    """Use the qualification suite's warnings and asyncio diagnostics."""
+    environment = os.environ.copy()
+    environment.update({
+        "SC_OBSERVABILITY_RUNTIME_TEST": "1",
+        "PYTHONDEVMODE": "1",
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error",
+    })
+    return environment
+
+
+def stage_installed_runtime_suite(runtime: Path) -> Path:
+    """Relocate the public runtime and typing suite beside the clean venv."""
+    tests = runtime / "tests"
+    shutil.copytree(ROOT / "bindings/python/sc-observability-py/tests", tests)
+    return tests
+
+
+def run_installed_runtime_tests(python: Path, runtime: Path, tests: Path) -> None:
+    """Exercise owned and async public APIs through the installed candidate."""
+    run_checked(
+        [
+            str(python), "-I", "-X", "dev", "-W", "error", "-m", "pytest",
+            str(tests / "test_runtime.py"),
+            str(tests / "test_async_runtime.py"),
+            "-ra",
+        ],
+        cwd=runtime,
+        environment=strict_runtime_environment(),
+    )
+
+
+def run_installed_typing_tests(python: Path, runtime: Path, tests: Path) -> None:
+    """Run the public tagged-result typing suites against the installed wheel."""
+    run_checked(
+        [
+            str(python), "-I", "-m", "mypy", "--strict", "--python-version", "3.10",
+            str(tests / "typing/test_result_narrowing.py"),
+            str(tests / "typing/test_async_narrowing.py"),
+            str(tests / "typing/test_telemetry_typing.py"),
+        ],
+        cwd=runtime,
+        environment=strict_runtime_environment(),
+    )
+
+
 def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
-    """Install one wheel in a clean environment and prove its typed owned runtime."""
+    """Install one wheel and run its public runtime and typing suites in a clean venv."""
     runtime = output / "runtime"
     runtime.mkdir(parents=True, exist_ok=False)
     venv = runtime / "venv"
@@ -169,7 +202,18 @@ def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
         [str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", str(wheel)],
         cwd=runtime,
     )
-    output_text = run_checked([str(python), "-I", "-c", IMPORT_AND_RUNTIME_PROBE], cwd=runtime)
+    run_checked(
+        [str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "pytest==9.1.1", "mypy==2.3.1"],
+        cwd=runtime,
+    )
+    tests = stage_installed_runtime_suite(runtime)
+    run_installed_runtime_tests(python, runtime, tests)
+    run_installed_typing_tests(python, runtime, tests)
+    output_text = run_checked(
+        [str(python), "-I", "-X", "dev", "-W", "error", "-c", IMPORT_AND_TELEMETRY_PROBE],
+        cwd=runtime,
+        environment=strict_runtime_environment(),
+    )
     installed = {"python": str(python), **json.loads(output_text)}
     try:
         python_binding_validator.installed_origins(installed)
@@ -182,6 +226,11 @@ def run_embedded_host(python: Path, package: Path) -> None:
     """Run the Rust-host proof against the installed binding package file."""
     environment = python_binding_validator.embedded_environment(python)
     environment["SC_OBSERVABILITY_ATTACHED_PACKAGE"] = str(package)
+    environment.update({
+        "PYTHONDEVMODE": "1",
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error",
+    })
     run_checked(
         ["cargo", "run", "--locked", "-p", "rust-python-logging"],
         cwd=ROOT,
@@ -217,6 +266,8 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
             "clean_install": "passed",
             "installed_origin": "passed",
             "owned_typed_runtime": "passed",
+            "installed_typed_failure": "passed",
+            "installed_typing": "passed",
             "installed_telemetry_lifecycle": "passed",
             "rust_host_attached_python": "passed",
         },

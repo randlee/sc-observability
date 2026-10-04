@@ -70,8 +70,13 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertEqual(checked.call_args.args[0], command.return_value)
         command.assert_called_once_with(run.ROOT, Path("/tmp/output/wheel"))
 
+    @mock.patch.object(run, "run_installed_typing_tests")
+    @mock.patch.object(run, "run_installed_runtime_tests")
+    @mock.patch.object(run, "stage_installed_runtime_suite", return_value=Path("/tmp/output/runtime/tests"))
     @mock.patch.object(run, "run_checked")
-    def test_install_probe_uses_isolated_interpreter_and_installs_candidate(self, checked: mock.Mock) -> None:
+    def test_install_probe_uses_isolated_interpreter_and_installs_candidate(
+            self, checked: mock.Mock, staged: mock.Mock, runtime_tests: mock.Mock,
+            typing_tests: mock.Mock) -> None:
         # Avoid a platform filesystem dependency while preserving the command contract.
         checked.return_value = '{"prefix": "/tmp/venv", "native": "/tmp/venv/native.so", "package": "/tmp/venv/package.py"}\n'
         with mock.patch.object(Path, "mkdir"), mock.patch.object(run.python_binding_validator, "venv_python", return_value=Path("/tmp/venv/bin/python")):
@@ -79,11 +84,19 @@ class WheelsRunnerTests(unittest.TestCase):
         commands = [call.args[0] for call in checked.call_args_list]
         self.assertEqual(commands[0][:3], [run.sys.executable, "-m", "venv"])
         self.assertIn("--no-input", commands[1])
-        self.assertEqual(commands[2][1:3], ["-I", "-c"])
+        self.assertEqual(commands[2][1:3], ["-m", "pip"])
+        self.assertEqual(commands[3][1:5], ["-I", "-X", "dev", "-W"])
+        runtime_tests.assert_called_once_with(
+            Path("/tmp/venv/bin/python"), Path("/tmp/output/runtime"), Path("/tmp/output/runtime/tests")
+        )
+        typing_tests.assert_called_once_with(
+            Path("/tmp/venv/bin/python"), Path("/tmp/output/runtime"), Path("/tmp/output/runtime/tests")
+        )
+        staged.assert_called_once_with(Path("/tmp/output/runtime"))
         self.assertEqual(installed["python"], "/tmp/venv/bin/python")
 
     def test_installed_probe_exercises_the_enabled_telemetry_lifecycle(self) -> None:
-        probe = run.IMPORT_AND_RUNTIME_PROBE
+        probe = run.IMPORT_AND_TELEMETRY_PROBE
         self.assertIn('getattr(native, "open", None)', probe)
         self.assertIn("Telemetry.open(", probe)
         self.assertIn("telemetry.emit(submission)", probe)
@@ -91,6 +104,40 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertIn("telemetry.status()", probe)
         self.assertIn("telemetry.shutdown(timeout_s=0.1)", probe)
         self.assertIn("TelemetryErr", probe)
+
+    @mock.patch.object(run, "run_checked")
+    def test_installed_runtime_tests_use_the_real_owned_and_async_suites_under_strict_diagnostics(
+            self, checked: mock.Mock) -> None:
+        python = Path("/tmp/venv/bin/python")
+        runtime = Path("/tmp/runtime")
+        tests = runtime / "tests"
+        with mock.patch.dict(os.environ, {"PATH": "/usr/bin"}, clear=True):
+            run.run_installed_runtime_tests(python, runtime, tests)
+        command = checked.call_args.args[0]
+        environment = checked.call_args.kwargs["environment"]
+        self.assertEqual(command[:8], [str(python), "-I", "-X", "dev", "-W", "error", "-m", "pytest"])
+        self.assertEqual(command[8:10], [str(tests / "test_runtime.py"), str(tests / "test_async_runtime.py")])
+        self.assertEqual(environment["SC_OBSERVABILITY_RUNTIME_TEST"], "1")
+        self.assertEqual(environment["PYTHONDEVMODE"], "1")
+        self.assertEqual(environment["PYTHONASYNCIODEBUG"], "1")
+        self.assertEqual(environment["PYTHONWARNINGS"], "error")
+
+    @mock.patch.object(run, "run_checked")
+    def test_installed_typing_tests_cover_all_public_typed_result_suites(self, checked: mock.Mock) -> None:
+        python = Path("/tmp/venv/bin/python")
+        runtime = Path("/tmp/runtime")
+        tests = runtime / "tests"
+        run.run_installed_typing_tests(python, runtime, tests)
+        command = checked.call_args.args[0]
+        self.assertEqual(command[:7], [str(python), "-I", "-m", "mypy", "--strict", "--python-version", "3.10"])
+        self.assertEqual(
+            command[7:],
+            [
+                str(tests / "typing/test_result_narrowing.py"),
+                str(tests / "typing/test_async_narrowing.py"),
+                str(tests / "typing/test_telemetry_typing.py"),
+            ],
+        )
 
     def test_shared_installed_origin_rejects_a_source_tree(self) -> None:
         installed = {
@@ -113,6 +160,9 @@ class WheelsRunnerTests(unittest.TestCase):
             checked.call_args.kwargs["environment"]["SC_OBSERVABILITY_ATTACHED_PACKAGE"],
             str(package),
         )
+        self.assertEqual(checked.call_args.kwargs["environment"]["PYTHONDEVMODE"], "1")
+        self.assertEqual(checked.call_args.kwargs["environment"]["PYTHONASYNCIODEBUG"], "1")
+        self.assertEqual(checked.call_args.kwargs["environment"]["PYTHONWARNINGS"], "error")
 
     def test_run_composes_result_and_attaches_the_venv_interpreter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
