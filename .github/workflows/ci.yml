@@ -218,7 +218,7 @@ jobs:
 
   windows-clippy:
     name: clippy (windows-latest top)
-    if: (github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep') || (github.event_name == 'push' && github.ref == 'refs/heads/integrate/phase-d')
+    if: github.event_name == 'workflow_dispatch' || ((github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep') || (github.event_name == 'push' && github.ref == 'refs/heads/integrate/phase-d'))
     needs: [fmt]
     runs-on: windows-latest
     steps:
@@ -264,7 +264,7 @@ jobs:
   windows-test:
     name: test (windows-latest top)
     # Integration pushes already include Windows in the original test matrix.
-    if: github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep')
     needs: [fmt]
     runs-on: windows-latest
     steps:
