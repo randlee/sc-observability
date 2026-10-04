@@ -5,3 +5,8 @@
 ["e-5", "obs-e-5-sanity", ["e-1"]]
 ["e-6", "obs-e-6-sanity", ["e-1"]]
 ["e-7", "obs-e-7-sanity", ["e-1"]]
+["e-8", "obs-phase-e-api-governance-replacement-sanity", []]
+["e-9", "obs-e-9-sanity", []]
+["e-10", "obs-e-10-sanity", []]
+["e-11", "obs-e-11-sanity", []]
+["e-12", "obs-e-12-sanity", []]

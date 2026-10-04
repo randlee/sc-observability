@@ -55,3 +55,7 @@ Retirement is part of each replacement sprint, not a later cleanup sprint. Remov
 | e-7 | Remove the replaced `packaged-consumer` job in `binding-runtime.yml`; preserve unrelated native-contract coverage and required release aggregation. |
 
 Shared-file retirement edits are reconciled at publication; they add no sibling development dependencies. e-5 and e-6 reuse the narrow existing assertions while preserving the distinct B.4a and TypeScript publisher qualification interfaces. Do not import their whole release pipelines, API extraction, unit tests or lint into integration jobs. `telemetry-platforms.yml` is a six-target build check, not duplicate integration execution, and is not retired by this plan. The importer suite is not silently added to these six suites.
+
+## Contract-versioning work
+
+The user added e-8 through e-12: public API, binding/IPC, CLI, configuration and durable-store history. See [schema-versioning.md](schema-versioning.md). They run independently of the seven integration sprints and add no integration matrix cells or automatic workflows. The earlier API-governance exclusion applies to integration runners, not this newly authorized work.
