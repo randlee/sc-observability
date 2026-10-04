@@ -42,9 +42,10 @@ class WheelsRunnerTests(unittest.TestCase):
     @mock.patch.object(run.subprocess, "check_output")
     def test_windows_embedded_environment_exposes_selected_dll_directory(self, check_output: mock.Mock) -> None:
         check_output.return_value = "C:\\Python310\n"
+        python_path = Path(r"C:\venv\Scripts\python.exe")
         with mock.patch.dict(os.environ, {"PATH": r"C:\\Windows"}, clear=True):
-            environment = run.embedded_environment(Path(r"C:\\venv\\Scripts\\python.exe"), platform_name="windows")
-        self.assertEqual(environment["PYO3_PYTHON"], r"C:\\venv\\Scripts\\python.exe")
+            environment = run.embedded_environment(python_path, platform_name="windows")
+        self.assertEqual(environment["PYO3_PYTHON"], str(python_path))
         self.assertEqual(environment["PYTHONHOME"], "C:\\Python310")
         self.assertTrue(environment["PATH"].startswith("C:\\Python310"))
 
