@@ -52,7 +52,9 @@ phase root before any dev bead is dispatched. Its steps are binding; this is
 why they are strict:
 
 - `validate-plan` runs first. `bd doctor` is part of it. Every problem it
-  prints is a blocking finding.
+  prints is a blocking finding. It also regenerates the live-state DAG beside
+  the configured plan. Review that refreshed artifact; CI verifies plan/HTML
+  consistency, while only local validation verifies live bead alignment.
 - A missing, empty or unknown requirement or ADR id is always blocking. An
   id the sprint adds itself is unknown unless it meets
   [New Ids](../../atm-beads/resources/planning.md#new-ids). So
@@ -176,7 +178,7 @@ screen said. What happens next depends on the verdict:
   checked sprint/finding; never select a default. The dispatch report prints
   `UNCLASSIFIED` and no agent for a live bead missing it.
 - A blocking finding never adds a dependency to another planned sprint. The
-  canonical `sprints.jsonl` plan is the sole source of those edges; file and
+  canonical configured plan JSONL plan is the sole source of those edges; file and
   dispatch the finding's own remediation through its normal finding/fix flow.
 - Findings are `parallel_safe` by default. Set `blocked_by` only to another finding
   of this round, when its fix needs that one's fix first.

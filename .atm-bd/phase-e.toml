@@ -1,0 +1,4 @@
+# Canonical phase plan location, shared by local validation and CI.
+root = "obs-phase-e"
+sprints = "docs/plans/phase-e.jsonl"
+integration_branch = "integrate/phase-e"

@@ -144,7 +144,7 @@ A gate and its edges are created only on the user's explicit instruction for
 that gate.
 
 Human gates require explicit user agreement recorded on the gate bead or phase
-root; the canonical `sprints.jsonl` contains only planned sprint dependencies.
+root; the canonical configured plan JSONL contains only planned sprint dependencies.
 
 ### Parallel Quick Fix
 
@@ -198,14 +198,16 @@ No dev bead is dispatched until the plan passes review.
      --title "phase-<x>: plan review" --deps blocks:<root sprint>,blocks:<root sprint>
    ```
 
-2. Generate and publish the initial phase diagram before review:
-   `.claude/skills/sprint-review/scripts/sprint-review --root <root>`.
-   The phase integration branch must contain the committed/pushed
-   `<plans_dir>/phase-<x>/sprints.jsonl` canonical dependency tuples and
-   `<plans_dir>/phase-<x>/phase-<x>-dag.html` with embedded SVG. Do not open the
-   diagram unless `--view` was requested and Wyvern is available.
-   Then run `.claude/skills/atm-beads/scripts/validate-plan --root <root>`
-   from the repository root; its header lists what it checks. Exit 0 or stop.
+2. Run `.claude/skills/atm-beads/scripts/validate-plan --root <root>` before review.
+   `.atm-bd/<phase>.toml` names the canonical JSONL plan via `sprints` and its
+   phase `root`; `.atm-bd/current-phase.toml` is an optional local selection.
+   In sc-obs the plan is `docs/plans/phase-e.jsonl`. Validation checks live
+   sprint membership and dependencies against it, then regenerates
+   `docs/plans/phase-e-dag.html` in the same folder. Any nonzero exit blocks
+   approval. Commit the tracked phase config, plan and regenerated diagram
+   together on the review branch. Validation never pushes or opens a viewer.
+   CI checks tracked configs, plan structure and HTML sprint/edge alignment;
+   live bead alignment is checked locally, not by CI.
 
 3. Dispatch it with
    [`plan-review-template.xml.j2`](templates/plan-review-template.xml.j2).
@@ -266,7 +268,7 @@ phase root also appears in it; it is never dispatched.
 After every bead write, run `validate-plan --root <root>`. On any problem,
 stop dispatching and report it to the user; never repair the graph
 (`bd dep`, `--parent`). A DAG problem is fixed by replanning: edit
-`sprints.jsonl` in a `/sc-git-worktree` branch off the root's
+configured plan JSONL in a `/sc-git-worktree` branch off the root's
 `integration_branch` and merge the plan PR into it. While a phase is in motion its sprint DAG is frozen; only
 dependencies to fix beads created during the phase are added or changed.
 Verify branches read-only (`git -C <worktree> log`,

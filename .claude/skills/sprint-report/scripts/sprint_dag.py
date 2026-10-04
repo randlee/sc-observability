@@ -45,7 +45,14 @@ def build_graph(index, beads):
             raise RuntimeError(f'{dev}: expected one live sanity gate, found {len(gates)}')
         if pairs[dev] != gates[0]:
             raise RuntimeError(f'{dev}: indexed sanity bead {pairs[dev]} does not match live gate {gates[0]}')
-    nodes = devs | set(pairs.values())
+    return plan_graph(index)
+
+
+def plan_graph(index):
+    """Deterministic graph from the canonical plan; no live state."""
+    validate_index(index)
+    pairs = index_bead_pairs(index)
+    nodes = set(pairs) | set(pairs.values())
     edges = []
     for row in index['sprints']:
         dev, sanity = row['dev_bead_id'], row['sanity_bead_id']

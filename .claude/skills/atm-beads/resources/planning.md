@@ -40,56 +40,47 @@ rather than reaching an agent:
    a failed bead silently.
 
 3. Write the phase definition by hand:
-   `<plans_dir>/phase-<x>/sprints.jsonl` has one
-   `[sprint_name, sanity_bead_id, depends_on_sprint_names]` tuple per sprint
+   `<plan-folder>/phase-<x>.jsonl` has one
+   `{ "sprint": "<bead-id>", "depends_on": [] }` record per sprint
    (see "Phase definition" below).
 4. Validate the rendered plan against it. This step is mandatory:
 
    ```bash
    .claude/skills/atm-beads/scripts/validate-plan --file <scratch>/plan.jsonl \
-     --root <prefix>-phase-<x> --index <plans_dir>/phase-<x>/sprints.jsonl
+     --root <prefix>-phase-<x> --index <plan-folder>/phase-<x>.jsonl
    ```
 
    `--root` is the id of the phase root in `plan.jsonl`. Exit 5 lists every
    problem. Fix them all and render again.
 5. `bd import --dry-run -i <scratch>/plan.jsonl`, then `bd import -i
-   <scratch>/plan.jsonl`. Right away, create the plan-review bead
-   (`atm-bd-orchestration` "Plan Gate", step 2). Commit `sprints.jsonl` and
-   push it to the root bead's `integration_branch`. Then run
-   `.claude/skills/sprint-review/scripts/sprint-review --root <root>`, which
-   renders the required initial `<plans_dir>/phase-<x>/phase-<x>-dag.html`
-   with embedded SVG and commits/pushes the HTML on the root bead's integration
-   branch. No viewer opens without `--view`. Then run `validate-plan --root <root>`
-   on the imported beads; without `--index` it reads `sprints.jsonl` from
-   that integration branch.
+   <scratch>/plan.jsonl`. Create the plan-review bead. Run `validate-plan
+   --root <root>` against live beads; it regenerates the live-state HTML beside
+   the configured plan. Commit the tracked `.atm-bd/<phase>.toml`, canonical
+   plan and diagram together before requesting review. No viewer or push is
+   performed by validation.
 
 The plan then goes to plan review (`atm-bd-orchestration` "Plan Gate").
 Nothing is dispatched until it passes.
 
 Keep `<scratch>` outside the repository.
 
-## Phase definition (`sprints.jsonl`)
+## Phase definition (configured plan JSONL)
 
-`<plans_dir>/phase-<x>/sprints.jsonl` is the authored, committed graph authority.
-Planning five sprints creates five dev beads and five sanity beads through the
-validated import JSONL. The planner records one compact tuple for each sprint;
-the dev bead ID is derived as `<prefix>-<sprint_name>`, so it cannot be
-duplicated or drift from the sprint name. It is authored, never exported: the
-planner edits it in the same commit as the bead changes. Sprint content (title, deliverables, acceptance, REQ/ADR,
-ownership, and state) lives only in Beads.
+`<plan-folder>/phase-<x>.jsonl` is the authored, committed graph authority.
+Planning five sprints creates five sprint beads and their sanity beads. Each line
+contains only the sprint bead id and locked sprint dependencies; Beads owns all
+content and state. The phase root and plan location live in `.atm-bd/<phase>.toml`.
 
 ```jsonl
-["d-12", "obs-d-12-sanity", []]
-["d-13", "obs-d-13-sanity", ["d-12"]]
+{"sprint": "obs-e-1", "depends_on": []}
+{"sprint": "obs-e-3", "depends_on": ["obs-e-1"]}
 ```
 
-Each tuple is exactly `(sprint_name, sanity_bead_id, depends_on[])`.
-`depends_on[]` names direct prerequisite sprints; validation resolves each
-name to that sprint's sanity bead and requires the direct `blocks` edge on the
-dependent dev bead. `<prefix>` is taken from the phase root id
-(`<prefix>-phase-<x>`); a script given only the file uses `bead_prefix` from the
-repository configuration and names the root `<prefix>-phase-<x>`. No finding, fix, QA, task, branch, or runtime gate appears in
-this file.
+`depends_on` names prerequisite sprint ids. The dependent's dev bead blocks
+on the predecessor's sanity bead, never its QA bead or sprint container.
+Gate ids are queried from Beads. No root, title, status, sanity id, finding or
+fix is serialized in the plan. Unknown ids, duplicate edges and cycles fail.
+Validation reports critical-path length and maximum parallel width.
 
 The file is never generated from beads and beads are never generated from the
 file. A plan change is one planner transaction: change the beads, edit the
@@ -107,12 +98,18 @@ Hierarchy:
   sanity beads. No `validates` or `caused-by` edge to the sprint: bd allows one
   edge type per pair, and the parent link is the membership.
 
-The initial `phase-<x>-dag.html` is a required plan-review artifact alongside
-`sprints.jsonl`. Live-root validation verifies both files on the remote
-integration branch and checks that the HTML embeds SVG for this phase root.
-Later `/sprint-review` runs refresh and push the same page; `--view` only
-controls optional background viewing in Wyvern. Import JSONL validation runs
-before beads exist, so it does not require this generated artifact yet.
+`phase-<x>-dag.html` is the generated plan-review artifact beside the plan.
+Configure `root` and `sprints = "<plan-folder>/phase-<x>.jsonl"` in tracked
+`.atm-bd/<phase>.toml`. Optional untracked `.atm-bd/current-phase.toml` selects
+local work; CI ignores it. `validate-plan` checks live beads then refreshes HTML.
+`validate-plan --ci` checks tracked plan files and HTML sprint/edge alignment without
+Beads or ATM. Only the local run proves live bead alignment.
+
+Adding/removing a sprint or changing a sprint prerequisite requires editing the
+canonical plan, running validation, committing the regenerated diagram, and
+plan review. Bead-only sprint changes fail. Finding/fix beads are not sprints.
+The DAG skill queries Beads for live status. CI compares rendered sprint nodes
+and edges with the plan, ignoring status overlays and timestamps.
 
 ## Phase Root
 

@@ -62,14 +62,12 @@ Read only the one the current job needs.
 | [`resources/dev-sanity.md`](resources/dev-sanity.md) | writing or sending the sanity check assignment (recipient and message) |
 | [`resources/troubleshooting.md`](resources/troubleshooting.md) | a claim, close or assignee looks wrong, or `bd ready` misses assigned work |
 
-Every phase plan must include a committed `<plans_dir>/phase-<x>/sprints.jsonl`
-(the plan format, and how dev bead ids are derived from it: `resources/planning.md`
-"Phase definition"). It and the initial `<plans_dir>/phase-<x>/phase-<x>-dag.html`
-(embedded SVG) are committed and pushed on the phase root's `integration_branch`
-before plan review. `sprint-review --root <root>` refreshes the HTML without a
-viewer; `--view` optionally opens Wyvern in the background. `plans_dir` and
-the other repository values come from the repository configuration
-(`atm-bd-orchestration` SKILL.md, "Repository configuration").
+Every phase plan has a tracked `.atm-bd/<phase>.toml` configuration naming
+its `root` and `sprints` JSONL path. In sc-obs this is `docs/plans/phase-e.jsonl`.
+Each line names a sprint bead and its `depends_on` sprint ids; sanity ids and
+all state are queried from Beads. `validate-plan` regenerates the co-located
+`phase-e-dag.html` before approval. Commit configuration, plan and diagram
+on the reviewed branch. No separate renderer invocation is required.
 
 ## Validation
 
@@ -78,13 +76,23 @@ before the first dispatch. Run it from the repository root:
 
 ```bash
 .claude/skills/atm-beads/scripts/validate-plan --file <plan.jsonl> --root <root id> --index <sprints.jsonl>   # before import
-.claude/skills/atm-beads/scripts/validate-plan --root <root id>   # live beads; plan from origin/<root integration_branch>
+.claude/skills/atm-beads/scripts/validate-plan --root <root id>   # live beads; configured plan; regenerate co-located DAG
 ```
 
-What it checks is listed once, in the header of
+What it checks is implemented in
 [`scripts/validate-plan`](scripts/validate-plan). The bead models are pydantic,
 in `scripts/bead_schema.py`; `schemas/*.schema.json` are exported from them
 (`bead_schema.py export schemas`) and published. Exit 0 means valid, 5 lists
-the problems, and 2 means it could not run (the reason is on stderr, including
-`bd doctor`'s own stderr). Report problems to the lead; never edit the script,
+the problems, and 2 means configuration or invocation failed. Report problems to the lead; never edit the script,
 the plan or the graph to make it pass.
+
+### Configured plan validation
+
+Tracked `.atm-bd/<phase>.toml` supplies `root` and `sprints` (for example
+`docs/plans/phase-e.jsonl`). `validate-plan --config <file>` verifies live
+beads and refreshes `phase-e-dag.html` in that same folder. Nonzero blocks
+plan approval. Commit config, plan, and HTML together. `--ci` reads tracked
+phase configs and checks plan structure and HTML sprint/edge alignment
+without Beads/ATM; it does not prove live bead alignment. The untracked
+`current-phase.toml` is only a local convenience. Sprint membership/edge
+changes require replanning and plan review, not bead-only edits.

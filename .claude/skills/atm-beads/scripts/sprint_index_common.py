@@ -72,6 +72,12 @@ def load_phase_plan(path: Path, root: str | None = None) -> dict:
     their existing pair-oriented interface while all persisted graph authority
     remains the compact tuple file.
     """
+    if path.read_text().lstrip().startswith('{'):
+        from locked_plan import load, index
+        if not root:
+            raise RuntimeError('minimal plan requires configured root')
+        repo = repo_config.repo_root(path.parent)
+        return index(load(path), run_json(repo, 'bd', 'list', '--all', '-n', '0', '--json'), root)
     prefix: str | None = None  # read on the first row, so an empty plan fails as empty
     rows: list[dict[str, object]] = []
     seen_sprints: set[str] = set()
@@ -107,7 +113,7 @@ def load_phase_plan(path: Path, root: str | None = None) -> dict:
         unknown = set(row["depends_on"]) - seen_sprints
         if unknown:
             raise RuntimeError(f"{path}: {row['sprint']} depends_on unknown sprint(s): {', '.join(sorted(unknown))}")
-    phase = _phase_from_path(path)
+    phase = phase_id(root, {}) if root else _phase_from_path(path)
     # The root is supplied by the caller when known; otherwise it is named from the
     # configured prefix and the phase directory, never stored in the tuple file.
     expected_root = root or f"{prefix}-phase-{phase}"
