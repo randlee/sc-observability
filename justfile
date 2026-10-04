@@ -35,3 +35,8 @@ deny:
 
 # Full gate: lint, tests and the scoped dependency audit.
 validate: lint test deny
+
+# On-demand integration; selectors and results are documented in docs/integration.md.
+[positional-arguments]
+integrate branch *args:
+    python3 scripts/integrate/dispatch.py "$@"
