@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import tempfile
 import unittest
@@ -34,6 +35,36 @@ class ChunkedResponse:
 
 
 class PinnedReleaseDownloadTests(unittest.TestCase):
+    def test_main_stages_on_destination_volume_before_atomic_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            parent = Path(temp).resolve() / "destination"
+            output = parent / "viewer"
+            real_replace = downloader.os.replace
+
+            def download(_url: str, archive: Path, _digest: str) -> str:
+                archive.write_bytes(b"archive")
+                return "a" * 64
+
+            def extract(_archive: Path, binary: Path, _lock: dict) -> str:
+                binary.write_bytes(b"verified viewer")
+                return "b" * 64
+
+            def replace_on_destination_volume(source: Path, target: Path) -> None:
+                # Model a destination mount distinct from the system temp volume.
+                if source.parent.parent.resolve() != parent:
+                    raise OSError(errno.EXDEV, "cross-device link")
+                real_replace(source, target)
+
+            with mock.patch.object(downloader.platform, "system", return_value="Darwin"), \
+                    mock.patch.object(downloader.platform, "machine", return_value="arm64"), \
+                    mock.patch.object(downloader, "_download_archive", side_effect=download), \
+                    mock.patch.object(downloader, "_extract_binary", side_effect=extract), \
+                    mock.patch.object(downloader.os, "replace", side_effect=replace_on_destination_volume), \
+                    mock.patch.object(downloader.sys, "argv", ["download_pinned_release.py", str(output)]):
+                self.assertEqual(downloader.main(), 0)
+            self.assertEqual(output.read_bytes(), b"verified viewer")
+            self.assertEqual(list(parent.iterdir()), [output])
+
     def test_manifest_requires_https_and_hex_sha256(self) -> None:
         lock = {"artifact_url": "http://example.test/release.tgz",
                 "artifact_sha256": "a" * 64, "binary_sha256": "b" * 64}

@@ -87,7 +87,7 @@ Note:
 - [x] `QueryError`
 - [x] `QueryHealthState`
 - [x] `QueryHealthReport`
-- [x] `ObservabilityHealthProvider` (sealed)
+- [x] `ObservabilityHealthProvider` (workspace-owned implementations supported; external implementations are technically possible but unsupported, at the implementor's own risk)
 - [x] `ObservationHealthState`
 - [x] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`

@@ -239,6 +239,11 @@ pub struct TelemetryHealthReport {
 }
 
 /// Shared contract for exposing telemetry health without an OTLP crate dependency.
+///
+/// Workspace-owned implementations are supported. External implementations are
+/// possible but unsupported and made at the implementor's own risk; compatibility
+/// for external implementations is not guaranteed. The hidden implementation
+/// hooks do not enforce compiler-level sealing.
 pub trait ObservabilityHealthProvider:
     telemetry_health_provider_sealed::Sealed + Send + Sync
 {

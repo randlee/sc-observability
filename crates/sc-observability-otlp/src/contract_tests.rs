@@ -851,3 +851,148 @@ fn released_checked_delays_preserve_zero_without_weakening_canonical_validation(
         assert!(super::config::prepared_backend_connection(&config.transport, &bounds).is_ok());
     }
 }
+
+#[test]
+fn contract_tests_bracketed_ipv6_endpoint_host_is_validated() {
+    let error = super::config::OtlpEndpoint::new_typed("https://[not-an-ip]:4318")
+        .expect_err("a bracketed non-IPv6 host must be rejected");
+    assert!(matches!(error, ConfigFailure::InvalidEndpoint { .. }));
+    assert_eq!(error.diagnostic().code, otlp::OTLP_CONFIG_INVALID_ENDPOINT);
+
+    super::config::OtlpEndpoint::new_typed("https://[::1]:4318")
+        .expect("a bracketed IPv6 literal is valid");
+}
+
+fn assert_bound_ordering(error: &ConfigFailure, field: &str, upper_field: &str) {
+    assert!(
+        matches!(error, ConfigFailure::InvalidBoundOrdering { .. }),
+        "expected InvalidBoundOrdering; got {error:?}"
+    );
+    let details = &error.diagnostic().details;
+    assert_eq!(details["field"].as_str(), Some(field));
+    assert_eq!(details["upper_field"].as_str(), Some(upper_field));
+}
+
+/// One case per adjacent pair of the owned first-failure order in
+/// docs/api-design.md; each config violates both neighbours and asserts the
+/// earlier one is reported.
+#[test]
+fn contract_tests_first_failure_order_for_each_adjacent_pair() {
+    // 1. retry positivity precedes the shutdown ordering.
+    let error = validated_transport_bounds(&OtelConfig {
+        lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
+        sync_http_retry: Some(SyncHttpRetryPolicy {
+            initial_backoff_ms: Some(0_u64.into()),
+            ..SyncHttpRetryPolicy::default()
+        }),
+        ..sync_http_config()
+    })
+    .expect_err("zero initial backoff is reported first");
+    assert!(matches!(error, ConfigFailure::ZeroDuration { .. }));
+
+    // 2. the shutdown ordering precedes the flush ordering.
+    let error = validated_transport_bounds(&OtelConfig {
+        lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
+        lifecycle_flush_timeout_ms: Some(2_999_u64.into()),
+        ..sync_http_config()
+    })
+    .expect_err("shutdown ordering is reported first");
+    assert_bound_ordering(&error, "timeout_ms", "lifecycle_shutdown_timeout_ms");
+
+    // 3. the flush ordering precedes queue capacity.
+    let error = validated_transport_bounds(&OtelConfig {
+        lifecycle_flush_timeout_ms: Some(2_999_u64.into()),
+        queue_capacity: Some(0),
+        ..sync_http_config()
+    })
+    .expect_err("flush ordering is reported first");
+    assert_bound_ordering(&error, "timeout_ms", "lifecycle_flush_timeout_ms");
+
+    // 4. queue capacity precedes the backoff ordering.
+    let error = validated_transport_bounds(&OtelConfig {
+        queue_capacity: Some(0),
+        sync_http_retry: Some(SyncHttpRetryPolicy {
+            max_backoff_ms: Some(100_u64.into()),
+            ..SyncHttpRetryPolicy::default()
+        }),
+        ..sync_http_config()
+    })
+    .expect_err("queue capacity is reported first");
+    assert!(matches!(error, ConfigFailure::InvalidQueueCapacity { .. }));
+
+    // 5. the backoff ordering precedes the sequence ordering.
+    let error = validated_transport_bounds(&OtelConfig {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
+            max_backoff_ms: Some(100_u64.into()),
+            retry_sequence_timeout_ms: Some(2_999_u64.into()),
+            ..SyncHttpRetryPolicy::default()
+        }),
+        ..sync_http_config()
+    })
+    .expect_err("backoff ordering is reported first");
+    assert_bound_ordering(
+        &error,
+        "sync_http_retry.initial_backoff_ms",
+        "sync_http_retry.max_backoff_ms",
+    );
+
+    // 6. the sequence ordering precedes the Retry-After cap ordering.
+    let error = validated_transport_bounds(&OtelConfig {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
+            retry_sequence_timeout_ms: Some(2_999_u64.into()),
+            retry_after_cap_ms: Some(3_001_u64.into()),
+            ..SyncHttpRetryPolicy::default()
+        }),
+        ..sync_http_config()
+    })
+    .expect_err("sequence ordering is reported first");
+    assert_bound_ordering(
+        &error,
+        "timeout_ms",
+        "sync_http_retry.retry_sequence_timeout_ms",
+    );
+
+    // 7. the Retry-After cap ordering precedes the jitter bound.
+    let error = validated_transport_bounds(&OtelConfig {
+        sync_http_retry: Some(SyncHttpRetryPolicy {
+            retry_sequence_timeout_ms: Some(3_000_u64.into()),
+            retry_after_cap_ms: Some(3_001_u64.into()),
+            retry_jitter_percent: Some(101),
+            ..SyncHttpRetryPolicy::default()
+        }),
+        ..sync_http_config()
+    })
+    .expect_err("cap ordering is reported first");
+    assert_bound_ordering(
+        &error,
+        "sync_http_retry.retry_after_cap_ms",
+        "sync_http_retry.retry_sequence_timeout_ms",
+    );
+
+    // 8. the jitter bound precedes the insecure-transport rejection.
+    let error = validated_transport_bounds(&OtelConfig {
+        insecure_skip_verify: true,
+        sync_http_retry: Some(SyncHttpRetryPolicy {
+            retry_jitter_percent: Some(101),
+            ..SyncHttpRetryPolicy::default()
+        }),
+        ..sync_http_config()
+    })
+    .expect_err("jitter bound is reported first");
+    assert!(matches!(error, ConfigFailure::InvalidJitterPercent { .. }));
+
+    // 9. field applicability precedes the insecure-transport rejection.
+    let error = validated_transport_bounds(&OtelConfig {
+        insecure_skip_verify: true,
+        sync_http_retry: Some(SyncHttpRetryPolicy {
+            max_retries: Some(1),
+            ..SyncHttpRetryPolicy::default()
+        }),
+        ..sdk_config()
+    })
+    .expect_err("applicability is reported first");
+    assert!(matches!(
+        error,
+        ConfigFailure::ConfigFieldNotApplicable { .. }
+    ));
+}

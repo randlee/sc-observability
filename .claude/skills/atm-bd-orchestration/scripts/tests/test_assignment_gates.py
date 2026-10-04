@@ -18,8 +18,10 @@ SPEC.loader.exec_module(gates)
 
 
 class FakeRunner:
-    def __init__(self, responses): self.responses = responses
-    cwds: list = []
+    def __init__(self, responses):
+        self.responses = responses
+        self.cwds: list = []
+
     def __call__(self, args, **kwargs):
         self.cwds.append(kwargs.get("cwd"))
         code, stdout = self.responses.get(tuple(args), (0, ""))
@@ -34,6 +36,10 @@ def ns(kind, **overrides):
 
 
 def dumped(value): return json.dumps(value)
+
+
+def history_fixture(name):
+    return json.loads((FIXTURES / name).read_text())
 
 
 def dev_runner(overrides=None):
@@ -55,7 +61,7 @@ def sanity_runner(overrides=None):
         ("git", "rev-parse", "origin/target"): (0, "base"),
         ("git", "log", "--format=%H", "origin/target..head"): (0, "delta"),
         ("git", "status", "--porcelain", "--untracked-files=no"): (0, "?? .beads.gate.lock"),
-        ("bd", "history", "bead", "--json"): (0, dumped({"events": []})),
+        ("bd", "history", "bead", "--json"): (0, dumped([])),
     }; data.update(overrides or {}); return FakeRunner(data)
 
 
@@ -69,6 +75,36 @@ def qa_runner(overrides=None):
 
 
 class AssignmentGateTests(unittest.TestCase):
+    def test_dolt_history_freezes_only_closed_pass_even_after_reopening(self):
+        history_command = ("bd", "history", "bead", "--json")
+        for fixture, expected in [
+            ("sanity-history-retry.json", "READY"),
+            ("sanity-history-pass.json", "SANITY_FROZEN"),
+            ("sanity-history-reopened.json", "SANITY_FROZEN"),
+        ]:
+            with self.subTest(fixture=fixture):
+                history = history_fixture(fixture)
+                self.assertEqual(gates.evaluate(ns("sanity"), sanity_runner({history_command: (0, dumped(history))})), expected)
+        retry = history_fixture("sanity-history-retry.json")
+        self.assertIn("lint passes", retry[0]["Issue"]["description"])
+        self.assertIn("no PASS claimed", retry[0]["Issue"]["notes"])
+        self.assertFalse(gates.has_prior_pass(retry))
+        for status, reason, expected in [
+            ("closed", "PASS", True),
+            ("closed", "PASS at 1234567: lint clean", True),
+            ("closed", "FAIL at 1234567; PASS required", False),
+            ("closed", "no PASS claimed", False),
+            ("closed", "lint passes", False),
+            ("closed", "PASS pending", False),
+            ("open", "PASS at 1234567", False),
+            ("in_progress", "PASS", False),
+        ]:
+            with self.subTest(status=status, reason=reason):
+                self.assertEqual(gates.has_prior_pass([{"Issue": {"status": status, "close_reason": reason}}]), expected)
+        for malformed in ({"verdict": "PASS"}, [{"description": "lint passes"}]):
+            self.assertEqual(gates.evaluate(ns("sanity"), sanity_runner({history_command: (0, dumped(malformed))})), "GATE_CANNOT_RUN")
+
+
     def expected(self, name): return json.loads((FIXTURES / name).read_text())["expected"]
 
     def assert_fixture(self, name, gate_args, runner):
@@ -101,13 +137,21 @@ class AssignmentGateTests(unittest.TestCase):
         behind = dev_runner({("git", "-C", "/other", "merge-base", "--is-ancestor", "origin/target", "HEAD"): (1, "")})
         self.assertEqual(gates.evaluate(ns("dev", worktree="/other"), behind), "WRONG_BASE")
 
+    def test_fake_runner_cwds_are_isolated_per_instance(self):
+        first = FakeRunner({})
+        second = FakeRunner({})
+        first(["first"], cwd="/first")
+        second(["second"], cwd="/second")
+        self.assertEqual(first.cwds, ["/first"])
+        self.assertEqual(second.cwds, ["/second"])
+
     def test_sanity_refusals_and_ready(self):
         cases = [
             ("pr-required.json", ns("sanity", pr_number=""), sanity_runner()),
             ("stale-base.json", ns("sanity"), sanity_runner({("gh", "pr", "view", "7", "--json", "baseRefName,headRefOid"): (0, dumped({"baseRefName": "wrong", "headRefOid": "head"}))})),
             ("zero-delta.json", ns("sanity"), sanity_runner({("git", "log", "--format=%H", "origin/target..head"): (0, "")})),
             ("dirty-tree.json", ns("sanity"), sanity_runner({("git", "status", "--porcelain", "--untracked-files=no"): (0, " M tracked.py")})),
-            ("sanity-frozen.json", ns("sanity"), sanity_runner({("bd", "history", "bead", "--json"): (0, dumped({"verdict": "PASS"}))})),
+            ("sanity-frozen.json", ns("sanity"), sanity_runner({("bd", "history", "bead", "--json"): (0, dumped(history_fixture("sanity-history-pass.json")))})),
             ("sanity-ready.json", ns("sanity"), sanity_runner()),
         ]
         for fixture, gate_args, runner in cases:

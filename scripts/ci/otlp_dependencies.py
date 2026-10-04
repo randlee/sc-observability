@@ -27,6 +27,13 @@ def dependency_sections(manifest):
             yield kind, target.get(kind, {})
 
 
+def resolved_package(key, declaration):
+    """Returns the package selected by a Cargo dependency declaration."""
+    if isinstance(declaration, dict):
+        return declaration.get("package", key)
+    return key
+
+
 def validate_transport_dependencies(root: Path) -> set[str]:
     def load(path):
         return tomllib.loads((root / path).read_text(encoding="utf-8"))
@@ -43,6 +50,16 @@ def validate_transport_dependencies(root: Path) -> set[str]:
     # every allowed dev-dependency and its exact effective features.
     reviewed_dev = document["dev_dependencies"]
     dev = set()
+    for kind, dependencies in dependency_sections(manifest):
+        if kind == "dev-dependencies":
+            continue
+        if any(
+            resolved_package(key, declaration) == "sc-observe"
+            for key, declaration in dependencies.items()
+        ):
+            raise SystemExit(
+                f"OTLP dependency sc-observe: dev-only; it must not appear in [{kind}]"
+            )
     for kind, dependencies in dependency_sections(manifest):
         if kind != "dev-dependencies":
             continue

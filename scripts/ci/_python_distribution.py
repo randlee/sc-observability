@@ -48,8 +48,8 @@ def validate_requires_python(value: str, minimum: str = PYTHON_FLOOR) -> str:
 def source_python_contract(root: Path) -> str:
     """Parse source metadata and retain the single expected wheel requirement."""
     try:
-        pyproject = tomllib.loads((root / 'pyproject.toml').read_text())
-        cargo = tomllib.loads((root / 'Cargo.toml').read_text())
+        pyproject = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
+        cargo = tomllib.loads((root / 'Cargo.toml').read_text(encoding='utf-8'))
     except (OSError, ValueError, TypeError) as error:
         raise DistributionError('source Python/Cargo metadata is not valid TOML') from error
     try:

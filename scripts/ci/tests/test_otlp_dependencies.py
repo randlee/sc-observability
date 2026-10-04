@@ -22,6 +22,76 @@ SHELL_TIMEOUT_SECONDS = 900
 
 
 class TransportPolicyTests(unittest.TestCase):
+    def test_sc_observe_dev_dependency_is_allowed(self):
+        validate_transport_dependencies(self.root)
+
+
+    def test_sc_observe_regular_dependency_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "[dependencies]\n",
+            "[dependencies]\nsc-observe.workspace = true\n",
+        )
+        with self.assertRaises(SystemExit) as raised:
+            validate_transport_dependencies(self.root)
+        self.assertEqual(
+            str(raised.exception),
+            "OTLP dependency sc-observe: dev-only; it must not appear in [dependencies]",
+        )
+
+
+    def test_sc_observe_regular_dependency_without_dev_declaration_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "sc-observe.workspace = true\n",
+            "",
+        )
+        self.replace(
+            MANIFEST,
+            "[dependencies]\n",
+            "[dependencies]\nsc-observe.workspace = true\n",
+        )
+        with self.assertRaises(SystemExit) as raised:
+            validate_transport_dependencies(self.root)
+        self.assertEqual(
+            str(raised.exception),
+            "OTLP dependency sc-observe: dev-only; it must not appear in [dependencies]",
+        )
+
+
+    def test_renamed_sc_observe_regular_dependency_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "[dependencies]\n",
+            '[dependencies]\nobserve_alias = { package = "sc-observe", workspace = true }\n',
+        )
+        self.rejects(
+            r"OTLP dependency sc-observe: dev-only; it must not appear in \[dependencies\]"
+        )
+
+
+    def test_sc_observe_build_dependency_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "[lints]",
+            "[build-dependencies]\nsc-observe.workspace = true\n\n[lints]",
+        )
+        self.rejects(
+            r"OTLP dependency sc-observe: dev-only; it must not appear in \[build-dependencies\]"
+        )
+
+
+    def test_target_specific_sc_observe_dependency_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "[lints]",
+            "[target.'cfg(unix)'.dependencies]\nsc-observe.workspace = true\n\n[lints]",
+        )
+        self.rejects(
+            r"OTLP dependency sc-observe: dev-only; it must not appear in \[dependencies\]"
+        )
+
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
