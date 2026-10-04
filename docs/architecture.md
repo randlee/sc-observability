@@ -1739,11 +1739,33 @@ was reworded accordingly to describe the remaining validation.
   qualification therefore requires every cell from every release target;
   local cross-documentation (for example through `cargo xwin` on macOS) is
   early feedback, not the release evidence.
-- **Exceptions**: Any platform-dependent public API requires an explicit
+- **Version history** (user amendment, 2026-10-04): Keep immutable published
+  API baselines under `schema/api/<surface>/<version>.json`, selected by the
+  producing package's existing manifest version. Rust, Python and TypeScript
+  surfaces have separate producing packages; no redundant version selector is
+  introduced. Accepted versions, including prereleases, cannot be edited or
+  deleted. A supplied local accepted git baseline verifies retained bytes;
+  intentional API changes require a new version and retained prior snapshots.
+  The first capture establishes the current implementation baseline, without
+  fabricating earlier published history. ADR-020 compatibility still applies.
+- **Unit verification**: Compare the current platform's actual public API from
+  already-built artifacts with its selected baseline in the existing macOS,
+  Windows and Linux unit jobs. The comparison runs no target build, rustdoc
+  build or renderer build and adds no standalone API job. Target approximately
+  five seconds and measure less than 60 seconds per platform. Rust uses the
+  pinned compiler's metadata via an unpublished unit helper; exact artifact
+  filenames and features come from the completed ordinary Cargo invocation,
+  with source/artifact freshness checks. Published baseline setup at release-cut
+  is separate and may build the configuration families it captures. A compiled
+  configuration covers only that configuration; absent platform or feature
+  artifacts cannot be reported as passing. Python exports and TypeScript
+  declarations require their actual producing package artifacts too. This
+  version comparison does not replace the existing native release parity
+  comparison described above.
+- **Exceptions**: Any platform-dependent public API still requires an explicit
   amendment to this ADR identifying the exception and its consumer impact.
-  No checked-in snapshot, bless workflow or hash approval is introduced; the
-  recorded source commit, toolchain, target and feature identity identify
-  what was compared.
+  Committed version history is authorized; it is neither a platform exception
+  nor a bless workflow or approval certificate.
 
 ## 8. API-Design Consistency
 

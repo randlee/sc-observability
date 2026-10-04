@@ -1,13 +1,18 @@
 # Phase E contract versioning
 
-User-authorized addition: retain versioned public contracts and detect changes through fast unit tests. This is separate from the six integration suites; it adds no suite/OS cells or automatic CI workflows. Sc-lint is still unspecified.
+User-authorized addition: retain versioned public contracts and detect changes through fast unit tests. Public API comparison runs after the ordinary platform unit build in the existing macOS, Windows and Linux jobs; it creates no separate workflow or job. This is separate from the six integration suites and adds no integration cells. Sc-lint is still unspecified.
 
 ## Version rules
 
 Keep accepted/merged snapshots immutable, including prerelease versions. A contract change requires a new versioned snapshot and an explicit current-version selection. Package/API versions, wire-format versions and SQLite migration versions have separate lifecycles. Keep existing wire identifiers and backwards-readable configuration. Historical snapshots are retained, not regenerated to silence a failure.
 
-Generated snapshots must represent actual current code. A comparison of two checked-in files cannot prove the code matches, nor can a single-platform extraction prove parity. Reuse existing generators and serializers. The complete sprint API check must meet the user's under-one-minute requirement; measure generation and comparison, and expose compilation cost rather than hiding it. The Rust extraction approach remains an implementation feasibility question; do not quietly substitute stale evidence.
-
+API checks read the actual current platform's already-built library metadata.
+They must not build target crates, run rustdoc, build a renderer, or compare two
+stored snapshots as evidence of current code. Setup at release-cut may build
+configuration families to create the published baseline. Report that setup time
+separately from the normal unit comparison, which targets approximately five
+seconds and must finish in less than 60 seconds per platform. A build of one
+configuration does not establish coverage for disabled configurations.
 ## Work items
 
 | Sprint | Contract | Storage / existing source |
@@ -18,7 +23,7 @@ Generated snapshots must represent actual current code. A comparison of two chec
 | e-11 | Public configuration/input formats | `schema/config/<format>/<version>.json`; existing parsers/defaults |
 | e-12 | Durable SQLite storage | Immutable SQL/migrations alongside the existing durable-store implementation |
 
-These do not depend on e-1 or each other. Each has a disjoint file fence in its authoritative bead: e-11 owns public configuration parsers/tests; e-12 owns storage schema/opening/tests, not the configuration loader. No broad shared durable-directory ownership is permitted. Shared files have one owner, not publication-time conflict resolution as a substitute. Each has its normal dev/sanity/QA records. The existing e-8 placeholder is renamed to `obs-e-8`, not duplicated.
+The contract-history sprints own independent paths; e-8 development resumed after the accepted e-1 sanity gate. Each has a disjoint file fence in its authoritative bead: e-11 owns public configuration parsers/tests; e-12 owns storage schema/opening/tests, not the configuration loader. No broad shared durable-directory ownership is permitted. Shared files have one owner, not publication-time conflict resolution as a substitute. Each has its normal dev/sanity/QA records. The existing e-8 placeholder is renamed to `obs-e-8`, not duplicated.
 
 ## CLI tooling
 
@@ -57,30 +62,108 @@ version is the API selection; do not create a redundant selection artifact.
 Mismatch output names the contract, version and difference; adding a new version
 is the remedy for an actual contract change, not overwriting accepted history.
 
-## API verification feasibility and ADR-022
+## API unit comparison and release-cut setup
 
-e-8 owns the ADR-022 verification amendment for the user's snapshot decision,
-including the API layout, Rust/Python/TypeScript surfaces, version selection and
-immutability. Reconcile the verification wording without changing the rule that
-platform-dependent public APIs require an explicit ADR amendment.
-It retains uniform public interfaces for the same release target/features and
-released compatibility. The fast unit comparison must obtain its current
-surface from current source/compiled exports, with deterministic normalization;
-comparing two stored snapshots is insufficient. Its first implementation step is a bounded prototype using the existing
-`public_api_parity.py` extractor and local build artifacts on current source;
-e-8 measures the complete path on this repository: total fresh
-verification must be under one minute, including any compilation it needs.
-Include source invalidation in that measurement. Separately record extraction, compilation and comparison durations; cached
-results cannot conceal a stale source revision. If no authoritative method
-meets the budget, e-8 acceptance fails: report the concrete result for a user
-decision before replacing it with a weaker test. Independent sprints continue;
-this plan does not claim the prototype has already demonstrated feasibility. Do not add another automatic extraction job.
+The user-approved design is an ordinary platform unit check of actual compiled
+public APIs against immutable versioned baselines. `scripts/api/run_unit_tests.py`
+executes the existing Cargo test command once, retains its compiler-artifact
+messages, waits for completion, and then runs the already-built metadata-reader
+test executable. It does not run a second build. Cargo's test failure status is
+preserved, and API comparison is reported independently after unrelated runtime
+test failures. The existing unit jobs retain their failure aggregation.
 
-Existing native release producers own release-target/feature parity proof; e-8
-consumes that evidence read-only and does not add another cross-platform job or
-edit release workflows. The fast local unit comparison cannot claim native
-parity. The amendment distinguishes these proofs without reducing the common-API
-contract or adding an exhaustive new matrix.
+The unpublished `sc-observability-api-test` workspace helper uses the repository's
+pinned Rust 1.94.1 compiler metadata APIs. `rustc-dev` is installed during normal
+toolchain setup; bootstrap is restricted to this helper crate. The reader parses
+only an in-memory `extern crate` declaration and stops after expansion, before
+local analysis or code generation. It reads signatures, fields, traits,
+reexports and implementations from the already-built dependency metadata.
+No target source is compiled by the check. The completed Cargo artifact stream
+supplies exact paths and feature selections; the checker does not guess among
+old files in `target`. Source and artifact hashes reject stale or replaced inputs.
+
+Normal developer invocation remains `just test`. To run only the existing
+workspace command and its API check:
+
+```sh
+python3 scripts/api/run_unit_tests.py --accepted-base <local-accepted-commit> -- cargo test --locked --workspace --all-targets --no-fail-fast
+python3 -m unittest scripts.api.test_history
+```
+
+`SC_API_ACCEPTED_BASE` can supply the local accepted baseline. Local default
+`HEAD` protects accepted files against working-tree edits; use the actual
+accepted/release commit to audit an already committed change. CI supplies the
+PR base or preceding push commit and fetches its local history. No registry or
+network query is used by the check. A mismatch identifies package, selected
+manifest version, feature family and changed rows. Keep accepted snapshots,
+increment the owning package version, and capture its new baseline when a
+contract change is intentional. Compatibility with released 1.x APIs still
+follows ADR-020; a version bump alone does not authorize a breaking change.
+
+At the initial or next release cut, build the ordinary workspace test artifacts
+and capture the current families, then explicitly prepare the other declared
+families. These are publishing setup commands, never invoked by the unit check:
+
+```sh
+python3 scripts/api/run_unit_tests.py --capture --accepted-base <local-accepted-commit> -- cargo test --locked --workspace --all-targets --no-run
+python3 scripts/api/cut_baseline.py --accepted-base <local-accepted-commit>
+```
+
+The release-cut command reuses the existing manifest-derived feature inventory.
+It accounts for the ten published Rust packages and 41 declared feature families
+at the current revision, including separately workspaced Tauri. Each comparison
+reports exactly which built families it covers; an unbuilt family is not a
+passing result. Accepted snapshots cannot be extended or overwritten in place,
+including accepted prereleases. The first capture establishes the implementation
+baseline for the next cut; it does not invent historical release snapshots.
+
+The metadata format is pinned to Rust 1.94.1. Compiler upgrades require explicit
+format review. Macros are observed through their compiled exports and expanded
+public items; macro expansion behavior is still covered by the existing macro
+consumer tests. Foreign implementations and dependency blanket/auto traits are
+inspected through compiler metadata, not binary symbol tables. Missing or
+unsupported metadata fails rather than silently reducing the public surface.
+
+Native release producers and `public_api_parity.py` remain unchanged and provide
+separate target/feature parity evidence. A local check establishes only its
+current target and built feature families. It cannot establish the other native
+platforms or unbuilt configuration families. Python runtime exports and TypeScript
+compiled declarations likewise require their producing package artifacts; a
+Rust-only build must not be reported as their verification.
+
+### Binding producer tests
+
+`npm test --prefix bindings/typescript` retains its existing TypeScript build and
+runtime tests, then reads the emitted `.d.ts` export/reference graph and runtime
+exports without emitting code. Its existing native Tauri qualification invokes
+this command on macOS, Windows and Linux. The graph includes public signatures,
+fields, constraints and referenced declarations. Runtime implementation behavior
+is outside the API shape comparison.
+
+The existing native Python test-suite staging copies the runtime API test and
+versioned history beside the relocated tests. Pytest reflects the installed
+wheel, with its installed distribution version selecting the snapshot. The
+existing local wheel validator and native distribution jobs share that staging
+path. Runtime signatures, annotations, class members, dataclass fields and
+public reexports are checked. Static-only `.pyi` declarations, dynamically
+manufactured attributes and native implementation behavior retain their existing
+independent typing/runtime tests; runtime reflection does not prove them.
+
+Binding baseline capture also uses existing producer outputs, outside testing:
+
+```sh
+# Run using the interpreter where the built native wheel is installed.
+python scripts/api/cut_python_baseline.py --accepted-base <local-accepted-commit>
+# After the existing TypeScript package build.
+SC_API_ACCEPTED_BASE=<local-accepted-commit> node scripts/ci/public_api_typescript.mjs --capture
+```
+
+No normal test command refreshes history. The Rust workspace job verifies Rust;
+it does not claim Python or TypeScript coverage. Those languages run in their
+existing producing package test paths. Local macOS timings are development
+evidence; Windows/Linux measurements remain native phase-end evidence. API rows
+are shared across native targets because ADR-022 requires identical public APIs;
+legitimate target divergence requires its existing explicit ADR exception.
 
 ## Configuration compatibility
 
