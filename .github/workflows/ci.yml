@@ -76,6 +76,9 @@ jobs:
           toolchain: "1.94.1"
           components: rustfmt, clippy
 
+      - name: Validate canonical plans and generated diagrams
+        run: python3 .claude/skills/atm-beads/scripts/validate-plan --ci
+
       - name: Validate docs consistency
         run: bash scripts/ci/validate_docs_consistency.sh
 

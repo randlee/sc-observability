@@ -45,7 +45,14 @@ def build_graph(index, beads):
             raise RuntimeError(f'{dev}: expected one live sanity gate, found {len(gates)}')
         if pairs[dev] != gates[0]:
             raise RuntimeError(f'{dev}: indexed sanity bead {pairs[dev]} does not match live gate {gates[0]}')
-    nodes = devs | set(pairs.values())
+    return plan_graph(index)
+
+
+def plan_graph(index):
+    """Deterministic graph from the canonical plan; no live state."""
+    validate_index(index)
+    pairs = index_bead_pairs(index)
+    nodes = set(pairs) | set(pairs.values())
     edges = []
     for row in index['sprints']:
         dev, sanity = row['dev_bead_id'], row['sanity_bead_id']
@@ -343,8 +350,7 @@ def open_wyvern(artifact):
     return True
 
 
-def generate(repo, index, counts, phase, output=None, open_image=False, open_view=False,
-             publish_branch=None):
+def generate(repo, index, counts, phase, output=None, open_image=False, open_view=False):
     if not (RENDERER / 'node_modules/@viz-js/viz').exists():
         raise RuntimeError(f'DAG renderer dependencies missing; run npm ci --prefix {RENDERER}')
     phase = str(phase).removeprefix('phase-')
@@ -368,7 +374,8 @@ def generate(repo, index, counts, phase, output=None, open_image=False, open_vie
         render('layout', path('.dot'), path('-layout.svg'))
     svg = overlay(path('-layout.svg').read_text(), icons, snapshot['captured_at'], qa)
     path('.svg').write_text(svg)
-    path('.html').write_text(html_view(svg, phase, index['root_bead_id']))
+    from locked_plan import annotate
+    path('.html').write_text(html_view(annotate(svg, index), phase, index['root_bead_id']))
     render('png', path('.svg'), path('.png'))
     for suffix, data in [('-data.json', graph), ('-state.json', snapshot), ('-icons.json', icons)]:
         path(suffix).write_text(json.dumps(data, indent=2) + '\n')
@@ -376,11 +383,6 @@ def generate(repo, index, counts, phase, output=None, open_image=False, open_vie
         print('sprint-report: some ATM evidence unavailable; affected states are unconfirmed (see state JSON)', file=sys.stderr)
     for suffix in ('.svg', '.html', '.png', '-state.json'):
         print(path(suffix))
-    if publish_branch is not None:
-        from phase_artifact import publish_artifact
-        published = publish_artifact(repo, publish_branch, phase, path('.html').read_text())
-        path('-published.json').write_text(json.dumps(published, indent=2) + '\n')
-        print(f"Published {published['html_path']} on {publish_branch} at {published['commit'][:12]}")
     if open_image:
         if sys.platform == 'darwin':
             subprocess.run(['open', '-a', 'Preview', str(path('.png'))], check=True)

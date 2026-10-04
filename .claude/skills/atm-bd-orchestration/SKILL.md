@@ -144,7 +144,7 @@ A gate and its edges are created only on the user's explicit instruction for
 that gate.
 
 Human gates require explicit user agreement recorded on the gate bead or phase
-root; the canonical `sprints.jsonl` contains only planned sprint dependencies.
+root; the configured plan JSONL contains only sprint bead ids.
 
 ### Parallel Quick Fix
 
@@ -198,14 +198,15 @@ No dev bead is dispatched until the plan passes review.
      --title "phase-<x>: plan review" --deps blocks:<root sprint>,blocks:<root sprint>
    ```
 
-2. Generate and publish the initial phase diagram before review:
-   `.claude/skills/sprint-review/scripts/sprint-review --root <root>`.
-   The phase integration branch must contain the committed/pushed
-   `<plans_dir>/phase-<x>/sprints.jsonl` canonical dependency tuples and
-   `<plans_dir>/phase-<x>/phase-<x>-dag.html` with embedded SVG. Do not open the
-   diagram unless `--view` was requested and Wyvern is available.
-   Then run `.claude/skills/atm-beads/scripts/validate-plan --root <root>`
-   from the repository root; its header lists what it checks. Exit 0 or stop.
+2. Run `.claude/skills/atm-beads/scripts/validate-plan --root <root> --refresh` before review.
+   Tracked `.atm-bd/<phase>.toml` names `root`, `sprints`, and `integration_branch`.
+   The plan is `<plans_dir>/<phase>.jsonl`; its live DAG is `<plans_dir>/<phase>-dag.html`.
+   Commit config, plan, and diagram together; any nonzero validation exit blocks approval.
+   Only the plan gate requests `--refresh`; assignment checks are read-only and require no renderer.
+   Pre-import `--file`/`--beads` never render; write the phase TOML before using them.
+   Exit 5 reports only the [plan contract problems](../atm-beads/SKILL.md#validation); exit 2 means the check cannot run.
+   Bead schema, sanity discovery, doctor, ATM evidence, and rendering problems are warnings.
+   CI checks plan schema and HTML sprint membership without querying live beads.
 
 3. Dispatch it with
    [`plan-review-template.xml.j2`](templates/plan-review-template.xml.j2).
@@ -233,7 +234,10 @@ bd ready -l phase-<x> -n 0 --json
 
 `bd ready` lists every bead whose blockers are closed, highest priority
 first: dev beads whose prerequisites' sanity checks passed, sanity checks
-whose dev bead closed, QA beads and open findings. For each ready bead:
+whose dev bead closed, QA beads and open findings.
+Plans specify only `hard`, `normal`, or `fast` difficulty, not agents or model classes.
+At dispatch, assign an available eligible agent; distribute parallel work among workers.
+For each ready bead:
 
 | Ready bead | Template | To |
 | --- | --- | --- |
@@ -266,7 +270,7 @@ phase root also appears in it; it is never dispatched.
 After every bead write, run `validate-plan --root <root>`. On any problem,
 stop dispatching and report it to the user; never repair the graph
 (`bd dep`, `--parent`). A DAG problem is fixed by replanning: edit
-`sprints.jsonl` in a `/sc-git-worktree` branch off the root's
+configured plan JSONL in a `/sc-git-worktree` branch off the root's
 `integration_branch` and merge the plan PR into it. While a phase is in motion its sprint DAG is frozen; only
 dependencies to fix beads created during the phase are added or changed.
 Verify branches read-only (`git -C <worktree> log`,
@@ -366,7 +370,7 @@ atm task assign <agent> --task-id <bead> \
   origin/<pr_target>`.
 - Set the bead's assignee to the recipient first:
   `bd update <bead> --assignee <agent>`. For a role, the recipient is
-  `resolve-role <role>` (a sanity check bead is already assigned to it). A claim fails when the bead is
+  `resolve-role <role>`; resolve and assign sanity at dispatch too. A claim fails when the bead is
   assigned to anyone else.
 - Build vars from the template's `required_variables`, with `task_id` = the
   bead id; the bead supplies most of the rest

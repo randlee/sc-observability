@@ -62,29 +62,40 @@ Read only the one the current job needs.
 | [`resources/dev-sanity.md`](resources/dev-sanity.md) | writing or sending the sanity check assignment (recipient and message) |
 | [`resources/troubleshooting.md`](resources/troubleshooting.md) | a claim, close or assignee looks wrong, or `bd ready` misses assigned work |
 
-Every phase plan must include a committed `<plans_dir>/phase-<x>/sprints.jsonl`
-(the plan format, and how dev bead ids are derived from it: `resources/planning.md`
-"Phase definition"). It and the initial `<plans_dir>/phase-<x>/phase-<x>-dag.html`
-(embedded SVG) are committed and pushed on the phase root's `integration_branch`
-before plan review. `sprint-review --root <root>` refreshes the HTML without a
-viewer; `--view` optionally opens Wyvern in the background. `plans_dir` and
-the other repository values come from the repository configuration
-(`atm-bd-orchestration` SKILL.md, "Repository configuration").
+Every phase plan has a tracked `.atm-bd/<phase>.toml` naming `root`,
+`sprints = "<plans_dir>/<phase>.jsonl"`, and `integration_branch`.
+Each plan line is `{"sprint":"<id>"}` with optional `"depends_on":["<id>"]` and no other fields.
+Sprint additions or removals require replanning.
+Plan difficulty as `hard`, `normal`, or `fast`; name agents only at dispatch.
+Optimize for parallel execution; record only dependencies that completely block the dependent sprint.
+Default the dependent dev bead to blocking on predecessor sanity; use its sprint bead only when the user requests it.
+Validation accepts either predecessor edge; guidance edges and waves stay out of the plan.
 
 ## Validation
 
-Validation is mandatory before a plan is imported, before plan review and
-before the first dispatch. Run it from the repository root:
+Create the phase TOML before pre-import validation; run from the repository root:
 
 ```bash
-.claude/skills/atm-beads/scripts/validate-plan --file <plan.jsonl> --root <root id> --index <sprints.jsonl>   # before import
-.claude/skills/atm-beads/scripts/validate-plan --root <root id>   # live beads; plan from origin/<root integration_branch>
+.claude/skills/atm-beads/scripts/validate-plan --file <beads.jsonl> --root <root>  # pre-import; no writes
+.claude/skills/atm-beads/scripts/validate-plan --root <root> --refresh  # plan gate; regenerate DAG
+.claude/skills/atm-beads/scripts/validate-plan --root <root> --scope <bead>  # assignment; no writes
 ```
 
-What it checks is listed once, in the header of
-[`scripts/validate-plan`](scripts/validate-plan). The bead models are pydantic,
-in `scripts/bead_schema.py`; `schemas/*.schema.json` are exported from them
-(`bead_schema.py export schemas`) and published. Exit 0 means valid, 5 lists
-the problems, and 2 means it could not run (the reason is on stderr, including
-`bd doctor`'s own stderr). Report problems to the lead; never edit the script,
-the plan or the graph to make it pass.
+Only the plan gate uses `--refresh`; assignment checks need no renderer.
+`--file` and `--beads` validate pre-import input without generating HTML.
+The live DAG is `<plans_dir>/<phase>-dag.html`, beside the plan; commit both with the phase TOML.
+The phase's own TOML is authoritative; `current-phase.toml` never overrides its plan path.
+`--ci` checks plan schema and committed HTML sprint membership without Beads or ATM.
+
+Live validation exits 5 for these contract problems on stdout as `<bead>: <problem>`:
+- invalid plan schema;
+- planned sprint without a bead;
+- sprint bead under the root absent from the plan;
+- configured integration branch differs from root `metadata.integration_branch`;
+- a declared dependency lacks an edge to predecessor sanity or sprint.
+
+Offline `--ci` also exits 5 for invalid HTML structure or a plan/HTML sprint-set mismatch.
+Exit 2 means validation cannot run, including unavailable Beads, unreadable files/output, or missing/malformed phase TOML.
+Every nonzero exit blocks plan approval; report every printed contract problem.
+Other checks, including bead schema, sanity labels/count, doctor, ATM evidence, and DAG rendering, emit nonfatal warnings.
+The implementation and shared contract are in `scripts/validate-plan` and `scripts/plan_contract.py`.

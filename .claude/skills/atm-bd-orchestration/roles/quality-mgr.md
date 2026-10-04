@@ -51,8 +51,12 @@ A plan-review task (`plan-review-template.xml.j2`) reviews the beads under a
 phase root before any dev bead is dispatched. Its steps are binding; this is
 why they are strict:
 
-- `validate-plan` runs first. `bd doctor` is part of it. Every problem it
-  prints is a blocking finding.
+- Run `validate-plan --root <root> --refresh` first at the plan gate.
+  Exit 5 lists contract problems as `<bead>: <problem>` on stdout; carry each as blocking.
+  Exit 2 means the check cannot run; any nonzero exit blocks approval.
+  Bead schema, sanity discovery, doctor, ATM evidence, and rendering warnings are nonfatal.
+  Review the live DAG beside the configured plan; CI checks committed plan/HTML sprint membership.
+  Assignment checks omit `--refresh` and never write HTML.
 - A missing, empty or unknown requirement or ADR id is always blocking. An
   id the sprint adds itself is unknown unless it meets
   [New Ids](../../atm-beads/resources/planning.md#new-ids). So
@@ -176,7 +180,7 @@ screen said. What happens next depends on the verdict:
   checked sprint/finding; never select a default. The dispatch report prints
   `UNCLASSIFIED` and no agent for a live bead missing it.
 - A blocking finding never adds a dependency to another planned sprint. The
-  canonical `sprints.jsonl` plan is the sole source of those edges; file and
+  configured plan JSONL locks sprint membership; dependency state lives in Beads; file and
   dispatch the finding's own remediation through its normal finding/fix flow.
 - Findings are `parallel_safe` by default. Set `blocked_by` only to another finding
   of this round, when its fix needs that one's fix first.

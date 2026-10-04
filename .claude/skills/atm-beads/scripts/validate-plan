@@ -1,128 +1,165 @@
-#!/usr/bin/env bash
-# Validate a phase plan in beads against its sprints.jsonl. These checks, nothing else:
-#   1. dependencies: for every tuple [Y, sanity-Y, [X, ...]], sprint Y has a blocks edge to sanity-X,
-#      and every prerequisite X is itself a sprint of sprints.jsonl;
-#   2. every sprint bead validates against SprintBead (scripts/bead_schema.py, published as schemas/sprint-bead.schema.json);
-#   3. every sanity bead validates against SanityBead, its metadata.dev_bead is its sprint, and it has a blocks edge to it;
-#   4. bd doctor reports no error (skipped with --no-doctor);
-#   5. only epics live at the top level: no open bead created since the phase root has no parent.
-# Every sprint and sanity bead named in sprints.jsonl must exist. This header is the one list of
-# what validate-plan checks; the skill docs point here.
-#
-#   validate-plan --root <id> [--index <sprints.jsonl>]                       live beads
-#   validate-plan --file <plan.jsonl> --root <id> [--index <sprints.jsonl>]   rendered plan, before `bd import`
-#   validate-plan --beads <beads.json> --root <id> --index <sprints.jsonl> --no-doctor   test input
-#
-# Without --index the plan is read from origin/<integration_branch>:<plans_dir>/phase-<p>/sprints.jsonl,
-# where integration_branch is the phase root bead's metadata.integration_branch and plans_dir comes from
-# the repository configuration (atm-beads/scripts/repo_config.py). The bead prefix is taken from the root id.
-# Prints one "<bead>: <problem>" line per problem. Exit 0 valid, 5 problems, 2 could not run.
-# Report problems to the lead; never edit this script, the plan or the graph to make it pass.
-set -uo pipefail
+#!/usr/bin/env python3
+"""Check live beads against the locked plan and refresh its DAG; --ci checks plan/HTML structure offline."""
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import tomllib
+import xml.etree.ElementTree as ET
 
-here=$(cd "$(dirname "$0")" && pwd)
-file="" beads="" root="" index="" doctor=1
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --file) file=$2; shift 2 ;;
-    --beads) beads=$2; shift 2 ;;
-    --root) root=$2; shift 2 ;;
-    --index) index=$2; shift 2 ;;
-    --no-doctor) doctor=0; shift ;;
-    --scope) shift 2 ;;  # accepted from older callers; every check is phase-wide
-    *) echo "validate-plan: unknown argument $1" >&2; exit 2 ;;
-  esac
-done
-[ -n "$root" ] || { echo "validate-plan: pass --root" >&2; exit 2; }
-for c in bd jq git python3; do
-  command -v "$c" >/dev/null || { echo "validate-plan: $c not on PATH; see atm-beads/references/installation-and-troubleshooting.md" >&2; exit 2; }
-done
-scratch=$(mktemp -d)
-trap 'rm -rf "$scratch"' EXIT
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[1] / 'sprint-report/scripts'))
+from phase_config import load as load_config, select
+from locked_plan import load, index, alignment, annotate, check_html
+from sprint_index_common import run_json, phase_id
+from plan_contract import EXIT_VALID, EXIT_CANNOT_RUN, EXIT_PROBLEMS, PROBLEM_LINE
 
-# the plan, from the root bead's integration branch
-if [ -z "$index" ]; then
-  bd show "$root" --json > "$scratch/root.json" 2>"$scratch/bd.err" \
-    || { echo "validate-plan: bd show $root failed: $(cat "$scratch/bd.err")" >&2; exit 2; }
-  branch=$(jq -r '.[0].metadata.integration_branch // ""' "$scratch/root.json") \
-    || { echo "validate-plan: bd show $root returned no bead JSON" >&2; exit 2; }
-  [ -n "$branch" ] || { echo "validate-plan: $root has no metadata.integration_branch; set it on the root bead or pass --index" >&2; exit 2; }
-  path=$("$here/phase-index-path" --root "$root") || { echo "validate-plan: no phase for $root" >&2; exit 2; }
-  relative=${path#"$(git rev-parse --show-toplevel)"/}
-  git fetch -q --no-tags origin "refs/heads/$branch:refs/remotes/origin/$branch" 2>"$scratch/git.err" \
-    || { echo "validate-plan: could not fetch origin/$branch: $(cat "$scratch/git.err")" >&2; exit 2; }
-  git show "origin/$branch:$relative" > "$scratch/sprints.jsonl" 2>/dev/null \
-    || { echo "$root: origin/$branch:$relative is missing; push the plan to $branch"; exit 5; }
-  index="$scratch/sprints.jsonl"
-fi
-jq -e -s 'all(type == "array" and length == 3)' "$index" >/dev/null 2>&1 \
-  || { echo "$root: $index is not sprints.jsonl tuples [sprint, sanity_bead, [prerequisite sprints]]"; exit 5; }
 
-# the beads, as one JSON array
-prefix=${root%%phase-*}
-if [ -n "$beads" ]; then
-  cp "$beads" "$scratch/beads.json"
-elif [ -n "$file" ]; then
-  jq -s . "$file" > "$scratch/beads.json" || { echo "validate-plan: $file is not JSONL" >&2; exit 2; }
-else
-  # shellcheck disable=SC2046
-  bd show $(jq -r --arg p "$prefix" '"\($p)\(.[0])", .[1]' "$index") --json > "$scratch/beads.json" 2>"$scratch/bd.err" \
-    || { echo "validate-plan: bd show failed: $(cat "$scratch/bd.err")" >&2; exit 2; }
-fi
+def warn(message):
+    print(f'warning: {message}', file=sys.stderr)
 
-problems=$(jq -r -n --arg p "$prefix" --slurpfile plan "$index" --slurpfile all "$scratch/beads.json" '
-  def blocks: [(.dependencies // [])[] | select((.type // .dependency_type) == "blocks") | (.depends_on_id // .id)];
-  ($all[0] | map({key: .id, value: .}) | from_entries) as $by
-  | ($plan | map({key: .[0], value: .[1]}) | from_entries) as $sanity
-  | $plan[] as [$sprint, $san, $pre] | "\($p)\($sprint)" as $dev | $by[$dev] as $d | $by[$san] as $s
-  | if $d == null then "\($dev): sprint \($sprint) is in sprints.jsonl but not in beads"
-    else
-      # 1. dependencies
-      ( $pre[] | $sanity[.] as $need
-        | if $need == null then "\($dev): prerequisite sprint \(.) is not in sprints.jsonl"
-          elif ($d | blocks | index($need)) == null then "\($dev): missing blocks edge to \($need) (sprints.jsonl: \($sprint) depends on \(.))"
-          else empty end ),
-      # 3. the sanity bead of this sprint (its schema is checked below)
-      ( if $s == null then "\($san): sanity bead of \($dev) is not in beads"
-        elif $s.metadata.dev_bead != $dev then "\($san): metadata.dev_bead is \($s.metadata.dev_bead | tojson), not \($dev)"
-        else empty end )
-    end
-') || { echo "validate-plan: the checks failed to run" >&2; exit 2; }
 
-# 2, 3. bead schemas
-schema=$(python3 "$here/bead_schema.py" validate "$scratch/beads.json" "$index" "$prefix"); rc=$?
-case $rc in 0|5) ;; *) echo "validate-plan: bead_schema.py failed to run" >&2; exit 2 ;; esac
-problems=$(printf '%s\n%s' "$problems" "$schema" | sed '/^$/d')
+def validate(repo, config, ci=False, root=None, explicit_index=None, source=None, no_doctor=False, refresh=False):
+    if Path(config).name == 'current-phase.toml':
+        config = select(repo, root)
+    configured_root, plan, diagram = load_config(repo, config)
+    if root and root != configured_root:
+        raise ValueError(f'{config}: root does not match --root {root}')
+    if explicit_index and (repo / explicit_index).resolve() != plan:
+        raise ValueError(f'{config}: --index differs from configured plan path')
+    try:
+        rows = load(plan)
+    except ValueError as exc:
+        print(PROBLEM_LINE.format(bead=configured_root, message=f'invalid plan schema: {exc}'))
+        return EXIT_PROBLEMS
+    if ci:
+        try:
+            check_html(rows, diagram.read_text(), configured_root)
+        except (ValueError, ET.ParseError) as exc:
+            print(PROBLEM_LINE.format(bead=configured_root, message=str(exc)))
+            return EXIT_PROBLEMS
+        print(f'plan/DAG sprint set valid: {plan.relative_to(repo)}')
+        return EXIT_VALID
+    beads = source if source is not None else run_json(repo, 'bd', 'list', '--all', '-n', '0', '--json')
+    if not isinstance(beads, list) or any(not isinstance(b, dict) or not isinstance(b.get('id'), str) for b in beads):
+        raise ValueError('bd output must be an array of bead objects with string ids')
+    errors = list(alignment(rows, beads, configured_root))
+    config_path = Path(config) if Path(config).is_absolute() else repo / config
+    integration = tomllib.loads(config_path.read_text())['integration_branch']
+    root_bead = next((b for b in beads if b['id'] == configured_root), {})
+    if integration != (root_bead.get('metadata') or {}).get('integration_branch'):
+        errors.append(PROBLEM_LINE.format(bead=configured_root, message='integration_branch differs from root metadata.integration_branch'))
+    try:
+        from bead_schema import problems, SprintBead
+        for bead in beads:
+            if bead['id'] in {r['sprint'] for r in rows}:
+                for problem in problems(bead, SprintBead):
+                    warn(problem)
+    except Exception as exc:
+        warn(f'bead schema: {exc}')
+    if not no_doctor:
+        try:
+            doctor = subprocess.run(['bd', 'doctor', '--json'], cwd=repo, capture_output=True, text=True)
+            if doctor.stderr:
+                print(doctor.stderr, end='', file=sys.stderr)
+            if doctor.returncode:
+                warn(f'bd doctor exited {doctor.returncode}: {doctor.stdout}')
+            else:
+                for check in json.loads(doctor.stdout).get('checks', []):
+                    if check.get('status') != 'ok':
+                        warn(f"bd doctor: {check.get('name')}: {check.get('message', '')}")
+        except Exception as exc:
+            warn(f'bd doctor: {exc}')
+    if errors:
+        print('\n'.join(errors))
+        return EXIT_PROBLEMS
+    if refresh and source is None:
+        try:
+            refresh_dag(repo, rows, beads, configured_root, diagram)
+        except Exception as exc:
+            warn(f'DAG rendering: {exc}')
+    print(f'plan valid: {len(rows)} sprints')
+    return EXIT_VALID
 
-# 5. epics only at the top level (closed beads are history and are not checked)
-if [ -n "$beads" ]; then cp "$scratch/beads.json" "$scratch/everything.json"
-else bd list --all -n 0 --json > "$scratch/everything.json" 2>"$scratch/bd.err" \
-  || { echo "validate-plan: bd list failed: $(cat "$scratch/bd.err")" >&2; exit 2; }; fi
-roots=$(jq -r --arg root "$root" '
-  ((.[] | select(.id == $root) | .created_at) // "") as $since
-  | .[] | select(.status != "closed" and (.parent // "") == "" and .issue_type != "epic" and (.created_at // "") >= $since)
-  | "\(.id): \(.issue_type) at the top level; only epics live at the top level, parent it under its epic"' "$scratch/everything.json") \
-  || { echo "validate-plan: the top-level check failed to run" >&2; exit 2; }
-problems=$(printf '%s\n%s' "$problems" "$roots" | sed '/^$/d')
 
-# 4. bd doctor
-if [ "$doctor" -eq 1 ]; then
-  # doctor's stderr is kept: in an unsupported mode (proxied server) it is the only explanation
-  report=$(bd doctor --json 2>"$scratch/doctor.err")
-  if ! echo "$report" | jq -e .checks >/dev/null 2>&1; then
-    echo "validate-plan: bd doctor produced no JSON; its stderr follows" >&2
-    cat "$scratch/doctor.err" >&2
-    exit 2
-  fi
-  if [ -s "$scratch/doctor.err" ]; then sed 's/^/bd doctor (stderr): /' "$scratch/doctor.err" >&2; fi
-  errors=$(echo "$report" | jq -r '.checks[] | select(.status == "error") | "bd doctor: \(.name): \(.message // "")"')
-  problems=$(printf '%s\n%s' "$problems" "$errors" | sed '/^$/d')
-fi
+def refresh_dag(repo, rows, beads, configured_root, diagram):
+    runtime = index(rows, beads, configured_root)
+    from sprint_dag import build_graph, collect_state, states, qa_states, dot_source, render, overlay, html_view
+    # Normalize bd list/show edge spellings for the existing live DAG renderer.
+    normalized = {b['id']: {**b, 'dependencies': [
+        {**e, 'type': e.get('type') or e.get('dependency_type'), 'depends_on_id': e.get('depends_on_id') or e.get('id')}
+        for e in b.get('dependencies', [])]} for b in beads}
+    graph = build_graph(runtime, normalized)
+    snapshot = collect_state(repo, graph, normalized, {})
+    for key, error in snapshot.get('errors', {}).items():
+        warn(f'ATM evidence {key}: {error}')
+    icons, qa = states(graph, snapshot, runtime), qa_states(graph, normalized, runtime)
+    with tempfile.TemporaryDirectory(prefix='validate-plan-') as directory:
+        dot, svg = Path(directory) / 'plan.dot', Path(directory) / 'plan.svg'
+        dot.write_text(dot_source(graph, phase_id(configured_root, {})))
+        render('layout', dot, svg)
+        rendered = overlay(svg.read_text(), icons, snapshot['captured_at'], qa)
+        html = html_view(annotate(rendered, runtime), phase_id(configured_root, {}), configured_root)
+    check_html(rows, html, configured_root)
+    staged = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', dir=diagram.parent, delete=False) as stream:
+            staged = Path(stream.name)
+            stream.write(html)
+        staged.replace(diagram)
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+    print(f'DAG refreshed: {diagram.relative_to(repo)}')
 
-if [ -z "$problems" ]; then
-  echo "plan valid: $(jq -s length "$index") sprints"
-  exit 0
-fi
-printf '%s\n' "$problems"
-echo "$(printf '%s\n' "$problems" | wc -l | tr -d ' ') problem(s); report them to the lead" >&2
-exit 5
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', type=Path)
+    parser.add_argument('--root')
+    parser.add_argument('--index', type=Path)
+    parser.add_argument('--scope', help='accepted for compatibility; validation remains phase-wide')
+    sources = parser.add_mutually_exclusive_group()
+    sources.add_argument('--file', type=Path, help='import JSONL; not proof of live bead alignment')
+    sources.add_argument('--beads', type=Path, help='test input JSON array; not proof of live bead alignment')
+    parser.add_argument('--no-doctor', action='store_true')
+    parser.add_argument('--ci', action='store_true')
+    parser.add_argument('--refresh', action='store_true', help='plan gate only: regenerate live DAG')
+    args = parser.parse_args()
+    repo = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip()).resolve()
+    if args.ci and any((args.file, args.beads, args.no_doctor, args.scope, args.refresh)):
+        parser.error('--ci validates committed plans only; live/import options are not allowed')
+    source = None
+    if args.file:
+        source = [json.loads(line) for line in args.file.read_text().splitlines() if line.strip()]
+    elif args.beads:
+        source = json.loads(args.beads.read_text())
+    if args.ci and not args.config:
+        names = subprocess.check_output(['git', 'ls-files', '--', '.atm-bd/*.toml'], cwd=repo, text=True).splitlines()
+        configs = [repo / n for n in names if Path(n).parent == Path('.atm-bd')
+                   and Path(n).name != 'current-phase.toml']
+        if not configs:
+            raise ValueError('no tracked .atm-bd/<phase>.toml plan configurations')
+    else:
+        configs = [args.config or select(repo, args.root)]
+    result = EXIT_VALID
+    for config in configs:
+        try:
+            code = validate(repo, config, args.ci, args.root, args.index, source, args.no_doctor, args.refresh)
+            if code:
+                result = code
+        except Exception as exc:
+            print(f'validate-plan: {exc}', file=sys.stderr)
+            return EXIT_CANNOT_RUN
+    return result
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except Exception as exc:
+        print(f'validate-plan: {exc}', file=sys.stderr)
+        sys.exit(EXIT_CANNOT_RUN)

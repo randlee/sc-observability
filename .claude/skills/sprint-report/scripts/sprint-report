@@ -279,7 +279,7 @@ def main() -> int:
     mode.add_argument("--dag", action="store_true", help="render the plan dependency DAG as SVG and PNG")
     mode.add_argument("--view", action="store_true", help="render the SVG DAG in an HTML artifact and open it in Wyvern")
     mode.add_argument("--dispatch", action="store_true", help="print phase-scoped ready work and fitting free agents")
-    parser.add_argument("--output", type=Path, help="local DAG export prefix; skips default integration-branch publication")
+    parser.add_argument("--output", type=Path, help="local DAG export prefix")
     parser.add_argument("--open", action="store_true", help="open DAG PNG in Preview on macOS, default viewer elsewhere")
     parser.add_argument("--root", help="phase root bead id")
     parser.add_argument("--index", type=Path, help="committed sprints.jsonl path")
@@ -307,9 +307,7 @@ def main() -> int:
             raise RuntimeError("sprint index contains no sprints")
         if args.dag or args.view:
             from sprint_dag import generate
-            branch = None if args.output else str(metadata(root_bead).get("integration_branch") or "")
-            return generate(repo, index, sanity_runs, phase, args.output, args.open, args.view,
-                            publish_branch=branch)
+            return generate(repo, index, sanity_runs, phase, args.output, args.open, args.view)
         row_ids = list(index_bead_pairs(index))
         all_beads = run_json(repo, "bd", "list", "--all", "-n", "0", "--json")
         if args.dispatch:
