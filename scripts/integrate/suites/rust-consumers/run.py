@@ -41,6 +41,13 @@ def windows_supervised_command(command: list[str], evidence_dir: Path) -> list[s
     return [sys.executable, WINDOWS_SUPERVISOR, "--evidence", str(evidence_dir), "--", *command]
 
 
+def output_text(value: str | bytes | None) -> str:
+    """Normalize timeout output before writing the text-mode case log."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
 def checked_origin(evidence_path: Path, source_sha: str) -> dict[str, object]:
     """Reject consumer evidence that does not prove staged first-party origins."""
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
@@ -88,8 +95,8 @@ def record_case(name: str, commands: list[list[str]], output_dir: Path, evidence
                 result = subprocess.CompletedProcess(
                     executed_command,
                     124,
-                    error.stdout or "",
-                    error.stderr or f"command exceeded 900 seconds: {command}\n",
+                    output_text(error.stdout),
+                    output_text(error.stderr) or f"command exceeded 900 seconds: {command}\n",
                 )
             log.write("$ " + " ".join(executed_command) + "\n")
             log.write(result.stdout)

@@ -64,6 +64,39 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse(summary["outcomes"]["core"])
         self.assertTrue(summary["outcomes"]["log-bridge"])
 
+    def test_timeout_receipt_normalizes_bytes_and_marks_case_failed(self) -> None:
+        command = ["cargo", "run"]
+        timeout = subprocess.TimeoutExpired(command, 900, output=b"partial\xff stdout\n", stderr=None)
+        evidence = self.evidence()
+        with patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=timeout):
+            passed, origin = run.record_case("timeout", [command], self.output, evidence, "a" * 40)
+
+        self.assertFalse(passed)
+        self.assertEqual({"status": "passed"}, origin)
+        receipt = json.loads((self.output / "timeout.json").read_text())
+        self.assertEqual(124, receipt["commands"][0]["exit_code"])
+        log = (self.output / "timeout.log").read_text()
+        self.assertIn("partial\ufffd stdout", log)
+        self.assertIn("command exceeded 900 seconds", log)
+
+    def test_case_command_vectors_include_all_consumer_proofs(self) -> None:
+        calls = []
+
+        def execute(command, **_kwargs):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, "ok\n", "")
+
+        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
+            self.assertEqual(0, run.run("e" * 40, self.output))
+
+        self.assertEqual(6, len(calls))
+        self.assertEqual("scripts/ci/build_binding_source_bundle.py", calls[0][1])
+        self.assertEqual("scripts/ci/validate_binding_bundle.py", calls[1][1])
+        self.assertEqual([run.sys.executable, "scripts/ci/validate_binding_runtime.py", "--consumer-only"], calls[2][:3])
+        self.assertEqual("scripts/ci/build_binding_source_bundle.py", calls[3][1])
+        self.assertEqual("scripts/ci/validate_binding_bundle.py", calls[4][1])
+        self.assertEqual("scripts/ci/validate_log_staged_consumer.py", calls[5][1])
+
     def test_windows_sandbox_validators_use_existing_supervisor(self) -> None:
         calls = []
 

@@ -15,6 +15,10 @@ from build_binding_source_bundle import BundleError,verify_bundle,digest
 from _python_sandbox import Sandbox,registered_checkouts
 ROOT=Path(__file__).resolve().parents[2]
 
+def bundle_evidence(manifest, bundle, metadata, probes, sandbox, policy, env, negatives, output):
+    """Build portable consumer proof from the completed Sandbox execution."""
+    return {'status':'passed','source_commit':manifest['source_commit'],'bundle_manifest_sha256':digest(bundle/'manifest.json'),'archives':{p['name']:p['archive_sha256'] for p in manifest['packages']},'registry_selection':manifest['registry_selection'],'reviewed_requirements':{p['name']:p['reviewed_requirements'] for p in manifest['packages']},'lock_sha256':manifest['lock_sha256'],'dependency_provenance':[{k:p[k] for k in ('name','version','source')} for p in metadata['packages']],'isolation_probes':probes,'sandbox_prefix':sandbox.prefix,'denied_roots':[str(p) for p in sorted(sandbox.denied)],'sandbox_policy':policy.read_text(encoding='utf-8') if policy.exists() else None,'cargo_home':env['CARGO_HOME'],'target_dir':env['CARGO_TARGET_DIR'],'negative_results':negatives,'consumer_output':output.strip(),'commands':sandbox.commands,'publication':'pending_B.7'}
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('--bundle',type=Path,required=True);p.add_argument('--evidence',type=Path,required=True);p.add_argument('--consumer-source',type=Path,default=ROOT/'scripts/ci/fixtures/binding-consumer/main.rs');p.add_argument('--expected-marker',default=None);args=p.parse_args()
     manifest=verify_bundle(args.bundle)
@@ -72,7 +76,7 @@ def main():
             key,spec=next((k,v) for k,v in entry['reviewed_requirements'].items() if k.startswith('/dependencies/'));alias=key.rsplit('/',1)[-1];start=text.index(f'[dependencies.{alias}]');old=f'version = "{spec["version"]}"';text=text[:start]+text[start:].replace(old,'version = "999.0.0"',1);path.write_text(text)
             record=json.loads((root/'manifest.json').read_text(encoding='utf-8'));record['files'][path.relative_to(root).as_posix()]=digest(path);(root/'manifest.json').write_text(json.dumps(record))
         negative('changed-normalized-requirement',changed_requirement,'BUNDLE_REQUIREMENT_DRIFT')
-        evidence={'status':'passed','source_commit':manifest['source_commit'],'bundle_manifest_sha256':digest(args.bundle/'manifest.json'),'archives':{p['name']:p['archive_sha256'] for p in manifest['packages']},'registry_selection':manifest['registry_selection'],'reviewed_requirements':{p['name']:p['reviewed_requirements'] for p in manifest['packages']},'lock_sha256':manifest['lock_sha256'],'dependency_provenance':[{k:p[k] for k in ('name','version','source')} for p in metadata['packages']],'isolation_probes':probes,'sandbox_prefix':prefix,'denied_roots':[str(p) for p in sorted(deny)],'sandbox_policy':policy.read_text(encoding='utf-8') if policy.exists() else None,'cargo_home':env['CARGO_HOME'],'target_dir':env['CARGO_TARGET_DIR'],'negative_results':negatives,'consumer_output':output.strip(),'commands':commands,'publication':'pending_B.7'}
+        evidence=bundle_evidence(manifest,args.bundle,metadata,probes,sandbox,policy,env,negatives,output)
         args.evidence.parent.mkdir(parents=True,exist_ok=True);args.evidence.write_text(json.dumps(evidence,sort_keys=True,indent=2)+'\n')
     print('BUNDLE_ISOLATED_CONSUMER_PASSED: positive and six exact-code negatives')
 if __name__=='__main__':main()
