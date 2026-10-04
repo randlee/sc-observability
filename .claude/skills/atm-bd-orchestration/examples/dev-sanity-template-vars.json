@@ -2,7 +2,7 @@
   "task_id": "obs-d-4-sanity",
   "checked_bead": "obs-d-4",
   "sprint": "d-4",
-  "worktree_path": "../sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
+  "worktree_path": "/Users/randlee/github/sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
   "branch": "sprint/d-4-otlp-sync-exporter",
   "commit": "4f1c2a9e7b3d5f60812a4c9e0b7d3f5a1c2e4b6d",
   "base": "sprint/d-3-otlp-config",
@@ -17,13 +17,12 @@
   "deliverable_text": "Implement the pinned deliverable.",
   "deliverables_total": 1,
   "owned_paths": [
-    "crates/example-otlp/src/sync.rs"
+    "crates/sc-observability-otlp/src/sync.rs"
   ],
   "changed_files": [
-    "crates/example-otlp/src/sync.rs"
+    "crates/sc-observability-otlp/src/sync.rs"
   ],
   "files_outside_owned_paths": [],
   "base_sha": "sprint/d-3-otlp-config",
-  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-alignment",
-  "lint_command": "make lint"
+  "primary_checkout": "/Users/randlee/github/sc-observability"
 }

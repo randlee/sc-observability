@@ -39,7 +39,7 @@ number of rows, display all available rows without padding or duplication.
 3. For display only, shorten `task` and `trigger_task` to the substring
    starting at the final `qa-pr<number>` or `sanity-pr<number>` component,
    preserving any following suffix. For example,
-   `pfx-d-23-entity-id-compatibility-qa-pr651-f2-qa-pr686-f1-qa-pr742`
+   `obs-d-23-entity-id-compatibility-qa-pr651-f2-qa-pr686-f1-qa-pr742`
    displays as `qa-pr742`. Leave IDs without either component unchanged.
    Preserve all other column names, values and formatting.
 

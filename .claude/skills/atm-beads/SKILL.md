@@ -36,7 +36,7 @@ before proceeding.**
 ## Identity
 
 - `ATM_IDENTITY` and `BEADS_ACTOR` are already in every agent's environment
-  and are equal: the bare pane name (`team-lead`), never an alias (`obs-lead`) and
+  and are equal: the bare pane name (`cobs`), never an alias (`obs-lead`) and
   never a model class (`terra`).
 - A bead's assignee is the recipient's `ATM_IDENTITY`.
 
@@ -62,14 +62,15 @@ Read only the one the current job needs.
 | [`resources/dev-sanity.md`](resources/dev-sanity.md) | writing or sending the sanity check assignment (recipient and message) |
 | [`resources/troubleshooting.md`](resources/troubleshooting.md) | a claim, close or assignee looks wrong, or `bd ready` misses assigned work |
 
-Every phase plan must include a committed `<plans_dir>/phase-<x>/sprints.jsonl`
-(the plan format, and how dev bead ids are derived from it: `resources/planning.md`
-"Phase definition"). It and the initial `<plans_dir>/phase-<x>/phase-<x>-dag.html`
-(embedded SVG) are committed and pushed on the phase root's `integration_branch`
-before plan review. `sprint-review --root <root>` refreshes the HTML without a
-viewer; `--view` optionally opens Wyvern in the background. `plans_dir` and
-the other repository values come from the repository configuration
-(`atm-bd-orchestration` SKILL.md, "Repository configuration").
+Every phase plan must include a committed `docs/plans/phase-<x>/sprints.jsonl`.
+Each line is `[sprint_name, sanity_bead_id, depends_on_sprint_names]`; the dev
+bead ID is derived as `obs-<sprint_name>`. The planner writes this compact
+graph authority in the plan PR; it is never exported from mutable Beads state.
+Bead hierarchy: `resources/planning.md`.
+The initial `docs/plans/phase-<x>/phase-<x>-dag.html` (embedded SVG) must also be
+committed and pushed with the plan on the phase integration branch before
+plan review. `sprint-review --root <root>` refreshes the HTML without a viewer;
+`--view` optionally opens Wyvern in the background.
 
 ## Validation
 
@@ -78,13 +79,23 @@ before the first dispatch. Run it from the repository root:
 
 ```bash
 .claude/skills/atm-beads/scripts/validate-plan --file <plan.jsonl> --root <root id> --index <sprints.jsonl>   # before import
-.claude/skills/atm-beads/scripts/validate-plan --root <root id>   # live beads; plan from origin/<root integration_branch>
+.claude/skills/atm-beads/scripts/validate-plan --root <root id>   # live beads, plan from origin/develop
 ```
 
-What it checks is listed once, in the header of
-[`scripts/validate-plan`](scripts/validate-plan). The bead models are pydantic,
-in `scripts/bead_schema.py`; `schemas/*.schema.json` are exported from them
-(`bead_schema.py export schemas`) and published. Exit 0 means valid, 5 lists
-the problems, and 2 means it could not run (the reason is on stderr, including
-`bd doctor`'s own stderr). Report problems to the lead; never edit the script,
-the plan or the graph to make it pass.
+It checks four things:
+
+1. every sprint that `sprints.jsonl` says depends on sprint X has a `blocks`
+   edge to X's sanity bead;
+2. every sprint bead validates against the `SprintBead` model: `requirements`
+   and `adrs` (ids, or exactly `["NONE"]`), `worktree`, `branch`,
+   `pr_target`, an assignee, a numbered `## Deliverables` list, acceptance
+   criteria and a valid difficulty;
+3. every sanity bead validates against the `SanityBead` model (an assignee,
+   `metadata.dev_bead`, a `blocks` edge to it), and `dev_bead` is its sprint;
+4. `bd doctor` reports no error.
+
+The models are pydantic, in `scripts/bead_schema.py`; `schemas/*.schema.json`
+are exported from them (`bead_schema.py export schemas`) and published.
+Exit 0 means valid, 5 lists the problems, and 2 means it could not run.
+Report problems to the lead; never edit the script, the plan or the graph to
+make it pass.

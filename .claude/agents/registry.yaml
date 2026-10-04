@@ -70,21 +70,7 @@ agents:
 # .atm.toml names the directive it runs. Member names are team-unique
 # because Herdr agent names are global on the host.
 roles:
-  lead: team-lead
   dev-sanity: obs-sanity
-  quality-mgr: quality-mgr
-
-# atm-bd-orchestration install configuration (rendered to .claude/project/atm-bd-orchestration.yaml).
-bead_prefix: obs
-worktree_base: ../sc-observability-worktrees
-test_command: just test
-lint_command: just lint
-integration_branch_pattern: integrate/phase-{phase}
-plans_dir: docs/plans
-requirements_globs: [docs/requirements.md]
-adr_globs: [docs/architecture.md]
-policy_path: .claude/project/quality-policy.md
-reviewers_round1: [req-qa, arch-qa, ruthless-boundary-qa, rust-qa-agent, rust-best-practices-agent, rust-service-hardening-agent]
 
 skills:
   codex-orchestration:
