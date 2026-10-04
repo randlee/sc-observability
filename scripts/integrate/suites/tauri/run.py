@@ -21,6 +21,9 @@ from pathlib import Path, PureWindowsPath
 
 
 ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / "scripts" / "ci"))
+from tauri_npm_artifact import produce as produce_npm_artifact
+
 SETUP_TIMEOUT_SECONDS = 10 * 60
 QUALIFICATION_TIMEOUT_SECONDS = 30 * 60
 
@@ -85,23 +88,15 @@ def prepare_artifacts(source_sha: str, artifacts: Path) -> tuple[Path, Path, Pat
     """Build the exact npm archive and Rust source bundle consumed by the helper."""
     npm = artifacts / "npm"
     bundle = artifacts / "rust-bundle"
-    npm.mkdir(parents=True)
-    command(["npm", "ci", "--ignore-scripts"], cwd=ROOT / "bindings" / "typescript",
+    package = ROOT / "bindings" / "typescript"
+    command(["npm", "ci", "--ignore-scripts"], cwd=package,
             timeout=SETUP_TIMEOUT_SECONDS, step="npm ci")
-    command(["npm", "run", "build"], cwd=ROOT / "bindings" / "typescript",
+    command(["npm", "run", "build"], cwd=package,
             timeout=SETUP_TIMEOUT_SECONDS, step="npm build")
-    command(["npm", "pack", "--pack-destination", str(npm)], cwd=ROOT / "bindings" / "typescript",
-            timeout=SETUP_TIMEOUT_SECONDS, step="npm pack")
-    archives = list(npm.glob("*.tgz"))
-    if len(archives) != 1:
-        raise RuntimeError("expected exactly one packaged TypeScript archive")
-    archive = archives[0]
-    manifest = npm / "npm-producer.json"
-    manifest.write_text(json.dumps({
-        "source_commit": source_sha,
-        "filename": archive.name,
-        "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
-    }, indent=2) + "\n", encoding="utf-8")
+    archive, manifest = produce_npm_artifact(
+        source_sha, npm, package,
+        lambda arguments, cwd: command(arguments, cwd=cwd, timeout=SETUP_TIMEOUT_SECONDS, step="npm pack"),
+    )
     command([
         sys.executable, "scripts/ci/build_binding_source_bundle.py",
         "--root-manifest", "bindings/tauri/Cargo.toml", "--output", str(bundle),

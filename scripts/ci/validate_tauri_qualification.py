@@ -23,6 +23,7 @@ from _python_sandbox import Sandbox, registered_checkouts
 from _tauri_webview import execute as execute_webview
 from _tauri_build_inputs import inventory, materialize, verify_inputs
 from build_binding_source_bundle import build, digest, verify_bundle, registry_identities
+from tauri_npm_artifact import produce as produce_npm_artifact
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / 'scripts/ci/fixtures/tauri-qualification'
@@ -150,7 +151,10 @@ def main():
                 shutil.copyfile(args.npm_archive, output / args.npm_archive.name)
                 shutil.copyfile(args.npm_manifest, output / 'npm-producer.json')
             else:
-                run(['npm', 'pack', '--pack-destination', output], package, commands)
+                produce_npm_artifact(
+                    report['source_commit'], output, package,
+                    lambda command, cwd: run(command, cwd, commands),
+                )
             archives = list(output.glob('*.tgz'))
             if len(archives) != 1:
                 raise RuntimeError('exactly one npm package archive is required')
