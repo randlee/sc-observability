@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import socket
 import subprocess
 import sys
@@ -30,6 +31,7 @@ BUILD_TIMEOUT_SECONDS = 10 * 60
 INSTALL_TIMEOUT_SECONDS = 2 * 60
 FRONTEND_TIMEOUT_SECONDS = 20
 VIEWER_TIMEOUT_SECONDS = 30
+VIEWER_MACHINES = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
 
 
 def run_process(command: list[str], *, timeout: float, **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -276,14 +278,34 @@ def dead_collector_endpoint() -> Iterator[str]:
         reserved.close()
 
 
+def _viewer_host_platform() -> str:
+    """Match the downloader's host selection for explicit local viewer opt-in."""
+    machine = platform.machine().lower()
+    return f"{platform.system().lower()}_{VIEWER_MACHINES.get(machine, machine)}"
+
+
+def _viewer_start_command(
+    binary: str, version: str, binary_sha256: str, state: Path, http: int, grpc: int, ui: int,
+    *, reuse_state: bool,
+) -> list[str]:
+    command = [
+        sys.executable, str(ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"),
+        "start", "--binary", binary, "--version", version, "--binary-sha256", binary_sha256,
+        "--state-dir", str(state), "--http", str(http), "--grpc", str(grpc), "--ui", str(ui),
+    ]
+    if reuse_state:
+        command.append("--reuse-state")
+    return command
+
+
 class PinnedViewer(dict[str, str]):
     """A hash-pinned viewer that tests may stop and restart on its same ports."""
 
-    def __init__(self, binary: str, manifest: dict[str, str], state: Path) -> None:
+    def __init__(self, binary: str, version: str, binary_sha256: str, state: Path) -> None:
         self.binary = binary
-        self.manifest = manifest
+        self.version = version
+        self.binary_sha256 = binary_sha256
         self.state = state
-        self.harness = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
         self._reservations = reserve_loopback_sockets(3)
         self.http, self.grpc, self.ui = (int(port.getsockname()[1]) for port in self._reservations)
         assert len({self.http, self.grpc, self.ui}) == 3
@@ -295,13 +317,10 @@ class PinnedViewer(dict[str, str]):
         for reserved in self._reservations:
             reserved.close()
         self._reservations = []
-        command = [
-            sys.executable, str(self.harness), "start", "--binary", self.binary,
-            "--version", self.manifest["version"], "--binary-sha256", self.manifest["binary_sha256"],
-            "--state-dir", str(self.state), "--http", str(self.http), "--grpc", str(self.grpc), "--ui", str(self.ui),
-        ]
-        if reuse_state:
-            command.append("--reuse-state")
+        command = _viewer_start_command(
+            self.binary, self.version, self.binary_sha256, self.state, self.http, self.grpc, self.ui,
+            reuse_state=reuse_state,
+        )
         started = run_process(
             command,
             check=False, text=True, capture_output=True, timeout=VIEWER_TIMEOUT_SECONDS,
@@ -335,7 +354,14 @@ def pinned_viewer(tmp_path: Path) -> Iterator[PinnedViewer]:
             pytest.fail(f"{message}; CI must not skip viewer readback", pytrace=False)
         pytest.skip(message)
     manifest = json.loads((ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/release.json").read_text())
-    viewer = PinnedViewer(binary, manifest, tmp_path / "viewer-state")
+    host = os.environ.get("TELEMETRY_E2E_VIEWER_PLATFORM", _viewer_host_platform())
+    entry = manifest["platforms"].get(host)
+    if entry is None:
+        pytest.fail(f"pinned viewer has no manifest entry for {host}", pytrace=False)
+    receipt_sha256 = os.environ.get("TELEMETRY_E2E_VIEWER_BINARY_SHA256")
+    if receipt_sha256 and receipt_sha256 != entry["binary_sha256"]:
+        pytest.fail("pinned viewer downloader receipt does not match host manifest", pytrace=False)
+    viewer = PinnedViewer(binary, manifest["version"], entry["binary_sha256"], tmp_path / "viewer-state")
     viewer.start()
     try:
         yield viewer

@@ -68,7 +68,11 @@ def main(argv: list[str] | None = None) -> int:
     tested = run(
         [sys.executable, "-m", "pytest", "-q", str(TESTS), f"--junitxml={output / 'pytest.xml'}"],
         timeout=SUITE_TIMEOUT_SECONDS,
-        env=env | {"TELEMETRY_E2E_VIEWER_BINARY": binary}, log=log,
+        env=env | {
+            "TELEMETRY_E2E_VIEWER_BINARY": binary,
+            "TELEMETRY_E2E_VIEWER_BINARY_SHA256": metadata["binary_sha256"],
+            "TELEMETRY_E2E_VIEWER_PLATFORM": metadata["platform"],
+        }, log=log,
     )
     return tested.returncode
 
