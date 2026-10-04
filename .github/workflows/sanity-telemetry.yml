@@ -2,8 +2,6 @@ name: sanity-telemetry
 permissions:
   contents: read
 on:
-  pull_request:
-    branches: ["sprint/*", "integrate/*", "fix/*"]
   workflow_dispatch:
 jobs:
   importer:
