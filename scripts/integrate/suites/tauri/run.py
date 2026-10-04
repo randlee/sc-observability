@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parents[4]
 
 
 def command(arguments: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> None:
-    subprocess.run(arguments, cwd=cwd, env=env, check=True)
+    executable = "npm.cmd" if os.name == "nt" and arguments[0] == "npm" else arguments[0]
+    subprocess.run([executable, *arguments[1:]], cwd=cwd, env=env, check=True)
 
 
 def platform_name() -> str:

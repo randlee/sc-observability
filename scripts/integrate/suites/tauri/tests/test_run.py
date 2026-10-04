@@ -19,6 +19,15 @@ SPEC.loader.exec_module(tauri_runner)
 
 
 class TauriRunnerTests(unittest.TestCase):
+    def test_command_uses_npm_cmd_on_windows(self):
+        cwd = Path("/tmp")
+        with patch.object(tauri_runner.os, "name", "nt"), \
+                patch.object(tauri_runner.subprocess, "run") as run:
+            tauri_runner.command(["npm", "ci", "--ignore-scripts"], cwd=cwd)
+        run.assert_called_once_with(
+            ["npm.cmd", "ci", "--ignore-scripts"], cwd=cwd, env=None, check=True
+        )
+
     def test_local_execution_is_rejected_before_any_desktop_work(self):
         with patch.dict("os.environ", {}, clear=True), patch.object(tauri_runner, "prepare_platform") as prepare:
             with self.assertRaisesRegex(RuntimeError, "only in CI"):
