@@ -120,8 +120,10 @@ not authorize final baseline generation or publication.
 
 The production-readiness review approved these source-breaking API updates:
 
-1. The sealed telemetry-health provider trait now uses the
-   `ObservabilityHealthProvider` name.
+1. The telemetry-health provider trait now uses the
+   `ObservabilityHealthProvider` name. Workspace-owned implementations are
+   supported; external implementations are possible but unsupported, with no
+   compatibility guarantee for their implementation hooks.
 2. `ObservabilityBuilder` now exposes
    `with_observability_health_provider(...)`.
 3. `ObservationSubscriber<T>` implementations now provide
