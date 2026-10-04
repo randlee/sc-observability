@@ -42,7 +42,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(command)
             return subprocess.CompletedProcess(command, 0, "ok\n", "")
 
-        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
+        with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("a" * 40, self.output))
         self.assertEqual(6, len(calls))
         summary = json.loads((self.output / "summary.json").read_text())
@@ -57,7 +57,7 @@ class RunnerTests(unittest.TestCase):
             exit_code = 1 if len(calls) == 1 else 0
             return subprocess.CompletedProcess(command, exit_code, "", "failure\n" if exit_code else "")
 
-        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
+        with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(1, run.run("b" * 40, self.output))
         self.assertEqual(6, len(calls))
         summary = json.loads((self.output / "summary.json").read_text())
@@ -86,7 +86,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(command)
             return subprocess.CompletedProcess(command, 0, "ok\n", "")
 
-        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
+        with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("e" * 40, self.output))
 
         self.assertEqual(6, len(calls))
@@ -97,6 +97,16 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual("scripts/ci/validate_binding_bundle.py", calls[4][1])
         self.assertEqual("scripts/ci/validate_log_staged_consumer.py", calls[5][1])
 
+    def test_sandbox_prerequisites_install_pinned_toolchain(self) -> None:
+        with patch.object(run.platform, "system", return_value="Darwin"), patch.object(run.subprocess, "run") as execute:
+            run.prepare_sandbox_prerequisites()
+        execute.assert_called_once_with(["rustup", "toolchain", "install", "1.94.1", "--profile", "minimal"], check=True)
+
+    def test_linux_sandbox_prerequisites_require_bwrap(self) -> None:
+        with patch.object(run.platform, "system", return_value="Linux"), patch.object(run.shutil, "which", return_value=None), patch.object(run.subprocess, "run"):
+            with self.assertRaisesRegex(RuntimeError, "bwrap"):
+                run.prepare_sandbox_prerequisites()
+
     def test_windows_sandbox_validators_use_existing_supervisor(self) -> None:
         calls = []
 
@@ -104,7 +114,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(command)
             return subprocess.CompletedProcess(command, 0, "ok\n", "")
 
-        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.platform, "system", return_value="Windows"), patch.object(run.subprocess, "run", side_effect=execute):
+        with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.platform, "system", return_value="Windows"), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("c" * 40, self.output))
 
         supervised = [command for command in calls if run.WINDOWS_SUPERVISOR in command]
@@ -123,7 +133,7 @@ class RunnerTests(unittest.TestCase):
             calls.append(command)
             return subprocess.CompletedProcess(command, 0, "ok\n", "")
 
-        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
+        with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("d" * 40, self.output))
 
         runtime_validator = next(

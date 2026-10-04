@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -17,6 +18,7 @@ WINDOWS_SANDBOX_VALIDATORS = {
     "scripts/ci/validate_binding_bundle.py",
     "scripts/ci/validate_binding_runtime.py",
 }
+SANDBOX_TOOLCHAIN = "1.94.1"
 
 
 def candidate_version() -> str:
@@ -39,6 +41,16 @@ def windows_supervised_command(command: list[str], evidence_dir: Path) -> list[s
     if command[1].endswith("validate_binding_runtime.py") and "--consumer-only" not in command:
         return command
     return [sys.executable, WINDOWS_SUPERVISOR, "--evidence", str(evidence_dir), "--", *command]
+
+
+def prepare_sandbox_prerequisites() -> None:
+    """Provision the pinned toolchain and reject missing native isolation support."""
+    subprocess.run(["rustup", "toolchain", "install", SANDBOX_TOOLCHAIN, "--profile", "minimal"], check=True)
+    system = platform.system()
+    if system == "Linux" and not shutil.which("bwrap"):
+        raise RuntimeError("rust-consumers requires bwrap on Linux for Sandbox isolation")
+    if system == "Windows" and not shutil.which("powershell"):
+        raise RuntimeError("rust-consumers requires Windows identity prerequisites (powershell)")
 
 
 def output_text(value: str | bytes | None) -> str:
@@ -120,6 +132,7 @@ def record_case(name: str, commands: list[list[str]], output_dir: Path, evidence
 def run(source_sha: str, output_dir: Path) -> int:
     """Run all four independent consumer cases, even after a prior failure."""
     verify_source(source_sha)
+    prepare_sandbox_prerequisites()
     output_dir.mkdir(parents=True, exist_ok=True)
     version = candidate_version()
     python = sys.executable
