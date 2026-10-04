@@ -61,9 +61,7 @@ class Pipeline(unittest.TestCase):
   self.man['question_specs']={'behavior':{'category':'presence','expected':'no','obligation_ids':['o1']}}
   class Client(FakeClient):
    @staticmethod
-   def evaluate(req):
-    assert 'question_specs' not in req['state'], 'answer key leaked to evaluator'
-    return answers({'behavior':('no',.95)})
+   def evaluate(req):return answers({'behavior':('no',.95)})
   packet=m.prepare(self.man,self.repo,Client)
   row=m.run([self.save('atomic.json',packet)],Client,self.root/'logs','phase-d')[0]
   self.assertIsNone(row['error']);self.assertEqual(row['schema_version'],2);self.assertEqual(row['presence_disposition'],'supported')

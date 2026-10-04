@@ -1,6 +1,6 @@
 ---
 name: schema-reviewer-assignment
-version: 3.0.0
+version: 2.0.0
 description: Render a fenced-JSON assignment for schema-reviewer in atm-bd-orchestration (unchanged contract; pinned branch and commit from the QA bead).
 format: json
 required_variables:
@@ -9,11 +9,12 @@ required_variables:
   - branch
   - commit
   - review_targets
-  - policy_path
 optional_variables:
+  - policy_path
   - reference_docs
   - notes
 defaults:
+  policy_path: .claude/project/quality-policy.md
   reference_docs: []
   notes: ""
 ---

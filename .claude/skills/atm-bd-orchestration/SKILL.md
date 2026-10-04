@@ -52,8 +52,8 @@ before proceeding.**
 
 The orchestrator is the **lead**: the identity that dispatches beads, creates
 QA beads, links layers into the stack and receives every task close. Templates
-address it through the `lead` variable and copy reports to `cc` (empty
-switches copies off); both are filled from the repository configuration. The role
+address it through the `lead` variable (default `team-lead`) and copy
+reports to `cc` (default `team-lead`; empty switches copies off). The role
 can move mid-phase: the outgoing lead sends the incoming lead the open task
 ids, open PRs and the stack number, and announces the new lead. In-flight
 tasks keep their assigner.
@@ -65,37 +65,8 @@ files those from a phase-end review.
 Before treating a finding or unresolved decision as a development stop, read
 [`blocking-findings-guidelines.md`](blocking-findings-guidelines.md). Scope the
 decision and the consequence of choosing wrong. Record decisions for the user
-or their delegate; conservative, reversible provisional choices keep independent
+or omega-prime; conservative, reversible provisional choices keep independent
 work moving. Unresolved decision beads block phase closure, not development.
-
-## Repository configuration
-
-Repository values live in one file, `.claude/project/atm-bd-orchestration.yaml`,
-which the installer renders from the consuming repository. Scripts read it at
-run time through
-[`../atm-beads/scripts/repo_config.py`](../atm-beads/scripts/repo_config.py);
-a missing file or key is a named error, never a default. Dispatch templates
-declare these values as required variables with no defaults, so the lead fills
-them from that file (start each vars file from `repo_config.py json`); a missing
-one fails the render.
-
-| Key | Consumed by |
-| --- | --- |
-| `bead_prefix` | `sprint_index_common.py` when no root id is given (a root id `<prefix>-phase-<x>` wins) |
-| `lead` | every assignment template (`lead`, `cc`) |
-| `dev_sanity_member` | the `dev-sanity` role (`resolve-role dev-sanity`); a team member, which may have no `.claude/agents/<name>.md` |
-| `qa_member` | `qa-bead.json.j2` (`qa_member`), the plan-review bead's assignee |
-| `worktree_base` | sprint bead `worktree` = `<worktree_base>/<branch>` |
-| `test_command` | `dev-template`, `fix-assignment`, `dev-fix` |
-| `lint_command` | `dev-sanity-template` |
-| `integration_branch_pattern` | the root's `integration_branch` (`plan-root.json.j2`), then `review-template` and `plan-review-template` (`integration_branch`) |
-| `plans_dir` | `phase-index-path`, `check-phase-artifact`, `sprint-report`, `sprint-review`, `plan-review-template` |
-| `requirements_globs`, `adr_globs` | `plan-review-template`, `fix-assignment` |
-| `policy_path` | `qa-template`, `dev-template`, `fix-assignment`, `schema-reviewer-assignment` |
-| `reviewers_round1` | `qa-template` (sprint reviews) |
-
-There is no base-branch key: `validate-plan` reads the plan from the phase
-root bead's `integration_branch`.
 
 ## Roles
 
@@ -158,14 +129,14 @@ on every restack and show up as out-of-scope work in that sprint's PR.
 1. The finder stops the edit in the sprint worktree and tells the lead the
    exact change and the branches it breaks.
 2. The lead picks the base: the lowest branch that already holds what the
-   change needs. That is the phase's integration branch for a bug in merged code, or
+   change needs. That is `integrate/phase-<x>` for a bug in merged code, or
    the stack layer whose types the change uses.
 3. The finder cuts `fix/<thing>` from `origin/<base>` in its own worktree,
    with only the change, the implementors and call sites the compiler
    forces, and one test when it is a bug. The test command passes; push; PR
    into `<base>`.
    When every roster agent is mid-task, the lead runs a background
-   developer subagent for this step instead of waiting; the branch,
+   `rust-developer` subagent for this step instead of waiting; the branch,
    scope and test rule are the same.
 4. The lead dispatches one QA round on the fix PR (`qa-template.xml.j2`,
    `checked_bead` = the finder's bead, `layer` = the base) and merges when
@@ -194,18 +165,19 @@ No dev bead is dispatched until the plan passes review.
 
    ```bash
    bd create --id <root>-plan-qa --type task --parent <root> \
-     -l phase-<x>,stage:plan-review --assignee <qa_member> \
+     -l phase-<x>,stage:plan-review --assignee quality-mgr \
      --title "phase-<x>: plan review" --deps blocks:<root sprint>,blocks:<root sprint>
    ```
 
 2. Generate and publish the initial phase diagram before review:
    `.claude/skills/sprint-review/scripts/sprint-review --root <root>`.
    The phase integration branch must contain the committed/pushed
-   `<plans_dir>/phase-<x>/sprints.jsonl` canonical dependency tuples and
-   `<plans_dir>/phase-<x>/phase-<x>-dag.html` with embedded SVG. Do not open the
+   `docs/plans/phase-<x>/sprints.jsonl` canonical dependency tuples and
+   `docs/plans/phase-<x>/phase-<x>-dag.html` with embedded SVG. Do not open the
    diagram unless `--view` was requested and Wyvern is available.
    Then run `.claude/skills/atm-beads/scripts/validate-plan --root <root>`
-   from the repository root; its header lists what it checks. Exit 0 or stop.
+   from the repository root. It checks beads, REQ/ADR references, ATM members,
+   index membership, and the published artifacts. Exit 0 or stop.
 
 3. Dispatch it with
    [`plan-review-template.xml.j2`](templates/plan-review-template.xml.j2).
@@ -213,8 +185,7 @@ No dev bead is dispatched until the plan passes review.
      findings, it is handed to you open; you fix them and close it.
    - FAIL leaves it open. The author fixes the beads with `bd update`; you
      assign the next round (`round` + 1, `carry_forward` = the open
-     finding lines) with the same task id. That round runs only each carried
-     finding's filing reviewer.
+     findings) with the same task id.
    - Plan review is capped at three rounds, as in `quality-mgr.md`.
 
 Requirements and ADRs are the tight part of the gate. Every dev bead lists
@@ -266,8 +237,8 @@ phase root also appears in it; it is never dispatched.
 After every bead write, run `validate-plan --root <root>`. On any problem,
 stop dispatching and report it to the user; never repair the graph
 (`bd dep`, `--parent`). A DAG problem is fixed by replanning: edit
-`sprints.jsonl` in a `/sc-git-worktree` branch off the root's
-`integration_branch` and merge the plan PR into it. While a phase is in motion its sprint DAG is frozen; only
+`sprints.jsonl` in a `/sc-git-worktree` branch off `develop` and merge the
+plan PR. While a phase is in motion its sprint DAG is frozen; only
 dependencies to fix beads created during the phase are added or changed.
 Verify branches read-only (`git -C <worktree> log`,
 `git diff`, `gh pr view`); never run a state-changing command in an
@@ -275,19 +246,18 @@ assignee's worktree.
 
 When every sprint and finding bead is closed
 (`bd list -l phase-<x> --status open,in_progress,blocked -n 0 --json` lists only
-the phase root), land the phase stack on the root's `integration_branch`, then run the
+the phase root), land the phase stack on `integrate/phase-<x>`, then run the
 phase-end review below on that integration commit. A closed finding is not
-proof that its fix landed. Close the phase root and merge the phase to the base branch only
+proof that its fix landed. Close the phase root and merge to `develop` only
 after the integration post-mortem passes at the final integration head; then
 run `bd sync`.
 
 ### Phase-End Review
 
-Quality-mgr runs the required JEV screening and investigated post-mortem.
 Read [references/post-mortem.md](references/post-mortem.md). The phase-end
 review includes a reconciliation of every finding bead, including closed
-ones, against the final integration source. Assign `branch` = the root's
-`integration_branch` and `commit` = its fetched, pinned head; reviewing a
+ones, against the final integration source. Assign `branch` =
+`integrate/phase-<x>` and `commit` = its fetched, pinned head; reviewing a
 stack tip alone does not satisfy this gate.
 
 After the sprint/fix stack has landed on the integration branch, create the
@@ -359,8 +329,8 @@ atm task assign <agent> --task-id <bead> \
   --vars <scratch>/<bead>-vars.json
 ```
 
-- Before the first dispatch of a phase, create the root's `integration_branch`
-  from the base branch and push it.
+- Before the first dispatch of a phase, create `integrate/phase-<x>` from
+  `develop` and push it.
 - For a dev or finding bead, create its branch and worktree from its declared
   target: `git fetch origin && git worktree add -b <branch> <worktree>
   origin/<pr_target>`.
