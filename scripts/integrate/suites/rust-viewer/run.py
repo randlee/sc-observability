@@ -109,6 +109,28 @@ def factory_test_command(test_name: str) -> list[str]:
     ]
 
 
+def cleanup_viewer(state: Path, *, environment: dict[str, str], output: Path) -> dict[str, str]:
+    """Stop any viewer proven owned by this run, retaining the cleanup outcome."""
+    log = output / "cleanup.log"
+    if not (state / "viewer.pid").is_file():
+        return {"status": "not-needed", "log": str(log)}
+    try:
+        invoke_harness(
+            ["stop", "--state-dir", str(state), "--timeout", "10", "--remove-state"],
+            environment=environment,
+            timeout=CLEANUP_TIMEOUT_SECONDS,
+            log=log,
+        )
+    except (OSError, SuiteError) as error:
+        try:
+            with log.open("a", encoding="utf-8") as cleanup_log:
+                cleanup_log.write(f"cleanup_error={error}\n")
+        except OSError:
+            pass
+        return {"status": "failed", "error": str(error), "log": str(log)}
+    return {"status": "passed", "log": str(log)}
+
+
 def run(source_sha: str, output: Path) -> dict[str, object]:
     """Run each public factory and its readback under an owned pinned viewer."""
     verify_source_sha(source_sha)
@@ -134,11 +156,18 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
     start = ["start", "--binary", binary, "--binary-sha256", binary_sha256,
              "--version", version, "--state-dir", str(state), "--host", HOST,
              "--http", str(http), "--grpc", str(grpc), "--ui", str(ui)]
-    started = False
     results: dict[str, object] = {}
+    result: dict[str, object] = {
+        "schema_version": 1,
+        "status": "failed",
+        "source_commit": source_sha,
+        "viewer": pinned,
+        "backends": results,
+        "cleanup": {"status": "pending", "log": str(output / "cleanup.log")},
+    }
+    primary_error: OSError | SuiteError | None = None
     try:
         invoke_harness(start, environment=environment, timeout=CLEANUP_TIMEOUT_SECONDS, log=setup_log)
-        started = True
         backend_environment = environment | {
             "D9_VIEWER_SYNC_HTTP_ADDRESS": f"{HOST}:{http}",
             "D9_VIEWER_SDK_ADDRESS": f"{HOST}:{grpc}",
@@ -183,25 +212,23 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
                     "log": str(log),
                 }
 
-        result: dict[str, object] = {
-            "schema_version": 1,
-            "status": "failed" if failed_backends else "passed",
-            "source_commit": source_sha,
-            "viewer": pinned,
-            "backends": results,
-        }
-        (output / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        result["status"] = "failed" if failed_backends else "passed"
         if failed_backends:
-            raise SuiteError(f"backend qualification failed: {', '.join(failed_backends)}")
-        return result
+            primary_error = SuiteError(f"backend qualification failed: {', '.join(failed_backends)}")
+    except (OSError, SuiteError) as error:
+        primary_error = error
     finally:
-        if started and (state / "viewer.pid").is_file():
-            invoke_harness(
-                ["stop", "--state-dir", str(state), "--timeout", "10", "--remove-state"],
-                environment=environment,
-                timeout=CLEANUP_TIMEOUT_SECONDS,
-                log=output / "cleanup.log",
-            )
+        cleanup = cleanup_viewer(state, environment=environment, output=output)
+        result["cleanup"] = cleanup
+        if cleanup["status"] == "failed":
+            result["status"] = "failed"
+        (output / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    if primary_error is not None:
+        raise primary_error
+    if cleanup["status"] == "failed":
+        raise SuiteError(f"viewer cleanup failed; inspect {cleanup['log']}")
+    return result
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)

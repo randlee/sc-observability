@@ -119,15 +119,16 @@ class RustViewerRunnerTests(unittest.TestCase):
                     mock.patch.object(runner, "invoke_harness", side_effect=harness):
                 result = runner.run(source_sha, output)
 
-            self.assertEqual({"schema_version", "status", "source_commit", "viewer", "backends"}, result.keys())
+            self.assertEqual({"schema_version", "status", "source_commit", "viewer", "backends", "cleanup"}, result.keys())
             self.assertEqual("passed", result["status"])
             self.assertEqual(source_sha, result["source_commit"])
             self.assertEqual(set(runner.TESTS), result["backends"].keys())
             self.assertTrue(all(outcome["status"] == "passed" for outcome in result["backends"].values()))
+            self.assertEqual("passed", result["cleanup"]["status"])
             self.assertEqual(result, json.loads((output / "result.json").read_text()))
             self.assertEqual(1, len(stops))
 
-    def test_start_failure_does_not_run_backends_or_write_a_success_result(self) -> None:
+    def test_start_failure_does_not_run_backends_and_retains_failed_result(self) -> None:
         source_sha = "d" * 40
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
@@ -150,7 +151,73 @@ class RustViewerRunnerTests(unittest.TestCase):
                     runner.run(source_sha, output)
 
             self.assertFalse(any(command[0] == "cargo" for command in commands))
-            self.assertFalse((output / "result.json").exists())
+            result = json.loads((output / "result.json").read_text())
+            self.assertEqual("failed", result["status"])
+            self.assertEqual("not-needed", result["cleanup"]["status"])
+
+    def test_partial_start_is_stopped_and_cleanup_is_retained(self) -> None:
+        source_sha = "e" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            stops: list[list[str]] = []
+
+            def checked(_command: list[str], **_kwargs: object) -> str:
+                return json.dumps({"binary": "viewer", "binary_sha256": "digest", "version": "v1"})
+
+            def harness(arguments: list[str], **_kwargs: object) -> str:
+                if arguments[0] == "start":
+                    state = output / "viewer-state"
+                    state.mkdir()
+                    (state / "viewer.pid").write_text("123\n")
+                    raise runner.SuiteError("start failed after spawn")
+                if arguments[0] == "stop":
+                    stops.append(arguments)
+                    return ""
+                self.fail(f"unexpected harness call: {arguments}")
+
+            with mock.patch.object(runner, "verify_source_sha"), \
+                    mock.patch.object(runner, "reserved_ports", return_value=(10001, 10002, 10003)), \
+                    mock.patch.object(runner, "run_checked", side_effect=checked), \
+                    mock.patch.object(runner, "invoke_harness", side_effect=harness):
+                with self.assertRaisesRegex(runner.SuiteError, "start failed after spawn"):
+                    runner.run(source_sha, output)
+
+            result = json.loads((output / "result.json").read_text())
+            self.assertEqual("passed", result["cleanup"]["status"])
+            self.assertEqual(1, len(stops))
+
+    def test_cleanup_failure_is_retained_without_masking_primary_backend_failure(self) -> None:
+        source_sha = "f" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+
+            def checked(command: list[str], **_kwargs: object) -> str:
+                if command[0] == "cargo" and runner.TESTS["sync-http"] in command:
+                    raise runner.SuiteError("command exited 17", exit_code=17)
+                return json.dumps({"binary": "viewer", "binary_sha256": "digest", "version": "v1"})
+
+            def harness(arguments: list[str], **_kwargs: object) -> str:
+                if arguments[0] == "start":
+                    state = output / "viewer-state"
+                    state.mkdir()
+                    (state / "viewer.pid").write_text("123\n")
+                    return ""
+                if arguments[0] == "stop":
+                    raise runner.SuiteError("cleanup failed")
+                return json.dumps({"backend": arguments[-1]})
+
+            with mock.patch.object(runner, "verify_source_sha"), \
+                    mock.patch.object(runner, "reserved_ports", return_value=(10001, 10002, 10003)), \
+                    mock.patch.object(runner, "run_checked", side_effect=checked), \
+                    mock.patch.object(runner, "invoke_harness", side_effect=harness):
+                with self.assertRaisesRegex(runner.SuiteError, "sync-http"):
+                    runner.run(source_sha, output)
+
+            result = json.loads((output / "result.json").read_text())
+            self.assertEqual("failed", result["cleanup"]["status"])
+            self.assertIn("cleanup failed", result["cleanup"]["error"])
+            self.assertIn("cleanup_error=cleanup failed", (output / "cleanup.log").read_text())
+            self.assertEqual("failed", result["backends"]["sync-http"]["status"])
 
     def test_malformed_readback_is_retained_as_one_backend_failure(self) -> None:
         source_sha = "b" * 40
