@@ -102,6 +102,29 @@ fn selected_v1_contract_history_matches_the_accepted_local_baseline() {
 }
 
 #[test]
+fn selected_v1_write_mode_refuses_to_overwrite_accepted_contracts() {
+    let output = Command::new(env!("CARGO_BIN_EXE_sc-observability-schema"))
+        .args([
+            "--output",
+            selected_v1_path("v1.json").to_str().expect("schema path is UTF-8"),
+            "--errors-output",
+            selected_v1_path("errors-v1.json")
+                .to_str()
+                .expect("error catalogue path is UTF-8"),
+        ])
+        .output()
+        .expect("run schema generator in write mode");
+    assert!(
+        !output.status.success(),
+        "write mode must not overwrite accepted v1 snapshots"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("binding schema v1"));
+    assert!(stderr.contains("v2.json"));
+    assert!(stderr.contains("errors-v2.json"));
+}
+
+#[test]
 fn selected_v1_contract_mismatches_name_contract_version_and_changed_field() {
     let directory = temporary_contract_directory("selected-v1-mismatch");
     let schema = directory.join("v1.json");

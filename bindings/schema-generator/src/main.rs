@@ -12,7 +12,7 @@ use schemars::{
     generate::{SchemaGenerator, SchemaSettings},
 };
 use serde_json::{Map, Value, json};
-use std::{collections::BTreeSet, error::Error, path::Path};
+use std::{collections::BTreeSet, error::Error, path::{Path, PathBuf}};
 fn register<T: JsonSchema>(
     g: &mut SchemaGenerator,
     entries: &mut Map<String, Value>,
@@ -561,19 +561,12 @@ fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(bytes)
 }
 
-fn schema_regeneration_command(output: &str, errors_output: &str) -> String {
-    format!(
-        "cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- --output {output} --errors-output {errors_output}"
-    )
-}
-
 fn write_or_check(
     path: &Path,
     bytes: &[u8],
     check: bool,
     contract_name: &str,
     selected_version: u32,
-    regeneration_command: &str,
 ) -> Result<(), Box<dyn Error>> {
     if check {
         let checked_in = std::fs::read(path)?;
@@ -584,7 +577,6 @@ fn write_or_check(
                 selected_version,
                 bytes,
                 &checked_in,
-                regeneration_command,
             )
             .into());
         }
@@ -593,6 +585,43 @@ fn write_or_check(
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, bytes)?;
+    }
+    Ok(())
+}
+
+fn selected_snapshot_paths(selected_version: u32) -> (PathBuf, PathBuf) {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../schema");
+    (
+        directory.join(format!("v{selected_version}.json")),
+        directory.join(format!("errors-v{selected_version}.json")),
+    )
+}
+
+fn reject_selected_snapshot_overwrite(
+    output: &Path,
+    errors_output: &Path,
+    selected_version: u32,
+) -> Result<(), Box<dyn Error>> {
+    let (selected_schema, selected_errors) = selected_snapshot_paths(selected_version);
+    let next_version = selected_version + 1;
+    let candidates = [
+        (output, &selected_schema, "binding schema"),
+        (errors_output, &selected_errors, "binding error catalogue"),
+    ];
+    for (candidate, selected, contract_name) in candidates {
+        if candidate.exists()
+            && selected.exists()
+            && std::fs::canonicalize(candidate)? == std::fs::canonicalize(selected)?
+        {
+            return Err(format!(
+                "refusing to overwrite immutable {contract_name} v{selected_version} at {}; \
+                 select v{next_version} and generate the new snapshot pair \
+                 bindings/schema/v{next_version}.json and \
+                 bindings/schema/errors-v{next_version}.json instead",
+                candidate.display(),
+            )
+            .into());
+        }
     }
     Ok(())
 }
@@ -658,7 +687,6 @@ fn generated_drift_error(
     selected_version: u32,
     expected: &[u8],
     checked_in: &[u8],
-    regeneration_command: &str,
 ) -> String {
     let changed_fields = match (
         serde_json::from_slice::<Value>(expected),
@@ -676,7 +704,7 @@ fn generated_drift_error(
     };
 
     format!(
-        "generated drift: {contract_name} v{selected_version} at {}; changed fields: {changed_fields}. The selected v{selected_version} contract is immutable; an intentional contract change requires a new versioned snapshot rather than overwriting v{selected_version}. Regenerate the selected contract with `{regeneration_command}`",
+        "generated drift: {contract_name} v{selected_version} at {}; changed fields: {changed_fields}. The selected v{selected_version} contract is immutable; an intentional contract change requires a new versioned snapshot. Do not overwrite retained v{selected_version}",
         path.display(),
     )
 }
@@ -696,7 +724,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let output = output.ok_or("--output required")?;
     let errors_output = errors_output.ok_or("--errors-output required")?;
-    let regeneration_command = schema_regeneration_command(&output, &errors_output);
+    if !check {
+        reject_selected_snapshot_overwrite(
+            Path::new(&output),
+            Path::new(&errors_output),
+            constants::WIRE_SCHEMA_VERSION,
+        )?;
+    }
     let mut defs = Map::new();
     let mut entrypoints = Map::new();
     for (is_output, prefix) in [(false, "Input"), (true, "Output")] {
@@ -725,7 +759,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         check,
         "binding schema",
         constants::WIRE_SCHEMA_VERSION,
-        &regeneration_command,
     )?;
     write_or_check(
         Path::new(&errors_output),
@@ -733,7 +766,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         check,
         "binding error catalogue",
         constants::WIRE_SCHEMA_VERSION,
-        &regeneration_command,
     )?;
     Ok(())
 }
@@ -780,27 +812,33 @@ mod tests {
     }
 
     #[test]
-    fn drift_error_includes_the_actual_schema_regeneration_outputs() {
+    fn drift_error_keeps_selected_v1_immutable_without_an_overwrite_command() {
         let output = "generated/schema.json";
-        let errors_output = "generated/errors.json";
-        let command = schema_regeneration_command(output, errors_output);
         let error = generated_drift_error(
             Path::new(output),
             "binding schema",
             1,
             br#"{"schema_version":1}"#,
             br#"{"schema_version":2}"#,
-            &command,
         );
 
         assert!(error.contains(output));
         assert!(error.contains("binding schema v1"));
         assert!(error.contains("/schema_version"));
         assert!(error.contains("new versioned snapshot"));
-        assert!(error.contains(errors_output));
-        assert!(error.contains("--output generated/schema.json"));
-        assert!(error.contains("--errors-output generated/errors.json"));
-        assert!(!error.contains("bindings/schema/v1.json"));
+        assert!(error.contains("Do not overwrite retained v1"));
+        assert!(!error.contains("--output"));
+    }
+
+    #[test]
+    fn write_mode_refuses_to_overwrite_the_selected_v1_snapshot_pair() {
+        let (schema, errors) = selected_snapshot_paths(1);
+        let error = reject_selected_snapshot_overwrite(&schema, &errors, 1)
+            .expect_err("selected v1 snapshots must be immutable in write mode")
+            .to_string();
+        assert!(error.contains("binding schema v1"));
+        assert!(error.contains("v2.json"));
+        assert!(error.contains("errors-v2.json"));
     }
 
     #[test]
@@ -821,7 +859,6 @@ mod tests {
             true,
             "binding schema",
             1,
-            "regenerate-schema",
         )
         .expect_err("CRLF must be drift");
         assert!(error.to_string().contains("generated drift"));
