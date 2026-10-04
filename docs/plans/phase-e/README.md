@@ -27,25 +27,29 @@ just integrate <branch> --suite wheels,collector --os windows,linux
 
 The workflow has only `workflow_dispatch`, with equivalent suite and OS inputs. The default selects all six suites on macOS, Windows and Linux: 18 independent suite/OS jobs. Validate selection before dispatch. All jobs use the branch SHA pinned by that run. Job matrix fail-fast is disabled; assertion failure does not stop other runnable tests within the job. Setup or compilation failure is reported explicitly and cannot be represented as successful coverage.
 
-The command reports the run URL; native GitHub tooling exposes every selected job result. Missing selected results fail the aggregate. Partial runs are clearly labelled; only the complete selection can provide phase-ending integration coverage. The repository default branch is `main`. Before native dispatch, the minimal `integration.yml` registration must be published there through the planned e-1 bootstrap PR (normal review/merge, no direct push); subsequent runs select the implementation branch with `--ref`. Do not silently change the default branch, bypass branch policy or add PR/push triggers. e-1 can prove local selector/runner contracts before bootstrap, but cannot claim native suite execution. Bootstrap publication is required for native validation, not for starting parallel implementation.
+The command reports the run URL; native GitHub tooling exposes every selected job result. Use native GitHub job/run conclusions to show every selected cell; no custom aggregate job is added. Failed, cancelled, skipped or missing selected execution is not successful coverage. Partial runs are clearly labelled; only the complete selection can provide phase-ending integration coverage. The repository default branch is `main`. Before native dispatch, the minimal `integration.yml` registration must be published there through the planned e-1 bootstrap PR (normal review/merge, no direct push); subsequent runs select the implementation branch with `--ref`. Do not silently change the default branch, bypass branch policy or add PR/push triggers. e-1 can prove local selector/runner contracts before bootstrap, but cannot claim native suite execution. Bootstrap publication is required for native validation, not for starting parallel implementation.
 
 ## Small runner interface
 
 `python3 scripts/integrate/run_suite.py --suite <selector> --source-sha <40hex> --output-dir <absolute-path>`
 invokes `python3 scripts/integrate/suites/<selector>/run.py --source-sha <40hex> --output-dir <absolute-path>` from
-the checked-out repository root. The suite verifies HEAD equals the supplied
-SHA (the run's pinned `GITHUB_SHA`), builds its own artifacts and writes existing logs/reports beneath
-the supplied directory. Exit zero means all selected assertions passed;
+the checked-out repository root. Only `run_suite.py` checks HEAD against the
+supplied SHA (the run's pinned `GITHUB_SHA`) and rejects a missing runner. The
+suite builds its own artifacts, executes assertions, owns bounded cleanup and
+writes existing logs/reports beneath the supplied directory. Exit zero means all selected assertions passed;
 nonzero means failure. Missing runners fail explicitly. No result schema or
 sibling artifact exchange is introduced. e-1 owns dispatch; each suite owns its
-entrypoint and setup. CI uploads its output directory even on failure.
+entrypoint and setup. The workflow calls only `run_suite.py`, not suite entrypoints directly. CI uploads its output directory even on failure.
 
 Both viewer suites reuse
 `scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py` and its `release.json`.
 The existing CLI contract is `start --binary PATH --binary-sha256 SHA --version
 VERSION --state-dir DIR`, `status --state-dir DIR`, `assert-production
---state-dir DIR --backend sdk|sync-http`, and `stop --state-dir DIR`.
-Each job has its own state directory/ports. e-2 extends platform acquisition
+--state-dir DIR --backend sdk|sync-http`, and `stop --state-dir DIR --timeout 10`.
+e-1 records this existing interface read-only in its documentation; e-2 owns
+implementation and any documentation within its own fence, with no later handoff
+to a closed e-1 sprint. This README contract is sufficient; no new dispatch ADR
+is required. Each job has its own state directory/ports. e-2 extends platform acquisition
 behind that interface; e-3 invokes the existing public-factory fixtures/readback
 and must not duplicate acquisition or claim synthetic probes as factory proof.
 
@@ -64,7 +68,7 @@ Existing wrappers often combine integration with unit, lint, schema, release or 
 
 ## Concrete platform work
 
-The existing viewer manifest contains only a macOS arm64 v0.5.0 artifact. e-2 extends the existing d-32 viewer_harness.py and release.json rather than introducing another fixture. It preserves the required v0.5.0 pin and supplies a macOS/Windows/Linux artifact URL, SHA-256 checksum and executable table for both viewer suites. Missing upstream assets require an explicit blocker/decision, never a mock or silent skip. e-2 fixes POSIX-only virtualenv and executable paths. e-7 adapts the bundled binding consumer's Darwin/Linux-only sandbox by minimally fixing the existing helper using existing cross-platform isolation support. No developer GUI launches are permitted; actual viewer/webview execution is confined to CI.
+The existing viewer manifest contains only a macOS arm64 v0.5.0 artifact. e-2 extends the existing d-32 viewer_harness.py and release.json rather than introducing another fixture. It preserves the required v0.5.0 pin and supplies a macOS/Windows/Linux artifact URL, SHA-256 checksum and executable table for both viewer suites. A missing upstream asset produces an explicit failed affected cell and blocker for a decision, never a mock, silent skip or unrelated-suite hold. e-2 fixes POSIX-only virtualenv and executable paths. e-7 adapts the bundled binding consumer's Darwin/Linux-only sandbox by minimally fixing the existing helper using existing cross-platform isolation support. No developer GUI launches are permitted; actual viewer/webview execution is confined to CI.
 
 No new product feature, publication, API governance, exhaustive interpreter/architecture matrix, generic unit/lint duplication, or sc-lint design is included. Native Windows execution is evidence; xwin alone is not.
 
@@ -77,11 +81,22 @@ Retirement is part of each replacement sprint, not a later cleanup sprint. Remov
 | Owner | Retirement |
 | --- | --- |
 | e-2 | Delete `telemetry-e2e.yml` once `wheel-cli-viewer` replaces it. |
-| e-4 | Sole editor of `otlp-conformance.yml`: remove each old job only after its corresponding e-3/e-4 replacement has native proof; delete the file when both are replaced. e-3 supplies its evidence without editing this file. |
+| e-4 | Sole editor of `otlp-conformance.yml`: remove each old job only after its corresponding e-3/e-4 replacement has native proof; delete the file when both are replaced. Use e-3's existing native job results; e-3 edits no shared workflow and creates no handoff artifact. |
 | e-7 | Remove the replaced `packaged-consumer` job in `binding-runtime.yml`; preserve unrelated native-contract coverage and required release aggregation. |
 
-e-4 owns the shared retirement edit at final publication; no other sprint edits that workflow and no sibling development dependency is added. e-5 and e-6 call existing narrow assertion helpers read-only where possible; any required helper/caller edits are explicitly fenced in their beads. They preserve the distinct B.4a and TypeScript publisher qualification interfaces. Do not import their whole release pipelines, API extraction, unit tests or lint into integration jobs. `telemetry-platforms.yml` is a six-target build check, not duplicate integration execution, and is not retired by this plan. The importer suite is not silently added to these six suites.
+e-4 owns the shared retirement edit at final publication, including stale invocation references in `docs/observability/otlp/local-viewer.md` and `grafana-environment.md` and the existing workflow test. e-1 documents stable suite selectors in `docs/integration.md` up front; retirement needs no later handoff to closed e-1. No other sprint edits the conformance workflow and no sibling development dependency is added. e-5 and e-6 invoke existing narrow assertion helpers read-only; they do not edit release helpers or callers. They preserve the distinct B.4a and TypeScript publisher qualification interfaces. Do not import their whole release pipelines, API extraction, unit tests or lint into integration jobs. `telemetry-platforms.yml` is a six-target build check, not duplicate integration execution, and is not retired by this plan. The importer suite is not silently added to these six suites.
 
 ## Contract-versioning work
 
 The user added e-8 through e-12: public API, binding/IPC, CLI, configuration and durable-store history. See [schema-versioning.md](schema-versioning.md). They run independently of the seven integration sprints and add no integration matrix cells or automatic workflows. The earlier API-governance exclusion applies to integration runners, not this newly authorized work.
+
+## Bounded integration execution
+
+Reuse fixture timeouts and bounded subprocess execution for viewer acquisition,
+readiness/readback and collector cases; do not add arbitrary sleeps. A timeout
+fails that case and records its cause while other runnable cases continue.
+Collectors bind loopback on an OS-assigned port and signal readiness before
+export begins. Flush/shutdown exporters before stopping the receiver, await
+bounded receipt, then assert captured payloads. Always terminate owned processes
+and close files/sockets in cleanup, including assertion or setup failure. Keep
+existing test-report formats; no lifecycle reporting framework is introduced.

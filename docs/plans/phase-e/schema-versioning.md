@@ -26,7 +26,7 @@ Use clap's `CommandFactory` and built command introspection (`get_subcommands`, 
 
 ## Existing compatibility to preserve
 
-Binding schemas already identify v1, CLI results use `sc-otel.result/v1`, and durable SQLite uses `PRAGMA user_version = 1` with newer-schema rejection. Preserve these baselines. Keep canonical binding schema paths unchanged, including existing generation-manifest and caller contracts; retain immutable versions in `bindings/schema/` without relocating callers or creating a second editable source. Do not copy upstream-owned OTLP schemas. Database work adds neither a cache nor seven-day retention and invents no migration merely to demonstrate machinery.
+Binding schemas already identify v1, CLI results use `sc-otel.result/v1`, and durable SQLite uses `PRAGMA user_version = 1` with newer-schema rejection. Preserve these baselines. Keep canonical binding schema paths unchanged, including existing generation-manifest and caller contracts. The active binding v1 files ARE the initial version-1 snapshots; do not copy them to an additional baseline. Likewise the existing durable `schema.sql` IS its initial v1 snapshot; retain that original when a real later version is added. Keep one authoritative file per version, without relocating current callers or creating a second editable source. Do not copy upstream-owned OTLP schemas. Database work adds neither a cache nor seven-day retention and invents no migration merely to demonstrate machinery.
 
 Implementation tests must detect a deliberate contract mismatch and retain valid current behavior. No new dashboards, approval certificates, standalone CI jobs, or exhaustive release matrix. Snapshot history is necessary contract data; the plan itself retires once implemented.
 
@@ -47,12 +47,22 @@ An accepted prerelease snapshot is immutable too; its next contract change
 requires a new version.
 The first snapshot capture establishes the current implementation baseline,
 not invented historical snapshots. Tests compare generated current code to the
-selected snapshot and check retained released files against that explicit local git
-accepted baseline. No mutable CI baseline refresh or registry service is added.
+selected snapshot and check retained accepted files against that explicit local git
+accepted baseline. Implement the history assertion inline in each existing
+per-surface unit test using `git show <supplied-local-base>:<path>`; its consumer
+is the user-required rejection of changes without a new version. The sprint
+owning that surface owns the assertion. No shared history helper, network fetch,
+service, new workflow or approval mechanism is added. The existing manifest
+version is the API selection; do not create a redundant selection artifact.
+Mismatch output names the contract, version and difference; adding a new version
+is the remedy for an actual contract change, not overwriting accepted history.
 
 ## API verification feasibility and ADR-022
 
-e-8 owns the ADR-022 verification amendment for the user's snapshot decision.
+e-8 owns the ADR-022 verification amendment for the user's snapshot decision,
+including the API layout, Rust/Python/TypeScript surfaces, version selection and
+immutability. Reconcile the verification wording without changing the rule that
+platform-dependent public APIs require an explicit ADR amendment.
 It retains uniform public interfaces for the same release target/features and
 released compatibility. The fast unit comparison must obtain its current
 surface from current source/compiled exports, with deterministic normalization;
@@ -66,10 +76,11 @@ meets the budget, e-8 acceptance fails: report the concrete result for a user
 decision before replacing it with a weaker test. Independent sprints continue;
 this plan does not claim the prototype has already demonstrated feasibility. Do not add another automatic extraction job.
 
-Existing native release producers provide full release-target/feature parity
-proof; the fast local unit comparison cannot claim it. Reuse the existing
-comparator and release machinery; the amendment distinguishes these proofs
-without reducing the common-API contract or adding an exhaustive new matrix.
+Existing native release producers own release-target/feature parity proof; e-8
+consumes that evidence read-only and does not add another cross-platform job or
+edit release workflows. The fast local unit comparison cannot claim native
+parity. The amendment distinguishes these proofs without reducing the common-API
+contract or adding an exhaustive new matrix.
 
 ## Configuration compatibility
 
@@ -78,7 +89,8 @@ e-11 covers telemetry YAML (`TelemetryFileConfig`, loaded by
 (`scripts/sanity-telemetry/import_sanity.py`, `load_config`/`sources`).
 Capture actual accepted fields, defaults and unknown-key rules for both.
 Importer invalid source kinds and duplicate paths remain rejected. In-memory
-configuration types belong to e-8, and CLI result schemas to e-10. In particular,
+configuration types are observed read-only by e-8 extraction; e-11 owns the
+configuration parser/test edits. CLI result schemas belong to e-10. In particular,
 `durable/config_file.rs` intentionally ignores consumer-specific YAML keys;
 its versioning tests must preserve that behavior, not turn it into strict
 unknown-key rejection. Invalid-value cases follow existing parser rejection.
