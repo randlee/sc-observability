@@ -1,6 +1,6 @@
 ---
 name: dev-fix
-version: 0.2.0
+version: 1.1.0
 description: lead dev-fix assignment for a dev bead reopened after a failed sanity check. Same bead (task_id), same branch; its open child finding beads are the work.
 format: xml
 required_variables:
@@ -12,16 +12,13 @@ required_variables:
   - pr_target
   - primary_checkout
   - phase_root
-optional_variables:
-  - sanity_bead
   - lead
   - cc
   - test_command
+optional_variables:
+  - sanity_bead
 defaults:
   sanity_bead: ""
-  lead: team-lead
-  cc: team-lead
-  test_command: "just validate"
 metadata:
   type: dev-fix
   tags:
@@ -44,7 +41,7 @@ metadata:
   <stack-discipline><![CDATA[`{{ branch | string | cdata_escape }}` is not linked. Commit the fixes there and rebase only onto `origin/{{ pr_target | string | cdata_escape }}`. Never edit another branch and never run `gh stack link`, `sync`, `rebase` or `merge`.]]></stack-discipline>
 
   <workflow>
-    <step id="a"><![CDATA[Before claiming, run `git fetch origin && git rebase origin/{{ pr_target | string | cdata_escape }}` in the worktree (a conflict is part of the fix), then `{{ primary_checkout | string | cdata_escape }}/.claude/skills/atm-bd-orchestration/scripts/assignment-gates.py dev --root {{ phase_root | string | cdata_escape }} --bead {{ task_id | string | cdata_escape }} --pr-target {{ pr_target | string | cdata_escape }} --worktree {{ worktree_path | string | cdata_escape }}` from the worktree (scripts come from the primary checkout, never the branch). Each check, its command and its refusal code: (1) plan valid: `{{ primary_checkout | string | cdata_escape }}/.claude/skills/atm-beads/scripts/validate-plan --root {{ phase_root | string | cdata_escape }} --scope {{ task_id | string | cdata_escape }}` exits 0, else `PLAN_INVALID`; (2) ready: `bd ready -n 0 --json` lists the bead, else `NOT_READY`; (3) claimable without `--force`: `bd show {{ task_id | string | cdata_escape }} --json` shows status `open` and assignee empty or `$ATM_IDENTITY`, else `UNCLAIMABLE`; (4) target: `metadata.pr_target` equals `{{ pr_target | string | cdata_escape }}`, else `PR_TARGET_MISMATCH`; (5) difficulty: your `atm members --json` model is in `DIFFICULTY_MODELS[metadata.difficulty]`, else `DIFFICULTY_MISMATCH`; (6) base: `git merge-base --is-ancestor origin/{{ pr_target | string | cdata_escape }} HEAD` exits 0, else `WRONG_BASE`. `GATE_CANNOT_RUN` when a command fails. Reuse an existing workflow class bead for the same failure signature: append the task id, head, command and failure evidence, and cite the class id in the refusal. If no class matches, report the signature to {{ lead | string | cdata_escape }} for classification and cite that message instead; do not create a per-task shadow or delay the refusal. A successful check permits a normal claim and task start.]]></step>
+    <step id="a"><![CDATA[Before claiming, run `git fetch origin && git rebase origin/{{ pr_target | string | cdata_escape }}` in the worktree (a conflict is part of the fix), then `{{ primary_checkout | string | cdata_escape }}/.claude/skills/atm-bd-orchestration/scripts/assignment-gates.py dev --root {{ phase_root | string | cdata_escape }} --bead {{ task_id | string | cdata_escape }} --pr-target {{ pr_target | string | cdata_escape }} --worktree {{ worktree_path | string | cdata_escape }}` from the worktree (scripts come from the primary checkout, never the branch). Each check, its command and its refusal code: (1) plan valid: `{{ primary_checkout | string | cdata_escape }}/.claude/skills/atm-beads/scripts/validate-plan --root {{ phase_root | string | cdata_escape }}` exits 0, else `PLAN_INVALID`; (2) ready: `bd ready -n 0 --json` lists the bead, else `NOT_READY`; (3) claimable without `--force`: `bd show {{ task_id | string | cdata_escape }} --json` shows status `open` and assignee empty or `$ATM_IDENTITY`, else `UNCLAIMABLE`; (4) target: `metadata.pr_target` equals `{{ pr_target | string | cdata_escape }}`, else `PR_TARGET_MISMATCH`; (5) difficulty: your `atm members --json` model is in `DIFFICULTY_MODELS[metadata.difficulty]`, else `DIFFICULTY_MISMATCH`; (6) base: `git merge-base --is-ancestor origin/{{ pr_target | string | cdata_escape }} HEAD` exits 0, else `WRONG_BASE`. `GATE_CANNOT_RUN` when a command fails. Reuse an existing workflow class bead for the same failure signature: append the task id, head, command and failure evidence, and cite the class id in the refusal. If no class matches, report the signature to {{ lead | string | cdata_escape }} for classification and cite that message instead; do not create a per-task shadow or delay the refusal. A successful check permits a normal claim and task start.]]></step>
     <step id="a1"><![CDATA[When it prints `false` the bead is not ready: do not claim it and do not start the task. Find the root cause: `bd show {{ task_id | string | cdata_escape }}` (status, assignee; still `closed` means it was never reopened), `bd blocked --json | jq --arg b {{ task_id | string | cdata_escape }} '.[] | select(.id == $b)'` (its open blockers), and `bd show <blocker>` for each. Report it with `atm send {{ lead | string | cdata_escape }} --stdin`: the bead, why it is not ready, and which bead or agent has to move. Then wait.]]></step>
     <step id="b"><![CDATA[Read `bd show {{ task_id | string | cdata_escape }}` and its open child beads (`bd list --parent {{ task_id | string | cdata_escape }} --status open --json`). Fix each one and close it individually: `bd close <child> --reason "<short sha>: <what fixed it>"`. Then re-check the whole bead: the sanity check reports what it saw, not everything that is missing. Do not weaken a test or criterion to make a finding go away. The bead's `metadata.requirements` and `metadata.adrs` still govern the fix: re-read each one it names.]]></step>
     <step id="c"><![CDATA[Run `{{ test_command | string | cdata_escape }}` and the bead's validation commands until they pass with zero failures.]]></step>

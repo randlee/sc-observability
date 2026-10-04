@@ -16,7 +16,7 @@ Run the repository-local report command from the checkout or worktree being used
 ```
 
 Use `--detailed` for one block per sprint. The command reads the committed
-`docs/plans/phase-<p>/sprints.jsonl`, then refreshes bead state and PR/CI state.
+`<plans_dir>/phase-<p>/sprints.jsonl`, then refreshes bead state and PR/CI state.
 Rows are never hand-typed.
 
 ## Dependency diagram
@@ -37,7 +37,7 @@ a log, so the agent remains available. Missing or failing Wyvern does not
 prevent publication; no alternative viewer is launched automatically.
 
 By default, DAG generation commits and pushes only
-`docs/plans/phase-<p>/phase-<p>-dag.html` to the root bead's
+`<plans_dir>/phase-<p>/phase-<p>-dag.html` to the root bead's
 `integration_branch`. It reads the committed canonical `sprints.jsonl` and
 never rewrites it from Beads state. The HTML embeds the SVG directly, including
 state tooltips and zoom controls, without external dependencies. Each refresh
@@ -98,7 +98,8 @@ number. It verifies the indexed sanity pairing, derives QA beads from live
 graph edges, and counts open findings across QA rounds. Paginated `gh api`
 pull-request results match each dev bead's branch, then `gh pr view` fetches
 selected PR checks. The integration row matches the root bead's integration
-branch into `develop`.
+branch; the detailed block names the integration PR's own base (`→ <base>`),
+and no target when there is no PR.
 
 The table QA cell contains one icon: 📥 assigned, 🌀 in progress, ✅ pass,
 or 🚩 findings (a FAIL verdict or open findings). A sprint without a QA bead
@@ -163,7 +164,7 @@ temporary file and run the same command from the repository root.
 {
   "mode": "detailed",
   "sprint_rows": "Sprint: d-12  types 2.0 contract\nDEV: ✅\nQA: R1 FAIL (16 open)\nCI: 🏁\nPR: #233",
-  "integration_row": "Integration: integrate/phase-d → develop\nCI: 🌀\nPR: —"
+  "integration_row": "Integration: integrate/phase-d → main\nCI: 🌀\nPR: #240"
 }
 ```
 

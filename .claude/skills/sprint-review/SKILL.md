@@ -15,11 +15,11 @@ Run from the working repository or worktree:
 
 `--root <bead-id>` and `--index <path>` select a phase when needed.
 
-Every run reads the canonical tuples in `docs/plans/phase-<p>/sprints.jsonl`,
+Every run reads the canonical tuples in `<plans_dir>/phase-<p>/sprints.jsonl`,
 uses them for the dependency graph, queries Beads/ATM only for current state,
 and regenerates the SVG inside a self-contained HTML page.
 
-It commits and pushes the rendered `docs/plans/phase-<p>/phase-<p>-dag.html`
+It commits and pushes the rendered `<plans_dir>/phase-<p>/phase-<p>-dag.html`
 on the root bead's `integration_branch`; it never rewrites `sprints.jsonl`.
 
 The initial HTML artifact and canonical phase plan are required before plan review.

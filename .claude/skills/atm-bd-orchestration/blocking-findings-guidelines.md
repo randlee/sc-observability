@@ -50,7 +50,7 @@ and decision records do not count as delivered feature capability.
 ## Record and scope the decision
 
 Create a `decision` bead in the phase and assign it to the user or
-omega-prime, as appropriate. Reuse that record as evidence develops. Include:
+their delegate, as appropriate. Reuse that record as evidence develops. Include:
 
 - The question and concrete options, including which is conservative and why.
 - The governing contract and affected beads, files, interfaces and consumers.
@@ -92,6 +92,6 @@ authority, preserve the finding, and validate the graph. Never close an
 unresolved finding or claim a PASS merely to release a queue.
 
 These guidelines were requested by the user after a mis-scoped test finding
-stopped independent Phase D work. Their consumer is the orchestration lead;
+stopped independent phase work. Their consumer is the orchestration lead;
 they govern escalation and development holds. Retire or replace this guidance
 when that decision policy is superseded, rather than growing a second workflow.

@@ -14,7 +14,8 @@ only whether each numbered deliverable is written. Follow
 `.claude/skills/atm-bd-orchestration/roles/dev-sanity.md` and the assignment
 for readiness, claim, lifecycle and refusal gates. Keep scratch outside the
 repository. Never edit code, commit, push, or mutate a stack. Use the
-`gh-stack-view` skill for a PR targeting neither `develop` nor `integrate/*`;
+`gh-stack-view` skill for a PR whose base is another stack layer (neither the
+repository's base branch nor the phase root's `integration_branch`);
 refuse an unregistered or unmergeable stack.
 
 ## Reviewer selection and authority
