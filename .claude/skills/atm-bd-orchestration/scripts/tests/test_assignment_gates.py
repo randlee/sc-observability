@@ -18,8 +18,10 @@ SPEC.loader.exec_module(gates)
 
 
 class FakeRunner:
-    def __init__(self, responses): self.responses = responses
-    cwds: list = []
+    def __init__(self, responses):
+        self.responses = responses
+        self.cwds: list = []
+
     def __call__(self, args, **kwargs):
         self.cwds.append(kwargs.get("cwd"))
         code, stdout = self.responses.get(tuple(args), (0, ""))
@@ -134,6 +136,14 @@ class AssignmentGateTests(unittest.TestCase):
         self.assertEqual(runner.cwds[0], str(gates.PRIMARY))
         behind = dev_runner({("git", "-C", "/other", "merge-base", "--is-ancestor", "origin/target", "HEAD"): (1, "")})
         self.assertEqual(gates.evaluate(ns("dev", worktree="/other"), behind), "WRONG_BASE")
+
+    def test_fake_runner_cwds_are_isolated_per_instance(self):
+        first = FakeRunner({})
+        second = FakeRunner({})
+        first(["first"], cwd="/first")
+        second(["second"], cwd="/second")
+        self.assertEqual(first.cwds, ["/first"])
+        self.assertEqual(second.cwds, ["/second"])
 
     def test_sanity_refusals_and_ready(self):
         cases = [
