@@ -26,6 +26,7 @@ from tauri_npm_artifact import produce as produce_npm_artifact
 
 SETUP_TIMEOUT_SECONDS = 10 * 60
 QUALIFICATION_TIMEOUT_SECONDS = 30 * 60
+QUALIFICATION_EVIDENCE_DIRECTORY = ROOT / "target" / "tauri-qualification"
 
 
 def command(arguments: list[str], *, cwd: Path, timeout: int, step: str,
@@ -104,14 +105,15 @@ def prepare_artifacts(source_sha: str, artifacts: Path) -> tuple[Path, Path, Pat
     return archive, manifest, bundle
 
 
-def qualification_command(name: str) -> list[str]:
+def qualification_command(name: str, evidence: Path) -> list[str]:
     base = ["bash", "scripts/ci/validate_typescript_bindings.sh", "--platform"]
     if name == "Linux":
         return ["xvfb-run", "-a", *base]
     if name == "Windows":
         git_bash = str(PureWindowsPath(os.environ.get("ProgramFiles", r"C:\Program Files")) /
                        "Git" / "bin" / "bash.exe")
-        return [sys.executable, "scripts/ci/supervise_windows_proof.py", "--", git_bash, *base[1:]]
+        return [sys.executable, "scripts/ci/supervise_windows_proof.py", "--evidence", str(evidence),
+                "--", git_bash, *base[1:]]
     return base
 
 
@@ -132,7 +134,7 @@ def run_qualification(name: str, env: dict[str, str], evidence: Path, output_dir
     report and diagnostics even when the helper exits non-zero.
     """
     try:
-        command(qualification_command(name), cwd=ROOT, env=env,
+        command(qualification_command(name, evidence), cwd=ROOT, env=env,
                 timeout=QUALIFICATION_TIMEOUT_SECONDS, step="Tauri qualification")
     finally:
         retain_qualification_evidence(evidence, output_dir)
@@ -147,13 +149,14 @@ def run(source_sha: str, output_dir: Path) -> None:
     artifacts.mkdir()
     prepare_platform(name)
     archive, manifest, bundle = prepare_artifacts(source_sha, artifacts)
+    evidence = QUALIFICATION_EVIDENCE_DIRECTORY
     env = os.environ.copy()
     env.update({
         "TAURI_NPM_ARCHIVE": str(archive),
         "TAURI_NPM_MANIFEST": str(manifest),
         "TAURI_RUST_BUNDLE": str(bundle),
+        "TAURI_QUALIFICATION_EVIDENCE": str(evidence),
     })
-    evidence = ROOT / "target" / "tauri-qualification"
     shutil.rmtree(evidence, ignore_errors=True)
     run_qualification(name, env, evidence, output_dir)
     if not evidence.is_dir():

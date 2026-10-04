@@ -46,17 +46,19 @@ class TauriRunnerTests(unittest.TestCase):
                 tauri_runner.verify_source("b" * 40)
 
     def test_linux_uses_headless_existing_qualification_helper(self):
+        evidence = Path("/tmp/evidence")
         self.assertEqual(
             ["xvfb-run", "-a", "bash", "scripts/ci/validate_typescript_bindings.sh", "--platform"],
-            tauri_runner.qualification_command("Linux"),
+            tauri_runner.qualification_command("Linux", evidence),
         )
 
     def test_windows_uses_process_supervisor(self):
+        evidence = Path("/tmp/evidence")
         with patch.dict(tauri_runner.os.environ, {"ProgramFiles": r"D:\Git Tools"}, clear=True):
             self.assertEqual(
-                [tauri_runner.sys.executable, "scripts/ci/supervise_windows_proof.py", "--",
+                [tauri_runner.sys.executable, "scripts/ci/supervise_windows_proof.py", "--evidence", str(evidence), "--",
                  r"D:\Git Tools\Git\bin\bash.exe", "scripts/ci/validate_typescript_bindings.sh", "--platform"],
-                tauri_runner.qualification_command("Windows"),
+                tauri_runner.qualification_command("Windows", evidence),
             )
 
     def test_failed_qualification_retains_helper_evidence_before_reraising(self):

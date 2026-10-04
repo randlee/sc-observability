@@ -7,8 +7,9 @@ if [[ $# -gt 1 || (${1:-} != '' && ${1:-} != '--platform') ]]; then
   echo 'usage: validate_typescript_bindings.sh [--platform]' >&2
   exit 2
 fi
-mkdir -p target/tauri-qualification
-exec > >(tee target/tauri-qualification/gate.log) 2>&1
+evidence="${TAURI_QUALIFICATION_EVIDENCE:-target/tauri-qualification}"
+mkdir -p "$evidence"
+exec > >(tee "$evidence/gate.log") 2>&1
 python3 scripts/ci/validate_typescript_control_flow.py
 if [[ ${1:-} != '--platform' ]]; then
   bash scripts/ci/validate_binding_schema.sh
@@ -22,8 +23,8 @@ if [[ "${1:-}" != '--platform' || "${RUNNER_OS:-}" != Linux ]]; then
   python3 -m unittest discover -s scripts/ci/tests -p test_binding_source_bundle.py
   cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test
 fi
-python3 scripts/ci/validate_binding_runtime.py --platform-only --evidence target/tauri-qualification/native-runtime
-qualification_args=(--evidence target/tauri-qualification)
+python3 scripts/ci/validate_binding_runtime.py --platform-only --evidence "$evidence/native-runtime"
+qualification_args=(--evidence "$evidence")
 if [[ -n ${TAURI_NPM_ARCHIVE:-} ]]; then
   qualification_args+=(--npm-archive "$TAURI_NPM_ARCHIVE" --npm-manifest "$TAURI_NPM_MANIFEST")
 fi
