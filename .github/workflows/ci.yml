@@ -169,6 +169,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # Versioned schema tests retain accepted SQL snapshots via git show.
           fetch-depth: 0
 
       - name: Install Rust toolchain
@@ -220,6 +221,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Versioned schema tests retain accepted SQL snapshots via git show.
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -264,6 +268,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # Versioned schema tests retain accepted SQL snapshots via git show.
           fetch-depth: 0
 
       - name: Install Rust toolchain
