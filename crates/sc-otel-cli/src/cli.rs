@@ -265,6 +265,7 @@ mod contract_tests {
     };
     use serde_json::Value;
     use std::{
+        collections::{BTreeMap, BTreeSet},
         path::{Path, PathBuf},
         process::Command,
     };
@@ -295,6 +296,18 @@ mod contract_tests {
             .join(path)
     }
 
+    fn member_id(value: &Value) -> Option<&str> {
+        value["id"].as_str().or_else(|| value["name"].as_str())
+    }
+
+    fn members_by_id(values: &[Value]) -> Option<BTreeMap<&str, &Value>> {
+        let members = values
+            .iter()
+            .map(|value| member_id(value).map(|id| (id, value)))
+            .collect::<Option<BTreeMap<_, _>>>()?;
+        (members.len() == values.len()).then_some(members)
+    }
+
     fn changed_fields(expected: &Value, actual: &Value, path: &str, changes: &mut Vec<String>) {
         match (expected, actual) {
             (Value::Object(expected), Value::Object(actual)) => {
@@ -309,13 +322,32 @@ mod contract_tests {
                 }
             }
             (Value::Array(expected), Value::Array(actual)) => {
-                for index in 0..expected.len().max(actual.len()) {
-                    let next = format!("{path}[{index}]");
-                    match (expected.get(index), actual.get(index)) {
-                        (Some(expected), Some(actual)) => {
-                            changed_fields(expected, actual, &next, changes);
+                if let (Some(expected), Some(actual)) =
+                    (members_by_id(expected), members_by_id(actual))
+                {
+                    let ids = expected
+                        .keys()
+                        .chain(actual.keys())
+                        .copied()
+                        .collect::<BTreeSet<_>>();
+                    for id in ids {
+                        let next = format!("{path}[{id}]");
+                        match (expected.get(id), actual.get(id)) {
+                            (Some(expected), Some(actual)) => {
+                                changed_fields(expected, actual, &next, changes);
+                            }
+                            _ => changes.push(next),
                         }
-                        _ => changes.push(next),
+                    }
+                } else {
+                    for index in 0..expected.len().max(actual.len()) {
+                        let next = format!("{path}[{index}]");
+                        match (expected.get(index), actual.get(index)) {
+                            (Some(expected), Some(actual)) => {
+                                changed_fields(expected, actual, &next, changes);
+                            }
+                            _ => changes.push(next),
+                        }
                     }
                 }
             }
@@ -490,15 +522,31 @@ mod contract_tests {
     fn changed_command_or_result_is_rejected_with_versioned_remedy() {
         let expected = snapshot(snapshot_path("commands", COMMAND_CONTRACT_VERSION));
         let mut changed_command = command_contract();
+        let flush = changed_command["subcommands"]
+            .as_array_mut()
+            .and_then(|subcommands| {
+                subcommands
+                    .iter_mut()
+                    .find(|subcommand| subcommand["name"] == "flush")
+            })
+            .expect("the command contract contains the flush subcommand");
+        let timeout = flush["arguments"]
+            .as_array_mut()
+            .and_then(|arguments| {
+                arguments
+                    .iter_mut()
+                    .find(|argument| argument["id"] == "timeout")
+            })
+            .expect("the flush subcommand contains the timeout argument");
         assert!(
-            changed_command["subcommands"][1]["arguments"][0]["value_constraint"].is_string(),
-            "timeout parser constraint was not projected: {changed_command}"
+            timeout["value_constraint"].is_string(),
+            "timeout parser constraint was not projected: {timeout}"
         );
         assert!(
-            changed_command["subcommands"][1]["arguments"][0]["action"].is_string(),
-            "argument action was not projected: {changed_command}"
+            timeout["action"].is_string(),
+            "argument action was not projected: {timeout}"
         );
-        changed_command["subcommands"][1]["arguments"][0]["action"] = serde_json::json!("Append");
+        timeout["action"] = serde_json::json!("Append");
         let command_error = assert_contract(
             "sc-otel.commands",
             COMMAND_CONTRACT_VERSION,
@@ -507,7 +555,10 @@ mod contract_tests {
         )
         .expect_err("changed argument must reject the selected command contract");
         assert!(command_error.contains("sc-otel.commands contract version 1.5.0 changed fields"));
-        assert!(command_error.contains("action"), "{command_error}");
+        assert!(
+            command_error.contains("$.subcommands[flush].arguments[timeout].action"),
+            "{command_error}"
+        );
         assert!(command_error.contains("new versioned snapshot"));
 
         let result_version = crate::constants::RESULT_SCHEMA
