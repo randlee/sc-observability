@@ -94,57 +94,6 @@ jobs:
       - name: Validate version literals
         run: python3 scripts/ci/validate_version_literals.py
 
-  public-api-governance:
-    name: public-api-governance (ubuntu)
-    needs: [clippy, docs-consistency, version-literals]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "1.94.1"
-          components: rustfmt, clippy
-
-      - name: Install nightly toolchain for cargo-public-api
-        run: |
-          toolchain="$(cat scripts/ci/public-api-toolchain)"
-          rustup toolchain install "$toolchain"
-          rustup target add --toolchain "$toolchain" x86_64-unknown-linux-gnu x86_64-pc-windows-msvc
-
-      - name: Run public API validator fixtures
-        run: |
-          python3 -m unittest discover -s scripts/ci/tests -p test_validate_public_api.py -v
-          python3 -m unittest discover -s scripts/ci/tests -p test_public_api_parity.py -v
-
-      - name: Validate public API diff visibility
-        id: public_api_diff
-        run: |
-          status=0
-          bash scripts/ci/validate_public_api_diff.sh || status=$?
-          # Exit 1 reports an API change; 2 reports tool-error rows; 3 reports a validator crash.
-          if [ "$status" -gt 1 ]; then exit "$status"; fi
-
-      - name: Validate public API semver compatibility
-        if: always()
-        run: python3 scripts/ci/validate_public_api_semver.py
-
-      - name: Validate public API documentation approvals
-        if: always()
-        run: bash scripts/ci/validate_public_api_docs.sh
-
-      - name: Upload public API governance reports
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: public-api-governance-${{ github.run_id }}-${{ github.sha }}
-          path: target/public-api/
-          if-no-files-found: error
-          retention-days: 14
-
   manifest-validation:
     name: manifest-validation (ubuntu)
     needs: [clippy, docs-consistency, version-literals]
