@@ -5,6 +5,7 @@ use std::process::Command;
 
 const V1_SCHEMA_GIT_BASELINE: &str = "37a7e7f57c02f0d918e7f455440cd23f931f2643";
 const V1_SCHEMA_PATH: &str = "crates/sc-observability-otlp/src/durable/schema.sql";
+const RETAINED_V1_SCHEMA: &str = include_str!("fixtures/schema-v1.sql");
 
 fn selected_v1_schema_from_git() -> String {
     let revision = format!("{V1_SCHEMA_GIT_BASELINE}:{V1_SCHEMA_PATH}");
@@ -40,11 +41,11 @@ fn v1_schema_contract_error(expected: &str, actual: &str) -> Result<(), String> 
 
 #[test]
 fn v1_schema_matches_selected_git_baseline() {
-    v1_schema_contract_error(
-        &selected_v1_schema_from_git(),
-        include_str!("../schema.sql"),
-    )
-    .expect("current durable schema must retain the selected immutable version 1 contract");
+    v1_schema_contract_error(&selected_v1_schema_from_git(), RETAINED_V1_SCHEMA).expect(
+        "retained durable schema fixture must retain the selected immutable version 1 contract",
+    );
+    v1_schema_contract_error(RETAINED_V1_SCHEMA, include_str!("../schema.sql"))
+        .expect("current durable schema must retain the selected immutable version 1 contract");
 }
 
 #[test]
@@ -141,11 +142,10 @@ fn retained_v1_database_reopens_with_pending_telemetry_usable() {
     let directory = tempfile::tempdir().unwrap();
     let config = config(directory.path());
     let pending = log("retained-v1");
-    let retained_v1 = selected_v1_schema_from_git();
     let receipt = {
         let mut v1 = Connection::open(&config.store_path).unwrap();
         v1.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-        v1.execute_batch(&retained_v1).unwrap();
+        v1.execute_batch(RETAINED_V1_SCHEMA).unwrap();
         store::admit(&mut v1, &config, &pending).unwrap()
     };
 
