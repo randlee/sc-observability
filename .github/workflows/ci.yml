@@ -245,19 +245,19 @@ jobs:
         run: cargo check --locked -p sc-observability-log-consumer-check
 
       - name: Run workspace tests
-        run: cargo test --locked --workspace --all-targets
+        run: cargo test --locked --no-fail-fast --workspace --all-targets
 
       - name: Run workspace doctests
-        run: cargo test --locked --workspace --doc
+        run: cargo test --locked --no-fail-fast --workspace --doc
 
       - name: Run imported log bridge test_hooks feature
-        run: cargo test --locked -p sc-observability-log --all-targets --features test_hooks
+        run: cargo test --locked --no-fail-fast -p sc-observability-log --all-targets --features test_hooks
 
       - name: Run imported log bridge release static-level-cap fixture
-        run: cargo test --locked -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
+        run: cargo test --locked --no-fail-fast -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
 
       - name: Run imported log bridge release runtime-level fixture
-        run: cargo test --locked -p sc-observability-log --release --test runtime_level_bridge
+        run: cargo test --locked --no-fail-fast -p sc-observability-log --release --test runtime_level_bridge
 
   windows-clippy:
     name: clippy (windows-latest top)
