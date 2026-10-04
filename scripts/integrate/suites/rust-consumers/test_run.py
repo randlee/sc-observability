@@ -83,6 +83,23 @@ class RunnerTests(unittest.TestCase):
             {command[6] for command in supervised},
         )
 
+    def test_runtime_level_uses_origin_evidence_without_an_empty_marker(self) -> None:
+        calls = []
+
+        def execute(command, **_kwargs):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, "ok\n", "")
+
+        with patch.object(run, "verify_source"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
+            self.assertEqual(0, run.run("d" * 40, self.output))
+
+        runtime_validator = next(
+            command for command in calls
+            if any("runtime-level-bundle" in item for item in command)
+            and "scripts/ci/validate_binding_bundle.py" in command
+        )
+        self.assertNotIn("--expected-marker", runtime_validator)
+
     def test_origin_evidence_requires_passed_status(self) -> None:
         with self.assertRaisesRegex(ValueError, "status"):
             run.checked_origin(self.evidence(status="failed"), "a" * 40)

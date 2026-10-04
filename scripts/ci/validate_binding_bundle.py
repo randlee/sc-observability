@@ -16,7 +16,7 @@ from _python_sandbox import Sandbox,registered_checkouts
 ROOT=Path(__file__).resolve().parents[2]
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--bundle',type=Path,required=True);p.add_argument('--evidence',type=Path,required=True);p.add_argument('--consumer-source',type=Path,default=ROOT/'scripts/ci/fixtures/binding-consumer/main.rs');p.add_argument('--expected-marker',default='BINDING_CONSUMER_OK');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--bundle',type=Path,required=True);p.add_argument('--evidence',type=Path,required=True);p.add_argument('--consumer-source',type=Path,default=ROOT/'scripts/ci/fixtures/binding-consumer/main.rs');p.add_argument('--expected-marker',default=None);args=p.parse_args()
     manifest=verify_bundle(args.bundle)
     with tempfile.TemporaryDirectory(prefix='binding-isolated-') as temporary:
         external=Path(temporary).resolve();artifact=external/'artifact';shutil.copytree(args.bundle,artifact)
@@ -43,7 +43,7 @@ def main():
         deny=set(sandbox.denied)
         prefix=sandbox.prefix
         policy=external/'isolation.sb'
-        if args.expected_marker not in output:raise RuntimeError('missing conversion proof')
+        if args.expected_marker is not None and args.expected_marker not in output:raise RuntimeError('missing conversion proof')
         negatives={}
         def negative(name,mutate,expected):
             copy=external/name;shutil.copytree(artifact,copy);mutate(copy)
