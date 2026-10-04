@@ -112,6 +112,16 @@ def collect_artifacts(messages, root=ROOT, prior_reader=None):
             'helper': helper, 'helper_sha256': digest_file(helper), 'fixture': fixture}
 
 
+def compiler_environment(sysroot):
+    env = dict(os.environ)
+    # Windows needs the compiler DLL directories. Preserve Unix executable
+    # resolution, including rustup proxies, for the ordinary Cargo command.
+    if sys.platform == 'win32':
+        env['PATH'] = os.pathsep.join([str(Path(sysroot) / 'bin'),
+                                     str(Path(sysroot) / 'lib'), env.get('PATH', '')])
+    return env
+
+
 def read_surfaces(record):
     entries = record['entries'] + ([record['fixture']] if record.get('fixture') else [])
     for entry in entries:
@@ -119,9 +129,8 @@ def read_surfaces(record):
             raise ApiError(f'built artifact changed after unit build: {entry["artifact"]}')
     if digest_file(record['helper']) != record['helper_sha256']:
         raise ApiError('metadata reader changed after unit build')
-    env = {**os.environ, 'SC_API_READER_REQUEST': json.dumps(entries)}
-    # Windows' loader needs the compiler DLL alongside rustc, not a new build.
-    env['PATH'] = os.pathsep.join([str(Path(record['sysroot']) / 'bin'), str(Path(record['sysroot']) / 'lib'), env.get('PATH', '')])
+    env = compiler_environment(record['sysroot'])
+    env['SC_API_READER_REQUEST'] = json.dumps(entries)
     result = subprocess.run([record['helper'], '--ignored', '--exact', 'metadata_dump', '--nocapture'],
                             env=env, text=True, capture_output=True, timeout=55)
     if result.returncode:

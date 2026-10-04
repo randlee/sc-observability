@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-from history import ApiError, ROOT, check_current, collect_artifacts, source_fingerprint
+from history import ApiError, ROOT, check_current, collect_artifacts, compiler_environment, source_fingerprint
 
 
 def main():
@@ -24,8 +24,7 @@ def main():
     if any(arg.startswith('--message-format') for arg in command):
         parser.error('message format is supplied by this runner')
     sysroot = subprocess.check_output(['rustc', '--print', 'sysroot'], text=True).strip()
-    unit_env = {**os.environ, 'PATH': os.pathsep.join([
-        str(Path(sysroot) / 'bin'), str(Path(sysroot) / 'lib'), os.environ.get('PATH', '')])}
+    unit_env = compiler_environment(sysroot)
     before = source_fingerprint()
     started = time.monotonic()
     messages = []
