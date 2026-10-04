@@ -55,17 +55,10 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertEqual(environment["LD_LIBRARY_PATH"], f"/opt/python/lib{os.pathsep}/existing")
 
     @mock.patch.object(run, "run_checked")
-    def test_verify_source_sha_rejects_a_different_checkout(self, checked: mock.Mock) -> None:
-        checked.return_value = "a" * 40 + "\n"
-        with self.assertRaisesRegex(run.SuiteError, "does not match"):
-            run.verify_source_sha("b" * 40)
-        self.assertEqual(checked.call_args.args[0], ["git", "rev-parse", "HEAD"])
-
-    @mock.patch.object(run, "run_checked")
     @mock.patch.object(run.python_binding_validator, "maturin_build_command")
     def test_build_wheel_uses_the_shared_declared_build_command(self, command: mock.Mock, checked: mock.Mock) -> None:
         command.return_value = ["/tools/uvx", "--from", "maturin==1.10.2", "maturin", "build"]
-        with mock.patch.object(Path, "mkdir"), mock.patch.object(Path, "glob", return_value=[Path("/tmp/wheel.whl")]):
+        with mock.patch.object(run, "recreate_output_directory"), mock.patch.object(Path, "glob", return_value=[Path("/tmp/wheel.whl")]):
             wheel = run.build_wheel(Path("/tmp/output"))
         self.assertEqual(wheel, Path("/tmp/wheel.whl"))
         self.assertEqual(checked.call_args.args[0], command.return_value)
@@ -80,7 +73,7 @@ class WheelsRunnerTests(unittest.TestCase):
             typing_tests: mock.Mock) -> None:
         # Avoid a platform filesystem dependency while preserving the command contract.
         checked.return_value = '{"prefix": "/tmp/venv", "native": "/tmp/venv/native.so", "package": "/tmp/venv/package.py"}\n'
-        with mock.patch.object(Path, "mkdir"), mock.patch.object(run.python_binding_validator, "venv_python", return_value=Path("/tmp/venv/bin/python")):
+        with mock.patch.object(run, "recreate_output_directory"), mock.patch.object(run.python_binding_validator, "venv_python", return_value=Path("/tmp/venv/bin/python")):
             installed = run.install_and_probe(Path("/tmp/candidate.whl"), Path("/tmp/output"))
         commands = [call.args[0] for call in checked.call_args_list]
         self.assertEqual(commands[0][:3], [run.sys.executable, "-m", "venv"])
@@ -150,6 +143,16 @@ class WheelsRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(run.python_binding_validator.BindingValidationError, "escaped the venv"):
             run.python_binding_validator.installed_origins(installed)
 
+    def test_recreate_output_directory_removes_retained_runner_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "runtime"
+            directory.mkdir()
+            stale = directory / "stale.txt"
+            stale.write_text("old", encoding="utf-8")
+            run.recreate_output_directory(directory)
+            self.assertTrue(directory.is_dir())
+            self.assertFalse(stale.exists())
+
     @mock.patch.object(run, "run_checked")
     @mock.patch.object(run.python_binding_validator, "embedded_environment", return_value={"PYO3_PYTHON": "/tmp/e5-venv/bin/python"})
     def test_embedded_host_receives_the_installed_package_contract(
@@ -186,7 +189,6 @@ class WheelsRunnerTests(unittest.TestCase):
             }
             package = Path(installed["package"]).resolve()
             with (
-                mock.patch.object(run, "verify_source_sha"),
                 mock.patch.object(run, "build_wheel", return_value=wheel),
                 mock.patch.object(run, "install_and_probe", return_value=installed),
                 mock.patch.object(run, "run_embedded_host") as embedded_host,

@@ -60,10 +60,19 @@ def wheel_digest(wheel: Path) -> str:
     return hashlib.sha256(wheel.read_bytes()).hexdigest()
 
 
+def recreate_output_directory(directory: Path) -> None:
+    """Clear one runner-owned subdirectory so a retained output can be rerun."""
+    if directory.exists():
+        if not directory.is_dir() or directory.is_symlink():
+            raise SuiteError(f"runner output path must be a directory: {directory}")
+        shutil.rmtree(directory)
+    directory.mkdir(parents=True)
+
+
 def build_wheel(output: Path) -> Path:
     """Build exactly one release-configured candidate wheel for this checkout."""
     wheel_dir = output / "wheel"
-    wheel_dir.mkdir(parents=True, exist_ok=False)
+    recreate_output_directory(wheel_dir)
     run_checked(
         python_binding_validator.maturin_build_command(ROOT, wheel_dir),
         cwd=ROOT,
@@ -194,7 +203,7 @@ def run_installed_typing_tests(python: Path, runtime: Path, tests: Path) -> None
 def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
     """Install one wheel and run its public runtime and typing suites in a clean venv."""
     runtime = output / "runtime"
-    runtime.mkdir(parents=True, exist_ok=False)
+    recreate_output_directory(runtime)
     venv = runtime / "venv"
     run_checked([sys.executable, "-m", "venv", str(venv)], cwd=runtime)
     python = python_binding_validator.venv_python(venv)
@@ -244,19 +253,10 @@ def run_embedded_host(python: Path, package: Path) -> None:
     )
 
 
-def verify_source_sha(source_sha: str) -> None:
-    """Reject a runner invocation that is not bound to its checked-out candidate."""
-    if len(source_sha) != 40 or any(character not in "0123456789abcdef" for character in source_sha.lower()):
-        raise SuiteError("source-sha must be a full 40-hex commit")
-    head = run_checked(["git", "rev-parse", "HEAD"], cwd=ROOT).strip()
-    if head != source_sha.lower():
-        raise SuiteError(f"checkout HEAD {head} does not match source-sha {source_sha}")
-
-
 def run(source_sha: str, output: Path) -> dict[str, object]:
-    """Execute the bounded candidate wheel, installed runtime, and attached-host checks."""
-    verify_source_sha(source_sha)
+    """Execute the candidate check after the dispatch runner verified ``source_sha``."""
     output.mkdir(parents=True, exist_ok=True)
+    (output / "failure-report.txt").unlink(missing_ok=True)
     wheel = build_wheel(output)
     installed = install_and_probe(wheel, output)
     package = python_binding_validator.installed_origins(installed)["package"]
