@@ -597,6 +597,32 @@ fn selected_snapshot_paths(selected_version: u32) -> (PathBuf, PathBuf) {
     )
 }
 
+fn selected_version_from_output_paths(output: &Path, errors_output: &Path) -> Result<u32, String> {
+    fn version(filename: Option<&std::ffi::OsStr>, prefix: &str) -> Result<u32, String> {
+        let filename = filename.and_then(std::ffi::OsStr::to_str).ok_or_else(|| {
+            format!("selected schema output must use {prefix}<version>.json")
+        })?;
+        let version = filename
+            .strip_prefix(prefix)
+            .and_then(|value| value.strip_suffix(".json"))
+            .ok_or_else(|| format!("selected schema output must use {prefix}<version>.json"))?;
+        version
+            .parse::<u32>()
+            .ok()
+            .filter(|version| *version > 0)
+            .ok_or_else(|| format!("selected schema output has invalid version in {filename}"))
+    }
+
+    let selected = version(output.file_name(), "v")?;
+    let errors = version(errors_output.file_name(), "errors-v")?;
+    if selected != errors {
+        return Err(format!(
+            "selected schema output v{selected} does not match error catalogue output v{errors}"
+        ));
+    }
+    Ok(selected)
+}
+
 fn reject_selected_snapshot_overwrite(
     output: &Path,
     errors_output: &Path,
@@ -724,11 +750,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let output = output.ok_or("--output required")?;
     let errors_output = errors_output.ok_or("--errors-output required")?;
+    let selected_version = selected_version_from_output_paths(
+        Path::new(&output),
+        Path::new(&errors_output),
+    )?;
     if !check {
         reject_selected_snapshot_overwrite(
             Path::new(&output),
             Path::new(&errors_output),
-            constants::WIRE_SCHEMA_VERSION,
+            selected_version,
         )?;
     }
     let mut defs = Map::new();
@@ -752,20 +782,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let registry = serde_json::to_value(error_codes::REGISTRY)?;
     let canonical_error_codes = canonical_error_catalogue();
-    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":constants::WIRE_SCHEMA_VERSION,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":constants::MAX_WIRE_PAYLOAD_BYTES,"container_depth":constants::MAX_CONTAINER_DEPTH,"query_limit":constants::MAX_QUERY_LIMIT,"timeout_ms":constants::MAX_TIMEOUT_MS,"diagnostic_string_bytes":constants::MAX_DIAGNOSTIC_FIELD_BYTES,"remediation_steps":constants::MAX_REMEDIATION_STEPS},"defaults":{"query_limit":constants::DEFAULT_QUERY_LIMIT,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","canonical_error_codes":canonical_error_codes,"generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
+    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":format!("https://sc-observability.dev/bindings/v{selected_version}.json"),"$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":selected_version,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":constants::MAX_WIRE_PAYLOAD_BYTES,"container_depth":constants::MAX_CONTAINER_DEPTH,"query_limit":constants::MAX_QUERY_LIMIT,"timeout_ms":constants::MAX_TIMEOUT_MS,"diagnostic_string_bytes":constants::MAX_DIAGNOSTIC_FIELD_BYTES,"remediation_steps":constants::MAX_REMEDIATION_STEPS},"defaults":{"query_limit":constants::DEFAULT_QUERY_LIMIT,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","canonical_error_codes":canonical_error_codes,"generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
     write_or_check(
         Path::new(&output),
         &canonical(&schema)?,
         check,
         "binding schema",
-        constants::WIRE_SCHEMA_VERSION,
+        selected_version,
     )?;
     write_or_check(
         Path::new(&errors_output),
         &canonical(&schema["x-sc-error-registry"])?,
         check,
         "binding error catalogue",
-        constants::WIRE_SCHEMA_VERSION,
+        selected_version,
     )?;
     Ok(())
 }
@@ -839,6 +869,24 @@ mod tests {
         assert!(error.contains("binding schema v1"));
         assert!(error.contains("v2.json"));
         assert!(error.contains("errors-v2.json"));
+    }
+
+    #[test]
+    fn versioned_output_pair_selects_the_contract_version() {
+        assert_eq!(
+            selected_version_from_output_paths(
+                Path::new("generated/v2.json"),
+                Path::new("generated/errors-v2.json"),
+            ),
+            Ok(2)
+        );
+        let error = selected_version_from_output_paths(
+            Path::new("generated/v2.json"),
+            Path::new("generated/errors-v1.json"),
+        )
+        .expect_err("schema and error output versions must agree");
+        assert!(error.contains("v2"));
+        assert!(error.contains("v1"));
     }
 
     #[test]

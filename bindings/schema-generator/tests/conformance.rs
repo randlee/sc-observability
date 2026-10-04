@@ -125,6 +125,51 @@ fn selected_v1_write_mode_refuses_to_overwrite_accepted_contracts() {
 }
 
 #[test]
+fn versioned_output_pair_selects_schema_id_metadata_and_drift_label() {
+    let directory = temporary_contract_directory("selected-v2-output");
+    let schema = directory.join("v2.json");
+    let errors = directory.join("errors-v2.json");
+    let generator = env!("CARGO_BIN_EXE_sc-observability-schema");
+
+    let generated = Command::new(generator)
+        .args([
+            "--output",
+            schema.to_str().expect("schema path is UTF-8"),
+            "--errors-output",
+            errors.to_str().expect("error catalogue path is UTF-8"),
+        ])
+        .output()
+        .expect("generate selected v2 contract pair");
+    assert!(
+        generated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generated.stderr)
+    );
+    let selected: Value = serde_json::from_slice(&fs::read(&schema).expect("read selected v2"))
+        .expect("generated v2 is JSON");
+    assert_eq!(
+        selected["$id"],
+        json!("https://sc-observability.dev/bindings/v2.json")
+    );
+    assert_eq!(selected["x-sc-bindings"]["schema_version"], json!(2));
+
+    let checked = generator_check(&schema, &errors);
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    fs::write(&schema, b"{}\n").expect("introduce selected v2 drift");
+    let drift = generator_check(&schema, &errors);
+    assert!(!drift.status.success(), "selected v2 drift must fail");
+    let stderr = String::from_utf8_lossy(&drift.stderr);
+    assert!(stderr.contains("binding schema v2"));
+    assert!(stderr.contains(schema.to_str().expect("schema path is UTF-8")));
+
+    fs::remove_dir_all(directory).expect("remove temporary contract directory");
+}
+
+#[test]
 fn selected_v1_contract_mismatches_name_contract_version_and_changed_field() {
     let directory = temporary_contract_directory("selected-v1-mismatch");
     let schema = directory.join("v1.json");
