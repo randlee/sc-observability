@@ -19,6 +19,11 @@ SPEC.loader.exec_module(runner)
 
 
 class RustViewerRunnerTests(unittest.TestCase):
+    def test_readback_timeout_exceeds_the_harness_query_window(self) -> None:
+        self.assertEqual(180, runner.READBACK_TIMEOUT_SECONDS)
+        self.assertGreater(runner.READBACK_TIMEOUT_SECONDS, 120)
+        self.assertGreater(runner.READBACK_TIMEOUT_SECONDS, runner.CLEANUP_TIMEOUT_SECONDS)
+
     def test_reserved_ports_are_distinct_positive_tcp_ports(self) -> None:
         ports = runner.reserved_ports()
         self.assertEqual(len(ports), 3)

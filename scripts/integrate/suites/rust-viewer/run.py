@@ -26,6 +26,10 @@ FEATURES = "sync-http,otlp-sdk"
 DOWNLOAD_TIMEOUT_SECONDS = 180
 TEST_TIMEOUT_SECONDS = 15 * 60
 CLEANUP_TIMEOUT_SECONDS = 30
+# The shared harness permits 120 seconds for viewer readback; leave another
+# minute for its requests and receipt serialization before the outer runner
+# intervenes.
+READBACK_TIMEOUT_SECONDS = 180
 HOST = "127.0.0.1"
 
 TESTS = {
@@ -187,7 +191,7 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
                 receipt = invoke_harness(
                     ["assert-production", "--state-dir", str(state), "--backend", backend],
                     environment=backend_environment,
-                    timeout=CLEANUP_TIMEOUT_SECONDS,
+                    timeout=READBACK_TIMEOUT_SECONDS,
                     log=log,
                 )
                 try:
