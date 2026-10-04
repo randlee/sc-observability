@@ -6,7 +6,7 @@ Usage:
                --branch <branch> --commit <commit> --base <base>
                --lint-command '<cmd>' --scratch <dir>
                [--bead-json <file>] [--split-only] [--template <path>]
-               [--lint-timeout-seconds <n>] [--reviewers both|llm|jev]
+               [--lint-timeout-seconds <n>]
   sanity-split lint-supervisor --worktree <path> --command '<cmd>' --log <file>
                --exit-file <file> [--timeout-seconds <n>]
 
@@ -340,7 +340,6 @@ def main():
     parser = argparse.ArgumentParser(add_help=True)
     for flag in ("--task", "--bead", "--worktree", "--branch", "--commit", "--base", "--lint-command", "--scratch"):
         parser.add_argument(flag, required=True)
-    parser.add_argument("--reviewers", choices=("both", "llm", "jev"), default="both")
     parser.add_argument("--bead-json")
     parser.add_argument("--split-only", action="store_true")
     parser.add_argument("--template", type=Path, default=TEMPLATE)
@@ -367,6 +366,7 @@ def main():
                 "deliverable_number": item["number"], "deliverable_text": item["text"],
                 "deliverables_total": len(deliverables),
                 "owned_paths": owned, "changed_files": files, "files_outside_owned_paths": outside,
+                "context": [],
                 "worktree_path": args.worktree, "branch": args.branch, "commit": sha, "base_sha": base_sha,
             })})
         if not args.split_only:
@@ -374,8 +374,8 @@ def main():
     except Fail as exc:
         return die(exc.code, str(exc))
     json.dump({"run_id": str(uuid.uuid4()),
-               "reviewers": ["sanity-llm", "sanity-jev"] if args.reviewers == "both" else [f"sanity-{args.reviewers}"],
-               "operational_reviewer": "sanity-jev" if args.reviewers == "jev" else "sanity-llm",
+               "reviewers": ["sanity-llm", "sanity-jev", "sanity-selected"],
+               "operational_reviewer": "sanity-selected",
                "sha": sha, "base_sha": base_sha, "sanity_bead": args.task, "dev_bead": bead["id"],
                "branch": args.branch, "worktree_path": args.worktree, "deliverables_total": len(deliverables),
                "changed_files": files, "files_outside_owned_paths": outside, "lint": lint,

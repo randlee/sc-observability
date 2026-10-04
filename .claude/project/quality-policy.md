@@ -23,11 +23,12 @@ their own prompts.
 - Initial implementation review (sprint QA-1): `req-qa`, `arch-qa`,
   `ruthless-boundary-qa`, `rust-qa-agent`, `rust-best-practices-agent`, and
   `rust-service-hardening-agent`
-- Fix verification (sprint QA-2 and later): `req-qa`, `arch-qa`, and
-  `rust-qa-agent`; re-dispatch `ruthless-boundary-qa`,
-  `rust-best-practices-agent`, or `rust-service-hardening-agent` only to
-  verify its own QA-1 findings, verification-locked to those ids; a reviewer
-  that raised no QA-1 findings is not re-run
+- Fix verification is separate from sprint QA rounds 1–2: dispatch only the
+  agent necessary to confirm the specific fix, normally the filing reviewer.
+  Lock it to the original finding and acceptance criterion. No automatic
+  req-qa/arch-qa/rust-qa or screening panel, no full sweep, and no new findings.
+  The verifier runs necessary focused checks and confirms original-finding
+  closure. Required CI remains a separate merge requirement.
 - Plan review QA-1: `plan-scope-reviewer`, `req-qa`, `arch-qa`,
   `ruthless-boundary-qa`, `rust-best-practices-agent`,
   `rust-service-hardening-agent`, and `ceremony-qa`. `plan-scope-reviewer`
@@ -38,14 +39,7 @@ their own prompts.
   `plan-scope-reviewer-assignment.json.j2` (codex-orchestration for a plan in
   markdown, atm-bd-orchestration for a plan in beads) over the same plan
   files as `req-qa` and `arch-qa`, plus the phase plan or root
-- Plan review QA-2 and later: `req-qa` and `arch-qa` scoped to the
-  dispatched findings, and `plan-scope-reviewer` in full again every round:
-  its checks are recomputed from the graph, not carried, so a fix round that
-  lengthens the critical path, adds an ordering rule or moves a shared file
-  into a layer sprint fails the round even when every carried finding is
-  fixed. Re-dispatch `ruthless-boundary-qa`, `rust-best-practices-agent`,
-  `rust-service-hardening-agent`, or `ceremony-qa` only to verify its own
-  QA-1 findings, verification-locked to those ids. Plan QA is capped at 3
+- Plan review QA-2 and later: dispatch only each carried finding's filing reviewer, locked to that finding id and its original acceptance criterion; no other reviewer, no screen, no new findings. Plan QA is capped at 3
   rounds (`plan_qa_cycle_limit`); a round that leaves only minor findings
   reports `PASS — minor fixes required, no re-QA`
 - Plan review rulings: the remedy for shared types, shared files or a shared

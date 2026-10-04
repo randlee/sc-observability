@@ -81,8 +81,11 @@ class SprintReportTests(unittest.TestCase):
             subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
             helper_dir = repo / '.claude/skills/atm-beads/scripts'
             helper_dir.mkdir(parents=True)
-            for name in ('phase-index-path', 'sprint_index_common.py'):
+            for name in ('phase-index-path', 'sprint_index_common.py', 'repo_config.py'):
                 shutil.copy2(checkout / '.claude/skills/atm-beads/scripts' / name, helper_dir / name)
+            config = repo / '.claude/project/atm-bd-orchestration.yaml'
+            config.parent.mkdir(parents=True)
+            config.write_text('plans_dir: docs/plans\n')
             path = repo / 'docs/plans/phase-x/sprints.jsonl'
             path.parent.mkdir(parents=True)
             path.write_text('["x-1", "gate-1", []]\n')
@@ -226,6 +229,13 @@ class SprintReportTests(unittest.TestCase):
             report.select_pr(prs, 'sprint/d-13-logging-contract')['number'], 234
         )
         self.assertIsNone(report.select_pr(prs, None))
+
+    def test_integration_target_is_the_pr_base_not_a_fixed_branch(self):
+        pr = {'number': 7, 'state': 'OPEN', 'headRefName': 'integrate/phase-x', 'baseRefName': 'main',
+              'statusCheckRollup': []}
+        self.assertTrue(report.integration_detail('integrate/phase-x', pr).startswith('Integration: integrate/phase-x → main\n'))
+        self.assertTrue(report.integration_detail('integrate/phase-x', None).startswith('Integration: integrate/phase-x\n'))
+        self.assertNotIn('develop', report.integration_detail('integrate/phase-x', None))
 
     def test_running_check_is_not_green(self):
         self.assertEqual(report.check_icon({'statusCheckRollup': [{'status': 'IN_PROGRESS', 'conclusion': ''}]}), '🌀')

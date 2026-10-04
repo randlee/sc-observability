@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "atm-beads/scripts"
 from sprint_index_common import load_phase_plan, run_json, index_bead_pairs, phase_id
 from sprint_qa import metadata, choose_round, qa_verdict, qa_icon, findings_summary
 from plan_contract import DIFFICULTY_MODELS
+import repo_config
 
 
 def edge_id(edge: dict[str, Any]) -> str:
@@ -184,6 +185,13 @@ def select_pr(prs: list[dict[str, Any]], head: str | None) -> dict[str, Any] | N
     ) if matches else None
 
 
+def integration_detail(branch: str | None, pr: dict[str, Any] | None) -> str:
+    """The detailed report's integration block; the target is the integration PR's own base, never assumed."""
+    target = f" → {pr['baseRefName']}" if pr and pr.get("baseRefName") else ""
+    cell = f"#{pr['number']}" if pr else "—"
+    return f"Integration: {branch or 'integration'}{target}\nCI: {check_icon(pr)}\nPR: {cell}"
+
+
 def index_path(repo: Path, root: str) -> Path:
     helper = repo / ".claude/skills/atm-beads/scripts/phase-index-path"
     return Path(subprocess.check_output([str(helper), "--root", root], text=True).strip())
@@ -195,7 +203,7 @@ def load_index(repo: Path, explicit: Path | None, root: str | None) -> tuple[Pat
     elif root:
         path = index_path(repo, root)
     else:
-        candidates = sorted((repo / "docs" / "plans").glob("phase-*/sprints.jsonl"))
+        candidates = sorted((repo / repo_config.load(repo)["plans_dir"]).glob("phase-*/sprints.jsonl"))
         if len(candidates) != 1:
             raise RuntimeError("pass --root or --index; no unique canonical phase plan found")
         path = candidates[0]
@@ -427,10 +435,7 @@ def main() -> int:
         f"| **{integration_branch or 'integration'}** | | | | | {check_icon(integration_pr)} | "
         f"{integration_pr_cell} |"
     )
-    detailed_integration = (
-        f"Integration: {integration_branch or 'integration'} → develop\n"
-        f"CI: {check_icon(integration_pr)}\nPR: {integration_pr_cell}"
-    )
+    detailed_integration = integration_detail(integration_branch, integration_pr)
     variables = {
         "mode": "detailed" if args.detailed else "table",
         "sprint_rows": "\n\n".join(detailed_rows) if args.detailed else "\n".join(table_rows),

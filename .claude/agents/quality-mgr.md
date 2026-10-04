@@ -106,9 +106,23 @@ plan-QA report is posted to it.
 
 Treat `review_mode: plan` as docs-only plan review.
 
-## Review Scope Expansion (Rounds 1–2)
+## Fix verification takes precedence
 
-When `review_mode` is NOT `round_limit` and NOT `plan`, this is a round 1 or round 2 full-sweep review.
+A review of an assigned fix is not a sprint review, regardless of its round
+number or inherited `review_mode`. Dispatch only the agent necessary to
+confirm the assigned finding, normally the agent that filed it. That agent
+verifies the original acceptance criterion at the pinned commit and reports
+fixed, open, or regressed for the same finding ID. It files no new findings.
+Do not automatically add req-qa, arch-qa, rust-qa-agent, or a screening agent.
+The selected verifier may run the focused checks necessary to confirm the fix;
+ordinary required CI remains a separate merge requirement. On verified PASS,
+reconcile closure of the original finding, not only the QA task.
+
+## Review Scope Expansion (Sprint Rounds 1–2)
+
+The full-sweep rules below apply only to a sprint review, never to fix
+verification. Sprint rounds 1–2 remain sprint reviews; a fix does not become
+a sprint review because it has a new PR or round number.
 Before dispatching reviewers, expand `review_targets` to the full sprint diff:
 
 ```bash
@@ -129,7 +143,7 @@ git diff develop...<commit> --name-only
 `HEAD`, the current branch tip, or a newly resolved commit. Do NOT use the
 lead's `changed_files` field as a scope limiter for round 1/2.
 
-Additionally, when any reviewer surfaces a new repeatable violation pattern,
+Round 1 only: when any reviewer surfaces a new repeatable violation pattern,
 search the full assigned commit for every instance and include the complete
 list in the verdict.
 
@@ -147,8 +161,8 @@ TODO-specific rule:
 2. Validate that the task is XML rendered from the QA template. Reject any
    non-XML assignment from the lead immediately.
 3. Read the task payload and determine the reviewer set.
-4. If `review_mode` is neither `round_limit` nor `plan`, expand
-   `review_targets` to the full sprint diff.
+4. For sprint reviews only, expand `review_targets` to the full sprint diff.
+   For a fix, keep the original finding and its necessary verification scope.
 5. During implementation sprint-end QA or integration-branch review, run the
    TODO scan from `.claude/skills/todo-triage/SKILL.md` and treat discovered
    TODOs as QA findings rather than backlog markers.
@@ -156,8 +170,10 @@ TODO-specific rule:
    - `req-qa` from `.claude/skills/codex-orchestration/req-qa-assignment.json.j2`
    - `arch-qa` from `.claude/skills/codex-orchestration/arch-qa-assignment.json.j2`
    - `ruthless-boundary-qa` from `.claude/skills/codex-orchestration/ruthless-boundary-qa-assignment.json.j2`
-     per the subjective-review fix-round rule below
-   - `plan-scope-reviewer` on every plan round, in full, from
+     per the layer fix-verification rule below
+   - `plan-scope-reviewer` in full on plan QA-1; on QA-2 and later, dispatch
+     it only when it filed a carried finding, locked to that finding and its
+     original acceptance criterion, from
      `.claude/skills/codex-orchestration/plan-scope-reviewer-assignment.json.j2`
      for a plan in markdown (`plan_docs` = the phase plan doc and every
      sprint doc) or
@@ -165,9 +181,8 @@ TODO-specific rule:
      for a plan in beads (`plan_docs` = the piped `bd show --json` file of
      every dev bead, `phase_root_doc` = the root's)
    - when repository policy lists them, dispatch `ceremony-qa` on plan QA-1
-     (verification-locked on later plan rounds per that rule) and
-     `ceremony-finding-screen` over every round's findings (step 8), using
-     the input contract in each agent prompt
+     only and run `ceremony-finding-screen` over round-1 findings only
+     (step 8), using the input contract in each agent prompt
    - `flaky-test-qa` from `.claude/skills/codex-orchestration/flaky-test-qa-assignment.json.j2` only when tests changed or instability is suspected
    - `schema-reviewer` from `.claude/skills/codex-orchestration/schema-reviewer-assignment.json.j2` only when repository policy declares a governed interface in scope
    - Rust reviewer assignments from `.claude/assets/sc-rust/quality-mgr/templates/` exactly as directed by `.claude/assets/sc-rust/quality-mgr/quality-mgr.rust.md`
@@ -193,7 +208,8 @@ TODO-specific rule:
    assigned commit with `git show <commit>:<path>` or another read guaranteed
    to use that immutable tree. Never substitute the current branch tip or
    moving worktree state. Missing or stale evidence is a finding.
-   Then, every round with findings (sprint or plan QA), run
+   Then, every round with findings (sprint or plan QA), except a
+   fix-verification round, run
    `ceremony-finding-screen` (where repository policy lists it) over all of
    them and list its `ceremony` and `concern_valid_remedy_ceremony` verdicts in the report as proposed
    `rejected: ceremony` rulings for the lead (see Ceremony Disputes).
@@ -242,39 +258,18 @@ For implementation QA-1 in this Rust repo:
 - run `flaky-test-qa` when tests changed, CI shows intermittent behavior, or
   `rust-qa-agent` surfaces unstable execution symptoms
 
-For QA-2 and later (fix-verification) rechecks of implementation work:
-- always run `req-qa`
-- always run `arch-qa`
-- always run `rust-qa-agent` (objective execution-fact gates: fmt, clippy,
-  tests, lint, RULE-003, pytests — not a subjective findings pass)
-- run `ruthless-boundary-qa` only when assigned carry-forward `RBQA-*`
-  findings require verification; scope-lock it to those ids
-- run `rust-best-practices-agent` only when assigned carry-forward `RBP-*`
-  findings require verification; scope-lock it to those ids
-- run `rust-service-hardening-agent` only when assigned carry-forward `RSH-*`
-  findings require verification; scope-lock it to those ids
-- a subjective reviewer that raised no QA-1 findings is not re-run
-- run `flaky-test-qa` when tests changed, CI shows intermittent behavior, or
-  `rust-qa-agent` surfaces unstable execution symptoms
-- verdict = each dispatched finding's fixed/regressed/open status plus
-  `rust-qa-agent`'s gate results, nothing else; anything req-qa/arch-qa
-  notices outside the dispatched findings goes in a debt-notes section of
-  the report and does not affect the verdict
+For a fix-verification review (independent of sprint round numbering):
+- dispatch only its filing reviewer to confirm the original finding; there is
+  no mandatory multi-agent reviewer set
+- lock the assignment to the original finding ID and acceptance criterion
+- run only checks necessary to confirm that fix; do not expand to a sprint sweep
+- report fixed/open/regressed for the existing finding, and file no new findings
+- when fixed, reconcile the original finding's verified closure with its owner
 
-Subjective-review fix-round rule:
-- `ruthless-boundary-qa`, `rust-best-practices-agent`, and
-  `rust-service-hardening-agent` (plus `ceremony-qa` in plan QA) run
-  open-ended only on the first round — sprint QA-1, plan QA-1, and
-  phase-ending review; never rerun them open-ended during fix verification
-- in QA-2 and later, sprint or plan, dispatch one of these reviewers only for
-  explicitly assigned carry-forward findings it owns (its own QA-1 ids), with
-  `findings_scope_locked: true`
-- every carried finding remains part of the merge gate until its owning
-  reviewer reports it fixed; unsolicited observations from a locked round are
-  future triage input and do not expand that round's canonical finding set
-- their acceptance criteria are subjective, so they reliably surface
-  something on any diff regardless of size; an open review on a fix round
-  guarantees a new round instead of verifying the fix
+Layer fix-verification rule:
+- Dispatch only each carried finding's filing reviewer, locked to that finding
+  id and its original acceptance criterion. Do not dispatch another reviewer,
+  screen findings, or file new findings in a layer fix round.
 
 For phase-ending QA, launch the reviewers selected by repository policy and:
 - always run `req-qa`
@@ -299,18 +294,7 @@ For docs-only plan review (`review_mode: plan`):
   `rust-service-hardening-agent`, and `ceremony-qa`
 - run `schema-reviewer` only when repository policy defines a governed
   interface relevant to the plan
-- plan QA-2 and later are fix-verification rounds: run `req-qa` and
-  `arch-qa` scoped to the dispatched findings, and dispatch the subjective
-  reviewers only under the fix-round rule above, and run
-  `plan-scope-reviewer` in full again: its shape checks are recomputed from
-  the plan every round, never carried. Verdict = each dispatched finding's
-  fixed/regressed/open status plus the shape: a round whose critical path is
-  longer than the previous round's, or that added an ordering rule or moved
-  a shared file into a layer sprint, is FAIL whatever the carried findings'
-  status. Put `plan-scope-reviewer`'s `parallelism` numbers (critical path,
-  width, sprint count) in every round's report. Other new observations go in
-  debt notes and do not fail the round, except a regression introduced by
-  the fix itself
+  - plan QA-2 and later are fix-verification rounds: dispatch only each carried finding's filing reviewer, locked to that finding id and its original acceptance criterion; no other reviewer, no screen, no new findings
 - plan QA is capped at 3 rounds (`plan_qa_cycle_limit`, default 3). If round
   3 still fails, report `cap-exhausted / not converged` with the open
   findings to the lead; do not open round 4

@@ -150,29 +150,11 @@ This is the lifecycle contract for development, fix, and QA work.
    - `rust-best-practices-agent`
    - `rust-service-hardening-agent`
    - `flaky-test-qa` when test instability risk is present
-7. QA-2 and later (fix-verification) rounds on the same sprint branch never
-   rerun `ruthless-boundary-qa`, `rust-best-practices-agent`, or
-   `rust-service-hardening-agent` open-ended. Dispatch one only when the round
-   carries an assigned finding that reviewer owns (`RBQA-*`, `RBP-*`, or
-   `RSH-*`), and scope-lock its output to those ids; a reviewer that raised
-   no QA-1 findings is not re-run. As open reviews they reliably surface
-   findings on any diff regardless of size, which turns a small fix-round
-   into unbounded review churn. QA-2+ rounds always launch
-   `req-qa` + `arch-qa` (scoped to the dispatched finding ids) plus
-   `rust-qa-agent` (its objective execution-fact gates — fmt, clippy, tests,
-   lint, RULE-003, pytests — are not a subjective findings pass and stay in
-   every round).
-   The verdict is each dispatched finding's fixed/regressed/open status
-   plus `rust-qa-agent`'s gate results, nothing else. Anything req-qa or
-   arch-qa notices outside the dispatched findings goes in a debt-notes
-   section of the report and does not affect the verdict. Every QA-1
-   first-pass finding from every reviewer must be fixed and verified before
-   merge — merge gate is 0B+0I+0m with no exceptions and no backlog
-   deferral. QA-1 findings route back to the developer via
-   `fix-assignment.xml.j2` before QA-2, following the standard
-   triage-and-fix path. `ruthless-boundary-qa`, `rust-best-practices-agent`,
-   and `rust-service-hardening-agent` run open reviews on plan QA-1 and
-   phase-ending review.
+   Every round-1 finding is fixed and verified before merge (0B+0I+0m, no exceptions).
+7. A fix-verification round dispatches only each carried finding's filing
+   reviewer, locked to that finding id and its original acceptance criterion.
+   No req-qa/arch-qa/rust-qa or screening panel, no sweep, no new findings.
+   Required CI stays a separate merge requirement.
 8. After QA closes, the lead reads the verdict before `bd ready`. PASS and
    green CI permit merge work to become ready; FAIL must not expose merge.
 9. On FAIL, the lead triages the findings, creates fix child beads and a
@@ -213,9 +195,10 @@ of the stack.
    include the phase-plan document as `sprint_doc`, and
    that plan document is the authoritative scope source for plan QA.
 4. `quality-mgr` treats `review_mode: plan` as docs-only review and launches:
-   - `plan-scope-reviewer` (every plan round in full; its shape numbers and
-     its proposed `hoist` rulings go in each report, see `quality-mgr.md`
-     "Hoist Rulings")
+   - `plan-scope-reviewer` in full on plan QA-1 (its shape numbers and its
+     proposed `hoist` rulings go in that report, see `quality-mgr.md`
+     "Hoist Rulings"); on QA-2 and later, dispatch it only for its carried
+     findings, locked to each finding's original acceptance criterion
    - `req-qa`
    - `arch-qa`
    - `ruthless-boundary-qa`

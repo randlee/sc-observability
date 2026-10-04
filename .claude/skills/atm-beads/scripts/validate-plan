@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Validate a phase plan in beads against its sprints.jsonl. Four checks, nothing else:
-#   1. dependencies: for every tuple [Y, sanity-Y, [X, ...]], sprint Y has a blocks edge to sanity-X;
+# Validate a phase plan in beads against its sprints.jsonl. These checks, nothing else:
+#   1. dependencies: for every tuple [Y, sanity-Y, [X, ...]], sprint Y has a blocks edge to sanity-X,
+#      and every prerequisite X is itself a sprint of sprints.jsonl;
 #   2. every sprint bead validates against SprintBead (scripts/bead_schema.py, published as schemas/sprint-bead.schema.json);
-#   3. every sanity bead validates against SanityBead, and its metadata.dev_bead is its sprint;
-#   4. bd doctor reports no error;
+#   3. every sanity bead validates against SanityBead, its metadata.dev_bead is its sprint, and it has a blocks edge to it;
+#   4. bd doctor reports no error (skipped with --no-doctor);
 #   5. only epics live at the top level: no open bead created since the phase root has no parent.
+# Every sprint and sanity bead named in sprints.jsonl must exist. This header is the one list of
+# what validate-plan checks; the skill docs point here.
 #
-#   validate-plan --root <id> [--index <sprints.jsonl>]                 live beads
+#   validate-plan --root <id> [--index <sprints.jsonl>]                       live beads
 #   validate-plan --file <plan.jsonl> --root <id> [--index <sprints.jsonl>]   rendered plan, before `bd import`
 #   validate-plan --beads <beads.json> --root <id> --index <sprints.jsonl> --no-doctor   test input
 #
-# The plan is read from origin/develop:docs/plans/phase-<p>/sprints.jsonl unless --index names a file.
+# Without --index the plan is read from origin/<integration_branch>:<plans_dir>/phase-<p>/sprints.jsonl,
+# where integration_branch is the phase root bead's metadata.integration_branch and plans_dir comes from
+# the repository configuration (atm-beads/scripts/repo_config.py). The bead prefix is taken from the root id.
 # Prints one "<bead>: <problem>" line per problem. Exit 0 valid, 5 problems, 2 could not run.
 # Report problems to the lead; never edit this script, the plan or the graph to make it pass.
 set -uo pipefail
@@ -35,13 +40,19 @@ done
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
-# the plan
+# the plan, from the root bead's integration branch
 if [ -z "$index" ]; then
+  bd show "$root" --json > "$scratch/root.json" 2>"$scratch/bd.err" \
+    || { echo "validate-plan: bd show $root failed: $(cat "$scratch/bd.err")" >&2; exit 2; }
+  branch=$(jq -r '.[0].metadata.integration_branch // ""' "$scratch/root.json") \
+    || { echo "validate-plan: bd show $root returned no bead JSON" >&2; exit 2; }
+  [ -n "$branch" ] || { echo "validate-plan: $root has no metadata.integration_branch; set it on the root bead or pass --index" >&2; exit 2; }
   path=$("$here/phase-index-path" --root "$root") || { echo "validate-plan: no phase for $root" >&2; exit 2; }
   relative=${path#"$(git rev-parse --show-toplevel)"/}
-  git fetch -q --no-tags origin develop || { echo "validate-plan: could not fetch origin/develop" >&2; exit 2; }
-  git show "origin/develop:$relative" > "$scratch/sprints.jsonl" 2>/dev/null \
-    || { echo "$root: origin/develop:$relative is missing; merge the plan PR into develop"; exit 5; }
+  git fetch -q --no-tags origin "refs/heads/$branch:refs/remotes/origin/$branch" 2>"$scratch/git.err" \
+    || { echo "validate-plan: could not fetch origin/$branch: $(cat "$scratch/git.err")" >&2; exit 2; }
+  git show "origin/$branch:$relative" > "$scratch/sprints.jsonl" 2>/dev/null \
+    || { echo "$root: origin/$branch:$relative is missing; push the plan to $branch"; exit 5; }
   index="$scratch/sprints.jsonl"
 fi
 jq -e -s 'all(type == "array" and length == 3)' "$index" >/dev/null 2>&1 \
@@ -96,8 +107,14 @@ problems=$(printf '%s\n%s' "$problems" "$roots" | sed '/^$/d')
 
 # 4. bd doctor
 if [ "$doctor" -eq 1 ]; then
-  report=$(bd doctor --json 2>/dev/null)
-  echo "$report" | jq -e .checks >/dev/null 2>&1 || { echo "validate-plan: bd doctor produced no JSON" >&2; exit 2; }
+  # doctor's stderr is kept: in an unsupported mode (proxied server) it is the only explanation
+  report=$(bd doctor --json 2>"$scratch/doctor.err")
+  if ! echo "$report" | jq -e .checks >/dev/null 2>&1; then
+    echo "validate-plan: bd doctor produced no JSON; its stderr follows" >&2
+    cat "$scratch/doctor.err" >&2
+    exit 2
+  fi
+  if [ -s "$scratch/doctor.err" ]; then sed 's/^/bd doctor (stderr): /' "$scratch/doctor.err" >&2; fi
   errors=$(echo "$report" | jq -r '.checks[] | select(.status == "error") | "bd doctor: \(.name): \(.message // "")"')
   problems=$(printf '%s\n%s' "$problems" "$errors" | sed '/^$/d')
 fi

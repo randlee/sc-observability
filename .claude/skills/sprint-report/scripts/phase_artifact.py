@@ -3,6 +3,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+import repo_config
+
 
 def git(repo, *args):
     result = subprocess.run(['git', *args], cwd=repo, text=True, capture_output=True)
@@ -24,7 +26,7 @@ def publish_artifact(repo, branch, phase, html):
     ref = f'refs/remotes/origin/{branch}'
     git(repo, 'fetch', '--no-tags', 'origin', f'refs/heads/{branch}:{ref}')
     head = git(repo, 'rev-parse', ref)
-    relative = Path('docs/plans') / f'phase-{phase}'
+    relative = Path(repo_config.load(Path(repo))['plans_dir']) / f'phase-{phase}'
     html_path = relative / f'phase-{phase}-dag.html'
     with tempfile.TemporaryDirectory(prefix='sprint-report-artifact-') as directory:
         checkout = Path(directory) / 'checkout'

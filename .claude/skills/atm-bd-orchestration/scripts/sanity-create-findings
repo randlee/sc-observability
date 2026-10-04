@@ -3,7 +3,7 @@
 
 Usage:
   sanity-create-findings --task <sanity-bead> --bead <checked-bead> \
-    --vars <sanity-vars.json> --reviewer <sc-sanity-llm|sc-sanity-jev> \
+    --vars <sanity-vars.json> --reviewer <sc-sanity-llm|sc-sanity-jev|sc-sanity-selected> \
     [--actor <identity>]
 
 The vars file is the JSON emitted by sanity-merge. On success, stdout is a
@@ -130,16 +130,16 @@ def main() -> int:
     parser.add_argument("--task", required=True)
     parser.add_argument("--bead", required=True)
     parser.add_argument("--vars", required=True, type=Path)
-    parser.add_argument("--reviewer", required=True, choices=("sc-sanity-llm", "sc-sanity-jev"))
+    parser.add_argument("--reviewer", required=True, choices=("sc-sanity-llm", "sc-sanity-jev", "sc-sanity-selected"))
     parser.add_argument("--actor", default=os.environ.get("ATM_IDENTITY", ""))
     args = parser.parse_args()
     try:
         report = load_vars(args.vars, args.task, args.bead)
         if report.get("run_id"):
-            if report.get("reviewer") != report.get("operational_reviewer"):
-                raise HandoffError("comparison-only reviewer cannot create finding children")
-            if args.reviewer != f"sc-{report.get('reviewer')}":
-                raise HandoffError("reviewer does not match report provenance")
+            if (report.get("reviewer") != "sanity-selected"
+                    or report.get("operational_reviewer") != "sanity-selected"
+                    or args.reviewer != "sc-sanity-selected"):
+                raise HandoffError("run reports may create children only from sanity-selected provenance")
         findings = undone_findings(report["findings"])
         selectors = {finding_key(finding): finding for finding in findings}
         if len(selectors) != len(findings):
@@ -186,10 +186,13 @@ def main() -> int:
                 priority = child_priority(severity, parent["priority"])
             except KeyError as exc:
                 raise HandoffError(f"invalid finding severity: {severity}") from exc
+            finding_reviewer = finding.get("reviewer")
+            if not isinstance(finding_reviewer, str) or not finding_reviewer:
+                raise HandoffError(f"finding lacks selected reviewer: {finding!r}")
             provenance = {
                 "phase": phase, "sprint": sprint, "stack": stack,
                 "found_on_layer": layer,
-                "found_at_commit": report["commit"], "reviewer": args.reviewer,
+                "found_at_commit": report["commit"], "reviewer": finding_reviewer,
                 "finding_ref": ref, "sprint_bead": sprint_bead, "severity": severity,
                 "difficulty": difficulty,
             }
