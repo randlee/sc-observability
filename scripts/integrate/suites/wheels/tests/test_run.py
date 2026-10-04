@@ -1,8 +1,10 @@
 """Unit tests for the bounded wheels integration runner."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
@@ -18,6 +20,24 @@ class WheelsRunnerTests(unittest.TestCase):
     def test_prepend_path_avoids_empty_loader_entries(self) -> None:
         self.assertEqual(run.prepend_path(None, "/python"), "/python")
         self.assertEqual(run.prepend_path("/existing", "/python"), f"/python{os.pathsep}/existing")
+
+    def test_run_checked_retains_timeout_stdout_and_stderr(self) -> None:
+        timeout = run.subprocess.TimeoutExpired(["probe"], 7, output="timed stdout", stderr="timed stderr")
+        with mock.patch.object(run.subprocess, "run", side_effect=timeout):
+            with self.assertRaises(run.SuiteError) as raised:
+                run.run_checked(["probe"], cwd=Path("/tmp"), timeout=7)
+        self.assertIn("timed out after 7s", str(raised.exception))
+        self.assertIn("timed stdout", str(raised.exception))
+        self.assertIn("timed stderr", str(raised.exception))
+
+    def test_run_checked_retains_nonzero_stdout_and_stderr(self) -> None:
+        failure = run.subprocess.CalledProcessError(23, ["probe"], output="failed stdout", stderr="failed stderr")
+        with mock.patch.object(run.subprocess, "run", side_effect=failure):
+            with self.assertRaises(run.SuiteError) as raised:
+                run.run_checked(["probe"], cwd=Path("/tmp"))
+        self.assertIn("failed (23)", str(raised.exception))
+        self.assertIn("failed stdout", str(raised.exception))
+        self.assertIn("failed stderr", str(raised.exception))
 
     @mock.patch.object(run.subprocess, "check_output")
     def test_windows_embedded_environment_exposes_selected_dll_directory(self, check_output: mock.Mock) -> None:
@@ -93,6 +113,41 @@ class WheelsRunnerTests(unittest.TestCase):
             checked.call_args.kwargs["environment"]["SC_OBSERVABILITY_ATTACHED_PACKAGE"],
             str(package),
         )
+
+    def test_run_composes_result_and_attaches_the_venv_interpreter(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            wheel = Path(temporary) / "candidate.whl"
+            wheel.write_bytes(b"candidate wheel")
+            installed = {
+                "python": "/tmp/e5-venv/bin/python",
+                "package": "/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/__init__.py",
+            }
+            package = Path(installed["package"])
+            with (
+                mock.patch.object(run, "verify_source_sha"),
+                mock.patch.object(run, "build_wheel", return_value=wheel),
+                mock.patch.object(run, "install_and_probe", return_value=installed),
+                mock.patch.object(run, "installed_package_origin", return_value=package),
+                mock.patch.object(run, "run_embedded_host") as embedded_host,
+            ):
+                result = run.run("a" * 40, output)
+            report = json.loads((output / "result.json").read_text(encoding="utf-8"))
+        embedded_host.assert_called_once_with(Path(installed["python"]), package)
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["wheel"]["path"], str(wheel))
+        self.assertEqual(result["checks"]["installed_telemetry_lifecycle"], "passed")
+        self.assertEqual(result["installed_artifacts"], installed)
+        self.assertEqual(report, result)
+
+    def test_main_writes_failure_report_and_returns_one_for_suite_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            with mock.patch.object(run, "run", side_effect=run.SuiteError("complete failure context")):
+                exit_code = run.main(["--source-sha", "a" * 40, "--output-dir", str(output)])
+            report = (output / "failure-report.txt").read_text(encoding="utf-8")
+        self.assertEqual(exit_code, 1)
+        self.assertIn("SuiteError: complete failure context", report)
 
 
 if __name__ == "__main__":
