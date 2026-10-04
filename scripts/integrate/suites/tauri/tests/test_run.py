@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -45,6 +46,18 @@ class TauriRunnerTests(unittest.TestCase):
              "scripts/ci/validate_typescript_bindings.sh", "--platform"],
             tauri_runner.qualification_command("Windows"),
         )
+
+    def test_failed_qualification_retains_helper_evidence_before_reraising(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = root / "target" / "tauri-qualification"
+            evidence.mkdir(parents=True)
+            (evidence / "windows-supervisor.json").write_text('{"exit": 1}\n')
+            output = root / "output"
+            with patch.object(tauri_runner, "command", side_effect=subprocess.CalledProcessError(1, ["proof"])):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    tauri_runner.run_qualification("Windows", {}, evidence, output)
+            self.assertEqual('{"exit": 1}\n', (output / "qualification" / "windows-supervisor.json").read_text())
 
     def test_artifacts_are_immutable_and_tied_to_selected_source(self):
         sha = "b" * 40

@@ -94,6 +94,25 @@ def qualification_command(name: str) -> list[str]:
     return base
 
 
+def retain_qualification_evidence(evidence: Path, output_dir: Path) -> None:
+    """Copy helper diagnostics before a failed qualification escapes the runner."""
+    if evidence.is_dir():
+        shutil.copytree(evidence, output_dir / "qualification", dirs_exist_ok=True)
+
+
+def run_qualification(name: str, env: dict[str, str], evidence: Path, output_dir: Path) -> None:
+    """Run the helper and retain its finalizer-owned evidence on every outcome.
+
+    The platform wrappers synchronously own their child process cleanup (notably
+    the Windows proof supervisor); this outer finally preserves their cleanup
+    report and diagnostics even when the helper exits non-zero.
+    """
+    try:
+        command(qualification_command(name), cwd=ROOT, env=env)
+    finally:
+        retain_qualification_evidence(evidence, output_dir)
+
+
 def run(source_sha: str, output_dir: Path) -> None:
     require_ci()
     verify_source(source_sha)
@@ -111,10 +130,9 @@ def run(source_sha: str, output_dir: Path) -> None:
     })
     evidence = ROOT / "target" / "tauri-qualification"
     shutil.rmtree(evidence, ignore_errors=True)
-    command(qualification_command(name), cwd=ROOT, env=env)
+    run_qualification(name, env, evidence, output_dir)
     if not evidence.is_dir():
         raise RuntimeError("Tauri qualification did not produce retained evidence")
-    shutil.copytree(evidence, output_dir / "qualification", dirs_exist_ok=True)
     (output_dir / "runner-report.json").write_text(json.dumps({
         "status": "passed",
         "source_commit": source_sha,
