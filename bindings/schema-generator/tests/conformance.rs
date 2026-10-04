@@ -1,8 +1,147 @@
 use sc_observability_dto::*;
-use serde_json::Value;
+use serde_json::{Value, json};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 fn roundtrip<T: serde::de::DeserializeOwned + serde::Serialize>(v: Value) -> Value {
     serde_json::to_value(serde_json::from_value::<T>(v).expect("Serde accepts schema fixture"))
         .unwrap()
+}
+
+fn selected_v1_path(filename: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../schema")
+        .join(filename)
+}
+
+fn temporary_contract_directory(name: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("current time")
+        .as_nanos();
+    let directory = std::env::temp_dir().join(format!(
+        "sc-observability-schema-{name}-{}-{nonce}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&directory).expect("create temporary contract directory");
+    directory
+}
+
+fn generator_check(schema: &Path, errors: &Path) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_sc-observability-schema"))
+        .args([
+            "--output",
+            schema.to_str().expect("schema path is UTF-8"),
+            "--errors-output",
+            errors.to_str().expect("error catalogue path is UTF-8"),
+            "--check",
+        ])
+        .output()
+        .expect("run schema generator")
+}
+
+#[test]
+fn selected_v1_contracts_match_current_dto_and_error_definitions() {
+    let output = generator_check(
+        &selected_v1_path("v1.json"),
+        &selected_v1_path("errors-v1.json"),
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn selected_v1_contract_mismatches_name_contract_version_and_changed_field() {
+    let directory = temporary_contract_directory("selected-v1-mismatch");
+    let schema = directory.join("v1.json");
+    let errors = directory.join("errors-v1.json");
+    fs::copy(selected_v1_path("v1.json"), &schema).expect("copy selected schema");
+    fs::copy(selected_v1_path("errors-v1.json"), &errors).expect("copy selected errors");
+
+    let mut changed: Value = serde_json::from_slice(&fs::read(&schema).expect("read schema"))
+        .expect("selected schema is JSON");
+    changed["x-sc-bindings"]["schema_version"] = json!(2);
+    let mut bytes = serde_json::to_vec_pretty(&changed).expect("serialize changed schema");
+    bytes.push(b'\n');
+    fs::write(&schema, &bytes).expect("write changed schema");
+
+    let output = generator_check(&schema, &errors);
+    assert!(
+        !output.status.success(),
+        "changed selected contract must fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("binding schema v1"));
+    assert!(stderr.contains("/x-sc-bindings/schema_version"));
+    assert!(stderr.contains("new versioned snapshot"));
+    assert_eq!(fs::read(&schema).expect("read changed schema"), bytes);
+
+    fs::remove_dir_all(directory).expect("remove temporary contract directory");
+}
+
+#[test]
+fn selected_v1_schema_missing_field_names_contract_version_and_field() {
+    let directory = temporary_contract_directory("selected-v1-missing-field");
+    let schema = directory.join("v1.json");
+    let errors = directory.join("errors-v1.json");
+    fs::copy(selected_v1_path("v1.json"), &schema).expect("copy selected schema");
+    fs::copy(selected_v1_path("errors-v1.json"), &errors).expect("copy selected errors");
+
+    let mut changed: Value = serde_json::from_slice(&fs::read(&schema).expect("read schema"))
+        .expect("selected schema is JSON");
+    changed["x-sc-bindings"]
+        .as_object_mut()
+        .expect("bindings metadata is an object")
+        .remove("defaults");
+    let mut bytes = serde_json::to_vec_pretty(&changed).expect("serialize changed schema");
+    bytes.push(b'\n');
+    fs::write(&schema, &bytes).expect("write changed schema");
+
+    let output = generator_check(&schema, &errors);
+    assert!(!output.status.success(), "missing selected field must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("binding schema v1"));
+    assert!(stderr.contains("/x-sc-bindings/defaults"));
+    assert!(stderr.contains("new versioned snapshot"));
+    assert_eq!(fs::read(&schema).expect("read changed schema"), bytes);
+
+    fs::remove_dir_all(directory).expect("remove temporary contract directory");
+}
+
+#[test]
+fn selected_v1_error_catalogue_mismatch_names_contract_version_and_changed_field() {
+    let directory = temporary_contract_directory("selected-v1-error-mismatch");
+    let schema = directory.join("v1.json");
+    let errors = directory.join("errors-v1.json");
+    fs::copy(selected_v1_path("v1.json"), &schema).expect("copy selected schema");
+    fs::copy(selected_v1_path("errors-v1.json"), &errors).expect("copy selected errors");
+
+    let mut changed: Value = serde_json::from_slice(&fs::read(&errors).expect("read errors"))
+        .expect("selected error catalogue is JSON");
+    changed[0]["code"] = json!("SC_OBSERVABILITY_BINDING_CHANGED");
+    let mut bytes = serde_json::to_vec_pretty(&changed).expect("serialize changed errors");
+    bytes.push(b'\n');
+    fs::write(&errors, &bytes).expect("write changed errors");
+
+    let output = generator_check(&schema, &errors);
+    assert!(
+        !output.status.success(),
+        "changed selected errors must fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("binding error catalogue v1"));
+    assert!(stderr.contains("/0/code"));
+    assert!(stderr.contains("new versioned snapshot"));
+    assert_eq!(fs::read(&errors).expect("read changed errors"), bytes);
+
+    fs::remove_dir_all(directory).expect("remove temporary contract directory");
 }
 #[test]
 fn every_registered_type_agrees_with_serde_and_frozen_expectations() {

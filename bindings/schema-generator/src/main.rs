@@ -12,7 +12,7 @@ use schemars::{
     generate::{SchemaGenerator, SchemaSettings},
 };
 use serde_json::{Map, Value, json};
-use std::{error::Error, path::Path};
+use std::{collections::BTreeSet, error::Error, path::Path};
 fn register<T: JsonSchema>(
     g: &mut SchemaGenerator,
     entries: &mut Map<String, Value>,
@@ -571,11 +571,22 @@ fn write_or_check(
     path: &Path,
     bytes: &[u8],
     check: bool,
+    contract_name: &str,
+    selected_version: u32,
     regeneration_command: &str,
 ) -> Result<(), Box<dyn Error>> {
     if check {
-        if std::fs::read(path)? != bytes {
-            return Err(generated_drift_error(path, regeneration_command).into());
+        let checked_in = std::fs::read(path)?;
+        if checked_in != bytes {
+            return Err(generated_drift_error(
+                path,
+                contract_name,
+                selected_version,
+                bytes,
+                &checked_in,
+                regeneration_command,
+            )
+            .into());
         }
     } else {
         if let Some(parent) = path.parent() {
@@ -586,10 +597,87 @@ fn write_or_check(
     Ok(())
 }
 
-fn generated_drift_error(path: &Path, regeneration_command: &str) -> String {
+fn changed_json_fields(expected: &Value, checked_in: &Value) -> Vec<String> {
+    const MAX_FIELDS: usize = 8;
+
+    fn escaped_segment(segment: &str) -> String {
+        segment.replace('~', "~0").replace('/', "~1")
+    }
+
+    fn collect(expected: &Value, checked_in: &Value, path: &str, fields: &mut Vec<String>) {
+        if fields.len() == MAX_FIELDS || expected == checked_in {
+            return;
+        }
+
+        match (expected, checked_in) {
+            (Value::Object(expected), Value::Object(checked_in)) => {
+                let keys: BTreeSet<_> = expected.keys().chain(checked_in.keys()).collect();
+                for key in keys {
+                    let child = format!("{path}/{}", escaped_segment(key));
+                    match (expected.get(key), checked_in.get(key)) {
+                        (Some(expected), Some(checked_in)) => {
+                            collect(expected, checked_in, &child, fields);
+                        }
+                        _ => fields.push(child),
+                    }
+                    if fields.len() == MAX_FIELDS {
+                        return;
+                    }
+                }
+            }
+            (Value::Array(expected), Value::Array(checked_in)) => {
+                for index in 0..expected.len().max(checked_in.len()) {
+                    let child = format!("{path}/{index}");
+                    match (expected.get(index), checked_in.get(index)) {
+                        (Some(expected), Some(checked_in)) => {
+                            collect(expected, checked_in, &child, fields);
+                        }
+                        _ => fields.push(child),
+                    }
+                    if fields.len() == MAX_FIELDS {
+                        return;
+                    }
+                }
+            }
+            _ => fields.push(if path.is_empty() {
+                "/".to_owned()
+            } else {
+                path.to_owned()
+            }),
+        }
+    }
+
+    let mut fields = Vec::new();
+    collect(expected, checked_in, "", &mut fields);
+    fields
+}
+
+fn generated_drift_error(
+    path: &Path,
+    contract_name: &str,
+    selected_version: u32,
+    expected: &[u8],
+    checked_in: &[u8],
+    regeneration_command: &str,
+) -> String {
+    let changed_fields = match (
+        serde_json::from_slice::<Value>(expected),
+        serde_json::from_slice::<Value>(checked_in),
+    ) {
+        (Ok(expected), Ok(checked_in)) => {
+            let fields = changed_json_fields(&expected, &checked_in);
+            if fields.is_empty() {
+                "non-semantic JSON formatting".to_owned()
+            } else {
+                fields.join(", ")
+            }
+        }
+        _ => "non-JSON content".to_owned(),
+    };
+
     format!(
-        "generated drift: {}; regenerate with `{regeneration_command}`",
-        path.display()
+        "generated drift: {contract_name} v{selected_version} at {}; changed fields: {changed_fields}. The selected v{selected_version} contract is immutable; an intentional contract change requires a new versioned snapshot rather than overwriting v{selected_version}. Regenerate the selected contract with `{regeneration_command}`",
+        path.display(),
     )
 }
 
@@ -635,12 +723,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         Path::new(&output),
         &canonical(&schema)?,
         check,
+        "binding schema",
+        constants::WIRE_SCHEMA_VERSION,
         &regeneration_command,
     )?;
     write_or_check(
         Path::new(&errors_output),
         &canonical(&schema["x-sc-error-registry"])?,
         check,
+        "binding error catalogue",
+        constants::WIRE_SCHEMA_VERSION,
         &regeneration_command,
     )?;
     Ok(())
@@ -692,9 +784,19 @@ mod tests {
         let output = "generated/schema.json";
         let errors_output = "generated/errors.json";
         let command = schema_regeneration_command(output, errors_output);
-        let error = generated_drift_error(Path::new(output), &command);
+        let error = generated_drift_error(
+            Path::new(output),
+            "binding schema",
+            1,
+            br#"{"schema_version":1}"#,
+            br#"{"schema_version":2}"#,
+            &command,
+        );
 
         assert!(error.contains(output));
+        assert!(error.contains("binding schema v1"));
+        assert!(error.contains("/schema_version"));
+        assert!(error.contains("new versioned snapshot"));
         assert!(error.contains(errors_output));
         assert!(error.contains("--output generated/schema.json"));
         assert!(error.contains("--errors-output generated/errors.json"));
@@ -713,8 +815,15 @@ mod tests {
         let path = directory.join("schema.json");
         std::fs::write(&path, crlf).unwrap();
 
-        let error = write_or_check(&path, canonical, true, "regenerate-schema")
-            .expect_err("CRLF must be drift");
+        let error = write_or_check(
+            &path,
+            canonical,
+            true,
+            "binding schema",
+            1,
+            "regenerate-schema",
+        )
+        .expect_err("CRLF must be drift");
         assert!(error.to_string().contains("generated drift"));
         assert_eq!(std::fs::read(&path).unwrap(), crlf);
 
