@@ -18,6 +18,14 @@ SPEC.loader.exec_module(runner)
 
 
 class CollectorRunnerTests(unittest.TestCase):
+    @staticmethod
+    def process(returncode: int, stdout: str | bytes, stderr: str | bytes) -> mock.Mock:
+        process = mock.Mock()
+        process.pid = 1234
+        process.returncode = returncode
+        process.communicate.return_value = (stdout, stderr)
+        return process
+
     def test_matrix_reuses_the_legacy_conformance_feature_coverage(self) -> None:
         names = [name for name, _ in runner.CASES]
         features = [command[command.index("--features") + 1] for _, command in runner.CASES]
@@ -28,6 +36,10 @@ class CollectorRunnerTests(unittest.TestCase):
         self.assertEqual(features, ["sync-http", "otlp-sdk", "otlp-sdk,sync-http", "otlp-sdk,sync-http"])
         self.assertTrue(all(command[-2:] == ["--", "--nocapture"] for _, command in runner.CASES))
 
+    def test_windows_cases_request_a_new_process_group(self) -> None:
+        with mock.patch.object(runner.os, "name", "nt"):
+            self.assertEqual(runner.case_process_options(), {"creationflags": 0x00000200})
+
     def test_verify_source_sha_rejects_non_commit_input_without_git(self) -> None:
         with mock.patch.object(runner.subprocess, "check_output") as check_output:
             with self.assertRaisesRegex(runner.SuiteError, "40-hex"):
@@ -36,8 +48,8 @@ class CollectorRunnerTests(unittest.TestCase):
 
     def test_run_case_retains_a_nonzero_result_without_raising(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            completed = subprocess.CompletedProcess(["cargo"], 7, "stdout\n", "stderr\n")
-            with mock.patch.object(runner.subprocess, "run", return_value=completed):
+            process = self.process(7, "stdout\n", "stderr\n")
+            with mock.patch.object(runner.subprocess, "Popen", return_value=process):
                 self.assertFalse(
                     runner.run_case("failed", ["cargo"], environment={}, output=Path(temporary))
                 )
@@ -51,19 +63,24 @@ class CollectorRunnerTests(unittest.TestCase):
             timeout = subprocess.TimeoutExpired(
                 ["cargo"], runner.CASE_TIMEOUT_SECONDS, output=b"partial\xff output\n", stderr=None
             )
-            completed = subprocess.CompletedProcess(["cargo"], 0, "later output\n", "")
+            timed_out = self.process(1, b"", b"")
+            timed_out.communicate.side_effect = [timeout, (b"", None)]
+            completed = self.process(0, "later output\n", "")
             with (
                 mock.patch.object(runner, "verify_source_sha"),
-                mock.patch.object(runner.subprocess, "run", side_effect=[timeout, completed, completed, completed]),
+                mock.patch.object(runner.os, "name", "posix"),
+                mock.patch.object(runner.os, "killpg") as killpg,
+                mock.patch.object(runner.subprocess, "Popen", side_effect=[timed_out, completed, completed, completed]),
             ):
                 self.assertFalse(runner.run("a" * 40, Path(temporary)))
+            killpg.assert_called_once_with(timed_out.pid, runner.signal.SIGKILL)
             output = Path(temporary)
             self.assertEqual(
                 (output / "sync-http-full-stack.log").read_text(),
                 "$ cargo test --locked -p sc-observability-otlp --test full_stack_integration --features sync-http -- --nocapture\n"
                 "partial\ufffd output\n"
                 f"timeout={runner.CASE_TIMEOUT_SECONDS}\n"
-                "cleanup=timeout-not-confirmed\n",
+                "cleanup=posix-process-group-killed\n",
             )
             self.assertIn("later output\nexit=0\n", (output / "canonical-ingress.log").read_text())
 

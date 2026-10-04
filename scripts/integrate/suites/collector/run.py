@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import traceback
@@ -74,37 +75,75 @@ def timeout_output_text(output: str | bytes | None) -> str:
     return output
 
 
+def timeout_output_text_after_cleanup(partial: str | bytes | None, drained: str | bytes | None) -> str:
+    """Keep timeout output without duplicating data returned by the final drain."""
+    partial_text = timeout_output_text(partial)
+    drained_text = timeout_output_text(drained)
+    if not drained_text:
+        return partial_text
+    if drained_text.startswith(partial_text):
+        return drained_text
+    return partial_text + drained_text
+
+
+def case_process_options() -> dict[str, object]:
+    """Place each cargo case in an owned process group or Windows job group."""
+    if os.name == "nt":
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)}
+    return {"start_new_session": True}
+
+
+def terminate_process_tree(process: subprocess.Popen[str]) -> str:
+    """Kill the entire case process tree after its watchdog expires."""
+    if os.name == "nt":
+        result = subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        return f"cleanup=windows-taskkill-exit={result.returncode}"
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return "cleanup=posix-process-group-already-exited"
+    return "cleanup=posix-process-group-killed"
+
+
 def run_case(name: str, command: list[str], *, environment: dict[str, str], output: Path) -> bool:
     """Run one bounded corpus entry and retain its entire cargo/test receipt."""
     log = output / f"{name}.log"
+    process = subprocess.Popen(
+        command,
+        cwd=ROOT,
+        env=environment,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        **case_process_options(),
+    )
     try:
-        completed = subprocess.run(
-            command,
-            cwd=ROOT,
-            env=environment,
-            text=True,
-            capture_output=True,
-            timeout=CASE_TIMEOUT_SECONDS,
-            check=False,
-        )
+        stdout, stderr = process.communicate(timeout=CASE_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired as error:
+        cleanup = terminate_process_tree(process)
+        drained_stdout, drained_stderr = process.communicate()
         with log.open("w", encoding="utf-8") as receipt:
             receipt.write("$ " + " ".join(command) + "\n")
-            receipt.write(timeout_output_text(error.stdout))
-            receipt.write(timeout_output_text(error.stderr))
+            receipt.write(timeout_output_text_after_cleanup(error.stdout, drained_stdout))
+            receipt.write(timeout_output_text_after_cleanup(error.stderr, drained_stderr))
             receipt.write(f"timeout={CASE_TIMEOUT_SECONDS}\n")
-            receipt.write("cleanup=timeout-not-confirmed\n")
+            receipt.write(cleanup + "\n")
         print(f"collector case {name}: timed out; inspect {log}", file=sys.stderr)
         return False
 
     with log.open("w", encoding="utf-8") as receipt:
         receipt.write("$ " + " ".join(command) + "\n")
-        receipt.write(completed.stdout)
-        receipt.write(completed.stderr)
-        receipt.write(f"exit={completed.returncode}\n")
+        receipt.write(stdout)
+        receipt.write(stderr)
+        receipt.write(f"exit={process.returncode}\n")
         receipt.write("cleanup=cargo-process-exited\n")
-    if completed.returncode:
-        print(f"collector case {name}: exit {completed.returncode}; inspect {log}", file=sys.stderr)
+    if process.returncode:
+        print(f"collector case {name}: exit {process.returncode}; inspect {log}", file=sys.stderr)
         return False
     print(f"collector case {name}: passed; receipt={log}")
     return True
