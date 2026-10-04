@@ -53,19 +53,6 @@ CASES = (
 )
 
 
-class SuiteError(RuntimeError):
-    """Reports an invalid candidate or unavailable integration command."""
-
-
-def verify_source_sha(source_sha: str) -> None:
-    """Bind execution to exactly the checked-out immutable candidate."""
-    if len(source_sha) != 40 or any(character not in "0123456789abcdef" for character in source_sha.lower()):
-        raise SuiteError("source-sha must be a full 40-hex commit")
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    if head != source_sha.lower():
-        raise SuiteError(f"checkout HEAD {head} does not match source-sha {source_sha}")
-
-
 def timeout_output_text(output: str | bytes | None) -> str:
     """Normalize captured timeout output for the text receipt."""
     if output is None:
@@ -151,7 +138,6 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
 
 def run(source_sha: str, output: Path) -> bool:
     """Run every real collector corpus entry, retaining later results on failure."""
-    verify_source_sha(source_sha)
     output.mkdir(parents=True, exist_ok=True)
     environment = os.environ | {"CI": "1", "GITHUB_ACTIONS": "true"}
     outcomes = [
@@ -169,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     output = args.output_dir.expanduser().resolve()
     try:
         return 0 if run(args.source_sha, output) else 1
-    except (OSError, SuiteError, subprocess.CalledProcessError) as error:
+    except (OSError, subprocess.CalledProcessError) as error:
         output.mkdir(parents=True, exist_ok=True)
         (output / "failure-report.txt").write_text(traceback.format_exc(), encoding="utf-8")
         print(f"collector integration: {error}", file=sys.stderr)

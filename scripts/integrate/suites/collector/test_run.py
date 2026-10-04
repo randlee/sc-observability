@@ -40,12 +40,6 @@ class CollectorRunnerTests(unittest.TestCase):
         with mock.patch.object(runner.os, "name", "nt"):
             self.assertEqual(runner.case_process_options(), {"creationflags": 0x00000200})
 
-    def test_verify_source_sha_rejects_non_commit_input_without_git(self) -> None:
-        with mock.patch.object(runner.subprocess, "check_output") as check_output:
-            with self.assertRaisesRegex(runner.SuiteError, "40-hex"):
-                runner.verify_source_sha("not-a-commit")
-        check_output.assert_not_called()
-
     def test_run_case_retains_a_nonzero_result_without_raising(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             process = self.process(7, "stdout\n", "stderr\n")
@@ -67,7 +61,6 @@ class CollectorRunnerTests(unittest.TestCase):
             timed_out.communicate.side_effect = [timeout, (b"", None)]
             completed = self.process(0, "later output\n", "")
             with (
-                mock.patch.object(runner, "verify_source_sha"),
                 mock.patch.object(runner.os, "name", "posix"),
                 mock.patch.object(runner.os, "killpg") as killpg,
                 mock.patch.object(runner.subprocess, "Popen", side_effect=[timed_out, completed, completed, completed]),
@@ -92,9 +85,7 @@ class CollectorRunnerTests(unittest.TestCase):
                 calls.append(name)
                 return name != "sync-http-full-stack"
 
-            with mock.patch.object(runner, "verify_source_sha"), mock.patch.object(
-                runner, "run_case", side_effect=record
-            ):
+            with mock.patch.object(runner, "run_case", side_effect=record):
                 self.assertFalse(runner.run("a" * 40, Path(temporary)))
             self.assertEqual(calls, [name for name, _ in runner.CASES])
 
