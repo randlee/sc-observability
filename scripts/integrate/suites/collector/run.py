@@ -139,7 +139,7 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
 def run(source_sha: str, output: Path) -> bool:
     """Run every real collector corpus entry, retaining later results on failure."""
     output.mkdir(parents=True, exist_ok=True)
-    environment = os.environ | {"CI": "1", "GITHUB_ACTIONS": "true"}
+    environment = dict(os.environ)
     outcomes = [
         run_case(name, command, environment=environment, output=output)
         for name, command in CASES

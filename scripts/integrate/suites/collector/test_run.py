@@ -89,6 +89,21 @@ class CollectorRunnerTests(unittest.TestCase):
                 self.assertFalse(runner.run("a" * 40, Path(temporary)))
             self.assertEqual(calls, [name for name, _ in runner.CASES])
 
+    def test_run_preserves_the_caller_environment_without_ci_impersonation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            environments: list[dict[str, str]] = []
+
+            def record(_name: str, _command: list[str], **kwargs: object) -> bool:
+                environments.append(kwargs["environment"])
+                return True
+
+            with (
+                mock.patch.dict(runner.os.environ, {"COLLECTOR_TEST_ENV": "preserved"}, clear=True),
+                mock.patch.object(runner, "run_case", side_effect=record),
+            ):
+                self.assertTrue(runner.run("a" * 40, Path(temporary)))
+            self.assertEqual(environments, [{"COLLECTOR_TEST_ENV": "preserved"}] * len(runner.CASES))
+
 
 if __name__ == "__main__":
     unittest.main()
