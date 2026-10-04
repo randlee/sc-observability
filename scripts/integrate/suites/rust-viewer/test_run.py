@@ -54,6 +54,7 @@ class RustViewerRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
             commands: list[list[str]] = []
+            stops: list[list[str]] = []
 
             def checked(command: list[str], **_kwargs: object) -> str:
                 commands.append(command)
@@ -62,6 +63,14 @@ class RustViewerRunnerTests(unittest.TestCase):
                 return json.dumps({"binary": "viewer", "binary_sha256": "digest", "version": "v1"})
 
             def harness(arguments: list[str], **_kwargs: object) -> str:
+                if arguments[0] == "start":
+                    state = output / "viewer-state"
+                    state.mkdir()
+                    (state / "viewer.pid").write_text("123\n")
+                    return ""
+                if arguments[0] == "stop":
+                    stops.append(arguments)
+                    return ""
                 if arguments[0] == "assert-production":
                     return json.dumps({"backend": arguments[-1], "records": 3})
                 return ""
@@ -82,6 +91,66 @@ class RustViewerRunnerTests(unittest.TestCase):
             self.assertEqual(0, result["backends"]["sdk"]["test_exit"])
             self.assertEqual("sdk", result["backends"]["sdk"]["readback"]["backend"])
             self.assertTrue(any(runner.TESTS["sdk"] in command for command in commands))
+            self.assertEqual(1, len(stops))
+
+    def test_successful_run_writes_the_complete_result_schema_and_stops_viewer(self) -> None:
+        source_sha = "c" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            stops: list[list[str]] = []
+
+            def checked(_command: list[str], **_kwargs: object) -> str:
+                return json.dumps({"binary": "viewer", "binary_sha256": "digest", "version": "v1"})
+
+            def harness(arguments: list[str], **_kwargs: object) -> str:
+                if arguments[0] == "start":
+                    state = output / "viewer-state"
+                    state.mkdir()
+                    (state / "viewer.pid").write_text("123\n")
+                    return ""
+                if arguments[0] == "stop":
+                    stops.append(arguments)
+                    return ""
+                return json.dumps({"backend": arguments[-1], "records": 3})
+
+            with mock.patch.object(runner, "verify_source_sha"), \
+                    mock.patch.object(runner, "reserved_ports", return_value=(10001, 10002, 10003)), \
+                    mock.patch.object(runner, "run_checked", side_effect=checked), \
+                    mock.patch.object(runner, "invoke_harness", side_effect=harness):
+                result = runner.run(source_sha, output)
+
+            self.assertEqual({"schema_version", "status", "source_commit", "viewer", "backends"}, result.keys())
+            self.assertEqual("passed", result["status"])
+            self.assertEqual(source_sha, result["source_commit"])
+            self.assertEqual(set(runner.TESTS), result["backends"].keys())
+            self.assertTrue(all(outcome["status"] == "passed" for outcome in result["backends"].values()))
+            self.assertEqual(result, json.loads((output / "result.json").read_text()))
+            self.assertEqual(1, len(stops))
+
+    def test_start_failure_does_not_run_backends_or_write_a_success_result(self) -> None:
+        source_sha = "d" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            commands: list[list[str]] = []
+
+            def checked(command: list[str], **_kwargs: object) -> str:
+                commands.append(command)
+                return json.dumps({"binary": "viewer", "binary_sha256": "digest", "version": "v1"})
+
+            def harness(arguments: list[str], **_kwargs: object) -> str:
+                if arguments[0] == "start":
+                    raise runner.SuiteError("viewer start failed")
+                self.fail(f"unexpected harness call: {arguments}")
+
+            with mock.patch.object(runner, "verify_source_sha"), \
+                    mock.patch.object(runner, "reserved_ports", return_value=(10001, 10002, 10003)), \
+                    mock.patch.object(runner, "run_checked", side_effect=checked), \
+                    mock.patch.object(runner, "invoke_harness", side_effect=harness):
+                with self.assertRaisesRegex(runner.SuiteError, "start failed"):
+                    runner.run(source_sha, output)
+
+            self.assertFalse(any(command[0] == "cargo" for command in commands))
+            self.assertFalse((output / "result.json").exists())
 
     def test_malformed_readback_is_retained_as_one_backend_failure(self) -> None:
         source_sha = "b" * 40
