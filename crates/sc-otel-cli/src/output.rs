@@ -211,3 +211,50 @@ fn as_json(outcome: &Outcome) -> Value {
         "error": error,
     })
 }
+
+/// Returns the versioned description of the JSON object emitted by [`print`].
+///
+/// Keep this adjacent to the renderer: clap describes only input syntax, while
+/// this projection is derived from the actual result constants and output
+/// fields.  The checked-in artifact is a contract snapshot, not another
+/// response parser or renderer.
+#[cfg(test)]
+pub(crate) fn result_contract() -> Value {
+    json!({
+        "contract": constants::RESULT_SCHEMA,
+        "type": "object",
+        "required_fields": [
+            "schema", "command", "exit_code", "state", "receipt", "flush", "status", "envelope", "error"
+        ],
+        "fields": {
+            "schema": { "type": "string", "const": constants::RESULT_SCHEMA },
+            "command": {
+                "type": "string",
+                "enum": constants::CommandName::ALL.map(CommandName::as_str),
+            },
+            "exit_code": { "type": "integer", "enum": constants::EXIT_CODE_MEANINGS.iter().map(|(code, _)| code).collect::<Vec<_>>() },
+            "state": {
+                "type": "string",
+                "enum": constants::OutcomeState::ALL.map(OutcomeState::as_str),
+            },
+            "receipt": { "type": ["object", "null"], "rust_type": "AdmissionReceipt" },
+            "flush": { "type": ["object", "null"], "rust_type": "FlushReport" },
+            "status": { "type": ["object", "null"], "rust_type": "StoreStatus" },
+            "envelope": { "type": ["object", "null"], "rust_type": "SubmissionEnvelope" },
+            "error": {
+                "type": ["object", "null"],
+                "required_fields": ["code", "message", "cause", "remediation"],
+                "fields": {
+                    "code": { "type": "string" },
+                    "message": { "type": "string" },
+                    "cause": { "type": ["string", "null"] },
+                    "remediation": { "type": "object" },
+                },
+            },
+        },
+        "exit_code_meanings": constants::EXIT_CODE_MEANINGS.iter().map(|(code, meaning)| json!({
+            "code": code,
+            "meaning": meaning,
+        })).collect::<Vec<_>>(),
+    })
+}
