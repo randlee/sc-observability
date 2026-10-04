@@ -12,14 +12,11 @@ from scripts.integrate.suites.wheels import run
 
 
 class WheelsRunnerTests(unittest.TestCase):
-    def test_venv_python_uses_platform_native_layout(self) -> None:
+    def test_shared_venv_python_uses_platform_native_layout(self) -> None:
         root = Path("/tmp/e5-venv")
-        self.assertEqual(run.venv_python(root, platform_name="posix"), root / "bin/python")
-        self.assertEqual(run.venv_python(root, platform_name="nt"), root / "Scripts/python.exe")
-
-    def test_prepend_path_avoids_empty_loader_entries(self) -> None:
-        self.assertEqual(run.prepend_path(None, "/python"), "/python")
-        self.assertEqual(run.prepend_path("/existing", "/python"), f"/python{os.pathsep}/existing")
+        validator = run.python_binding_validator
+        self.assertEqual(validator.venv_python(root, platform_name="posix"), root / "bin/python")
+        self.assertEqual(validator.venv_python(root, platform_name="nt"), root / "Scripts/python.exe")
 
     def test_run_checked_retains_timeout_stdout_and_stderr(self) -> None:
         timeout = run.subprocess.TimeoutExpired(["probe"], 7, output="timed stdout", stderr="timed stderr")
@@ -39,21 +36,21 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertIn("failed stdout", str(raised.exception))
         self.assertIn("failed stderr", str(raised.exception))
 
-    @mock.patch.object(run.subprocess, "check_output")
+    @mock.patch.object(run.python_binding_validator.subprocess, "check_output")
     def test_windows_embedded_environment_exposes_selected_dll_directory(self, check_output: mock.Mock) -> None:
         check_output.return_value = "C:\\Python310\n"
         python_path = Path(r"C:\venv\Scripts\python.exe")
         with mock.patch.dict(os.environ, {"PATH": r"C:\\Windows"}, clear=True):
-            environment = run.embedded_environment(python_path, platform_name="windows")
+            environment = run.python_binding_validator.embedded_environment(python_path, platform_name="windows")
         self.assertEqual(environment["PYO3_PYTHON"], str(python_path))
         self.assertEqual(environment["PYTHONHOME"], "C:\\Python310")
         self.assertTrue(environment["PATH"].startswith("C:\\Python310"))
 
-    @mock.patch.object(run.subprocess, "check_output")
+    @mock.patch.object(run.python_binding_validator.subprocess, "check_output")
     def test_linux_embedded_environment_exposes_selected_library_directory(self, check_output: mock.Mock) -> None:
         check_output.side_effect = ["/opt/python\n", "/opt/python/lib\n"]
         with mock.patch.dict(os.environ, {"LD_LIBRARY_PATH": "/existing"}, clear=True):
-            environment = run.embedded_environment(Path("/venv/bin/python"), platform_name="linux")
+            environment = run.python_binding_validator.embedded_environment(Path("/venv/bin/python"), platform_name="linux")
         self.assertEqual(environment["PYTHONHOME"], "/opt/python")
         self.assertEqual(environment["LD_LIBRARY_PATH"], f"/opt/python/lib{os.pathsep}/existing")
 
@@ -64,20 +61,20 @@ class WheelsRunnerTests(unittest.TestCase):
             run.verify_source_sha("b" * 40)
 
     @mock.patch.object(run, "run_checked")
-    @mock.patch.object(run.shutil, "which")
-    def test_build_wheel_uses_pinned_uvx_only_when_maturin_is_missing(self, which: mock.Mock, checked: mock.Mock) -> None:
-        which.side_effect = [None, "/tools/uvx"]
+    @mock.patch.object(run.python_binding_validator, "maturin_build_command")
+    def test_build_wheel_uses_the_shared_declared_build_command(self, command: mock.Mock, checked: mock.Mock) -> None:
+        command.return_value = ["/tools/uvx", "--from", "maturin==1.10.2", "maturin", "build"]
         with mock.patch.object(Path, "mkdir"), mock.patch.object(Path, "glob", return_value=[Path("/tmp/wheel.whl")]):
             wheel = run.build_wheel(Path("/tmp/output"))
         self.assertEqual(wheel, Path("/tmp/wheel.whl"))
-        command = checked.call_args.args[0]
-        self.assertEqual(command[:4], ["/tools/uvx", "--from", "maturin==1.10.2", "maturin"])
+        self.assertEqual(checked.call_args.args[0], command.return_value)
+        command.assert_called_once_with(run.ROOT, Path("/tmp/output/wheel"))
 
     @mock.patch.object(run, "run_checked")
     def test_install_probe_uses_isolated_interpreter_and_installs_candidate(self, checked: mock.Mock) -> None:
         # Avoid a platform filesystem dependency while preserving the command contract.
-        checked.return_value = '{"native": "/tmp/venv/native.so", "package": "/tmp/venv/package.py"}\n'
-        with mock.patch.object(Path, "mkdir"), mock.patch.object(run, "venv_python", return_value=Path("/tmp/venv/bin/python")):
+        checked.return_value = '{"prefix": "/tmp/venv", "native": "/tmp/venv/native.so", "package": "/tmp/venv/package.py"}\n'
+        with mock.patch.object(Path, "mkdir"), mock.patch.object(run.python_binding_validator, "venv_python", return_value=Path("/tmp/venv/bin/python")):
             installed = run.install_and_probe(Path("/tmp/candidate.whl"), Path("/tmp/output"))
         commands = [call.args[0] for call in checked.call_args_list]
         self.assertEqual(commands[0][:3], [run.sys.executable, "-m", "venv"])
@@ -95,16 +92,18 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertIn("telemetry.shutdown(timeout_s=0.1)", probe)
         self.assertIn("TelemetryErr", probe)
 
-    def test_embedded_package_origin_rejects_a_source_tree(self) -> None:
+    def test_shared_installed_origin_rejects_a_source_tree(self) -> None:
         installed = {
             "python": "/tmp/e5-venv/bin/python",
+            "prefix": "/tmp/e5-venv",
+            "native": "/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/_native.so",
             "package": "/workspace/bindings/python/sc-observability-py/python/sc_observability/__init__.py",
         }
-        with self.assertRaisesRegex(run.SuiteError, "escaped the installed venv"):
-            run.installed_package_origin(installed)
+        with self.assertRaisesRegex(run.python_binding_validator.BindingValidationError, "escaped the venv"):
+            run.python_binding_validator.installed_origins(installed)
 
     @mock.patch.object(run, "run_checked")
-    @mock.patch.object(run, "embedded_environment", return_value={"PYO3_PYTHON": "/tmp/e5-venv/bin/python"})
+    @mock.patch.object(run.python_binding_validator, "embedded_environment", return_value={"PYO3_PYTHON": "/tmp/e5-venv/bin/python"})
     def test_embedded_host_receives_the_installed_package_contract(
             self, environment: mock.Mock, checked: mock.Mock) -> None:
         package = Path("/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/__init__.py")
@@ -122,14 +121,15 @@ class WheelsRunnerTests(unittest.TestCase):
             wheel.write_bytes(b"candidate wheel")
             installed = {
                 "python": "/tmp/e5-venv/bin/python",
+                "prefix": "/tmp/e5-venv",
+                "native": "/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/_native.so",
                 "package": "/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/__init__.py",
             }
-            package = Path(installed["package"])
+            package = Path(installed["package"]).resolve()
             with (
                 mock.patch.object(run, "verify_source_sha"),
                 mock.patch.object(run, "build_wheel", return_value=wheel),
                 mock.patch.object(run, "install_and_probe", return_value=installed),
-                mock.patch.object(run, "installed_package_origin", return_value=package),
                 mock.patch.object(run, "run_embedded_host") as embedded_host,
             ):
                 result = run.run("a" * 40, output)

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
 QUALIFICATION_HELPERS = (
     '_python_distribution.py', '_python_sandbox.py', '_windows_identity.py',
-    'python_arm64.py',
+    'python_arm64.py', 'python_binding_validator.py',
     'supervise_windows_proof.py', 'validate_python_distribution.py',
     'build_binding_source_bundle.py', '_hashing.py', '_log_staging.py',
     'python-packaging-requirements.txt',

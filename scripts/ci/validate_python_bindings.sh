@@ -16,19 +16,18 @@ B4_PYTHON="${B4_PYTHON:-$(uv python find 3.10)}"
 B4_GENERATOR_PYTHON="${B4_GENERATOR_PYTHON:-$(uv python find 3.12.10)}"
 "$B4_GENERATOR_PYTHON" -c 'import sys; assert sys.version_info[:3] == (3, 12, 10), "schema generation requires Python 3.12.10"'
 
-# Rust embedding executables must resolve the selected standalone interpreter's
-# shared library, including when uv's Python is outside the system loader path.
-if [[ "$(uname -s)" == Linux ]]; then
-  B4_PYTHON_LIBDIR="$("$B4_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
-  export LD_LIBRARY_PATH="$B4_PYTHON_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-fi
+# The shared validator owns the selected interpreter, PYTHONHOME, and loader
+# path updates for every Rust-hosted binding command below.
+B4_EMBEDDED_ENV=()
+while IFS= read -r assignment; do
+  B4_EMBEDDED_ENV+=("$assignment")
+done < <("$B4_PYTHON" scripts/ci/python_binding_validator.py embedded-environment "$B4_PYTHON")
 
 B4_TEMP_DIR="$(mktemp -d -t sc-observability-b4.XXXXXX)"
 trap 'rm -rf "$B4_TEMP_DIR"' EXIT
 
 cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings
-PYO3_PYTHON="$B4_PYTHON" PYTHONHOME="$("$B4_PYTHON" -c 'import sys; print(sys.base_prefix)')" \
-  cargo test --locked -p sc-observability-py
+env "${B4_EMBEDDED_ENV[@]}" cargo test --locked -p sc-observability-py
 "$B4_GENERATOR_PYTHON" scripts/generate_python_bindings.py \
   --schema bindings/schema/v1.json \
   --output-dir bindings/python/sc-observability-py/python/sc_observability/generated \
@@ -42,7 +41,7 @@ MYPYPATH=bindings/python/sc-observability-py/python \
 uv run --no-project --python "$B4_PYTHON" --with pytest==9.1.1 python -m pytest \
   bindings/python/sc-observability-py/tests/test_facade.py
 
-uvx --from maturin==1.10.2 maturin build --locked \
+uvx --from "maturin==$("$B4_PYTHON" -c 'from pathlib import Path; from scripts.ci.python_binding_validator import maturin_version; print(maturin_version(Path(".")))')" maturin build --locked \
   --manifest-path bindings/python/sc-observability-py/Cargo.toml \
   --features test-hooks \
   --interpreter "$B4_PYTHON" \
@@ -60,8 +59,8 @@ SC_OBSERVABILITY_RUNTIME_TEST=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
   "$B4_TEMP_DIR/tests/typing/test_async_narrowing.py" "$B4_TEMP_DIR/examples/async_logging.py"
 "$B4_TEMP_DIR/venv/bin/python" -I "$B4_TEMP_DIR/examples/standard_logging.py"
 "$B4_TEMP_DIR/venv/bin/python" -I -X dev -W error "$B4_TEMP_DIR/examples/async_logging.py"
-PYO3_PYTHON="$B4_PYTHON" PYTHONHOME="$("$B4_PYTHON" -c 'import sys; print(sys.base_prefix)')" \
-  PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error cargo run --locked -p rust-python-logging
+env "${B4_EMBEDDED_ENV[@]}" PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
+  cargo run --locked -p rust-python-logging
 
 if rg -n '\braise\b' bindings/python/sc-observability-py/python/sc_observability/{__init__,logging,context,async_logging}.py; then
   exit 1

@@ -10,57 +10,25 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import traceback
 
 
 ROOT = Path(__file__).resolve().parents[4]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.ci import python_binding_validator
+
+
 BUILD_TIMEOUT_SECONDS = 10 * 60
 RUNTIME_TIMEOUT_SECONDS = 2 * 60
 
 
 class SuiteError(RuntimeError):
     """Reports one bounded command with the output needed to diagnose it."""
-
-
-def venv_python(venv: Path, *, platform_name: str | None = None) -> Path:
-    """Return the platform-native Python executable for a virtual environment."""
-    if (platform_name or os.name) == "nt":
-        return venv / "Scripts" / "python.exe"
-    return venv / "bin" / "python"
-
-
-def prepend_path(current: str | None, directory: str) -> str:
-    """Prepend one loader directory without introducing an empty path element."""
-    return directory if not current else directory + os.pathsep + current
-
-
-def embedded_environment(python: Path, *, platform_name: str | None = None) -> dict[str, str]:
-    """Configure the selected interpreter for the Rust-host embedded executable."""
-    environment = os.environ.copy()
-    environment.pop("PYTHONPATH", None)
-    environment["PYO3_PYTHON"] = str(python)
-    base_prefix = subprocess.check_output(
-        [str(python), "-I", "-c", "import sys; print(sys.base_prefix)"], text=True
-    ).strip()
-    environment["PYTHONHOME"] = base_prefix
-    platform_name = platform_name or sys.platform
-    if platform_name in ("nt", "windows"):
-        # f20f7a19: embedded hosts on Windows must expose the selected Python
-        # DLL directory, including the normal venv ``Scripts/python.exe`` path.
-        environment["PATH"] = prepend_path(environment.get("PATH"), base_prefix)
-    elif platform_name.startswith("linux"):
-        libdir = subprocess.check_output(
-            [str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR') or '')"],
-            text=True,
-        ).strip()
-        if libdir:
-            environment["LD_LIBRARY_PATH"] = prepend_path(environment.get("LD_LIBRARY_PATH"), libdir)
-    return environment
 
 
 def run_checked(command: list[str], *, cwd: Path, environment: dict[str, str] | None = None,
@@ -92,32 +60,10 @@ def wheel_digest(wheel: Path) -> str:
 
 def build_wheel(output: Path) -> Path:
     """Build exactly one release-configured candidate wheel for this checkout."""
-    maturin = shutil.which("maturin")
-    if maturin is not None:
-        maturin_command = [maturin]
-    else:
-        uvx = shutil.which("uvx")
-        if uvx is None:
-            raise SuiteError("maturin or uvx is required to build the candidate wheel")
-        # This is the same pinned one-shot build tool used by the existing
-        # binding validator.  The shared integration workflow only provisions
-        # Python, so the suite must not assume a preinstalled Maturin binary.
-        maturin_command = [uvx, "--from", "maturin==1.10.2", "maturin"]
     wheel_dir = output / "wheel"
     wheel_dir.mkdir(parents=True, exist_ok=False)
     run_checked(
-        [
-            *maturin_command,
-            "build",
-            "--locked",
-            "--release",
-            "--manifest-path",
-            str(ROOT / "bindings/python/sc-observability-py/Cargo.toml"),
-            "--features",
-            "otlp-telemetry",
-            "--out",
-            str(wheel_dir),
-        ],
+        python_binding_validator.maturin_build_command(ROOT, wheel_dir),
         cwd=ROOT,
         timeout=BUILD_TIMEOUT_SECONDS,
     )
@@ -143,13 +89,10 @@ from sc_observability import (
 import sc_observability
 import sc_observability._native as native
 
-prefix = pathlib.Path(sys.prefix).resolve()
 origins = {
     "package": pathlib.Path(sc_observability.__file__).resolve(),
     "native": pathlib.Path(native.__file__).resolve(),
 }
-if any(not path.is_relative_to(prefix) for path in origins.values()):
-    raise SystemExit(f"installed artifacts escaped the venv: {origins}")
 created = create_logger(LoggerConfig(service="e5-installed-wheel", log_root="."))
 if not isinstance(created, Ok):
     raise SystemExit(f"owned logger was not a tagged Ok: {created!r}")
@@ -211,7 +154,7 @@ for operation, result in (
         raise SystemExit(f"installed telemetry {operation} returned an untyped outcome: {result!r}")
 if not isinstance(telemetry.flush(timeout_s=float("nan")), TelemetryErr):
     raise SystemExit("installed telemetry invalid timeout did not return TelemetryErr")
-print(json.dumps({key: str(value) for key, value in origins.items()}, sort_keys=True))
+print(json.dumps({"prefix": sys.prefix, **{key: str(value) for key, value in origins.items()}}, sort_keys=True))
 '''
 
 
@@ -221,30 +164,23 @@ def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
     runtime.mkdir(parents=True, exist_ok=False)
     venv = runtime / "venv"
     run_checked([sys.executable, "-m", "venv", str(venv)], cwd=runtime)
-    python = venv_python(venv)
+    python = python_binding_validator.venv_python(venv)
     run_checked(
         [str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", str(wheel)],
         cwd=runtime,
     )
     output_text = run_checked([str(python), "-I", "-c", IMPORT_AND_RUNTIME_PROBE], cwd=runtime)
-    return {"python": str(python), **json.loads(output_text)}
-
-
-def installed_package_origin(installed: dict[str, str]) -> Path:
-    """Return the installed package file, rejecting a source-tree substitution."""
-    python = Path(installed["python"])
-    package = Path(installed["package"]).resolve()
-    # The venv executable is usually a symlink to the base interpreter.  Keep
-    # its lexical parent while resolving only the venv directory itself.
-    venv = python.parent.parent.resolve()
-    if not package.is_relative_to(venv):
-        raise SuiteError(f"attached package escaped the installed venv: {package}")
-    return package
+    installed = {"python": str(python), **json.loads(output_text)}
+    try:
+        python_binding_validator.installed_origins(installed)
+    except python_binding_validator.BindingValidationError as error:
+        raise SuiteError(str(error)) from error
+    return installed
 
 
 def run_embedded_host(python: Path, package: Path) -> None:
     """Run the Rust-host proof against the installed binding package file."""
-    environment = embedded_environment(python)
+    environment = python_binding_validator.embedded_environment(python)
     environment["SC_OBSERVABILITY_ATTACHED_PACKAGE"] = str(package)
     run_checked(
         ["cargo", "run", "--locked", "-p", "rust-python-logging"],
@@ -269,7 +205,8 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
     output.mkdir(parents=True, exist_ok=True)
     wheel = build_wheel(output)
     installed = install_and_probe(wheel, output)
-    run_embedded_host(Path(installed["python"]), installed_package_origin(installed))
+    package = python_binding_validator.installed_origins(installed)["package"]
+    run_embedded_host(Path(installed["python"]), package)
     result: dict[str, object] = {
         "schema_version": 1,
         "status": "passed",

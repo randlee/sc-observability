@@ -17,6 +17,7 @@ from pathlib import Path
 
 from _python_distribution import (DistributionError, actual_cell, confined, digest,
                                   extract_sdist, inspect_wheel, verify_source, runtime_options, fault_paths, release_wheel, tomllib)
+from python_binding_validator import installed_origins, production_maturin_features, venv_python
 from _python_sandbox import Sandbox, registered_checkouts
 
 
@@ -279,7 +280,7 @@ def cell(args) -> None:
                     'candidate_version': source['version']}
         wheel = inspect_wheel(args.wheel, selected, source['version'], source['expected_requires_python'])
         execute([sys.executable, '-m', 'venv', str(scratch / 'venv')])
-        python = str(scratch / 'venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
+        python = str(venv_python(scratch / 'venv'))
         execute([python, '-m', 'pip', 'install', '--disable-pip-version-check', str(args.wheel)])
         # Check runtime imports before pytest/mypy can accidentally supply an undeclared dependency.
         with Sandbox(scratch, checkouts) as sandbox:
@@ -296,7 +297,7 @@ def cell(args) -> None:
             if private_wheel['sha256'] == wheel['sha256']:
                 raise DistributionError('instrumented wheel cannot substitute for production')
             execute([sys.executable, '-m', 'venv', str(scratch / 'fault-venv')])
-            private_python = str(scratch / 'fault-venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
+            private_python = str(venv_python(scratch / 'fault-venv'))
             execute([private_python, '-m', 'pip', 'install', '--disable-pip-version-check',
                      str(args.instrumented_wheel), '-r', str(root / 'qualification/python-packaging-requirements.txt')])
         suite = scratch / 'suite'
@@ -310,13 +311,11 @@ def cell(args) -> None:
             raise DistributionError('full runtime/type suite contract is incomplete')
         with Sandbox(scratch, checkouts) as sandbox:
             probes = sandbox.prove_denials(python, args.checkout)
-            imported = sandbox.run([python, '-I', '-c',
-                'import pathlib,sys,sc_observability,sc_observability._native as n; '
-                'root=pathlib.Path(sys.prefix).resolve(); '
-                'assert pathlib.Path(sc_observability.__file__).resolve().is_relative_to(root); '
-                'assert pathlib.Path(n.__file__).resolve().is_relative_to(root); '
+            imported = json.loads(sandbox.run([python, '-I', '-c',
+                'import json,sys,sc_observability,sc_observability._native as n; '
                 'assert not any(name.startswith("_test") for name in dir(n)), "private hooks leaked into production"; '
-                'print(n.__file__)'], suite)
+                'print(json.dumps({"prefix":sys.prefix,"package":sc_observability.__file__,"native":n.__file__}))'], suite))
+            installed_origins(imported)
             flags, environment = runtime_options(contract)
             sandbox.env.update(environment)
             sandbox.env['SC_OBSERVABILITY_RUNTIME_TEST'] = '1'
@@ -334,10 +333,10 @@ def cell(args) -> None:
             fault_result = None
             if private_python:
                 private_identity = json.loads(sandbox.run([private_python, '-I', '-c',
-                    'import json,pathlib,sys,sc_observability._native as n; '
-                    'assert pathlib.Path(n.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); '
+                    'import json,sys,sc_observability,sc_observability._native as n; '
                     'assert any(name.startswith("_test") for name in dir(n)); '
-                    'print(json.dumps({"python_full":sys.version,"native":n.__file__}))'], suite))
+                    'print(json.dumps({"python_full":sys.version,"prefix":sys.prefix,"package":sc_observability.__file__,"native":n.__file__}))'], suite))
+                installed_origins(private_identity)
                 if private_identity['python_full'] != actual['python_full']:
                     raise DistributionError('fault companion interpreter differs from production cell')
                 fault_junit = scratch / 'fault-runtime.xml'
@@ -364,7 +363,7 @@ def cell(args) -> None:
                       'expected_requires_python': source['expected_requires_python'],
                       'wheel': wheel, 'runtime_suite': contract, 'test_count': len(cases),
                       'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in cases),
-                      'installed_extension': imported.strip(), 'production_hooks_absent': True,
+                      'installed_extension': imported['native'], 'production_hooks_absent': True,
                       'fault_companion': fault_result, 'isolation': probes, 'embedding': embedded,
                       'typecheck': 'passed', 'interpreter_flags': flags, 'runtime_environment': environment,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
@@ -420,7 +419,7 @@ def aggregate(args) -> None:
                 or source['source_commit'] != args.source_commit):
             raise DistributionError('source contract is not a completed qualification candidate')
         runtime_options(contract)
-        production_features = sorted(tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))['tool']['maturin']['features'])
+        production_features = sorted(production_maturin_features(root))
         expected_requires_python = source['expected_requires_python']
     if any(item.get('expected_requires_python') != expected_requires_python for item in builds + cells):
         raise DistributionError('source and build/cell Requires-Python metadata disagree')

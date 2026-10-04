@@ -145,7 +145,7 @@ class DistributionTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, '-I', '-c',
                  'import sys; sys.path.insert(0, sys.argv[1]); '
-                 'import _python_distribution, build_binding_source_bundle; '
+                 'import _python_distribution, build_binding_source_bundle, python_binding_validator, validate_python_distribution; '
                  'print("QUALIFICATION_HELPER_IMPORTS_PASSED")', str(qualification)],
                 capture_output=True, text=True, check=True,
             )
