@@ -37,6 +37,10 @@ TESTS = {
 class SuiteError(RuntimeError):
     """Reports a bounded CI command failure with its retained evidence path."""
 
+    def __init__(self, message: str, *, exit_code: int | None = None) -> None:
+        super().__init__(message)
+        self.exit_code = exit_code
+
 
 def verify_source_sha(source_sha: str) -> None:
     """Bind the suite execution to exactly the checked-out candidate commit."""
@@ -87,7 +91,7 @@ def run_checked(command: list[str], *, environment: dict[str, str], timeout: int
         output.write(completed.stderr)
         output.write(f"exit={completed.returncode}\n")
     if completed.returncode:
-        raise SuiteError(f"command exited {completed.returncode}; inspect {log}")
+        raise SuiteError(f"command exited {completed.returncode}; inspect {log}", exit_code=completed.returncode)
     return completed.stdout
 
 
@@ -139,21 +143,57 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
             "D9_VIEWER_SYNC_HTTP_ADDRESS": f"{HOST}:{http}",
             "D9_VIEWER_SDK_ADDRESS": f"{HOST}:{grpc}",
         }
+        failed_backends: list[str] = []
         for backend, test_name in TESTS.items():
             log = output / f"{backend}.log"
-            run_checked(
-                factory_test_command(test_name),
-                environment=backend_environment,
-                timeout=TEST_TIMEOUT_SECONDS,
-                log=log,
-            )
-            receipt = invoke_harness(
-                ["assert-production", "--state-dir", str(state), "--backend", backend],
-                environment=backend_environment,
-                timeout=CLEANUP_TIMEOUT_SECONDS,
-                log=log,
-            )
-            results[backend] = json.loads(receipt)
+            test_exit: int | None = None
+            try:
+                run_checked(
+                    factory_test_command(test_name),
+                    environment=backend_environment,
+                    timeout=TEST_TIMEOUT_SECONDS,
+                    log=log,
+                )
+                test_exit = 0
+                receipt = invoke_harness(
+                    ["assert-production", "--state-dir", str(state), "--backend", backend],
+                    environment=backend_environment,
+                    timeout=CLEANUP_TIMEOUT_SECONDS,
+                    log=log,
+                )
+                try:
+                    readback = json.loads(receipt)
+                except json.JSONDecodeError as error:
+                    raise SuiteError(
+                        f"invalid assert-production receipt for {backend}; inspect {log}"
+                    ) from error
+            except (OSError, SuiteError) as error:
+                failed_backends.append(backend)
+                results[backend] = {
+                    "status": "failed",
+                    "test_exit": test_exit if test_exit is not None else getattr(error, "exit_code", None),
+                    "error": str(error),
+                    "log": str(log),
+                }
+            else:
+                results[backend] = {
+                    "status": "passed",
+                    "test_exit": test_exit,
+                    "readback": readback,
+                    "log": str(log),
+                }
+
+        result: dict[str, object] = {
+            "schema_version": 1,
+            "status": "failed" if failed_backends else "passed",
+            "source_commit": source_sha,
+            "viewer": pinned,
+            "backends": results,
+        }
+        (output / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if failed_backends:
+            raise SuiteError(f"backend qualification failed: {', '.join(failed_backends)}")
+        return result
     finally:
         if started and (state / "viewer.pid").is_file():
             invoke_harness(
@@ -162,17 +202,6 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
                 timeout=CLEANUP_TIMEOUT_SECONDS,
                 log=output / "cleanup.log",
             )
-
-    result: dict[str, object] = {
-        "schema_version": 1,
-        "status": "passed",
-        "source_commit": source_sha,
-        "viewer": pinned,
-        "backends": results,
-    }
-    (output / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return result
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)

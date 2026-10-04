@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -47,6 +48,66 @@ class RustViewerRunnerTests(unittest.TestCase):
                     "out\n",
                 )
             self.assertEqual(log.read_text(), "$ command\nout\nerr\nexit=0\n")
+
+    def test_backend_failure_records_both_backend_outcomes_before_reraising(self) -> None:
+        source_sha = "a" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            commands: list[list[str]] = []
+
+            def checked(command: list[str], **_kwargs: object) -> str:
+                commands.append(command)
+                if command[0] == "cargo" and runner.TESTS["sync-http"] in command:
+                    raise runner.SuiteError("command exited 17", exit_code=17)
+                return json.dumps({"binary": "viewer", "binary_sha256": "digest", "version": "v1"})
+
+            def harness(arguments: list[str], **_kwargs: object) -> str:
+                if arguments[0] == "assert-production":
+                    return json.dumps({"backend": arguments[-1], "records": 3})
+                return ""
+
+            with mock.patch.object(runner, "verify_source_sha"), \
+                    mock.patch.object(runner, "reserved_ports", return_value=(10001, 10002, 10003)), \
+                    mock.patch.object(runner, "run_checked", side_effect=checked), \
+                    mock.patch.object(runner, "invoke_harness", side_effect=harness):
+                with self.assertRaisesRegex(runner.SuiteError, "sync-http"):
+                    runner.run(source_sha, output)
+
+            result = json.loads((output / "result.json").read_text())
+            self.assertEqual("failed", result["status"])
+            self.assertEqual("failed", result["backends"]["sync-http"]["status"])
+            self.assertEqual(17, result["backends"]["sync-http"]["test_exit"])
+            self.assertIn("sync-http.log", result["backends"]["sync-http"]["log"])
+            self.assertEqual("passed", result["backends"]["sdk"]["status"])
+            self.assertEqual(0, result["backends"]["sdk"]["test_exit"])
+            self.assertEqual("sdk", result["backends"]["sdk"]["readback"]["backend"])
+            self.assertTrue(any(runner.TESTS["sdk"] in command for command in commands))
+
+    def test_malformed_readback_is_retained_as_one_backend_failure(self) -> None:
+        source_sha = "b" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+
+            def checked(_command: list[str], **_kwargs: object) -> str:
+                return json.dumps({"binary": "viewer", "binary_sha256": "digest", "version": "v1"})
+
+            def harness(arguments: list[str], **_kwargs: object) -> str:
+                if arguments[0] != "assert-production":
+                    return ""
+                return "not-json" if arguments[-1] == "sync-http" else json.dumps({"backend": "sdk"})
+
+            with mock.patch.object(runner, "verify_source_sha"), \
+                    mock.patch.object(runner, "reserved_ports", return_value=(10001, 10002, 10003)), \
+                    mock.patch.object(runner, "run_checked", side_effect=checked), \
+                    mock.patch.object(runner, "invoke_harness", side_effect=harness):
+                with self.assertRaisesRegex(runner.SuiteError, "sync-http"):
+                    runner.run(source_sha, output)
+
+            result = json.loads((output / "result.json").read_text())
+            self.assertEqual("failed", result["backends"]["sync-http"]["status"])
+            self.assertEqual(0, result["backends"]["sync-http"]["test_exit"])
+            self.assertIn("invalid assert-production receipt", result["backends"]["sync-http"]["error"])
+            self.assertEqual("passed", result["backends"]["sdk"]["status"])
 
 
 if __name__ == "__main__":
