@@ -131,14 +131,18 @@ fn command_contract_for(command: &clap::Command) -> Value {
                 .collect::<Vec<_>>();
             allowed_values.sort();
             allowed_values.dedup();
-            json!({
+            let mut contract = json!({
                 "id": argument.get_id().as_str(),
                 "flags": flags,
                 "required": argument.is_required_set(),
                 "default_values": argument.get_default_values().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>(),
                 "allowed_values": allowed_values,
                 "conflicts_with": conflicts,
-            })
+            });
+            if let Some(constraint) = parser_constraint(command, argument) {
+                contract["value_constraint"] = json!(constraint);
+            }
+            contract
         })
         .collect::<Vec<_>>();
     arguments.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
@@ -176,6 +180,31 @@ fn command_contract_for(command: &clap::Command) -> Value {
     })
 }
 
+/// Captures validation supplied by clap's configured parser without creating a
+/// parallel parser description. Enumerated parsers are already represented by
+/// `allowed_values`; for other value-taking arguments, a stable invalid probe
+/// records the parser's own diagnostic only when that parser rejects it.
+#[cfg(test)]
+fn parser_constraint(command: &clap::Command, argument: &clap::Arg) -> Option<String> {
+    const INVALID_VALUE: &str = "__sc_otel_contract_invalid_value__";
+
+    if !argument.get_action().takes_values() || !argument.get_possible_values().is_empty() {
+        return None;
+    }
+
+    let flag = argument
+        .get_long()
+        .map(|name| format!("--{name}"))
+        .or_else(|| argument.get_short().map(|name| format!("-{name}")))?;
+    let probe = command.clone();
+    match probe.try_get_matches_from([command.get_name(), flag.as_str(), INVALID_VALUE]) {
+        Err(error) if error.kind() == clap::error::ErrorKind::ValueValidation => {
+            Some(error.to_string())
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod contract_tests {
     use super::command_contract;
@@ -211,6 +240,17 @@ mod contract_tests {
                 for key in expected.keys().chain(actual.keys()) {
                     let next = format!("{path}.{key}");
                     match (expected.get(key), actual.get(key)) {
+                        (Some(expected), Some(actual)) => {
+                            changed_fields(expected, actual, &next, changes);
+                        }
+                        _ => changes.push(next),
+                    }
+                }
+            }
+            (Value::Array(expected), Value::Array(actual)) => {
+                for index in 0..expected.len().max(actual.len()) {
+                    let next = format!("{path}[{index}]");
+                    match (expected.get(index), actual.get(index)) {
                         (Some(expected), Some(actual)) => {
                             changed_fields(expected, actual, &next, changes);
                         }
@@ -298,8 +338,12 @@ mod contract_tests {
     fn changed_command_or_result_is_rejected_with_versioned_remedy() {
         let expected = snapshot(snapshot_path("commands", COMMAND_VERSION));
         let mut changed_command = command_contract();
-        changed_command["subcommands"][0]["arguments"][0]["flags"] =
-            serde_json::json!(["--changed-log"]);
+        assert!(
+            changed_command["subcommands"][1]["arguments"][0]["value_constraint"].is_string(),
+            "timeout parser constraint was not projected: {changed_command}"
+        );
+        changed_command["subcommands"][1]["arguments"][0]["value_constraint"] =
+            serde_json::json!("timeout accepts any string");
         let command_error = assert_contract(
             "sc-otel.commands",
             COMMAND_VERSION,
@@ -308,6 +352,10 @@ mod contract_tests {
         )
         .expect_err("changed argument must reject the selected command contract");
         assert!(command_error.contains("sc-otel.commands contract version 1.5.0 changed fields"));
+        assert!(
+            command_error.contains("value_constraint"),
+            "{command_error}"
+        );
         assert!(command_error.contains("new versioned snapshot"));
 
         let result_version = crate::constants::RESULT_SCHEMA
