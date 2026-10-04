@@ -240,10 +240,6 @@ jobs:
           path: target
           key: windows-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      # Retire with obs-d-18 when the deprecated legacy types are removed.
-      - name: Check deprecated lint policies in external examples
-        run: python3 scripts/ci/check_external_example_deprecated.py
-
       - name: Check standalone custom sink example
         run: cargo check --locked --manifest-path examples/custom-sink-example/Cargo.toml
 
