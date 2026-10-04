@@ -20,12 +20,13 @@ SPEC.loader.exec_module(runner)
 class CollectorRunnerTests(unittest.TestCase):
     def test_matrix_reuses_the_legacy_conformance_feature_coverage(self) -> None:
         names = [name for name, _ in runner.CASES]
-        features = [command[-1] for _, command in runner.CASES]
+        features = [command[command.index("--features") + 1] for _, command in runner.CASES]
         self.assertEqual(
             names,
             ["sync-http-full-stack", "sdk-full-stack", "combined-full-stack", "canonical-ingress"],
         )
         self.assertEqual(features, ["sync-http", "otlp-sdk", "otlp-sdk,sync-http", "otlp-sdk,sync-http"])
+        self.assertTrue(all(command[-2:] == ["--", "--nocapture"] for _, command in runner.CASES))
 
     def test_verify_source_sha_rejects_non_commit_input_without_git(self) -> None:
         with mock.patch.object(runner.subprocess, "check_output") as check_output:
@@ -42,7 +43,7 @@ class CollectorRunnerTests(unittest.TestCase):
                 )
             self.assertEqual(
                 (Path(temporary) / "failed.log").read_text(),
-                "$ cargo\nstdout\nstderr\nexit=7\n",
+                "$ cargo\nstdout\nstderr\nexit=7\ncleanup=cargo-process-exited\n",
             )
 
     def test_timeout_receipt_normalizes_bytes_and_runs_later_cases(self) -> None:
@@ -59,9 +60,10 @@ class CollectorRunnerTests(unittest.TestCase):
             output = Path(temporary)
             self.assertEqual(
                 (output / "sync-http-full-stack.log").read_text(),
-                "$ cargo test --locked -p sc-observability-otlp --test full_stack_integration --features sync-http\n"
+                "$ cargo test --locked -p sc-observability-otlp --test full_stack_integration --features sync-http -- --nocapture\n"
                 "partial\ufffd output\n"
-                f"timeout={runner.CASE_TIMEOUT_SECONDS}\n",
+                f"timeout={runner.CASE_TIMEOUT_SECONDS}\n"
+                "cleanup=timeout-not-confirmed\n",
             )
             self.assertIn("later output\nexit=0\n", (output / "canonical-ingress.log").read_text())
 

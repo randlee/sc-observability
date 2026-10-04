@@ -25,28 +25,28 @@ CASES = (
         "sync-http-full-stack",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "sync-http",
+            "--test", "full_stack_integration", "--features", "sync-http", "--", "--nocapture",
         ],
     ),
     (
         "sdk-full-stack",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "otlp-sdk",
+            "--test", "full_stack_integration", "--features", "otlp-sdk", "--", "--nocapture",
         ],
     ),
     (
         "combined-full-stack",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "otlp-sdk,sync-http",
+            "--test", "full_stack_integration", "--features", "otlp-sdk,sync-http", "--", "--nocapture",
         ],
     ),
     (
         "canonical-ingress",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "canonical_ingress", "--features", "otlp-sdk,sync-http",
+            "--test", "canonical_ingress", "--features", "otlp-sdk,sync-http", "--", "--nocapture",
         ],
     ),
 )
@@ -93,6 +93,7 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
             receipt.write(timeout_output_text(error.stdout))
             receipt.write(timeout_output_text(error.stderr))
             receipt.write(f"timeout={CASE_TIMEOUT_SECONDS}\n")
+            receipt.write("cleanup=timeout-not-confirmed\n")
         print(f"collector case {name}: timed out; inspect {log}", file=sys.stderr)
         return False
 
@@ -101,6 +102,7 @@ def run_case(name: str, command: list[str], *, environment: dict[str, str], outp
         receipt.write(completed.stdout)
         receipt.write(completed.stderr)
         receipt.write(f"exit={completed.returncode}\n")
+        receipt.write("cleanup=cargo-process-exited\n")
     if completed.returncode:
         print(f"collector case {name}: exit {completed.returncode}; inspect {log}", file=sys.stderr)
         return False
