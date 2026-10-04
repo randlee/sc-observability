@@ -169,6 +169,14 @@ class RunnerTests(unittest.TestCase):
         with patch.object(run.subprocess, "check_output", return_value="b" * 40 + "\n"), self.assertRaisesRegex(ValueError, "does not match"):
             run.verify_source("a" * 40)
 
+    def test_dirty_source_is_rejected_before_cases(self) -> None:
+        with patch.object(
+            run.subprocess,
+            "check_output",
+            side_effect=["a" * 40 + "\n", " M scripts/integrate/suites/rust-consumers/run.py\n"],
+        ), self.assertRaisesRegex(ValueError, "uncommitted changes"):
+            run.verify_source("a" * 40)
+
 
 if __name__ == "__main__":
     unittest.main()

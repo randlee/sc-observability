@@ -32,6 +32,9 @@ def verify_source(source_sha: str) -> None:
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     if head != source_sha:
         raise ValueError(f"checkout HEAD {head} does not match source-sha {source_sha}")
+    dirty = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True)
+    if dirty:
+        raise ValueError("checkout has uncommitted changes; candidate source must be clean")
 
 
 def windows_supervised_command(command: list[str], evidence_dir: Path) -> list[str]:
