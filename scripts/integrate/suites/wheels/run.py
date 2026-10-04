@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""Build one candidate wheel and exercise its installed and embedded runtimes.
+
+This is intentionally a candidate-artifact check, rather than a replacement
+for the B4a publishing qualification.  It reuses only the narrow clean-venv,
+installed-origin, and embedded-host checks used by that qualification.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import traceback
+
+
+ROOT = Path(__file__).resolve().parents[4]
+BUILD_TIMEOUT_SECONDS = 10 * 60
+RUNTIME_TIMEOUT_SECONDS = 2 * 60
+
+
+class SuiteError(RuntimeError):
+    """Reports one bounded command with the output needed to diagnose it."""
+
+
+def venv_python(venv: Path, *, platform_name: str | None = None) -> Path:
+    """Return the platform-native Python executable for a virtual environment."""
+    if (platform_name or os.name) == "nt":
+        return venv / "Scripts" / "python.exe"
+    return venv / "bin" / "python"
+
+
+def prepend_path(current: str | None, directory: str) -> str:
+    """Prepend one loader directory without introducing an empty path element."""
+    return directory if not current else directory + os.pathsep + current
+
+
+def embedded_environment(python: Path, *, platform_name: str | None = None) -> dict[str, str]:
+    """Configure the selected interpreter for the Rust-host embedded executable."""
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    environment["PYO3_PYTHON"] = str(python)
+    base_prefix = subprocess.check_output(
+        [str(python), "-I", "-c", "import sys; print(sys.base_prefix)"], text=True
+    ).strip()
+    environment["PYTHONHOME"] = base_prefix
+    platform_name = platform_name or sys.platform
+    if platform_name in ("nt", "windows"):
+        # f20f7a19: embedded hosts on Windows must expose the selected Python
+        # DLL directory, including the normal venv ``Scripts/python.exe`` path.
+        environment["PATH"] = prepend_path(environment.get("PATH"), base_prefix)
+    elif platform_name.startswith("linux"):
+        libdir = subprocess.check_output(
+            [str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR') or '')"],
+            text=True,
+        ).strip()
+        if libdir:
+            environment["LD_LIBRARY_PATH"] = prepend_path(environment.get("LD_LIBRARY_PATH"), libdir)
+    return environment
+
+
+def run_checked(command: list[str], *, cwd: Path, environment: dict[str, str] | None = None,
+                timeout: int = RUNTIME_TIMEOUT_SECONDS) -> str:
+    """Run one bounded command and retain its stdout and stderr in the error."""
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise SuiteError(f"timed out after {timeout}s: {command!r}\nstdout:\n{error.stdout or ''}\nstderr:\n{error.stderr or ''}") from error
+    except subprocess.CalledProcessError as error:
+        raise SuiteError(
+            f"failed ({error.returncode}): {command!r}\nstdout:\n{error.stdout}\nstderr:\n{error.stderr}"
+        ) from error
+    return completed.stdout
+
+
+def wheel_digest(wheel: Path) -> str:
+    """Return the immutable candidate wheel digest recorded in the suite report."""
+    return hashlib.sha256(wheel.read_bytes()).hexdigest()
+
+
+def build_wheel(output: Path) -> Path:
+    """Build exactly one release-configured candidate wheel for this checkout."""
+    maturin = shutil.which("maturin")
+    if maturin is not None:
+        maturin_command = [maturin]
+    else:
+        uvx = shutil.which("uvx")
+        if uvx is None:
+            raise SuiteError("maturin or uvx is required to build the candidate wheel")
+        # This is the same pinned one-shot build tool used by the existing
+        # binding validator.  The shared integration workflow only provisions
+        # Python, so the suite must not assume a preinstalled Maturin binary.
+        maturin_command = [uvx, "--from", "maturin==1.10.2", "maturin"]
+    wheel_dir = output / "wheel"
+    wheel_dir.mkdir(parents=True, exist_ok=False)
+    run_checked(
+        [
+            *maturin_command,
+            "build",
+            "--locked",
+            "--release",
+            "--manifest-path",
+            str(ROOT / "bindings/python/sc-observability-py/Cargo.toml"),
+            "--features",
+            "otlp-telemetry",
+            "--out",
+            str(wheel_dir),
+        ],
+        cwd=ROOT,
+        timeout=BUILD_TIMEOUT_SECONDS,
+    )
+    wheels = sorted(wheel_dir.glob("*.whl"))
+    if len(wheels) != 1:
+        raise SuiteError(f"expected exactly one candidate wheel, found: {wheels}")
+    return wheels[0]
+
+
+IMPORT_AND_RUNTIME_PROBE = r'''
+import json
+import pathlib
+import sys
+from sc_observability import LogEvent, LoggerConfig, LogQuery, Ok, create_logger
+import sc_observability
+import sc_observability._native as native
+
+prefix = pathlib.Path(sys.prefix).resolve()
+origins = {
+    "package": pathlib.Path(sc_observability.__file__).resolve(),
+    "native": pathlib.Path(native.__file__).resolve(),
+}
+if any(not path.is_relative_to(prefix) for path in origins.values()):
+    raise SystemExit(f"installed artifacts escaped the venv: {origins}")
+created = create_logger(LoggerConfig(service="e5-installed-wheel", log_root="."))
+if not isinstance(created, Ok):
+    raise SystemExit(f"owned logger was not a tagged Ok: {created!r}")
+logger = created.value
+for result in (
+    logger.log(LogEvent(level="info", target="e5.wheels", action="installed-runtime")),
+    logger.flush(),
+    logger.query(LogQuery(action="installed-runtime")),
+    logger.shutdown(),
+):
+    if not isinstance(result, Ok):
+        raise SystemExit(f"owned runtime returned an untagged failure: {result!r}")
+print(json.dumps({key: str(value) for key, value in origins.items()}, sort_keys=True))
+'''
+
+
+def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
+    """Install one wheel in a clean environment and prove its typed owned runtime."""
+    runtime = output / "runtime"
+    runtime.mkdir(parents=True, exist_ok=False)
+    venv = runtime / "venv"
+    run_checked([sys.executable, "-m", "venv", str(venv)], cwd=runtime)
+    python = venv_python(venv)
+    run_checked(
+        [str(python), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", str(wheel)],
+        cwd=runtime,
+    )
+    output_text = run_checked([str(python), "-I", "-c", IMPORT_AND_RUNTIME_PROBE], cwd=runtime)
+    return {"python": str(python), **json.loads(output_text)}
+
+
+def run_embedded_host(python: Path) -> None:
+    """Run the existing Rust-host attached-Python proof with the selected interpreter."""
+    run_checked(
+        ["cargo", "run", "--locked", "-p", "rust-python-logging"],
+        cwd=ROOT,
+        environment=embedded_environment(python),
+        timeout=BUILD_TIMEOUT_SECONDS,
+    )
+
+
+def verify_source_sha(source_sha: str) -> None:
+    """Reject a runner invocation that is not bound to its checked-out candidate."""
+    if len(source_sha) != 40 or any(character not in "0123456789abcdef" for character in source_sha.lower()):
+        raise SuiteError("source-sha must be a full 40-hex commit")
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    if head != source_sha.lower():
+        raise SuiteError(f"checkout HEAD {head} does not match source-sha {source_sha}")
+
+
+def run(source_sha: str, output: Path) -> dict[str, object]:
+    """Execute the bounded candidate wheel, installed runtime, and attached-host checks."""
+    verify_source_sha(source_sha)
+    output.mkdir(parents=True, exist_ok=True)
+    wheel = build_wheel(output)
+    installed = install_and_probe(wheel, output)
+    run_embedded_host(Path(installed["python"]))
+    result: dict[str, object] = {
+        "schema_version": 1,
+        "status": "passed",
+        "source_commit": source_sha,
+        "wheel": {"path": str(wheel), "sha256": wheel_digest(wheel)},
+        "installed_artifacts": installed,
+        "checks": {
+            "clean_install": "passed",
+            "installed_origin": "passed",
+            "owned_typed_runtime": "passed",
+            "rust_host_attached_python": "passed",
+        },
+    }
+    (output / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-sha", required=True)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    args = parser.parse_args(argv)
+    try:
+        result = run(args.source_sha, args.output_dir.resolve())
+    except (OSError, SuiteError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        (args.output_dir / "failure-report.txt").write_text(traceback.format_exc(), encoding="utf-8")
+        print(f"wheels integration: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
