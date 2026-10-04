@@ -35,9 +35,23 @@ python3 -m unittest scripts.integrate.tests.test_dispatch
 The workflow is `workflow_dispatch` only. The command uses
 `gh workflow run integration.yml --ref <branch>`. GitHub resolves that ref when
 creating the run; every job checks out its immutable `github.sha`, and the
-common runner verifies HEAD equals that SHA. Suite builds use that checkout;
-no job consumes artifacts built by another suite. Artifact names include the
-suite, OS and SHA. Branch changes after dispatch do not move the run's source.
+common runner verifies HEAD equals that SHA. Suite builds use that checkout.
+Branch changes after dispatch do not move the run's source.
+
+An explicitly compatible E3/E4 Rust preparation may avoid recompiling the same
+OTLP test target. It is valid only for the same immutable SHA, OS/architecture,
+Rust `1.94.1`, `Cargo.lock`, target/profile/`RUSTFLAGS`,
+`otlp-sdk,sync-http` feature projection, named test binary, and restored target
+path. This shares compilation only: both suite cells retain their own selected
+tests and assertions, and E4 compiles its additional `canonical_ingress` binary
+when required. A mismatch or absent compatible target is a normal local compile,
+not a fallback to another suite's artifact.
+
+No other sibling artifact exchange is implied. E2's wheel/CLI and E6's
+Tauri/npm artifacts have distinct build contracts. E5's isolated sdist wheel
+and embedding checks, and E7's isolated external-consumer checks, must build in
+their own constrained roots. The workflow remains `workflow_dispatch` only:
+there is no automatic per-sprint preparation and no generic cache framework.
 
 The selection job validates workflow-form inputs and emits the matrix; it is
 not an aggregate status job. Matrix fail-fast is disabled. The six suite owners
@@ -82,12 +96,13 @@ python scripts/integrate/suites/<selector>/run.py --source-sha <40hex> --output-
 
 Only the common runner checks HEAD and runner presence. Missing implementations
 fail explicitly; they never pass or silently skip. Each suite builds its own
-candidate artifacts, runs existing assertions, writes existing logs/reports
-below the output directory and returns nonzero on failure. Preserve runnable
-assertions, use bounded subprocess operations and clean owned processes,
-files and sockets in `finally`, including setup/assertion failure. Native
-viewer/webview execution belongs on CI, not a developer desktop. No suite
-requires another suite's artifact job.
+candidate artifacts unless the narrow E3/E4 compatible-preparation conditions
+above are met, runs existing assertions, writes existing logs/reports below the
+output directory and returns nonzero on failure. Preserve runnable assertions,
+use bounded subprocess operations and clean owned processes, files and sockets
+in `finally`, including setup/assertion failure. Native viewer/webview execution
+belongs on CI, not a developer desktop. No suite may consume an unqualified
+sibling artifact.
 
 ## Existing viewer interface (read-only contract)
 
