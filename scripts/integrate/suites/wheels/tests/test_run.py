@@ -64,6 +64,26 @@ class WheelsRunnerTests(unittest.TestCase):
         self.assertEqual(commands[2][1:3], ["-I", "-c"])
         self.assertEqual(installed["python"], "/tmp/venv/bin/python")
 
+    def test_embedded_package_origin_rejects_a_source_tree(self) -> None:
+        installed = {
+            "python": "/tmp/e5-venv/bin/python",
+            "package": "/workspace/bindings/python/sc-observability-py/python/sc_observability/__init__.py",
+        }
+        with self.assertRaisesRegex(run.SuiteError, "escaped the installed venv"):
+            run.installed_package_origin(installed)
+
+    @mock.patch.object(run, "run_checked")
+    @mock.patch.object(run, "embedded_environment", return_value={"PYO3_PYTHON": "/tmp/e5-venv/bin/python"})
+    def test_embedded_host_receives_the_installed_package_contract(
+            self, environment: mock.Mock, checked: mock.Mock) -> None:
+        package = Path("/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/__init__.py")
+        run.run_embedded_host(Path("/tmp/e5-venv/bin/python"), package)
+        self.assertEqual(environment.call_args.args[0], Path("/tmp/e5-venv/bin/python"))
+        self.assertEqual(
+            checked.call_args.kwargs["environment"]["SC_OBSERVABILITY_ATTACHED_PACKAGE"],
+            str(package),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

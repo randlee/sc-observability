@@ -173,12 +173,26 @@ def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
     return {"python": str(python), **json.loads(output_text)}
 
 
-def run_embedded_host(python: Path) -> None:
-    """Run the existing Rust-host attached-Python proof with the selected interpreter."""
+def installed_package_origin(installed: dict[str, str]) -> Path:
+    """Return the installed package file, rejecting a source-tree substitution."""
+    python = Path(installed["python"])
+    package = Path(installed["package"]).resolve()
+    # The venv executable is usually a symlink to the base interpreter.  Keep
+    # its lexical parent while resolving only the venv directory itself.
+    venv = python.parent.parent.resolve()
+    if not package.is_relative_to(venv):
+        raise SuiteError(f"attached package escaped the installed venv: {package}")
+    return package
+
+
+def run_embedded_host(python: Path, package: Path) -> None:
+    """Run the Rust-host proof against the installed binding package file."""
+    environment = embedded_environment(python)
+    environment["SC_OBSERVABILITY_ATTACHED_PACKAGE"] = str(package)
     run_checked(
         ["cargo", "run", "--locked", "-p", "rust-python-logging"],
         cwd=ROOT,
-        environment=embedded_environment(python),
+        environment=environment,
         timeout=BUILD_TIMEOUT_SECONDS,
     )
 
@@ -198,7 +212,7 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
     output.mkdir(parents=True, exist_ok=True)
     wheel = build_wheel(output)
     installed = install_and_probe(wheel, output)
-    run_embedded_host(Path(installed["python"]))
+    run_embedded_host(Path(installed["python"]), installed_package_origin(installed))
     result: dict[str, object] = {
         "schema_version": 1,
         "status": "passed",
