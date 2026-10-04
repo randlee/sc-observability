@@ -143,7 +143,7 @@ def run(source_sha: str, output: Path) -> dict[str, object]:
     verify_source_sha(source_sha)
     source_commit = source_sha.lower()
     output.mkdir(parents=True, exist_ok=True)
-    environment = os.environ | {"CI": "1", "GITHUB_ACTIONS": "true"}
+    environment = dict(os.environ)
     setup_log = output / "setup.log"
     downloader_receipt = run_checked(
         [sys.executable, str(DOWNLOADER), str(output / "otel-desktop-viewer")],

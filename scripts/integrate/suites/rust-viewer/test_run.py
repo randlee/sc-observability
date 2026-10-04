@@ -138,6 +138,36 @@ class RustViewerRunnerTests(unittest.TestCase):
             self.assertEqual(result, json.loads((output / "result.json").read_text()))
             self.assertEqual(1, len(stops))
 
+    def test_run_does_not_claim_a_ci_or_github_actions_environment(self) -> None:
+        source_sha = "c" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            environments: list[dict[str, str]] = []
+
+            def checked(_command: list[str], *, environment: dict[str, str], **_kwargs: object) -> str:
+                environments.append(environment)
+                return json.dumps({"binary": "viewer", "binary_sha256": "digest", "version": "v1"})
+
+            def harness(_arguments: list[str], *, environment: dict[str, str], **_kwargs: object) -> str:
+                environments.append(environment)
+                return json.dumps({"backend": "sdk", "records": 3})
+
+            with mock.patch.dict(runner.os.environ, {}, clear=True), \
+                    mock.patch.object(runner, "verify_source_sha"), \
+                    mock.patch.object(runner, "reserved_ports", return_value=(10001, 10002, 10003)), \
+                    mock.patch.object(runner, "run_checked", side_effect=checked), \
+                    mock.patch.object(runner, "invoke_harness", side_effect=harness):
+                runner.run(source_sha, output)
+
+            self.assertTrue(environments)
+            self.assertTrue(all("CI" not in environment for environment in environments))
+            self.assertTrue(all("GITHUB_ACTIONS" not in environment for environment in environments))
+            backend_environments = [
+                environment for environment in environments if "D9_VIEWER_SDK_ADDRESS" in environment
+            ]
+            self.assertTrue(backend_environments)
+            self.assertTrue(all("D9_VIEWER_SYNC_HTTP_ADDRESS" in environment for environment in backend_environments))
+
     def test_start_failure_does_not_run_backends_and_retains_failed_result(self) -> None:
         source_sha = "d" * 40
         with tempfile.TemporaryDirectory() as temporary:
