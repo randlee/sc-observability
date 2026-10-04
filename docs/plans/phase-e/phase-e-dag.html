@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="phase-root-bead" content="obs-phase-e">
+  <meta name="wyvern:width" content="1536">
+  <meta name="wyvern:height" content="864">
+  <title>Sprint review · Phase E</title>
+  <script id="wyvern-initial-size">
+    (() => {
+      function sizeWindow(event) {
+        const bounds = (event && event.detail) || window.__wyvernViewportBounds || {};
+        const screen = window.screen || {};
+        const width = Math.round(0.8 * (bounds.available_width || screen.availWidth || 1920));
+        const height = Math.round(0.8 * (bounds.available_height || screen.availHeight || 1080));
+        document.querySelector('meta[name="wyvern:width"]').content = String(width);
+        document.querySelector('meta[name="wyvern:height"]').content = String(height);
+        if (window.ipc && typeof window.ipc.postMessage === 'function') {
+          window.ipc.postMessage('resize:' + width + 'x' + height);
+        }
+      }
+      window.addEventListener('wyvern:viewport-bounds', sizeWindow);
+      sizeWindow();
+    })();
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #172b43; background: white; font: 14px system-ui, sans-serif; }
+    header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px;
+      padding: 12px 18px; background: #f8fafc; border-bottom: 1px solid #dbe3ed; }
+    h1 { margin: 0 auto 0 0; font-size: 17px; }
+    button { font: inherit; color: inherit; background: white; border: 1px solid #a8b7c9;
+      border-radius: 5px; padding: 5px 12px; cursor: pointer; }
+    button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+    output { min-width: 45px; text-align: center; }
+    main { overflow: auto; height: calc(100vh - 59px); padding: 12px; }
+    #diagram { width: 100%; }
+    #diagram > svg { display: block; width: 100%; height: auto; }
+    @media print { header { position: static; } button, output { display: none; }
+      main { height: auto; overflow: visible; } #diagram { width: 100% !important; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Sprint review · Phase E</h1>
+    <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+    <output id="zoom-level" aria-live="polite">100%</output>
+    <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+    <button id="fit" type="button">Fit</button>
+  </header>
+  <main aria-label="Sprint dependency diagram">
+    <div id="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="919pt" height="798.0pt" viewBox="0.0 0.0 919 798.0">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(28.8 680.8)">
+<title>execution</title>
+<polygon fill="white" stroke="none" points="-28.8,28.8 -28.8,-680.8 600.58,-680.8 600.58,28.8 -28.8,28.8" />
+<text xml:space="preserve" text-anchor="middle" x="285.89" y="-630" font-family="Arial" font-size="20.00">Phase E — execution order</text>
+<text xml:space="preserve" text-anchor="middle" x="285.89" y="-606" font-family="Arial" font-size="20.00">Sprint completes → its gate passes → downstream sprint starts</text>
+<g id="clust1" class="cluster">
+<title>cluster_obs-e-1</title>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_obs-e-2</title>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_obs-e-3</title>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_obs-e-4</title>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_obs-e-5</title>
+</g>
+<g id="clust6" class="cluster">
+<title>cluster_obs-e-6</title>
+</g>
+<g id="clust7" class="cluster">
+<title>cluster_obs-e-7</title>
+</g>
+
+<g id="node1" class="node">
+<title>obs-e-1 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M89,-315C89,-315 51.64,-315 51.64,-315 45.64,-315 39.64,-309 39.64,-303 39.64,-303 39.64,-291 39.64,-291 39.64,-285 45.64,-279 51.64,-279 51.64,-279 89,-279 89,-279 95,-279 101,-285 101,-291 101,-291 101,-303 101,-303 101,-309 95,-315 89,-315" />
+<text xml:space="preserve" text-anchor="middle" x="70.32" y="-293.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-1</text>
+</g>
+
+<g id="node2" class="node">
+<title>obs-e-1-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M259.97,-306.01C259.97,-306.01 243.09,-325.22 243.09,-325.22 239.13,-329.73 229.17,-334.23 223.17,-334.23 223.17,-334.23 181.72,-334.23 181.72,-334.23 175.72,-334.23 165.76,-329.73 161.8,-325.22 161.8,-325.22 144.92,-306.01 144.92,-306.01 140.96,-301.51 140.96,-292.49 144.92,-287.99 144.92,-287.99 161.8,-268.78 161.8,-268.78 165.76,-264.27 175.72,-259.77 181.72,-259.77 181.72,-259.77 223.17,-259.77 223.17,-259.77 229.17,-259.77 239.13,-264.27 243.09,-268.78 243.09,-268.78 259.97,-287.99 259.97,-287.99 263.93,-292.49 263.93,-301.51 259.97,-306.01" />
+<text xml:space="preserve" text-anchor="middle" x="202.45" y="-300.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-1</text>
+<text xml:space="preserve" text-anchor="middle" x="202.45" y="-285.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge1" class="edge">
+<title>obs-e-1-&gt;obs-e-1-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M101.17,-297C109.11,-297 118.04,-297 127.23,-297" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="127.22,-299.63 134.72,-297 127.22,-294.38 127.22,-299.63" />
+</g>
+
+<g id="node3" class="node">
+<title>obs-e-2 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M353.25,-551C353.25,-551 315.89,-551 315.89,-551 309.89,-551 303.89,-545 303.89,-539 303.89,-539 303.89,-527 303.89,-527 303.89,-521 309.89,-515 315.89,-515 315.89,-515 353.25,-515 353.25,-515 359.25,-515 365.25,-521 365.25,-527 365.25,-527 365.25,-539 365.25,-539 365.25,-545 359.25,-551 353.25,-551" />
+<text xml:space="preserve" text-anchor="middle" x="334.57" y="-529.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-2</text>
+</g>
+
+<g id="edge2" class="edge">
+<title>obs-e-1-sanity-&gt;obs-e-2</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M216.77,-334.52C232.34,-375.67 260.51,-442.67 295.89,-494 299.19,-498.78 303.08,-503.52 307.1,-507.97" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="305.18,-509.76 312.24,-513.4 308.99,-506.15 305.18,-509.76" />
+</g>
+
+<g id="node5" class="node">
+<title>obs-e-3 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M353.25,-453C353.25,-453 315.89,-453 315.89,-453 309.89,-453 303.89,-447 303.89,-441 303.89,-441 303.89,-429 303.89,-429 303.89,-423 309.89,-417 315.89,-417 315.89,-417 353.25,-417 353.25,-417 359.25,-417 365.25,-423 365.25,-429 365.25,-429 365.25,-441 365.25,-441 365.25,-447 359.25,-453 353.25,-453" />
+<text xml:space="preserve" text-anchor="middle" x="334.57" y="-431.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-3</text>
+</g>
+
+<g id="edge4" class="edge">
+<title>obs-e-1-sanity-&gt;obs-e-3</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M236.68,-332.88C254.21,-351.74 276.13,-375.2 295.89,-396 300.35,-400.69 305.13,-405.68 309.74,-410.46" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="307.56,-411.99 314.66,-415.56 311.34,-408.34 307.56,-411.99" />
+</g>
+
+<g id="node7" class="node">
+<title>obs-e-4 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M353.25,-355C353.25,-355 315.89,-355 315.89,-355 309.89,-355 303.89,-349 303.89,-343 303.89,-343 303.89,-331 303.89,-331 303.89,-325 309.89,-319 315.89,-319 315.89,-319 353.25,-319 353.25,-319 359.25,-319 365.25,-325 365.25,-331 365.25,-331 365.25,-343 365.25,-343 365.25,-349 359.25,-355 353.25,-355" />
+<text xml:space="preserve" text-anchor="middle" x="334.57" y="-333.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-4</text>
+</g>
+
+<g id="edge6" class="edge">
+<title>obs-e-1-sanity-&gt;obs-e-4</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M254.5,-312.69C268.04,-316.86 282.42,-321.28 295.16,-325.19" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="294.08,-327.61 302.02,-327.3 295.63,-322.59 294.08,-327.61" />
+</g>
+
+<g id="node9" class="node">
+<title>obs-e-5 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M353.25,-276C353.25,-276 315.89,-276 315.89,-276 309.89,-276 303.89,-270 303.89,-264 303.89,-264 303.89,-252 303.89,-252 303.89,-246 309.89,-240 315.89,-240 315.89,-240 353.25,-240 353.25,-240 359.25,-240 365.25,-246 365.25,-252 365.25,-252 365.25,-264 365.25,-264 365.25,-270 359.25,-276 353.25,-276" />
+<text xml:space="preserve" text-anchor="middle" x="334.57" y="-254.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-5</text>
+</g>
+
+<g id="edge8" class="edge">
+<title>obs-e-1-sanity-&gt;obs-e-5</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M254.87,-281.59C268.14,-277.61 282.19,-273.4 294.69,-269.65" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="295.39,-272.18 301.82,-267.51 293.89,-267.15 295.39,-272.18" />
+</g>
+
+<g id="node11" class="node">
+<title>obs-e-6 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M353.25,-179C353.25,-179 315.89,-179 315.89,-179 309.89,-179 303.89,-173 303.89,-167 303.89,-167 303.89,-155 303.89,-155 303.89,-149 309.89,-143 315.89,-143 315.89,-143 353.25,-143 353.25,-143 359.25,-143 365.25,-149 365.25,-155 365.25,-155 365.25,-167 365.25,-167 365.25,-173 359.25,-179 353.25,-179" />
+<text xml:space="preserve" text-anchor="middle" x="334.57" y="-157.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-6</text>
+</g>
+
+<g id="edge10" class="edge">
+<title>obs-e-1-sanity-&gt;obs-e-6</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M237.2,-261.47C254.68,-243.09 276.4,-220.31 295.89,-200 300.37,-195.33 305.16,-190.36 309.78,-185.58" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="311.38,-187.7 314.7,-180.48 307.6,-184.05 311.38,-187.7" />
+</g>
+
+<g id="node13" class="node">
+<title>obs-e-7 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M353.25,-80C353.25,-80 315.89,-80 315.89,-80 309.89,-80 303.89,-74 303.89,-68 303.89,-68 303.89,-56 303.89,-56 303.89,-50 309.89,-44 315.89,-44 315.89,-44 353.25,-44 353.25,-44 359.25,-44 365.25,-50 365.25,-56 365.25,-56 365.25,-68 365.25,-68 365.25,-74 359.25,-80 353.25,-80" />
+<text xml:space="preserve" text-anchor="middle" x="334.57" y="-58.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-7</text>
+</g>
+
+<g id="edge12" class="edge">
+<title>obs-e-1-sanity-&gt;obs-e-7</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M217.11,-259.58C232.88,-218.9 261.14,-152.9 295.89,-102 299.36,-96.92 303.47,-91.86 307.69,-87.13" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="309.5,-89.04 312.68,-81.76 305.65,-85.46 309.5,-89.04" />
+</g>
+
+<g id="node4" class="node">
+<title>obs-e-2-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M524.22,-552.01C524.22,-552.01 507.34,-571.22 507.34,-571.22 503.38,-575.73 493.42,-580.23 487.42,-580.23 487.42,-580.23 445.97,-580.23 445.97,-580.23 439.97,-580.23 430.01,-575.73 426.05,-571.22 426.05,-571.22 409.17,-552.01 409.17,-552.01 405.21,-547.51 405.21,-538.49 409.17,-533.99 409.17,-533.99 426.05,-514.78 426.05,-514.78 430.01,-510.27 439.97,-505.77 445.97,-505.77 445.97,-505.77 487.42,-505.77 487.42,-505.77 493.42,-505.77 503.38,-510.27 507.34,-514.78 507.34,-514.78 524.22,-533.99 524.22,-533.99 528.18,-538.49 528.18,-547.51 524.22,-552.01" />
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-546.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-2</text>
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-531.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge3" class="edge">
+<title>obs-e-2-&gt;obs-e-2-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M365.42,-535.29C374.63,-536 385.17,-536.81 395.9,-537.64" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="395.5,-540.24 403.18,-538.2 395.9,-535 395.5,-540.24" />
+</g>
+
+<g id="node6" class="node">
+<title>obs-e-3-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M524.22,-454.01C524.22,-454.01 507.34,-473.22 507.34,-473.22 503.38,-477.73 493.42,-482.23 487.42,-482.23 487.42,-482.23 445.97,-482.23 445.97,-482.23 439.97,-482.23 430.01,-477.73 426.05,-473.22 426.05,-473.22 409.17,-454.01 409.17,-454.01 405.21,-449.51 405.21,-440.49 409.17,-435.99 409.17,-435.99 426.05,-416.78 426.05,-416.78 430.01,-412.27 439.97,-407.77 445.97,-407.77 445.97,-407.77 487.42,-407.77 487.42,-407.77 493.42,-407.77 503.38,-412.27 507.34,-416.78 507.34,-416.78 524.22,-435.99 524.22,-435.99 528.18,-440.49 528.18,-449.51 524.22,-454.01" />
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-448.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-3</text>
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-433.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge5" class="edge">
+<title>obs-e-3-&gt;obs-e-3-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M365.42,-437.29C374.63,-438 385.17,-438.81 395.9,-439.64" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="395.5,-442.24 403.18,-440.2 395.9,-437 395.5,-442.24" />
+</g>
+
+<g id="node8" class="node">
+<title>obs-e-4-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M524.22,-356.01C524.22,-356.01 507.34,-375.22 507.34,-375.22 503.38,-379.73 493.42,-384.23 487.42,-384.23 487.42,-384.23 445.97,-384.23 445.97,-384.23 439.97,-384.23 430.01,-379.73 426.05,-375.22 426.05,-375.22 409.17,-356.01 409.17,-356.01 405.21,-351.51 405.21,-342.49 409.17,-337.99 409.17,-337.99 426.05,-318.78 426.05,-318.78 430.01,-314.27 439.97,-309.77 445.97,-309.77 445.97,-309.77 487.42,-309.77 487.42,-309.77 493.42,-309.77 503.38,-314.27 507.34,-318.78 507.34,-318.78 524.22,-337.99 524.22,-337.99 528.18,-342.49 528.18,-351.51 524.22,-356.01" />
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-350.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-4</text>
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-335.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge7" class="edge">
+<title>obs-e-4-&gt;obs-e-4-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M365.42,-339.29C374.63,-340 385.17,-340.81 395.9,-341.64" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="395.5,-344.24 403.18,-342.2 395.9,-339 395.5,-344.24" />
+</g>
+
+<g id="node10" class="node">
+<title>obs-e-5-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M524.22,-258.01C524.22,-258.01 507.34,-277.22 507.34,-277.22 503.38,-281.73 493.42,-286.23 487.42,-286.23 487.42,-286.23 445.97,-286.23 445.97,-286.23 439.97,-286.23 430.01,-281.73 426.05,-277.22 426.05,-277.22 409.17,-258.01 409.17,-258.01 405.21,-253.51 405.21,-244.49 409.17,-239.99 409.17,-239.99 426.05,-220.78 426.05,-220.78 430.01,-216.27 439.97,-211.77 445.97,-211.77 445.97,-211.77 487.42,-211.77 487.42,-211.77 493.42,-211.77 503.38,-216.27 507.34,-220.78 507.34,-220.78 524.22,-239.99 524.22,-239.99 528.18,-244.49 528.18,-253.51 524.22,-258.01" />
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-252.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-5</text>
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-237.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge9" class="edge">
+<title>obs-e-5-&gt;obs-e-5-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M365.42,-255.94C374.51,-255.31 384.91,-254.59 395.49,-253.86" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="395.35,-256.5 402.65,-253.36 394.99,-251.26 395.35,-256.5" />
+</g>
+
+<g id="node12" class="node">
+<title>obs-e-6-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M524.22,-160.01C524.22,-160.01 507.34,-179.22 507.34,-179.22 503.38,-183.73 493.42,-188.23 487.42,-188.23 487.42,-188.23 445.97,-188.23 445.97,-188.23 439.97,-188.23 430.01,-183.73 426.05,-179.22 426.05,-179.22 409.17,-160.01 409.17,-160.01 405.21,-155.51 405.21,-146.49 409.17,-141.99 409.17,-141.99 426.05,-122.78 426.05,-122.78 430.01,-118.27 439.97,-113.77 445.97,-113.77 445.97,-113.77 487.42,-113.77 487.42,-113.77 493.42,-113.77 503.38,-118.27 507.34,-122.78 507.34,-122.78 524.22,-141.99 524.22,-141.99 528.18,-146.49 528.18,-155.51 524.22,-160.01" />
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-154.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-6</text>
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-139.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge11" class="edge">
+<title>obs-e-6-&gt;obs-e-6-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M365.42,-158.71C374.63,-158 385.17,-157.19 395.9,-156.36" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="395.9,-159 403.18,-155.8 395.5,-153.76 395.9,-159" />
+</g>
+
+<g id="node14" class="node">
+<title>obs-e-7-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M524.22,-62.01C524.22,-62.01 507.34,-81.22 507.34,-81.22 503.38,-85.73 493.42,-90.23 487.42,-90.23 487.42,-90.23 445.97,-90.23 445.97,-90.23 439.97,-90.23 430.01,-85.73 426.05,-81.22 426.05,-81.22 409.17,-62.01 409.17,-62.01 405.21,-57.51 405.21,-48.49 409.17,-43.99 409.17,-43.99 426.05,-24.78 426.05,-24.78 430.01,-20.27 439.97,-15.77 445.97,-15.77 445.97,-15.77 487.42,-15.77 487.42,-15.77 493.42,-15.77 503.38,-20.27 507.34,-24.78 507.34,-24.78 524.22,-43.99 524.22,-43.99 528.18,-48.49 528.18,-57.51 524.22,-62.01" />
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-56.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-e-7</text>
+<text xml:space="preserve" text-anchor="middle" x="466.69" y="-41.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge13" class="edge">
+<title>obs-e-7-&gt;obs-e-7-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M365.42,-59.94C374.51,-59.31 384.91,-58.59 395.49,-57.86" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="395.35,-60.5 402.65,-57.36 394.99,-55.26 395.35,-60.5" />
+</g>
+<g class="state-badges"><g class="state-badge" transform="translate(60.32 -324)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(60.32 -288)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><path d="M4 10V14H16V10 M10 3V10 M7 7L10 10L13 7" fill="none" stroke="#64748b" stroke-width="1.5" /><title>QA IN PROGRESS; obs-e-1-qa</title></g><g class="state-badge" transform="translate(183.45 -343.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(324.57 -560)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(324.57 -524)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><path d="M4 10V14H16V10 M10 3V10 M7 7L10 10L13 7" fill="none" stroke="#64748b" stroke-width="1.5" /><title>QA IN PROGRESS; obs-e-2-qa</title></g><g class="state-badge" transform="translate(324.57 -462)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(324.57 -426)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><path d="M4 10V14H16V10 M10 3V10 M7 7L10 10L13 7" fill="none" stroke="#64748b" stroke-width="1.5" /><title>QA IN PROGRESS; obs-e-3-qa</title></g><g class="state-badge" transform="translate(324.57 -364)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(324.57 -328)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><path d="M4 10V14H16V10 M10 3V10 M7 7L10 10L13 7" fill="none" stroke="#64748b" stroke-width="1.5" /><title>QA IN PROGRESS; obs-e-4-qa</title></g><g class="state-badge" transform="translate(324.57 -285)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(324.57 -249)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><path d="M4 10V14H16V10 M10 3V10 M7 7L10 10L13 7" fill="none" stroke="#64748b" stroke-width="1.5" /><title>QA IN PROGRESS; obs-e-5-qa</title></g><g class="state-badge" transform="translate(324.57 -188)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(324.57 -152)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><path d="M4 10V14H16V10 M10 3V10 M7 7L10 10L13 7" fill="none" stroke="#64748b" stroke-width="1.5" /><title>QA IN PROGRESS; obs-e-6-qa</title></g><g class="state-badge" transform="translate(324.57 -89)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(324.57 -53)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><path d="M4 10V14H16V10 M10 3V10 M7 7L10 10L13 7" fill="none" stroke="#64748b" stroke-width="1.5" /><title>QA IN PROGRESS; obs-e-7-qa</title></g><g class="state-badge" transform="translate(447.69 -589.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(447.69 -491.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(447.69 -393.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(447.69 -295.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(447.69 -197.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(447.69 -99.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g></g></g>
+<g class="state-legend" font-family="Arial" font-size="14" fill="#334155"><rect x="0" y="710.0" width="629.0" height="88" fill="white" /><g class="state-badge" transform="translate(30 719)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><text x="56" y="733.0">Complete / sanity PASS</text><g class="state-badge" transform="translate(232 719)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#64748b">○</text></g><text x="258" y="733.0">Pending</text><g class="state-badge" transform="translate(329 719)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><text x="355" y="733.0">Blocked</text><g class="state-badge" transform="translate(426 719)"><rect width="20" height="18" rx="6" fill="white" stroke="#2563eb" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#2563eb">↻</text></g><text x="452" y="733.0">Active</text><g class="state-badge" transform="translate(516 719)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><text x="542" y="733.0">Findings</text><g class="state-badge" transform="translate(620 719)"><rect width="20" height="18" rx="6" fill="white" stroke="#b45309" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b45309">?</text></g><text x="646" y="733.0">Unconfirmed</text><g class="state-badge" transform="translate(745 719)"><rect width="20" height="18" rx="6" fill="white" stroke="#7e22ce" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#7e22ce">↷</text></g><text x="771" y="733.0">User override</text><text x="30" y="762.0" font-size="12">Top = dev/sanity; gate number = completed sanity iterations; ? = unavailable. Dev check requires sanity PASS. Snapshot: 2026-10-03T21:11:39.680243+00:00</text><text x="30" y="784.0" font-size="12">Bottom = QA: assigned / active / pass, or open blocking:important:minor findings after FAIL. Blank = undispatched.</text></g></svg></div>
+  </main>
+  <script>
+    const diagram = document.getElementById('diagram');
+    let zoom = 1;
+    function setZoom(value) {
+      zoom = Math.max(0.5, Math.min(4, value));
+      diagram.style.width = (zoom * 100) + '%';
+      document.getElementById('zoom-level').textContent = Math.round(zoom * 100) + '%';
+    }
+    document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoom / 1.25));
+    document.getElementById('zoom-in').addEventListener('click', () => setZoom(zoom * 1.25));
+    document.getElementById('fit').addEventListener('click', () => setZoom(1));
+  </script>
+</body>
+</html>
