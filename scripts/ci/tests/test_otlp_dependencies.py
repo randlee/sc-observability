@@ -59,6 +59,39 @@ class TransportPolicyTests(unittest.TestCase):
         )
 
 
+    def test_renamed_sc_observe_regular_dependency_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "[dependencies]\n",
+            '[dependencies]\nobserve_alias = { package = "sc-observe", workspace = true }\n',
+        )
+        self.rejects(
+            r"OTLP dependency sc-observe: dev-only; it must not appear in \[dependencies\]"
+        )
+
+
+    def test_sc_observe_build_dependency_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "[lints]",
+            "[build-dependencies]\nsc-observe.workspace = true\n\n[lints]",
+        )
+        self.rejects(
+            r"OTLP dependency sc-observe: dev-only; it must not appear in \[build-dependencies\]"
+        )
+
+
+    def test_target_specific_sc_observe_dependency_is_rejected(self):
+        self.replace(
+            MANIFEST,
+            "[lints]",
+            "[target.'cfg(unix)'.dependencies]\nsc-observe.workspace = true\n\n[lints]",
+        )
+        self.rejects(
+            r"OTLP dependency sc-observe: dev-only; it must not appear in \[dependencies\]"
+        )
+
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
