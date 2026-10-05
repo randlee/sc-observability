@@ -33,7 +33,7 @@ def run(suite, source_sha, output_dir, root=ROOT):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=SUITES, required=True)
+    parser.add_argument("--suite", required=True)
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args(argv)
