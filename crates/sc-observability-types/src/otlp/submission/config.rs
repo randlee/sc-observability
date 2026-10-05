@@ -655,13 +655,6 @@ mod tests {
                 )));
             }
         }
-        if schema.pointer("/properties/store/properties/disk_bound_policy/enum")
-            != Some(&serde_json::json!(["reject_new", "evict_oldest"]))
-        {
-            return Err(schema_mismatch(
-                "/properties/store/properties/disk_bound_policy/enum",
-            ));
-        }
         Ok(())
     }
 
@@ -874,22 +867,63 @@ mod tests {
             constants::TELEMETRY_MAX_STORE_BYTES
         );
         assert_eq!(defaults.disk_bound_policy, DiskBoundPolicy::RejectNew);
-        assert_eq!(
-            schema.pointer("/properties/service/default"),
-            Some(&serde_json::Value::String(
-                constants::TELEMETRY_DEFAULT_SERVICE.into()
-            ))
+        let disk_bound_policies = serde_json::Value::Array(
+            [DiskBoundPolicy::RejectNew, DiskBoundPolicy::EvictOldest]
+                .into_iter()
+                .map(|policy| serde_json::to_value(policy).unwrap())
+                .collect(),
         );
-        assert_eq!(
-            schema.pointer("/properties/otlp/properties/timeout_ms/default"),
-            Some(&serde_json::Value::from(10_000))
-        );
-        assert_eq!(
-            schema.pointer("/properties/store/properties/max_bytes/default"),
-            Some(&serde_json::Value::from(
-                constants::TELEMETRY_MAX_STORE_BYTES
-            ))
-        );
+        for (path, expected) in [
+            (
+                "/properties/service/default",
+                serde_json::Value::String(constants::TELEMETRY_DEFAULT_SERVICE.into()),
+            ),
+            (
+                "/properties/otlp/properties/endpoint/default",
+                serde_json::Value::String(constants::TELEMETRY_DEFAULT_ENDPOINT.into()),
+            ),
+            (
+                "/properties/otlp/properties/timeout_ms/default",
+                serde_json::Value::from(
+                    u64::try_from(constants::TELEMETRY_REQUEST_TIMEOUT.as_millis()).unwrap(),
+                ),
+            ),
+            (
+                "/properties/store/properties/max_bytes/default",
+                serde_json::Value::from(constants::TELEMETRY_MAX_STORE_BYTES),
+            ),
+            (
+                "/properties/store/properties/delivered_retention_hours/default",
+                serde_json::Value::from(
+                    constants::TELEMETRY_DELIVERED_RETENTION.as_secs()
+                        / constants::TELEMETRY_SECONDS_PER_HOUR,
+                ),
+            ),
+            (
+                "/properties/store/properties/disk_bound_policy/default",
+                serde_json::to_value(DiskBoundPolicy::default()).unwrap(),
+            ),
+            (
+                "/properties/store/properties/disk_bound_policy/enum",
+                disk_bound_policies,
+            ),
+            (
+                "/properties/otlp/properties/timeout_ms/minimum",
+                serde_json::Value::from(
+                    u64::try_from(constants::TELEMETRY_DURATION_MIN.as_millis()).unwrap(),
+                ),
+            ),
+            (
+                "/properties/store/properties/max_bytes/minimum",
+                serde_json::Value::from(1_u64),
+            ),
+            (
+                "/properties/store/properties/delivered_retention_hours/minimum",
+                serde_json::Value::from(1_u64),
+            ),
+        ] {
+            assert_eq!(schema.pointer(path), Some(&expected), "{path}");
+        }
     }
 
     #[test]
