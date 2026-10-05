@@ -40,6 +40,11 @@ jobs:
           toolchain: "1.94.1"
           components: rustfmt, clippy, rustc-dev
 
+      - name: Install pinned cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.19.4
+
       - name: Cache cargo registry
         uses: actions/cache@v5
         with:
@@ -67,6 +72,18 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Validate error migration
+        run: python3 scripts/ci/validate_error_migration.py
+
+      - name: Check durable-store crate dependency policy
+        run: cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store --locked check --config policy/deny-durable-store.toml licenses bans advisories
+
+      - name: Check Python OTLP dependency policy
+        run: cargo deny --manifest-path bindings/python/sc-observability-py/Cargo.toml --features otlp-telemetry --locked check --config policy/deny-durable-store.toml licenses bans advisories
+
+      - name: Check CLI dependency policy
+        run: cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --locked check --config policy/deny-durable-store.toml licenses bans advisories
 
   docs-consistency:
     name: docs-consistency (ubuntu)
