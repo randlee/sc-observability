@@ -63,6 +63,9 @@ class HistoryTests(unittest.TestCase):
             with self.assertRaisesRegex(history.ApiError, 'requires a PR base or prior revision'):
                 history.accepted_base(root=self.root)
 
+    def test_explicit_prior_revision_is_a_valid_accepted_base(self):
+        self.assertEqual(history.accepted_base('HEAD^', self.root), self.base)
+
     def test_code_and_accepted_snapshot_change_without_version_increment_fails(self):
         (self.root / 'source.rs').write_text('pub fn method(_: u64) {}\n')
         self.rows[self.entry['artifact']] = ['method(u64)']

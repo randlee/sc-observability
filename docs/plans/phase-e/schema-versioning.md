@@ -90,11 +90,12 @@ python3 scripts/api/run_unit_tests.py --accepted-base <local-accepted-commit> --
 python3 -m unittest scripts.api.test_history
 ```
 
-`SC_API_ACCEPTED_BASE` can supply the local accepted baseline. Local default
-`HEAD` protects accepted files against working-tree edits; use the actual
+`SC_API_ACCEPTED_BASE` can supply the local accepted baseline. `just test`
+explicitly supplies `HEAD^` when the caller has not supplied one, so the
+candidate never supplies its own accepted history; use the actual
 accepted/release commit to audit an already committed change. CI supplies the
-PR base or preceding push commit and fetches its local history. No registry or
-network query is used by the check. A mismatch identifies package, selected
+PR base or preceding push commit, and a newly created push branch explicitly
+uses its parent revision. No registry or network query is used by the check. A mismatch identifies package, selected
 manifest version, feature family and changed rows. Keep accepted snapshots,
 increment the owning package version, and capture its new baseline when a
 contract change is intentional. Compatibility with released 1.x APIs still
