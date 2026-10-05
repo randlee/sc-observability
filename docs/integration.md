@@ -110,10 +110,11 @@ Both viewer suites reuse
 `scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py` and its adjacent
 `release.json`. Select the host artifact from that pinned manifest, verify its
 artifact checksum and extracted binary checksum, and use its version and
-binary name. The current manifest declares v0.5.0 for macOS arm64 only; e-2
-owns extending platform acquisition and the manifest. This common workflow
-does not download or qualify the viewer, and unavailable platform assets must
-fail affected viewer cells explicitly. Viewer readiness is no prerequisite for
+binary name. The current v0.5.0 manifest has `darwin_arm64`, `linux_amd64`, and
+`windows_amd64` entries; each entry owns its archive URL, archive and executable
+digests, archive type, and executable name. The common workflow does not
+download or qualify the viewer, and unavailable platform assets must fail
+affected viewer cells explicitly. Viewer readiness is no prerequisite for
 common dispatch or the four unrelated suites.
 
 The existing harness CLI is:
