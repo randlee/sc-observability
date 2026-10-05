@@ -60,23 +60,27 @@ class WheelsRunnerTests(unittest.TestCase):
     @mock.patch.object(run.python_binding_validator, "venv_python", return_value=Path("/tmp/output/build-venv/bin/python"))
     def test_build_wheel_provisions_the_pinned_maturin_for_the_shared_declared_command(
             self, builder: mock.Mock, version: mock.Mock, command: mock.Mock, checked: mock.Mock) -> None:
-        command.return_value = ["/tmp/output/build-venv/bin/python", "-m", "maturin", "build"]
+        output = Path("/tmp/output")
+        build_venv = output / "build-venv"
+        builder_path = build_venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        builder.return_value = builder_path
+        command.return_value = [str(builder_path), "-m", "maturin", "build"]
         with mock.patch.object(run, "recreate_output_directory"), mock.patch.object(Path, "glob", return_value=[Path("/tmp/wheel.whl")]):
-            wheel = run.build_wheel(Path("/tmp/output"))
+            wheel = run.build_wheel(output)
         self.assertEqual(wheel, Path("/tmp/wheel.whl"))
         commands = [call.args[0] for call in checked.call_args_list]
-        self.assertEqual(commands[0], [run.sys.executable, "-m", "venv", "/tmp/output/build-venv"])
+        self.assertEqual(commands[0], [run.sys.executable, "-m", "venv", str(build_venv)])
         self.assertEqual(
             commands[1],
-            ["/tmp/output/build-venv/bin/python", "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "maturin==1.10.2"],
+            [str(builder_path), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "maturin==1.10.2"],
         )
         self.assertEqual(commands[2], command.return_value)
         version.assert_called_once_with(run.ROOT)
-        builder.assert_called_once_with(Path("/tmp/output/build-venv"))
+        builder.assert_called_once_with(build_venv)
         command.assert_called_once_with(
             run.ROOT,
-            Path("/tmp/output/wheel"),
-            maturin_command=["/tmp/output/build-venv/bin/python", "-m", "maturin"],
+            output / "wheel",
+            maturin_command=[str(builder_path), "-m", "maturin"],
         )
 
     @mock.patch.object(run, "stage_installed_runtime_suite", return_value=Path("/tmp/output/runtime/tests"))

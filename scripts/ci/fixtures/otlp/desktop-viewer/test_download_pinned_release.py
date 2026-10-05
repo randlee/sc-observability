@@ -157,9 +157,22 @@ class PinnedReleaseDownloadTests(unittest.TestCase):
             target = root / "keep.bin"
             target.write_bytes(b"keep")
             link = root / "viewer"
-            link.symlink_to(target)
-            with self.assertRaisesRegex(SystemExit, "symlink output"):
-                downloader._output_path(str(link))
+            try:
+                link.symlink_to(target)
+            except OSError:
+                # Windows can prohibit symlink creation without Developer Mode
+                # or the necessary privilege. Still exercise the refusal path.
+                with mock.patch.object(
+                    Path,
+                    "is_symlink",
+                    autospec=True,
+                    side_effect=lambda candidate: candidate == link,
+                ):
+                    with self.assertRaisesRegex(SystemExit, "symlink output"):
+                        downloader._output_path(str(link))
+            else:
+                with self.assertRaisesRegex(SystemExit, "symlink output"):
+                    downloader._output_path(str(link))
             self.assertEqual(target.read_bytes(), b"keep")
 
     def test_windows_output_path_appends_exe_suffix(self) -> None:

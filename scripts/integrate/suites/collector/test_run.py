@@ -48,7 +48,7 @@ class CollectorRunnerTests(unittest.TestCase):
                     runner.run_case("failed", ["cargo"], environment={}, output=Path(temporary))
                 )
             self.assertEqual(
-                (Path(temporary) / "failed.log").read_text(),
+                (Path(temporary) / "failed.log").read_text(encoding="utf-8"),
                 "$ cargo\nstdout\nstderr\nexit=7\ncleanup=cargo-process-exited\n",
             )
 
@@ -62,20 +62,23 @@ class CollectorRunnerTests(unittest.TestCase):
             completed = self.process(0, "later output\n", "")
             with (
                 mock.patch.object(runner.os, "name", "posix"),
-                mock.patch.object(runner.os, "killpg") as killpg,
+                mock.patch.object(runner.os, "killpg", create=True) as killpg,
                 mock.patch.object(runner.subprocess, "Popen", side_effect=[timed_out, completed, completed, completed]),
             ):
                 self.assertFalse(runner.run("a" * 40, Path(temporary)))
             killpg.assert_called_once_with(timed_out.pid, runner.signal.SIGKILL)
             output = Path(temporary)
             self.assertEqual(
-                (output / "sync-http-full-stack.log").read_text(),
+                (output / "sync-http-full-stack.log").read_text(encoding="utf-8"),
                 "$ cargo test --locked -p sc-observability-otlp --test full_stack_integration --features sync-http -- --nocapture\n"
                 "partial\ufffd output\n"
                 f"timeout={runner.CASE_TIMEOUT_SECONDS}\n"
                 "cleanup=posix-process-group-killed\n",
             )
-            self.assertIn("later output\nexit=0\n", (output / "canonical-ingress.log").read_text())
+            self.assertIn(
+                "later output\nexit=0\n",
+                (output / "canonical-ingress.log").read_text(encoding="utf-8"),
+            )
 
     def test_run_executes_later_cases_after_an_earlier_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

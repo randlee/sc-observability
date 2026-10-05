@@ -100,7 +100,7 @@ class TauriRunnerTests(unittest.TestCase):
             process.wait.side_effect = [subprocess.TimeoutExpired(["proof"], 1), 0]
             with patch.object(tauri_runner.subprocess, "Popen", return_value=process), \
                     patch.object(tauri_runner.os, "name", "posix"), \
-                    patch.object(tauri_runner.os, "killpg") as killpg:
+                    patch.object(tauri_runner.os, "killpg", create=True) as killpg:
                 with self.assertRaisesRegex(RuntimeError, "Tauri qualification timed out after 1800s"):
                     tauri_runner.run_qualification("Linux", {}, evidence, output)
             killpg.assert_called_once_with(42, tauri_runner.signal.SIGKILL)
