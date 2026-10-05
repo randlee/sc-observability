@@ -33,15 +33,15 @@ def git(root, *args):
 def accepted_base(value=None, root=ROOT):
     """Resolve a non-vacuous accepted-history revision.
 
-    CI supplies the PR base or the previous pushed SHA. Local and dispatch
-    runs instead use the immediate parent, which is still an accepted prior
-    revision. A repository without one cannot prove history immutability.
+    CI supplies the PR base or the previous pushed SHA. A run without either
+    cannot prove history immutability and must fail rather than compare a
+    candidate branch against its immediate parent.
     """
     candidate = value or os.environ.get('SC_API_ACCEPTED_BASE')
     if candidate == '0000000000000000000000000000000000000000':
         candidate = None
     if not candidate:
-        candidate = 'HEAD^'
+        raise ApiError('accepted API history requires a PR base or prior revision')
     try:
         resolved = git(root, 'rev-parse', '--verify', f'{candidate}^{{commit}}').decode().strip()
     except ApiError as error:

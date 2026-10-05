@@ -58,6 +58,11 @@ class HistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(history.ApiError, 'resolves to the candidate'):
             history.accepted_history('HEAD', self.root)
 
+    def test_missing_accepted_base_fails_closed(self):
+        with patch.dict(os.environ, {'SC_API_ACCEPTED_BASE': ''}):
+            with self.assertRaisesRegex(history.ApiError, 'requires a PR base or prior revision'):
+                history.accepted_base(root=self.root)
+
     def test_code_and_accepted_snapshot_change_without_version_increment_fails(self):
         (self.root / 'source.rs').write_text('pub fn method(_: u64) {}\n')
         self.rows[self.entry['artifact']] = ['method(u64)']
