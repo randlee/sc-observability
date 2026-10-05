@@ -326,7 +326,7 @@ def cell(args) -> None:
                 'import json,sys,sc_observability,sc_observability._native as n; '
                 'assert not any(name.startswith("_test") for name in dir(n)), "private hooks leaked into production"; '
                 'print(json.dumps({"prefix":sys.prefix,"package":sc_observability.__file__,"native":n.__file__}))'], suite))
-            installed_origins(imported)
+            origins = installed_origins(imported)
             flags, environment = runtime_options(contract)
             sandbox.env.update(environment)
             sandbox.env['SC_OBSERVABILITY_RUNTIME_TEST'] = '1'

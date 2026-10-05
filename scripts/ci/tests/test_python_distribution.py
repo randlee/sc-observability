@@ -276,6 +276,81 @@ class DistributionTests(unittest.TestCase):
         self.assertNotIn('PYTHONPATH', host_environment)
         self.assertEqual(sandbox.env, {})
 
+    def test_installed_cell_passes_validated_candidate_origin_to_embedding(self):
+        from validate_python_distribution import cell
+
+        class SandboxFixture:
+            instances = []
+
+            def __init__(self, *_):
+                self.env = {}
+                self.commands = []
+                self.cargo = 'cargo'
+                self.__class__.instances.append(self)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def prove_denials(self, *_):
+                return {'checkout': True, 'cargo_cache': True, 'network': True}
+
+            def run(self, command, _cwd, **_):
+                if 'pytest' in command:
+                    Path(command[command.index('--junitxml') + 1]).write_text(
+                        '<testsuite><testcase classname="fixture" name="passes" /></testsuite>')
+                    return ''
+                if 'assert not any' in command[-1]:
+                    return json.dumps({
+                        'prefix': '/candidate',
+                        'package': '/candidate/lib/python/site-packages/sc_observability/__init__.py',
+                        'native': '/candidate/lib/python/site-packages/sc_observability/_native.so',
+                    })
+                return ''
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'source'
+            (root / 'tests').mkdir(parents=True)
+            (root / 'tests/example.py').write_text('pass\n')
+            output = Path(temporary) / 'output'
+            sdist = root / 'candidate.tar.gz'
+            sdist.write_bytes(b'candidate')
+            args = Namespace(checkout=root, output=output, sdist=sdist,
+                             wheel=root / 'candidate.whl', instrumented_wheel=None,
+                             allow_incomplete_runtime=False)
+            source = {
+                'runtime_suite': {
+                    'runtime_complete': True,
+                    'embedding_in_each_cell': True,
+                    'pytest_paths': ['tests/example.py'],
+                    'typing_paths': ['tests/example.py'],
+                },
+                'source_commit': 'a' * 40,
+                'expected_requires_python': '>=3.10',
+                'version': '1.5.0',
+            }
+            actual = {'platform': 'linux-x86_64', 'python': '3.10', 'python_full': 'candidate'}
+            package = Path('/candidate/lib/python/site-packages/sc_observability/__init__.py')
+            with patch('validate_python_distribution.registered_checkouts', return_value=[]), \
+                    patch('validate_python_distribution.extract_sdist', return_value=root), \
+                    patch('validate_python_distribution.verify_source', return_value=source), \
+                    patch('validate_python_distribution.policy_at', return_value={'platforms': [{'id': 'linux-x86_64'}]}), \
+                    patch('validate_python_distribution.actual_cell', return_value=actual), \
+                    patch('validate_python_distribution.inspect_wheel', return_value={'sha256': 'wheel'}), \
+                    patch('validate_python_distribution.execute'), \
+                    patch('validate_python_distribution.venv_python', return_value=Path('/candidate/bin/python')), \
+                    patch('validate_python_distribution.runtime_options', return_value=([], {})), \
+                    patch('validate_python_distribution.fault_paths', return_value=[]), \
+                    patch('validate_python_distribution.Sandbox', SandboxFixture), \
+                    patch('validate_python_distribution.run_embedding',
+                          return_value={'python_full': 'candidate'}) as embedding:
+                cell(args)
+
+        embedding.assert_called_once()
+        self.assertEqual(embedding.call_args.args[4], package)
+
     def test_binary_architecture_cannot_be_overridden_by_filename(self):
         from _python_distribution import verify_native_architecture
         arm = b'\xcf\xfa\xed\xfe' + (0x100000c).to_bytes(4, 'little')
