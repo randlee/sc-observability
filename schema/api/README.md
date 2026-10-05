@@ -42,6 +42,7 @@ Development evidence on macOS arm64 (2026-10-04):
 - TypeScript ordinary npm test: existing build/runtime tests and compiled
   declaration mutation tests passed; API comparison took 0.156s with zero builds
   in the check.
-- Native Windows and Linux timings have not yet been measured;
-  the existing native unit/package jobs run the same applicable checks. No new
-  workflow or job was added.
+- Native CI run 37248053749 recorded API unit-test PASS for all three release
+  hosts, each inspecting nine libraries with `builds_in_check` equal to zero:
+  Windows took 6.625s (including 5.563s of inspection), Linux took 0.895s,
+  and macOS took 2.355s. No new workflow or job was added.
