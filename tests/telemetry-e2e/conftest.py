@@ -32,6 +32,7 @@ INSTALL_TIMEOUT_SECONDS = 2 * 60
 FRONTEND_TIMEOUT_SECONDS = 20
 VIEWER_TIMEOUT_SECONDS = 30
 VIEWER_MACHINES = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
+VIEWER_HARNESS = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
 
 
 def run_process(command: list[str], *, timeout: float, **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -289,7 +290,7 @@ def _viewer_start_command(
     *, reuse_state: bool,
 ) -> list[str]:
     command = [
-        sys.executable, str(ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"),
+        sys.executable, str(VIEWER_HARNESS),
         "start", "--binary", binary, "--version", version, "--binary-sha256", binary_sha256,
         "--state-dir", str(state), "--http", str(http), "--grpc", str(grpc), "--ui", str(ui),
     ]
@@ -329,7 +330,7 @@ class PinnedViewer(dict[str, str]):
 
     def stop(self) -> None:
         stopped = run_process(
-            [sys.executable, str(self.harness), "stop", "--state-dir", str(self.state)],
+            [sys.executable, str(VIEWER_HARNESS), "stop", "--state-dir", str(self.state)],
             check=False, text=True, capture_output=True, timeout=VIEWER_TIMEOUT_SECONDS,
         )
         assert stopped.returncode == 0, stopped.stdout + stopped.stderr
