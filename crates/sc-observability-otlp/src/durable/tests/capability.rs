@@ -1,9 +1,5 @@
 use super::*;
 
-// Capability checks exercise durable filesystem I/O, not delivery latency. Keep
-// their hang watchdog separate from the deadline and credit-pressure tests.
-const CAPABILITY_WATCHDOG: Duration = Duration::from_secs(30);
-
 #[test]
 fn every_matrix_row_delivers_and_sdk_is_rejected() {
     for name in [
@@ -25,11 +21,10 @@ fn every_matrix_row_delivers_and_sdk_is_rejected() {
         let receipt = client.emit(envelope).unwrap();
         // Capability is independent of Windows fsync/scheduler latency. Drive the
         // real claim/export/commit at a frozen lease clock, then inspect its result.
-        assert!(drain_once_with_watchdog(
+        assert!(drain_once_bounded(
             &client.owner.shared,
             exporter.as_ref(),
-            signal,
-            CAPABILITY_WATCHDOG
+            signal
         ));
         assert_eq!(
             client
@@ -76,9 +71,11 @@ fn metric_exemplar_row_is_preserved() {
         None,
         None,
     ));
-    let _clock = FrozenClock::new();
-    let exporter = Arc::new(ScriptedExporter::new(dir.path()));
-    let client = conformance::open_gated(config(dir.path()), &exporter);
+    let client = DurableTelemetryClient::open_with_exporter(
+        config(dir.path()),
+        Arc::new(ScriptedExporter::new(dir.path())),
+    )
+    .unwrap();
     let receipt = client.emit(envelope.clone()).unwrap();
     let stored: Vec<u8> = client
         .owner
@@ -96,17 +93,9 @@ fn metric_exemplar_row_is_preserved() {
         serde_json::from_slice::<SubmissionEnvelope>(&stored).unwrap(),
         envelope
     );
-    // Finish the actual claim/export/commit before inspecting the report. A
-    // slow fsync must not expire the lease in this representation-only test.
-    assert!(drain_once_with_watchdog(
-        &client.owner.shared,
-        exporter.as_ref(),
-        Signal::Metrics,
-        CAPABILITY_WATCHDOG
-    ));
     assert_eq!(
         client
-            .flush_submission(&receipt.submission_id, Duration::ZERO)
+            .flush_submission(&receipt.submission_id, DEADLINE)
             .unwrap()
             .delivered
             .metrics,

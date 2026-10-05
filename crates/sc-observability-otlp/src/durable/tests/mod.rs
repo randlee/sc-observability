@@ -255,15 +255,6 @@ impl Drop for FrozenClock {
 }
 
 fn drain_once_bounded(shared: &Shared, exporter: &dyn SubmissionExporter, signal: Signal) -> bool {
-    drain_once_with_watchdog(shared, exporter, signal, DEADLINE)
-}
-
-fn drain_once_with_watchdog(
-    shared: &Shared,
-    exporter: &dyn SubmissionExporter,
-    signal: Signal,
-    watchdog: Duration,
-) -> bool {
     let now = frozen_now();
     std::thread::scope(|scope| {
         let (send, receive) = std::sync::mpsc::sync_channel(1);
@@ -274,7 +265,7 @@ fn drain_once_with_watchdog(
             let result = worker::drain_once_for_test(shared, exporter, signal);
             let _ = send.send(result);
         });
-        match receive.recv_timeout(watchdog) {
+        match receive.recv_timeout(DEADLINE) {
             Ok(result) => {
                 helper.join().unwrap();
                 result
@@ -285,9 +276,7 @@ fn drain_once_with_watchdog(
                     .store(true, std::sync::atomic::Ordering::Release);
                 shared.notify();
                 helper.join().unwrap();
-                panic!(
-                    "drain did not finish within {watchdog:?}; it may be waiting for credits or filesystem I/O"
-                );
+                panic!("drain waited for its own batch credits");
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 helper.join().unwrap();
