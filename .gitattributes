@@ -8,3 +8,5 @@ bindings/tauri/permissions/schemas/*.json text eol=lf
 
 # Immutable history compares checkout bytes with Git blobs on every platform.
 schema/api/** text eol=lf
+crates/sc-observability-otlp/src/durable/schema.sql text eol=lf
+crates/sc-observability-otlp/src/durable/tests/fixtures/schema-v1.sql text eol=lf
