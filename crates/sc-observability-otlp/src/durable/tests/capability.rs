@@ -1,5 +1,4 @@
 use super::*;
-
 #[test]
 fn every_matrix_row_delivers_and_sdk_is_rejected() {
     for name in [
