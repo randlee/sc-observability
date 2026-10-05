@@ -69,12 +69,37 @@ def recreate_output_directory(directory: Path) -> None:
     directory.mkdir(parents=True)
 
 
+def provision_maturin(output: Path) -> Path:
+    """Install the repository-pinned Maturin into this suite's isolated builder venv."""
+    build_venv = output / "build-venv"
+    recreate_output_directory(build_venv)
+    run_checked(
+        [sys.executable, "-m", "venv", str(build_venv)],
+        cwd=ROOT,
+        timeout=BUILD_TIMEOUT_SECONDS,
+    )
+    builder = python_binding_validator.venv_python(build_venv)
+    try:
+        maturin_pin = f"maturin=={python_binding_validator.maturin_version(ROOT)}"
+    except python_binding_validator.BindingValidationError as error:
+        raise SuiteError(f"cannot provision the candidate-wheel builder: {error}") from error
+    run_checked(
+        [str(builder), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", maturin_pin],
+        cwd=ROOT,
+        timeout=BUILD_TIMEOUT_SECONDS,
+    )
+    return builder
+
+
 def build_wheel(output: Path) -> Path:
     """Build exactly one release-configured candidate wheel for this checkout."""
     wheel_dir = output / "wheel"
     recreate_output_directory(wheel_dir)
+    builder = provision_maturin(output)
     run_checked(
-        python_binding_validator.maturin_build_command(ROOT, wheel_dir),
+        python_binding_validator.maturin_build_command(
+            ROOT, wheel_dir, maturin_command=[str(builder), "-m", "maturin"]
+        ),
         cwd=ROOT,
         timeout=BUILD_TIMEOUT_SECONDS,
     )

@@ -56,13 +56,28 @@ class WheelsRunnerTests(unittest.TestCase):
 
     @mock.patch.object(run, "run_checked")
     @mock.patch.object(run.python_binding_validator, "maturin_build_command")
-    def test_build_wheel_uses_the_shared_declared_build_command(self, command: mock.Mock, checked: mock.Mock) -> None:
-        command.return_value = ["/tools/uvx", "--from", "maturin==1.10.2", "maturin", "build"]
+    @mock.patch.object(run.python_binding_validator, "maturin_version", return_value="1.10.2")
+    @mock.patch.object(run.python_binding_validator, "venv_python", return_value=Path("/tmp/output/build-venv/bin/python"))
+    def test_build_wheel_provisions_the_pinned_maturin_for_the_shared_declared_command(
+            self, builder: mock.Mock, version: mock.Mock, command: mock.Mock, checked: mock.Mock) -> None:
+        command.return_value = ["/tmp/output/build-venv/bin/python", "-m", "maturin", "build"]
         with mock.patch.object(run, "recreate_output_directory"), mock.patch.object(Path, "glob", return_value=[Path("/tmp/wheel.whl")]):
             wheel = run.build_wheel(Path("/tmp/output"))
         self.assertEqual(wheel, Path("/tmp/wheel.whl"))
-        self.assertEqual(checked.call_args.args[0], command.return_value)
-        command.assert_called_once_with(run.ROOT, Path("/tmp/output/wheel"))
+        commands = [call.args[0] for call in checked.call_args_list]
+        self.assertEqual(commands[0], [run.sys.executable, "-m", "venv", "/tmp/output/build-venv"])
+        self.assertEqual(
+            commands[1],
+            ["/tmp/output/build-venv/bin/python", "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "maturin==1.10.2"],
+        )
+        self.assertEqual(commands[2], command.return_value)
+        version.assert_called_once_with(run.ROOT)
+        builder.assert_called_once_with(Path("/tmp/output/build-venv"))
+        command.assert_called_once_with(
+            run.ROOT,
+            Path("/tmp/output/wheel"),
+            maturin_command=["/tmp/output/build-venv/bin/python", "-m", "maturin"],
+        )
 
     @mock.patch.object(run, "run_installed_typing_tests")
     @mock.patch.object(run, "run_installed_runtime_tests")
@@ -210,6 +225,15 @@ class WheelsRunnerTests(unittest.TestCase):
             report = (output / "failure-report.txt").read_text(encoding="utf-8")
         self.assertEqual(exit_code, 1)
         self.assertIn("SuiteError: complete failure context", report)
+
+    def test_main_writes_a_failure_report_when_builder_provisioning_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            with mock.patch.object(run, "run_checked", side_effect=run.SuiteError("maturin setup failed")):
+                exit_code = run.main(["--source-sha", "a" * 40, "--output-dir", str(output)])
+            report = (output / "failure-report.txt").read_text(encoding="utf-8")
+        self.assertEqual(exit_code, 1)
+        self.assertIn("SuiteError: maturin setup failed", report)
 
 
 if __name__ == "__main__":

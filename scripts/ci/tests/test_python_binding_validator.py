@@ -24,6 +24,23 @@ class PythonBindingValidatorTests(unittest.TestCase):
         self.assertEqual(command[:4], ["/tools/uvx", "--from", "maturin==9.8.7", "maturin"])
         self.assertEqual(command[command.index("--features") + 1], "production-a,production-b")
 
+    def test_build_command_uses_a_provisioned_maturin_command_when_supplied(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            requirements = root / "scripts/ci/python-packaging-requirements.txt"
+            requirements.parent.mkdir(parents=True)
+            requirements.write_text("maturin==9.8.7\n", encoding="utf-8")
+            pyproject = root / "bindings/python/sc-observability-py/pyproject.toml"
+            pyproject.parent.mkdir(parents=True)
+            pyproject.write_text("[tool.maturin]\nfeatures = [\"production-a\"]\n", encoding="utf-8")
+            command = validator.maturin_build_command(
+                root,
+                root / "dist",
+                maturin_command=["/tmp/build-venv/bin/python", "-m", "maturin"],
+            )
+        self.assertEqual(command[:3], ["/tmp/build-venv/bin/python", "-m", "maturin"])
+        self.assertEqual(command[command.index("--features") + 1], "production-a")
+
     def test_installed_origins_reject_any_import_outside_the_venv(self) -> None:
         installed = {
             "prefix": "/tmp/venv",

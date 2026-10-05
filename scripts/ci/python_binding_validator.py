@@ -107,16 +107,21 @@ def production_maturin_features(root: Path) -> list[str]:
     return list(features)
 
 
-def maturin_build_command(root: Path, wheel_dir: Path) -> list[str]:
+def maturin_build_command(
+        root: Path, wheel_dir: Path, *, maturin_command: list[str] | None = None
+) -> list[str]:
     """Build the declared production wheel with the declared Maturin pin/features."""
-    maturin = shutil.which("maturin")
-    if maturin is not None:
-        command = [maturin]
+    if maturin_command is not None:
+        command = list(maturin_command)
     else:
-        uvx = shutil.which("uvx")
-        if uvx is None:
-            raise BindingValidationError("maturin or uvx is required to build the candidate wheel")
-        command = [uvx, "--from", f"maturin=={maturin_version(root)}", "maturin"]
+        maturin = shutil.which("maturin")
+        if maturin is not None:
+            command = [maturin]
+        else:
+            uvx = shutil.which("uvx")
+            if uvx is None:
+                raise BindingValidationError("maturin or uvx is required to build the candidate wheel")
+            command = [uvx, "--from", f"maturin=={maturin_version(root)}", "maturin"]
     return [
         *command,
         "build",
