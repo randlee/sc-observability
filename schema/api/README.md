@@ -23,6 +23,7 @@ review of the projection format and historical compatibility.
 
 Run `just test`, the existing installed Python wheel tests, or
 `npm test --prefix bindings/typescript` as appropriate for the producing package.
+The Rust API comparison runs only through `scripts/api/run_unit_tests.py`.
 Normal tests fail API mismatches and never refresh baselines. See the
 [release-cut and version-update instructions](../../docs/plans/phase-e/schema-versioning.md#api-unit-comparison-and-release-cut-setup).
 
