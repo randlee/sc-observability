@@ -1,0 +1,8 @@
+pub mod sc_observability_log_macros
+pub proc macro sc_observability_log_macros::debug!()
+pub proc macro sc_observability_log_macros::error!()
+pub proc macro sc_observability_log_macros::event!()
+pub proc macro sc_observability_log_macros::info!()
+pub proc macro sc_observability_log_macros::#[instrument]
+pub proc macro sc_observability_log_macros::trace!()
+pub proc macro sc_observability_log_macros::warn!()

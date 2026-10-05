@@ -40,6 +40,11 @@ jobs:
           toolchain: "1.94.1"
           components: rustfmt, clippy, rustc-dev
 
+      - name: Install pinned cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.19.4
+
       - name: Cache cargo registry
         uses: actions/cache@v5
         with:
@@ -67,6 +72,18 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Validate error migration
+        run: python3 scripts/ci/validate_error_migration.py
+
+      - name: Check durable-store crate dependency policy
+        run: cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store --locked check --config policy/deny-durable-store.toml licenses bans advisories
+
+      - name: Check Python OTLP dependency policy
+        run: cargo deny --manifest-path bindings/python/sc-observability-py/Cargo.toml --features otlp-telemetry --locked check --config policy/deny-durable-store.toml licenses bans advisories
+
+      - name: Check CLI dependency policy
+        run: cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --locked check --config policy/deny-durable-store.toml licenses bans advisories
 
   docs-consistency:
     name: docs-consistency (ubuntu)
@@ -204,10 +221,32 @@ jobs:
       - name: Check log bridge consumer crate
         run: cargo check --locked -p sc-observability-log-consumer-check
 
+      - name: Run Phase E headless integration runner unit tests
+        run: |
+          python3 -m unittest discover -s scripts/integrate/suites/collector -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/rust-consumers -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/rust-viewer -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/tauri/tests -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/wheel-cli-viewer/tests -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
+          python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
+
+      - name: Install Linux native prerequisites for public API setup
+        uses: ./.github/actions/install-linux-native-deps
+
+      - name: Generate native public API JSON and stock text snapshots
+        shell: bash
+        run: |
+          toolchain="$(cat scripts/ci/public-api-toolchain)"
+          rustup toolchain install "$toolchain" --profile minimal
+          cargo +stable install cargo-public-api --version 0.52.0 --locked
+          python3 scripts/ci/stock_public_api.py setup --target-dir "$RUNNER_TEMP/e-api-public-api"
+
       - name: Run workspace tests
-        env:
-          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || inputs.accepted_base || '' }}
-        run: python3 scripts/api/run_unit_tests.py -- cargo test --locked --no-fail-fast --workspace --all-targets
+        run: cargo test --locked --no-fail-fast --workspace --all-targets
+
+      - name: Compare native public API text without a build
+        run: python3 scripts/ci/stock_public_api.py check --target-dir "$RUNNER_TEMP/e-api-public-api"
 
       - name: Run workspace doctests
         run: cargo test --locked --no-fail-fast --workspace --doc
@@ -307,11 +346,34 @@ jobs:
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         run: cargo check --locked -p sc-observability-log-consumer-check
 
+      - name: Run Phase E headless integration runner unit tests
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        shell: bash
+        run: |
+          python3 -m unittest discover -s scripts/integrate/suites/collector -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/rust-consumers -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/rust-viewer -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/tauri/tests -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/wheel-cli-viewer/tests -p test_run.py
+          python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
+          python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
+
+      - name: Generate native public API JSON and stock text snapshots
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        shell: bash
+        run: |
+          toolchain="$(cat scripts/ci/public-api-toolchain)"
+          rustup toolchain install "$toolchain" --profile minimal
+          cargo +stable install cargo-public-api --version 0.52.0 --locked
+          python3 scripts/ci/stock_public_api.py setup --target-dir "$RUNNER_TEMP/e-api-public-api"
+
       - name: Run workspace tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
-        env:
-          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || inputs.accepted_base || '' }}
-        run: python3 scripts/api/run_unit_tests.py -- cargo test --locked --no-fail-fast --workspace --all-targets
+        run: cargo test --locked --no-fail-fast --workspace --all-targets
+
+      - name: Compare native public API text without a build
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: python3 scripts/ci/stock_public_api.py check --target-dir "$RUNNER_TEMP/e-api-public-api"
 
       - name: Run OTLP feature unit tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}

@@ -1,9 +1,6 @@
 # Pinned viewer fixture
 
-`release.json` currently pins only the verified `darwin_arm64` viewer release.
-On Windows, `download_pinned_release.py` deliberately exits before choosing an
-output path or downloading anything: no Windows artifact URL or SHA-256 has
-been verified for this pin. The download test exercises that real main-path
-refusal, while `_output_path` separately guards the eventual Windows `.exe`
-destination. Add a verified Windows artifact pin before enabling Windows
-downloads through `main`.
+`release.json` pins verified v0.5.0 viewer artifacts for `darwin_arm64`,
+`linux_amd64`, and `windows_amd64`. Each entry records its artifact URL and
+SHA-256, binary name, and archive format; the Windows entry names
+`otel-desktop-viewer.exe`.

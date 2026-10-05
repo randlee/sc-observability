@@ -16,6 +16,8 @@ import shutil
 import subprocess
 import sys
 import traceback
+from collections.abc import Callable
+from typing import TypeVar
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -27,6 +29,7 @@ from scripts.ci import python_binding_validator
 
 BUILD_TIMEOUT_SECONDS = 10 * 60
 RUNTIME_TIMEOUT_SECONDS = 2 * 60
+T = TypeVar("T")
 
 
 class SuiteError(RuntimeError):
@@ -69,12 +72,37 @@ def recreate_output_directory(directory: Path) -> None:
     directory.mkdir(parents=True)
 
 
+def provision_maturin(output: Path) -> Path:
+    """Install the repository-pinned Maturin into this suite's isolated builder venv."""
+    build_venv = output / "build-venv"
+    recreate_output_directory(build_venv)
+    run_checked(
+        [sys.executable, "-m", "venv", str(build_venv)],
+        cwd=ROOT,
+        timeout=BUILD_TIMEOUT_SECONDS,
+    )
+    builder = python_binding_validator.venv_python(build_venv)
+    try:
+        maturin_pin = f"maturin=={python_binding_validator.maturin_version(ROOT)}"
+    except python_binding_validator.BindingValidationError as error:
+        raise SuiteError(f"cannot provision the candidate-wheel builder: {error}") from error
+    run_checked(
+        [str(builder), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", maturin_pin],
+        cwd=ROOT,
+        timeout=BUILD_TIMEOUT_SECONDS,
+    )
+    return builder
+
+
 def build_wheel(output: Path) -> Path:
     """Build exactly one release-configured candidate wheel for this checkout."""
     wheel_dir = output / "wheel"
     recreate_output_directory(wheel_dir)
+    builder = provision_maturin(output)
     run_checked(
-        python_binding_validator.maturin_build_command(ROOT, wheel_dir),
+        python_binding_validator.maturin_build_command(
+            ROOT, wheel_dir, maturin_command=[str(builder), "-m", "maturin"]
+        ),
         cwd=ROOT,
         timeout=BUILD_TIMEOUT_SECONDS,
     )
@@ -200,8 +228,8 @@ def run_installed_typing_tests(python: Path, runtime: Path, tests: Path) -> None
     )
 
 
-def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
-    """Install one wheel and run its public runtime and typing suites in a clean venv."""
+def prepare_installed_runtime(wheel: Path, output: Path) -> tuple[Path, Path, Path]:
+    """Install one wheel and return the independent installed checks' inputs."""
     runtime = output / "runtime"
     recreate_output_directory(runtime)
     venv = runtime / "venv"
@@ -216,19 +244,17 @@ def install_and_probe(wheel: Path, output: Path) -> dict[str, str]:
         cwd=runtime,
     )
     tests = stage_installed_runtime_suite(runtime)
-    run_installed_runtime_tests(python, runtime, tests)
-    run_installed_typing_tests(python, runtime, tests)
+    return python, runtime, tests
+
+
+def probe_installed_runtime(python: Path, runtime: Path) -> dict[str, str]:
+    """Run the installed telemetry probe and return its reported artifacts."""
     output_text = run_checked(
         [str(python), "-I", "-X", "dev", "-W", "error", "-c", IMPORT_AND_TELEMETRY_PROBE],
         cwd=runtime,
         environment=strict_runtime_environment(),
     )
-    installed = {"python": str(python), **json.loads(output_text)}
-    try:
-        python_binding_validator.installed_origins(installed)
-    except python_binding_validator.BindingValidationError as error:
-        raise SuiteError(str(error)) from error
-    return installed
+    return {"python": str(python), **json.loads(output_text)}
 
 
 def run_embedded_host(python: Path, package: Path) -> None:
@@ -253,31 +279,99 @@ def run_embedded_host(python: Path, package: Path) -> None:
     )
 
 
+def observe(
+        checks: dict[str, dict[str, str]], name: str, action: Callable[[], T]
+) -> T | None:
+    """Run one check without hiding its bounded failure from later independent checks."""
+    try:
+        value = action()
+    except (OSError, SuiteError, json.JSONDecodeError, subprocess.CalledProcessError,
+            python_binding_validator.BindingValidationError) as error:
+        checks[name] = {"status": "failed", "detail": str(error)}
+        return None
+    checks[name] = {"status": "passed"}
+    return value
+
+
+def mark_blocked(
+        checks: dict[str, dict[str, str]], names: tuple[str, ...], reason: str
+) -> None:
+    """Record checks that cannot run because their required setup did not succeed."""
+    for name in names:
+        checks[name] = {"status": "blocked", "detail": reason}
+
+
+def write_result(output: Path, result: dict[str, object]) -> None:
+    """Persist every observed check outcome, including failed and blocked checks."""
+    (output / "result.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
 def run(source_sha: str, output: Path) -> dict[str, object]:
-    """Execute the candidate check after the dispatch runner verified ``source_sha``."""
+    """Execute every check whose prerequisites succeeded and retain each observed outcome."""
     output.mkdir(parents=True, exist_ok=True)
     (output / "failure-report.txt").unlink(missing_ok=True)
-    wheel = build_wheel(output)
-    installed = install_and_probe(wheel, output)
-    package = python_binding_validator.installed_origins(installed)["package"]
-    run_embedded_host(Path(installed["python"]), package)
+    checks: dict[str, dict[str, str]] = {}
+    wheel = observe(checks, "wheel_build", lambda: build_wheel(output))
+    if wheel is None:
+        mark_blocked(
+            checks,
+            ("clean_install", "owned_typed_runtime", "installed_typing",
+             "installed_telemetry_lifecycle", "installed_origin", "rust_host_attached_python"),
+            "wheel_build failed",
+        )
+        installed: dict[str, str] | None = None
+    else:
+        prepared = observe(
+            checks, "clean_install", lambda: prepare_installed_runtime(wheel, output)
+        )
+        if prepared is None:
+            mark_blocked(
+                checks,
+                ("owned_typed_runtime", "installed_typing", "installed_telemetry_lifecycle",
+                 "installed_origin", "rust_host_attached_python"),
+                "clean_install failed",
+            )
+            installed = None
+        else:
+            python, runtime, tests = prepared
+            observe(checks, "owned_typed_runtime", lambda: run_installed_runtime_tests(python, runtime, tests))
+            observe(checks, "installed_typing", lambda: run_installed_typing_tests(python, runtime, tests))
+            installed = observe(checks, "installed_telemetry_lifecycle", lambda: probe_installed_runtime(python, runtime))
+            if installed is None:
+                mark_blocked(
+                    checks,
+                    ("installed_origin", "rust_host_attached_python"),
+                    "installed_telemetry_lifecycle failed",
+                )
+            else:
+                origins = observe(
+                    checks,
+                    "installed_origin",
+                    lambda: python_binding_validator.installed_origins(installed),
+                )
+                if origins is None:
+                    mark_blocked(
+                        checks,
+                        ("rust_host_attached_python",),
+                        "installed_origin failed",
+                    )
+                else:
+                    observe(
+                        checks,
+                        "rust_host_attached_python",
+                        lambda: run_embedded_host(Path(installed["python"]), origins["package"]),
+                    )
     result: dict[str, object] = {
         "schema_version": 1,
-        "status": "passed",
+        "status": "passed" if all(value["status"] == "passed" for value in checks.values()) else "failed",
         "source_commit": source_sha,
-        "wheel": {"path": str(wheel), "sha256": wheel_digest(wheel)},
+        "wheel": None if wheel is None else {"path": str(wheel), "sha256": wheel_digest(wheel)},
         "installed_artifacts": installed,
-        "checks": {
-            "clean_install": "passed",
-            "installed_origin": "passed",
-            "owned_typed_runtime": "passed",
-            "installed_typed_failure": "passed",
-            "installed_typing": "passed",
-            "installed_telemetry_lifecycle": "passed",
-            "rust_host_attached_python": "passed",
-        },
+        "checks": checks,
     }
-    (output / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_result(output, result)
     return result
 
 
@@ -288,6 +382,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         result = run(args.source_sha, args.output_dir.resolve())
+        if result["status"] != "passed":
+            (args.output_dir / "failure-report.txt").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            print("wheels integration: one or more observed checks failed", file=sys.stderr)
+            return 1
     except (OSError, SuiteError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         args.output_dir.mkdir(parents=True, exist_ok=True)
         (args.output_dir / "failure-report.txt").write_text(traceback.format_exc(), encoding="utf-8")

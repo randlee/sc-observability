@@ -53,9 +53,10 @@ jobs:
           manifest = json.loads(Path(
               'scripts/ci/fixtures/otlp/desktop-viewer/release.json'
           ).read_text())
+          platform = manifest['platforms']['darwin_arm64']
           with Path(os.environ['GITHUB_ENV']).open('a') as output:
               output.write(f"VIEWER_VERSION={manifest['version']}\n")
-              output.write(f"VIEWER_BINARY_SHA256={manifest['binary_sha256']}\n")
+              output.write(f"VIEWER_BINARY_SHA256={platform['binary_sha256']}\n")
           PY
       - name: Download verified pinned desktop viewer
         run: >-

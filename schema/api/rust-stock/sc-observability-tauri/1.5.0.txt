@@ -1,0 +1,35 @@
+pub mod sc_observability_tauri
+pub enum sc_observability_tauri::WireResult<T>
+pub sc_observability_tauri::WireResult::Error
+pub sc_observability_tauri::WireResult::Error::error: sc_observability_dto::wire::operations::Failure
+pub sc_observability_tauri::WireResult::Ok
+pub sc_observability_tauri::WireResult::Ok::value: T
+pub struct sc_observability_tauri::Adapter
+impl sc_observability_tauri::Adapter
+pub async fn sc_observability_tauri::Adapter::flush(&self, &str, serde_json::value::Value) -> sc_observability_dto::wire::operations::WireEnvelope<sc_observability_dto::wire::operations::CompletionDto>
+pub fn sc_observability_tauri::Adapter::health(&self, &str, serde_json::value::Value) -> sc_observability_dto::wire::operations::WireEnvelope<sc_observability_dto::wire::health::LogHealthDto>
+pub fn sc_observability_tauri::Adapter::new(alloc::sync::Arc<dyn sc_observability_binding_runtime::HostLoggingBackend>, sc_observability_tauri::AdapterPolicy) -> core::result::Result<Self, sc_observability_dto::wire::operations::Failure>
+pub async fn sc_observability_tauri::Adapter::query(&self, &str, serde_json::value::Value) -> sc_observability_dto::wire::operations::WireEnvelope<sc_observability_dto::wire::events::LogSnapshotDto>
+pub fn sc_observability_tauri::Adapter::try_log(&self, &str, serde_json::value::Value) -> sc_observability_dto::wire::operations::WireEnvelope<sc_observability_dto::wire::operations::AdmissionDto>
+pub fn sc_observability_tauri::Adapter::with_settings(alloc::sync::Arc<dyn sc_observability_binding_runtime::HostLoggingBackend>, sc_observability_tauri::AdapterSettings) -> core::result::Result<Self, sc_observability_dto::wire::operations::Failure>
+impl core::fmt::Debug for sc_observability_tauri::Adapter
+pub fn sc_observability_tauri::Adapter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_tauri::AdapterPolicy
+pub sc_observability_tauri::AdapterPolicy::allowed_targets: alloc::collections::btree::set::BTreeSet<alloc::string::String>
+pub sc_observability_tauri::AdapterPolicy::allowed_window_labels: alloc::collections::btree::set::BTreeSet<alloc::string::String>
+pub sc_observability_tauri::AdapterPolicy::max_depth: u32
+pub sc_observability_tauri::AdapterPolicy::max_request_bytes: u32
+pub sc_observability_tauri::AdapterPolicy::redacted_field_keys: alloc::collections::btree::set::BTreeSet<alloc::string::String>
+impl sc_observability_tauri::AdapterPolicy
+pub fn sc_observability_tauri::AdapterPolicy::validate(&self) -> core::result::Result<(), sc_observability_dto::wire::operations::Failure>
+impl core::convert::From<sc_observability_tauri::AdapterPolicy> for sc_observability_tauri::AdapterSettings
+pub fn sc_observability_tauri::AdapterSettings::from(sc_observability_tauri::AdapterPolicy) -> Self
+pub struct sc_observability_tauri::AdapterSettings
+pub sc_observability_tauri::AdapterSettings::policy: sc_observability_tauri::AdapterPolicy
+pub sc_observability_tauri::AdapterSettings::query_timeout_ms: u32
+impl sc_observability_tauri::AdapterSettings
+pub fn sc_observability_tauri::AdapterSettings::validate(&self) -> core::result::Result<(), sc_observability_dto::wire::operations::Failure>
+impl core::convert::From<sc_observability_tauri::AdapterPolicy> for sc_observability_tauri::AdapterSettings
+pub fn sc_observability_tauri::AdapterSettings::from(sc_observability_tauri::AdapterPolicy) -> Self
+pub fn sc_observability_tauri::plugin<R: tauri::Runtime>(alloc::sync::Arc<dyn sc_observability_binding_runtime::HostLoggingBackend>, sc_observability_tauri::AdapterPolicy) -> core::result::Result<tauri::plugin::TauriPlugin<R>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_tauri::plugin_with_settings<R: tauri::Runtime>(alloc::sync::Arc<dyn sc_observability_binding_runtime::HostLoggingBackend>, sc_observability_tauri::AdapterSettings) -> core::result::Result<tauri::plugin::TauriPlugin<R>, sc_observability_dto::wire::operations::Failure>

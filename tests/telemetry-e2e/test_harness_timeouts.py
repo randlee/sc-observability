@@ -4,10 +4,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 import pytest
 
-from conftest import ROOT, _viewer_start_command, run_process
+from conftest import PinnedViewer, ROOT, VIEWER_HARNESS, _viewer_start_command, run_process
 
 
 def test_subprocess_timeout_reports_the_command_and_captured_output(
@@ -33,3 +34,26 @@ def test_real_release_manifest_builds_host_specific_harness_command(tmp_path: Pa
     assert command[command.index("--version") + 1] == manifest["version"]
     assert command[command.index("--binary-sha256") + 1] == entry["binary_sha256"]
     assert command[-1] == "--reuse-state"
+
+
+def test_viewer_restart_uses_canonical_harness_stop_and_start_headlessly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    state = tmp_path / "viewer-state"
+    calls: list[list[str]] = []
+
+    def record(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("conftest.run_process", record)
+    viewer = PinnedViewer("viewer", "0.5.0", "a" * 64, state)
+    viewer.restart()
+
+    expected_harness = ROOT / "scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py"
+    assert VIEWER_HARNESS == expected_harness
+    assert calls == [
+        [sys.executable, str(expected_harness), "stop", "--state-dir", str(state)],
+        _viewer_start_command("viewer", "0.5.0", "a" * 64, state, viewer.http, viewer.grpc, viewer.ui,
+                              reuse_state=True),
+    ]

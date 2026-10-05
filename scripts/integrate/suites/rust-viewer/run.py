@@ -49,6 +49,13 @@ class SuiteError(RuntimeError):
         self.exit_code = exit_code
 
 
+def timeout_stream_text(stream: str | bytes | None) -> str:
+    """Normalize a timed-out command stream for the UTF-8 evidence log."""
+    if isinstance(stream, bytes):
+        return stream.decode("utf-8", errors="replace")
+    return stream or ""
+
+
 def verify_source_sha(source_sha: str) -> None:
     """Defend direct entrypoint use by binding it to the checked-out commit."""
     if len(source_sha) != 40 or any(char not in "0123456789abcdef" for char in source_sha.lower()):
@@ -93,8 +100,8 @@ def run_checked(command: list[str], *, environment: dict[str, str], timeout: int
     except subprocess.TimeoutExpired as error:
         with log.open("a", encoding="utf-8") as output:
             output.write("$ " + " ".join(command) + "\n")
-            output.write(error.stdout or "")
-            output.write(error.stderr or "")
+            output.write(timeout_stream_text(error.stdout))
+            output.write(timeout_stream_text(error.stderr))
             output.write(f"timeout={timeout}\n")
         raise SuiteError(f"timed out after {timeout}s; inspect {log}") from error
     with log.open("a", encoding="utf-8") as output:

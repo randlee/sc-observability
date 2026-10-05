@@ -56,38 +56,44 @@ class WheelsRunnerTests(unittest.TestCase):
 
     @mock.patch.object(run, "run_checked")
     @mock.patch.object(run.python_binding_validator, "maturin_build_command")
-    def test_build_wheel_uses_the_shared_declared_build_command(self, command: mock.Mock, checked: mock.Mock) -> None:
-        command.return_value = ["/tools/uvx", "--from", "maturin==1.10.2", "maturin", "build"]
+    @mock.patch.object(run.python_binding_validator, "maturin_version", return_value="1.10.2")
+    @mock.patch.object(run.python_binding_validator, "venv_python", return_value=Path("/tmp/output/build-venv/bin/python"))
+    def test_build_wheel_provisions_the_pinned_maturin_for_the_shared_declared_command(
+            self, builder: mock.Mock, version: mock.Mock, command: mock.Mock, checked: mock.Mock) -> None:
+        command.return_value = ["/tmp/output/build-venv/bin/python", "-m", "maturin", "build"]
         with mock.patch.object(run, "recreate_output_directory"), mock.patch.object(Path, "glob", return_value=[Path("/tmp/wheel.whl")]):
             wheel = run.build_wheel(Path("/tmp/output"))
         self.assertEqual(wheel, Path("/tmp/wheel.whl"))
-        self.assertEqual(checked.call_args.args[0], command.return_value)
-        command.assert_called_once_with(run.ROOT, Path("/tmp/output/wheel"))
+        commands = [call.args[0] for call in checked.call_args_list]
+        self.assertEqual(commands[0], [run.sys.executable, "-m", "venv", "/tmp/output/build-venv"])
+        self.assertEqual(
+            commands[1],
+            ["/tmp/output/build-venv/bin/python", "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "maturin==1.10.2"],
+        )
+        self.assertEqual(commands[2], command.return_value)
+        version.assert_called_once_with(run.ROOT)
+        builder.assert_called_once_with(Path("/tmp/output/build-venv"))
+        command.assert_called_once_with(
+            run.ROOT,
+            Path("/tmp/output/wheel"),
+            maturin_command=["/tmp/output/build-venv/bin/python", "-m", "maturin"],
+        )
 
-    @mock.patch.object(run, "run_installed_typing_tests")
-    @mock.patch.object(run, "run_installed_runtime_tests")
     @mock.patch.object(run, "stage_installed_runtime_suite", return_value=Path("/tmp/output/runtime/tests"))
     @mock.patch.object(run, "run_checked")
-    def test_install_probe_uses_isolated_interpreter_and_installs_candidate(
-            self, checked: mock.Mock, staged: mock.Mock, runtime_tests: mock.Mock,
-            typing_tests: mock.Mock) -> None:
+    def test_prepare_installed_runtime_uses_isolated_interpreter_and_installs_candidate(
+            self, checked: mock.Mock, staged: mock.Mock) -> None:
         # Avoid a platform filesystem dependency while preserving the command contract.
-        checked.return_value = '{"prefix": "/tmp/venv", "native": "/tmp/venv/native.so", "package": "/tmp/venv/package.py"}\n'
         with mock.patch.object(run, "recreate_output_directory"), mock.patch.object(run.python_binding_validator, "venv_python", return_value=Path("/tmp/venv/bin/python")):
-            installed = run.install_and_probe(Path("/tmp/candidate.whl"), Path("/tmp/output"))
+            python, runtime, tests = run.prepare_installed_runtime(Path("/tmp/candidate.whl"), Path("/tmp/output"))
         commands = [call.args[0] for call in checked.call_args_list]
         self.assertEqual(commands[0][:3], [run.sys.executable, "-m", "venv"])
         self.assertIn("--no-input", commands[1])
         self.assertEqual(commands[2][1:3], ["-m", "pip"])
-        self.assertEqual(commands[3][1:5], ["-I", "-X", "dev", "-W"])
-        runtime_tests.assert_called_once_with(
-            Path("/tmp/venv/bin/python"), Path("/tmp/output/runtime"), Path("/tmp/output/runtime/tests")
-        )
-        typing_tests.assert_called_once_with(
-            Path("/tmp/venv/bin/python"), Path("/tmp/output/runtime"), Path("/tmp/output/runtime/tests")
-        )
         staged.assert_called_once_with(Path("/tmp/output/runtime"))
-        self.assertEqual(installed["python"], "/tmp/venv/bin/python")
+        self.assertEqual(python, Path("/tmp/venv/bin/python"))
+        self.assertEqual(runtime, Path("/tmp/output/runtime"))
+        self.assertEqual(tests, Path("/tmp/output/runtime/tests"))
 
     def test_installed_probe_exercises_the_enabled_telemetry_lifecycle(self) -> None:
         probe = run.IMPORT_AND_TELEMETRY_PROBE
@@ -176,7 +182,7 @@ class WheelsRunnerTests(unittest.TestCase):
             run.run_embedded_host(Path("/tmp/venv/bin/python"), Path("/tmp/package.py"))
         self.assertEqual(environment.call_args.kwargs["timeout"], run.RUNTIME_TIMEOUT_SECONDS)
 
-    def test_run_composes_result_and_attaches_the_venv_interpreter(self) -> None:
+    def test_run_records_each_successful_observation_and_attaches_the_venv_interpreter(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "output"
             wheel = Path(temporary) / "candidate.whl"
@@ -190,7 +196,10 @@ class WheelsRunnerTests(unittest.TestCase):
             package = Path(installed["package"]).resolve()
             with (
                 mock.patch.object(run, "build_wheel", return_value=wheel),
-                mock.patch.object(run, "install_and_probe", return_value=installed),
+                mock.patch.object(run, "prepare_installed_runtime", return_value=(Path(installed["python"]), output / "runtime", output / "runtime/tests")),
+                mock.patch.object(run, "run_installed_runtime_tests"),
+                mock.patch.object(run, "run_installed_typing_tests"),
+                mock.patch.object(run, "probe_installed_runtime", return_value=installed),
                 mock.patch.object(run, "run_embedded_host") as embedded_host,
             ):
                 result = run.run("a" * 40, output)
@@ -198,8 +207,38 @@ class WheelsRunnerTests(unittest.TestCase):
         embedded_host.assert_called_once_with(Path(installed["python"]), package)
         self.assertEqual(result["status"], "passed")
         self.assertEqual(result["wheel"]["path"], str(wheel))
-        self.assertEqual(result["checks"]["installed_telemetry_lifecycle"], "passed")
+        self.assertEqual(result["checks"]["installed_telemetry_lifecycle"]["status"], "passed")
         self.assertEqual(result["installed_artifacts"], installed)
+        self.assertEqual(report, result)
+
+    def test_run_records_a_runtime_failure_and_runs_independent_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            wheel = Path(temporary) / "candidate.whl"
+            wheel.write_bytes(b"candidate wheel")
+            installed = {
+                "python": "/tmp/e5-venv/bin/python",
+                "prefix": "/tmp/e5-venv",
+                "native": "/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/_native.so",
+                "package": "/tmp/e5-venv/lib/python3.14/site-packages/sc_observability/__init__.py",
+            }
+            with (
+                mock.patch.object(run, "build_wheel", return_value=wheel),
+                mock.patch.object(run, "prepare_installed_runtime", return_value=(Path(installed["python"]), output / "runtime", output / "runtime/tests")),
+                mock.patch.object(run, "run_installed_runtime_tests", side_effect=run.SuiteError("runtime assertion failed")),
+                mock.patch.object(run, "run_installed_typing_tests") as typing_tests,
+                mock.patch.object(run, "probe_installed_runtime", return_value=installed),
+                mock.patch.object(run, "run_embedded_host") as embedded_host,
+            ):
+                result = run.run("a" * 40, output)
+            report = json.loads((output / "result.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["checks"]["owned_typed_runtime"], {"status": "failed", "detail": "runtime assertion failed"})
+        self.assertEqual(result["checks"]["installed_typing"]["status"], "passed")
+        self.assertEqual(result["checks"]["installed_telemetry_lifecycle"]["status"], "passed")
+        self.assertEqual(result["checks"]["rust_host_attached_python"]["status"], "passed")
+        typing_tests.assert_called_once()
+        embedded_host.assert_called_once()
         self.assertEqual(report, result)
 
     def test_main_writes_failure_report_and_returns_one_for_suite_error(self) -> None:
@@ -210,6 +249,26 @@ class WheelsRunnerTests(unittest.TestCase):
             report = (output / "failure-report.txt").read_text(encoding="utf-8")
         self.assertEqual(exit_code, 1)
         self.assertIn("SuiteError: complete failure context", report)
+
+    def test_main_writes_a_failure_report_when_builder_provisioning_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            with mock.patch.object(run, "run_checked", side_effect=run.SuiteError("maturin setup failed")):
+                exit_code = run.main(["--source-sha", "a" * 40, "--output-dir", str(output)])
+            report = (output / "failure-report.txt").read_text(encoding="utf-8")
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(json.loads(report)["checks"]["wheel_build"], {"status": "failed", "detail": "maturin setup failed"})
+
+    def test_main_writes_observed_setup_failure_results(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            with mock.patch.object(run, "build_wheel", side_effect=run.SuiteError("builder setup failed")):
+                exit_code = run.main(["--source-sha", "a" * 40, "--output-dir", str(output)])
+            report = json.loads((output / "failure-report.txt").read_text(encoding="utf-8"))
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["checks"]["wheel_build"], {"status": "failed", "detail": "builder setup failed"})
+        self.assertEqual(report["checks"]["clean_install"]["status"], "blocked")
 
 
 if __name__ == "__main__":
