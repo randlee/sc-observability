@@ -86,9 +86,9 @@ python3 scripts/ci/stock_public_api.py setup --target-dir target/e-api-public-ap
 The ordinary follow-up check requires each current rustdoc JSON file and invokes
 the stock tool with `--rustdoc-json`. It has no package or manifest argument and
 does not run a Cargo build. Missing JSON or a missing committed native baseline
-fails clearly. The native text is intentionally compared byte-for-byte: it is a
-transparent audit snapshot, so an addition is visible rather than silently
-normalized.
+fails clearly when a committed stock-text line is removed or changed. Pure
+additions pass the ordinary unit check; release-cut records them in a new
+versioned baseline only after intentional release review.
 
 `release-cut` is the separate, explicit command that refreshes a committed
 versioned baseline after intentional release review; ordinary CI setup never

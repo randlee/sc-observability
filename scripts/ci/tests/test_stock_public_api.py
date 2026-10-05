@@ -58,7 +58,7 @@ class StockPublicApiTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0, "pub fn changed()\n", "")
             with patch.object(snapshots, "run", side_effect=fake_run):
                 snapshots.setup(target)
-                with self.assertRaisesRegex(snapshots.SnapshotError, "differs"):
+                with self.assertRaisesRegex(snapshots.SnapshotError, "removed or changed"):
                     snapshots.check(target)
             self.assertEqual(baseline.read_bytes(), before)
             self.assertEqual((target / "native-text/demo.txt").read_text(), "pub fn changed()\n")
@@ -78,10 +78,29 @@ class StockPublicApiTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0, "pub struct StillHere;\n", "")
             with patch.object(snapshots, "run", side_effect=fake_run):
                 snapshots.setup(target)
-                with self.assertRaisesRegex(snapshots.SnapshotError, "differs"):
+                with self.assertRaisesRegex(snapshots.SnapshotError, "removed or changed"):
                     snapshots.check(target)
             self.assertEqual(baseline.read_bytes(), before)
             self.assertEqual((target / "native-text/demo.txt").read_text(), "pub struct StillHere;\n")
+
+    def test_setup_then_check_allows_added_item_without_mutating_baseline(self):
+        package = snapshots.Package("demo", Path("demo/Cargo.toml"), "demo", "1.5.0")
+        with tempfile.TemporaryDirectory() as directory, patch.object(snapshots, "published_packages", return_value=[package]), patch.object(snapshots, "BASELINES", Path(directory) / "baselines"):
+            target = Path(directory) / "target"
+            current = target / "doc/demo.json"
+            current.parent.mkdir(parents=True)
+            current.write_text("{}")
+            baseline = Path(directory) / "baselines/demo/1.5.0.txt"
+            baseline.parent.mkdir(parents=True)
+            baseline.write_text("pub fn accepted()\n")
+            before = baseline.read_bytes()
+            def fake_run(command):
+                return subprocess.CompletedProcess(command, 0, "pub fn accepted()\npub fn added()\n", "")
+            with patch.object(snapshots, "run", side_effect=fake_run):
+                snapshots.setup(target)
+                snapshots.check(target)
+            self.assertEqual(baseline.read_bytes(), before)
+            self.assertEqual((target / "native-text/demo.txt").read_text(), "pub fn accepted()\npub fn added()\n")
 
 
 if __name__ == "__main__":

@@ -9,14 +9,16 @@ is the *separate explicit action* permitted to update committed baselines.
 stock tool; it never calls Cargo with a package or manifest and therefore
 cannot build a candidate crate.
 
-Text equality is an audit of the generated native surface.  Release
+The unit check requires every accepted stock-text line, including repeated
+lines, to remain present in the current surface. Release
 compatibility itself remains the stock ``cargo public-api diff --deny changed
---deny removed`` gate: equality intentionally notices additions while that
-semantic gate permits them.
+--deny removed`` gate: both checks allow pure additions while rejecting
+changed or removed accepted items.
 """
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import subprocess
 import sys
@@ -116,10 +118,10 @@ def check(target_dir: Path) -> dict[str, object]:
             raise SnapshotError(f"{package.name}: missing committed native baseline {package.baseline}")
         current = require_success(run(command("--rustdoc-json", str(current_json))), package.name)
         expected = package.baseline.read_text(encoding="utf-8")
-        if current != expected:
+        missing = Counter(expected.splitlines()) - Counter(current.splitlines())
+        if missing:
             raise SnapshotError(
-                f"{package.name}: native public-api text differs from {package.baseline}; "
-                "run the semantic compatibility gate to classify additions versus breaking changes"
+                f"{package.name}: native public-api text removed or changed accepted lines from {package.baseline}"
             )
         results.append({"package": package.name, "lines": len(current.splitlines())})
     elapsed = time.monotonic() - started
