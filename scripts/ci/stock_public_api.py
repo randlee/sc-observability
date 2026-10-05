@@ -2,10 +2,11 @@
 """Capture and check native ``cargo public-api`` text snapshots.
 
 This deliberately has no renderer, row projection, feature matrix, or private
-snapshot format.  ``capture`` is the one explicit, potentially-building setup:
-it writes the verbatim output of the stock tool for every released Rust crate.
-``check`` accepts only the rustdoc JSON emitted by that setup and reads it with
-the stock tool; it never calls Cargo with a package or manifest and therefore
+snapshot format. ``setup`` is the potentially-building candidate setup: it
+writes native text only below its caller-owned target directory. ``release-cut``
+is the *separate explicit action* permitted to update committed baselines.
+``check`` accepts only the rustdoc JSON emitted by setup and reads it with the
+stock tool; it never calls Cargo with a package or manifest and therefore
 cannot build a candidate crate.
 
 Text equality is an audit of the generated native surface.  Release
@@ -87,15 +88,21 @@ def require_success(result: subprocess.CompletedProcess[str], label: str) -> str
     return result.stdout
 
 
-def capture(target_dir: Path) -> dict[str, object]:
+def setup(target_dir: Path, *, write_baselines: bool = False) -> dict[str, object]:
     started = time.monotonic()
     results = []
+    current_text = target_dir / "native-text"
     for package in published_packages():
         output = require_success(run(command("--target-dir", str(target_dir), "--manifest-path", str(package.manifest))), package.name)
-        package.baseline.parent.mkdir(parents=True, exist_ok=True)
-        package.baseline.write_text(output, encoding="utf-8")
-        results.append({"package": package.name, "baseline": str(package.baseline.relative_to(ROOT)), "lines": len(output.splitlines())})
-    return {"packages": results, "setup_seconds": round(time.monotonic() - started, 3), "target_dir": str(target_dir)}
+        current_path = current_text / f"{package.name}.txt"
+        current_path.parent.mkdir(parents=True, exist_ok=True)
+        current_path.write_text(output, encoding="utf-8")
+        if write_baselines:
+            package.baseline.parent.mkdir(parents=True, exist_ok=True)
+            package.baseline.write_text(output, encoding="utf-8")
+        results.append({"package": package.name, "current_text": str(current_path), "lines": len(output.splitlines())})
+    return {"packages": results, "setup_seconds": round(time.monotonic() - started, 3),
+            "target_dir": str(target_dir), "baselines_written": write_baselines}
 
 
 def check(target_dir: Path) -> dict[str, object]:
@@ -104,7 +111,7 @@ def check(target_dir: Path) -> dict[str, object]:
     for package in published_packages():
         current_json = rustdoc_json(target_dir, package)
         if not current_json.is_file():
-            raise SnapshotError(f"{package.name}: missing current rustdoc JSON {current_json}; run capture first")
+            raise SnapshotError(f"{package.name}: missing current rustdoc JSON {current_json}; run setup first")
         if not package.baseline.is_file():
             raise SnapshotError(f"{package.name}: missing committed native baseline {package.baseline}")
         current = require_success(run(command("--rustdoc-json", str(current_json))), package.name)
@@ -123,10 +130,11 @@ def check(target_dir: Path) -> dict[str, object]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("capture", "check"))
+    parser.add_argument("mode", choices=("setup", "release-cut", "check"))
     parser.add_argument("--target-dir", required=True, type=Path)
     args = parser.parse_args()
-    report = capture(args.target_dir) if args.mode == "capture" else check(args.target_dir)
+    report = (setup(args.target_dir, write_baselines=args.mode == "release-cut")
+              if args.mode != "check" else check(args.target_dir))
     print(json.dumps(report, sort_keys=True))
     return 0
 

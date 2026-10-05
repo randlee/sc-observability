@@ -73,14 +73,14 @@ is the remedy for an actual contract change, not overwriting accepted history.
 ## API unit comparison and release-cut setup
 
 Rust uses the pinned stock `cargo public-api` tool, not a compiler-metadata
-reader or a project-defined row format. `capture` is the only build-producing
-step: it generates current rustdoc JSON for every one of the ten
+reader or a project-defined row format. `setup` is the only build-producing
+candidate step: it generates current rustdoc JSON for every one of the ten
 `publish = true` Rust crates named in `release/publish-artifacts.toml`, including
-the standalone Tauri crate, and writes the tool's unmodified `-sss` text to one
-versioned file per crate under `schema/api/rust-stock/`.
+the standalone Tauri crate, and writes the tool's unmodified `-sss` text only
+under its caller-owned target directory. It never writes the committed baseline.
 
 ```sh
-python3 scripts/ci/stock_public_api.py capture --target-dir target/e-api-public-api
+python3 scripts/ci/stock_public_api.py setup --target-dir target/e-api-public-api
 ```
 
 The ordinary follow-up check requires each current rustdoc JSON file and invokes
@@ -89,6 +89,14 @@ does not run a Cargo build. Missing JSON or a missing committed native baseline
 fails clearly. The native text is intentionally compared byte-for-byte: it is a
 transparent audit snapshot, so an addition is visible rather than silently
 normalized.
+
+`release-cut` is the separate, explicit command that refreshes a committed
+versioned baseline after intentional release review; ordinary CI setup never
+does so.
+
+```sh
+python3 scripts/ci/stock_public_api.py release-cut --target-dir target/e-api-public-api
+```
 
 ```sh
 python3 scripts/ci/stock_public_api.py check --target-dir target/e-api-public-api
