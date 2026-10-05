@@ -568,11 +568,11 @@ mod tests {
     use crate::constants;
     use std::{collections::BTreeSet, fs, path::Path, time::Duration};
 
-    const TELEMETRY_SCHEMA_VERSION: u64 = 1;
+    const TELEMETRY_SCHEMA_VERSION: u64 = 2;
 
     fn selected_telemetry_schema() -> serde_json::Value {
         let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schema/config/telemetry/v1.json");
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schema/config/telemetry/v2.json");
         serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
     }
 
@@ -829,8 +829,11 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[test]
-    fn telemetry_yaml_selected_v1_schema_matches_parser_fields_defaults_and_enum_values() {
-        let schema = selected_telemetry_schema();
+    fn telemetry_yaml_v1_schema_matches_accepted_history() {
+        let current = fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schema/config/telemetry/v1.json"),
+        )
+        .unwrap();
         let accepted_baseline = std::process::Command::new("git")
             .args([
                 "show",
@@ -844,12 +847,16 @@ mod tests {
             "could not read telemetry YAML v1 accepted baseline: {}",
             String::from_utf8_lossy(&accepted_baseline.stderr)
         );
-        let accepted_baseline: serde_json::Value =
-            serde_json::from_slice(&accepted_baseline.stdout).unwrap();
         assert_eq!(
-            schema, accepted_baseline,
-            "telemetry YAML v1 selected snapshot differs from accepted baseline; an intentional contract change requires schema/config/telemetry/v2.json rather than overwriting v1"
+            current, accepted_baseline.stdout,
+            "telemetry YAML v1 retained snapshot differs from accepted baseline; an intentional contract change requires schema/config/telemetry/v2.json rather than overwriting v1"
         );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[test]
+    fn telemetry_yaml_selected_v2_schema_matches_parser_fields_defaults_and_enum_values() {
+        let schema = selected_telemetry_schema();
         assert_selected_telemetry_schema_is_current(&schema).unwrap();
         let file: TelemetryFileConfig = serde_json::from_value(serde_json::json!({
             "service": "schema-test",
@@ -887,6 +894,53 @@ mod tests {
             constants::TELEMETRY_MAX_STORE_BYTES
         );
         assert_eq!(defaults.disk_bound_policy, DiskBoundPolicy::RejectNew);
+        let nullable: TelemetryFileConfig = serde_json::from_value(serde_json::json!({
+            "service": null,
+            "otlp": {"endpoint": null, "timeout_ms": null},
+            "store": {
+                "path": "store.db",
+                "max_bytes": null,
+                "disk_bound_policy": null,
+                "delivered_retention_hours": null
+            }
+        }))
+        .unwrap();
+        let nullable =
+            resolve_config(ConfigSources::new(&overrides, Some(&nullable), &|_| None)).unwrap();
+        assert_eq!(nullable.service_name, constants::TELEMETRY_DEFAULT_SERVICE);
+        assert_eq!(nullable.endpoint, constants::TELEMETRY_DEFAULT_ENDPOINT);
+        assert_eq!(
+            nullable.request_timeout,
+            constants::TELEMETRY_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            nullable.max_store_bytes,
+            constants::TELEMETRY_MAX_STORE_BYTES
+        );
+        assert_eq!(nullable.disk_bound_policy, DiskBoundPolicy::RejectNew);
+
+        for (file, expected_field) in [
+            (
+                serde_json::json!({"store": {"path": "store.db", "max_bytes": 0}}),
+                "max_store_bytes",
+            ),
+            (
+                serde_json::json!({"store": {"path": "store.db", "delivered_retention_hours": 0}}),
+                "delivered_retention",
+            ),
+            (
+                serde_json::json!({"store": {"path": "store.db"}, "otlp": {"timeout_ms": 0}}),
+                "request_timeout",
+            ),
+        ] {
+            let file: TelemetryFileConfig = serde_json::from_value(file).unwrap();
+            match resolve_config(ConfigSources::new(&overrides, Some(&file), &|_| None)) {
+                Err(TelemetryConfigError::InvalidField { field, .. }) => {
+                    assert_eq!(field, expected_field);
+                }
+                other => panic!("expected {expected_field} resolver rejection, got {other:?}"),
+            }
+        }
         let disk_bound_policies = serde_json::Value::Array(
             [DiskBoundPolicy::RejectNew, DiskBoundPolicy::EvictOldest]
                 .into_iter()
@@ -925,7 +979,15 @@ mod tests {
             ),
             (
                 "/properties/store/properties/disk_bound_policy/enum",
-                disk_bound_policies,
+                serde_json::Value::Array(
+                    disk_bound_policies
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .cloned()
+                        .chain(std::iter::once(serde_json::Value::Null))
+                        .collect(),
+                ),
             ),
             (
                 "/properties/otlp/properties/timeout_ms/minimum",
@@ -934,12 +996,77 @@ mod tests {
                 ),
             ),
             (
+                "/properties/otlp/properties/timeout_ms/maximum",
+                serde_json::Value::from(
+                    u64::try_from(constants::TELEMETRY_REQUEST_TIMEOUT_MAX.as_millis()).unwrap(),
+                ),
+            ),
+            (
                 "/properties/store/properties/max_bytes/minimum",
                 serde_json::Value::from(1_u64),
             ),
             (
+                "/properties/store/properties/max_bytes/maximum",
+                serde_json::Value::from(constants::TELEMETRY_MAX_STORE_BYTES_LIMIT),
+            ),
+            (
                 "/properties/store/properties/delivered_retention_hours/minimum",
                 serde_json::Value::from(1_u64),
+            ),
+            (
+                "/properties/store/properties/delivered_retention_hours/maximum",
+                serde_json::Value::from(
+                    constants::TELEMETRY_RETENTION_MAX.as_secs()
+                        / constants::TELEMETRY_SECONDS_PER_HOUR,
+                ),
+            ),
+            (
+                "/x-sc-observability/null_optional_fields",
+                serde_json::Value::String("treated as absent by the parser".into()),
+            ),
+            (
+                "/x-sc-observability/numeric_bounds_enforced_at",
+                serde_json::Value::String("resolve_config".into()),
+            ),
+        ] {
+            assert_eq!(schema.pointer(path), Some(&expected), "{path}");
+        }
+        for (path, expected) in [
+            (
+                "/properties/service/type",
+                serde_json::json!(["string", "null"]),
+            ),
+            (
+                "/properties/otlp/type",
+                serde_json::json!(["object", "null"]),
+            ),
+            (
+                "/properties/otlp/properties/endpoint/type",
+                serde_json::json!(["string", "null"]),
+            ),
+            (
+                "/properties/otlp/properties/timeout_ms/type",
+                serde_json::json!(["integer", "null"]),
+            ),
+            (
+                "/properties/store/type",
+                serde_json::json!(["object", "null"]),
+            ),
+            (
+                "/properties/store/properties/path/type",
+                serde_json::json!(["string", "null"]),
+            ),
+            (
+                "/properties/store/properties/max_bytes/type",
+                serde_json::json!(["integer", "null"]),
+            ),
+            (
+                "/properties/store/properties/disk_bound_policy/type",
+                serde_json::json!(["string", "null"]),
+            ),
+            (
+                "/properties/store/properties/delivered_retention_hours/type",
+                serde_json::json!(["integer", "null"]),
             ),
         ] {
             assert_eq!(schema.pointer(path), Some(&expected), "{path}");
@@ -955,9 +1082,9 @@ mod tests {
             .unwrap()
             .remove("service");
         let error = assert_selected_telemetry_schema_is_current(&schema).unwrap_err();
-        assert!(error.contains("telemetry YAML v1"), "{error}");
+        assert!(error.contains("telemetry YAML v2"), "{error}");
         assert!(error.contains("/properties/service"), "{error}");
         assert!(error.contains("immutable"), "{error}");
-        assert!(error.contains("schema/config/telemetry/v2.json"), "{error}");
+        assert!(error.contains("schema/config/telemetry/v3.json"), "{error}");
     }
 }
