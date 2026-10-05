@@ -204,9 +204,12 @@ jobs:
       - name: Check log bridge consumer crate
         run: cargo check --locked -p sc-observability-log-consumer-check
 
+      - name: Fetch trusted accepted API history base
+        run: git fetch origin develop --depth=1
+
       - name: Run workspace tests
         env:
-          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || (github.event.created && format('{0}^', github.sha)) || inputs.accepted_base || '' }}
+          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || inputs.accepted_base || 'origin/develop' }}
         run: python3 scripts/api/run_unit_tests.py -- cargo test --locked --no-fail-fast --workspace --all-targets
 
       - name: Run workspace doctests
@@ -307,10 +310,14 @@ jobs:
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         run: cargo check --locked -p sc-observability-log-consumer-check
 
+      - name: Fetch trusted accepted API history base
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: git fetch origin develop --depth=1
+
       - name: Run workspace tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         env:
-          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || (github.event.created && format('{0}^', github.sha)) || inputs.accepted_base || '' }}
+          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || inputs.accepted_base || 'origin/develop' }}
         run: python3 scripts/api/run_unit_tests.py -- cargo test --locked --no-fail-fast --workspace --all-targets
 
       - name: Run OTLP feature unit tests

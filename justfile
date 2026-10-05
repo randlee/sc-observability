@@ -15,7 +15,7 @@ lint:
 
 # Workspace tests.
 test:
-    SC_API_ACCEPTED_BASE="${SC_API_ACCEPTED_BASE:-HEAD^}" python3 scripts/api/run_unit_tests.py -- cargo test --workspace --no-fail-fast
+    SC_API_ACCEPTED_BASE="${SC_API_ACCEPTED_BASE:-origin/develop}" python3 scripts/api/run_unit_tests.py -- cargo test --workspace --no-fail-fast
     cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked
     python3 -m unittest scripts.ci.tests.test_prepare_release_staged_packages scripts.ci.tests.test_publish_retry_idempotency scripts.integrate.tests.test_dispatch scripts.api.test_history scripts.api.test_python_surface scripts.api.test_unit_runner
 

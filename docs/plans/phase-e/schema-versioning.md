@@ -91,11 +91,11 @@ python3 -m unittest scripts.api.test_history
 ```
 
 `SC_API_ACCEPTED_BASE` can supply the local accepted baseline. `just test`
-explicitly supplies `HEAD^` when the caller has not supplied one, so the
-candidate never supplies its own accepted history; use the actual
-accepted/release commit to audit an already committed change. CI supplies the
-PR base or preceding push commit, and a newly created push branch explicitly
-uses its parent revision. No registry or network query is used by the check. A mismatch identifies package, selected
+defaults to the explicit `origin/develop` accepted baseline when the caller
+has not supplied one; missing or invalid trusted history fails through the
+history check rather than falling back to candidate ancestry. CI supplies the
+PR base or preceding push commit and, for a newly created push branch, fetches
+and uses `origin/develop`. No registry or network query is used by the check. A mismatch identifies package, selected
 manifest version, feature family and changed rows. Keep accepted snapshots,
 increment the owning package version, and capture its new baseline when a
 contract change is intentional. Compatibility with released 1.x APIs still

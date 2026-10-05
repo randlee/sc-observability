@@ -63,6 +63,10 @@ class HistoryTests(unittest.TestCase):
             with self.assertRaisesRegex(history.ApiError, 'requires a PR base or prior revision'):
                 history.accepted_base(root=self.root)
 
+    def test_missing_trusted_baseline_fails_closed_with_the_history_diagnostic(self):
+        with self.assertRaisesRegex(history.ApiError, 'requires a PR base or prior revision'):
+            history.accepted_base('origin/develop', self.root)
+
     def test_explicit_prior_revision_is_a_valid_accepted_base(self):
         self.assertEqual(history.accepted_base('HEAD^', self.root), self.base)
 
@@ -71,6 +75,19 @@ class HistoryTests(unittest.TestCase):
         self.rows[self.entry['artifact']] = ['method(u64)']
         self.snapshot.update(history.encode_families({'none': ['method(u64)']}))
         self.path.write_text(json.dumps(self.snapshot))
+        self.record['source_sha256'] = history.source_fingerprint(self.root)
+        with self.assertRaisesRegex(history.ApiError, 'immutable accepted API history changed'):
+            self.check()
+
+    def test_trusted_baseline_rejects_snapshot_tampering_across_multiple_candidate_commits(self):
+        self.snapshot.update(history.encode_families({'none': ['method(u64)']}))
+        self.path.write_text(json.dumps(self.snapshot))
+        self.git('add', str(self.path.relative_to(self.root)))
+        self.git('commit', '-qm', 'tamper accepted snapshot')
+        (self.root / 'source.rs').write_text('pub fn method(_: u64) {}\n')
+        self.rows[self.entry['artifact']] = ['method(u64)']
+        self.git('add', 'source.rs')
+        self.git('commit', '-qm', 'candidate API change')
         self.record['source_sha256'] = history.source_fingerprint(self.root)
         with self.assertRaisesRegex(history.ApiError, 'immutable accepted API history changed'):
             self.check()
