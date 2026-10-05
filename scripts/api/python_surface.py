@@ -72,10 +72,20 @@ def project(package):
                 return
             active.add(value)
             rows.add('bases ' + path + ' ' + ','.join(value_name(x) for x in value.__bases__))
-            if getattr(value.__init__, '__module__', '').startswith(package.__name__):
-                rows.add('constructor ' + path + ' ' + signature(value))
+            constructor = value.__init__
+            if issubclass(value, enum.Enum) and constructor in (object.__init__, enum.Enum.__init__):
+                # CPython has reported a default Enum constructor as both
+                # object.__init__ and Enum.__init__ across supported versions.
+                # Neither is part of the public Enum surface, so retain the
+                # accepted object.__init__ history spelling.
+                rows.add('constructor ' + path + ' inherited=' + value_name(object.__init__))
+            elif getattr(constructor, '__module__', '').startswith(package.__name__):
+                # EnumMeta's class-call signature is (*values), which hides
+                # a package-defined Enum constructor. Project that constructor
+                # directly so changes remain public API differences.
+                rows.add('constructor ' + path + ' ' + signature(constructor if issubclass(value, enum.Enum) else value))
             else:
-                rows.add('constructor ' + path + ' inherited=' + value_name(value.__init__))
+                rows.add('constructor ' + path + ' inherited=' + value_name(constructor))
             for name, annotation in sorted(getattr(value, '__annotations__', {}).items()):
                 if not name.startswith('_'):
                     rows.add('field ' + path + '.' + name + ': ' + value_name(annotation))

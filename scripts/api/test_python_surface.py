@@ -1,4 +1,5 @@
 import json
+import enum
 from pathlib import Path
 import tempfile
 import types
@@ -37,6 +38,33 @@ class RuntimeProjectionTests(unittest.TestCase):
     def test_deterministic_rows(self):
         module = self.module('def read(value: int = 2) -> str: ...')
         self.assertEqual(project(module), project(module))
+
+    def test_enum_default_constructor_is_canonical_but_custom_constructor_changes(self):
+        default = 'import enum\nclass Cause(str, enum.Enum):\n    VALUE = "value"\n'
+        expected = project(self.module(default))
+        previous = enum.Enum.__init__
+
+        def enum_init(self, *_):
+            pass
+
+        enum_init.__module__ = 'enum'
+        enum_init.__qualname__ = 'Enum.__init__'
+        try:
+            enum.Enum.__init__ = enum_init
+            self.assertEqual(expected, project(self.module(default)))
+        finally:
+            enum.Enum.__init__ = previous
+
+        custom = ('import enum\nclass Cause(enum.Enum):\n    VALUE = ("value", "label")\n'
+                  '    def __init__(self, value, label):\n        self.label = label\n')
+        changed = ('import enum\nclass Cause(enum.Enum):\n    VALUE = ("value", "label")\n'
+                   '    def __init__(self, value, label, priority=0):\n        self.label = label\n        self.priority = priority\n')
+        custom_rows = project(self.module(custom))
+        changed_rows = project(self.module(changed))
+        custom_constructor = next(row for row in custom_rows if row.startswith('constructor sc_test_api.Cause '))
+        changed_constructor = next(row for row in changed_rows if row.startswith('constructor sc_test_api.Cause '))
+        self.assertNotEqual(custom_constructor, changed_constructor)
+        self.assertNotEqual(custom_rows, changed_rows)
 
 
 if __name__ == '__main__':
