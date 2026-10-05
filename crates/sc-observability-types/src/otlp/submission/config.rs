@@ -827,6 +827,19 @@ mod tests {
         }
     }
 
+    fn normalize_crlf_to_lf(bytes: &[u8]) -> Vec<u8> {
+        let mut normalized = Vec::with_capacity(bytes.len());
+        let mut index = 0;
+        while index < bytes.len() {
+            if bytes[index] == b'\r' && bytes.get(index + 1) == Some(&b'\n') {
+                index += 1;
+            }
+            normalized.push(bytes[index]);
+            index += 1;
+        }
+        normalized
+    }
+
     #[allow(clippy::too_many_lines)]
     #[test]
     fn telemetry_yaml_v1_schema_matches_accepted_history() {
@@ -845,7 +858,8 @@ mod tests {
             String::from_utf8_lossy(&accepted_baseline.stderr)
         );
         assert_eq!(
-            current, accepted_baseline.stdout,
+            normalize_crlf_to_lf(&current),
+            normalize_crlf_to_lf(&accepted_baseline.stdout),
             "telemetry YAML v1 retained snapshot differs from accepted baseline; an intentional contract change requires schema/config/telemetry/v2.json rather than overwriting v1"
         );
     }
