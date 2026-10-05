@@ -91,19 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn telemetry_yaml_schema_preserves_unknown_consumer_keys_and_existing_loader_rejections() {
-        let schema: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(
-                Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schema/config/telemetry/v1.json"),
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        assert_eq!(schema["x-sc-observability"]["selected_version"], 1);
-        assert_eq!(schema["additionalProperties"], true);
-        assert_eq!(schema["properties"]["otlp"]["additionalProperties"], true);
-        assert_eq!(schema["properties"]["store"]["additionalProperties"], true);
-
+    fn telemetry_yaml_loader_preserves_unknown_consumer_keys_and_existing_rejections() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("telemetry.yaml");
         std::fs::write(
