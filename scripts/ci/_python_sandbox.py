@@ -19,6 +19,17 @@ from contextlib import contextmanager
 from _python_distribution import DistributionError
 
 
+def linux_loader_path(toolchain_library: Path, python_library: str | None,
+                      inherited: str | None) -> str:
+    """Keep the selected Rust toolchain loadable before Python's libraries."""
+    paths = [str(toolchain_library)]
+    if python_library:
+        paths.append(python_library)
+    if inherited:
+        paths.append(inherited)
+    return os.pathsep.join(paths)
+
+
 def bounded_command(command: list[str], cwd: Path, environment: dict, timeout: float = 900) -> subprocess.CompletedProcess:
     """Bound command lifetime without waiting for inherited output handles."""
     # Compiler service descendants can retain their parent's output handles.
@@ -85,9 +96,13 @@ class Sandbox:
                         PYO3_PYTHON=sys.executable, PYTHONDONTWRITEBYTECODE='1')
         self.system = platform.system()
         if self.system == 'Linux':
-            library_dir = sysconfig.get_config_var('LIBDIR')
-            if library_dir:
-                self.env['LD_LIBRARY_PATH'] = str(library_dir) + os.pathsep + self.env.get('LD_LIBRARY_PATH', '')
+            toolchain_sysroot = subprocess.check_output(
+                [self.rustc, '--print', 'sysroot'], text=True).strip()
+            self.env['LD_LIBRARY_PATH'] = linux_loader_path(
+                Path(toolchain_sysroot) / 'lib',
+                sysconfig.get_config_var('LIBDIR'),
+                self.env.get('LD_LIBRARY_PATH'),
+            )
         self.cache_probe = Path.home() / '.cargo' / ('sc-observability-probe-' + uuid.uuid4().hex)
         self.network_ip = socket.gethostbyname('index.crates.io')
         with socket.create_connection((self.network_ip, 443), timeout=10):

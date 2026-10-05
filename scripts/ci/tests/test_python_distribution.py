@@ -1,6 +1,7 @@
 """Boundary failures must be detected before executing artifact contents."""
 import io
 import json
+import os
 import sys
 import tarfile
 import tempfile
@@ -9,7 +10,7 @@ import unittest
 import zipfile
 from argparse import Namespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -96,6 +97,37 @@ class DistributionTests(unittest.TestCase):
                     'print("child launched",flush=True); time.sleep(30)'],
                     Path(temporary), dict(os.environ), timeout=0.5)
             self.assertLess(time.monotonic() - started, 10)
+
+    def test_linux_sandbox_prepends_pinned_rust_loader_to_python_only_inherited_path(self):
+        from _python_sandbox import Sandbox
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / 'home'
+            (home / '.cargo').mkdir(parents=True)
+            scratch = root / 'scratch'
+            scratch.mkdir()
+            connection = MagicMock()
+
+            def tool(command, **_):
+                if command[:4] == ['rustup', 'which', '--toolchain', '1.94.1']:
+                    return '/rust/1.94.1/bin/' + command[-1]
+                self.assertEqual(command, ['/rust/1.94.1/bin/rustc', '--print', 'sysroot'])
+                return '/rust/1.94.1\n'
+
+            with patch.dict(os.environ, {'PATH': '/bin', 'LD_LIBRARY_PATH': '/python-only/lib'}, clear=True), \
+                    patch('_python_sandbox.platform.system', return_value='Linux'), \
+                    patch('_python_sandbox.Path.home', return_value=home), \
+                    patch('_python_sandbox.subprocess.check_output', side_effect=tool), \
+                    patch('_python_sandbox.sysconfig.get_config_var', return_value='/python/lib'), \
+                    patch('_python_sandbox.socket.gethostbyname', return_value='198.51.100.1'), \
+                    patch('_python_sandbox.socket.create_connection', return_value=connection):
+                sandbox = Sandbox(scratch, [])
+
+            self.assertEqual(
+                sandbox.env['LD_LIBRARY_PATH'],
+                os.pathsep.join(('/rust/1.94.1/lib', '/python/lib', '/python-only/lib')),
+            )
 
     def test_relocated_conformance_corpus_is_an_exact_source_input(self):
         from stage_python_conformance import stage_conformance
