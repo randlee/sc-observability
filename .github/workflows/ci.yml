@@ -231,6 +231,9 @@ jobs:
           python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
           python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
 
+      - name: Install Linux native prerequisites for public API setup
+        uses: ./.github/actions/install-linux-native-deps
+
       - name: Generate native public API JSON and stock text snapshots
         shell: bash
         run: |
