@@ -43,7 +43,7 @@ class StockPublicApiTests(unittest.TestCase):
             self.assertEqual(seen, [snapshots.command("--rustdoc-json", str(current))])
             self.assertNotIn("--manifest-path", seen[0])
 
-    def test_setup_then_check_rejects_changed_candidate_without_mutating_baseline(self):
+    def test_setup_then_check_rejects_changed_signature_without_mutating_baseline(self):
         package = snapshots.Package("demo", Path("demo/Cargo.toml"), "demo", "1.5.0")
         with tempfile.TemporaryDirectory() as directory, patch.object(snapshots, "published_packages", return_value=[package]), patch.object(snapshots, "BASELINES", Path(directory) / "baselines"):
             target = Path(directory) / "target"
@@ -52,16 +52,16 @@ class StockPublicApiTests(unittest.TestCase):
             current.write_text("{}")
             baseline = Path(directory) / "baselines/demo/1.5.0.txt"
             baseline.parent.mkdir(parents=True)
-            baseline.write_text("pub fn old()\n")
+            baseline.write_text("pub fn old(value: u8)\n")
             before = baseline.read_bytes()
             def fake_run(command):
-                return subprocess.CompletedProcess(command, 0, "pub fn changed()\n", "")
+                return subprocess.CompletedProcess(command, 0, "pub fn old(value: u16)\n", "")
             with patch.object(snapshots, "run", side_effect=fake_run):
                 snapshots.setup(target)
                 with self.assertRaisesRegex(snapshots.SnapshotError, "removed or changed"):
                     snapshots.check(target)
             self.assertEqual(baseline.read_bytes(), before)
-            self.assertEqual((target / "native-text/demo.txt").read_text(), "pub fn changed()\n")
+            self.assertEqual((target / "native-text/demo.txt").read_text(), "pub fn old(value: u16)\n")
 
     def test_setup_then_check_rejects_removed_accepted_item_without_mutating_baseline(self):
         package = snapshots.Package("demo", Path("demo/Cargo.toml"), "demo", "1.5.0")
