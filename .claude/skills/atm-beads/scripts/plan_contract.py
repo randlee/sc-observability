@@ -41,7 +41,7 @@ EXIT_CANNOT_RUN: int = 2
 EXIT_PROBLEMS: int = 5
 PROBLEM_LINE: str = "{bead}: {message}"  # one per stdout line
 
-# Legacy in-memory fixture keys. Persisted phase plans use sprints.jsonl tuples.
+# Legacy in-memory fixture keys. Persisted phase plans use the plan file <plans_dir>/phase-<x>.jsonl.
 INDEX_OPTIONAL_KEYS: tuple[str, ...] = ("integration_branch", "review_artifacts", "policy")
 POLICY_KEYS: tuple[str, ...] = ("human_gates", "waivers")
 # policy.waivers[{bead, check, reason}]: a past state violation the user accepted in the plan PR; the validator

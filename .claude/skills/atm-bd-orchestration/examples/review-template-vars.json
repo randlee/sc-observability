@@ -7,7 +7,5 @@
   "review_focus": "- OTLP exporter boundaries (SDK vs sync path)",
   "review_questions": "- Is example-otlp extractable without sc-observability internals?",
   "references": "- bd show obs-phase-d\n- docs/architecture.md",
-  "lead": "obs-lead",
-  "cc": "",
   "integration_branch": "integrate/phase-d"
 }

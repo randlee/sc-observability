@@ -76,16 +76,11 @@
     }
   },
   "additionalProperties": true,
-  "description": "A stage:sprint dev bead.",
+  "description": "A stage:sprint container: the plan fields; its dev, sanity and qa beads are poured under it.",
   "properties": {
     "id": {
       "minLength": 1,
       "title": "Id",
-      "type": "string"
-    },
-    "assignee": {
-      "minLength": 1,
-      "title": "Assignee",
       "type": "string"
     },
     "dependencies": {
@@ -112,7 +107,6 @@
   },
   "required": [
     "id",
-    "assignee",
     "description",
     "acceptance_criteria",
     "metadata"

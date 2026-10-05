@@ -9,6 +9,8 @@ import tempfile
 import time
 import unittest
 
+from jev_receipts import CLIENT, env, receipted
+
 ROOT = Path(__file__).parents[2]
 SCRIPT = ROOT / "scripts/sanity-merge"
 TEMPLATES = ROOT / "templates"
@@ -60,9 +62,9 @@ class SanityMerge(unittest.TestCase):
         self.manifest.write_text(json.dumps(manifest))
 
     def result(self, number, findings=()):
-        return {"success": True, "error": None, "data": {
+        return receipted({"success": True, "error": None, "data": {
             "sanity_bead": TASK, "dev_bead": DEV, "deliverable": number, "commit_checked": self.sha,
-            "findings": list(findings)}}
+            "findings": list(findings)}})
 
     def failure(self, **error):
         base = {"code": "SANITY.TARGET_UNREADABLE", "message": "no such path", "recoverable": False,
@@ -77,7 +79,7 @@ class SanityMerge(unittest.TestCase):
     def merge(self, results, *args):
         argv = args or (str(self.manifest), TASK, DEV, SPRINT)
         body = results if isinstance(results, str) else json.dumps(results)
-        return subprocess.run([str(SCRIPT), *argv], input=body, capture_output=True, text=True)
+        return subprocess.run([str(SCRIPT), *argv, "--client", str(CLIENT)], input=body, capture_output=True, text=True, env=env())
 
     def test_paired_reports_share_identity_preserve_conclusions_and_own_timing(self):
         self.write_manifest(run_id="shared-run", reviewers=["sanity-llm", "sanity-jev"],
@@ -121,6 +123,38 @@ class SanityMerge(unittest.TestCase):
                               "--reviewer", "sanity-llm", "--started-at", "1700000000", "--completed-at", "1700000001")
         self.assertEqual(rejected.returncode, 1)
         self.assertEqual(rejected.stdout, "")
+
+    def test_a_jev_reply_without_a_valid_receipt_becomes_a_result_invalid_failure(self):
+        self.write_manifest(run_id="jev-run", reviewers=["sanity-llm", "sanity-jev"], operational_reviewer="sanity-llm")
+        self.lint(0)
+        good, bare = self.result(1), {**self.result(2), "data": without(self.result(2)["data"], "jev")}
+        yes_with_finding = {**self.result(2, [FINDING]), "data": {**self.result(2, [FINDING])["data"], "jev": self.result(2)["data"]["jev"]}}
+        tampered = {**self.result(2), "data": {**self.result(2)["data"], "jev": {**self.result(2)["data"]["jev"], "choice": "no"}}}
+        reused = {**self.result(2), "data": {**self.result(2)["data"], "jev": good["data"]["jev"]}}
+        invented = self.failure(code="SANITY.JEV_UNAVAILABLE", message="Selected model is at capacity")
+        args = (str(self.manifest), TASK, DEV, SPRINT, "--reviewer", "sanity-jev", "--started-at", "1700000000", "--completed-at", "1700000001")
+        cases = {"no receipt": (bare, "no valid Jev receipt"), "choice contradicts findings": (yes_with_finding, "contradicts"),
+                 "tampered receipt": (tampered, "no valid Jev receipt"), "receipt reused": (reused, "reused"),
+                 "invented failure message": (invented, "not the client's own text")}
+        for name, (reply, reason) in cases.items():
+            with self.subTest(name):
+                out = self.merge([good, reply], *args)
+                self.assertEqual(out.returncode, 3, out.stderr)
+                report = json.loads(out.stdout)
+                self.assertEqual(report["verdict"], "CANNOT_RUN")
+                slot = report["reviewer_results"][1]
+                self.assertEqual((slot["success"], slot["error"]["code"], slot["error"]["deliverable"]), (False, "SANITY.RESULT_INVALID", 2))
+                self.assertIn(reason, slot["error"]["message"])
+                self.assertEqual(report["rejected_results"], [{"deliverable": 2, "reason": slot["error"]["message"], "reply": reply}])
+                self.assertEqual(report["reviewer_results"][0], good)
+        client_text = self.failure(code="SANITY.JEV_UNAVAILABLE", message="Jev HTTP 529; response body withheld")
+        report = json.loads(self.merge([good, client_text], *args).stdout)
+        self.assertEqual((report["reviewer_results"][1], report["rejected_results"]), (client_text, []))
+        no_key = subprocess.run([str(SCRIPT), *args, "--client", str(CLIENT)], input=json.dumps([good, self.result(2)]),
+                                capture_output=True, text=True, env={k: v for k, v in env().items() if k != "TYPESAFE_API_KEY"})
+        self.assertIn("cannot be verified", json.loads(no_key.stdout)["reviewer_results"][0]["error"]["message"])
+        llm = self.merge([{**good, "data": without(good["data"], "jev")}, bare], *args[:4], "--reviewer", "sanity-llm", *args[6:])
+        self.assertEqual((llm.returncode, json.loads(llm.stdout)["rejected_results"]), (0, []))
 
     def test_pass(self):
         self.lint(0, "ok\n")
@@ -229,7 +263,8 @@ class SanityMerge(unittest.TestCase):
             "success 1": ([self.result(1), {**self.result(2), "success": 1}], "result 1: not a success or failure envelope"),
             "success without error key": ([self.result(1), without(self.result(2), "error")], "result 1: not a success or failure envelope"),
             "failure without data key": ([self.result(1), without(self.failure(), "data")], "result 1: not a success or failure envelope"),
-            "not a result": (["not a result"], "result 0: not a success or failure envelope"),
+            "not a result": (["```json\n\"not a result\"\n```"], "result 0: not a success or failure envelope"),
+            "reply text not JSON": (["not a result"], "result 0: reply is not fenced JSON"),
             "not an array": ({"success": True}, "JSON array"),
             "not json": ("PASS", "not JSON"),
         }
@@ -291,6 +326,14 @@ class SanityMerge(unittest.TestCase):
             out = self.merge([self.result(1), self.result(2)])
             self.assertEqual((out.returncode, out.stdout.strip()), (3, "SANITY.TARGET_UNREADABLE fatal 0"))
         self.write_manifest()
+        with self.subTest("tool lock and log files are not dirt"):
+            (self.wt / ".beads.gate.lock").write_text("")
+            (self.wt / ".sc-compose").mkdir()
+            (self.wt / ".sc-compose" / "log.jsonl").write_text("{}")
+            out = self.merge([self.result(1), self.result(2)])
+            self.assertEqual(out.returncode, 0, out.stderr)
+            (self.wt / ".beads.gate.lock").unlink()
+            shutil.rmtree(self.wt / ".sc-compose")
         with self.subTest("dirty"):
             (self.wt / "new.rs").write_text("x")
             out = self.merge([self.result(1), self.result(2)])

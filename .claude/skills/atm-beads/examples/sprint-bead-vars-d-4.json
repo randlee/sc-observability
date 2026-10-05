@@ -3,7 +3,6 @@
   "phase": "d",
   "sprint": "d-4",
   "title": "Error enums",
-  "assignee": "team-lead",
   "stack": "phase-d",
   "layer": 1,
   "branch": "sprint/d-4-error-enums",
@@ -15,10 +14,9 @@
   "owned_paths": [
     "crates/example-types/src/error.rs"
   ],
-  "description": "## Goal\nTyped error enums.\n\n## Deliverables\n- D4-1 error enums\n\n## Does Not Close\n- OTLP signal model",
+  "description": "## Goal\nTyped error enums.\n\n## Deliverables\n1. D4-1 error enums\n\n## Does Not Close\n- OTLP signal model",
   "design": "## Public Contract\n`pub enum ObsError { .. }`",
   "acceptance_criteria": "## Acceptance Criteria\n- [ ] every error variant has a code\n\n## Validation\n- `cargo test -p example-types`",
-  "blocked_by": [],
   "model_class": "terra",
   "requirements": [
     "NONE"

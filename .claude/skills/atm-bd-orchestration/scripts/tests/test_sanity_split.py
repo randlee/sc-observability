@@ -9,11 +9,85 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 SCRIPTS = Path(__file__).parents[1]
 SCRIPT = SCRIPTS / "sanity-split"
 MERGE = SCRIPTS / "sanity-merge"
 FAKE_LINT = "sh -c 'echo lint-ran; exit 1'"
+
+# Runs `sanity-split lint-supervisor` with one test hook: Popen records the lint process group id (the
+# child's pid; the supervisor starts it in a new session) atomically, before the supervisor waits, so a
+# test knows the group whether or not the command ever started. With --gated the supervisor's wait
+# expires (TimeoutExpired) when the test writes a byte to this driver's stdin instead of on the clock.
+DRIVER = """import importlib.machinery, importlib.util, os, subprocess, sys
+from pathlib import Path
+script, pgid_file, gated, argv = sys.argv[1], Path(sys.argv[2]), sys.argv[3] == "--gated", sys.argv[4:]
+loader = importlib.machinery.SourceFileLoader("sanity_split", script)
+split = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+loader.exec_module(split)
+
+
+class Recorded(subprocess.Popen):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        partial = pgid_file.with_name(pgid_file.name + ".tmp")
+        partial.write_text(str(self.pid))
+        os.replace(partial, pgid_file)
+
+    def wait(self, timeout=None):
+        if gated and timeout is not None:
+            sys.stdin.buffer.read(1)
+            raise subprocess.TimeoutExpired(self.args, timeout)
+        return super().wait(timeout)
+
+
+split.subprocess.Popen = Recorded
+sys.exit(split.supervise(argv))
+"""
+
+
+def wait_for(condition, what, seconds=10, interval=0.05):
+    """Poll `condition` until it returns a truthy value and return that value; fail after a hard deadline."""
+    deadline = time.monotonic() + seconds
+    while True:
+        value = condition()
+        if value:
+            return value
+        if time.monotonic() > deadline:
+            raise AssertionError(f"{what}: not reached within {seconds}s")
+        time.sleep(interval)
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    return True
+
+
+def kill_group(pgid):
+    """Test cleanup: SIGKILL a process group; a group that is already gone (or, on macOS, only exiting
+    members: EPERM) is fine."""
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def stop_supervisor(pid):
+    """Test cleanup: SIGTERM a supervisor still running (it stops a lint group the test may never have
+    learned), then SIGKILL its group whatever happened."""
+    try:
+        os.killpg(pid, signal.SIGTERM)
+        wait_for(lambda: not alive(pid), f"supervisor {pid} stopped")
+    except (ProcessLookupError, PermissionError, AssertionError):
+        pass
+    kill_group(pid)
+
 
 DESCRIPTION = """## Goal
 
@@ -93,14 +167,18 @@ class SanitySplit(unittest.TestCase):
         argv = [str(SCRIPT), "--task", "obs-x-1-sanity", "--bead", "obs-x-1", "--worktree", str(worktree or self.repo.wt),
                 "--branch", branch, "--commit", commit or self.repo.sha, "--base", base, "--lint-command", lint,
                 "--scratch", str(self.scratch), "--bead-json", str(bead_file), *extra]
-        return subprocess.run(argv, capture_output=True, text=True)
+        out = subprocess.run(argv, capture_output=True, text=True)
+        try:
+            supervisor = json.loads(out.stdout)["lint"]["pid"]
+        except (ValueError, KeyError, TypeError):
+            supervisor = None
+        if supervisor:
+            self.addCleanup(stop_supervisor, supervisor)    # the supervisor leads its own session
+        return out
 
-    def wait_lint(self, exit_file, seconds=10):
-        for _ in range(int(seconds / 0.05)):
-            if Path(exit_file).exists():
-                return Path(exit_file).read_text().strip()
-            time.sleep(0.05)
-        self.fail("lint never wrote its exit file")
+    def wait_lint(self, exit_file):
+        exit_file = Path(exit_file)
+        return wait_for(lambda: exit_file.exists() and exit_file.read_text().strip(), f"exit file {exit_file.name}")
 
     def merge(self, manifest, results):
         manifest_file = self.root / "manifest.json"
@@ -156,6 +234,32 @@ class SanitySplit(unittest.TestCase):
         merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
         self.assertEqual(merged.returncode, 0, merged.stderr)
         self.assertEqual(json.loads(merged.stdout)["verdict"], "FAIL")   # the fake lint exits 1
+
+    def test_rerun_assignment_is_the_manifest_assignment_with_context(self):
+        out = self.run_split()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest_file = self.root / "manifest.json"
+        manifest_file.write_text(out.stdout)
+        assignment = json.loads(out.stdout)["assignments"][1]["assignment"]
+        context = [{"path": "crates/types/src/lib.rs", "why": "declares the module"}]
+        # agents/dev-sanity.md step 4, rerun
+        rerun = subprocess.run(["jq", "--argjson", "n", "2", "--argjson", "context", json.dumps(context),
+                                ".assignments[] | select(.number == $n) | .assignment | .context = $context",
+                                str(manifest_file)], capture_output=True, text=True)
+        self.assertEqual(rerun.returncode, 0, rerun.stderr)
+        variables = {"sanity_bead": assignment["sanity_bead"], "dev_bead_id": assignment["dev_bead"]["id"],
+                     "dev_bead_title": assignment["dev_bead"]["title"],
+                     "deliverable_number": 2, "deliverable_text": assignment["deliverable"]["text"],
+                     **{key: assignment[key] for key in ("deliverables_total", "owned_paths", "changed_files",
+                                                         "files_outside_owned_paths", "worktree_path", "branch",
+                                                         "commit", "base_sha")},
+                     "context": context}
+        rendered = subprocess.run(["sc-compose", "render", "--strict", "--root", str(SCRIPTS.parent / "templates"),
+                                   "--file", "dev-sanity-assignment.json.j2", "--var-file", "/dev/stdin"],
+                                  input=json.dumps(variables), capture_output=True, text=True)
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        self.assertEqual(json.loads(rerun.stdout), json.loads(rendered.stdout))
+        self.assertEqual(json.loads(rerun.stdout)["context"], context)
 
     def test_plan_invalid(self):
         cases = {
@@ -234,6 +338,14 @@ class SanitySplit(unittest.TestCase):
                 self.assertEqual(texts, expected)
 
     def test_commit_mismatch(self):
+        with self.subTest("tool lock and log files are not dirt"):
+            (self.repo.wt / ".beads.gate.lock").write_text("")
+            (self.repo.wt / ".sc-compose").mkdir()
+            (self.repo.wt / ".sc-compose" / "log.jsonl").write_text("{}")
+            out = self.run_split()
+            self.assertEqual(out.returncode, 0, out.stderr)
+            (self.repo.wt / ".beads.gate.lock").unlink()
+            shutil.rmtree(self.repo.wt / ".sc-compose")
         with self.subTest("dirty tree"):
             (self.repo.wt / "scratch.txt").write_text("x")
             out = self.run_split()
@@ -270,6 +382,40 @@ class SanitySplit(unittest.TestCase):
         self.assertEqual(manifest["files_outside_owned_paths"], ["docs/other.md"])
         self.assertEqual(manifest["assignments"][0]["assignment"]["files_outside_owned_paths"], ["docs/other.md"])
         self.wait_lint(manifest["lint"]["exit_file"])
+
+    def test_layer_prs_diff_only_the_sprints_own_layers(self):
+        """After a dev-fix with another sprint's layer between, the changed files are the sprint's layer ranges only."""
+        la = (self.repo.base_sha, self.repo.sha)
+        git(self.repo.wt, "checkout", "-q", "-b", "sprint/y")
+        self.repo.commit("docs/other-sprint.md", "other sprint\n", "other sprint")
+        git(self.repo.wt, "push", "-q", "-u", "origin", "sprint/y")
+        lb_head = git(self.repo.wt, "rev-parse", "HEAD")
+        git(self.repo.wt, "checkout", "-q", "-b", "fix/x")
+        self.repo.commit("crates/types/src/retry_tests.rs", "// 503\n", "fix")
+        git(self.repo.wt, "push", "-q", "-u", "origin", "fix/x")
+        f_head = git(self.repo.wt, "rev-parse", "HEAD")
+        prs = self.root / "prs.json"
+        prs.write_text(json.dumps({"1": {"baseRefOid": la[0], "headRefOid": la[1]}, "3": {"baseRefOid": lb_head, "headRefOid": f_head}}))
+        fake = self.root / "bin"
+        fake.mkdir()
+        (fake / "gh").write_text(f"#!{sys.executable}\nimport json, sys\nprs = json.load(open({str(prs)!r}))\n"
+                                 "sys.exit(1) if sys.argv[3] not in prs else print(json.dumps(prs[sys.argv[3]]))\n")
+        (fake / "gh").chmod(0o755)
+        path = f"{fake}{os.pathsep}{os.environ['PATH']}"
+        with unittest.mock.patch.dict(os.environ, {"PATH": path}):
+            whole = self.run_split(None, None, f_head, "fix/x", "develop")
+            own = self.run_split(None, None, f_head, "fix/x", "sprint/y", "--layer-pr", "1", "--layer-pr", "3")
+            stale = self.run_split(None, None, f_head, "fix/x", "sprint/y", "--layer-pr", "3", "--layer-pr", "1")
+            missing = self.run_split(None, None, f_head, "fix/x", "sprint/y", "--layer-pr", "1", "--layer-pr", "9")
+        self.assertIn("docs/other-sprint.md", json.loads(whole.stdout)["changed_files"])  # one span carries the other sprint
+        self.assertEqual(own.returncode, 0, own.stderr)
+        manifest = json.loads(own.stdout)
+        self.assertEqual(manifest["changed_files"], ["crates/types/src/retry.rs", "crates/types/src/retry_tests.rs"])
+        self.assertEqual(manifest["files_outside_owned_paths"], [])
+        self.assertEqual(stale.returncode, 4, stale.stderr)  # the checked PR goes last and must be at the pinned sha
+        self.assertEqual(missing.returncode, 3, missing.stderr)
+        for out in (whole, own):
+            self.wait_lint(json.loads(out.stdout)["lint"]["exit_file"])
 
     def test_renames_list_source_and_destination(self):
         with self.subTest("outside -> inside the fence"):
@@ -331,57 +477,88 @@ class SanitySplit(unittest.TestCase):
                 self.assertEqual(out.returncode, 0, out.stderr)
                 self.assertEqual(self.wait_lint(json.loads(out.stdout)["lint"]["exit_file"]), expected)
 
-    def test_lint_supervisor_times_out_and_kills_the_command(self):
-        out = self.run_split(None, None, None, "sprint/x", "develop", "--lint-timeout-seconds", "1", lint="sleep 3017")
+    def owned_group(self, command):
+        """Prefix the lint command so its shell, the group leader, publishes its process group id atomically."""
+        marker = self.root / "lint.pgid"
+        return f"echo $$ > {marker}.tmp && mv {marker}.tmp {marker} && {command}", marker
+
+    def read_marker(self, marker):
+        """The first number in an atomically written marker; its last number is the lint process group id."""
+        numbers = wait_for(lambda: marker.exists() and marker.read_text().split(), f"marker {marker.name}")
+        self.addCleanup(kill_group, int(numbers[-1]))
+        return int(numbers[0])
+
+    def assert_group_gone(self, pgid, message):
+        """Only this test's lint process group is inspected, never processes of concurrent runs."""
+        with self.assertRaises(ProcessLookupError, msg=message):
+            os.killpg(pgid, 0)
+
+    def supervise(self, command, timeout_seconds, gated=False):
+        """Start the lint supervisor through DRIVER; return it, its exit file and the recorded group id file."""
+        driver, pgid_file = self.root / "driver.py", self.root / "lint.pgid"
+        exit_file = self.root / "lint.exit"
+        driver.write_text(DRIVER)
+        proc = subprocess.Popen(
+            [sys.executable, str(driver), str(SCRIPT), str(pgid_file), "--gated" if gated else "--clock",
+             "--worktree", str(self.repo.wt), "--command", command, "--log", str(self.root / "lint.log"),
+             "--exit-file", str(exit_file), "--timeout-seconds", str(timeout_seconds)],
+            stdin=subprocess.PIPE if gated else subprocess.DEVNULL, start_new_session=True)
+        self.addCleanup(proc.wait)
+        self.addCleanup(lambda: proc.stdin and proc.stdin.close())
+        self.addCleanup(kill_group, proc.pid)
+        self.addCleanup(lambda: pgid_file.exists() and kill_group(int(pgid_file.read_text())))
+        return proc, exit_file, pgid_file
+
+    def finished(self, proc):
+        return wait_for(lambda: proc.poll() is not None, f"supervisor {proc.pid} exit") and proc.returncode
+
+    def test_lint_timeout_reaches_the_merge_as_lint_unavailable(self):
+        out = self.run_split(None, None, None, "sprint/x", "develop", "--lint-timeout-seconds", "1",
+                             lint="exec sleep 3017")
         self.assertEqual(out.returncode, 0, out.stderr)
         manifest = json.loads(out.stdout)
         self.assertEqual(manifest["lint"]["timeout_seconds"], 1)
         self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "timeout")
-        time.sleep(0.2)
-        leftover = subprocess.run(["pgrep", "-f", "sleep 3017"], capture_output=True, text=True)
-        self.assertEqual(leftover.stdout.strip(), "", "the lint command survived its timeout")
         merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
         self.assertEqual(merged.returncode, 3, merged.stderr)
         self.assertEqual(json.loads(merged.stdout)["error"]["code"], "SANITY.LINT_UNAVAILABLE")
         self.assertEqual(json.loads(merged.stdout)["verdict"], "CANNOT_RUN")
 
+    def test_lint_supervisor_times_out_and_kills_the_command(self):
+        """Real clock: the group id is recorded at Popen, so it is known even if the command never started."""
+        proc, exit_file, pgid_file = self.supervise("exec sleep 3017", 1)
+        self.assertEqual(self.finished(proc), 0)
+        self.assertEqual(exit_file.read_text().strip(), "timeout")
+        self.assert_group_gone(int(pgid_file.read_text()), "the lint command survived its timeout")
+
     def test_lint_supervisor_is_stopped_with_its_process_group(self):
-        out = self.run_split(lint="sleep 3018")
+        lint, group = self.owned_group("exec sleep 3018")
+        out = self.run_split(lint=lint)
         self.assertEqual(out.returncode, 0, out.stderr)
         manifest = json.loads(out.stdout)
-        time.sleep(0.3)
+        pgid = self.read_marker(group)          # the lint command is running before the supervisor is stopped
         os.killpg(manifest["lint"]["pid"], signal.SIGTERM)
         self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "cancelled")
-        time.sleep(0.2)
-        leftover = subprocess.run(["pgrep", "-f", "sleep 3018"], capture_output=True, text=True)
-        self.assertEqual(leftover.stdout.strip(), "", "the lint command survived the cancellation")
+        self.assert_group_gone(pgid, "the lint command survived the cancellation")
 
     def test_lint_supervisor_cancellation_kills_a_term_resistant_command(self):
         marker = self.root / "resistant.pid"
         script = self.root / "resistant.py"
         script.write_text("import os, pathlib, signal, time\n"
                           "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
-                          f"pathlib.Path({str(marker)!r}).write_text(str(os.getpid()))\n"
+                          f"pathlib.Path({str(marker)!r} + '.tmp').write_text(str(os.getpid()) + ' ' + str(os.getpgid(0)))\n"
+                          f"os.replace({str(marker)!r} + '.tmp', {str(marker)!r})\n"
                           "time.sleep(3019)\n")
         out = self.run_split(lint=f"{sys.executable} {script}")
         self.assertEqual(out.returncode, 0, out.stderr)
         manifest = json.loads(out.stdout)
-        for _ in range(200):
-            if marker.exists():
-                break
-            time.sleep(0.05)
-        child_pid = int(marker.read_text())
+        child_pid = self.read_marker(marker)
+        pgid = int(marker.read_text().split()[1])
         os.killpg(manifest["lint"]["pid"], signal.SIGTERM)
         self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "cancelled")
-        for _ in range(100):   # the supervisor exits right after writing the exit file
-            if subprocess.run(["kill", "-0", str(manifest["lint"]["pid"])], capture_output=True).returncode != 0:
-                break
-            time.sleep(0.05)
-        self.assertNotEqual(subprocess.run(["kill", "-0", str(manifest["lint"]["pid"])], capture_output=True).returncode, 0)
-        self.assertNotEqual(subprocess.run(["kill", "-0", str(child_pid)], capture_output=True).returncode, 0,
-                            "the TERM-resistant lint command survived the cancellation")
-        leftover = subprocess.run(["pgrep", "-f", "resistant.py"], capture_output=True, text=True)
-        self.assertEqual(leftover.stdout.strip(), "")
+        self.wait_gone(manifest["lint"]["pid"])    # the supervisor exits right after writing the exit file
+        self.assertFalse(alive(child_pid), "the TERM-resistant lint command survived the cancellation")
+        self.assert_group_gone(pgid, "a member of the lint process group survived the cancellation")
 
     def resistant_descendant(self):
         """A lint command whose shell backgrounds a SIGTERM-ignoring python and waits on it."""
@@ -389,45 +566,38 @@ class SanitySplit(unittest.TestCase):
         helper = self.root / "descendant.py"
         helper.write_text("import os, pathlib, signal, time\n"
                           "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
-                          f"pathlib.Path({str(marker)!r}).write_text(str(os.getpid()))\n"
+                          f"pathlib.Path({str(marker)!r} + '.tmp').write_text(str(os.getpid()) + ' ' + str(os.getpgid(0)))\n"
+                          f"os.replace({str(marker)!r} + '.tmp', {str(marker)!r})\n"
                           "time.sleep(3020)\n")
         return f"{sys.executable} {helper} & wait", marker
 
-    def alive(self, pid):
-        return subprocess.run(["kill", "-0", str(pid)], capture_output=True).returncode == 0
-
-    def wait_gone(self, pid, seconds=10):
-        for _ in range(int(seconds / 0.05)):
-            if not self.alive(pid):
-                return
-            time.sleep(0.05)
-        self.fail(f"process {pid} is still alive")
+    def wait_gone(self, pid):
+        wait_for(lambda: not alive(pid), f"process {pid} gone")
 
     def test_lint_supervisor_cancellation_kills_a_term_resistant_descendant(self):
         lint, marker = self.resistant_descendant()
         out = self.run_split(lint=lint)
         self.assertEqual(out.returncode, 0, out.stderr)
         manifest = json.loads(out.stdout)
-        for _ in range(200):
-            if marker.exists():
-                break
-            time.sleep(0.05)
-        descendant = int(marker.read_text())
+        descendant = self.read_marker(marker)
+        pgid = int(marker.read_text().split()[1])
         os.killpg(manifest["lint"]["pid"], signal.SIGTERM)
         self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "cancelled")
         self.wait_gone(manifest["lint"]["pid"])
-        self.assertFalse(self.alive(descendant), "the TERM-ignoring descendant survived the cancellation")
-        self.assertEqual(subprocess.run(["pgrep", "-f", "descendant.py"], capture_output=True, text=True).stdout, "")
+        self.assertFalse(alive(descendant), "the TERM-ignoring descendant survived the cancellation")
+        self.assert_group_gone(pgid, "a member of the lint process group survived the cancellation")
 
     def test_lint_supervisor_timeout_kills_a_term_resistant_descendant(self):
+        """Gated clock: the timeout expires only once the descendant exists, however slow its startup."""
         lint, marker = self.resistant_descendant()
-        out = self.run_split(None, None, None, "sprint/x", "develop", "--lint-timeout-seconds", "1", lint=lint)
-        self.assertEqual(out.returncode, 0, out.stderr)
-        manifest = json.loads(out.stdout)
-        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "timeout")
-        descendant = int(marker.read_text())
-        self.wait_gone(manifest["lint"]["pid"])
-        self.assertFalse(self.alive(descendant), "the TERM-ignoring descendant survived the timeout")
+        proc, exit_file, pgid_file = self.supervise(lint, 1800, gated=True)
+        descendant = self.read_marker(marker)
+        proc.stdin.write(b"t")
+        proc.stdin.close()
+        self.assertEqual(self.finished(proc), 0)
+        self.assertEqual(exit_file.read_text().strip(), "timeout")
+        self.assertFalse(alive(descendant), "the TERM-ignoring descendant survived the timeout")
+        self.assert_group_gone(int(pgid_file.read_text()), "a member of the lint process group survived the timeout")
 
     def test_split_only_skips_git_and_lint(self):
         (self.repo.wt / "dirty.txt").write_text("would fail pinning")

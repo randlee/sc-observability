@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Bounded Jev transport and startup probe for the proposed sanity agent."""
 import argparse
+import hashlib
+import hmac
 import http.client
 import json
+import re
 import math
 import os
 from pathlib import Path
@@ -26,7 +29,7 @@ class JevError(Exception):
 def failure(exc):
     return {"success": False, "data": None, "error": {
         "code": exc.code, "message": exc.message, "recoverable": exc.recoverable,
-        "suggested_action": "set TYPESAFE_API_KEY or keep dev-sanity-llm" if "TYPESAFE_API_KEY is missing" in exc.message else "Keep the LLM directive active; correct Jev access or request data and rerun the startup probe",
+        "suggested_action": "set TYPESAFE_API_KEY; until then dev-sanity records every JEV slot as unavailable" if "TYPESAFE_API_KEY is missing" in exc.message else "dev-sanity records every JEV slot as unavailable; correct Jev access or request data and rerun the startup probe",
     }}
 
 
@@ -123,6 +126,49 @@ def evaluate(request):
     raise JevError("SANITY.JEV_UNAVAILABLE", "Jev retry budget exhausted", True)
 
 
+# Every failure message this client writes. A Jev failure envelope must carry one verbatim (sanity-merge checks it).
+CLIENT_MESSAGES = re.compile("|".join([
+    r"TYPESAFE_API_KEY is missing; no Jev evaluation ran", r"TYPESAFE_API_KEY has invalid formatting",
+    r"Unexpected Jev response model or shape", r"Missing or unexpected answer IDs", r"Answer must be an object",
+    r"Invalid Choice answer", r"Expected pinned model, state and nonempty questions",
+    r"Pilot supports well-formed Choice questions only", r"Request must contain finite JSON values",
+    r"Pilot request exceeds 24000 bytes; split evidence without dropping checks",
+    r"Jev connection failed or timed out", r"Jev HTTP \d{3}; response body withheld",
+    r"Jev response exceeded size limit", r"Jev response was not JSON", r"Jev retry budget exhausted",
+    r"Startup probe returned the wrong literal choice", r"Request file unavailable or invalid JSON",
+]))
+RECEIPT_KEYS = ("model", "question", "choice", "probabilities", "response_id", "request_sha256", "mac")
+
+
+def is_client_message(message):
+    return isinstance(message, str) and CLIENT_MESSAGES.fullmatch(message) is not None
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def receipt_mac(body, key):
+    return hmac.new(key.encode("utf-8"), canonical({k: body[k] for k in RECEIPT_KEYS if k != "mac"}), hashlib.sha256).hexdigest()
+
+
+def receipt(request, response, key):
+    """What a caller copies to show this call happened: the one question's answer, bound to the request and keyed with
+    the API key, so it cannot be written without the call."""
+    (name,) = request["questions"]
+    answer = response["answers"][name]
+    body = {"model": response["model"], "question": name, "choice": answer["choice"],
+            "probabilities": answer["probabilities"],
+            "response_id": response.get("id") if isinstance(response.get("id"), str) else None,
+            "request_sha256": hashlib.sha256(canonical(request)).hexdigest()}
+    return {**body, "mac": receipt_mac({**body, "mac": None}, key)}
+
+
+def verify_receipt(value, key):
+    return (isinstance(value, dict) and set(value) == set(RECEIPT_KEYS) and isinstance(value["mac"], str) and bool(key)
+            and hmac.compare_digest(value["mac"], receipt_mac(value, key)))
+
+
 def startup_request():
     # Synthetic state only: no repository source is sent during startup.
     return {"model": MODEL, "state": {"marker": "ready"}, "questions": {
@@ -131,18 +177,59 @@ def startup_request():
     }}
 
 
+def escalation_recipients():
+    """ATM's escalation recipients: the team's (`ATM_TEAM`), else the daemon default; [] when neither is set or readable."""
+    team = os.environ.get("ATM_TEAM", "")
+    for argv in ([["atm", "escalation", "list", "--team", team, "--json"]] if team else []) + [["atm", "escalation", "list", "--json"]]:
+        try:
+            listed = subprocess.run(argv, text=True, capture_output=True, timeout=15)
+            value = json.loads(listed.stdout) if listed.returncode == 0 else {}
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            value = {}
+        found = [r for r in (value.get("recipients") or []) if isinstance(r, str) and r] if isinstance(value, dict) else []
+        if found:
+            return found
+    return []
+
+
+def announce(message, lead):
+    """Send `message` to ATM's escalation recipients, else to `lead` saying none is set."""
+    recipients = escalation_recipients()
+    if not recipients:
+        recipients, message = [lead], message + " No escalation recipient is set."
+    for recipient in recipients:
+        try:
+            sent = subprocess.run(["atm", "send", recipient, "--stdin"], input=message,
+                                  text=True, capture_output=True, timeout=15)
+            if sent.returncode:
+                print(f"Announcement to {recipient} failed; coordinator must report the error via ATM.", file=sys.stderr)
+        except (OSError, subprocess.TimeoutExpired):
+            print(f"Announcement to {recipient} unavailable; coordinator must report the error via ATM.", file=sys.stderr)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--startup", action="store_true")
     mode.add_argument("--request", type=Path)
-    parser.add_argument("--lead", help="ATM lead identity; required with --startup")
+    mode.add_argument("--error", help="with --announce: announce this JEV child error verbatim; no probe runs")
+    parser.add_argument("--announce", action="store_true",
+                        help="with --startup or --error: send a failure to ATM's escalation recipients (else --lead)")
+    parser.add_argument("--lead", help="ATM lead identity; required with --announce, the fallback recipient")
     args = parser.parse_args(argv)
-    if args.startup and (not args.lead or args.lead.startswith("-")):
-        parser.error("--startup requires an explicit --lead identity")
+    if args.announce and (args.request or not args.lead or args.lead.startswith("-")):
+        parser.error("--announce requires --startup or --error and an explicit --lead identity")
+    if args.error is not None and (not args.announce or not args.error.strip()):
+        parser.error("--error requires --announce and a nonempty error")
+    if args.error is not None:
+        announce(f"dev-sanity Jev child failed: {args.error}. Selection takes the LLM reply for JEV slots until a Jev child succeeds.", args.lead)
+        print(json.dumps({"success": True, "data": {"announced": args.error}, "error": None}))
+        return 0
     try:
         request = startup_request() if args.startup else json.loads(args.request.read_text())
         data = evaluate(request)
+        if not args.startup and len(request["questions"]) == 1:
+            data = {**data, "receipt": receipt(request, data, api_key())}
         if args.startup:
             if data["answers"]["startup"]["choice"] != "ready":
                 raise JevError("SANITY.JEV_RESPONSE_INVALID", "Startup probe returned the wrong literal choice")
@@ -152,16 +239,9 @@ def main(argv=None):
         result = failure(exc)
     except (OSError, ValueError, UnicodeError):
         result = failure(JevError("VALIDATION.INPUT", "Request file unavailable or invalid JSON"))
-    if args.startup and not result["success"]:
+    if args.announce and not result["success"]:
         error = result["error"]
-        message = f"dev-sanity Jev startup failed: {error['code']}: {error['message']}. No checks accepted; keep dev-sanity-llm active."
-        try:
-            sent = subprocess.run(["atm", "send", args.lead, "--stdin"], input=message,
-                                  text=True, capture_output=True, timeout=15)
-            if sent.returncode:
-                print("Lead notification failed; coordinator must report the startup error via ATM.", file=sys.stderr)
-        except (OSError, subprocess.TimeoutExpired):
-            print("Lead notification unavailable; coordinator must report the startup error via ATM.", file=sys.stderr)
+        announce(f"dev-sanity Jev startup failed: {error['code']}: {error['message']}. No sc-sanity-jev checks run; dev-sanity records every JEV slot as unavailable until a startup probe passes.", args.lead)
     print(json.dumps(result, allow_nan=False))
     return 0 if result["success"] else 2
 

@@ -33,15 +33,27 @@ each as soon as its verdict is ready, in any order.
 
 ## Pre-claim refusals
 
-Before claim, run `gh pr view "$PR_NUMBER" --json baseRefName,headRefOid`,
-read the pinned PASS commit with `bd show "$CHECKED_BEAD" --json | jq -r
-'.[0].metadata.sanity_pass_commit'`, and run `git rev-parse HEAD`. The PR base
-must equal `metadata.pr_target`, its head must equal the sanity PASS commit,
+Before claim, check that `bd ready -n 0 --json` lists the QA bead. When it does
+not, do not claim it and do not start the task: find the root cause (its open
+blockers, normally its sanity bead) and refuse; never wait: close the task
+`refused` with `task-refused.md.j2`, `bead_state` `open`, naming the bead, why
+it is not ready, which bead or agent has to move, and for a blocker that is not
+yet its dependency the edge to add, `bd dep add <bead> --blocked-by <blocker>`.
+The task assigner re-assigns it once `bd ready` lists the bead.
+
+Then run `gh pr view "$PR_NUMBER" --json baseRefName,headRefOid`,
+read the sha of the checked bead's latest sanity PASS (the close reason
+`PASS at <sha>` of the closed `stage:dev-sanity` bead whose `metadata.dev_bead`
+is `$CHECKED_BEAD`), and run `git rev-parse HEAD`. The PR base
+must be the lower bound `pr_target` or a descendant of it (the QA bead's own
+`metadata.pr_target` when set, a Parallel Quick Fix; else the checked bead's;
+else its sprint container's, `metadata.sprint_bead`), its head must start with that sha
+(not checked when the QA bead's `metadata.quick_fix` is true: a Parallel Quick Fix has no sanity check),
 and the QA worktree HEAD must equal that PR head. Otherwise refuse
 `SANITY_STALE`; no layer or quick fix lacking QA PASS at that pinned head is
 mergeable. Reuse an existing workflow class bead for the same failure signature:
 append the task id, head, command and failure evidence, and cite the class id in
-the refusal. If no class matches, report the signature to the lead for
+the refusal. If no class matches, report the signature to the task assigner for
 classification and cite that message instead; do not create a per-task shadow
 or delay the refusal.
 
@@ -51,12 +63,8 @@ A plan-review task (`plan-review-template.xml.j2`) reviews the beads under a
 phase root before any dev bead is dispatched. Its steps are binding; this is
 why they are strict:
 
-- Run `validate-plan --root <root> --refresh` first at the plan gate.
-  Exit 5 lists contract problems as `<bead>: <problem>` on stdout; carry each as blocking.
-  Exit 2 means the check cannot run; any nonzero exit blocks approval.
-  Bead schema, sanity discovery, doctor, ATM evidence, and rendering warnings are nonfatal.
-  Review the live DAG beside the configured plan; CI checks committed plan/HTML sprint membership.
-  Assignment checks omit `--refresh` and never write HTML.
+- `validate-plan` runs first. `bd doctor` is part of it. Every problem it
+  prints is a blocking finding.
 - A missing, empty or unknown requirement or ADR id is always blocking. An
   id the sprint adds itself is unknown unless it meets
   [New Ids](../../atm-beads/resources/planning.md#new-ids). So
@@ -87,8 +95,8 @@ behavior, and do not expand a carried finding into a new whole-sprint review.
 
 Investigate every uncertain or flagged result before accepting it or filing
 anything. Confirm defects against the original obligation and current source,
-deduplicate them, then file finding beads and report them to the lead for fix
-assignment. You verify these carried gaps after the fixes; the lead coordinates
+deduplicate them, then report them to the task assigner, who files them as finding beads
+for fix assignment. You verify these carried gaps after the fixes; the lead coordinates
 development. Keep unchecked cases unresolved rather than sampling them away.
 
 Append raw evaluations and linked investigation dispositions to the phase's
@@ -96,8 +104,10 @@ JSONL evidence, with UTC timestamps, pinned SHA and run IDs. Preserve prior
 attempts. The review completion includes `post_mortem_jev` with run IDs, JSONL
 path, integration SHA and status, plus the complete inventory dispositions.
 A model error is not PASS. If no code findings exist, record `not_applicable`
-with the inventory reason; if JEV is unavailable, record `unavailable` and
-leave integration review pending. Quality scores are advisory, not closures.
+with the inventory reason; if JEV is unavailable, leave integration review
+pending: refuse `REVIEW_PENDING_JEV` (review-template steps b1 and d1) with the
+code findings and `post_mortem_jev` (status `unavailable`) in the refusal notes;
+`check-review-completion.py` accepts no `unavailable` completion; announce a persistent Jev outage as a serious failure (`.claude/skills/atm-bd-orchestration/SKILL.md`, Lead Role). Quality scores are advisory, not closures.
 
 ## Reviewers
 
@@ -154,10 +164,13 @@ This section applies to round 1 only. A fix round (`carry_forward` set) screens 
 
 After the reviewers return, screen every finding with
 `ceremony-finding-screen`, which also runs as a background agent. Then file
-one finding bead per finding with `finding-bead.json.j2`, whatever the
-screen said. What happens next depends on the verdict:
+every finding, whatever the screen said: a blocking finding the screen keeps
+is poured as a fix ← sanity ← qa group under the sprint (`bead-groups
+--findings`, qa-template step g); every other finding is one finding bead
+(`finding-bead.json.j2`) under the phase or feature bead. What happens next
+depends on the verdict:
 
-| Screen verdict | Finding bead |
+| Screen verdict | Finding |
 | --- | --- |
 | `keep` | filed open as reported |
 | `not_applicable` | filed open as reported |
@@ -180,15 +193,17 @@ screen said. What happens next depends on the verdict:
   checked sprint/finding; never select a default. The dispatch report prints
   `UNCLASSIFIED` and no agent for a live bead missing it.
 - A blocking finding never adds a dependency to another planned sprint. The
-  configured plan JSONL locks sprint membership; dependency state lives in Beads; file and
+  plan file is the minimum set of those edges, and only the lead adds one
+  (including one discovered in motion; recommend it); file and
   dispatch the finding's own remediation through its normal finding/fix flow.
 - Findings are `parallel_safe` by default. Set `blocked_by` only to another finding
   of this round, when its fix needs that one's fix first.
-- Ids are `<qa bead>-f<n>`, numbered in report order.
+- Ids are `<qa bead>-f<n>` for finding beads and `<sprint>.qa<round>-f<n>-r1-fix`
+  for poured fix beads, numbered in report order.
 - Every finding closes with a close reason. You close ceremony findings. The
   fixer closes the rest, as fixed or not reproducible. In a fix round you
-  note each confirmed fix and reopen each carried finding that regressed or
-  is still open (`bd reopen`).
+  note each confirmed fix and pour round n+1 for each carried fix that
+  regressed or is still open; you never reopen a fix bead.
 
 Do not assign findings. The lead picks the member for each one.
 
@@ -209,8 +224,9 @@ forward from a previous row.
 - `phase-<p>-stats.jsonl` — one row per round, a phase-wide snapshot queried
   live from `bd` at that same moment: `snapshot_at`, `snapshot_local`,
   `phase`, `trigger_task` (the round that produced this snapshot), `tot`
-  (all finding beads ever filed in the phase), `open`, and `blk`/`imp`/`min`
-  (open findings by severity). This is the same query used to answer "how
+  (every finding of the phase: finding beads that are not sanity findings, plus
+  each poured blocking finding counted once at its latest round), `open`, and
+  `blk`/`imp`/`min` (open findings by severity). This is the same query used to answer "how
   many findings are open" ad hoc; it gives velocity and a closure estimate
   across rounds, and ties out against `phase-<p>.jsonl` at phase end (sum of
   its `fnd` across all rounds reconciles with this log's final `tot`).

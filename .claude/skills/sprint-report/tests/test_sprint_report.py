@@ -34,41 +34,35 @@ class SprintReportTests(unittest.TestCase):
         self.assertIn('`--table` is the default mode', skill)
         self.assertIn('"\\n\\n".join(detailed_rows)', script)
 
-    def test_phase_d_index_excludes_folded_d11(self):
-        repo = Path(__file__).resolve().parents[4]
-        index = report.load_index(
-            repo, repo / 'docs/plans/phase-d/sprints.jsonl', 'obs-phase-d'
-        )[1]
-        self.assertNotIn('obs-d-11', report.index_bead_pairs(index))
-
-    def test_loads_compact_canonical_tuples_and_rejects_invalid_rows(self):
+    def test_loads_plan_lines_and_rejects_invalid_rows(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
-            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path = repo / 'docs/plans/phase-x.jsonl'
             path.parent.mkdir(parents=True)
-            path.write_text('["x-1", "gate-1", []]\n["x-2", "gate-2", ["x-1"]]\n')
+            path.write_text('{"sprint": "x-1"}\n{"sprint": "x-2", "depends_on": ["x-1"]}\n')
             index = report.load_index(repo, path, 'obs-phase-x')[1]
             self.assertEqual(index['root_bead_id'], 'obs-phase-x')
             self.assertEqual(index['sprints'][1], {
-                'dev_bead_id': 'obs-x-2', 'sanity_bead_id': 'gate-2',
-                'depends_on_sanity_bead_ids': ['gate-1'],
+                'sprint_bead_id': 'obs-x-2', 'dev_bead_id': 'obs-x-2.group-dev',
+                'sanity_bead_id': 'obs-x-2.group-sanity',
+                'depends_on_sanity_bead_ids': ['obs-x-1.group-sanity'],
             })
-            path.write_text('["x-1", "gate-1"]\n')
-            with self.assertRaisesRegex(RuntimeError, 'each line must be'):
+            path.write_text('["x-1", "gate-1", []]\n')
+            with self.assertRaisesRegex(RuntimeError, 'each line is'):
                 report.load_index(repo, path, 'obs-phase-x')
-            path.write_text('["x-1", "gate-1", ["unknown"]]\n')
+            path.write_text('{"sprint": "x-1", "depends_on": ["unknown"]}\n')
             with self.assertRaisesRegex(RuntimeError, 'unknown sprint'):
                 report.load_index(repo, path, 'obs-phase-x')
             path.write_text('')
-            with self.assertRaisesRegex(RuntimeError, 'contains no sprints'):
+            with self.assertRaisesRegex(RuntimeError, 'lists no sprints'):
                 report.load_index(repo, path, 'obs-phase-x')
 
     def test_root_lookup_uses_phase_index_path_without_root_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
-            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path = repo / 'docs/plans/phase-x.jsonl'
             path.parent.mkdir(parents=True)
-            path.write_text('["x-1", "gate-1", []]\n')
+            path.write_text('{"sprint": "x-1"}\n')
             with mock.patch.object(report, 'index_path', return_value=path) as index_path:
                 index = report.load_index(repo, None, 'obs-phase-x')[1]
             index_path.assert_called_once_with(repo, 'obs-phase-x')
@@ -86,9 +80,12 @@ class SprintReportTests(unittest.TestCase):
             config = repo / '.claude/project/atm-bd-orchestration.yaml'
             config.parent.mkdir(parents=True)
             config.write_text('plans_dir: docs/plans\n')
-            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            (repo / '.atm-bd').mkdir()
+            (repo / '.atm-bd/phase-x.toml').write_text(
+                'plan = "docs/plans/phase-x.jsonl"\nroot = "obs-phase-x"\nintegration_branch = "integrate/phase-x"\n')
+            path = repo / 'docs/plans/phase-x.jsonl'
             path.parent.mkdir(parents=True)
-            path.write_text('["x-1", "gate-1", []]\n')
+            path.write_text('{"sprint": "x-1"}\n')
             bin_dir = repo / 'bin'
             bin_dir.mkdir()
             bd = bin_dir / 'bd'
@@ -107,7 +104,7 @@ class SprintReportTests(unittest.TestCase):
     def test_main_reports_malformed_json_without_traceback(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
-            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path = repo / 'docs/plans/phase-x.jsonl'
             path.parent.mkdir(parents=True)
             path.write_text('{not json}\n')
             code, error = self.run_main_with_index(repo, path)
@@ -118,9 +115,9 @@ class SprintReportTests(unittest.TestCase):
     def test_main_reports_row_without_id_without_traceback(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
-            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path = repo / 'docs/plans/phase-x.jsonl'
             path.parent.mkdir(parents=True)
-            path.write_text('["", "gate-1", []]\n')
+            path.write_text('{"sprint": ""}\n')
             code, error = self.run_main_with_index(repo, path)
             self.assertEqual(code, 2)
             self.assertIn('sprint-report:', error)
@@ -129,29 +126,30 @@ class SprintReportTests(unittest.TestCase):
     def test_main_rejects_empty_index_before_bd_show(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
-            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path = repo / 'docs/plans/phase-x.jsonl'
             path.parent.mkdir(parents=True)
             path.write_text('')
             with mock.patch.object(report, 'run_json') as run_json:
                 code, error = self.run_main_with_index(repo, path)
             self.assertEqual(code, 2)
             run_json.assert_not_called()
-            self.assertIn('contains no sprints', error)
+            self.assertIn('lists no sprints', error)
 
     def test_membership_index_reads_names_and_order_from_live_beads(self):
         index = {'sprints': [
-            {'dev_bead_id': 'dev-1', 'sanity_bead_id': 'gate-1'},
+            {'sprint_bead_id': 's-1', 'dev_bead_id': 'dev-1', 'sanity_bead_id': 'gate-1'},
             {'dev_bead_id': 'dev-2', 'sanity_bead_id': 'gate-2'}]}
-        beads = {'dev-1': {'title': 'First', 'metadata': {'sprint': 's-1', 'layer': 2}},
+        beads = {'dev-1': {'title': 's-1: dev', 'metadata': {'sprint': 's-1', 'layer': 5}},
+                 's-1': {'title': 'First', 'metadata': {'sprint': 's-1', 'layer': 2}},
                  'dev-2': {'title': 'Second', 'metadata': {'sprint': 's-2', 'layer': 1}}}
         rows = report.live_sprint_rows(index, beads)
         self.assertEqual([row['id'] for row in rows], ['dev-2', 'dev-1'])
-        beads['dev-1']['metadata']['layer'] = 0
-        beads['dev-1']['title'] = 'Changed in beads'
+        beads['s-1']['metadata']['layer'] = 0
+        beads['s-1']['title'] = 'Changed in beads'
         rows = report.live_sprint_rows(index, beads)
         self.assertEqual(rows[0]['title'], 'Changed in beads')
         self.assertEqual(rows[0]['sprint'], 's-1')
-        self.assertEqual(set(index['sprints'][0]), {'dev_bead_id', 'sanity_bead_id'})
+        self.assertEqual(set(index['sprints'][1]), {'dev_bead_id', 'sanity_bead_id'})
 
     def test_historical_sanity_count_counts_only_completed_runs(self):
         events = {'events': [{'event': event} for event in (

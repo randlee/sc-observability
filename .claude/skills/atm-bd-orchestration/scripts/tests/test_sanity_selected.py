@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from jev_receipts import CLIENT, KEY, client as jev_client, receipted
+
 
 SCRIPTS = Path(__file__).parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -30,10 +32,11 @@ merge = load("sanity_merge")
 history = load("sanity_run_history")
 split = load("sanity_split")
 findings = load("sanity_create_findings")
+merge.CLIENT = CLIENT  # the package's own client verifies the receipts below
 
 
 def reply(number: int, findings: list[dict] | None = None) -> dict:
-    return {
+    return receipted({
         "success": True,
         "data": {
             "deliverable": number,
@@ -43,11 +46,24 @@ def reply(number: int, findings: list[dict] | None = None) -> dict:
             "findings": findings or [],
         },
         "error": None,
-    }
+    })
+
+
+def failed(number: int, code: str) -> dict:
+    """A failure with the message its source writes: the Jev client's own text for a SANITY.JEV_* code."""
+    return {"success": False, "data": None, "error": {
+        "code": code, "message": "Jev retry budget exhausted" if code.startswith("SANITY.JEV_") else f"{code} for deliverable {number}",
+        "recoverable": True,
+        "suggested_action": "rerun when the reviewer is available", "deliverable": number}}
 
 
 class SelectedMergeTests(unittest.TestCase):
     manifest = {"run_id": "run", "deliverables_total": 1, "sha": "a" * 40}
+
+    def setUp(self):
+        patcher = mock.patch.dict(merge.os.environ, {"TYPESAFE_API_KEY": KEY})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def selected(self, llm, jev, selection):
         with tempfile.TemporaryDirectory() as directory:
@@ -140,7 +156,8 @@ class SelectedMergeTests(unittest.TestCase):
         with self.assertRaisesRegex(merge.Reject, "not a success or failure envelope"):
             merge.reply_status(extra, 0, self.manifest, "sanity", "dev")
 
-    def test_selected_missing_jev_result_cannot_runs_and_appends_three_rows(self):
+    def test_selected_missing_jev_result_cannot_runs(self):
+        # Its two ledger rows: test_sanity_run_history.ShippedFlow.test_selected_merge_cannot_run_keeps_reviewer_verdicts.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = {
@@ -174,22 +191,6 @@ class SelectedMergeTests(unittest.TestCase):
             selected = json.loads(output.getvalue())
             self.assertEqual((selected["verdict"], selected["selection"]), ("CANNOT_RUN", selection))
 
-            log, table = root / "ledger.jsonl", root / "table.json"
-            for reviewer, selection_value in (("sanity-llm", None), ("sanity-jev", None),
-                                              ("sanity-selected", selected["selection"])):
-                record = {
-                    "run_id": "shared", "reviewer": reviewer, "commit": "a" * 40,
-                    "task": "sanity", "sprint": "d", "phase": "d",
-                    "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:00:01Z",
-                    "duration": "1s", "duration_seconds": 1, "pr_number": 1, "iteration": 1,
-                    "verdict": "CANNOT_RUN", "final_verdict": "CANNOT_RUN", "findings": None,
-                    "error": {"code": "SANITY.RESULT_INVALID", "message": "D2 missing"},
-                    "selection": selection_value,
-                }
-                history.append_record(log, history.render_record(record), table)
-            self.assertEqual([json.loads(line)["reviewer"] for line in log.read_text().splitlines()],
-                             ["sanity-llm", "sanity-jev", "sanity-selected"])
-
     def test_non_selected_merge_rejects_selection_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -205,30 +206,6 @@ class SelectedMergeTests(unittest.TestCase):
                                      "--llm-vars", str(root / "llm.json")])
             self.assertEqual(result, 1)
             self.assertIn("selection inputs are only valid for sanity-selected", stderr.getvalue())
-
-    def test_pick_counts_agreements_and_non_agreement_choices(self):
-        rows = history.display_runs([{
-            "run_id": "one", "reviewer": "sanity-selected", "sprint": "d", "pr_number": 1,
-            "completed_at": "2026-01-01T00:00:00Z", "duration": "1s", "iteration": 1,
-            "verdict": "PASS", "findings": 0,
-            "selection": [
-                {"llm": "done", "jev": "done", "selected": "llm", "checker_defect": False},
-                {"llm": "done", "jev": "undone", "selected": "llm", "checker_defect": False},
-                {"llm": "done", "jev": "undone", "selected": "rerun", "checker_defect": True},
-            ],
-        }], 10)
-        self.assertEqual(rows[0]["pick"], "=1 L1 R1 D1")
-
-    def test_selected_ledger_record_accepts_selection_list(self):
-        record = {
-            "run_id": "one", "reviewer": "sanity-selected", "commit": "a" * 40,
-            "task": "sanity", "sprint": "d", "phase": "d",
-            "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:00:01Z",
-            "duration": "1s", "duration_seconds": 1, "pr_number": 1, "iteration": 1,
-            "verdict": "PASS", "final_verdict": "PASS", "findings": 0, "error": None,
-            "selection": [{"deliverable": 1}],
-        }
-        self.assertEqual(history.validate_record(record), record)
 
     def merged(self, llm, jev, selection):
         with tempfile.TemporaryDirectory() as directory:
@@ -257,6 +234,125 @@ class SelectedMergeTests(unittest.TestCase):
                  contextlib.redirect_stdout(output):
                 self.assertEqual(merge.main(argv), 0)
             return json.loads(output.getvalue())
+
+    def reviewer_vars(self, reviewer, rows):
+        """Run the real per-reviewer merge and return the vars file it writes, report or CANNOT_RUN."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "manifest.json"
+            manifest.write_text(json.dumps({
+                "run_id": "run", "reviewers": ["sanity-llm", "sanity-jev", "sanity-selected"],
+                "operational_reviewer": "sanity-selected", "deliverables_total": len(rows),
+                "sha": "a" * 40, "branch": "branch", "lint": {"command": "lint"},
+            }))
+            output = io.StringIO()
+            argv = ["sanity-merge", str(manifest), "sanity", "dev", "d", "--reviewer", reviewer,
+                    "--started-at", "0", "--completed-at", "1"]
+            with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(rows))), \
+                 mock.patch.object(merge, "lint_result", return_value=(0, [], "")), \
+                 mock.patch.object(merge, "verify_worktree"), \
+                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
+                merge.main(argv)
+            return json.loads(output.getvalue())
+
+    def selected_from_vars(self, llm_vars, jev_vars, selection):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            selection = [{**entry, "llm_sha256": llm_vars["reviewer_results_sha256"],
+                          "jev_sha256": jev_vars["reviewer_results_sha256"]} for entry in selection]
+            manifest = {"run_id": "run", "reviewers": ["sanity-llm", "sanity-jev", "sanity-selected"],
+                        "operational_reviewer": "sanity-selected", "deliverables_total": len(selection),
+                        "sha": "a" * 40, "branch": "branch", "lint": {"command": "lint"}}
+            for name, value in (("manifest.json", manifest), ("llm.json", llm_vars),
+                                ("jev.json", jev_vars), ("selection.json", selection)):
+                (root / name).write_text(json.dumps(value))
+            output = io.StringIO()
+            argv = ["sanity-merge", str(root / "manifest.json"), "sanity", "dev", "d",
+                    "--reviewer", "sanity-selected", "--started-at", "0", "--completed-at", "1",
+                    "--llm-vars", str(root / "llm.json"), "--jev-vars", str(root / "jev.json"),
+                    "--selection", str(root / "selection.json")]
+            with mock.patch.object(merge, "lint_result", return_value=(0, [], "")), \
+                 mock.patch.object(merge, "verify_worktree"), \
+                 contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
+                code = merge.main(argv)
+            return code, json.loads(output.getvalue())
+
+    def test_one_failed_reviewer_selects_the_other_valid_reply(self):
+        missing = {"kind": "skipped", "file": "a.rs", "line": 1, "issue": "missing"}
+        jev_down = self.reviewer_vars("sanity-jev", [failed(1, "SANITY.JEV_UNAVAILABLE"), failed(2, "SANITY.JEV_UNAVAILABLE")])
+        self.assertEqual(jev_down["verdict"], "CANNOT_RUN")
+        llm_ok = self.reviewer_vars("sanity-llm", [reply(1), reply(2, [missing])])
+        code, report = self.selected_from_vars(llm_ok, jev_down, [
+            {"deliverable": number, "llm": status, "jev": "cannot_run", "selected": "llm",
+             "reason": "JEV unavailable: SANITY.JEV_UNAVAILABLE", "rerun": None, "checker_defect": False}
+            for number, status in ((1, "done"), (2, "undone"))])
+        self.assertEqual((code, report["verdict"], report["findings_count"]), (0, "FAIL", 1))
+        self.assertEqual(report["findings"][0]["reviewer"], "sc-sanity-llm")
+        code, report = self.selected_from_vars(self.reviewer_vars("sanity-llm", [reply(1)]),
+                                               self.reviewer_vars("sanity-jev", [failed(1, "SANITY.JEV_UNAVAILABLE")]), [
+            {"deliverable": 1, "llm": "done", "jev": "cannot_run", "selected": "llm",
+             "reason": "JEV unavailable", "rerun": None, "checker_defect": False}])
+        self.assertEqual((code, report["verdict"]), (0, "PASS"))
+
+        llm_down = self.reviewer_vars("sanity-llm", [failed(1, "SANITY.CHILD_TIMEOUT")])
+        self.assertEqual(llm_down["verdict"], "CANNOT_RUN")
+        code, report = self.selected_from_vars(llm_down, self.reviewer_vars("sanity-jev", [reply(1, [missing])]), [
+            {"deliverable": 1, "llm": "cannot_run", "jev": "undone", "selected": "jev",
+             "reason": "LLM child failed after its rerun", "rerun": None, "checker_defect": False}])
+        self.assertEqual((code, report["verdict"], report["findings"][0]["reviewer"]), (0, "FAIL", "sc-sanity-jev"))
+
+    def test_both_reviewers_failed_for_a_deliverable_cannot_run(self):
+        llm = self.reviewer_vars("sanity-llm", [reply(1), failed(2, "SANITY.CHILD_TIMEOUT")])
+        jev = self.reviewer_vars("sanity-jev", [reply(1), failed(2, "SANITY.JEV_UNAVAILABLE")])
+        code, report = self.selected_from_vars(llm, jev, [
+            {"deliverable": 1, "llm": "done", "jev": "done", "selected": "llm", "reason": "", "rerun": None, "checker_defect": False},
+            {"deliverable": 2, "llm": "cannot_run", "jev": "cannot_run", "selected": "llm", "reason": "neither reviewer ran", "rerun": None, "checker_defect": False}])
+        self.assertEqual((code, report["verdict"], report["findings_count"]), (3, "CANNOT_RUN", None))
+
+    def test_selection_of_a_failed_reply_over_a_valid_one_is_rejected(self):
+        llm = self.reviewer_vars("sanity-llm", [reply(1)])
+        jev = self.reviewer_vars("sanity-jev", [failed(1, "SANITY.JEV_UNAVAILABLE")])
+        code, report = self.selected_from_vars(llm, jev, [
+            {"deliverable": 1, "llm": "done", "jev": "cannot_run", "selected": "jev",
+             "reason": "wrong pick", "rerun": None, "checker_defect": False}])
+        self.assertEqual((code, report["verdict"]), (1, "CANNOT_RUN"))
+        self.assertIn("selection must take the reviewer with a valid reply", report["error"]["message"])
+
+    def test_a_failed_rerun_never_replaces_a_valid_original_reply(self):
+        rerun = {"reviewer": "sanity-jev", "context": ["a.rs"], "reply": failed(1, "SANITY.JEV_UNAVAILABLE")}
+        for llm_row, jev_row, statuses in ((reply(1), failed(1, "SANITY.JEV_UNAVAILABLE"), ("done", "cannot_run")),
+                                          (failed(1, "SANITY.CHILD_TIMEOUT"), reply(1), ("cannot_run", "done")),
+                                          (reply(1), reply(1), ("done", "done"))):
+            with self.subTest(statuses=statuses), mock.patch.object(merge, "context_path_exists", return_value=True):
+                code, report = self.selected_from_vars(
+                    self.reviewer_vars("sanity-llm", [llm_row]), self.reviewer_vars("sanity-jev", [jev_row]), [
+                        {"deliverable": 1, "llm": statuses[0], "jev": statuses[1], "selected": "rerun",
+                         "reason": "rerun with context", "rerun": rerun, "checker_defect": False}])
+                self.assertEqual((code, report["verdict"]), (1, "CANNOT_RUN"))
+                self.assertIn("a failed rerun cannot replace a valid original reply", report["error"]["message"])
+        with mock.patch.object(merge, "context_path_exists", return_value=True):
+            code, report = self.selected_from_vars(
+                self.reviewer_vars("sanity-llm", [failed(1, "SANITY.CHILD_TIMEOUT")]),
+                self.reviewer_vars("sanity-jev", [failed(1, "SANITY.JEV_UNAVAILABLE")]), [
+                    {"deliverable": 1, "llm": "cannot_run", "jev": "cannot_run", "selected": "rerun",
+                     "reason": "rerun with context", "rerun": rerun, "checker_defect": False}])
+        self.assertEqual((code, report["verdict"]), (3, "CANNOT_RUN"))
+        self.assertNotIn("a failed rerun", report["error"]["message"])
+
+    def test_selected_merge_rejects_jev_replies_without_a_valid_receipt(self):
+        bare = reply(1)
+        bare["data"] = {k: v for k, v in bare["data"].items() if k != "jev"}
+        code, report = self.selected_from_vars(self.reviewer_vars("sanity-llm", [reply(1)]), {
+            "run_id": "run", "reviewer": "sanity-jev", "reviewer_results": [bare],
+            "reviewer_results_sha256": merge.canonical_sha256([bare])}, [
+            {"deliverable": 1, "llm": "done", "jev": "done", "selected": "llm", "reason": "", "rerun": None, "checker_defect": False}])
+        self.assertEqual((code, report["verdict"]), (1, "CANNOT_RUN"))
+        self.assertIn("sanity-jev reply: no valid Jev receipt", report["error"]["message"])
+        with mock.patch.object(merge, "context_path_exists", return_value=True):
+            code, report = self.selected_from_vars(self.reviewer_vars("sanity-llm", [reply(1)]), self.reviewer_vars("sanity-jev", [reply(1)]), [
+                {"deliverable": 1, "llm": "done", "jev": "done", "selected": "rerun", "reason": "rerun with context",
+                 "rerun": {"reviewer": "sanity-jev", "context": ["a.rs"], "reply": bare}, "checker_defect": False}])
+        self.assertEqual((code, report["verdict"]), (1, "CANNOT_RUN"))
+        self.assertIn("rerun reply: no valid Jev receipt", report["error"]["message"])
 
     def test_selected_rejects_rerun_context_directory_at_manifest_commit(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -360,30 +456,16 @@ class SelectedMergeTests(unittest.TestCase):
                 self.assertEqual(findings.main(), 0)
         self.assertEqual([item["reviewer"] for item in created], ["sc-sanity-jev", "sc-sanity-llm"])
 
-    def test_history_rejects_invalid_selection_for_reviewer_kind(self):
-        base = {
-            "sprint": "d", "run_id": "run", "reviewer": "sanity-llm", "commit": "a" * 40,
-            "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:00:01Z",
-            "verdict": "PASS", "findings_count": 0, "error": None,
-        }
+    def test_history_rejects_selected_reviewer_row(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            comparison = root / "comparison.json"
-            comparison.write_text(json.dumps({**base, "selection": []}))
-            selected = root / "selected.json"
-            selected.write_text(json.dumps({**base, "reviewer": "sanity-selected", "selection": None}))
-            with self.assertRaisesRegex(SystemExit, "comparison reviewers require null selection"):
-                history.read_vars(comparison)
-            with self.assertRaisesRegex(SystemExit, "sanity-selected requires a selection list"):
+            selected = Path(directory) / "selected.json"
+            selected.write_text(json.dumps({
+                "sprint": "d", "run_id": "run", "reviewer": "sanity-selected", "commit": "a" * 40,
+                "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:00:01Z",
+                "verdict": "PASS", "findings_count": 0, "error": None, "selection": [],
+            }))
+            with self.assertRaisesRegex(SystemExit, "invalid reviewer"):
                 history.read_vars(selected)
-            selected.write_text(json.dumps({**base, "reviewer": "sanity-selected", "selection": []}))
-            with self.assertRaisesRegex(SystemExit, "empty selection only for CANNOT_RUN"):
-                history.read_vars(selected)
-            selected.write_text(json.dumps({**base, "reviewer": "sanity-selected", "verdict": "CANNOT_RUN",
-                                            "findings_count": None,
-                                            "error": {"code": "SANITY.RESULT_INVALID", "message": "selection failed"},
-                                            "selection": []}))
-            self.assertEqual(history.read_vars(selected)["selection"], [])
 
     def test_mixed_checker_defect_and_real_finding_only_emits_real_finding(self):
         defective = reply(1, [{"kind": "skipped", "file": "a.rs", "line": 1, "issue": "wrong"}])

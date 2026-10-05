@@ -49,14 +49,13 @@ concerns. Spot-check accepted results against source as well: agreement with
 another agent and JEV confidence are not ground truth. A model outage or
 malformed response remains an error, not a verification result.
 
-Before filing any bead or reporting an actionable defect to the lead,
+Before filing any bead or reporting an actionable defect to the task assigner,
 quality-mgr verifies the concrete failure, its original scope, current source,
 and existing repairs/findings. Deduplicate carried issues. Report the confirmed
 impact and evidence, not a quality score. Create a finding bead in the
 phase under review for each confirmed issue without an existing tracking
-bead, report it promptly to the lead, and request a fix agent; copy the
-requesting coordinator. Do not wait for the full run to finish. During
-candidate iterations, send aggregate results to the coordinator first.
+bead, report it promptly to the task assigner, and request a fix agent. Do not wait for the full run to finish. During
+candidate iterations, send aggregate results to the task assigner first.
 
 Improve the script or evidence preparation based on observed failures, then
 rerun the affected cases before the next full-phase iteration. Report first-pass

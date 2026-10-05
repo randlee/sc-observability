@@ -3,8 +3,6 @@
   "root": "obs-phase-d",
   "phase": "d",
   "round": 1,
-  "lead": "my-lead",
-  "cc": "",
   "integration_branch": "integrate/phase-d",
   "plans_dir": "docs/plans",
   "requirements_globs": [
