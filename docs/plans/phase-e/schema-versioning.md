@@ -2,6 +2,14 @@
 
 User-authorized addition: retain versioned public contracts and detect changes through fast unit tests. Public API comparison runs after the ordinary platform unit build in the existing macOS, Windows and Linux jobs; it creates no separate workflow or job. This is separate from the six integration suites and adds no integration cells. Sc-lint is still unspecified.
 
+> Historical Rust-draft note: the accepted-history, `SC_API_ACCEPTED_BASE`,
+> and no-rustdoc requirements in the retained Rust draft text below were
+> superseded by the stock `cargo public-api` design in
+> [PR #1013](https://github.com/randlee/sc-observability/pull/1013)
+> (`ebde67eb`). The authoritative replacement is the Rust section, “API unit
+> comparison and release-cut setup.” This pointer changes no separate
+> Python/TypeScript, binding, configuration, or storage history rule.
+
 ## Version rules
 
 Keep accepted/merged snapshots immutable, including prerelease versions. A contract change requires a new versioned snapshot and an explicit current-version selection. Package/API versions, wire-format versions and SQLite migration versions have separate lifecycles. Keep existing wire identifiers and backwards-readable configuration. Historical snapshots are retained, not regenerated to silence a failure.
