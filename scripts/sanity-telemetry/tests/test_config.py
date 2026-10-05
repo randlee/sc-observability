@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from import_sanity import load_config, sources
+from import_sanity import SOURCE_KINDS, load_config, sources
 
 
 ROOT = Path(__file__).parents[3]
@@ -61,9 +61,14 @@ def test_selected_importer_v1_schema_matches_real_sources_validation(tmp_path: P
     schema = _selected_importer_schema()
     _assert_selected_importer_schema_is_current(schema)
     source_schema = schema["properties"]["sources"]
+    source_item_schema = source_schema["items"]
     assert source_schema["default"] == []
-    assert source_schema["items"]["properties"]["kind"]["enum"] == ["sanity", "qa", "finding-counts"]
-    assert source_schema["items"]["additionalProperties"] is True
+    assert source_item_schema["required"] == ["path", "kind"]
+    assert source_item_schema["properties"]["path"]["minLength"] == 1
+    assert source_item_schema["properties"]["phase"]["type"] == ["string", "null"]
+    assert source_item_schema["properties"]["reviewer"]["type"] == ["string", "null"]
+    assert source_item_schema["properties"]["kind"]["enum"] == list(SOURCE_KINDS)
+    assert source_item_schema["additionalProperties"] is True
     assert schema["additionalProperties"] is True
 
     path = tmp_path / "importer.yaml"
@@ -77,6 +82,10 @@ def test_selected_importer_v1_schema_matches_real_sources_validation(tmp_path: P
 
     for body in [
         "sources: not-a-list\n",
+        "sources:\n  - kind: qa\n",
+        "sources:\n  - path: ''\n    kind: qa\n",
+        "sources:\n  - path: events.jsonl\n    kind: qa\n    phase: 1\n",
+        "sources:\n  - path: events.jsonl\n    kind: qa\n    reviewer: 1\n",
         "sources:\n  - path: events.jsonl\n    kind: unsupported\n",
         "sources:\n  - path: duplicate.jsonl\n    kind: qa\n  - path: duplicate.jsonl\n    kind: sanity\n",
     ]:
