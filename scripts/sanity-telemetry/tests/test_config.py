@@ -59,6 +59,23 @@ def _assert_selected_importer_schema_is_current(schema: dict[str, object]) -> No
 
 def test_selected_importer_v1_schema_matches_real_sources_validation(tmp_path: Path) -> None:
     schema = _selected_importer_schema()
+    accepted_baseline = json.loads(
+        subprocess.run(
+            [
+                "git",
+                "show",
+                "9ebc96d6607967122c898dcf91e63a5b6d861477:schema/config/sanity-importer/v1.json",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    assert schema == accepted_baseline, (
+        "sanity importer YAML v1 selected snapshot differs from accepted baseline; "
+        "an intentional contract change requires schema/config/sanity-importer/v2.json rather than overwriting v1"
+    )
     _assert_selected_importer_schema_is_current(schema)
     source_schema = schema["properties"]["sources"]
     source_item_schema = source_schema["items"]

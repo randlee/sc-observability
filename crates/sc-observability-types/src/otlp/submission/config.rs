@@ -827,9 +827,29 @@ mod tests {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn telemetry_yaml_selected_v1_schema_matches_parser_fields_defaults_and_enum_values() {
         let schema = selected_telemetry_schema();
+        let accepted_baseline = std::process::Command::new("git")
+            .args([
+                "show",
+                "9ebc96d6607967122c898dcf91e63a5b6d861477:schema/config/telemetry/v1.json",
+            ])
+            .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+            .output()
+            .unwrap();
+        assert!(
+            accepted_baseline.status.success(),
+            "could not read telemetry YAML v1 accepted baseline: {}",
+            String::from_utf8_lossy(&accepted_baseline.stderr)
+        );
+        let accepted_baseline: serde_json::Value =
+            serde_json::from_slice(&accepted_baseline.stdout).unwrap();
+        assert_eq!(
+            schema, accepted_baseline,
+            "telemetry YAML v1 selected snapshot differs from accepted baseline; an intentional contract change requires schema/config/telemetry/v2.json rather than overwriting v1"
+        );
         assert_selected_telemetry_schema_is_current(&schema).unwrap();
         let file: TelemetryFileConfig = serde_json::from_value(serde_json::json!({
             "service": "schema-test",
