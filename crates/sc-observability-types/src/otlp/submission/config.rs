@@ -837,7 +837,7 @@ mod tests {
         let accepted_baseline = std::process::Command::new("git")
             .args([
                 "show",
-                "9ebc96d6607967122c898dcf91e63a5b6d861477:schema/config/telemetry/v1.json",
+                "9215de6e8498ed5fcd1486b5e5f2be78440dbcab:schema/config/telemetry/v1.json",
             ])
             .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
             .output()
