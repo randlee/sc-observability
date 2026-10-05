@@ -32,7 +32,7 @@ class RunnerTests(unittest.TestCase):
         }
         evidence.update(overrides)
         path = self.output / "evidence.json"
-        path.write_text(json.dumps(evidence))
+        path.write_text(json.dumps(evidence), encoding="utf-8")
         return path
 
     def test_four_named_independent_cases_are_recorded(self) -> None:
@@ -45,7 +45,7 @@ class RunnerTests(unittest.TestCase):
         with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("a" * 40, self.output))
         self.assertEqual(6, len(calls))
-        summary = json.loads((self.output / "summary.json").read_text())
+        summary = json.loads((self.output / "summary.json").read_text(encoding="utf-8"))
         self.assertEqual({"core", "binding-bridge", "runtime-level", "log-bridge"}, set(summary["outcomes"]))
         self.assertTrue(all(summary["outcomes"].values()))
 
@@ -60,7 +60,7 @@ class RunnerTests(unittest.TestCase):
         with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(1, run.run("b" * 40, self.output))
         self.assertEqual(6, len(calls))
-        summary = json.loads((self.output / "summary.json").read_text())
+        summary = json.loads((self.output / "summary.json").read_text(encoding="utf-8"))
         self.assertFalse(summary["outcomes"]["core"])
         self.assertTrue(summary["outcomes"]["log-bridge"])
 
@@ -73,9 +73,9 @@ class RunnerTests(unittest.TestCase):
 
         self.assertFalse(passed)
         self.assertEqual({"status": "passed"}, origin)
-        receipt = json.loads((self.output / "timeout.json").read_text())
+        receipt = json.loads((self.output / "timeout.json").read_text(encoding="utf-8"))
         self.assertEqual(124, receipt["commands"][0]["exit_code"])
-        log = (self.output / "timeout.log").read_text()
+        log = (self.output / "timeout.log").read_text(encoding="utf-8")
         self.assertIn("partial\ufffd stdout", log)
         self.assertIn("command exceeded 900 seconds", log)
 
@@ -89,8 +89,7 @@ class RunnerTests(unittest.TestCase):
         with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("e" * 40, self.output))
 
-        self.assertEqual(
-            [
+        expected = [
                 [
                     run.sys.executable,
                     "scripts/ci/build_binding_source_bundle.py",
@@ -140,9 +139,18 @@ class RunnerTests(unittest.TestCase):
                     "--result-file",
                     str(self.output / "log-bridge-evidence.json"),
                 ],
-            ],
-            calls,
-        )
+        ]
+        if run.platform.system() == "Windows":
+            for index, evidence in ((1, "core-windows-supervisor"), (2, "binding-bridge-windows-supervisor"), (4, "runtime-level-windows-supervisor")):
+                expected[index] = [
+                    run.sys.executable,
+                    run.WINDOWS_SUPERVISOR,
+                    "--evidence",
+                    str(self.output / evidence),
+                    "--",
+                    *expected[index],
+                ]
+        self.assertEqual(expected, calls)
 
     def test_sandbox_prerequisites_install_pinned_toolchain(self) -> None:
         with patch.object(run.platform, "system", return_value="Darwin"), patch.object(run.subprocess, "run") as execute:

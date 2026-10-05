@@ -6,6 +6,7 @@ import importlib.util
 from pathlib import Path
 import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -37,7 +38,8 @@ class CollectorRunnerTests(unittest.TestCase):
         self.assertTrue(all(command[-2:] == ["--", "--nocapture"] for _, command in runner.CASES))
 
     def test_windows_cases_request_a_new_process_group(self) -> None:
-        with mock.patch.object(runner.os, "name", "nt"):
+        windows = SimpleNamespace(name="nt")
+        with mock.patch.object(runner, "os", windows):
             self.assertEqual(runner.case_process_options(), {"creationflags": 0x00000200})
 
     def test_run_case_retains_a_nonzero_result_without_raising(self) -> None:
@@ -48,7 +50,7 @@ class CollectorRunnerTests(unittest.TestCase):
                     runner.run_case("failed", ["cargo"], environment={}, output=Path(temporary))
                 )
             self.assertEqual(
-                (Path(temporary) / "failed.log").read_text(),
+                (Path(temporary) / "failed.log").read_text(encoding="utf-8"),
                 "$ cargo\nstdout\nstderr\nexit=7\ncleanup=cargo-process-exited\n",
             )
 
@@ -60,22 +62,29 @@ class CollectorRunnerTests(unittest.TestCase):
             timed_out = self.process(1, b"", b"")
             timed_out.communicate.side_effect = [timeout, (b"", None)]
             completed = self.process(0, "later output\n", "")
+            posix = SimpleNamespace(
+                environ=runner.os.environ,
+                name="posix",
+                killpg=mock.Mock(),
+            )
             with (
-                mock.patch.object(runner.os, "name", "posix"),
-                mock.patch.object(runner.os, "killpg") as killpg,
+                mock.patch.object(runner, "os", posix),
                 mock.patch.object(runner.subprocess, "Popen", side_effect=[timed_out, completed, completed, completed]),
             ):
                 self.assertFalse(runner.run("a" * 40, Path(temporary)))
-            killpg.assert_called_once_with(timed_out.pid, runner.signal.SIGKILL)
+            posix.killpg.assert_called_once_with(timed_out.pid, runner.signal.SIGKILL)
             output = Path(temporary)
             self.assertEqual(
-                (output / "sync-http-full-stack.log").read_text(),
+                (output / "sync-http-full-stack.log").read_text(encoding="utf-8"),
                 "$ cargo test --locked -p sc-observability-otlp --test full_stack_integration --features sync-http -- --nocapture\n"
                 "partial\ufffd output\n"
                 f"timeout={runner.CASE_TIMEOUT_SECONDS}\n"
                 "cleanup=posix-process-group-killed\n",
             )
-            self.assertIn("later output\nexit=0\n", (output / "canonical-ingress.log").read_text())
+            self.assertIn(
+                "later output\nexit=0\n",
+                (output / "canonical-ingress.log").read_text(encoding="utf-8"),
+            )
 
     def test_run_executes_later_cases_after_an_earlier_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

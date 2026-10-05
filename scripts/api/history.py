@@ -13,6 +13,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+VERSIONED_SNAPSHOT_DIRECTORIES = (
+    "schema/api/python-sc-observability",
+    "schema/api/typescript-sc-observability",
+)
 
 
 class ApiError(Exception):
@@ -42,17 +46,18 @@ def accepted_base(value: str | None = None, root: Path = ROOT) -> str:
 
 
 def accepted_history(accepted_base_value: str | None = None, root: Path = ROOT) -> dict[str, bytes]:
-    """Return retained non-Rust snapshots after proving working-tree immutability."""
+    """Return retained Python/TypeScript snapshots after proving immutability."""
     base = accepted_base(accepted_base_value, root)
     accepted: dict[str, bytes] = {}
-    for name in git(root, "ls-tree", "-r", "--name-only", base, "--", "schema/api").decode().splitlines():
-        if not name.endswith(".json"):
-            continue
-        previous = git(root, "show", f"{base}:{name}")
-        path = root / name
-        if not path.is_file() or path.read_bytes() != previous:
-            raise ApiError(f"immutable accepted API history changed: {name} (baseline {base})")
-        accepted[name] = previous
+    for directory in VERSIONED_SNAPSHOT_DIRECTORIES:
+        for name in git(root, "ls-tree", "-r", "--name-only", base, "--", directory).decode().splitlines():
+            if not name.endswith(".json"):
+                continue
+            previous = git(root, "show", f"{base}:{name}")
+            path = root / name
+            if not path.is_file() or path.read_bytes() != previous:
+                raise ApiError(f"immutable accepted API history changed: {name} (baseline {base})")
+            accepted[name] = previous
     return accepted
 
 
