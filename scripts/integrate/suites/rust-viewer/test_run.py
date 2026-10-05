@@ -59,6 +59,31 @@ class RustViewerRunnerTests(unittest.TestCase):
                 )
             self.assertEqual(log.read_text(), "$ command\nout\nerr\nexit=0\n")
 
+    def test_run_checked_retains_byte_text_and_absent_timeout_streams(self) -> None:
+        cases = [
+            (b"stdout \xff\n", b"stderr \xe2\x98\x83\n", "stdout �\nstderr ☃\n"),
+            ("stdout\n", None, "stdout\n"),
+            (None, None, ""),
+        ]
+        for stdout, stderr, expected_streams in cases:
+            with self.subTest(stdout=stdout, stderr=stderr), tempfile.TemporaryDirectory() as temp:
+                log = Path(temp) / "command.log"
+                timeout = subprocess.TimeoutExpired(["command"], 1, output=stdout, stderr=stderr)
+                with mock.patch.object(runner.subprocess, "run", side_effect=timeout):
+                    with self.assertRaisesRegex(runner.SuiteError, "timed out after 1s"):
+                        runner.run_checked(["command"], environment={}, timeout=1, log=log)
+                self.assertEqual(log.read_text(), f"$ command\n{expected_streams}timeout=1\n")
+
+    def test_run_checked_retains_nonzero_exit_code_and_streams(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "command.log"
+            completed = subprocess.CompletedProcess(["command"], 17, "out\n", "err\n")
+            with mock.patch.object(runner.subprocess, "run", return_value=completed):
+                with self.assertRaisesRegex(runner.SuiteError, "command exited 17") as raised:
+                    runner.run_checked(["command"], environment={}, timeout=1, log=log)
+            self.assertEqual(17, raised.exception.exit_code)
+            self.assertEqual(log.read_text(), "$ command\nout\nerr\nexit=17\n")
+
     def test_start_viewer_reports_a_port_taken_after_reservation_without_retry(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             log = Path(temporary) / "setup.log"
