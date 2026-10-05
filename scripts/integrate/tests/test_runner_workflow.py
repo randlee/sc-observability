@@ -5,6 +5,16 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3]
 
 class RunnerWorkflowTests(unittest.TestCase):
+    def test_rust_consumers_linux_provisions_the_required_isolation_helper(self):
+        workflow = (ROOT / '.github/workflows/integration.yml').read_text()
+        suite = workflow.split('\n  suite:\n', 1)[1]
+        setup = suite.split('      - name: Install Linux isolation helper for Rust consumers\n', 1)[1]
+        setup = setup.split('\n      - name:', 1)[0]
+        self.assertIn("matrix.suite == 'rust-consumers' && runner.os == 'Linux'", setup)
+        self.assertIn('sudo apt-get update', setup)
+        self.assertIn('sudo apt-get install -y bubblewrap', setup)
+        self.assertIn('kernel.apparmor_restrict_unprivileged_userns=0', setup)
+
     def test_windows_runner_discovery_is_complete_and_uses_fail_fast_bash(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         windows = workflow.split('\n  windows-test:\n', 1)[1]
