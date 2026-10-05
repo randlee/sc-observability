@@ -17,7 +17,8 @@ from pathlib import Path
 
 from _python_distribution import (DistributionError, actual_cell, confined, digest,
                                   extract_sdist, inspect_wheel, verify_source, runtime_options, fault_paths, release_wheel, tomllib)
-from python_binding_validator import installed_origins, production_maturin_features, venv_python
+from python_binding_validator import (embedded_environment_updates, installed_origins,
+                                      production_maturin_features, venv_python)
 from _python_sandbox import Sandbox, registered_checkouts
 
 
@@ -157,22 +158,23 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
     return results
 
 
-def run_embedding(root: Path, scratch: Path, sandbox: Sandbox, python: str) -> dict:
-    """Build the real bundled host with this interpreter and an empty Cargo cache."""
+def run_embedding(root: Path, scratch: Path, sandbox: Sandbox, python: str, package: Path) -> dict:
+    """Build the real bundled host against the installed candidate package."""
     interpreter = json.loads(sandbox.run([python, '-I', '-c',
         'import json,sys; print(json.dumps({"python":f"{sys.version_info.major}.{sys.version_info.minor}",'
         '"python_full":sys.version,"base_prefix":sys.base_prefix}))'], scratch))
-    keys = ('CARGO_HOME', 'CARGO_TARGET_DIR', 'PYTHONPATH', 'PYTHONHOME', 'PYO3_PYTHON')
+    keys = ('CARGO_HOME', 'CARGO_TARGET_DIR', 'PYTHONHOME', 'PYO3_PYTHON',
+            'SC_OBSERVABILITY_ATTACHED_PACKAGE')
     previous = {key: sandbox.env.get(key) for key in keys}
     sandbox.env.update(CARGO_HOME=str(scratch / 'embedding-cargo-home'),
                        CARGO_TARGET_DIR=str(scratch / 'embedding-target'),
-                       PYTHONPATH=str(root / 'python'), PYTHONHOME=interpreter['base_prefix'],
-                       PYO3_PYTHON=python)
+                       **embedded_environment_updates(Path(python)))
     try:
         metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
                                           '--format-version', '1'], root / 'embedding'))
         resolution = verify_resolution(metadata, root)
         verify_embedding_features(metadata)
+        sandbox.env['SC_OBSERVABILITY_ATTACHED_PACKAGE'] = str(package.resolve())
         sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
     finally:
         for key, value in previous.items():
@@ -247,7 +249,16 @@ def build(args) -> None:
                     raise DistributionError('instrumented companion is not distinct from production')
                 (output / 'instrumented').mkdir()
                 shutil.copyfile(private_wheels[0], output / instrumented['path'])
-            embedded = run_embedding(root, scratch, sandbox, sys.executable)
+            embedding_venv = scratch / 'embedding-venv'
+            execute([sys.executable, '-m', 'venv', str(embedding_venv)])
+            embedding_python = str(venv_python(embedding_venv))
+            execute([embedding_python, '-m', 'pip', 'install', '--disable-pip-version-check',
+                     '--no-index', str(wheels[0])])
+            embedded_origin = json.loads(sandbox.run([embedding_python, '-I', '-c',
+                'import json,sys,sc_observability,sc_observability._native as n; '
+                'print(json.dumps({"prefix":sys.prefix,"package":sc_observability.__file__,"native":n.__file__}))'], scratch))
+            embedded = run_embedding(root, scratch, sandbox, embedding_python,
+                                     installed_origins(embedded_origin)['package'])
             negatives = negative_cases(root, scratch, sandbox, metadata)
             verify_source(root)
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
@@ -355,7 +366,7 @@ def cell(args) -> None:
                 shutil.copyfile(fault_junit, output / 'fault-runtime.xml')
             embedded = None
             if contract.get('embedding_in_each_cell'):
-                embedded = run_embedding(root, scratch, sandbox, python)
+                embedded = run_embedding(root, scratch, sandbox, python, origins['package'])
                 if embedded['python_full'] != actual['python_full']:
                     raise DistributionError('embedding interpreter differs from installed cell')
             record = {'schema_version': 1, 'status': 'passed', **actual,

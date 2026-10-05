@@ -201,6 +201,49 @@ class DistributionTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(DistributionError):
                 runtime_options({key: 'false'})
 
+    def test_embedding_host_receives_only_the_installed_candidate_package(self):
+        from validate_python_distribution import run_embedding
+
+        class RecordingSandbox:
+            cargo = 'cargo'
+
+            def __init__(self):
+                self.env = {}
+                self.calls = []
+
+            def run(self, command, _cwd):
+                self.calls.append((command, dict(self.env)))
+                if command[0] == 'candidate-python':
+                    return json.dumps({'python': '3.10', 'python_full': 'fixture', 'base_prefix': '/base'})
+                if command[1:2] == ['metadata']:
+                    return '{}'
+                return ''
+
+        sandbox = RecordingSandbox()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'source'
+            scratch = Path(temporary) / 'scratch'
+            package = Path(temporary) / 'venv/site-packages/sc_observability/__init__.py'
+            (root / 'embedding').mkdir(parents=True)
+            scratch.mkdir()
+            package.parent.mkdir(parents=True)
+            package.write_text('fixture')
+            with patch('validate_python_distribution.embedded_environment_updates',
+                       return_value={'PYO3_PYTHON': 'candidate-python', 'PYTHONHOME': '/base'}), \
+                    patch('validate_python_distribution.verify_resolution', return_value=[]), \
+                    patch('validate_python_distribution.verify_embedding_features'), \
+                    patch('validate_python_distribution.verify_source'):
+                run_embedding(root, scratch, sandbox, 'candidate-python', package)
+
+        metadata_environment = next(environment for command, environment in sandbox.calls
+                                    if command[1:2] == ['metadata'])
+        host_environment = next(environment for command, environment in sandbox.calls
+                                if command[1:2] == ['run'])
+        self.assertNotIn('SC_OBSERVABILITY_ATTACHED_PACKAGE', metadata_environment)
+        self.assertEqual(host_environment['SC_OBSERVABILITY_ATTACHED_PACKAGE'], str(package.resolve()))
+        self.assertNotIn('PYTHONPATH', host_environment)
+        self.assertEqual(sandbox.env, {})
+
     def test_binary_architecture_cannot_be_overridden_by_filename(self):
         from _python_distribution import verify_native_architecture
         arm = b'\xcf\xfa\xed\xfe' + (0x100000c).to_bytes(4, 'little')
