@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / 'scripts/ci/fixtures/tauri-qualification'
 
 
-def run(arguments, cwd, log):
+def run(arguments, cwd, log, *, visible=False):
     command = [str(arg) for arg in arguments]
     if os.name == 'nt' and command[0] == 'npm':
         command[0] = 'npm.cmd'
@@ -38,6 +38,9 @@ def run(arguments, cwd, log):
                 'stdout': result.stdout, 'stderr': result.stderr})
     if result.returncode:
         raise RuntimeError(f'{command}:\n{result.stdout}\n{result.stderr}')
+    if visible:
+        print(result.stdout, end='', flush=True)
+        print(result.stderr, end='', file=sys.stderr, flush=True)
     return result.stdout
 
 
@@ -141,7 +144,7 @@ def main():
             package = ROOT / 'bindings/typescript'
             run(['npm', 'ci', '--ignore-scripts'], package, commands)
             run(['npm', 'run', 'build'], package, commands)
-            run(['npm', 'test'], package, commands)
+            run(['npm', 'test'], package, commands, visible=True)
             if bool(args.npm_archive) != bool(args.npm_manifest):
                 raise RuntimeError('shared npm artifact requires its exact producer manifest')
             if args.npm_archive:

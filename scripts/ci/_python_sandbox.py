@@ -150,7 +150,8 @@ class Sandbox:
             return subprocess.Popen(self.prefix + command, cwd=cwd, env=self.env,
                                     stdout=stdout, stderr=stderr)
 
-    def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
+    def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False,
+            visible: bool = False) -> str:
         print('B4A_COMMAND ' + json.dumps(command), flush=True)
         started = time.monotonic()
         with self.network_denial(Path(command[0])):
@@ -163,6 +164,9 @@ class Sandbox:
                               'stdout': result.stdout, 'stderr': result.stderr})
         if (result.returncode == 0) == expect_failure:
             raise DistributionError(f'isolation command had unexpected result: {command}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}')
+        if visible:
+            print(result.stdout, end='', flush=True)
+            print(result.stderr, end='', file=sys.stderr, flush=True)
         return result.stdout
 
     def prove_denials(self, python: str, checkout: Path) -> dict:

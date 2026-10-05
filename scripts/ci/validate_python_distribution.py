@@ -322,7 +322,8 @@ def cell(args) -> None:
             junit = scratch / 'runtime.xml'
             paths = [str(confined(suite, path)) for path in contract['pytest_paths']]
             ignored = ['--ignore=' + str(confined(suite, path)) for path in private_paths]
-            sandbox.run([python, *flags, '-m', 'pytest', *paths, *ignored, '-ra', '--junitxml', str(junit)], suite)
+            sandbox.run([python, *flags, '-m', 'pytest', *paths, *ignored, '-ra', '--capture=tee-sys',
+                         '--junitxml', str(junit)], suite, visible=True)
             tree = ET.parse(junit)
             cases = tree.findall('.//testcase')
             if not cases or tree.findall('.//skipped') or tree.findall('.//failure') or tree.findall('.//error'):
