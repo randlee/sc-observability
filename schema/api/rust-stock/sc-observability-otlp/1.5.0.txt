@@ -1,0 +1,317 @@
+pub mod sc_observability_otlp
+pub use sc_observability_otlp::ExporterHealth
+pub use sc_observability_otlp::ExporterHealthState
+pub use sc_observability_otlp::TelemetryError
+pub use sc_observability_otlp::TelemetryHealthReport
+pub use sc_observability_otlp::TelemetryHealthState
+pub mod sc_observability_otlp::constants
+pub const sc_observability_otlp::constants::DEFAULT_LOG_BATCH_SIZE: usize
+pub const sc_observability_otlp::constants::DEFAULT_METRIC_BATCH_SIZE: usize
+pub const sc_observability_otlp::constants::DEFAULT_METRIC_EXPORT_INTERVAL_MS: u64
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS: u64
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_LIFECYCLE_FLUSH_TIMEOUT_MS: u64
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_LIFECYCLE_SHUTDOWN_TIMEOUT_MS: u64
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_MAX_BACKOFF_MS: u64
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_MAX_RETRIES: u32
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_QUEUE_BYTE_CAPACITY: usize
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_QUEUE_CAPACITY: usize
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_RETRY_AFTER_CAP_MS: u64
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT: u8
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS: u64
+pub const sc_observability_otlp::constants::DEFAULT_OTLP_TIMEOUT_MS: u64
+pub const sc_observability_otlp::constants::DEFAULT_TRACE_BATCH_SIZE: usize
+pub const sc_observability_otlp::constants::MAX_OTLP_BATCH_BYTES: usize
+pub const sc_observability_otlp::constants::MAX_OTLP_BATCH_RECORDS: usize
+pub const sc_observability_otlp::constants::MAX_OTLP_EVENTS_PER_SPAN: usize
+pub const sc_observability_otlp::constants::MAX_OTLP_LIVE_SPANS: usize
+pub const sc_observability_otlp::constants::MAX_OTLP_QUEUE_BYTE_CAPACITY: usize
+pub const sc_observability_otlp::constants::MAX_OTLP_QUEUE_CAPACITY: usize
+pub const sc_observability_otlp::constants::MAX_OTLP_RECORD_BYTES: usize
+pub const sc_observability_otlp::constants::MAX_OTLP_RETRY_JITTER_PERCENT: u8
+pub mod sc_observability_otlp::error_codes
+pub const sc_observability_otlp::error_codes::ALL: &[sc_observability_types::primitives::ErrorCode]
+pub const sc_observability_otlp::error_codes::SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_otlp::error_codes::TELEMETRY_EXPORTER_INIT_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_otlp::error_codes::TELEMETRY_EXPORT_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_otlp::error_codes::TELEMETRY_FLUSH_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_otlp::error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_otlp::error_codes::TELEMETRY_INVALID_CONFIG: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_otlp::error_codes::TELEMETRY_INVALID_PROTOCOL: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_otlp::error_codes::TELEMETRY_SHUTDOWN: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_otlp::error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED: sc_observability_types::primitives::ErrorCode
+pub mod sc_observability_otlp::v2
+pub use sc_observability_otlp::v2::ConfigFailure
+pub use sc_observability_otlp::v2::EventError
+pub use sc_observability_otlp::v2::FlushError
+pub use sc_observability_otlp::v2::InitError
+pub use sc_observability_otlp::v2::ShutdownError
+pub use sc_observability_otlp::v2::TelemetryError
+#[non_exhaustive] pub enum sc_observability_otlp::v2::ExporterBackend
+pub sc_observability_otlp::v2::ExporterBackend::OpenTelemetrySdk
+pub sc_observability_otlp::v2::ExporterBackend::SyncHttp
+pub enum sc_observability_otlp::v2::OtlpProtocol
+pub sc_observability_otlp::v2::OtlpProtocol::Grpc
+pub sc_observability_otlp::v2::OtlpProtocol::HttpBinary
+pub sc_observability_otlp::v2::OtlpProtocol::HttpJson
+impl core::convert::From<sc_observability_otlp::OtlpProtocol> for sc_observability_otlp::v2::OtlpProtocol
+pub fn sc_observability_otlp::v2::OtlpProtocol::from(sc_observability_otlp::OtlpProtocol) -> Self
+pub struct sc_observability_otlp::v2::AuthHeader(_)
+impl sc_observability_otlp::v2::AuthHeader
+pub fn sc_observability_otlp::v2::AuthHeader::as_str(&self) -> &str
+pub fn sc_observability_otlp::v2::AuthHeader::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::errors_v2::ConfigFailure>
+impl core::convert::AsRef<str> for sc_observability_otlp::v2::AuthHeader
+pub fn sc_observability_otlp::v2::AuthHeader::as_ref(&self) -> &str
+impl core::fmt::Debug for sc_observability_otlp::v2::AuthHeader
+pub fn sc_observability_otlp::v2::AuthHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_otlp::v2::AuthHeader
+pub fn sc_observability_otlp::v2::AuthHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_otlp::v2::LogsConfig
+pub sc_observability_otlp::v2::LogsConfig::batch_size: usize
+impl core::default::Default for sc_observability_otlp::LogsConfig
+pub fn sc_observability_otlp::LogsConfig::default() -> Self
+pub struct sc_observability_otlp::v2::MetricsConfig
+pub sc_observability_otlp::v2::MetricsConfig::batch_size: usize
+pub sc_observability_otlp::v2::MetricsConfig::export_interval_ms: sc_observability_types::primitives::DurationMs
+impl core::default::Default for sc_observability_otlp::MetricsConfig
+pub fn sc_observability_otlp::MetricsConfig::default() -> Self
+#[non_exhaustive] pub struct sc_observability_otlp::v2::OtelConfig
+pub sc_observability_otlp::v2::OtelConfig::auth_header: core::option::Option<sc_observability_otlp::v2::AuthHeader>
+pub sc_observability_otlp::v2::OtelConfig::backend: sc_observability_otlp::ExporterBackend
+pub sc_observability_otlp::v2::OtelConfig::ca_file: core::option::Option<std::path::PathBuf>
+pub sc_observability_otlp::v2::OtelConfig::debug_local_export: bool
+pub sc_observability_otlp::v2::OtelConfig::enabled: bool
+pub sc_observability_otlp::v2::OtelConfig::endpoint: core::option::Option<sc_observability_otlp::v2::OtlpEndpoint>
+pub sc_observability_otlp::v2::OtelConfig::insecure_skip_verify: bool
+pub sc_observability_otlp::v2::OtelConfig::lifecycle_flush_timeout_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub sc_observability_otlp::v2::OtelConfig::lifecycle_shutdown_timeout_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub sc_observability_otlp::v2::OtelConfig::protocol: sc_observability_otlp::v2::OtlpProtocol
+pub sc_observability_otlp::v2::OtelConfig::queue_byte_capacity: core::option::Option<usize>
+pub sc_observability_otlp::v2::OtelConfig::queue_capacity: core::option::Option<usize>
+pub sc_observability_otlp::v2::OtelConfig::sync_http_retry: core::option::Option<sc_observability_otlp::SyncHttpRetryPolicy>
+pub sc_observability_otlp::v2::OtelConfig::timeout_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+impl sc_observability_otlp::v2::OtelConfig
+pub fn sc_observability_otlp::v2::OtelConfig::new(sc_observability_otlp::ExporterBackend, sc_observability_otlp::v2::OtlpProtocol) -> Self
+impl core::default::Default for sc_observability_otlp::v2::OtelConfig
+pub fn sc_observability_otlp::v2::OtelConfig::default() -> Self
+pub struct sc_observability_otlp::v2::OtlpEndpoint(_)
+impl sc_observability_otlp::v2::OtlpEndpoint
+pub fn sc_observability_otlp::v2::OtlpEndpoint::as_str(&self) -> &str
+pub fn sc_observability_otlp::v2::OtlpEndpoint::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::errors_v2::ConfigFailure>
+impl core::convert::AsRef<str> for sc_observability_otlp::v2::OtlpEndpoint
+pub fn sc_observability_otlp::v2::OtlpEndpoint::as_ref(&self) -> &str
+impl core::fmt::Display for sc_observability_otlp::v2::OtlpEndpoint
+pub fn sc_observability_otlp::v2::OtlpEndpoint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_otlp::v2::ResourceAttributes
+pub sc_observability_otlp::v2::ResourceAttributes::attributes: serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+#[non_exhaustive] pub struct sc_observability_otlp::v2::SyncHttpRetryPolicy
+pub sc_observability_otlp::v2::SyncHttpRetryPolicy::initial_backoff_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub sc_observability_otlp::v2::SyncHttpRetryPolicy::max_backoff_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub sc_observability_otlp::v2::SyncHttpRetryPolicy::max_retries: core::option::Option<u32>
+pub sc_observability_otlp::v2::SyncHttpRetryPolicy::retry_after_cap_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub sc_observability_otlp::v2::SyncHttpRetryPolicy::retry_jitter_percent: core::option::Option<u8>
+pub sc_observability_otlp::v2::SyncHttpRetryPolicy::retry_sequence_timeout_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub struct sc_observability_otlp::v2::Telemetry
+impl sc_observability_otlp::RuntimeTelemetry
+pub fn sc_observability_otlp::RuntimeTelemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
+pub fn sc_observability_otlp::RuntimeTelemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
+pub fn sc_observability_otlp::RuntimeTelemetry::emit_span(&self, &sc_observability_types::signals_v2::SpanSignal) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
+pub fn sc_observability_otlp::RuntimeTelemetry::new(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::new_typed(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::RuntimeTelemetry
+pub fn sc_observability_otlp::RuntimeTelemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
+impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::RuntimeTelemetry
+pub fn sc_observability_otlp::RuntimeTelemetry::token(&self) -> sc_observability_types::telemetry_health_provider_sealed::Token
+pub struct sc_observability_otlp::v2::TelemetryConfig
+pub sc_observability_otlp::v2::TelemetryConfig::logs: core::option::Option<sc_observability_otlp::LogsConfig>
+pub sc_observability_otlp::v2::TelemetryConfig::metrics: core::option::Option<sc_observability_otlp::MetricsConfig>
+pub sc_observability_otlp::v2::TelemetryConfig::resource: sc_observability_otlp::ResourceAttributes
+pub sc_observability_otlp::v2::TelemetryConfig::service_name: sc_observability_types::validation::ServiceName
+pub sc_observability_otlp::v2::TelemetryConfig::traces: core::option::Option<sc_observability_otlp::TracesConfig>
+pub sc_observability_otlp::v2::TelemetryConfig::transport: sc_observability_otlp::v2::OtelConfig
+pub struct sc_observability_otlp::v2::TelemetryConfigBuilder
+impl sc_observability_otlp::v2::TelemetryConfigBuilder
+pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::v2::TelemetryConfig, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::enable_logs(self, sc_observability_otlp::LogsConfig) -> Self
+pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::enable_metrics(self, sc_observability_otlp::MetricsConfig) -> Self
+pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::enable_traces(self, sc_observability_otlp::TracesConfig) -> Self
+pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::new(sc_observability_types::validation::ServiceName) -> Self
+pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::with_resource(self, sc_observability_otlp::ResourceAttributes) -> Self
+pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::with_transport(self, sc_observability_otlp::v2::OtelConfig) -> Self
+pub struct sc_observability_otlp::v2::TelemetryProjectors<T> where T: sc_observability_types::events::Observable
+impl<T> sc_observability_otlp::V2TelemetryProjectors<T> where T: sc_observability_types::events::Observable
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::observation_v2::ProjectionRegistration<T>
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::new(alloc::sync::Arc<sc_observability_otlp::RuntimeTelemetry>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::projection::ObservationFilter<T>>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::LogProjector<T>>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::MetricProjector<T>>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::SpanProjector<T>>) -> Self
+pub struct sc_observability_otlp::v2::TracesConfig
+pub sc_observability_otlp::v2::TracesConfig::batch_size: usize
+impl core::default::Default for sc_observability_otlp::TracesConfig
+pub fn sc_observability_otlp::TracesConfig::default() -> Self
+#[non_exhaustive] pub enum sc_observability_otlp::ExporterBackend
+pub sc_observability_otlp::ExporterBackend::OpenTelemetrySdk
+pub sc_observability_otlp::ExporterBackend::SyncHttp
+pub enum sc_observability_otlp::OtlpProtocol
+pub sc_observability_otlp::OtlpProtocol::Grpc
+pub sc_observability_otlp::OtlpProtocol::HttpBinary
+pub sc_observability_otlp::OtlpProtocol::HttpJson
+impl core::convert::From<sc_observability_otlp::OtlpProtocol> for sc_observability_otlp::v2::OtlpProtocol
+pub fn sc_observability_otlp::v2::OtlpProtocol::from(sc_observability_otlp::OtlpProtocol) -> Self
+pub struct sc_observability_otlp::AuthHeader(_)
+impl sc_observability_otlp::AuthHeader
+pub fn sc_observability_otlp::AuthHeader::as_str(&self) -> &str
+pub fn sc_observability_otlp::AuthHeader::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::errors::InitError>
+pub fn sc_observability_otlp::AuthHeader::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+impl core::convert::AsRef<str> for sc_observability_otlp::AuthHeader
+pub fn sc_observability_otlp::AuthHeader::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_otlp::AuthHeader
+pub type sc_observability_otlp::AuthHeader::Error = sc_observability_types::errors::InitError
+pub fn sc_observability_otlp::AuthHeader::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for sc_observability_otlp::AuthHeader
+pub fn sc_observability_otlp::AuthHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_otlp::AuthHeader
+pub fn sc_observability_otlp::AuthHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_otlp::CompleteSpan
+pub sc_observability_otlp::CompleteSpan::events: alloc::vec::Vec<sc_observability_types::span::SpanEvent>
+pub sc_observability_otlp::CompleteSpan::record: sc_observability_types::span::SpanRecord<sc_observability_types::span::SpanEnded>
+pub struct sc_observability_otlp::LogsConfig
+pub sc_observability_otlp::LogsConfig::batch_size: usize
+impl core::default::Default for sc_observability_otlp::LogsConfig
+pub fn sc_observability_otlp::LogsConfig::default() -> Self
+pub struct sc_observability_otlp::MetricsConfig
+pub sc_observability_otlp::MetricsConfig::batch_size: usize
+pub sc_observability_otlp::MetricsConfig::export_interval_ms: sc_observability_types::primitives::DurationMs
+impl core::default::Default for sc_observability_otlp::MetricsConfig
+pub fn sc_observability_otlp::MetricsConfig::default() -> Self
+pub struct sc_observability_otlp::OtelConfig
+pub sc_observability_otlp::OtelConfig::auth_header: core::option::Option<sc_observability_otlp::AuthHeader>
+pub sc_observability_otlp::OtelConfig::ca_file: core::option::Option<std::path::PathBuf>
+pub sc_observability_otlp::OtelConfig::debug_local_export: bool
+pub sc_observability_otlp::OtelConfig::enabled: bool
+pub sc_observability_otlp::OtelConfig::endpoint: core::option::Option<sc_observability_otlp::OtlpEndpoint>
+pub sc_observability_otlp::OtelConfig::initial_backoff_ms: sc_observability_types::primitives::DurationMs
+pub sc_observability_otlp::OtelConfig::insecure_skip_verify: bool
+pub sc_observability_otlp::OtelConfig::max_backoff_ms: sc_observability_types::primitives::DurationMs
+pub sc_observability_otlp::OtelConfig::max_retries: u32
+pub sc_observability_otlp::OtelConfig::protocol: sc_observability_otlp::OtlpProtocol
+pub sc_observability_otlp::OtelConfig::timeout_ms: sc_observability_types::primitives::DurationMs
+impl core::default::Default for sc_observability_otlp::OtelConfig
+pub fn sc_observability_otlp::OtelConfig::default() -> Self
+pub struct sc_observability_otlp::OtlpEndpoint(_)
+impl sc_observability_otlp::OtlpEndpoint
+pub fn sc_observability_otlp::OtlpEndpoint::as_str(&self) -> &str
+pub fn sc_observability_otlp::OtlpEndpoint::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::errors::InitError>
+pub fn sc_observability_otlp::OtlpEndpoint::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+impl core::convert::AsRef<str> for sc_observability_otlp::OtlpEndpoint
+pub fn sc_observability_otlp::OtlpEndpoint::as_ref(&self) -> &str
+impl core::convert::TryFrom<alloc::string::String> for sc_observability_otlp::OtlpEndpoint
+pub type sc_observability_otlp::OtlpEndpoint::Error = sc_observability_types::errors::InitError
+pub fn sc_observability_otlp::OtlpEndpoint::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for sc_observability_otlp::OtlpEndpoint
+pub fn sc_observability_otlp::OtlpEndpoint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_otlp::ResourceAttributes
+pub sc_observability_otlp::ResourceAttributes::attributes: serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub struct sc_observability_otlp::RuntimeTelemetry
+impl sc_observability_otlp::RuntimeTelemetry
+pub fn sc_observability_otlp::RuntimeTelemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
+pub fn sc_observability_otlp::RuntimeTelemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
+pub fn sc_observability_otlp::RuntimeTelemetry::emit_span(&self, &sc_observability_types::signals_v2::SpanSignal) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
+pub fn sc_observability_otlp::RuntimeTelemetry::new(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::new_typed(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::RuntimeTelemetry
+pub fn sc_observability_otlp::RuntimeTelemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
+impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::RuntimeTelemetry
+pub fn sc_observability_otlp::RuntimeTelemetry::token(&self) -> sc_observability_types::telemetry_health_provider_sealed::Token
+pub struct sc_observability_otlp::SpanAssembler
+impl sc_observability_otlp::SpanAssembler
+pub fn sc_observability_otlp::SpanAssembler::flush_incomplete(&mut self) -> usize
+pub fn sc_observability_otlp::SpanAssembler::new() -> Self
+pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::typed::EventFailure>
+pub fn sc_observability_otlp::SpanAssembler::take_loss(&mut self) -> sc_observability_otlp::SpanAssemblyLoss
+pub fn sc_observability_otlp::SpanAssembler::with_limits(usize, usize) -> Self
+impl sc_observability_otlp::SpanAssembler
+pub fn sc_observability_otlp::SpanAssembler::push(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::errors::EventError>
+impl core::default::Default for sc_observability_otlp::SpanAssembler
+pub fn sc_observability_otlp::SpanAssembler::default() -> Self
+pub struct sc_observability_otlp::SpanAssemblyLoss
+pub sc_observability_otlp::SpanAssemblyLoss::evicted_events: u64
+pub sc_observability_otlp::SpanAssemblyLoss::evicted_spans: u64
+impl sc_observability_otlp::SpanAssemblyLoss
+pub const fn sc_observability_otlp::SpanAssemblyLoss::total(self) -> u64
+#[non_exhaustive] pub struct sc_observability_otlp::SyncHttpRetryPolicy
+pub sc_observability_otlp::SyncHttpRetryPolicy::initial_backoff_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub sc_observability_otlp::SyncHttpRetryPolicy::max_backoff_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub sc_observability_otlp::SyncHttpRetryPolicy::max_retries: core::option::Option<u32>
+pub sc_observability_otlp::SyncHttpRetryPolicy::retry_after_cap_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub sc_observability_otlp::SyncHttpRetryPolicy::retry_jitter_percent: core::option::Option<u8>
+pub sc_observability_otlp::SyncHttpRetryPolicy::retry_sequence_timeout_ms: core::option::Option<sc_observability_types::primitives::DurationMs>
+pub struct sc_observability_otlp::Telemetry
+impl sc_observability_otlp::Telemetry
+pub fn sc_observability_otlp::Telemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
+pub fn sc_observability_otlp::Telemetry::emit_metric(&self, &sc_observability_types::metric::MetricRecord) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
+pub fn sc_observability_otlp::Telemetry::emit_span(&self, &sc_observability_types::span::SpanSignal) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
+pub fn sc_observability_otlp::Telemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors::FlushError>
+pub async fn sc_observability_otlp::Telemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::Telemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
+pub fn sc_observability_otlp::Telemetry::new(sc_observability_otlp::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
+pub fn sc_observability_otlp::Telemetry::new_typed(sc_observability_otlp::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::Telemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors::ShutdownError>
+pub async fn sc_observability_otlp::Telemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub fn sc_observability_otlp::Telemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::Telemetry
+pub fn sc_observability_otlp::Telemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
+impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::Telemetry
+pub fn sc_observability_otlp::Telemetry::token(&self) -> sc_observability_types::telemetry_health_provider_sealed::Token
+pub struct sc_observability_otlp::TelemetryConfig
+pub sc_observability_otlp::TelemetryConfig::logs: core::option::Option<sc_observability_otlp::LogsConfig>
+pub sc_observability_otlp::TelemetryConfig::metrics: core::option::Option<sc_observability_otlp::MetricsConfig>
+pub sc_observability_otlp::TelemetryConfig::resource: sc_observability_otlp::ResourceAttributes
+pub sc_observability_otlp::TelemetryConfig::service_name: sc_observability_types::validation::ServiceName
+pub sc_observability_otlp::TelemetryConfig::traces: core::option::Option<sc_observability_otlp::TracesConfig>
+pub sc_observability_otlp::TelemetryConfig::transport: sc_observability_otlp::OtelConfig
+pub struct sc_observability_otlp::TelemetryConfigBuilder
+impl sc_observability_otlp::TelemetryConfigBuilder
+pub fn sc_observability_otlp::TelemetryConfigBuilder::build(self) -> core::result::Result<sc_observability_otlp::TelemetryConfig, sc_observability_types::errors::InitError>
+pub fn sc_observability_otlp::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::TelemetryConfig, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::TelemetryConfigBuilder::enable_logs(self, sc_observability_otlp::LogsConfig) -> Self
+pub fn sc_observability_otlp::TelemetryConfigBuilder::enable_metrics(self, sc_observability_otlp::MetricsConfig) -> Self
+pub fn sc_observability_otlp::TelemetryConfigBuilder::enable_traces(self, sc_observability_otlp::TracesConfig) -> Self
+pub fn sc_observability_otlp::TelemetryConfigBuilder::new(sc_observability_types::validation::ServiceName) -> Self
+pub fn sc_observability_otlp::TelemetryConfigBuilder::with_resource(self, sc_observability_otlp::ResourceAttributes) -> Self
+pub fn sc_observability_otlp::TelemetryConfigBuilder::with_transport(self, sc_observability_otlp::OtelConfig) -> Self
+pub struct sc_observability_otlp::TelemetryProjectors<T> where T: sc_observability_types::events::Observable
+impl<T> sc_observability_otlp::TelemetryProjectors<T> where T: sc_observability_types::events::Observable
+pub fn sc_observability_otlp::TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::projection::ProjectionRegistration<T>
+pub fn sc_observability_otlp::TelemetryProjectors<T>::new(alloc::sync::Arc<sc_observability_otlp::Telemetry>) -> Self
+pub fn sc_observability_otlp::TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::projection::ObservationFilter<T>>) -> Self
+pub fn sc_observability_otlp::TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::LogProjector<T>>) -> Self
+pub fn sc_observability_otlp::TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::MetricProjector<T>>) -> Self
+pub fn sc_observability_otlp::TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::SpanProjector<T>>) -> Self
+pub struct sc_observability_otlp::TracesConfig
+pub sc_observability_otlp::TracesConfig::batch_size: usize
+impl core::default::Default for sc_observability_otlp::TracesConfig
+pub fn sc_observability_otlp::TracesConfig::default() -> Self
+pub struct sc_observability_otlp::V2TelemetryProjectors<T> where T: sc_observability_types::events::Observable
+impl<T> sc_observability_otlp::V2TelemetryProjectors<T> where T: sc_observability_types::events::Observable
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::observation_v2::ProjectionRegistration<T>
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::new(alloc::sync::Arc<sc_observability_otlp::RuntimeTelemetry>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::projection::ObservationFilter<T>>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::LogProjector<T>>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::MetricProjector<T>>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::SpanProjector<T>>) -> Self

@@ -226,7 +226,10 @@ def main() -> int:
             command = ['cargo', f'+{PUBLIC_API_TOOLCHAIN}', 'public-api', '--manifest-path', package['manifest_path']]
             command.append('-sss')
             if not initial:
-                command.extend(['diff', baseline])
+                # Let the stock tool classify compatibility. Additions are
+                # valid for a 1.x minor release; removals and signature
+                # changes are the only denied kinds.
+                command.extend(['diff', '--deny', 'changed', '--deny', 'removed', baseline])
         else:
             same_minor = baseline.split('.')[:2] == package['version'].split('.')[:2]
             command = ['cargo', 'semver-checks', '--manifest-path', package['manifest_path'], '--baseline-version', baseline, '--release-type', 'patch' if same_minor else 'minor', '--all-features']
@@ -259,10 +262,10 @@ def main() -> int:
                 status = 'initial-public-api' if args.mode == 'diff' else 'initial-release-no-published-baseline'
                 changes = True
         elif args.mode == 'diff':
-            # cargo-public-api returns zero for a successful diff, including additions.
-            # Empty sections explicitly report '(none)'; any actual +/- line is a change.
-            status = 'changed' if any(line.startswith(('+', '-')) for line in result.stdout.splitlines()) else 'unchanged'
-            changes |= status == 'changed'
+            # A successful stock diff has already rejected changed and
+            # removed items.  Its text may include additions, which are
+            # compatible and need no approval certificate.
+            status = 'compatible-public-api'
         report['crates'][crate] = {'status': status, 'baseline_version': baseline, 'kind': settings['kind'],
                                    'command': command, 'exit_code': result.returncode, 'log': log_name,
                                    'api_sha256': hashlib.sha256(result.stdout.encode()).hexdigest()}
@@ -272,9 +275,6 @@ def main() -> int:
     print('\n'.join(lines))
     if failure:
         return 2  # Cannot be mistaken for an actionable API diff or waived by approvals.
-    if args.mode == 'diff' and changes:
-        print('public API diff report generated (diffs detected; crate-scoped review required)')
-        return 1
     print(f'public API {args.mode} validation passed' + (' (selected crates only)' if args.crates else ''))
     return 0
 

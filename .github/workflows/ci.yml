@@ -231,10 +231,19 @@ jobs:
           python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
           python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
 
+      - name: Generate native public API JSON and stock text snapshots
+        shell: bash
+        run: |
+          toolchain="$(cat scripts/ci/public-api-toolchain)"
+          rustup toolchain install "$toolchain" --profile minimal
+          cargo +stable install cargo-public-api --version 0.52.0 --locked
+          python3 scripts/ci/stock_public_api.py capture --target-dir "$RUNNER_TEMP/e-api-public-api"
+
       - name: Run workspace tests
-        env:
-          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || inputs.accepted_base || '' }}
-        run: python3 scripts/api/run_unit_tests.py -- cargo test --locked --no-fail-fast --workspace --all-targets
+        run: cargo test --locked --no-fail-fast --workspace --all-targets
+
+      - name: Compare native public API text without a build
+        run: python3 scripts/ci/stock_public_api.py check --target-dir "$RUNNER_TEMP/e-api-public-api"
 
       - name: Run workspace doctests
         run: cargo test --locked --no-fail-fast --workspace --doc
@@ -346,11 +355,22 @@ jobs:
           python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
           python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
 
+      - name: Generate native public API JSON and stock text snapshots
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        shell: bash
+        run: |
+          toolchain="$(cat scripts/ci/public-api-toolchain)"
+          rustup toolchain install "$toolchain" --profile minimal
+          cargo +stable install cargo-public-api --version 0.52.0 --locked
+          python3 scripts/ci/stock_public_api.py capture --target-dir "$RUNNER_TEMP/e-api-public-api"
+
       - name: Run workspace tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
-        env:
-          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || inputs.accepted_base || '' }}
-        run: python3 scripts/api/run_unit_tests.py -- cargo test --locked --no-fail-fast --workspace --all-targets
+        run: cargo test --locked --no-fail-fast --workspace --all-targets
+
+      - name: Compare native public API text without a build
+        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        run: python3 scripts/ci/stock_public_api.py check --target-dir "$RUNNER_TEMP/e-api-public-api"
 
       - name: Run OTLP feature unit tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}

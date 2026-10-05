@@ -1710,10 +1710,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-api-mutation-fixture"
-version = "0.1.0"
-
-[[package]]
 name = "sc-lint-attributes"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1746,14 +1742,6 @@ dependencies = [
  "thiserror",
  "trybuild",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "sc-observability-api-test"
-version = "1.5.0"
-dependencies = [
- "sc-api-mutation-fixture",
- "serde_json",
 ]
 
 [[package]]

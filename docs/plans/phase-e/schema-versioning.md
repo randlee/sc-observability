@@ -64,65 +64,41 @@ is the remedy for an actual contract change, not overwriting accepted history.
 
 ## API unit comparison and release-cut setup
 
-The user-approved design is an ordinary platform unit check of actual compiled
-public APIs against immutable versioned baselines. `scripts/api/run_unit_tests.py`
-executes the existing Cargo test command once, retains its compiler-artifact
-messages, waits for completion, and then runs the already-built metadata-reader
-test executable. It does not run a second build. Cargo's test failure status is
-preserved, and API comparison is reported independently after unrelated runtime
-test failures. The existing unit jobs retain their failure aggregation.
-
-The unpublished `sc-observability-api-test` workspace helper uses the repository's
-pinned Rust 1.94.1 compiler metadata APIs. `rustc-dev` is installed during normal
-toolchain setup; bootstrap is restricted to this helper crate. The reader parses
-only an in-memory `extern crate` declaration and stops after expansion, before
-local analysis or code generation. It reads signatures, fields, traits,
-reexports and implementations from the already-built dependency metadata.
-No target source is compiled by the check. The completed Cargo artifact stream
-supplies exact paths and feature selections; the checker does not guess among
-old files in `target`. Source and artifact hashes reject stale or replaced inputs.
-
-Normal developer invocation remains `just test`. To run only the existing
-workspace command and its API check:
+Rust uses the pinned stock `cargo public-api` tool, not a compiler-metadata
+reader or a project-defined row format. `capture` is the only build-producing
+step: it generates current rustdoc JSON for every one of the ten
+`publish = true` Rust crates named in `release/publish-artifacts.toml`, including
+the standalone Tauri crate, and writes the tool's unmodified `-sss` text to one
+versioned file per crate under `schema/api/rust-stock/`.
 
 ```sh
-python3 scripts/api/run_unit_tests.py --accepted-base <local-accepted-commit> -- cargo test --locked --workspace --all-targets --no-fail-fast
-python3 -m unittest scripts.api.test_history
+python3 scripts/ci/stock_public_api.py capture --target-dir target/e-api-public-api
 ```
 
-`SC_API_ACCEPTED_BASE` can supply the local accepted baseline. Local default
-`HEAD` protects accepted files against working-tree edits; use the actual
-accepted/release commit to audit an already committed change. CI supplies the
-PR base or preceding push commit and fetches its local history. No registry or
-network query is used by the check. A mismatch identifies package, selected
-manifest version, feature family and changed rows. Keep accepted snapshots,
-increment the owning package version, and capture its new baseline when a
-contract change is intentional. Compatibility with released 1.x APIs still
-follows ADR-020; a version bump alone does not authorize a breaking change.
-
-At the initial or next release cut, build the ordinary workspace test artifacts
-and capture the current families, then explicitly prepare the other declared
-families. These are publishing setup commands, never invoked by the unit check:
+The ordinary follow-up check requires each current rustdoc JSON file and invokes
+the stock tool with `--rustdoc-json`. It has no package or manifest argument and
+does not run a Cargo build. Missing JSON or a missing committed native baseline
+fails clearly. The native text is intentionally compared byte-for-byte: it is a
+transparent audit snapshot, so an addition is visible rather than silently
+normalized.
 
 ```sh
-python3 scripts/api/run_unit_tests.py --capture --accepted-base <local-accepted-commit> -- cargo test --locked --workspace --all-targets --no-run
-python3 scripts/api/cut_baseline.py --accepted-base <local-accepted-commit>
+python3 scripts/ci/stock_public_api.py check --target-dir target/e-api-public-api
 ```
 
-The release-cut command reuses the existing manifest-derived feature inventory.
-It accounts for the ten published Rust packages and 41 declared feature families
-at the current revision, including separately workspaced Tauri. Each comparison
-reports exactly which built families it covers; an unbuilt family is not a
-passing result. Accepted snapshots cannot be extended or overwritten in place,
-including accepted prereleases. The first capture establishes the implementation
-baseline for the next cut; it does not invent historical release snapshots.
+Text equality alone cannot classify an addition as consumer-compatible. The
+existing compatibility gate remains the semantic authority and now asks the
+stock tool to deny only changed or removed public items:
+`cargo public-api diff --deny changed --deny removed <published-version>`.
+Therefore compatible additions pass the release compatibility gate; removals and
+signature changes fail. No mapping from native text to another schema is used.
 
-The metadata format is pinned to Rust 1.94.1. Compiler upgrades require explicit
-format review. Macros are observed through their compiled exports and expanded
-public items; macro expansion behavior is still covered by the existing macro
-consumer tests. Foreign implementations and dependency blanket/auto traits are
-inspected through compiler metadata, not binary symbol tables. Missing or
-unsupported metadata fails rather than silently reducing the public surface.
+The existing `test` and `windows-test` CI jobs run capture, their ordinary Cargo
+tests, then the zero-build check. They are normal PR jobs, not a new pipeline.
+Local setup time is reported independently from comparison time; Windows and
+Linux job timings are native CI evidence. Python and TypeScript keep their
+existing independent history/producer checks and are not claimed by this Rust
+check.
 
 Native release producers and `public_api_parity.py` remain unchanged and provide
 separate target/feature parity evidence. A local check establishes only its
