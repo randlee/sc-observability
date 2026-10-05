@@ -67,12 +67,14 @@ class CollectorRunnerTests(unittest.TestCase):
                 name="posix",
                 killpg=mock.Mock(),
             )
+            posix_signal = SimpleNamespace(SIGKILL=object())
             with (
                 mock.patch.object(runner, "os", posix),
+                mock.patch.object(runner, "signal", posix_signal),
                 mock.patch.object(runner.subprocess, "Popen", side_effect=[timed_out, completed, completed, completed]),
             ):
                 self.assertFalse(runner.run("a" * 40, Path(temporary)))
-            posix.killpg.assert_called_once_with(timed_out.pid, runner.signal.SIGKILL)
+            posix.killpg.assert_called_once_with(timed_out.pid, posix_signal.SIGKILL)
             output = Path(temporary)
             self.assertEqual(
                 (output / "sync-http-full-stack.log").read_text(encoding="utf-8"),
