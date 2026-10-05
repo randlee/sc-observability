@@ -5,22 +5,22 @@ import importlib.metadata
 import json
 import os
 from pathlib import Path
-import subprocess
 import time
 
+from history import accepted_history
 from python_surface import project
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[2])
-    parser.add_argument('--accepted-base', default=os.environ.get('SC_API_ACCEPTED_BASE', 'HEAD'))
+    parser.add_argument('--accepted-base', default=os.environ.get('SC_API_ACCEPTED_BASE'))
     args = parser.parse_args()
     import sc_observability
     import sc_observability._native  # require real installed native wheel
     version = importlib.metadata.version('sc-observability')
     relative = 'schema/api/python-sc-observability/' + version + '.json'
-    if subprocess.run(['git', 'cat-file', '-e', args.accepted_base + ':' + relative], cwd=args.root, capture_output=True).returncode == 0:
+    if relative in accepted_history(args.accepted_base, args.root):
         raise SystemExit('accepted Python history is immutable; increment the package version')
     started = time.monotonic()
     rows = project(sc_observability)

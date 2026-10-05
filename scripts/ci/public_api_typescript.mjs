@@ -55,7 +55,11 @@ export function projectApi(entry, runtime) {
 }
 
 export function differences(expected, current) {
-  return [...current.filter(x => !expected.includes(x)).map(x => '+ ' + x), ...expected.filter(x => !current.includes(x)).map(x => '- ' + x)];
+  return JSON.parse(execFileSync(process.env.PYTHON ?? 'python3', [resolve(root, 'scripts/api/history.py'), '--row-differences'], {
+    cwd: root,
+    encoding: 'utf8',
+    input: JSON.stringify({ reference: expected, candidate: current }),
+  }));
 }
 
 function main() {
@@ -63,12 +67,11 @@ function main() {
   const manifest = JSON.parse(readFileSync(resolve(project, 'package.json'), 'utf8'));
   const relative = 'schema/api/typescript-sc-observability/' + manifest.version + '.json';
   const path = resolve(root, relative);
-  const base = process.env.SC_API_ACCEPTED_BASE || 'HEAD';
-  const accepted = execFileSync('git', ['ls-tree', '-r', '--name-only', base, '--', 'schema/api'], { cwd: root, encoding: 'utf8' }).trim().split('\n').filter(x => x.endsWith('.json'));
-  for (const name of accepted) {
-    const original = execFileSync('git', ['show', base + ':' + name], { cwd: root, maxBuffer: 64 * 1024 * 1024 });
-    if (!original.equals(readFileSync(resolve(root, name)))) throw new Error('immutable accepted API history changed: ' + name);
-  }
+  const base = process.env.SC_API_ACCEPTED_BASE;
+  const accepted = new Set(JSON.parse(execFileSync(process.env.PYTHON ?? 'python3', [resolve(root, 'scripts/api/history.py'), '--accepted-base', base ?? '', '--check-accepted-history'], {
+    cwd: root,
+    encoding: 'utf8',
+  })));
   const rows = projectApi(resolve(project, manifest.types), require(resolve(project, manifest.main)));
   const snapshot = { format: 'typescript-declarations/v1', package: manifest.name, version: manifest.version, rows };
   if (process.argv.includes('--capture')) {

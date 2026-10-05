@@ -8,12 +8,12 @@ import subprocess
 import sys
 import time
 
-from history import ApiError, ROOT, check_current, collect_artifacts, compiler_environment, source_fingerprint
+from history import ApiError, ROOT, accepted_base, check_current, collect_artifacts, compiler_environment, source_fingerprint
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--accepted-base', default=os.environ.get('SC_API_ACCEPTED_BASE', 'HEAD'))
+    parser.add_argument('--accepted-base', default=os.environ.get('SC_API_ACCEPTED_BASE'))
     parser.add_argument('--capture', action='store_true', help='release-cut only: create new version snapshots')
     parser.add_argument('--record', type=Path, default=ROOT / 'target/api/current-build.json')
     parser.add_argument('command', nargs=argparse.REMAINDER)
@@ -23,6 +23,10 @@ def main():
         parser.error('supply the normal cargo test command after --')
     if any(arg.startswith('--message-format') for arg in command):
         parser.error('message format is supplied by this runner')
+    try:
+        args.accepted_base = accepted_base(args.accepted_base)
+    except ApiError as error:
+        parser.error(str(error))
     sysroot = subprocess.check_output(['rustc', '--print', 'sysroot'], text=True).strip()
     unit_env = compiler_environment(sysroot)
     before = source_fingerprint()

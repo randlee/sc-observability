@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import os
-import subprocess
+import sys
 from pathlib import Path
 
 
@@ -14,14 +14,11 @@ def stage_conformance(source: Path, tests: Path) -> Path:
     destination = tests / 'conformance/v1/conversion-cases.json'
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(corpus, destination)
-    base = os.environ.get('SC_API_ACCEPTED_BASE', 'HEAD')
-    accepted = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', base, '--', 'schema/api'], cwd=source, text=True)
-    for name in accepted.splitlines():
-        if name.endswith('.json'):
-            previous = subprocess.check_output(['git', 'show', base + ':' + name], cwd=source)
-            if (source / name).read_bytes() != previous:
-                raise ValueError('immutable accepted API history changed: ' + name)
+    sys.path.insert(0, str(source))
+    from scripts.api.history import accepted_history
+    accepted_history(os.environ.get('SC_API_ACCEPTED_BASE'), source)
     # The existing native pytest suite checks the installed package, not source.
+    shutil.copyfile(source / 'scripts/api/api_rows.py', tests / 'api_rows.py')
     shutil.copyfile(source / 'scripts/api/python_surface.py', tests / 'api_python_surface.py')
     shutil.copyfile(source / 'scripts/api/python_history_test.py', tests / 'test_public_api_history.py')
     shutil.copytree(source / 'schema/api/python-sc-observability', tests / 'api-history', dirs_exist_ok=True)

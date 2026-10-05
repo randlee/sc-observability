@@ -31,6 +31,11 @@ class HistoryTests(unittest.TestCase):
         self.git('add', '.')
         self.git('commit', '-qm', 'accepted prerelease')
         self.base = self.git('rev-parse', 'HEAD').strip()
+        # Checks must compare the candidate against a preceding accepted
+        # revision, never the candidate's own tree.
+        (self.root / 'source.rs').write_text('pub fn method() {} // candidate\n')
+        self.git('add', 'source.rs')
+        self.git('commit', '-qm', 'candidate source')
         self.record = {'entries': [self.entry], 'fixture': None,
                        'source_sha256': history.source_fingerprint(self.root)}
         self.rows = {self.entry['artifact']: ['method()']}
@@ -48,6 +53,10 @@ class HistoryTests(unittest.TestCase):
         self.rows[self.entry['artifact']] = ['method(u64)']
         with self.assertRaisesRegex(history.ApiError, r'example 1.5.0-rc.1.*API differs'):
             self.check()
+
+    def test_candidate_commit_cannot_be_its_own_accepted_base(self):
+        with self.assertRaisesRegex(history.ApiError, 'resolves to the candidate'):
+            history.accepted_history('HEAD', self.root)
 
     def test_code_and_accepted_snapshot_change_without_version_increment_fails(self):
         (self.root / 'source.rs').write_text('pub fn method(_: u64) {}\n')

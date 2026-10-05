@@ -16,6 +16,11 @@ import pkgutil
 import typing
 import types
 
+try:
+    from api_rows import row_differences
+except ModuleNotFoundError:
+    from scripts.api.api_rows import row_differences
+
 
 def value_name(value):
     if value is inspect.Signature.empty:
@@ -117,6 +122,5 @@ def compare(rows, path, version):
     assert expected['version'] == version, 'installed Python version differs from selected history'
     assert expected['format'] == 'python-runtime/v1', 'unsupported Python API snapshot format'
     if rows != expected['rows']:
-        added = sorted(set(rows) - set(expected['rows']))
-        removed = sorted(set(expected['rows']) - set(rows))
-        raise AssertionError('Python API differs for ' + version + '\n' + '\n'.join(['+ ' + x for x in added[:15]] + ['- ' + x for x in removed[:15]]) + '\nIncrement the package version and capture at release-cut; retain accepted history.')
+        differences = row_differences(expected['rows'], rows)
+        raise AssertionError('Python API differs for ' + version + '\n' + '\n'.join(differences[:15]) + '\nIncrement the package version and capture at release-cut; retain accepted history.')

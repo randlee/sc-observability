@@ -16,7 +16,7 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from scripts.ci.public_api_parity import row_differences
+from scripts.api.api_rows import row_differences
 
 
 class ApiError(Exception):
@@ -28,6 +28,42 @@ def git(root, *args):
     if result.returncode:
         raise ApiError(result.stderr.decode(errors='replace').strip())
     return result.stdout
+
+
+def accepted_base(value=None, root=ROOT):
+    """Resolve a non-vacuous accepted-history revision.
+
+    CI supplies the PR base or the previous pushed SHA. Local and dispatch
+    runs instead use the immediate parent, which is still an accepted prior
+    revision. A repository without one cannot prove history immutability.
+    """
+    candidate = value or os.environ.get('SC_API_ACCEPTED_BASE')
+    if candidate == '0000000000000000000000000000000000000000':
+        candidate = None
+    if not candidate:
+        candidate = 'HEAD^'
+    try:
+        resolved = git(root, 'rev-parse', '--verify', f'{candidate}^{{commit}}').decode().strip()
+    except ApiError as error:
+        raise ApiError('accepted API history requires a PR base or prior revision') from error
+    current = git(root, 'rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
+    if resolved == current:
+        raise ApiError('accepted API history base resolves to the candidate commit; supply a prior revision')
+    return resolved
+
+
+def accepted_history(accepted_base_value=None, root=ROOT):
+    """Return immutable accepted snapshots after checking every tracked byte."""
+    base = accepted_base(accepted_base_value, root)
+    accepted = {}
+    for name in git(root, 'ls-tree', '-r', '--name-only', base, '--', 'schema/api').decode().splitlines():
+        if name.endswith('.json'):
+            accepted[name] = git(root, 'show', f'{base}:{name}')
+            path = root / name
+            if not path.is_file() or path.read_bytes() != accepted[name]:
+                raise ApiError(f'immutable accepted API history changed: {name} (baseline {base}); '
+                               'retain it and add a new package version')
+    return accepted
 
 
 def source_fingerprint(root=ROOT):
@@ -202,16 +238,9 @@ def check_current(record, accepted_base, root=ROOT, capture=False):
     started = time.monotonic()
     if source_fingerprint(root) != record['source_sha256']:
         raise ApiError('source changed since the completed unit build; rerun normal unit tests')
-    # Compare all accepted files byte-for-byte against the explicitly supplied
-    # local git baseline. This also rejects code + snapshot edits at one version.
-    accepted = {}
-    for name in git(root, 'ls-tree', '-r', '--name-only', accepted_base, '--', 'schema/api').decode().splitlines():
-        if name.endswith('.json'):
-            accepted[name] = git(root, 'show', f'{accepted_base}:{name}')
-            path = root / name
-            if not path.is_file() or path.read_bytes() != accepted[name]:
-                raise ApiError(f'immutable accepted API history changed: {name} (baseline {accepted_base}); '
-                               'retain it and add a new package version')
+    # One shared check rejects code + snapshot edits at one version for every
+    # API surface before any runtime-specific comparison proceeds.
+    accepted = accepted_history(accepted_base, root)
     t = time.monotonic()
     surfaces = read_surfaces(record)
     inspection = time.monotonic() - t
@@ -258,3 +287,28 @@ def check_current(record, accepted_base, root=ROOT, capture=False):
     return {'libraries': len(record['entries']), 'inspection_seconds': round(inspection, 3),
             'total_seconds': round(total, 3), 'builds_in_check': 0,
             'covered_families': [f'{e["package"]}[{family(e)}]' for e in record['entries']]}
+
+
+def main():
+    """Small cross-language boundary for history and row-diff consumers."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--accepted-base')
+    parser.add_argument('--check-accepted-history', action='store_true')
+    parser.add_argument('--row-differences', action='store_true')
+    args = parser.parse_args()
+    if args.check_accepted_history == args.row_differences:
+        parser.error('choose exactly one operation')
+    try:
+        if args.check_accepted_history:
+            print(json.dumps(sorted(accepted_history(args.accepted_base))))
+        else:
+            payload = json.load(sys.stdin)
+            print(json.dumps(row_differences(payload['reference'], payload['candidate'])))
+    except (ApiError, KeyError, TypeError, json.JSONDecodeError) as error:
+        parser.error(str(error))
+
+
+if __name__ == '__main__':
+    main()

@@ -33,6 +33,7 @@ class UnitRunnerTests(unittest.TestCase):
             args = ['runner', '--record', str(Path(directory) / 'record.json'), '--', 'cargo', 'test', '--workspace', '--no-fail-fast']
             with (patch.object(sys, 'argv', args),
                   patch.object(runner, 'source_fingerprint', return_value='current'),
+                  patch.object(runner, 'accepted_base', return_value='accepted-parent'),
                   patch.object(runner.subprocess, 'check_output', return_value='/compiler\n'),
                   patch.object(runner.subprocess, 'Popen', return_value=cargo) as launch,
                   patch.object(runner, 'collect_artifacts', return_value={}) as collect,
