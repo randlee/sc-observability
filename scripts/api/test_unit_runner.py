@@ -92,6 +92,30 @@ class EnvironmentAndWorkflowTests(unittest.TestCase):
             with self.subTest(event=event, base=base):
                 self.assertEqual(json.loads(evaluate(matrix, event, base)), expected)
 
+    def test_native_api_workflows_require_an_explicit_dispatch_baseline(self):
+        workflows = {
+            'ci': history.ROOT / '.github/workflows/ci.yml',
+            'python': history.ROOT / '.github/workflows/b4a-python-distributions.yml',
+            'python-source': history.ROOT / '.github/workflows/bindings-python.yml',
+            'typescript': history.ROOT / '.github/workflows/bindings-typescript.yml',
+        }
+        for name, path in workflows.items():
+            with self.subTest(name=name):
+                workflow = path.read_text()
+                self.assertRegex(workflow, r'accepted_base:\n\s+type: string\n\s+required: true')
+                if name == 'ci':
+                    self.assertIn('inputs.accepted_base ||', workflow)
+                else:
+                    self.assertIn('SC_API_ACCEPTED_BASE: ${{ inputs.accepted_base }}', workflow)
+        ci = workflows['ci'].read_text()
+        self.assertEqual(ci.count('inputs.accepted_base ||'), 2)
+        python = workflows['python'].read_text()
+        self.assertIn('-e SC_API_ACCEPTED_BASE b4a-manylinux', python)
+        self.assertIn('accepted_history reads the explicitly supplied ancestor with git show', python)
+        typescript = workflows['typescript'].read_text()
+        self.assertNotIn('git rev-parse "${QUALIFICATION_SOURCE}^"', typescript)
+        self.assertIn('The packaged API check reads the explicitly supplied ancestor', typescript)
+
 
 if __name__ == '__main__':
     unittest.main()

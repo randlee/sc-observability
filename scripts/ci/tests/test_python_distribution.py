@@ -103,14 +103,18 @@ class DistributionTests(unittest.TestCase):
         corpus = source / 'bindings/conformance/v1/conversion-cases.json'
         with tempfile.TemporaryDirectory() as temporary:
             tests = Path(temporary) / 'tests'
-            staged = stage_conformance(source, tests)
+            # This fixture proves relocation only. Production staging retains
+            # the default immutable-history check and receives an explicit
+            # accepted base from its workflow caller.
+            staged = stage_conformance(source, tests, verify_accepted_history=False)
             self.assertEqual(staged.relative_to(tests).as_posix(),
                              'conformance/v1/conversion-cases.json')
             self.assertEqual(staged.read_bytes(), corpus.read_bytes())
             cases = json.loads(staged.read_text(encoding='utf-8'))
             self.assertTrue(any(case.get('operation') == 'canonical_envelope' for case in cases))
             with self.assertRaises(FileNotFoundError):
-                stage_conformance(Path(temporary) / 'missing-source', tests)
+                stage_conformance(Path(temporary) / 'missing-source', tests,
+                                  verify_accepted_history=False)
 
     def test_tracked_source_copy_excludes_generated_caches_without_removing_them(self):
         import subprocess

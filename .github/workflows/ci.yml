@@ -6,6 +6,11 @@ on:
   push:
     branches: [develop, main, integrate/phase-d]
   workflow_dispatch:
+    inputs:
+      accepted_base:
+        type: string
+        required: true
+        description: 'Accepted ancestor SHA for immutable API history checks'
 
 jobs:
   fmt:
@@ -201,7 +206,7 @@ jobs:
 
       - name: Run workspace tests
         env:
-          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
+          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || inputs.accepted_base || '' }}
         run: python3 scripts/api/run_unit_tests.py -- cargo test --locked --no-fail-fast --workspace --all-targets
 
       - name: Run workspace doctests
@@ -305,7 +310,7 @@ jobs:
       - name: Run workspace tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         env:
-          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}
+          SC_API_ACCEPTED_BASE: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || inputs.accepted_base || '' }}
         run: python3 scripts/api/run_unit_tests.py -- cargo test --locked --no-fail-fast --workspace --all-targets
 
       - name: Run OTLP feature unit tests
