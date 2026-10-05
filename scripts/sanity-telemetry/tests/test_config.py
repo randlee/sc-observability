@@ -64,7 +64,7 @@ def test_selected_importer_v1_schema_matches_real_sources_validation(tmp_path: P
             [
                 "git",
                 "show",
-                "9215de6e8498ed5fcd1486b5e5f2be78440dbcab:schema/config/sanity-importer/v1.json",
+                "c603cf498679c29fdb6ccda4cf5bc777f0cb2356",
             ],
             cwd=ROOT,
             check=True,
