@@ -89,13 +89,60 @@ class RunnerTests(unittest.TestCase):
         with patch.object(run, "verify_source"), patch.object(run, "prepare_sandbox_prerequisites"), patch.object(run, "candidate_version", return_value="1.4.1"), patch.object(run, "checked_origin", return_value={"status": "passed"}), patch.object(run.subprocess, "run", side_effect=execute):
             self.assertEqual(0, run.run("e" * 40, self.output))
 
-        self.assertEqual(6, len(calls))
-        self.assertEqual("scripts/ci/build_binding_source_bundle.py", calls[0][1])
-        self.assertEqual("scripts/ci/validate_binding_bundle.py", calls[1][1])
-        self.assertEqual([run.sys.executable, "scripts/ci/validate_binding_runtime.py", "--consumer-only"], calls[2][:3])
-        self.assertEqual("scripts/ci/build_binding_source_bundle.py", calls[3][1])
-        self.assertEqual("scripts/ci/validate_binding_bundle.py", calls[4][1])
-        self.assertEqual("scripts/ci/validate_log_staged_consumer.py", calls[5][1])
+        self.assertEqual(
+            [
+                [
+                    run.sys.executable,
+                    "scripts/ci/build_binding_source_bundle.py",
+                    "--root-manifest",
+                    "crates/sc-observability-dto/Cargo.toml",
+                    "--output",
+                    str(self.output / "core-bundle"),
+                ],
+                [
+                    run.sys.executable,
+                    "scripts/ci/validate_binding_bundle.py",
+                    "--bundle",
+                    str(self.output / "core-bundle"),
+                    "--evidence",
+                    str(self.output / "core-evidence.json"),
+                ],
+                [
+                    run.sys.executable,
+                    "scripts/ci/validate_binding_runtime.py",
+                    "--consumer-only",
+                    "--consumer-evidence",
+                    str(self.output / "binding-runtime-evidence.json"),
+                ],
+                [
+                    run.sys.executable,
+                    "scripts/ci/build_binding_source_bundle.py",
+                    "--root-manifest",
+                    "crates/sc-observability/Cargo.toml",
+                    "--output",
+                    str(self.output / "runtime-level-bundle"),
+                ],
+                [
+                    run.sys.executable,
+                    "scripts/ci/validate_binding_bundle.py",
+                    "--bundle",
+                    str(self.output / "runtime-level-bundle"),
+                    "--evidence",
+                    str(self.output / "runtime-level-evidence.json"),
+                    "--consumer-source",
+                    "scripts/ci/fixtures/runtime-level-consumer/candidate.rs",
+                ],
+                [
+                    run.sys.executable,
+                    "scripts/ci/validate_log_staged_consumer.py",
+                    "--version",
+                    "1.4.1",
+                    "--result-file",
+                    str(self.output / "log-bridge-evidence.json"),
+                ],
+            ],
+            calls,
+        )
 
     def test_sandbox_prerequisites_install_pinned_toolchain(self) -> None:
         with patch.object(run.platform, "system", return_value="Darwin"), patch.object(run.subprocess, "run") as execute:
