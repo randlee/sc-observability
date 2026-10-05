@@ -16,6 +16,7 @@ members = [
   "examples/otlp-sdk",
   "examples/log-settings",
   "tests/sc-observability-composition",
+  "scripts/api/metadata-reader",
 ]
 exclude = ["examples/atm-adapter-example"]
 resolver = "2"

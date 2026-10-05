@@ -111,6 +111,14 @@ class RunnerTests(unittest.TestCase):
             with self.subTest(suite=suite, sha=sha, output=output), self.assertRaises(ValueError):
                 run_suite.run(suite, sha, output, self.root)
 
+    def test_cli_unknown_suite_uses_shared_runner_validation(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(1, run_suite.main([
+                "--suite", "missing", "--source-sha", self.sha, "--output-dir", str(self.output),
+            ]))
+        self.assertIn("unknown suite: missing", stderr.getvalue())
+
     def test_entrypoint_receives_arguments_cwd_and_failure_is_preserved(self):
         self.runner.parent.mkdir(parents=True)
         self.runner.write_text(

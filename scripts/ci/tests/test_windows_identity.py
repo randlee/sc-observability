@@ -46,5 +46,20 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'before network policy'):
             identity.run(['unavailable-proof-program'])
 
+    def test_proof_environment_retains_attached_candidate_package(self):
+        identity=Identity.__new__(Identity)
+        identity.scratch=Path(self.id().replace('.', '_'))
+        try:
+            environment=identity.environment({
+                'SC_OBSERVABILITY_ATTACHED_PACKAGE': r'C:\\proof\\site-packages\\sc_observability\\__init__.py',
+                'UNRELATED_SECRET': 'must-not-pass',
+            })
+        finally:
+            import shutil
+            shutil.rmtree(identity.scratch, ignore_errors=True)
+        self.assertEqual(environment['SC_OBSERVABILITY_ATTACHED_PACKAGE'],
+                         r'C:\\proof\\site-packages\\sc_observability\\__init__.py')
+        self.assertNotIn('UNRELATED_SECRET', environment)
+
 
 if __name__=='__main__': unittest.main()

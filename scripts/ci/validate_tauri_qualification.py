@@ -23,12 +23,13 @@ from _python_sandbox import Sandbox, registered_checkouts
 from _tauri_webview import execute as execute_webview
 from _tauri_build_inputs import inventory, materialize, verify_inputs
 from build_binding_source_bundle import build, digest, verify_bundle, registry_identities
+from tauri_npm_artifact import produce as produce_npm_artifact
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / 'scripts/ci/fixtures/tauri-qualification'
 
 
-def run(arguments, cwd, log):
+def run(arguments, cwd, log, *, visible=False):
     command = [str(arg) for arg in arguments]
     if os.name == 'nt' and command[0] == 'npm':
         command[0] = 'npm.cmd'
@@ -37,6 +38,9 @@ def run(arguments, cwd, log):
                 'stdout': result.stdout, 'stderr': result.stderr})
     if result.returncode:
         raise RuntimeError(f'{command}:\n{result.stdout}\n{result.stderr}')
+    if visible:
+        print(result.stdout, end='', flush=True)
+        print(result.stderr, end='', file=sys.stderr, flush=True)
     return result.stdout
 
 
@@ -140,7 +144,7 @@ def main():
             package = ROOT / 'bindings/typescript'
             run(['npm', 'ci', '--ignore-scripts'], package, commands)
             run(['npm', 'run', 'build'], package, commands)
-            run(['npm', 'test'], package, commands)
+            run(['npm', 'test'], package, commands, visible=True)
             if bool(args.npm_archive) != bool(args.npm_manifest):
                 raise RuntimeError('shared npm artifact requires its exact producer manifest')
             if args.npm_archive:
@@ -150,7 +154,10 @@ def main():
                 shutil.copyfile(args.npm_archive, output / args.npm_archive.name)
                 shutil.copyfile(args.npm_manifest, output / 'npm-producer.json')
             else:
-                run(['npm', 'pack', '--pack-destination', output], package, commands)
+                produce_npm_artifact(
+                    report['source_commit'], output, package,
+                    lambda command, cwd: run(command, cwd, commands),
+                )
             archives = list(output.glob('*.tgz'))
             if len(archives) != 1:
                 raise RuntimeError('exactly one npm package archive is required')

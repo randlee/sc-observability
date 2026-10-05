@@ -25,6 +25,8 @@ import yaml
 from sc_observability import Ok
 from sc_observability.telemetry import Telemetry, TelemetryErr
 
+SOURCE_KINDS = ("sanity", "qa", "finding-counts")
+
 
 def _timestamp(value: object) -> str | None:
     """Return the canonical nanosecond UTC representation without inventing time."""
@@ -140,7 +142,7 @@ def sources(config: Mapping[str, object]) -> list[Source]:
             or not isinstance(item.get("path"), str)
             or not item["path"]
             or not isinstance(item.get("kind"), str)
-            or item["kind"] not in {"sanity", "qa", "finding-counts"}
+            or item["kind"] not in SOURCE_KINDS
             or ("phase" in item and item["phase"] is not None and not isinstance(item["phase"], str))
             or ("reviewer" in item and item["reviewer"] is not None and not isinstance(item["reviewer"], str))
         ):
@@ -189,7 +191,7 @@ def _common(source: Source, row: Mapping[str, object], config: Mapping[str, obje
 
 def map_row(source: Source, row: Mapping[str, object], config: Mapping[str, object]) -> dict[str, object] | None:
     """Map one source row. Invalid mandatory source fields produce no submission."""
-    if source.kind not in {"sanity", "qa", "finding-counts"}:
+    if source.kind not in SOURCE_KINDS:
         return None
     time = _timestamp(row.get("completed_at") or row.get("snapshot_at"))
     verdict = row.get("verdict")

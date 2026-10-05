@@ -1,6 +1,7 @@
 """Boundary failures must be detected before executing artifact contents."""
 import io
 import json
+import os
 import sys
 import tarfile
 import tempfile
@@ -9,7 +10,7 @@ import unittest
 import zipfile
 from argparse import Namespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -97,20 +98,55 @@ class DistributionTests(unittest.TestCase):
                     Path(temporary), dict(os.environ), timeout=0.5)
             self.assertLess(time.monotonic() - started, 10)
 
+    def test_linux_sandbox_prepends_pinned_rust_loader_to_python_only_inherited_path(self):
+        from _python_sandbox import Sandbox
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / 'home'
+            (home / '.cargo').mkdir(parents=True)
+            scratch = root / 'scratch'
+            scratch.mkdir()
+            connection = MagicMock()
+
+            def tool(command, **_):
+                if command[:4] == ['rustup', 'which', '--toolchain', '1.94.1']:
+                    return '/rust/1.94.1/bin/' + command[-1]
+                self.assertEqual(command, ['/rust/1.94.1/bin/rustc', '--print', 'sysroot'])
+                return '/rust/1.94.1\n'
+
+            with patch.dict(os.environ, {'PATH': '/bin', 'LD_LIBRARY_PATH': '/python-only/lib'}, clear=True), \
+                    patch('_python_sandbox.platform.system', return_value='Linux'), \
+                    patch('_python_sandbox.Path.home', return_value=home), \
+                    patch('_python_sandbox.subprocess.check_output', side_effect=tool), \
+                    patch('_python_sandbox.sysconfig.get_config_var', return_value='/python/lib'), \
+                    patch('_python_sandbox.socket.gethostbyname', return_value='198.51.100.1'), \
+                    patch('_python_sandbox.socket.create_connection', return_value=connection):
+                sandbox = Sandbox(scratch, [])
+
+            self.assertEqual(
+                sandbox.env['LD_LIBRARY_PATH'],
+                os.pathsep.join(('/rust/1.94.1/lib', '/python/lib', '/python-only/lib')),
+            )
+
     def test_relocated_conformance_corpus_is_an_exact_source_input(self):
         from stage_python_conformance import stage_conformance
         source = Path(__file__).resolve().parents[3]
         corpus = source / 'bindings/conformance/v1/conversion-cases.json'
         with tempfile.TemporaryDirectory() as temporary:
             tests = Path(temporary) / 'tests'
-            staged = stage_conformance(source, tests)
+            # This fixture proves relocation only. Production staging retains
+            # the default immutable-history check and receives an explicit
+            # accepted base from its workflow caller.
+            staged = stage_conformance(source, tests, verify_accepted_history=False)
             self.assertEqual(staged.relative_to(tests).as_posix(),
                              'conformance/v1/conversion-cases.json')
             self.assertEqual(staged.read_bytes(), corpus.read_bytes())
             cases = json.loads(staged.read_text(encoding='utf-8'))
             self.assertTrue(any(case.get('operation') == 'canonical_envelope' for case in cases))
             with self.assertRaises(FileNotFoundError):
-                stage_conformance(Path(temporary) / 'missing-source', tests)
+                stage_conformance(Path(temporary) / 'missing-source', tests,
+                                  verify_accepted_history=False)
 
     def test_tracked_source_copy_excludes_generated_caches_without_removing_them(self):
         import subprocess
@@ -145,7 +181,7 @@ class DistributionTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, '-I', '-c',
                  'import sys; sys.path.insert(0, sys.argv[1]); '
-                 'import _python_distribution, build_binding_source_bundle; '
+                 'import _python_distribution, build_binding_source_bundle, python_binding_validator, validate_python_distribution; '
                  'print("QUALIFICATION_HELPER_IMPORTS_PASSED")', str(qualification)],
                 capture_output=True, text=True, check=True,
             )
@@ -196,6 +232,124 @@ class DistributionTests(unittest.TestCase):
         for key in ('warnings_as_errors', 'asyncio_debug', 'embedding_in_each_cell'):
             with self.subTest(key=key), self.assertRaises(DistributionError):
                 runtime_options({key: 'false'})
+
+    def test_embedding_host_receives_only_the_installed_candidate_package(self):
+        from validate_python_distribution import run_embedding
+
+        class RecordingSandbox:
+            cargo = 'cargo'
+
+            def __init__(self):
+                self.env = {}
+                self.calls = []
+
+            def run(self, command, _cwd):
+                self.calls.append((command, dict(self.env)))
+                if command[0] == 'candidate-python':
+                    return json.dumps({'python': '3.10', 'python_full': 'fixture', 'base_prefix': '/base'})
+                if command[1:2] == ['metadata']:
+                    return '{}'
+                return ''
+
+        sandbox = RecordingSandbox()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'source'
+            scratch = Path(temporary) / 'scratch'
+            package = Path(temporary) / 'venv/site-packages/sc_observability/__init__.py'
+            (root / 'embedding').mkdir(parents=True)
+            scratch.mkdir()
+            package.parent.mkdir(parents=True)
+            package.write_text('fixture')
+            with patch('validate_python_distribution.embedded_environment_updates',
+                       return_value={'PYO3_PYTHON': 'candidate-python', 'PYTHONHOME': '/base'}), \
+                    patch('validate_python_distribution.verify_resolution', return_value=[]), \
+                    patch('validate_python_distribution.verify_embedding_features'), \
+                    patch('validate_python_distribution.verify_source'):
+                run_embedding(root, scratch, sandbox, 'candidate-python', package)
+
+        metadata_environment = next(environment for command, environment in sandbox.calls
+                                    if command[1:2] == ['metadata'])
+        host_environment = next(environment for command, environment in sandbox.calls
+                                if command[1:2] == ['run'])
+        self.assertNotIn('SC_OBSERVABILITY_ATTACHED_PACKAGE', metadata_environment)
+        self.assertEqual(host_environment['SC_OBSERVABILITY_ATTACHED_PACKAGE'], str(package.resolve()))
+        self.assertNotIn('PYTHONPATH', host_environment)
+        self.assertEqual(sandbox.env, {})
+
+    def test_installed_cell_passes_validated_candidate_origin_to_embedding(self):
+        from validate_python_distribution import cell
+
+        class SandboxFixture:
+            instances = []
+
+            def __init__(self, *_):
+                self.env = {}
+                self.commands = []
+                self.cargo = 'cargo'
+                self.__class__.instances.append(self)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def prove_denials(self, *_):
+                return {'checkout': True, 'cargo_cache': True, 'network': True}
+
+            def run(self, command, _cwd, **_):
+                if 'pytest' in command:
+                    Path(command[command.index('--junitxml') + 1]).write_text(
+                        '<testsuite><testcase classname="fixture" name="passes" /></testsuite>')
+                    return ''
+                if 'assert not any' in command[-1]:
+                    return json.dumps({
+                        'prefix': '/candidate',
+                        'package': '/candidate/lib/python/site-packages/sc_observability/__init__.py',
+                        'native': '/candidate/lib/python/site-packages/sc_observability/_native.so',
+                    })
+                return ''
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'source'
+            (root / 'tests').mkdir(parents=True)
+            (root / 'tests/example.py').write_text('pass\n')
+            output = Path(temporary) / 'output'
+            sdist = root / 'candidate.tar.gz'
+            sdist.write_bytes(b'candidate')
+            args = Namespace(checkout=root, output=output, sdist=sdist,
+                             wheel=root / 'candidate.whl', instrumented_wheel=None,
+                             allow_incomplete_runtime=False)
+            source = {
+                'runtime_suite': {
+                    'runtime_complete': True,
+                    'embedding_in_each_cell': True,
+                    'pytest_paths': ['tests/example.py'],
+                    'typing_paths': ['tests/example.py'],
+                },
+                'source_commit': 'a' * 40,
+                'expected_requires_python': '>=3.10',
+                'version': '1.5.0',
+            }
+            actual = {'platform': 'linux-x86_64', 'python': '3.10', 'python_full': 'candidate'}
+            package = Path('/candidate/lib/python/site-packages/sc_observability/__init__.py')
+            with patch('validate_python_distribution.registered_checkouts', return_value=[]), \
+                    patch('validate_python_distribution.extract_sdist', return_value=root), \
+                    patch('validate_python_distribution.verify_source', return_value=source), \
+                    patch('validate_python_distribution.policy_at', return_value={'platforms': [{'id': 'linux-x86_64'}]}), \
+                    patch('validate_python_distribution.actual_cell', return_value=actual), \
+                    patch('validate_python_distribution.inspect_wheel', return_value={'sha256': 'wheel'}), \
+                    patch('validate_python_distribution.execute'), \
+                    patch('validate_python_distribution.venv_python', return_value=Path('/candidate/bin/python')), \
+                    patch('validate_python_distribution.runtime_options', return_value=([], {})), \
+                    patch('validate_python_distribution.fault_paths', return_value=[]), \
+                    patch('validate_python_distribution.Sandbox', SandboxFixture), \
+                    patch('validate_python_distribution.run_embedding',
+                          return_value={'python_full': 'candidate'}) as embedding:
+                cell(args)
+
+        embedding.assert_called_once()
+        self.assertEqual(embedding.call_args.args[4], package)
 
     def test_binary_architecture_cannot_be_overridden_by_filename(self):
         from _python_distribution import verify_native_architecture

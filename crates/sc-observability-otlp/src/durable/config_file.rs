@@ -89,4 +89,27 @@ mod tests {
             Err(TelemetryConfigError::ConfigFile { .. })
         ));
     }
+
+    #[test]
+    fn telemetry_yaml_loader_preserves_unknown_consumer_keys_and_existing_rejections() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("telemetry.yaml");
+        std::fs::write(
+            &path,
+            "service: schema-test\nconsumer_extension: keep-me\notlp:\n  endpoint: http://collector:4318\nstore:\n  path: relative.db\n  consumer_extension: keep-me\n",
+        )
+        .unwrap();
+        let loaded = load_telemetry_file(&path).unwrap();
+        let overrides = ConfigOverrides::default();
+        let resolved =
+            resolve_config(ConfigSources::new(&overrides, Some(&loaded), &|_| None)).unwrap();
+        assert_eq!(resolved.store_path, directory.path().join("relative.db"));
+        assert_eq!(resolved.request_timeout, std::time::Duration::from_secs(10));
+
+        std::fs::write(&path, "store: not-a-mapping\n").unwrap();
+        assert!(matches!(
+            load_telemetry_file(&path),
+            Err(TelemetryConfigError::ConfigFile { .. })
+        ));
+    }
 }

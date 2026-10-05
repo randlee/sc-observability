@@ -20,11 +20,13 @@ import shlex
 import subprocess
 import sys
 import tomllib
-from collections import Counter
 from itertools import combinations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from scripts.api.api_rows import row_differences
+
 MANIFEST_PATH = ROOT / 'release/publish-artifacts.toml'
 TOOLCHAIN_PATH = Path(__file__).with_name('public-api-toolchain')
 RENDERER_DIR = ROOT / 'scripts/ci/fixtures/public-api-parity/surface-renderer'
@@ -401,19 +403,6 @@ def cell_key(cell: dict) -> tuple[str, str, str]:
 def rows_digest(rows: list[str]) -> str:
     """Order-independent integrity check that preserves duplicate rows."""
     return hashlib.sha256(json.dumps(sorted(rows), ensure_ascii=True).encode()).hexdigest()
-
-
-def row_differences(reference: list[str], candidate: list[str]) -> list[str]:
-    """Rows whose multiplicity differs; `-` only in the reference, `+` only in the candidate."""
-    before, after = Counter(reference), Counter(candidate)
-    lines = []
-    for row in sorted(set(before) | set(after)):
-        delta = after[row] - before[row]
-        if delta < 0:
-            lines.append(f'-{abs(delta)}x {row}' if abs(delta) > 1 else f'- {row}')
-        elif delta > 0:
-            lines.append(f'+{delta}x {row}' if delta > 1 else f'+ {row}')
-    return lines
 
 
 def failure_summary(log: str, limit: int = 300) -> str:

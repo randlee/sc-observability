@@ -109,7 +109,7 @@ e-4 owns the shared retirement edit at final publication, including stale invoca
 
 ## Contract-versioning work
 
-The user added e-8 through e-12: public API, binding/IPC, CLI, configuration and durable-store history. See [schema-versioning.md](schema-versioning.md). They run independently of the seven integration sprints and add no integration matrix cells or automatic workflows. The earlier API-governance exclusion applies to integration runners, not this newly authorized work.
+The user added e-8 through e-12: public API, binding/IPC, CLI, configuration and durable-store history. See [schema-versioning.md](schema-versioning.md). They add no integration matrix cells or standalone workflows. E-8 resumed after e-1 sanity acceptance and adds a fast check against already-built public API metadata to the existing platform unit jobs. Release-cut setup creates versioned baselines outside that check; the check itself runs no additional build. The earlier API-governance exclusion applies to integration runners, not this newly authorized work.
 
 ## Bounded integration execution
 

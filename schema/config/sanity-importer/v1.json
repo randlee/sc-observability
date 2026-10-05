@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SC Observability sanity importer YAML",
+  "type": "object",
+  "properties": {
+    "service": {
+      "type": "string"
+    },
+    "team": {
+      "type": "string"
+    },
+    "github": {
+      "type": "object",
+      "properties": {
+        "pr_url_template": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "otlp": {
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "store": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "sources": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "sanity",
+              "qa",
+              "finding-counts"
+            ]
+          },
+          "phase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reviewer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "kind"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true,
+  "x-sc-observability": {
+    "contract": "sanity-importer-yaml",
+    "selected_version": 1,
+    "source_paths": "unique",
+    "unknown_consumer_keys": "accepted"
+  }
+}
