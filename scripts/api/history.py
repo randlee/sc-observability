@@ -23,6 +23,11 @@ class ApiError(Exception):
     pass
 
 
+RUST_METADATA_V1 = 'rustc-1.94.1-metadata/v1'
+RUST_METADATA_V2 = 'rustc-1.94.1-metadata/v2'
+UNRELEASED_RUST_SNAPSHOT_VERSION = '1.5.0'
+
+
 def git(root, *args):
     result = subprocess.run(['git', *args], cwd=root, capture_output=True)
     if result.returncode:
@@ -52,6 +57,91 @@ def accepted_base(value=None, root=ROOT):
     return resolved
 
 
+def snapshot_bytes(document):
+    return (json.dumps(document, indent=2, sort_keys=True) + '\n').encode()
+
+
+def is_unreleased_rust_snapshot(name):
+    parts = Path(name).parts
+    return (len(parts) == 4 and parts[:2] == ('schema', 'api')
+            and parts[2].startswith('rust-')
+            and parts[3] == f'{UNRELEASED_RUST_SNAPSHOT_VERSION}.json')
+
+
+def compact_legacy_rows(rows):
+    """Remove only rows generated while expanding dependency blanket impls."""
+    blanket_labels = [row.removeprefix('blanket ') for row in rows if row.startswith('blanket ')]
+    generated_prefixes = tuple(
+        prefix + label + ' '
+        for label in blanket_labels
+        for prefix in ('generic ', 'bound ')
+    )
+    return sorted(row for row in rows
+                  if not row.startswith('blanket ') and not row.startswith(generated_prefixes))
+
+
+def encode_indices(indices):
+    """Encode sorted row indices as readable, stable inclusive ranges."""
+    ranges = []
+    start = end = None
+    for index in indices:
+        if start is None:
+            start = end = index
+        elif index == end + 1:
+            end = index
+        else:
+            ranges.append(str(start) if start == end else f'{start}-{end}')
+            start = end = index
+    if start is not None:
+        ranges.append(str(start) if start == end else f'{start}-{end}')
+    return ','.join(ranges)
+
+
+def decode_indices(value, length):
+    if not isinstance(value, str) or not value:
+        raise ApiError('malformed compact API row indices')
+    result = []
+    for segment in value.split(','):
+        bounds = segment.split('-')
+        if len(bounds) not in (1, 2) or not all(part.isdecimal() for part in bounds):
+            raise ApiError('malformed compact API row indices')
+        start = int(bounds[0])
+        end = int(bounds[-1])
+        if start > end:
+            raise ApiError('malformed compact API row indices')
+        result.extend(range(start, end + 1))
+    if (not result or result != sorted(set(result))
+            or result[-1] >= length or encode_indices(result) != value):
+        raise ApiError('malformed compact API row indices')
+    return result
+
+
+def migrate_unreleased_rust_snapshot(document):
+    """Deterministically project a Phase E draft v1 Rust snapshot to v2."""
+    if (document.get('schema'), document.get('format')) != (1, RUST_METADATA_V1):
+        raise ApiError('unsupported Rust API snapshot migration')
+    families = {
+        name: compact_legacy_rows(rows)
+        for name, rows in decode_families(document).items()
+    }
+    return {
+        'schema': 2,
+        'package': document['package'],
+        'version': document['version'],
+        'format': RUST_METADATA_V2,
+        **encode_families(families),
+    }
+
+
+def migration_matches_accepted_draft(name, accepted, current):
+    if not is_unreleased_rust_snapshot(name):
+        return False
+    try:
+        return snapshot_bytes(migrate_unreleased_rust_snapshot(json.loads(accepted))) == current
+    except (ApiError, KeyError, TypeError, json.JSONDecodeError):
+        return False
+
+
 def accepted_history(accepted_base_value=None, root=ROOT):
     """Return immutable accepted snapshots after checking every tracked byte."""
     base = accepted_base(accepted_base_value, root)
@@ -60,10 +150,41 @@ def accepted_history(accepted_base_value=None, root=ROOT):
         if name.endswith('.json'):
             accepted[name] = git(root, 'show', f'{base}:{name}')
             path = root / name
-            if not path.is_file() or path.read_bytes() != accepted[name]:
+            if not path.is_file():
+                raise ApiError(f'immutable accepted API history changed: {name} (baseline {base}); '
+                               'retain it and add a new package version')
+            current = path.read_bytes()
+            if current != accepted[name] and not migration_matches_accepted_draft(name, accepted[name], current):
                 raise ApiError(f'immutable accepted API history changed: {name} (baseline {base}); '
                                'retain it and add a new package version')
     return accepted
+
+
+def migrate_unreleased_rust_snapshots(accepted_base_value, root=ROOT):
+    """Apply the one approved v1-to-v2 draft migration without reading artifacts."""
+    if accepted_base_value == '0000000000000000000000000000000000000000' or not accepted_base_value:
+        raise ApiError('format migration requires an explicit accepted draft revision')
+    try:
+        # This command compares and rewrites only a deterministic representation
+        # of the supplied historical draft. It never uses this relaxed resolver
+        # for the normal fail-closed current-API comparison above.
+        base = git(root, 'rev-parse', '--verify', f'{accepted_base_value}^{{commit}}').decode().strip()
+    except ApiError as error:
+        raise ApiError('format migration requires an explicit accepted draft revision') from error
+    migrated = []
+    for name in git(root, 'ls-tree', '-r', '--name-only', base, '--', 'schema/api').decode().splitlines():
+        if not name.endswith('.json') or not is_unreleased_rust_snapshot(name):
+            continue
+        source = git(root, 'show', f'{base}:{name}')
+        path = root / name
+        if not path.is_file() or path.read_bytes() != source:
+            raise ApiError(f'cannot migrate changed accepted draft: {name}')
+        migrated_document = migrate_unreleased_rust_snapshot(json.loads(source))
+        path.write_bytes(snapshot_bytes(migrated_document))
+        migrated.append(name)
+    if not migrated:
+        raise ApiError('no unreleased Rust API snapshots available for migration')
+    return migrated
 
 
 def source_fingerprint(root=ROOT):
@@ -190,6 +311,8 @@ def assert_mutations(rows):
                       if prefix + module + '::' in row and not row.startswith(('impl ', 'bound impl ')))
     if any('NotExported' in row for row in rows):
         raise ApiError('private trait leaked into the public API projection')
+    if any(row.startswith('blanket ') for row in rows):
+        raise ApiError('dependency blanket implementation leaked into the public API projection')
     baseline = selected('baseline')
     for module, marker in [('signature', 'signature '), ('field', 'field '),
                            ('trait_bound', 'bound '), ('visibility', 'Alias')]:
@@ -201,11 +324,11 @@ def assert_mutations(rows):
 
 
 def encode_families(families):
-    # A canonical shared row table avoids repeating the same API 18 times in
-    # feature-family history. Family indices are derived data, never selectors.
+    # A canonical shared row table avoids repeating the same API in every
+    # feature family. Compact index ranges are derived data, never selectors.
     rows = sorted({row for family_rows in families.values() for row in family_rows})
     indices = {row: index for index, row in enumerate(rows)}
-    return {'rows': rows, 'families': {name: [indices[row] for row in sorted(set(values))]
+    return {'rows': rows, 'families': {name: encode_indices([indices[row] for row in sorted(set(values))])
                                      for name, values in sorted(families.items())}}
 
 
@@ -218,10 +341,17 @@ def decode_families(document):
         raise ApiError('malformed API configuration families')
     result = {}
     for name, indices in families.items():
-        if (not isinstance(name, str) or not isinstance(indices, list)
-                or not all(type(index) is int and 0 <= index < len(rows) for index in indices)
-                or indices != sorted(set(indices))):
+        if not isinstance(name, str):
             raise ApiError(f'malformed API row indices for {name}')
+        if isinstance(indices, list):
+            if (not all(type(index) is int and 0 <= index < len(rows) for index in indices)
+                    or indices != sorted(set(indices))):
+                raise ApiError(f'malformed API row indices for {name}')
+        else:
+            try:
+                indices = decode_indices(indices, len(rows))
+            except ApiError as error:
+                raise ApiError(f'malformed API row indices for {name}') from error
         result[name] = [rows[index] for index in indices]
     return result
 
@@ -255,10 +385,10 @@ def check_current(record, accepted_base, root=ROOT, capture=False):
         expected = updates.get(path)
         if expected is None:
             expected = json.loads(path.read_text()) if path.exists() else {
-                'schema': 1, 'package': entry['package'], 'version': entry['version'],
-                'format': 'rustc-1.94.1-metadata/v1', 'families': {}, 'rows': []}
+                'schema': 2, 'package': entry['package'], 'version': entry['version'],
+                'format': RUST_METADATA_V2, 'families': {}, 'rows': []}
         if (expected.get('schema'), expected.get('package'), expected.get('version'), expected.get('format')) != (
-                1, entry['package'], entry['version'], 'rustc-1.94.1-metadata/v1'):
+                2, entry['package'], entry['version'], RUST_METADATA_V2):
             raise ApiError(f'malformed API snapshot: {path}')
         decoded = decode_families(expected)
         previous = decoded.get(selected)
@@ -297,12 +427,16 @@ def main():
     parser.add_argument('--accepted-base')
     parser.add_argument('--check-accepted-history', action='store_true')
     parser.add_argument('--row-differences', action='store_true')
+    parser.add_argument('--migrate-unreleased-rust-snapshots', action='store_true')
     args = parser.parse_args()
-    if args.check_accepted_history == args.row_differences:
+    if sum((args.check_accepted_history, args.row_differences,
+            args.migrate_unreleased_rust_snapshots)) != 1:
         parser.error('choose exactly one operation')
     try:
         if args.check_accepted_history:
             print(json.dumps(sorted(accepted_history(args.accepted_base))))
+        elif args.migrate_unreleased_rust_snapshots:
+            print(json.dumps(migrate_unreleased_rust_snapshots(args.accepted_base)))
         else:
             payload = json.load(sys.stdin)
             print(json.dumps(row_differences(payload['reference'], payload['candidate'])))

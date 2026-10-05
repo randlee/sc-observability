@@ -19,14 +19,19 @@ class HistoryTests(unittest.TestCase):
         self.git('init', '-q')
         self.git('config', 'user.name', 'API test')
         self.git('config', 'user.email', 'api-test@example.invalid')
-        self.entry = {'package': 'example', 'version': '1.5.0-rc.1', 'features': [],
+        self.entry = {'package': 'example', 'version': '1.5.0', 'features': [],
                       'artifact': str(self.root / 'built.rlib')}
         (self.root / 'source.rs').write_text('pub fn method() {}\n')
         (self.root / 'built.rlib').write_bytes(b'current compiled metadata fixture')
         self.path = history.snapshot_path(self.entry, self.root)
         self.path.parent.mkdir(parents=True)
-        self.snapshot = {'schema': 1, 'package': 'example', 'version': '1.5.0-rc.1',
-                         'format': 'rustc-1.94.1-metadata/v1', **history.encode_families({'none': ['method()']})}
+        self.snapshot = {'schema': 1, 'package': 'example', 'version': '1.5.0',
+                         'format': history.RUST_METADATA_V1,
+                         'rows': ['blanket example::Value <T as dependency::Trait>',
+                                  'bound example::Value <T as dependency::Trait> T: Sized',
+                                  'generic example::Value <T as dependency::Trait> 0 T type',
+                                  'method()'],
+                         'families': {'none': [0, 1, 2, 3]}}
         self.path.write_text(json.dumps(self.snapshot))
         self.git('add', '.')
         self.git('commit', '-qm', 'accepted prerelease')
@@ -36,6 +41,8 @@ class HistoryTests(unittest.TestCase):
         (self.root / 'source.rs').write_text('pub fn method() {} // candidate\n')
         self.git('add', 'source.rs')
         self.git('commit', '-qm', 'candidate source')
+        self.snapshot = history.migrate_unreleased_rust_snapshot(self.snapshot)
+        self.path.write_bytes(history.snapshot_bytes(self.snapshot))
         self.record = {'entries': [self.entry], 'fixture': None,
                        'source_sha256': history.source_fingerprint(self.root)}
         self.rows = {self.entry['artifact']: ['method()']}
@@ -51,7 +58,7 @@ class HistoryTests(unittest.TestCase):
 
     def test_current_api_is_compared_not_snapshot_to_itself(self):
         self.rows[self.entry['artifact']] = ['method(u64)']
-        with self.assertRaisesRegex(history.ApiError, r'example 1.5.0-rc.1.*API differs'):
+        with self.assertRaisesRegex(history.ApiError, r'example 1.5.0.*API differs'):
             self.check()
 
     def test_candidate_commit_cannot_be_its_own_accepted_base(self):
@@ -72,6 +79,19 @@ class HistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(history.ApiError, 'immutable accepted API history changed'):
             self.check()
 
+    def test_dependency_blanket_rows_are_excluded_by_exact_v1_to_v2_migration(self):
+        self.assertEqual(self.snapshot['schema'], 2)
+        self.assertEqual(self.snapshot['format'], history.RUST_METADATA_V2)
+        self.assertEqual(self.snapshot['rows'], ['method()'])
+        self.assertEqual(self.snapshot['families'], {'none': '0'})
+        self.check()
+
+    def test_unreleased_rust_format_migration_rejects_semantic_tampering(self):
+        self.snapshot['rows'] = ['signature example::Value::changed fn()']
+        self.path.write_bytes(history.snapshot_bytes(self.snapshot))
+        with self.assertRaisesRegex(history.ApiError, 'immutable accepted API history changed'):
+            self.check()
+
     def test_accepted_deletion_is_rejected(self):
         self.path.unlink()
         with self.assertRaisesRegex(history.ApiError, 'immutable accepted API history changed'):
@@ -79,7 +99,7 @@ class HistoryTests(unittest.TestCase):
 
     def test_new_version_keeps_accepted_prerelease(self):
         previous = self.path.read_bytes()
-        self.entry['version'] = '1.5.0-rc.2'
+        self.entry['version'] = '1.5.1'
         self.rows[self.entry['artifact']] = ['method(u64)']
         self.check(capture=True)
         self.assertEqual(self.path.read_bytes(), previous)
@@ -122,6 +142,11 @@ class HistoryTests(unittest.TestCase):
         with patch.object(subprocess, 'run', side_effect=checked):
             self.check()
         self.assertTrue(commands)
+
+    def test_compact_family_indices_reject_noncanonical_ranges(self):
+        document = {'rows': ['a', 'b', 'c'], 'families': {'none': '0-1,2'}}
+        with self.assertRaisesRegex(history.ApiError, 'malformed API row indices'):
+            history.decode_families(document)
 
 
 class ArtifactTests(unittest.TestCase):

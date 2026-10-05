@@ -120,9 +120,38 @@ baseline for the next cut; it does not invent historical release snapshots.
 The metadata format is pinned to Rust 1.94.1. Compiler upgrades require explicit
 format review. Macros are observed through their compiled exports and expanded
 public items; macro expansion behavior is still covered by the existing macro
-consumer tests. Foreign implementations and dependency blanket/auto traits are
-inspected through compiler metadata, not binary symbol tables. Missing or
-unsupported metadata fails rather than silently reducing the public surface.
+consumer tests. Crate-owned public implementations and compiler-evaluated
+auto-trait capabilities are inspected through compiler metadata, not binary
+symbol tables. Dependency blanket implementations and the generic/bound rows
+created only while expanding them are deliberately excluded: they are
+dependency internals, not declarations made by the supported package. Missing
+or unsupported metadata fails rather than silently reducing the public surface.
+
+### Rust draft snapshot v1-to-v2 migration
+
+The initial unreleased Phase E Rust snapshots used
+`rustc-1.94.1-metadata/v1`: each family stored a pretty-printed array of row
+indices, and rows included dependency blanket implementation expansion. Version
+2 keeps the canonical row table but stores each family as sorted inclusive index
+ranges (`0-3,7,9-11`), and projects out exactly those `blanket` rows plus their
+generated `generic` and `bound` rows. Item declarations, public signatures,
+fields, variants, reexports, meaningful declared bounds, crate-owned trait
+implementations and auto-trait capabilities remain rows in v2.
+
+The one-time migration is deterministic and requires an explicit historical
+draft revision; it reads no artifact and runs no build:
+
+```sh
+python3 -m scripts.api.history --migrate-unreleased-rust-snapshots \
+  --accepted-base <phase-e-draft-revision>
+```
+
+It refuses a changed source snapshot and writes only the exact v1 projection.
+Normal API comparison separately verifies the current already-built artifact
+against v2, so a signature, declared-bound, field, variant, reexport, removal,
+or public capability change still produces the ordinary readable row diff. The
+migration allowance is limited to current `1.5.0` Rust Phase E draft snapshots;
+released history and Python/TypeScript snapshots stay immutable.
 
 Native release producers and `public_api_parity.py` remain unchanged and provide
 separate target/feature parity evidence. A local check establishes only its

@@ -16,10 +16,8 @@ extern crate rustc_trait_selection;
 use rustc_driver::{Callbacks, Compilation};
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
-use rustc_infer::infer::{DefineOpaqueTypes, TyCtxtInferExt};
-use rustc_middle::ty::{self, TyCtxt, Upcast};
+use rustc_middle::ty::{self, TyCtxt};
 use rustc_trait_selection::traits::auto_trait::{AutoTraitFinder, AutoTraitResult};
-use rustc_trait_selection::traits::query::evaluate_obligation::InferCtxtExt;
 use std::collections::{BTreeSet, HashSet};
 
 struct Surface<'tcx> {
@@ -261,63 +259,11 @@ impl<'tcx> Surface<'tcx> {
                 AutoTraitResult::ExplicitImpl => {}
             }
         }
-        // Use metadata obligations to test applicability, including dependency
-        // blanket implementations; never infer availability from symbol names.
-        for trait_id in tcx.visible_traits() {
-            if !tcx.visibility(trait_id).is_public()
-                || !tcx.visible_parent_map(()).contains_key(&trait_id)
-            {
-                continue;
-            }
-            if tcx
-                .lookup_stability(trait_id)
-                .is_some_and(|s| s.level.is_unstable())
-            {
-                continue;
-            }
-            for implementation in tcx.trait_impls_of(trait_id).blanket_impls() {
-                let template = tcx.impl_trait_ref(*implementation);
-                if !matches!(template.skip_binder().self_ty().kind(), ty::Param(_)) {
-                    continue;
-                }
-                let inference = tcx.infer_ctxt().build(ty::TypingMode::non_body_analysis());
-                let target = tcx
-                    .type_of(id)
-                    .instantiate(tcx, inference.fresh_args_for_item(rustc_span::DUMMY_SP, id));
-                let args = inference.fresh_args_for_item(rustc_span::DUMMY_SP, *implementation);
-                let applied = template.instantiate(tcx, args);
-                let cause = rustc_infer::traits::ObligationCause::dummy();
-                let environment = ty::ParamEnv::empty();
-                if inference
-                    .at(&cause, environment)
-                    .eq(DefineOpaqueTypes::Yes, applied.self_ty(), target)
-                    .is_err()
-                {
-                    continue;
-                }
-                let mut requirements = tcx
-                    .predicates_of(*implementation)
-                    .instantiate(tcx, args)
-                    .predicates;
-                requirements.push(applied.upcast(tcx));
-                let possible = requirements.into_iter().all(|predicate| {
-                    let obligation = rustc_infer::traits::Obligation::new(
-                        tcx,
-                        cause.clone(),
-                        environment,
-                        predicate,
-                    );
-                    inference
-                        .evaluate_obligation(&obligation)
-                        .is_ok_and(|result| result.may_apply())
-                });
-                if possible {
-                    let label = format!("{path} {}", template.instantiate_identity());
-                    self.rows.insert(format!("blanket {label}"));
-                    self.generics(*implementation, &label);
-                }
-            }
-        }
+        // Dependency blanket implementations are not declarations made by this
+        // package. They are transitive implementation detail and can change
+        // with a dependency without changing the supported surface. Retain
+        // compiler-evaluated auto-trait capabilities above and crate-owned
+        // implementations below; omit dependency blanket expansion entirely.
     }
 
     fn implementations(&mut self, krate: rustc_hir::def_id::CrateNum) {
