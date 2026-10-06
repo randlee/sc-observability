@@ -96,14 +96,14 @@ pub mod error_codes;
 
 mod bridge;
 mod callsite;
-#[cfg(feature = "v1")]
-mod compat;
 mod context;
 mod control;
 mod error;
 mod handle;
 mod health;
 mod mapping;
+#[cfg(feature = "v1")]
+mod v1;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -117,34 +117,6 @@ pub use bridge::{
     AttachmentOptions, BridgeEventDecision, BridgeEventPolicy, DetachError, LogAttachment,
     PolicyRejection, attach_logger,
 };
-#[cfg(feature = "v1")]
-#[doc(inline)]
-#[allow(
-    deprecated,
-    reason = "the released root re-exports the deprecated v1 facade"
-)]
-pub use compat::LogControl;
-#[cfg(feature = "v1")]
-#[doc(inline)]
-#[allow(
-    deprecated,
-    reason = "the released root re-exports the deprecated v1 owner"
-)]
-pub use compat::LogGuard;
-#[cfg(feature = "v1")]
-#[doc(inline)]
-#[allow(
-    deprecated,
-    reason = "the released root re-exports the deprecated v1 initializer"
-)]
-pub use compat::init;
-#[cfg(feature = "v1")]
-#[doc(inline)]
-#[allow(
-    deprecated,
-    reason = "the released root re-exports the deprecated v1 errors"
-)]
-pub use compat::{EmitError, FlushError, InitError, ShutdownError};
 #[doc(inline)]
 pub use control::{BridgeEvent, EmitOutcome};
 #[doc(inline)]
@@ -155,6 +127,34 @@ pub use error::{ShutdownOutcome, ShutdownReport, UnconfirmedShutdown};
 pub use health::{BRIDGE_HEALTH_SCHEMA_VERSION, BridgeHealthReport};
 #[doc(inline)]
 pub use sc_observability::v2::LoggerConfig;
+#[cfg(feature = "v1")]
+#[doc(inline)]
+#[allow(
+    deprecated,
+    reason = "the released root re-exports the deprecated v1 facade"
+)]
+pub use v1::LogControl;
+#[cfg(feature = "v1")]
+#[doc(inline)]
+#[allow(
+    deprecated,
+    reason = "the released root re-exports the deprecated v1 owner"
+)]
+pub use v1::LogGuard;
+#[cfg(feature = "v1")]
+#[doc(inline)]
+#[allow(
+    deprecated,
+    reason = "the released root re-exports the deprecated v1 initializer"
+)]
+pub use v1::init;
+#[cfg(feature = "v1")]
+#[doc(inline)]
+#[allow(
+    deprecated,
+    reason = "the released root re-exports the deprecated v1 errors"
+)]
+pub use v1::{EmitError, FlushError, InitError, ShutdownError};
 // Re-exported so consumers need no direct sc-observability-types dependency.
 #[doc(inline)]
 pub use sc_observability_types::{

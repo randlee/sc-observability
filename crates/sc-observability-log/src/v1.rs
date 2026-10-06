@@ -762,7 +762,7 @@ mod tests {
         }
 
         if !crate::handle::is_isolated_test_child(
-            "compat::tests::detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running",
+            "v1::tests::detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running",
         ) {
             return;
         }
@@ -1249,7 +1249,7 @@ mod tests {
         }
 
         if !crate::handle::is_isolated_test_child(
-            "compat::tests::synthetic_released_control_flush_preserves_non_running_phase_at_the_adapter_boundary",
+            "v1::tests::synthetic_released_control_flush_preserves_non_running_phase_at_the_adapter_boundary",
         ) {
             return;
         }
