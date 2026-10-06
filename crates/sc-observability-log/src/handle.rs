@@ -262,16 +262,169 @@ static WAIT_STOPPED_HOOK: OnceLock<Mutex<Option<mpsc::SyncSender<()>>>> = OnceLo
 static SHUTDOWN_WORK_HOOK: OnceLock<Mutex<Option<ShutdownCommand>>> = OnceLock::new();
 
 #[cfg(test)]
+const ISOLATED_TEST_CHILD_DEADLINE: Duration = Duration::from_secs(30);
+#[cfg(test)]
+const ISOLATED_TEST_CHILD_POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+#[cfg(test)]
+struct ReapIsolatedTestChildOnDrop {
+    child: Option<std::process::Child>,
+}
+
+#[cfg(test)]
+impl ReapIsolatedTestChildOnDrop {
+    fn new(child: std::process::Child) -> Self {
+        Self { child: Some(child) }
+    }
+
+    fn child_mut(&mut self) -> &mut std::process::Child {
+        self.child
+            .as_mut()
+            .expect("isolated test child remains guarded until it is reaped")
+    }
+
+    fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        self.child_mut().try_wait()
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        self.child_mut().kill()
+    }
+
+    fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        let status = self.child_mut().wait()?;
+        self.child = None;
+        Ok(status)
+    }
+}
+
+#[cfg(test)]
+impl Drop for ReapIsolatedTestChildOnDrop {
+    fn drop(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug)]
+enum IsolatedTestChildRun {
+    Completed(std::process::Output),
+    TimedOut {
+        elapsed: Duration,
+        status: std::process::ExitStatus,
+        stdout: Vec<u8>,
+        stderr: Vec<u8>,
+        kill_error: Option<std::io::Error>,
+    },
+}
+
+#[cfg(test)]
+fn read_isolated_test_child_output(
+    reader: impl std::io::Read + Send + 'static,
+) -> std::thread::JoinHandle<std::io::Result<Vec<u8>>> {
+    std::thread::spawn(move || {
+        let mut reader = reader;
+        let mut output = Vec::new();
+        std::io::Read::read_to_end(&mut reader, &mut output)?;
+        Ok(output)
+    })
+}
+
+#[cfg(test)]
+fn collect_isolated_test_child_output(
+    reader: std::thread::JoinHandle<std::io::Result<Vec<u8>>>,
+) -> Vec<u8> {
+    match reader.join() {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => format!("<capture failed: {error}>").into_bytes(),
+        Err(_) => b"<capture thread panicked>".to_vec(),
+    }
+}
+
+#[cfg(test)]
+fn run_isolated_test_child(
+    command: &mut std::process::Command,
+    deadline: Duration,
+) -> IsolatedTestChildRun {
+    let mut child = ReapIsolatedTestChildOnDrop::new(
+        command
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn isolated library test"),
+    );
+    let stdout = read_isolated_test_child_output(
+        child
+            .child_mut()
+            .stdout
+            .take()
+            .expect("piped isolated test child stdout"),
+    );
+    let stderr = read_isolated_test_child_output(
+        child
+            .child_mut()
+            .stderr
+            .take()
+            .expect("piped isolated test child stderr"),
+    );
+    let started = Instant::now();
+    loop {
+        if child
+            .try_wait()
+            .expect("poll isolated library test child")
+            .is_some()
+        {
+            let status = child.wait().expect("reap isolated library test child");
+            return IsolatedTestChildRun::Completed(std::process::Output {
+                status,
+                stdout: collect_isolated_test_child_output(stdout),
+                stderr: collect_isolated_test_child_output(stderr),
+            });
+        }
+        if started.elapsed() >= deadline {
+            let kill_error = child.kill().err();
+            let status = child
+                .wait()
+                .expect("reap timed-out isolated library test child");
+            return IsolatedTestChildRun::TimedOut {
+                elapsed: started.elapsed(),
+                status,
+                stdout: collect_isolated_test_child_output(stdout),
+                stderr: collect_isolated_test_child_output(stderr),
+                kill_error,
+            };
+        }
+        std::thread::sleep(ISOLATED_TEST_CHILD_POLL_INTERVAL);
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn is_isolated_test_child(test_name: &str) -> bool {
     const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_ISOLATED_LIB_TEST";
     if std::env::var(CHILD_ENV).as_deref() == Ok(test_name) {
         return true;
     }
-    let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+    let mut command = std::process::Command::new(std::env::current_exe().expect("test executable"));
+    command
         .args(["--exact", test_name, "--nocapture", "--test-threads=1"])
-        .env(CHILD_ENV, test_name)
-        .output()
-        .expect("spawn isolated library test");
+        .env(CHILD_ENV, test_name);
+    let output = match run_isolated_test_child(&mut command, ISOLATED_TEST_CHILD_DEADLINE) {
+        IsolatedTestChildRun::Completed(output) => output,
+        IsolatedTestChildRun::TimedOut {
+            elapsed,
+            status,
+            stdout,
+            stderr,
+            kill_error,
+        } => panic!(
+            "isolated {test_name} exceeded {ISOLATED_TEST_CHILD_DEADLINE:?} and was killed after {elapsed:?}: status={status}; kill_error={kill_error:?}; stdout={}\\nstderr={}",
+            String::from_utf8_lossy(&stdout),
+            String::from_utf8_lossy(&stderr),
+        ),
+    };
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -1146,6 +1299,46 @@ mod tests {
     use super::*;
     use std::sync::mpsc::sync_channel;
     use std::time::Instant;
+
+    #[test]
+    fn isolated_test_child_timeout_kills_and_reaps() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_ISOLATED_TEST_TIMEOUT_CHILD";
+        const TEST_NAME: &str = "handle::tests::isolated_test_child_timeout_kills_and_reaps";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            std::thread::sleep(Duration::from_secs(60));
+            return;
+        }
+
+        let mut command =
+            std::process::Command::new(std::env::current_exe().expect("test executable"));
+        command
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, "1");
+        let started = Instant::now();
+        let run = run_isolated_test_child(&mut command, Duration::from_millis(100));
+        let (elapsed, kill_error) = match run {
+            IsolatedTestChildRun::TimedOut {
+                elapsed,
+                kill_error,
+                ..
+            } => (elapsed, kill_error),
+            other @ IsolatedTestChildRun::Completed(_) => {
+                panic!("hung isolated test child must time out: {other:?}")
+            }
+        };
+        assert!(
+            kill_error.is_none(),
+            "timed-out child must be killed: {kill_error:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "deadline was not bounded: {elapsed:?}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "parent must return after killing and reaping the timed-out child"
+        );
+    }
 
     #[test]
     #[cfg(feature = "v1")]
