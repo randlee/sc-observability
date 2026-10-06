@@ -790,11 +790,14 @@ implementation review. No wildcard approval covers an unrelated dependency. ADR-
 amendment to ADR-018; the existing boundary manifest is the single machine
 allowlist and this section is its normative explanation.
 
-The OTLP crate's only dev-dependencies are `sc-observability`, `sc-observe`,
-and `tonic`. The first two support facade tests; `tonic` adds the `router`
-feature to the reviewed transport pin for the hermetic integration collector.
-The `[dev_dependencies]` section of the same policy file records them; `router`
-is never a normal dependency feature, and `tonic` stays bound to `otlp-sdk` only
+The OTLP crate's dev-dependencies support its tests: `sc-observability-types`
+with `test-double` supplies test fixtures, `tempfile` supports temporary-file
+tests, `sc-observability` and `sc-observe` support facade and error-registry
+tests, and `tokio` with `test-util` supports paused-time SDK tests. `tonic` adds
+the `router` feature for the hermetic integration collector. These remain
+test-only dependencies; the normal transport policy validates production
+dependency boundaries. `router` is enabled only through the dev-dependency
+declaration, while normal `tonic` use remains optional under `otlp-sdk`
 ([ADR-019 amendment](#adr-019-amendment-otlp-hermetic-test-collector)).
 
 ## 6.1 Query/Follow Dependency Order
