@@ -26,13 +26,12 @@ pub(crate) fn run(cli: &Cli) -> u8 {
 }
 
 fn execute(cli: &Cli) -> Outcome {
-    let outcome = match &cli.command {
+    match &cli.command {
         Command::Validate(args) => validate(args),
         Command::Emit(args) => emit(cli, args),
         Command::Flush(args) => flush(cli, args),
         Command::Status(args) => status(cli, args),
-    };
-    outcome
+    }
 }
 
 fn validate(args: &crate::cli::InputArgs) -> Outcome {
