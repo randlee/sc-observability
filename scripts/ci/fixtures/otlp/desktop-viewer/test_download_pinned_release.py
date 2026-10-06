@@ -10,6 +10,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import download_pinned_release as downloader
@@ -151,29 +152,41 @@ class PinnedReleaseDownloadTests(unittest.TestCase):
                     downloader._download_archive("https://example.test/archive.tgz",
                                                  target, "0" * 64)
 
-    def test_refuses_symlink_output_without_touching_target(self) -> None:
+    def _assert_refuses_effective_symlink_output(self, system: str,
+                                                symlink_available: bool) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             target = root / "keep.bin"
             target.write_bytes(b"keep")
-            link = root / "viewer"
-            try:
-                link.symlink_to(target)
-            except OSError:
-                # Windows can prohibit symlink creation without Developer Mode
-                # or the necessary privilege. Still exercise the refusal path.
-                with mock.patch.object(
-                    Path,
-                    "is_symlink",
-                    autospec=True,
-                    side_effect=lambda candidate: candidate == link,
-                ):
+            requested = root / "viewer"
+            effective = requested.with_name("viewer.exe") if system == "Windows" else requested
+            platform = SimpleNamespace(system=lambda: system)
+            with mock.patch.object(downloader, "platform", platform):
+                if symlink_available:
+                    effective.symlink_to(target)
                     with self.assertRaisesRegex(SystemExit, "symlink output"):
-                        downloader._output_path(str(link))
-            else:
-                with self.assertRaisesRegex(SystemExit, "symlink output"):
-                    downloader._output_path(str(link))
+                        downloader._output_path(str(requested))
+                else:
+                    # Windows can prohibit symlink creation without Developer Mode
+                    # or the necessary privilege. Exercise the same effective-path
+                    # refusal when no real link can be created by the test host.
+                    with mock.patch.object(
+                        Path,
+                        "is_symlink",
+                        autospec=True,
+                        side_effect=lambda candidate: candidate == effective,
+                    ):
+                        with self.assertRaisesRegex(SystemExit, "symlink output"):
+                            downloader._output_path(str(requested))
             self.assertEqual(target.read_bytes(), b"keep")
+
+    def test_refuses_effective_symlink_output_without_touching_target(self) -> None:
+        with self.subTest(platform="Linux", symlink_available=True):
+            self._assert_refuses_effective_symlink_output("Linux", True)
+        with self.subTest(platform="Windows", symlink_available=True):
+            self._assert_refuses_effective_symlink_output("Windows", True)
+        with self.subTest(platform="Windows", symlink_available=False):
+            self._assert_refuses_effective_symlink_output("Windows", False)
 
     def test_windows_output_path_appends_exe_suffix(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

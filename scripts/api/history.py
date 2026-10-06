@@ -73,7 +73,10 @@ def main() -> None:
         if args.check_accepted_history:
             print(json.dumps(sorted(accepted_history(args.accepted_base))))
         else:
-            from scripts.api.api_rows import row_differences
+            if __package__:
+                from .api_rows import row_differences
+            else:
+                from api_rows import row_differences
             payload = json.load(sys.stdin)
             print(json.dumps(row_differences(payload["reference"], payload["candidate"])))
     except (ApiError, KeyError, TypeError, json.JSONDecodeError) as error:

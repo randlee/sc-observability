@@ -374,6 +374,7 @@ jobs:
 
       - name: Compare native public API text without a build
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
+        shell: bash
         run: python3 scripts/ci/stock_public_api.py check --target-dir "$RUNNER_TEMP/e-api-public-api"
 
       - name: Run OTLP feature unit tests

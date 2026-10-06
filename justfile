@@ -24,7 +24,7 @@ test:
     python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
     cargo test --workspace --no-fail-fast
     cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked
-    python3 -m unittest scripts.ci.tests.test_prepare_release_staged_packages scripts.ci.tests.test_publish_retry_idempotency scripts.ci.tests.test_stock_public_api scripts.integrate.tests.test_dispatch scripts.integrate.tests.test_runner_workflow scripts.api.test_python_surface
+    python3 -m unittest scripts.ci.tests.test_prepare_release_staged_packages scripts.ci.tests.test_publish_retry_idempotency scripts.ci.tests.test_stock_public_api scripts.integrate.tests.test_dispatch scripts.integrate.tests.test_runner_workflow scripts.api.test_history scripts.api.test_python_surface
 
 # Public API checks; these need the nightly toolchain (see .github/workflows/ci.yml).
 public-api:
