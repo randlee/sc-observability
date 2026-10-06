@@ -1794,7 +1794,7 @@ assembly.
 Rule:
 
 - calling `emit_log()`, `emit_span()`, or `emit_metric()` after `shutdown()`
-  returns `Err(TelemetryError::Shutdown)`
+  returns `Err(v2::TelemetryError::Shutdown { context })`
 - this lifecycle rule is semantic only in this design doc; no telemetry handle
   typestate is required here
 - `flush()` attempts export of all ready batches
