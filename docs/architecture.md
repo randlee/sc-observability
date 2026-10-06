@@ -526,10 +526,10 @@ Owns:
 
 - `sc_observability_otlp::v2::Telemetry` (`RuntimeTelemetry`)
 - `sc_observability_otlp::v2::TelemetryConfig`
-- `OtelConfig`
-- `OtlpProtocol`
-- `SpanAssembler`
-- `CompleteSpan`
+- `sc_observability_otlp::v2::OtelConfig`
+- `sc_observability_otlp::v2::OtlpProtocol`
+- the runtime's internal `V2SpanAssembler`
+- the canonical `sc_observability_types::otlp::OtlpCompleteSpan` record
 - internal OTLP exporter contracts used by the runtime implementation
 - OTLP batching, retry, timeout, flush, and shutdown
 - `TelemetryHealthReport`, `ExporterHealth`, and `ExporterHealthState` defined
@@ -549,6 +549,8 @@ Configuration model:
   application layer
 - `sc_observability_otlp::v2::TelemetryConfig` is passed directly to
   `sc-observability-otlp`
+- `sc_observability_otlp::v2::OtelConfig` selects the exporter backend and
+  typed `v2::OtlpProtocol`
 - `TelemetryConfig` is not embedded in or derived from `ObservabilityConfig`
 
 Must not push OTLP concerns into the lower crates.
