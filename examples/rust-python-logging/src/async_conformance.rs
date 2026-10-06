@@ -1,4 +1,5 @@
 //! B.6 real embedded writer holds: only this executable owns test controls.
+use crate::installed_package_root;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use sc_observability_binding_runtime::{HostLoggingBackend, Operation, ProducerOrigin};
@@ -255,10 +256,9 @@ pub fn finalize(mode: &str) -> Result<(), String> {
                 sys.getattr("modules")?
                     .cast_into::<PyDict>()?
                     .set_item("sc_observability._native", module)?;
-                let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../bindings/python/sc-observability-py/python");
+                let package_root = installed_package_root()?;
                 sys.getattr("path")?
-                    .call_method1("insert", (0, source.to_string_lossy().as_ref()))?;
+                    .call_method1("insert", (0, package_root.to_string_lossy().as_ref()))?;
                 py.run(c"import asyncio\nfrom sc_observability import Ok,LogEvent,get_host_logger\nfrom sc_observability.async_logging import _pools\nlogger=get_host_logger().value\nreceipt=logger.submit(LogEvent(level='info',target='finalize.host',action='held'))\nassert isinstance(receipt,Ok)\nloop=asyncio.new_event_loop()\nwait=logger.flush_async(60000)\nloop.call_soon(wait.send,None)\nloop.run_until_complete(asyncio.sleep(0))\nassert len(_pools[logger._native.observer_key()].observers)==1\nloop.close()", None, None)
             };
             action().map_err(|error| error.to_string())

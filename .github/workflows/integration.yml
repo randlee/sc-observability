@@ -1,0 +1,85 @@
+name: Integration
+run-name: Integration ${{ inputs.dispatch_id || github.run_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Comma-separated suite selectors
+        type: string
+        default: wheel-cli-viewer,rust-viewer,collector,wheels,tauri,rust-consumers
+      os:
+        description: Comma-separated OS selectors
+        type: string
+        default: macos,windows,linux
+      dispatch_id:
+        description: Optional command correlation ID
+        type: string
+permissions:
+  contents: read
+jobs:
+  selection:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: select
+        env:
+          SUITES: ${{ inputs.suite }}
+          PLATFORMS: ${{ inputs.os }}
+        run: python scripts/integrate/dispatch.py --matrix --suite "$SUITES" --os "$PLATFORMS"
+  suite:
+    name: ${{ matrix.suite }} (${{ matrix.os }})
+    needs: selection
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.selection.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      CI: '1'
+      SOURCE_SHA: ${{ github.sha }}
+      SUITE: ${{ matrix.suite }}
+      # The packaged TypeScript API check reads immutable snapshots from this
+      # trusted prior revision; the step below makes it available to every
+      # suite runner and its npm subprocesses.
+      SC_API_ACCEPTED_BASE: origin/develop
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch trusted accepted API history base
+        shell: bash
+        run: git fetch origin develop:refs/remotes/origin/develop --depth=1
+      - name: Install Linux isolation helper for Rust consumers
+        if: ${{ matrix.suite == 'rust-consumers' && runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Run suite
+        env:
+          OUTPUT_DIR: ${{ runner.temp }}/integration-output
+        shell: bash
+        run: |
+          mkdir -p "$OUTPUT_DIR"
+          set -o pipefail
+          python scripts/integrate/run_suite.py --suite "$SUITE" --source-sha "$SOURCE_SHA" --output-dir "$OUTPUT_DIR" 2>&1 | tee "$OUTPUT_DIR/runner.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-${{ matrix.suite }}-${{ matrix.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/integration-output
+          if-no-files-found: warn

@@ -2,11 +2,18 @@ name: Python binding runtime
 
 on:
   workflow_dispatch:
+    inputs:
+      accepted_base:
+        type: string
+        required: true
+        description: Accepted ancestor SHA for immutable API history checks
 
 jobs:
   python-source-runtime:
     name: Python source runtime (ubuntu)
     runs-on: ubuntu-latest
+    env:
+      SC_API_ACCEPTED_BASE: ${{ inputs.accepted_base }}
     steps:
       - uses: actions/checkout@v5
         with:

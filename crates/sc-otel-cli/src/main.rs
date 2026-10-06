@@ -42,11 +42,7 @@ fn run() -> u8 {
     let cli = match cli::Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
-            let exit = if error.use_stderr() {
-                constants::EXIT_USAGE
-            } else {
-                constants::EXIT_OK
-            };
+            let exit = exit::parser_exit(&error);
             if let Err(print_error) = error.print() {
                 eprintln!("sc-otel: unable to render usage error: {print_error}");
             }

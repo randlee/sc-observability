@@ -1,7 +1,7 @@
 //! CLI-local failures that occur before the shared submission parser is reached.
 
 use crate::constants;
-use sc_observability_types::otlp::submission::TelemetryClientError;
+use sc_observability_types::{Remediation, otlp::submission::TelemetryClientError};
 use serde_json::Value;
 use std::{error::Error, fmt, path::PathBuf};
 
@@ -72,20 +72,25 @@ impl CliError {
     pub(crate) fn remediation(&self) -> Value {
         match self {
             Self::Input(InputError::Stdin { .. }) => {
-                Value::String("supply readable JSON on standard input".into())
+                local_remediation("supply readable JSON on standard input")
             }
             Self::Input(InputError::File { .. }) => {
-                Value::String("supply a readable JSON fragment file".into())
+                local_remediation("supply a readable JSON fragment file")
             }
             Self::Input(InputError::Fragment { .. }) => {
-                Value::String("correct the JSON fragment before retrying".into())
+                local_remediation("correct the JSON fragment before retrying")
             }
             Self::Internal(_) => {
-                Value::String("report the internal CLI failure with the result code".into())
+                local_remediation("report the internal CLI failure with the result code")
             }
             Self::Telemetry(error) => telemetry_remediation(error),
         }
     }
+}
+
+fn local_remediation(step: &str) -> Value {
+    serde_json::to_value(Remediation::recoverable(step, [] as [&str; 0]))
+        .expect("the local CLI remediation is serializable")
 }
 
 fn telemetry_remediation(error: &TelemetryClientError) -> Value {

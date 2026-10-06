@@ -1,0 +1,4 @@
+# Only the unpublished API test helper uses compiler-private metadata APIs.
+# Target libraries continue to compile on the pinned stable toolchain.
+[env]
+RUSTC_BOOTSTRAP = "sc_observability_api_test"

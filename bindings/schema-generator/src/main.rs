@@ -12,7 +12,7 @@ use schemars::{
     generate::{SchemaGenerator, SchemaSettings},
 };
 use serde_json::{Map, Value, json};
-use std::{error::Error, path::Path};
+use std::{collections::BTreeSet, error::Error, path::{Path, PathBuf}};
 fn register<T: JsonSchema>(
     g: &mut SchemaGenerator,
     entries: &mut Map<String, Value>,
@@ -561,21 +561,24 @@ fn canonical(value: &Value) -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(bytes)
 }
 
-fn schema_regeneration_command(output: &str, errors_output: &str) -> String {
-    format!(
-        "cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- --output {output} --errors-output {errors_output}"
-    )
-}
-
 fn write_or_check(
     path: &Path,
     bytes: &[u8],
     check: bool,
-    regeneration_command: &str,
+    contract_name: &str,
+    selected_version: u32,
 ) -> Result<(), Box<dyn Error>> {
     if check {
-        if std::fs::read(path)? != bytes {
-            return Err(generated_drift_error(path, regeneration_command).into());
+        let checked_in = std::fs::read(path)?;
+        if checked_in != bytes {
+            return Err(generated_drift_error(
+                path,
+                contract_name,
+                selected_version,
+                bytes,
+                &checked_in,
+            )
+            .into());
         }
     } else {
         if let Some(parent) = path.parent() {
@@ -586,10 +589,149 @@ fn write_or_check(
     Ok(())
 }
 
-fn generated_drift_error(path: &Path, regeneration_command: &str) -> String {
+fn selected_snapshot_paths(selected_version: u32) -> (PathBuf, PathBuf) {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../schema");
+    (
+        directory.join(format!("v{selected_version}.json")),
+        directory.join(format!("errors-v{selected_version}.json")),
+    )
+}
+
+fn selected_version_from_output_paths(output: &Path, errors_output: &Path) -> Result<u32, String> {
+    fn version(filename: Option<&std::ffi::OsStr>, prefix: &str) -> Result<u32, String> {
+        let filename = filename.and_then(std::ffi::OsStr::to_str).ok_or_else(|| {
+            format!("selected schema output must use {prefix}<version>.json")
+        })?;
+        let version = filename
+            .strip_prefix(prefix)
+            .and_then(|value| value.strip_suffix(".json"))
+            .ok_or_else(|| format!("selected schema output must use {prefix}<version>.json"))?;
+        version
+            .parse::<u32>()
+            .ok()
+            .filter(|version| *version > 0)
+            .ok_or_else(|| format!("selected schema output has invalid version in {filename}"))
+    }
+
+    let selected = version(output.file_name(), "v")?;
+    let errors = version(errors_output.file_name(), "errors-v")?;
+    if selected != errors {
+        return Err(format!(
+            "selected schema output v{selected} does not match error catalogue output v{errors}"
+        ));
+    }
+    Ok(selected)
+}
+
+fn reject_selected_snapshot_overwrite(
+    output: &Path,
+    errors_output: &Path,
+    selected_version: u32,
+) -> Result<(), Box<dyn Error>> {
+    let (selected_schema, selected_errors) = selected_snapshot_paths(selected_version);
+    let next_version = selected_version + 1;
+    let candidates = [
+        (output, &selected_schema, "binding schema"),
+        (errors_output, &selected_errors, "binding error catalogue"),
+    ];
+    for (candidate, selected, contract_name) in candidates {
+        if candidate.exists()
+            && selected.exists()
+            && std::fs::canonicalize(candidate)? == std::fs::canonicalize(selected)?
+        {
+            return Err(format!(
+                "refusing to overwrite immutable {contract_name} v{selected_version} at {}; \
+                 select v{next_version} and generate the new snapshot pair \
+                 bindings/schema/v{next_version}.json and \
+                 bindings/schema/errors-v{next_version}.json instead",
+                candidate.display(),
+            )
+            .into());
+        }
+    }
+    Ok(())
+}
+
+fn changed_json_fields(expected: &Value, checked_in: &Value) -> Vec<String> {
+    const MAX_FIELDS: usize = 8;
+
+    fn escaped_segment(segment: &str) -> String {
+        segment.replace('~', "~0").replace('/', "~1")
+    }
+
+    fn collect(expected: &Value, checked_in: &Value, path: &str, fields: &mut Vec<String>) {
+        if fields.len() == MAX_FIELDS || expected == checked_in {
+            return;
+        }
+
+        match (expected, checked_in) {
+            (Value::Object(expected), Value::Object(checked_in)) => {
+                let keys: BTreeSet<_> = expected.keys().chain(checked_in.keys()).collect();
+                for key in keys {
+                    let child = format!("{path}/{}", escaped_segment(key));
+                    match (expected.get(key), checked_in.get(key)) {
+                        (Some(expected), Some(checked_in)) => {
+                            collect(expected, checked_in, &child, fields);
+                        }
+                        _ => fields.push(child),
+                    }
+                    if fields.len() == MAX_FIELDS {
+                        return;
+                    }
+                }
+            }
+            (Value::Array(expected), Value::Array(checked_in)) => {
+                for index in 0..expected.len().max(checked_in.len()) {
+                    let child = format!("{path}/{index}");
+                    match (expected.get(index), checked_in.get(index)) {
+                        (Some(expected), Some(checked_in)) => {
+                            collect(expected, checked_in, &child, fields);
+                        }
+                        _ => fields.push(child),
+                    }
+                    if fields.len() == MAX_FIELDS {
+                        return;
+                    }
+                }
+            }
+            _ => fields.push(if path.is_empty() {
+                "/".to_owned()
+            } else {
+                path.to_owned()
+            }),
+        }
+    }
+
+    let mut fields = Vec::new();
+    collect(expected, checked_in, "", &mut fields);
+    fields
+}
+
+fn generated_drift_error(
+    path: &Path,
+    contract_name: &str,
+    selected_version: u32,
+    expected: &[u8],
+    checked_in: &[u8],
+) -> String {
+    let changed_fields = match (
+        serde_json::from_slice::<Value>(expected),
+        serde_json::from_slice::<Value>(checked_in),
+    ) {
+        (Ok(expected), Ok(checked_in)) => {
+            let fields = changed_json_fields(&expected, &checked_in);
+            if fields.is_empty() {
+                "non-semantic JSON formatting".to_owned()
+            } else {
+                fields.join(", ")
+            }
+        }
+        _ => "non-JSON content".to_owned(),
+    };
+
     format!(
-        "generated drift: {}; regenerate with `{regeneration_command}`",
-        path.display()
+        "generated drift: {contract_name} v{selected_version} at {}; changed fields: {changed_fields}. The selected v{selected_version} contract is immutable; an intentional contract change requires a new versioned snapshot. Do not overwrite retained v{selected_version}",
+        path.display(),
     )
 }
 
@@ -608,7 +750,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let output = output.ok_or("--output required")?;
     let errors_output = errors_output.ok_or("--errors-output required")?;
-    let regeneration_command = schema_regeneration_command(&output, &errors_output);
+    let selected_version = selected_version_from_output_paths(
+        Path::new(&output),
+        Path::new(&errors_output),
+    )?;
+    if !check {
+        reject_selected_snapshot_overwrite(
+            Path::new(&output),
+            Path::new(&errors_output),
+            selected_version,
+        )?;
+    }
     let mut defs = Map::new();
     let mut entrypoints = Map::new();
     for (is_output, prefix) in [(false, "Input"), (true, "Output")] {
@@ -630,18 +782,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let registry = serde_json::to_value(error_codes::REGISTRY)?;
     let canonical_error_codes = canonical_error_catalogue();
-    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":constants::WIRE_SCHEMA_VERSION,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":constants::MAX_WIRE_PAYLOAD_BYTES,"container_depth":constants::MAX_CONTAINER_DEPTH,"query_limit":constants::MAX_QUERY_LIMIT,"timeout_ms":constants::MAX_TIMEOUT_MS,"diagnostic_string_bytes":constants::MAX_DIAGNOSTIC_FIELD_BYTES,"remediation_steps":constants::MAX_REMEDIATION_STEPS},"defaults":{"query_limit":constants::DEFAULT_QUERY_LIMIT,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","canonical_error_codes":canonical_error_codes,"generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
+    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":format!("https://sc-observability.dev/bindings/v{selected_version}.json"),"$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":selected_version,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":constants::MAX_WIRE_PAYLOAD_BYTES,"container_depth":constants::MAX_CONTAINER_DEPTH,"query_limit":constants::MAX_QUERY_LIMIT,"timeout_ms":constants::MAX_TIMEOUT_MS,"diagnostic_string_bytes":constants::MAX_DIAGNOSTIC_FIELD_BYTES,"remediation_steps":constants::MAX_REMEDIATION_STEPS},"defaults":{"query_limit":constants::DEFAULT_QUERY_LIMIT,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","canonical_error_codes":canonical_error_codes,"generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
     write_or_check(
         Path::new(&output),
         &canonical(&schema)?,
         check,
-        &regeneration_command,
+        "binding schema",
+        selected_version,
     )?;
     write_or_check(
         Path::new(&errors_output),
         &canonical(&schema["x-sc-error-registry"])?,
         check,
-        &regeneration_command,
+        "binding error catalogue",
+        selected_version,
     )?;
     Ok(())
 }
@@ -688,17 +842,51 @@ mod tests {
     }
 
     #[test]
-    fn drift_error_includes_the_actual_schema_regeneration_outputs() {
+    fn drift_error_keeps_selected_v1_immutable_without_an_overwrite_command() {
         let output = "generated/schema.json";
-        let errors_output = "generated/errors.json";
-        let command = schema_regeneration_command(output, errors_output);
-        let error = generated_drift_error(Path::new(output), &command);
+        let error = generated_drift_error(
+            Path::new(output),
+            "binding schema",
+            1,
+            br#"{"schema_version":1}"#,
+            br#"{"schema_version":2}"#,
+        );
 
         assert!(error.contains(output));
-        assert!(error.contains(errors_output));
-        assert!(error.contains("--output generated/schema.json"));
-        assert!(error.contains("--errors-output generated/errors.json"));
-        assert!(!error.contains("bindings/schema/v1.json"));
+        assert!(error.contains("binding schema v1"));
+        assert!(error.contains("/schema_version"));
+        assert!(error.contains("new versioned snapshot"));
+        assert!(error.contains("Do not overwrite retained v1"));
+        assert!(!error.contains("--output"));
+    }
+
+    #[test]
+    fn write_mode_refuses_to_overwrite_the_selected_v1_snapshot_pair() {
+        let (schema, errors) = selected_snapshot_paths(1);
+        let error = reject_selected_snapshot_overwrite(&schema, &errors, 1)
+            .expect_err("selected v1 snapshots must be immutable in write mode")
+            .to_string();
+        assert!(error.contains("binding schema v1"));
+        assert!(error.contains("v2.json"));
+        assert!(error.contains("errors-v2.json"));
+    }
+
+    #[test]
+    fn versioned_output_pair_selects_the_contract_version() {
+        assert_eq!(
+            selected_version_from_output_paths(
+                Path::new("generated/v2.json"),
+                Path::new("generated/errors-v2.json"),
+            ),
+            Ok(2)
+        );
+        let error = selected_version_from_output_paths(
+            Path::new("generated/v2.json"),
+            Path::new("generated/errors-v1.json"),
+        )
+        .expect_err("schema and error output versions must agree");
+        assert!(error.contains("v2"));
+        assert!(error.contains("v1"));
     }
 
     #[test]
@@ -713,8 +901,14 @@ mod tests {
         let path = directory.join("schema.json");
         std::fs::write(&path, crlf).unwrap();
 
-        let error = write_or_check(&path, canonical, true, "regenerate-schema")
-            .expect_err("CRLF must be drift");
+        let error = write_or_check(
+            &path,
+            canonical,
+            true,
+            "binding schema",
+            1,
+        )
+        .expect_err("CRLF must be drift");
         assert!(error.to_string().contains("generated drift"));
         assert_eq!(std::fs::read(&path).unwrap(), crlf);
 

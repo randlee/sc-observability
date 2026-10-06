@@ -15,9 +15,16 @@ lint:
 
 # Workspace tests.
 test:
-    cargo test --workspace
+    python3 -m unittest discover -s scripts/integrate/suites/collector -p test_run.py
+    python3 -m unittest discover -s scripts/integrate/suites/rust-consumers -p test_run.py
+    python3 -m unittest discover -s scripts/integrate/suites/rust-viewer -p test_run.py
+    python3 -m unittest discover -s scripts/integrate/suites/tauri/tests -p test_run.py
+    python3 -m unittest discover -s scripts/integrate/suites/wheel-cli-viewer/tests -p test_run.py
+    python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
+    python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
+    cargo test --workspace --no-fail-fast
     cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked
-    python3 -m unittest scripts.ci.tests.test_prepare_release_staged_packages scripts.ci.tests.test_publish_retry_idempotency
+    python3 -m unittest scripts.ci.tests.test_prepare_release_staged_packages scripts.ci.tests.test_publish_retry_idempotency scripts.ci.tests.test_stock_public_api scripts.integrate.tests.test_dispatch scripts.integrate.tests.test_runner_workflow scripts.api.test_history scripts.api.test_python_surface
 
 # Public API checks; these need the nightly toolchain (see .github/workflows/ci.yml).
 public-api:
@@ -35,3 +42,8 @@ deny:
 
 # Full gate: lint, tests and the scoped dependency audit.
 validate: lint test deny
+
+# On-demand integration; selectors and results are documented in docs/integration.md.
+[positional-arguments]
+integrate branch *args:
+    python3 scripts/integrate/dispatch.py "$@"

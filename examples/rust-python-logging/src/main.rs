@@ -20,7 +20,7 @@ use sc_observability_binding_runtime::{ProducerOrigin, create_core_backend};
 use sc_observability_dto::{LevelDto, LogEventDto, LogOrderDto, LogQueryDto, ValueDto};
 use sc_observability_types::ServiceName;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -39,6 +39,68 @@ fn accepts_public_backend(_: Arc<dyn HostLoggingBackend>) {}
 
 fn runtime_error(message: impl Into<String>) -> PyErr {
     pyo3::exceptions::PyRuntimeError::new_err(message.into())
+}
+
+fn site_packages_root(expected_package: &std::path::Path) -> PyResult<PathBuf> {
+    expected_package
+        .parent()
+        .and_then(|package| package.parent())
+        .map(Path::to_path_buf)
+        .ok_or_else(|| runtime_error("installed candidate package has no site-packages parent"))
+}
+
+pub(crate) fn installed_package_root() -> PyResult<PathBuf> {
+    let expected_package = PathBuf::from(
+        std::env::var("SC_OBSERVABILITY_ATTACHED_PACKAGE").map_err(|_| {
+            runtime_error(
+                "SC_OBSERVABILITY_ATTACHED_PACKAGE must name the installed candidate package",
+            )
+        })?,
+    )
+    .canonicalize()
+    .map_err(|error| {
+        runtime_error(format!(
+            "installed candidate package is unavailable: {error}"
+        ))
+    })?;
+    site_packages_root(&expected_package)
+}
+
+fn import_installed_api<'py>(
+    py: Python<'py>,
+    sys: &Bound<'py, PyModule>,
+) -> PyResult<Bound<'py, PyModule>> {
+    let expected_package = PathBuf::from(
+        std::env::var("SC_OBSERVABILITY_ATTACHED_PACKAGE").map_err(|_| {
+            runtime_error(
+                "SC_OBSERVABILITY_ATTACHED_PACKAGE must name the installed candidate package",
+            )
+        })?,
+    )
+    .canonicalize()
+    .map_err(|error| {
+        runtime_error(format!(
+            "installed candidate package is unavailable: {error}"
+        ))
+    })?;
+    let package_root = installed_package_root()?;
+    sys.getattr("path")?
+        .call_method1("insert", (0, package_root.to_string_lossy().as_ref()))?;
+
+    let api = PyModule::import(py, "sc_observability")?;
+    let resolved_package = PathBuf::from(api.getattr("__file__")?.extract::<String>()?)
+        .canonicalize()
+        .map_err(|error| {
+            runtime_error(format!("attached package origin is unavailable: {error}"))
+        })?;
+    if resolved_package != expected_package {
+        return Err(runtime_error(format!(
+            "attached Python package resolved from {}, expected installed candidate {}",
+            resolved_package.display(),
+            expected_package.display(),
+        )));
+    }
+    Ok(api)
 }
 
 fn rust_event() -> LogEventDto {
@@ -114,12 +176,7 @@ fn run_example(py: Python<'_>) -> PyResult<()> {
     let sys = PyModule::import(py, "sys")?;
     let modules = sys.getattr("modules")?.cast_into::<PyDict>()?;
     modules.set_item("sc_observability._native", &module)?;
-    let source_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../bindings/python/sc-observability-py/python");
-    sys.getattr("path")?
-        .call_method1("insert", (0, source_root.to_string_lossy().as_ref()))?;
-
-    let api = PyModule::import(py, "sc_observability")?;
+    let api = import_installed_api(py, &sys)?;
     let attached = api.getattr("get_host_logger")?.call0()?;
     let kind: String = attached.getattr("kind")?.extract()?;
     if kind != "ok" {
@@ -195,4 +252,21 @@ fn run_example(py: Python<'_>) -> PyResult<()> {
     b5_context::after_stop(py)?;
     async_conformance::run(py)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::site_packages_root;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn finalization_candidate_root_is_the_installed_site_packages_parent() {
+        assert_eq!(
+            site_packages_root(Path::new(
+                "candidate/site-packages/sc_observability/__init__.py"
+            ))
+            .unwrap(),
+            PathBuf::from("candidate/site-packages")
+        );
+    }
 }

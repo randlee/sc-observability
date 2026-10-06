@@ -14,6 +14,15 @@ pub(crate) struct Classification {
     pub(crate) flush: Option<FlushReport>,
 }
 
+/// Maps clap's actual parser disposition to the CLI's process contract.
+pub(crate) fn parser_exit(error: &clap::Error) -> u8 {
+    if error.use_stderr() {
+        constants::EXIT_USAGE
+    } else {
+        constants::EXIT_OK
+    }
+}
+
 pub(crate) fn classify(error: &CliError) -> Classification {
     match error {
         CliError::Input(_) => rejected(constants::EXIT_INVALID_INPUT),

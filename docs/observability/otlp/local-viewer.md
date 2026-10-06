@@ -1,20 +1,23 @@
 # Local desktop viewer setup
 
 The local collector and viewer is the released `otel-desktop-viewer` v0.5.0
-selected and installed by the managed installer. The approved release is the
-macOS Apple Silicon archive at
-`https://github.com/CtrlSpice/otel-desktop-viewer/releases/download/v0.5.0/otel-desktop-viewer_darwin_arm64.tar.gz`,
-SHA-256 `e4a0051f827e6a40f52b097f490d7832af85bae577f4b33a69a986112c7618a4`.
-The same source commit is recorded in
-[`release.json`](../../../scripts/ci/fixtures/otlp/desktop-viewer/release.json).
-The pin supports macOS Apple Silicon (`darwin_arm64`) only. Setup provenance is
-the `obs-d9-local-viewer-setup` deliverables and
+selected and installed by the managed installer. The pinned release manifest
+supports macOS Apple Silicon (`darwin_arm64`), Linux x86-64 (`linux_amd64`),
+and Windows x86-64 (`windows_amd64`), with a separate archive URL, archive
+digest, executable digest, archive type, and binary name for each host. The
+manifest and its source commit are recorded in
+[`release.json`](../../../scripts/ci/fixtures/otlp/desktop-viewer/release.json);
+the downloader selects the current host entry and verifies both digests. The
+managed launchd service instructions in this document apply to macOS. Setup
+provenance is the `obs-d9-local-viewer-setup` deliverables and
 [`collector-environments.md`](../../plans/phase-d/collector-environments.md).
 The `desktop-viewer-factory-conformance` job in
-`otlp-conformance.yml` downloads that pinned artifact, starts an isolated
+`otlp-conformance.yml` downloads the pinned macOS artifact, starts an isolated
 viewer on dynamically selected loopback ports, and qualifies both public
-factory backends by querying their exported production records. Do not resolve
-`latest` at run time.
+factory backends by querying their exported production records. It remains a
+macOS-only check until the replacement `rust-viewer` suite has native results;
+the manifest's other entries do not imply CI proof for those hosts. Do not
+resolve `latest` at run time.
 
 ## Installed desktop service
 
@@ -45,8 +48,8 @@ it occupies one of the defaults; select explicit free port overrides instead.
 
 ## Isolated viewer invocation
 
-The harness is standard-library Python. The commands below show a local run of
-the pinned `darwin_arm64` artifact: download and verify it, then start an
+The harness is standard-library Python. The commands below show a local macOS
+run of the pinned `darwin_arm64` artifact: download and verify it, then start an
 isolated instance with a disposable database. The CI qualification job uses
 the same pinned release and harness lifecycle, but selects free loopback ports
 and invokes `assert-production` after each public-factory backend rather than
@@ -55,7 +58,7 @@ running this synthetic setup command verbatim.
 ```sh
 VIEWER_RELEASE=scripts/ci/fixtures/otlp/desktop-viewer/release.json
 VIEWER_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$VIEWER_RELEASE")"
-VIEWER_SHA256="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["binary_sha256"])' "$VIEWER_RELEASE")"
+VIEWER_SHA256="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["platforms"]["darwin_arm64"]["binary_sha256"])' "$VIEWER_RELEASE")"
 VIEWER_STATE_DIR="${TMPDIR:-/tmp}/sc-observability-d9-viewer-$$"
 python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py build/otel-desktop-viewer
 python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py ci \
