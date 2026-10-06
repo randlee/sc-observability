@@ -11,7 +11,7 @@ description = "Compile-only proof that the event macros need only the sc-observa
 publish = false
 
 [dependencies]
-sc-observability-log = { workspace = true, features = ["v1"] }
+sc-observability-log.workspace = true
 
 [lints]
 workspace = true

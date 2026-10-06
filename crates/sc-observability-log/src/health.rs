@@ -7,7 +7,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use sc_observability_types::{LevelFilter, LoggingHealthReport, Remediation};
@@ -60,13 +60,12 @@ static SNAPSHOT_CONFIG: OnceLock<SinkConfig> = OnceLock::new();
 static LAST_REPORT: Mutex<Option<LoggingHealthReport>> = Mutex::new(None);
 static LAST_LEVEL_STATE: Mutex<Option<sc_observability_types::LevelState>> = Mutex::new(None);
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 static FAIL_NEXT_SNAPSHOT: AtomicBool = AtomicBool::new(false);
 
 /// Makes the next health snapshot fail, for the isolated shutdown fixture.
-#[cfg(feature = "test_hooks")]
-#[doc(hidden)]
-pub fn fail_next_health_snapshot() {
+#[cfg(test)]
+pub(crate) fn fail_next_health_snapshot() {
     FAIL_NEXT_SNAPSHOT.store(true, Ordering::SeqCst);
 }
 
@@ -118,7 +117,7 @@ fn unavailable() -> ControlError {
 
 /// Takes a bridge snapshot, preserving core health rather than re-projecting it.
 pub(crate) fn snapshot() -> Result<BridgeHealthReport, ControlError> {
-    #[cfg(feature = "test_hooks")]
+    #[cfg(test)]
     if FAIL_NEXT_SNAPSHOT.swap(false, Ordering::SeqCst) {
         return Err(unavailable());
     }

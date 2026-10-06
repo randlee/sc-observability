@@ -4,8 +4,13 @@
 //! the canonical operation errors were introduced. Runtime ownership remains
 //! in the canonical bridge; adapters only translate its typed outcomes.
 
+#![allow(
+    deprecated,
+    reason = "this module owns the retained deprecated v1 facade"
+)]
+
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use sc_observability_types::{ErrorCode, LevelFilter, Remediation};
@@ -13,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{control, error_codes};
 
+#[deprecated(note = "use sc_observability_log::v2::InitError")]
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 /// Failure while initializing the released 1.x bridge facade.
@@ -51,6 +57,7 @@ pub enum InitError {
     },
 }
 
+#[deprecated(note = "use sc_observability_log::v2::FlushError")]
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 /// Failure while flushing the released 1.x bridge facade.
@@ -90,6 +97,7 @@ pub enum FlushError {
     },
 }
 
+#[deprecated(note = "use sc_observability_log::v2::ShutdownError")]
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 /// Failure while shutting down the released 1.x bridge facade.
@@ -120,6 +128,7 @@ pub enum ShutdownError {
     },
 }
 
+#[deprecated(note = "use sc_observability_log::v2::EventError")]
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 /// Failure while admitting an event through the released 1.x bridge facade.
@@ -322,6 +331,7 @@ impl EmitError {
     }
 }
 
+#[deprecated(note = "use sc_observability_log::v2::LogControl")]
 #[derive(Debug, Clone)]
 /// Cloneable, non-owning control for the installed released 1.x bridge.
 pub struct LogControl {
@@ -439,6 +449,102 @@ impl Deref for LogControl {
     fn deref(&self) -> &Self::Target {
         &ROOT_CONTROL
     }
+}
+
+/// Released 1.x lifecycle owner retained during the migration window.
+#[deprecated(note = "use sc_observability_log::v2::LogGuard")]
+#[must_use = "dropping the guard shuts the logger down"]
+#[derive(Debug)]
+pub struct LogGuard {
+    inner: crate::InnerLogGuard,
+}
+
+#[allow(
+    deprecated,
+    reason = "the released wrapper intentionally preserves its own path"
+)]
+#[allow(
+    clippy::missing_errors_doc,
+    reason = "the released methods retain their documented contract"
+)]
+impl LogGuard {
+    /// Returns a cloneable, non-owning released control.
+    #[must_use]
+    pub fn control(&self) -> LogControl {
+        LogControl::new()
+    }
+
+    /// Raises the staged core's effective filter.
+    pub fn elevate_level(
+        &mut self,
+        level: LevelFilter,
+        source: sc_observability_types::LevelChangeSource,
+    ) -> Result<sc_observability_types::LevelChange, sc_observability_types::LevelChangeError> {
+        self.inner.elevate_level(level, source)
+    }
+
+    /// Restores the configured runtime-level baseline.
+    pub fn reset_level(
+        &mut self,
+        source: sc_observability_types::LevelChangeSource,
+    ) -> Result<sc_observability_types::LevelChange, sc_observability_types::LevelChangeError> {
+        self.inner.reset_level(source)
+    }
+
+    /// Requests a bounded flush through the released error surface.
+    pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
+        crate::handle::flush_installed(timeout).map_err(|error| legacy_flush(&error, timeout))
+    }
+
+    /// Performs final flush and shutdown through the released error surface.
+    pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError> {
+        self.inner.shut_down = true;
+        crate::handle::shutdown_sequence(timeout).map_err(|error| legacy_shutdown(error, timeout))
+    }
+
+    /// Snapshots bridge-owned dropped-event counters.
+    #[must_use]
+    pub fn dropped_events(&self) -> crate::DroppedEvents {
+        self.inner.dropped_events()
+    }
+
+    /// Returns the cached active log path.
+    #[must_use]
+    pub fn active_log_path(&self) -> Option<&Path> {
+        self.inner.active_log_path()
+    }
+
+    /// Reads retained bridge health.
+    pub fn health(&self) -> Result<crate::BridgeHealthReport, crate::ControlError> {
+        self.inner.health()
+    }
+}
+
+impl Drop for LogGuard {
+    fn drop(&mut self) {}
+}
+
+/// Installs the released 1.x bridge facade over the canonical lifecycle owner.
+#[deprecated(note = "use sc_observability_log::v2::init")]
+#[allow(
+    deprecated,
+    reason = "the released signature retains the deprecated owner type"
+)]
+#[allow(
+    clippy::missing_errors_doc,
+    reason = "the released v1 error contract is documented on its canonical replacement"
+)]
+pub fn init(
+    config: crate::LoggerConfig,
+    options: crate::BridgeOptions,
+) -> Result<LogGuard, InitError> {
+    let configured = config.level;
+    let available = crate::ensure_static_level(configured)
+        .err()
+        .unwrap_or(configured);
+    crate::init_canonical(config, options)
+        .map(|inner| LogGuard { inner })
+        .map_err(|error| legacy_init(error, configured, available))
 }
 
 pub(crate) fn legacy_init(

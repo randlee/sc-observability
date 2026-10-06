@@ -6,7 +6,11 @@ publish = false
 
 [workspace]
 
+[features]
+static_level_cap = ["dep:log", "log/release_max_level_info"]
+
 [dependencies]
+log = { version = "0.4", optional = true }
 sc-observability = { path = "../../../crates/sc-observability", default-features = false }
 sc-observability-binding-runtime = { path = "../../../crates/sc-observability-binding-runtime", default-features = false }
 sc-observability-dto = { path = "../../../crates/sc-observability-dto" }

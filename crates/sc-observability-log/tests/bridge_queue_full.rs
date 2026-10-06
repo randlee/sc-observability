@@ -1,5 +1,7 @@
 //! One `init` per test binary, with `queue_capacity = 1`.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

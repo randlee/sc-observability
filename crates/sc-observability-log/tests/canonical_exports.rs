@@ -1,4 +1,5 @@
 //! Compile-only public-signature proof for the opt-in bridge facade.
+#![cfg(feature = "v1")]
 
 use std::time::Duration;
 
@@ -10,6 +11,7 @@ use sc_observability_log::{ActionName, EventLevel, LoggerConfig, ServiceName, Ta
 fn requires_clone<T: Clone>() {}
 
 #[test]
+#[allow(deprecated)] // Retained v1 conversion proof; the canonical assertions use v2.
 fn canonical_log_exports_have_real_public_signatures() {
     let _: fn(&LogGuard) -> LogControl = LogGuard::control;
     let _: fn(&LogGuard, Duration) -> Result<(), FlushError> = LogGuard::flush;

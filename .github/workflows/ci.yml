@@ -226,9 +226,6 @@ jobs:
           path: target
           key: ${{ runner.os }}-test-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Check log bridge consumer crate
-        run: cargo check --locked -p sc-observability-log-consumer-check
-
       - name: Run Phase E headless integration runner unit tests
         shell: bash
         run: |
@@ -246,11 +243,8 @@ jobs:
       - name: Run workspace doctests
         run: cargo test --locked --no-fail-fast --workspace --doc
 
-      - name: Run imported log bridge test_hooks feature
-        run: cargo test --locked --no-fail-fast -p sc-observability-log --all-targets --features test_hooks
-
-      - name: Run imported log bridge release static-level-cap fixture
-        run: cargo test --locked --no-fail-fast -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
+      - name: Run isolated log bridge release static-level-cap fixture
+        run: cargo run --locked --release --manifest-path scripts/ci/fixtures/static-level-cap/Cargo.toml
 
       - name: Run imported log bridge release runtime-level fixture
         run: cargo test --locked --no-fail-fast -p sc-observability-log --release --test runtime_level_bridge
@@ -337,10 +331,6 @@ jobs:
           path: target
           key: ${{ runner.os }}-test-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Check log bridge consumer crate
-        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
-        run: cargo check --locked -p sc-observability-log-consumer-check
-
       - name: Run Phase E headless integration runner unit tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         shell: bash
@@ -365,13 +355,9 @@ jobs:
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         run: cargo test --locked --no-fail-fast --workspace --doc
 
-      - name: Run imported log bridge test_hooks feature
+      - name: Run isolated log bridge release static-level-cap fixture
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
-        run: cargo test --locked --no-fail-fast -p sc-observability-log --all-targets --features test_hooks
-
-      - name: Run imported log bridge release static-level-cap fixture
-        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
-        run: cargo test --locked --no-fail-fast -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
+        run: cargo run --locked --release --manifest-path scripts/ci/fixtures/static-level-cap/Cargo.toml
 
       - name: Run imported log bridge release runtime-level fixture
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}

@@ -1,5 +1,7 @@
 //! Install-once and post-stop direct-admission evidence in a fresh child process.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

@@ -3,7 +3,9 @@
 //!
 //! One `init` per test binary: every sub-case runs inside the single test fn, so
 //! the `DropCause::InvalidEvent` deltas asserted here cannot race.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

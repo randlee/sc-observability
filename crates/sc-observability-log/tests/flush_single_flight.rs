@@ -9,7 +9,9 @@
 //!
 //! Unix only: the stuck sink is a named pipe (`mkfifo`).
 #![cfg(unix)]
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

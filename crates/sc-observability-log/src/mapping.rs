@@ -14,8 +14,8 @@ use std::borrow::Cow;
 use sc_observability_types::typed::IdentityFailure;
 use sc_observability_types::v2::IdentityError as CanonicalIdentityError;
 use sc_observability_types::{
-    ActionName, ErrorContext, Level, LogEvent, Observation, ProcessIdentity, ProcessIdentityPolicy,
-    Remediation, ServiceName, TargetCategory,
+    ActionName, ErrorContext, Level, LogEvent, OBSERVATION_SCHEMA_VERSION, ProcessIdentity,
+    ProcessIdentityPolicy, Remediation, ServiceName, TargetCategory, Timestamp,
 };
 use serde_json::{Map, Value};
 
@@ -385,14 +385,9 @@ pub(crate) fn assemble_event(
     identity: &ProcessIdentity,
     default_action: &ActionName,
 ) -> LogEvent {
-    // `Observation::new` yields the shared, pre-validated envelope version and a
-    // UTC timestamp without a fallible `SchemaVersion::new` call in this crate.
-    let Observation {
-        version, timestamp, ..
-    } = Observation::new(service.clone(), ());
     LogEvent {
-        version,
-        timestamp,
+        version: OBSERVATION_SCHEMA_VERSION.clone(),
+        timestamp: Timestamp::now_utc(),
         level: parts.level,
         service: service.clone(),
         target: parts.target,
