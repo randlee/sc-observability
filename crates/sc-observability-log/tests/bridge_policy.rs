@@ -1,5 +1,7 @@
 //! Policy admission and panic containment fixtures for an attached host logger.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::expect_used,
     clippy::unwrap_used,
     clippy::panic,
@@ -9,7 +11,6 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-#[allow(deprecated)]
 use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegistration};
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
@@ -49,7 +50,6 @@ struct RecordingSink {
     events: Arc<Mutex<Vec<LogEvent>>>,
 }
 
-#[allow(deprecated)]
 impl LogSink for RecordingSink {
     fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
         self.events

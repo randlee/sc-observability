@@ -1,5 +1,7 @@
 //! The released root control converts to the canonical facade without another owner.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::expect_used,
     clippy::unwrap_used,
     reason = "one isolated integration test owns the process-global bridge"

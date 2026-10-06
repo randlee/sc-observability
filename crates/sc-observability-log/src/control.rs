@@ -210,10 +210,9 @@ pub(crate) fn assemble_event(
         }
         fields.insert(key, value);
     }
-    let observation = sc_observability_types::Observation::new(service.clone(), ());
     Ok(sc_observability_types::LogEvent {
-        version: observation.version,
-        timestamp: observation.timestamp,
+        version: sc_observability_types::OBSERVATION_SCHEMA_VERSION.clone(),
+        timestamp: sc_observability_types::Timestamp::now_utc(),
         level: event.level,
         service: service.clone(),
         target: event.target,

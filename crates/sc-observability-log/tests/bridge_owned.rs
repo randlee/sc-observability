@@ -1,5 +1,7 @@
 //! Owned initialization excludes a competing host attachment.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::expect_used,
     clippy::panic,
     reason = "integration fixture keeps setup failures explicit"

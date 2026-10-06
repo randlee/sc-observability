@@ -1,5 +1,5 @@
 use sc_observability_binding_runtime::{
-    HostLoggingBackend, OperationState, ProducerOrigin, bridge_backend, create_core_backend,
+    HostLoggingBackend, OperationState, ProducerOrigin, bridge_backend_v2, create_core_backend,
 };
 use sc_observability_dto::{self as dto, AdmissionDto, CompletionDto, Failure};
 use sc_observability_types::{LevelChangeSource, LevelFilter, ProcessIdentityPolicy, ServiceName};
@@ -124,7 +124,7 @@ fn core_roundtrip_and_surviving_read_handles() {
 #[test]
 fn bridge_roundtrip_preserves_host_ownership() {
     let temp = tempfile::tempdir().unwrap();
-    let host = sc_observability_log::init(
+    let host = sc_observability_log::v2::init(
         config(temp.path()),
         sc_observability_log::BridgeOptions {
             default_action: sc_observability_types::ActionName::new("native.default").unwrap(),
@@ -133,7 +133,7 @@ fn bridge_roundtrip_preserves_host_ownership() {
     )
     .unwrap();
     let control = host.control();
-    let backend = bridge_backend(control.clone()).unwrap();
+    let backend = bridge_backend_v2(control.clone()).unwrap();
     exercise(&backend);
     let snapshot = backend.health().unwrap();
     let bridge = snapshot.bridge.as_ref().unwrap();

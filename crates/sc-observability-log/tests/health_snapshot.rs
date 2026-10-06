@@ -1,5 +1,7 @@
 //! Native health keeps the core report intact and retains it after shutdown.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

@@ -735,6 +735,10 @@ impl log::Log for Bridge {
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "unit tests retain coverage of the released v1 facade"
+)]
 mod tests {
     use super::*;
 
@@ -908,7 +912,7 @@ mod tests {
 
         // Installed, below the effective level.
         let root = tempfile::tempdir().expect("temporary log root");
-        let guard = crate::init(
+        let guard = crate::v2::init(
             crate::LoggerConfig::default_for(
                 ServiceName::new("bridge-skip-installed").expect("service name"),
                 root.path().to_path_buf(),

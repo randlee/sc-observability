@@ -486,6 +486,7 @@ impl Coordinator {
     }
 
     #[cfg(feature = "test-hooks")]
+    #[doc(hidden)]
     pub(crate) fn force_revision_exhaustion_for_test(&self) -> Result<(), Failure> {
         let Backend::Core { level, .. } = &self.backend else {
             return Err(error::closed());
@@ -542,6 +543,7 @@ fn core_parts(
 }
 
 #[cfg(feature = "test-hooks")]
+#[doc(hidden)]
 pub(crate) fn core_from_test_factory(
     build: impl FnOnce() -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), Failure>,
 ) -> Result<Arc<Coordinator>, Failure> {

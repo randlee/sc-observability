@@ -1,7 +1,9 @@
 //! Compiles the shared fixture `tests/compat/events.rs` against `tracing` 0.1
 //! (compile-only) and against `sc_observability_log` (executed and asserted
 //! against the JSONL output). One `init` per test binary.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

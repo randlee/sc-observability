@@ -3,7 +3,9 @@
 //! R-A4-003: `Bridge::log` renders `record.args()` and key-values inside the one
 //! emit guard, so a panicking or logging `Display` implementation is contained
 //! and counted exactly once. Every sub-case runs inside the single test fn.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

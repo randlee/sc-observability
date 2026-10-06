@@ -12,8 +12,9 @@
 
 use std::time::Duration;
 
+use sc_observability_log::v2::FlushError;
 use sc_observability_log::{
-    ActionName, BridgeOptions, FlushError, LevelFilter, LifecyclePhase, LoggerConfig, ServiceName,
+    ActionName, BridgeOptions, LevelFilter, LifecyclePhase, LoggerConfig, ServiceName,
 };
 use sc_observability_log_consumer_check::status::read_status;
 
@@ -42,7 +43,7 @@ fn consumer_reads_health_and_flushes_through_control_only() {
         default_action: ActionName::new("log.record").unwrap(),
         parse_bracket_action: false,
     };
-    let guard = sc_observability_log::init(config, options).unwrap();
+    let guard = sc_observability_log::v2::init(config, options).unwrap();
     let control = guard.control();
 
     sc_observability_log::info!(target: "consumer", "record seen by the consumer");
@@ -60,11 +61,6 @@ fn consumer_reads_health_and_flushes_through_control_only() {
     guard.shutdown(Duration::from_secs(5)).unwrap();
 
     let stopped = read_status(&control, Duration::from_secs(1));
-    assert!(matches!(
-        stopped.flush,
-        Err(FlushError::NotRunning {
-            phase: LifecyclePhase::Stopped,
-        })
-    ));
+    assert!(matches!(stopped.flush, Err(FlushError::Drain { .. })));
     assert_eq!(stopped.health.unwrap().lifecycle, LifecyclePhase::Stopped);
 }
