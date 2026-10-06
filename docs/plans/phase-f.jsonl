@@ -1,8 +1,8 @@
-{"sprint": "obs-f-1"}
-{"sprint": "obs-f-2"}
-{"sprint": "obs-f-3"}
-{"sprint": "obs-f-4"}
-{"sprint": "obs-f-5"}
-{"sprint": "obs-f-6"}
-{"sprint": "obs-f-7"}
-{"sprint": "obs-f-8"}
+{"sprint": "f-1"}
+{"sprint": "f-2", "depends_on": ["f-1"]}
+{"sprint": "f-3", "depends_on": ["f-1"]}
+{"sprint": "f-4", "depends_on": ["f-1"]}
+{"sprint": "f-5", "depends_on": ["f-1"]}
+{"sprint": "f-6", "depends_on": ["f-1"]}
+{"sprint": "f-7", "depends_on": ["f-1"]}
+{"sprint": "f-8", "depends_on": ["f-2", "f-3", "f-4", "f-5", "f-6", "f-7"]}
