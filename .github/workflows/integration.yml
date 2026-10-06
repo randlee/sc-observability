@@ -46,6 +46,10 @@ jobs:
       CI: '1'
       SOURCE_SHA: ${{ github.sha }}
       SUITE: ${{ matrix.suite }}
+      # The packaged TypeScript API check reads immutable snapshots from this
+      # trusted prior revision; the step below makes it available to every
+      # suite runner and its npm subprocesses.
+      SC_API_ACCEPTED_BASE: origin/develop
     steps:
       - uses: actions/checkout@v5
         with:
@@ -53,6 +57,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Fetch trusted accepted API history base
+        shell: bash
+        run: git fetch origin develop:refs/remotes/origin/develop --depth=1
       - name: Install Linux isolation helper for Rust consumers
         if: ${{ matrix.suite == 'rust-consumers' && runner.os == 'Linux' }}
         shell: bash

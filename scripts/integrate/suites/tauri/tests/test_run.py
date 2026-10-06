@@ -129,6 +129,35 @@ class TauriRunnerTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(found_archive.read_bytes()).hexdigest(), producer["sha256"])
             self.assertTrue(bundle.is_dir())
 
+    def test_run_propagates_the_trusted_history_base_to_qualification(self):
+        source = "a" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "artifacts/npm/sc-observability-1.0.0.tgz"
+            archive.parent.mkdir(parents=True)
+            archive.write_bytes(b"immutable archive")
+            manifest = archive.with_name("npm-producer.json")
+            manifest.write_text(json.dumps({"filename": archive.name}))
+            bundle = root / "artifacts/rust-bundle"
+            bundle.mkdir(parents=True)
+            evidence = root / "evidence"
+            output = root / "output"
+
+            def qualified(name, environment, received_evidence, _output):
+                self.assertEqual("Linux", name)
+                self.assertEqual("origin/develop", environment["SC_API_ACCEPTED_BASE"])
+                self.assertEqual(evidence, received_evidence)
+                received_evidence.mkdir()
+
+            with patch.dict("os.environ", {"CI": "1", "SC_API_ACCEPTED_BASE": "origin/develop"}, clear=True), \
+                    patch.object(tauri_runner, "verify_source"), \
+                    patch.object(tauri_runner, "platform_name", return_value="Linux"), \
+                    patch.object(tauri_runner, "prepare_platform"), \
+                    patch.object(tauri_runner, "prepare_artifacts", return_value=(archive, manifest, bundle)), \
+                    patch.object(tauri_runner, "run_qualification", side_effect=qualified), \
+                    patch.object(tauri_runner, "QUALIFICATION_EVIDENCE_DIRECTORY", evidence):
+                tauri_runner.run(source, output)
+
 
 if __name__ == "__main__":
     unittest.main()
