@@ -51,6 +51,7 @@ use sc_observability::{LoggerConfig, RetainedLogPolicy, Running, Stopped};
 #[cfg(feature = "v1")]
 use sc_observability_types::DiagnosticInfo;
 #[cfg(feature = "v1")]
+#[allow(deprecated)]
 use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::v2::{
     FlushError as CanonicalFlushError, InitError as CanonicalInitError, ObservationFilter,
@@ -395,6 +396,7 @@ enum RunningLogger {
 enum RunningFlushError {
     Canonical(CanonicalFlushError),
     #[cfg(feature = "v1")]
+    #[allow(deprecated)]
     Released(FlushFailure),
 }
 
@@ -412,6 +414,7 @@ fn released_log_error_summary(error: LogError) -> DiagnosticSummary {
     }
 }
 
+#[allow(deprecated)]
 impl RunningFlushError {
     fn summary(&self) -> DiagnosticSummary {
         match self {
@@ -2032,6 +2035,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn running_flush_error_arms_preserve_context_and_source_identity() {
         fn context() -> Box<ErrorContext> {
             Box::new(

@@ -12,6 +12,7 @@ use sc_observability_types::v2::{
 };
 #[allow(deprecated)]
 use sc_observability_types::{InitError as LegacyInitError, ServiceName, ToolName};
+#[allow(deprecated)]
 use sc_observability_types::{
     ObservabilityHealthProvider, ObservabilityHealthReport, Observation, ObservationError,
     typed::{FlushFailure, InitFailure, ShutdownFailure},
@@ -108,6 +109,7 @@ fn released_root_observe_exports_keep_their_error_identities() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn released_typed_helpers_keep_their_public_signatures() {
     let _: fn(ToolName, PathBuf) -> Result<LegacyConfig, InitFailure> =
         LegacyConfig::default_for_typed;
