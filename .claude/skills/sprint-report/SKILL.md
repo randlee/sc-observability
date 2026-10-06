@@ -47,7 +47,7 @@ Local render intermediates live under
 not committed. State-only refreshes reuse the existing layout.
 
 To skip writing next to the plan, pass `--output <prefix>` to
-`sprint-report --dag` or `--view`. The legacy `--dag --open` option explicitly
+`.claude/skills/sprint-report/scripts/sprint-report --dag` or `--view`. The legacy `--dag --open` option explicitly
 opens the PNG in Preview on macOS (default image viewer elsewhere); do not use
 it for `/sprint-review`. Diagram modes are mutually exclusive with `--table`
 and `--detailed`. `--root` and `--index` work in every mode. Diagram generation

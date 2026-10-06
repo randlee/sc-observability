@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Judge prompt rewrites with Jev: per-requirement keep/drop plus clarity.
 
-judge.py --key key.json --original original.txt --out DIR [--client scripts/jev_client.py] CAND.txt...
+judge.py --key key.json --original original.txt --out DIR [--client .claude/skills/atm-bd-orchestration/scripts/jev_client.py] CAND.txt...
 Writes DIR/<cand>.req.json and DIR/<cand>.json (Jev answers) and prints one row per
 candidate; each value is the choice and Jev's probability for it. A failed row carries the
 client's exit code, JSON error, unparsed stdout and stderr verbatim.
@@ -71,7 +71,7 @@ def main(argv=None):
     a.add_argument("--key", required=True, type=Path)
     a.add_argument("--original", required=True, type=Path)
     a.add_argument("--out", required=True, type=Path)
-    a.add_argument("--client", type=Path, default=Path("scripts/jev_client.py"))
+    a.add_argument("--client", type=Path, default=Path(__file__).resolve().parents[2] / "atm-bd-orchestration/scripts/jev_client.py")
     a.add_argument("cands", nargs="+", type=Path)
     o = a.parse_args(argv)
     key, orig = json.loads(o.key.read_text()), o.original.read_text()

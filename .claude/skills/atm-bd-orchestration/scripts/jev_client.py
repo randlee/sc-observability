@@ -136,6 +136,8 @@ CLIENT_MESSAGES = re.compile("|".join([
     r"Jev connection failed or timed out", r"Jev HTTP \d{3}; response body withheld",
     r"Jev response exceeded size limit", r"Jev response was not JSON", r"Jev retry budget exhausted",
     r"Startup probe returned the wrong literal choice", r"Request file unavailable or invalid JSON",
+    r"Assignment lacks deliverable text, worktree, commits or file lists",
+    r"Committed evidence unreadable at the pinned commits",
 ]))
 RECEIPT_KEYS = ("model", "question", "choice", "probabilities", "response_id", "request_sha256", "mac")
 
@@ -177,6 +179,32 @@ def startup_request():
     }}
 
 
+def assignment_request(assignment):
+    """The sanity request, built from the assignment so no agent writes it: the deliverable text verbatim,
+    the committed diff of the changed files and the context files at the pinned commit."""
+    try:
+        text, worktree = assignment["deliverable"]["text"], assignment["worktree_path"]
+        commit, base, changed, context = (assignment[k] for k in ("commit", "base_sha", "changed_files", "context"))
+        if not all(isinstance(v, str) and v for v in (text, worktree, commit, base)) or not all(
+                isinstance(v, list) and all(isinstance(p, str) and p for p in v) for v in (changed, context)):
+            raise TypeError
+    except (KeyError, TypeError):
+        raise JevError("VALIDATION.INPUT", "Assignment lacks deliverable text, worktree, commits or file lists") from None
+
+    def git(*args):
+        proc = subprocess.run(["git", "-C", worktree, *args], capture_output=True, text=True)
+        if proc.returncode:
+            raise JevError("VALIDATION.INPUT", "Committed evidence unreadable at the pinned commits")
+        return proc.stdout
+
+    state = {"deliverable": text, "evidence": git("diff", "--no-color", f"{base}...{commit}", "--", *changed) if changed else ""}
+    if context:
+        state["context"] = {path: git("show", f"{commit}:{path}") for path in context}
+    return {"model": MODEL, "state": state, "questions": {"written": {
+        "type": "choice", "instructions": "Does the committed evidence deliver the deliverable?",
+        "criteria": {"yes": "delivered", "no": "not delivered"}}}}
+
+
 def escalation_recipients():
     """ATM's escalation recipients: the team's (`ATM_TEAM`), else the daemon default; [] when neither is set or readable."""
     team = os.environ.get("ATM_TEAM", "")
@@ -212,12 +240,13 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--startup", action="store_true")
     mode.add_argument("--request", type=Path)
+    mode.add_argument("--assignment", type=Path, help="a sanity assignment (fenced JSON body); the client builds the request")
     mode.add_argument("--error", help="with --announce: announce this JEV child error verbatim; no probe runs")
     parser.add_argument("--announce", action="store_true",
                         help="with --startup or --error: send a failure to ATM's escalation recipients (else --lead)")
     parser.add_argument("--lead", help="ATM lead identity; required with --announce, the fallback recipient")
     args = parser.parse_args(argv)
-    if args.announce and (args.request or not args.lead or args.lead.startswith("-")):
+    if args.announce and (args.request or args.assignment or not args.lead or args.lead.startswith("-")):
         parser.error("--announce requires --startup or --error and an explicit --lead identity")
     if args.error is not None and (not args.announce or not args.error.strip()):
         parser.error("--error requires --announce and a nonempty error")
@@ -226,7 +255,12 @@ def main(argv=None):
         print(json.dumps({"success": True, "data": {"announced": args.error}, "error": None}))
         return 0
     try:
-        request = startup_request() if args.startup else json.loads(args.request.read_text())
+        if args.startup:
+            request = startup_request()
+        elif args.assignment:
+            request = assignment_request(json.loads(args.assignment.read_text()))
+        else:
+            request = json.loads(args.request.read_text())
         data = evaluate(request)
         if not args.startup and len(request["questions"]) == 1:
             data = {**data, "receipt": receipt(request, data, api_key())}

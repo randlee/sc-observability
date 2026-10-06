@@ -85,7 +85,7 @@ call nor a high percentage of clear answers substitutes for that reconciliation.
 
 ## Execute the candidate
 
-From the repository root, use `scripts/post_mortem_jev.py` within this skill:
+From the repository root, use `.claude/skills/atm-bd-orchestration/scripts/post_mortem_jev.py`:
 
 ```bash
 python3 .claude/skills/atm-bd-orchestration/scripts/post_mortem_jev.py prepare --repo . --manifest finding.json --out packet.json
@@ -108,7 +108,7 @@ describes presence screening only, not an all-clear. Check the separate
 issue/quality dispositions and `investigation_required` before accepting a row. The script's summary
 counts evaluation attempts, not unique verified findings; reconcile the ledger
 separately. This runner uses POSIX file locking and the repository's existing
-`scripts/jev_client.py`; pass global `--client` to select its absolute path
+`.claude/skills/atm-bd-orchestration/scripts/jev_client.py`; pass global `--client` to select its absolute path
 when invoking from another directory.
 
 ## Atomic question mapping (v2)

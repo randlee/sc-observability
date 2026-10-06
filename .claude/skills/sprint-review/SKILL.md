@@ -35,4 +35,4 @@ only the optional viewer. Rendering requires Python, Node and the pinned
 
 For report columns, badge meanings and evidence sources, see
 [sprint-report](../sprint-report/SKILL.md). Local exports for development remain
-available through `sprint-report --dag --output <prefix>`.
+available through `.claude/skills/sprint-report/scripts/sprint-report --dag --output <prefix>`.

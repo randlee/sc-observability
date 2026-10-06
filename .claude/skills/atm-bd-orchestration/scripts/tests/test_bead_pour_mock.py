@@ -43,8 +43,17 @@ class Workspace:
     def run(self, *argv, check=True) -> subprocess.CompletedProcess:
         proc = subprocess.run([str(a) for a in argv], cwd=self.root, env=self.env, text=True, capture_output=True)
         if check and proc.returncode:
-            raise AssertionError(f"{argv} exited {proc.returncode}\nstdout: {proc.stdout}\nstderr: {proc.stderr}")
+            raise AssertionError(f"{argv} exited {proc.returncode}\nstdout: {proc.stdout}\nstderr: {proc.stderr}{self.server_logs()}")
         return proc
+
+    def server_logs(self) -> str:
+        """The proxied server's log tails, so a dropped connection carries its cause."""
+        out = ""
+        for name in ("proxy.log", "server.log"):
+            log = self.root / ".beads" / "dolt" / name
+            if log.is_file():
+                out += f"\n--- {name} (last 40 lines) ---\n" + "\n".join(log.read_text(errors="replace").splitlines()[-40:])
+        return out
 
     def bd(self, *args, check=True):
         return self.run("bd", *args, check=check)
@@ -101,7 +110,7 @@ class Workspace:
 
     def groups(self, *args, expect: int = 0) -> dict:
         proc = self.run(sys.executable, self.scripts / "bead-groups", "--json", *args, check=False)
-        assert proc.returncode == expect, f"exit {proc.returncode}\n{proc.stdout}\n{proc.stderr}"
+        assert proc.returncode == expect, f"exit {proc.returncode}\n{proc.stdout}\n{proc.stderr}{self.server_logs()}"
         return json.loads(proc.stdout)
 
 

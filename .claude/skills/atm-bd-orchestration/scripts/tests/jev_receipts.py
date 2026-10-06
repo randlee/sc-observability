@@ -5,9 +5,7 @@ import os
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
-# Installed: <repo>/scripts/jev_client.py; package source: <package>/assets/scripts/jev_client.py.
-CLIENT = next(path for path in (HERE.parents[5] / "scripts/jev_client.py", HERE.parents[4] / "assets/scripts/jev_client.py")
-              if path.exists())
+CLIENT = HERE.parents[1] / "jev_client.py"
 KEY = "test-only-key"
 _spec = importlib.util.spec_from_file_location("jev_client_for_tests", CLIENT)
 client = importlib.util.module_from_spec(_spec)
