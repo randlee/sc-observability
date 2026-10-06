@@ -481,6 +481,38 @@ mod tests {
     }
 
     #[test]
+    fn unit_client_covers_combined_signal_arguments() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let arguments = [
+            "emit".to_owned(),
+            "--log".to_owned(),
+            "{}".to_owned(),
+            "--span".to_owned(),
+            fixture_component("traces", "spans"),
+            "--metric".to_owned(),
+            fixture_component("metric_gauge", "metrics"),
+            "--profile".to_owned(),
+            fixture_component("profiles", "profiles"),
+        ];
+
+        let (exit_code, _, envelope) = recorded_run(directory.path(), &arguments, None);
+
+        assert_eq!(exit_code, constants::EXIT_OK);
+        let envelope = envelope.expect("recorded envelope");
+        for field in ["logs", "spans", "metrics"] {
+            assert_eq!(
+                envelope[field].as_array().expect("signal array").len(),
+                1,
+                "{field} reaches the unit-only client"
+            );
+        }
+        assert!(
+            envelope["profiles"].is_object(),
+            "profiles reaches the unit-only client"
+        );
+    }
+
+    #[test]
     fn unit_client_covers_combined_stdin_without_mutating_process_environment() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let script = directory.path().join("script.json");
