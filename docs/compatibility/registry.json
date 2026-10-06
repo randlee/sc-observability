@@ -1367,8 +1367,8 @@
       "status": "canonical_routed",
       "canonical": "root sink implementing canonical LogSink",
       "treatment": "existing_pair",
-      "baseline_signature": "pub struct JsonlFileSink { path: PathBuf, health: RwLock<SinkHealth>, legacy_policy: Option<LegacyRetentionPolicy>, }",
-      "canonical_signature": "pub struct JsonlFileSink { path: PathBuf, health: RwLock<SinkHealth>, legacy_policy: Option<LegacyRetentionPolicy>, }",
+      "baseline_signature": "pub struct JsonlFileSink { path: PathBuf, health: RwLock<SinkHealth>, #[cfg(feature = \"v1\")] legacy_policy: Option<RetainedLogPolicy>, }",
+      "canonical_signature": "pub struct JsonlFileSink { path: PathBuf, health: RwLock<SinkHealth>, #[cfg(feature = \"v1\")] legacy_policy: Option<RetainedLogPolicy>, }",
       "obligations": [
         "signature identity: preserve JsonlFileSink declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
