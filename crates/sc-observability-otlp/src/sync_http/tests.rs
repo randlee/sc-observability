@@ -25,6 +25,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 // This is a test watchdog, not the production handshake deadline (1 ms).
 const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
+const TLS_SERVER_READY_WATCHDOG: Duration = Duration::from_secs(10);
 const REQUEST_FIXTURE_WATCHDOG: Duration = Duration::from_secs(2);
 const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 8_000;
 // Leave the client-wide timeout much longer than the final attempt's remaining
@@ -571,12 +572,71 @@ fn start_tls_test_server(
         .spawn()
         .expect("start standard-library local TLS server");
     let mut server = server;
-    let mut ready = String::new();
-    std::io::BufReader::new(server.stdout.take().expect("TLS server ready output"))
-        .read_line(&mut ready)
-        .expect("read TLS server readiness");
+    let ready = match read_line_with_watchdog(
+        server.stdout.take().expect("TLS server ready output"),
+        TLS_SERVER_READY_WATCHDOG,
+    ) {
+        Ok(ready) => ready,
+        Err(error) if error.kind() == ErrorKind::TimedOut => {
+            let _ = server.kill();
+            let _ = server.wait();
+            panic!("timed out waiting for TLS test server readiness: {error}");
+        }
+        Err(error) => panic!("read TLS test server readiness: {error}"),
+    };
     assert_eq!(ready.trim(), "READY", "local TLS server became ready");
     server
+}
+
+fn read_line_with_watchdog<R>(reader: R, watchdog: Duration) -> std::io::Result<String>
+where
+    R: Read + Send + 'static,
+{
+    let (ready_tx, ready_rx) = mpsc::channel();
+    thread::spawn(move || {
+        let mut ready = String::new();
+        let result = std::io::BufReader::new(reader)
+            .read_line(&mut ready)
+            .map(|_| ready);
+        let _ = ready_tx.send(result);
+    });
+
+    match ready_rx.recv_timeout(watchdog) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(std::io::Error::new(
+            ErrorKind::TimedOut,
+            "timed out waiting for readiness line",
+        )),
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(std::io::Error::new(
+            ErrorKind::UnexpectedEof,
+            "readiness reader exited without a result",
+        )),
+    }
+}
+
+#[test]
+fn tls_server_readiness_wait_times_out_if_stdout_stalls() {
+    struct GatedReader(mpsc::Receiver<()>);
+
+    impl Read for GatedReader {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            self.0
+                .recv()
+                .expect("test releases the stalled readiness reader");
+            let line = b"READY\n";
+            buffer[..line.len()].copy_from_slice(line);
+            Ok(line.len())
+        }
+    }
+
+    let (release_tx, release_rx) = mpsc::channel();
+    let error = read_line_with_watchdog(GatedReader(release_rx), Duration::from_millis(20))
+        .expect_err("a stalled readiness read must time out");
+
+    assert_eq!(error.kind(), ErrorKind::TimedOut);
+    release_tx
+        .send(())
+        .expect("release the detached readiness reader");
 }
 
 fn retry_policy(
