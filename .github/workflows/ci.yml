@@ -80,9 +80,6 @@ jobs:
       - name: Run clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
-      - name: Validate error migration
-        run: python3 scripts/ci/validate_error_migration.py
-
       - name: Check durable-store crate dependency policy
         run: cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store --locked check --config policy/deny-durable-store.toml licenses bans advisories
 
