@@ -4,7 +4,7 @@
   "phase_root_doc": "/scratch/plan-qa/obs-phase-d-plan.md",
   "plan_docs": ["/scratch/plan-qa/obs-d-1-plan.md", "/scratch/plan-qa/obs-d-2-plan.md"],
   "reference_docs": [".claude/skills/atm-beads/resources/atm-beads-plan-guidelines.md", ".claude/skills/atm-beads/resources/planning.md", "docs/architecture.md"],
-  "worktree_path": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-orchestration-0.10",
+  "worktree_path": "/path/to/sc-observability",
   "branch": "integrate/phase-d",
   "commit": "0123456789abcdef0123456789abcdef01234567",
   "round_index": 1,
