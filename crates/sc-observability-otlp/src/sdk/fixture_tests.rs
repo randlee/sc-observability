@@ -18,11 +18,128 @@ use sc_observability_types::{
     ServiceName, SpanId, SpanStatus, TargetCategory, Timestamp, TraceContext as LogTraceContext,
     TraceId,
 };
+use std::io;
 use std::io::Read;
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+
+const DEADLINE_TEST_SERVER_IO_TIMEOUT: Duration = Duration::from_secs(2);
+const DEADLINE_TEST_SERVER_ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(5);
+const DEADLINE_TEST_UNWIND_MIN_WAIT: Duration = Duration::from_secs(1);
+const DEADLINE_TEST_UNWIND_MAX_WAIT: Duration = Duration::from_secs(5);
+
+struct DeadlineTestServer {
+    release_tx: Option<mpsc::Sender<()>>,
+    join_handle: Option<JoinHandle<io::Result<()>>>,
+}
+
+impl DeadlineTestServer {
+    fn spawn(listener: TcpListener, accepted_tx: tokio::sync::oneshot::Sender<()>) -> Self {
+        let (release_tx, release_rx) = mpsc::channel();
+        let join_handle = thread::spawn(move || {
+            listener.set_nonblocking(true)?;
+            let accept_deadline = Instant::now() + DEADLINE_TEST_SERVER_IO_TIMEOUT;
+            let (mut stream, _) = loop {
+                match listener.accept() {
+                    Ok(connection) => break connection,
+                    Err(error)
+                        if error.kind() == io::ErrorKind::WouldBlock
+                            && Instant::now() < accept_deadline =>
+                    {
+                        thread::sleep(DEADLINE_TEST_SERVER_ACCEPT_POLL_INTERVAL);
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "deadline test server accept timed out",
+                        ));
+                    }
+                    Err(error) => return Err(error),
+                }
+            };
+            stream.set_nonblocking(false)?;
+            stream.set_read_timeout(Some(DEADLINE_TEST_SERVER_IO_TIMEOUT))?;
+            let mut request_prefix = [0_u8; 1];
+            stream.read_exact(&mut request_prefix)?;
+            accepted_tx.send(()).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "deadline test dropped acceptance receiver",
+                )
+            })?;
+            release_rx
+                .recv_timeout(DEADLINE_TEST_SERVER_IO_TIMEOUT)
+                .map_err(|error| {
+                    let kind = match error {
+                        mpsc::RecvTimeoutError::Timeout => io::ErrorKind::TimedOut,
+                        mpsc::RecvTimeoutError::Disconnected => io::ErrorKind::BrokenPipe,
+                    };
+                    io::Error::new(kind, "deadline test server release was not received")
+                })?;
+            Ok(())
+        });
+
+        Self {
+            release_tx: Some(release_tx),
+            join_handle: Some(join_handle),
+        }
+    }
+
+    fn finish(mut self) -> io::Result<()> {
+        self.release();
+        let join_handle = self
+            .join_handle
+            .take()
+            .expect("deadline test server thread is present");
+        join_handle
+            .join()
+            .map_err(|_| io::Error::other("deadline test server thread panicked"))?
+    }
+
+    fn release(&mut self) {
+        if let Some(release_tx) = self.release_tx.take() {
+            let _ = release_tx.send(());
+        }
+    }
+}
+
+impl Drop for DeadlineTestServer {
+    fn drop(&mut self) {
+        self.release();
+        if let Some(join_handle) = self.join_handle.take() {
+            let _ = join_handle.join();
+        }
+    }
+}
+
+#[test]
+fn deadline_test_server_drop_joins_on_unwind_after_bounded_read() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind deadline listener");
+    let address = listener.local_addr().expect("deadline listener address");
+    let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
+    let client = TcpStream::connect(address).expect("connect deadline client");
+    let server = DeadlineTestServer::spawn(listener, accepted_tx);
+
+    let started = Instant::now();
+    let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+        let _server = server;
+        panic!("simulate a failed deadline-fixture assertion");
+    }));
+    drop(client);
+    drop(accepted_rx);
+
+    assert!(unwind.is_err(), "the simulated assertion must unwind");
+    assert!(
+        started.elapsed() >= DEADLINE_TEST_UNWIND_MIN_WAIT,
+        "unwinding should wait for the server's bounded read timeout"
+    );
+    assert!(
+        started.elapsed() < DEADLINE_TEST_UNWIND_MAX_WAIT,
+        "unwinding must join the read-blocked helper promptly"
+    );
+}
 
 fn fixture_config(queue_byte_capacity: usize) -> TelemetryConfig {
     fixture_config_for_endpoint(queue_byte_capacity, "http://127.0.0.1:9")
@@ -223,16 +340,7 @@ async fn external_fixture_exercises_request_deadline_terminal_outcome() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind deadline listener");
     let address = listener.local_addr().expect("deadline listener address");
     let (accepted_tx, accepted_rx) = tokio::sync::oneshot::channel();
-    let (release_tx, release_rx) = mpsc::channel();
-    let server = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("accept deadline request");
-        let mut request_prefix = [0_u8; 1];
-        stream
-            .read_exact(&mut request_prefix)
-            .expect("read the started deadline request");
-        accepted_tx.send(()).expect("signal request acceptance");
-        release_rx.recv().expect("release held deadline request");
-    });
+    let server = DeadlineTestServer::spawn(listener, accepted_tx);
 
     let endpoint = format!("http://{address}");
     let fixture = SdkFixture::new(&fixture_config_for_endpoint(8 * 1_024, &endpoint))
@@ -246,10 +354,11 @@ async fn external_fixture_exercises_request_deadline_terminal_outcome() {
         .expect("deadline server dropped its acceptance signal");
     let flush_result = tokio::time::timeout(Duration::from_secs(1), fixture.flush()).await;
 
-    // Release and join before inspecting the assertion result, so a regression
-    // cannot strand the server thread or turn teardown into a second panic.
-    release_tx.send(()).expect("release deadline request");
-    server.join().expect("join deadline server");
+    // Release and join before inspecting the assertion result. The guard also
+    // does this on unwinding paths, with bounded I/O in the helper thread.
+    server
+        .finish()
+        .expect("deadline server should complete cleanly");
     let flush = flush_result
         .expect("request deadline must complete before the test bound")
         .expect_err("held request must preserve its typed terminal outcome");
