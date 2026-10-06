@@ -140,6 +140,12 @@ impl JsonlFileSink {
     /// This is the canonical direct-file-sink constructor. It uses the same
     /// maintenance path as logger-owned sinks, so an existing active file is
     /// rotated and retained files are pruned before the caller writes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InitError::Runtime`] if startup rotation or retained-file
+    /// pruning fails, such as when the active file cannot be inspected or
+    /// rotated, or retained files cannot be read or removed.
     pub fn open(path: PathBuf, policy: RetainedLogPolicy) -> Result<Self, InitError> {
         let sink = Self::for_logger(path);
         sink.perform_maintenance(&policy)
