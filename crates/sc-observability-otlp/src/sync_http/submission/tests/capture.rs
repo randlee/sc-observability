@@ -1,5 +1,5 @@
 use serde_json::Value;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{
     Arc,
@@ -7,7 +7,7 @@ use std::sync::{
     mpsc,
 };
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub(super) const CAPTURE_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -55,7 +55,7 @@ pub(super) fn read_request(stream: &mut TcpStream) -> (String, Value) {
 }
 
 pub(super) struct CaptureServer {
-    completed: mpsc::Receiver<()>,
+    completed: mpsc::Receiver<Result<(), String>>,
     received: Arc<AtomicUsize>,
     expected: usize,
     server: thread::JoinHandle<()>,
@@ -63,7 +63,7 @@ pub(super) struct CaptureServer {
 
 impl CaptureServer {
     pub(super) fn join(self) -> Result<usize, String> {
-        self.completed.recv_timeout(CAPTURE_TIMEOUT).map_err(|error| {
+        let completed = self.completed.recv_timeout(CAPTURE_TIMEOUT).map_err(|error| {
             format!(
                 "capture server did not complete after receiving {} of {} expected requests: {error}",
                 self.received.load(Ordering::Relaxed),
@@ -73,6 +73,7 @@ impl CaptureServer {
         self.server
             .join()
             .map_err(|_| "capture server panicked".to_owned())?;
+        completed?;
         Ok(self.received.load(Ordering::Relaxed))
     }
 }
@@ -81,6 +82,14 @@ pub(super) fn capture_server(
     listener: TcpListener,
     statuses: &[u16],
 ) -> (mpsc::Receiver<(String, Value)>, CaptureServer) {
+    capture_server_with_accept_timeout(listener, statuses, CAPTURE_TIMEOUT)
+}
+
+fn capture_server_with_accept_timeout(
+    listener: TcpListener,
+    statuses: &[u16],
+    accept_timeout: Duration,
+) -> (mpsc::Receiver<(String, Value)>, CaptureServer) {
     let (captured_tx, captured_rx) = mpsc::channel();
     let (completed_tx, completed_rx) = mpsc::channel();
     let statuses = statuses.to_vec();
@@ -88,8 +97,23 @@ pub(super) fn capture_server(
     let received = Arc::new(AtomicUsize::new(0));
     let received_by_server = Arc::clone(&received);
     let server = thread::spawn(move || {
+        listener
+            .set_nonblocking(true)
+            .expect("set capture listener nonblocking");
+        let accept_deadline = Instant::now() + accept_timeout;
         for status in statuses {
-            let (mut stream, _) = listener.accept().expect("accept submission request");
+            let (mut stream, _) = match accept_before(&listener, accept_deadline) {
+                Ok(connection) => connection,
+                Err(error) => {
+                    let _ = completed_tx.send(Err(format!(
+                        "accept submission request before deadline: {error}"
+                    )));
+                    return;
+                }
+            };
+            stream
+                .set_nonblocking(false)
+                .expect("set capture stream blocking");
             let request = read_request(&mut stream);
             captured_tx.send(request).expect("deliver captured request");
             received_by_server.fetch_add(1, Ordering::Relaxed);
@@ -106,7 +130,9 @@ pub(super) fn capture_server(
             )
             .expect("write capture response");
         }
-        completed_tx.send(()).expect("report capture completion");
+        completed_tx
+            .send(Ok(()))
+            .expect("report capture completion");
     });
     (
         captured_rx,
@@ -117,4 +143,51 @@ pub(super) fn capture_server(
             server,
         },
     )
+}
+
+fn accept_before(
+    listener: &TcpListener,
+    deadline: Instant,
+) -> std::io::Result<(TcpStream, std::net::SocketAddr)> {
+    loop {
+        match listener.accept() {
+            Ok(connection) => return Ok(connection),
+            Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {
+                thread::yield_now();
+            }
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                return Err(std::io::Error::new(
+                    ErrorKind::TimedOut,
+                    "capture server accept deadline elapsed",
+                ));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_server_stops_waiting_when_no_request_arrives() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind capture listener");
+        let (_, server) =
+            capture_server_with_accept_timeout(listener, &[200], Duration::from_millis(50));
+
+        let started = Instant::now();
+        let error = server.join().expect_err("missing request should time out");
+
+        assert!(
+            started.elapsed() < CAPTURE_TIMEOUT / 2,
+            "capture server exceeded its accept deadline: {error}"
+        );
+        assert!(
+            error.contains(
+                "accept submission request before deadline: capture server accept deadline elapsed"
+            ),
+            "capture server did not report its bounded accept timeout: {error}"
+        );
+    }
 }
