@@ -71,7 +71,7 @@ pub use sc_observability_types::{
 )]
 pub use v1::{
     AuthHeader, CompleteSpan, OtelConfig, OtlpEndpoint, OtlpProtocol, SpanAssembler, Telemetry,
-    TelemetryConfig, TelemetryConfigBuilder, TelemetryProjectors,
+    TelemetryConfig, TelemetryConfigBuilder, TelemetryError, TelemetryProjectors,
 };
 
 /// Opt-in canonical OTLP facade for the compatible 1.x transition.

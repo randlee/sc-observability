@@ -43,8 +43,11 @@ use sc_observability_types::{
     DurationMs, ErrorContext, EventError, FlushError, InitError, LogEvent, LogProjector,
     MetricProjector, MetricRecord, Observable, Observation, ObservationFilter, ProjectionError,
     ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanProjector, SpanSignal,
-    TelemetryError,
 };
+
+/// Released root telemetry error alias retained for the 1.x migration window.
+#[deprecated(note = "use sc_observability_otlp::v2::TelemetryError")]
+pub type TelemetryError = sc_observability_types::TelemetryError;
 
 /// The released 1.4.1 OTLP protocol set.
 #[deprecated(note = "use sc_observability_otlp::v2::OtlpProtocol")]
@@ -482,12 +485,15 @@ impl Telemetry {
     }
 
     /// Buffers one log event for export.
-    pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError> {
+    pub fn emit_log(&self, event: &LogEvent) -> Result<(), sc_observability_types::TelemetryError> {
         self.inner.emit_log(event).map_err(legacy_telemetry_error)
     }
 
     /// Buffers one span signal for export.
-    pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError> {
+    pub fn emit_span(
+        &self,
+        span: &SpanSignal,
+    ) -> Result<(), sc_observability_types::TelemetryError> {
         let span = v1_span_signal(span).map_err(|error| {
             legacy_telemetry_error(CanonicalTelemetryError::ExportFailure(error))
         })?;
@@ -495,7 +501,10 @@ impl Telemetry {
     }
 
     /// Buffers one metric record for export.
-    pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError> {
+    pub fn emit_metric(
+        &self,
+        metric: &MetricRecord,
+    ) -> Result<(), sc_observability_types::TelemetryError> {
         if metric.kind == sc_observability_types::MetricKind::Histogram {
             return Ok(());
         }
