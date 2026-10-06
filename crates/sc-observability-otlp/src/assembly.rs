@@ -4,23 +4,29 @@
 //! `CompleteSpan`, reports orphaned or inconsistent lifecycle transitions as
 //! explicit errors, and maintains incomplete-span accounting for runtime
 //! shutdown handling.
-#![expect(
-    clippy::missing_errors_doc,
-    reason = "span-assembly failure behavior is documented at the telemetry facade level, and repeating it here would add low-signal boilerplate"
+#![cfg_attr(
+    feature = "v1",
+    expect(
+        clippy::missing_errors_doc,
+        reason = "span-assembly failure behavior is documented at the telemetry facade level, and repeating it here would add low-signal boilerplate"
+    )
 )]
-#![expect(
-    clippy::must_use_candidate,
-    reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
+#![cfg_attr(
+    feature = "v1",
+    expect(
+        clippy::must_use_candidate,
+        reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
+    )
 )]
 use std::collections::{HashMap, VecDeque};
 
 use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::error_codes;
+#[cfg(feature = "v1")]
 use sc_observability_types::typed::EventFailure;
-use sc_observability_types::{
-    ErrorContext, Remediation, SpanEnded, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
-    TraceId,
-};
+use sc_observability_types::{ErrorContext, Remediation, SpanId, TraceId};
+#[cfg(feature = "v1")]
+use sc_observability_types::{SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted};
 
 use sc_observability_types::otlp::OtlpCompleteSpan;
 use sc_observability_types::v2::{
@@ -29,6 +35,7 @@ use sc_observability_types::v2::{
 };
 
 /// Completed span assembled from a start/event/end stream.
+#[cfg(feature = "v1")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompleteSpan {
     /// Final completed span record.
@@ -58,6 +65,7 @@ impl SpanAssemblyLoss {
 }
 
 /// Stateful span assembler used by telemetry export.
+#[cfg(feature = "v1")]
 #[cfg_attr(
     feature = "v1",
     expect(
@@ -76,7 +84,7 @@ pub struct SpanAssembler {
 
 /// Bounded assembler for the canonical 2.0 span contract.
 ///
-/// It applies the retained [`SpanAssembler`] bounds, eviction order and loss
+/// It applies the retained legacy assembler bounds, eviction order and loss
 /// accounting to validated canonical signals, so completed spans keep their
 /// kind, links, parent, trace flags, status, timing and events. Released root
 /// signals enter it after an infallible field-by-field conversion.
@@ -89,6 +97,7 @@ pub(crate) struct V2SpanAssembler {
     loss: SpanAssemblyLoss,
 }
 
+#[cfg(feature = "v1")]
 impl SpanAssembler {
     /// Creates an empty assembler.
     pub fn new() -> Self {
@@ -380,6 +389,7 @@ fn v2_lifecycle_error(message: &str, recovery: &str) -> V2EventError {
     }
 }
 
+#[cfg(feature = "v1")]
 impl Default for SpanAssembler {
     fn default() -> Self {
         Self::new()
