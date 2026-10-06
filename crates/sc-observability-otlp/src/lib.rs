@@ -67,6 +67,7 @@ pub use sc_observability_types::{
     deprecated,
     reason = "the root keeps the released v1 paths while v1 items direct consumers to v2"
 )]
+#[doc(inline)]
 pub use v1::{
     AuthHeader, CompleteSpan, OtelConfig, OtlpEndpoint, OtlpProtocol, SpanAssembler, Telemetry,
     TelemetryConfig, TelemetryConfigBuilder, TelemetryError, TelemetryProjectors,
