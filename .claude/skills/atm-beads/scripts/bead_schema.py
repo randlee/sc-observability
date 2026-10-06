@@ -3,7 +3,7 @@
 # A bead that fails these models is fixed in the bead, never by changing the models. Report the problem instead.
 """Pydantic models of the schema-type beads. The published JSON Schemas (atm-beads/schemas/) are exported from them.
 
-  bead_schema.py validate <beads.json> <sprints.jsonl> <id prefix>   one "<bead>: <field>: <problem>" line per problem
+  bead_schema.py validate <beads.json> <plan.jsonl> <id prefix>      one "<bead>: <field>: <problem>" line per problem
   bead_schema.py export <dir>                                          write <dir>/<name>.schema.json for every model
 
 Exit 0 valid, 5 problems, 2 could not run.
@@ -43,7 +43,6 @@ class Dependency(BaseModel):
 class Bead(BaseModel):
     model_config = ConfigDict(extra="allow")
     id: NonEmpty
-    assignee: NonEmpty
     dependencies: list[Dependency] = []
 
     def blocks(self) -> list[str]:
@@ -61,7 +60,7 @@ class SprintMetadata(BaseModel):
 
 
 class SprintBead(Bead):
-    """A stage:sprint dev bead."""
+    """A stage:sprint container: the plan fields; its dev, sanity and qa beads are poured under it."""
     description: Annotated[str, Field(pattern=DELIVERABLES)]
     acceptance_criteria: NonEmpty
     metadata: SprintMetadata
@@ -73,7 +72,7 @@ class SanityMetadata(BaseModel):
 
 
 class SanityBead(Bead):
-    """A stage:dev-sanity bead: it blocks on the bead it checks."""
+    """A sanity bead: it blocks on the bead it checks."""
     metadata: SanityMetadata
 
     @model_validator(mode="after")
@@ -104,8 +103,9 @@ def main(argv: list[str]) -> int:
         beads = {b.get("id"): b for b in json.loads(Path(argv[1]).read_text())}
         plan = [json.loads(line) for line in Path(argv[2]).read_text().splitlines() if line.strip()]
         found = []
-        for sprint, sanity, _ in plan:
-            for bid, model in ((f"{argv[3]}{sprint}", SprintBead), (sanity, SanityBead)):
+        for row in plan:
+            container = f"{argv[3]}{row['sprint']}"
+            for bid, model in ((container, SprintBead), (f"{container}.group-sanity", SanityBead)):
                 if bid in beads:
                     found += problems(beads[bid], model)
         print("\n".join(found)) if found else None

@@ -44,8 +44,9 @@ risk deferred to one late checkpoint. Both extremes are findings. See
 - A track is a `gh stack` on the phase integration branch. The stack is
   specified when the plan is written: each sprint bead's metadata records its
   `stack`, `layer` (1 = bottom), `branch`, `pr_target` and `worktree`, where
-  `pr_target` is the branch of the layer below (the integration branch for
-  layer 1).
+  `pr_target` is the branch of its nearest `must_follow` prerequisite, the one
+  it builds on (the integration branch when it has none; never a parallel
+  sibling), a lower bound: the PR's actual base is it or a descendant of it.
 - The plan is optimized for parallel execution, so waves are horizontal
   layers of code: contract, layers, integration. A bead is released as soon
   as all of its blockers are closed, that is when all its required work is
@@ -176,11 +177,11 @@ List each related sprint as `must_follow` or `parallel_safe` with a rationale.
 - "Both sprints edit the same file" is never a `must_follow` rationale. It is
   a split defect. Re-cut ownership so the file has one owner, move the shared
   file to the contract or integration sprint, or merge the two sprints.
-- A `must_follow` edge needs concrete coupling: the same files/crates/public
-  types, or the child consumes the parent's code. Shared release/version
-  baseline alone is not coupling; handle it with a final integration step.
-- Parallel tracks run as separate gh-stack stacks with named branches,
-  worktrees, and assigned agents.
+- A `must_follow` edge is a hard dependency: the child consumes the parent's
+  code. Shared release/version baseline alone is not coupling; handle it with
+  a final integration step.
+- Parallel tracks run as separate gh-stack stacks with named branches and
+  worktrees; the lead picks the agents at dispatch.
 
 The phase bead's design publishes a **wave table**: each track, its sprints by wave,
 their `target_boundary` and `owned_paths`, plus three numbers: **critical
@@ -281,15 +282,11 @@ must have explicit code samples or signatures when prose alone would leave
 implementation choices open. In a phase with a contract sprint they live in
 that sprint bead's design; layer sprints reference them and do not restate them.
 
-## Recommended Agent / Model
+## Difficulty
 
-Each sprint bead names its agent as its assignee (the ATM identity) and its
-model in `model_class` metadata, chosen by the tier the work needs: a fast agent for
-bounded or documentation work; the workhorse for typical work; a
-deep-reasoning agent for algorithmic, architectural, or performance work.
-When the repository keeps a developer roster (its path is in the repository
-QA policy, `policy_path`), name the agent from it, preferring
-a named team member over a background agent. How many agents run is decided
+Each sprint bead names its `difficulty`, never an agent, by the tier the work needs: `fast` for
+bounded or documentation work; `normal` for typical work; `hard`
+for algorithmic, architectural, or performance work. Which agents run, and how many, is decided
 at dispatch, not in the plan. Layer sprints are bounded by construction
 and suit one developer and one QA pass each, running concurrently.
 

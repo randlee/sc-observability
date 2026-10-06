@@ -36,16 +36,11 @@
     }
   },
   "additionalProperties": true,
-  "description": "A stage:dev-sanity bead: it blocks on the bead it checks.",
+  "description": "A sanity bead: it blocks on the bead it checks.",
   "properties": {
     "id": {
       "minLength": 1,
       "title": "Id",
-      "type": "string"
-    },
-    "assignee": {
-      "minLength": 1,
-      "title": "Assignee",
       "type": "string"
     },
     "dependencies": {
@@ -62,7 +57,6 @@
   },
   "required": [
     "id",
-    "assignee",
     "metadata"
   ],
   "title": "SanityBead",

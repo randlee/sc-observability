@@ -71,12 +71,12 @@ class LoadTests(unittest.TestCase):
 class RunTimeValuesTests(unittest.TestCase):
     """sprint_index_common needs no install-time rendering: prefix and plan directory are read at run time."""
 
-    PLAN = '["x-1", "zz-x-1-sanity", []]\n["x-2", "zz-x-2-sanity", ["x-1"]]\n'
+    PLAN = '{"sprint": "x-1"}\n{"sprint": "x-2", "depends_on": ["x-1"]}\n'
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = make_repo(Path(self.tmp.name), "bead_prefix: cfgp\nplans_dir: work/plans\n")
-        self.plan = self.repo / "work/plans/phase-x/sprints.jsonl"
+        self.plan = self.repo / "work/plans/phase-x.jsonl"
         self.plan.parent.mkdir(parents=True)
         self.plan.write_text(self.PLAN)
 
@@ -86,12 +86,12 @@ class RunTimeValuesTests(unittest.TestCase):
     def test_the_root_id_supplies_the_prefix(self):
         index = sprint_index_common.load_phase_plan(self.plan, "rootp-phase-x")
         self.assertEqual(index["root_bead_id"], "rootp-phase-x")
-        self.assertEqual([r["dev_bead_id"] for r in index["sprints"]], ["rootp-x-1", "rootp-x-2"])
+        self.assertEqual([r["sprint_bead_id"] for r in index["sprints"]], ["rootp-x-1", "rootp-x-2"])
 
     def test_without_a_root_the_configured_prefix_is_used(self):
         index = sprint_index_common.load_phase_plan(self.plan)
         self.assertEqual(index["root_bead_id"], "cfgp-phase-x")
-        self.assertEqual([r["dev_bead_id"] for r in index["sprints"]], ["cfgp-x-1", "cfgp-x-2"])
+        self.assertEqual([r["dev_bead_id"] for r in index["sprints"]], ["cfgp-x-1.group-dev", "cfgp-x-2.group-dev"])
 
     def test_a_root_id_that_is_not_a_phase_root_is_rejected(self):
         with self.assertRaises(RuntimeError):

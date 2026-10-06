@@ -12,8 +12,6 @@
   "base": "sprint/d-3-otlp-config",
   "worktree_path": "../sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
   "pr_number": 231,
-  "lead": "obs-lead",
-  "cc": "",
   "policy_path": ".claude/project/quality-policy.md",
   "reviewers_round1": [
     "req-qa",

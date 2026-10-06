@@ -5,9 +5,7 @@
   "pr_target": "integrate/phase-d",
   "worktree_path": "../sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
   "branch": "sprint/d-4-otlp-sync-exporter",
-  "lead": "obs-lead",
-  "cc": "",
-  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-alignment",
+  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-orchestration-0.10",
   "phase_root": "obs-phase-d",
   "test_command": "make test",
   "policy_path": ".claude/project/quality-policy.md"

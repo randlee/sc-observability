@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a sprint report from the committed index and live beads/PRs."""
+"""Render a sprint report from the committed plan file and live beads/PRs."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "atm-beads/scripts"))
-from sprint_index_common import load_phase_plan, run_json, index_bead_pairs, phase_id
+from sprint_index_common import load_phase_plan, run_json, index_bead_pairs, phase_id, sprint_beads
 from sprint_qa import metadata, choose_round, qa_verdict, qa_icon, findings_summary
 from plan_contract import DIFFICULTY_MODELS
 import repo_config
@@ -203,7 +203,7 @@ def load_index(repo: Path, explicit: Path | None, root: str | None) -> tuple[Pat
     elif root:
         path = index_path(repo, root)
     else:
-        candidates = sorted((repo / repo_config.load(repo)["plans_dir"]).glob("phase-*/sprints.jsonl"))
+        candidates = sorted((repo / repo_config.load(repo)["plans_dir"]).glob("phase-*.jsonl"))
         if len(candidates) != 1:
             raise RuntimeError("pass --root or --index; no unique canonical phase plan found")
         path = candidates[0]
@@ -216,13 +216,14 @@ def load_index(repo: Path, explicit: Path | None, root: str | None) -> tuple[Pat
 
 
 def live_sprint_rows(index: dict[str, Any], beads: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    """The index supplies membership; all labels and ordering come from live beads."""
+    """The plan supplies membership; labels and ordering come from live beads (the sprint container when
+    it is live, else the dev bead)."""
     rows = []
-    for dev_id in index_bead_pairs(index):
+    for dev_id, container_id in sprint_beads(index).items():
         if dev_id not in beads:
-            raise RuntimeError(f"indexed dev bead not found: {dev_id}")
-        bead = beads[dev_id]
-        meta = metadata(bead)
+            raise RuntimeError(f"planned dev bead not found: {dev_id}")
+        bead = beads.get(container_id) or beads[dev_id]
+        meta = {**metadata(beads[dev_id]), **metadata(bead)}
         rows.append({"id": dev_id, "sprint": meta.get("sprint") or dev_id,
                      "title": bead.get("title", ""), "layer": meta.get("layer")})
     def order(row):
@@ -279,10 +280,10 @@ def main() -> int:
     mode.add_argument("--dag", action="store_true", help="render the plan dependency DAG as SVG and PNG")
     mode.add_argument("--view", action="store_true", help="render the SVG DAG in an HTML artifact and open it in Wyvern")
     mode.add_argument("--dispatch", action="store_true", help="print phase-scoped ready work and fitting free agents")
-    parser.add_argument("--output", type=Path, help="local DAG export prefix")
+    parser.add_argument("--output", type=Path, help="local DAG export prefix; skips writing the HTML next to the plan")
     parser.add_argument("--open", action="store_true", help="open DAG PNG in Preview on macOS, default viewer elsewhere")
     parser.add_argument("--root", help="phase root bead id")
-    parser.add_argument("--index", type=Path, help="committed sprints.jsonl path")
+    parser.add_argument("--index", type=Path, help="plan file path (<plans_dir>/phase-<p>.jsonl)")
     args = parser.parse_args()
     if args.output and not (args.dag or args.view):
         parser.error("--output requires --dag or --view")
@@ -307,7 +308,10 @@ def main() -> int:
             raise RuntimeError("sprint index contains no sprints")
         if args.dag or args.view:
             from sprint_dag import generate
-            return generate(repo, index, sanity_runs, phase, args.output, args.open, args.view)
+            plan_html = None if args.output else (
+                repo / repo_config.load(repo)["plans_dir"] / f"phase-{phase}" / f"phase-{phase}-dag.html")
+            return generate(repo, index, sanity_runs, phase, args.output, args.open, args.view,
+                            plan_html=plan_html)
         row_ids = list(index_bead_pairs(index))
         all_beads = run_json(repo, "bd", "list", "--all", "-n", "0", "--json")
         if args.dispatch:
@@ -351,7 +355,8 @@ def main() -> int:
         with ThreadPoolExecutor(max_workers=4) as pool:
             for task, count in pool.map(lambda task: historical_sanity_iterations(repo, task), missing_history):
                 sanity_runs[task] = count
-        related_ids = row_ids + [str(bead["id"]) for bead in sanity_by_dev.values()] + [
+        containers = sprint_beads(index)
+        related_ids = row_ids + list(containers.values()) + [str(bead["id"]) for bead in sanity_by_dev.values()] + [
             str(qa["id"]) for qa in selected_qa.values() if qa
         ]
         live = run_json(repo, "bd", "show", *dict.fromkeys(related_ids), "--json")
@@ -368,7 +373,9 @@ def main() -> int:
              "baseRefName": pr["base"]["ref"]}
             for page in pages for pr in page
         ]
-        heads = {metadata(live_by_id.get(dev_id, {})).get("branch") for dev_id in dev_ids}
+        def sprint_meta(dev_id):
+            return {**metadata(live_by_id.get(dev_id, {})), **metadata(live_by_id.get(containers[dev_id], {}))}
+        heads = {sprint_meta(dev_id).get("branch") for dev_id in dev_ids}
         heads.add(integration_branch)
         selected = [pr for head in heads if (pr := select_pr(prs, head))]
         def refresh_pr(pr):
@@ -411,7 +418,7 @@ def main() -> int:
         )
         qa_cell = qa_icon(qa, findings)
         find_cell = "" if not qa else findings_summary(findings)
-        pr = select_pr(prs, metadata(dev).get("branch"))
+        pr = select_pr(prs, sprint_meta(dev_id).get("branch"))
         pr_cell = f"#{pr['number']}" if pr else "—"
         ci_cell = check_icon(
             pr, merge_ready=review_ready(dev_cell, qa, findings)

@@ -8,8 +8,6 @@
   "base": "sprint/d-3-otlp-config",
   "pr_number": 262,
   "pr_url": "https://github.com/randlee/sc-observability/pull/262",
-  "lead": "obs-lead",
-  "cc": "",
   "sanity_bead": "obs-d-4-sanity",
   "dev_bead_id": "obs-d-4",
   "dev_bead_title": "d-4: OTLP sync exporter",
@@ -24,6 +22,6 @@
   ],
   "files_outside_owned_paths": [],
   "base_sha": "sprint/d-3-otlp-config",
-  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-alignment",
+  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-orchestration-0.10",
   "lint_command": "make lint"
 }

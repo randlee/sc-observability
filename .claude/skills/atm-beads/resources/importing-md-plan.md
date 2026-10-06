@@ -18,22 +18,24 @@ goes back to the plan's author to supply, with the exact list of gaps.
 
 ## Procedure
 
-0. **Check the database.** Run `bd doctor --json`; retain its output as warnings.
-   Doctor findings are not plan contract failures.
+0. **Check the database.** Run `bd doctor --json`. Any check with
+   `"status": "error"` stops the import: report it to the plan's author. Do not import
+   into a database that doctor rejects. `validate-plan` runs doctor again at
+   step 5 and step 10.
 1. **Find the root.** `bd list -l phase-<x> --type feature -n 0` (or `epic`). If
    the phase root already exists, do not render a new one. Import the
    sprints under it, and gate them with
-   `--root <id> --phase <x>` (step 5). Check that its description,
+   `--phase <x>` (step 5). Check that its description,
    design and acceptance criteria hold what the phase plan says; report
    anything missing.
 2. **Read** the phase plan (whole-phase import) and each sprint doc to import.
    Build one vars file per bead from the mapping below:
    - a whole-phase import produces the root (`plan-root.json.j2`), plus
-     `sprint-bead.json.j2` and `dev-sanity-bead.json.j2` for each sprint;
-   - a one-plan import produces only the sprint's two beads.
+     `sprint-bead.json.j2` for each sprint container;
+   - a one-plan import produces only the sprint container.
 3. **Check** the vars against every row in Checks except the id-exists row
    (step 6), and collect all the gaps before reporting any of them. If any blocking row fails, stop and send the
-   list to lead: `atm send <lead> --stdin` with the file, the field and what
+   list to the plan's author: `atm send <author> --stdin` with the file, the field and what
    is missing. Nothing is imported.
 4. **Render** each bead strictly and collect the result as JSONL:
 
@@ -46,12 +48,12 @@ goes back to the plan's author to supply, with the exact list of gaps.
    A failed render must stop you: never pipe a render straight into `jq`,
    which exits 0 on empty input and drops the bead silently.
 
-5. **Gate** the rendered plan. First write `.atm-bd/<phase>.toml` with
-   `root`, `sprints = "<plans_dir>/<phase>.jsonl"`, and `integration_branch`.
-   Run from the repository root; pre-import `--file`/`--beads` never generate HTML:
+5. **Gate** the rendered plan. Write the plan file `<plans_dir>/phase-<x>.jsonl`
+   and the phase file `.atm-bd/phase-<x>.toml` now (step 9 commits and pushes
+   them), then run from the repository root:
 
    ```bash
-   .claude/skills/atm-beads/scripts/validate-plan --file <scratch>/plan.jsonl --root <id> --index <plan-folder>/phase-<x>.jsonl
+   .claude/skills/atm-beads/scripts/validate-plan --file <scratch>/plan.jsonl --phase <x> --index <plans_dir>/phase-<x>.jsonl
    ```
 
    Exit 5 lists the problems (`SKILL.md`, Validation), and every one of
@@ -76,20 +78,17 @@ goes back to the plan's author to supply, with the exact list of gaps.
 
 8. **Record the source** on each imported sprint bead:
    `bd update <bead> --append-notes "imported from <doc path>@<git short sha>"`.
+   Then pour the groups: `.claude/skills/atm-bd-orchestration/scripts/bead-groups --phase <x>`.
 9. **Wire the plan gate** right away, before any readiness check. Nothing
    is dispatched until this is done. Create the plan-review bead as in
-   `atm-bd-orchestration` "Plan Gate", step 2:
+   `atm-bd-orchestration` "Plan Gate", step 1:
    - whole phase: `<root>-plan-qa`, blocking every root sprint;
    - one plan into a running phase: `<root>-plan-qa` is already closed, so
      create `<root>-plan-qa-<n>` (the next free number), blocking every new
-     dev bead.
-   **Mandatory:** commit the authored canonical plan selected by tracked
-   `.atm-bd/<phase>.toml` (`root`, `sprints`, `integration_branch`). Run `.claude/skills/atm-beads/scripts/validate-plan --root <root> --refresh`
-   against imported live beads; it regenerates the DAG beside the plan.
-   Commit both in the same commit as the plan before plan review. CI checks plan/HTML consistency offline;
-   live bead alignment is proven by the local command. No viewer is opened.
-10. **Verify** with `.claude/skills/atm-beads/scripts/validate-plan --root
-    <root>`, then check the graph:
+     sprint container.
+   **Mandatory:** write the plan file `<plans_dir>/phase-<x>.jsonl` (one `{"sprint", "depends_on"?}` line per imported sprint) and the phase file `.atm-bd/phase-<x>.toml` by hand (`resources/planning.md` "Phase definition") in the same commit as the plan, push it to the root's `integration_branch`, then run `.claude/skills/atm-beads/scripts/validate-plan --phase <x>` followed by `.claude/skills/sprint-review/scripts/sprint-review --root <root>`. It writes `<plans_dir>/phase-<x>/phase-<x>-dag.html` locally; it never commits or pushes. Do not open a viewer unless `--view` is requested. The plan is never exported from Beads.
+10. **Verify** with `.claude/skills/atm-beads/scripts/validate-plan --phase
+    <x>`, then check the graph:
     - `bd ready -l phase-<x> -n 0` lists the plan-review bead and no dev bead
       from this import;
     - `bd ready --explain` shows every other dev bead blocked by the
@@ -124,12 +123,13 @@ Keep `<scratch>` outside the repository.
 | Bead var | Markdown source |
 | --- | --- |
 | `sprint` | frontmatter `id`, lower-cased with `.` → `-` (`D.4` → `d-4`) |
-| `id` | `<prefix>-<sprint>` (`obs-d-4`); its sanity check is `<id>-sanity` |
+| `id` | `<prefix>-<sprint>` (`obs-d-4`); its sanity check is `<id>.group-sanity` |
 | `parent` | the phase root's id |
 | `title` | H1 without the `<id> — ` prefix |
-| `difficulty` | `hard`, `normal`, or `fast`; omit named agents and model classes until dispatch |
+| `model_class` | frontmatter `model_class` (or the model of the sprint table's `agent:model`) |
 | `relation` | frontmatter `relation` (`root`, `must_follow`, `parallel_safe`) |
-| `blocked_by` | for each `must_follow` parent in `depends_on`: that parent's sanity check bead by default; the parent's sprint bead only on user request (validation accepts either) |
+| `difficulty` | frontmatter `difficulty` (`hard`, `normal`, `fast`) |
+| `depends_on` (plan file line) | each `must_follow` parent's sprint (`d-5`); `bead-groups` blocks this sprint's dev bead on that parent's sanity check bead (`obs-d-5.group-sanity`), never the parent's dev bead |
 | `closure_type`, `target_boundary` | frontmatter or the "Closure" section |
 | `owned_paths` | the "Owned Paths" section, else "Exact Targets", plus `owned_docs` (see Checks) |
 | `description` | Goal, Deliverables, Required Work, and Non-closure, in that order, as markdown |
@@ -142,8 +142,8 @@ Keep `<scratch>` outside the repository.
 | `branch` | `sprint/<sprint>-<slug>`, with the slug taken from the doc's branch or file name |
 | `worktree` | `<worktree_base>/<branch>` |
 | `stack` | `phase-<x>`: the phase is one append-only stack |
-| `layer`, `pr_target` | planned order: layer 1 targets the phase's `integration_branch`, and layer n targets the branch of layer n−1. Number the layers in the sprint table's order among sprints of the same dependency depth, and by sprint number within a row. These are the plan's intent: layers really stack in completion order, and lead records the actual values at link time |
-| sanity check bead | `id` = `<sprint id>-sanity`, `dev_bead` = the sprint id, leave `assignee` unset; resolve the dev-sanity role at dispatch |
+| `layer`, `pr_target` | `pr_target` is the branch of the sprint's nearest `must_follow` prerequisite, the one it builds on, or the phase's `integration_branch` when it has none; never a parallel sibling. Number the layers in the sprint table's order among sprints of the same dependency depth, and by sprint number within a row. `layer` is the plan's intent: layers really stack in completion order, and lead records the actual `layer` at link time |
+| sanity check bead | not imported: `bead-groups` pours `<id>.group-sanity`, `dev_bead` = `<id>.group-dev` |
 
 Section headings vary between plans. Map a section by what it holds, not by
 its exact title: "Goal and dependency" is the Goal plus the dependency
@@ -155,6 +155,7 @@ Markdown-only mechanics are dropped rather than carried over:
 - merge-forward triggers;
 - "PR-completion trigger";
 - the per-sprint `base`;
+- frontmatter `assignee` (the plan names no agent);
 - `status`.
 
 The dependency edges replace them.
@@ -169,7 +170,7 @@ does not stop it.
 | --- | --- | --- |
 | Any bead id already exists (step 6) | blocking | stop; update the existing bead instead |
 | One-plan import: the phase root does not exist, or is not a `feature` or `epic` | blocking | import the phase first |
-| A sprint's `status` is not `planned` (in progress, complete) | blocking | ask lead: finish it on the old workflow, or import it as closed |
+| A sprint's `status` is not `planned` (in progress, complete) | blocking | ask the author: finish it on the old workflow, or import it as closed |
 | `closure_type` or `target_boundary` missing | blocking | ask the author; do not infer them from the goal |
 | No owned code paths: no "Owned Paths" and no "Exact Targets" (`owned_docs` alone is not enough) | blocking | ask the author for the file fence |
 | Owned paths taken only from the Deliverables list (no "Owned Paths" or "Exact Targets" section) | warn | import them and list them for the author to confirm |
@@ -182,13 +183,12 @@ does not stop it.
 | No design content (no code samples, no exact targets) | blocking | ask the author; "no contract change" must be stated by the author with a reason |
 | `depends_on` names a sprint that is not in the plan or in beads | blocking | ask the author |
 | `must_follow` without a parent, or a dependency cycle | blocking | ask the author |
-| Sprint table, branch table and sprint docs disagree (missing doc, extra doc, different agent or relation) | blocking | ask the author which is right |
-| Planned sprint names an agent or model class | correct the plan | retain difficulty only; choose the agent at dispatch |
-| The planned branch or worktree already exists (`git ls-remote`, `git worktree list`) | blocking | ask lead: rename it, or finish that sprint on the old workflow |
+| Sprint table, branch table and sprint docs disagree (missing doc, extra doc, different relation) | blocking | ask the author which is right |
+| The planned branch or worktree already exists (`git ls-remote`, `git worktree list`) | blocking | ask the author: rename it, or finish that sprint on the old workflow |
 | Branch name is not `sprint/<p>-<n>-<slug>`, and no branch exists yet | warn | rename it at import and list the old and new names |
-| `difficulty` missing | ask author | specify `hard`, `normal`, or `fast` |
+| `difficulty` missing or not `hard`, `normal` or `fast` | blocking | ask the author |
 | Frontmatter `base` is not the phase's `integration_branch` | warn | ignore it; the stack's layer 1 targets the `integration_branch` |
 | Requirement or ADR ids named in the body but not in frontmatter | warn | add them to `requirements` / `adrs` and list them |
 
-The report to lead is one line per gap: `<doc>: <field>: <what is missing or
+The report to the plan's author is one line per gap: `<doc>: <field>: <what is missing or
 conflicting>`. It lists the blocking gaps first, then the warnings.

@@ -48,10 +48,18 @@ class FixVerificationScopeTests(unittest.TestCase):
         self.assertEqual(out["dispositions"][0]["disposition"], "open")
         self.assertEqual(len(out["dropped_out_of_scope"]), 2)
 
-    def test_unreported_carried_finding_is_fixed(self):
-        out = scope.filter_result("arch-qa", CARRIED, {"data": {"findings": []}})
+    def test_unreported_carried_finding_stays_open(self):
+        for result in ({"data": {"findings": []}}, {}, {"data": {"findings": [{"id": "ARCH-F099", "disposition": "fixed"}]}}):
+            with self.subTest(result=result):  # empty, error-shaped, renumbered
+                out = scope.filter_result("arch-qa", CARRIED, result)
+                self.assertEqual(out["dispositions"], [{"bead": "x-d-4-qa1-f2", "finding_ref": "ARCH-F002",
+                                                        "disposition": "open", "evidence": ""}])
+
+    def test_only_an_explicit_fixed_disposition_passes(self):
+        out = scope.filter_result("arch-qa", CARRIED, {"data": {"findings": [
+            {"id": "ARCH-F002", "disposition": "fixed", "evidence": "a.rs:3 now bounded"}]}})
         self.assertEqual(out["dispositions"], [{"bead": "x-d-4-qa1-f2", "finding_ref": "ARCH-F002",
-                                                "disposition": "fixed", "evidence": ""}])
+                                                "disposition": "fixed", "evidence": "a.rs:3 now bounded"}])
 
     def test_another_reviewers_ids_are_not_in_scope(self):
         out = scope.filter_result("arch-qa", CARRIED, {"data": {"findings": [{"id": "RBQA-F001"}]}})
