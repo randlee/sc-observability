@@ -8,7 +8,7 @@ import sys
 import time
 import uuid
 
-SUITES = ("wheel-cli-viewer", "rust-viewer", "collector", "wheels", "tauri", "rust-consumers")
+SUITES = ("wheel-cli-viewer", "collector", "wheels", "tauri", "rust-consumers")
 RUNNERS = {"macos": "macos-14", "windows": "windows-2022", "linux": "ubuntu-24.04"}
 
 
