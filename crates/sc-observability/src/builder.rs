@@ -4,8 +4,7 @@
 )]
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
-use sc_observability_types::typed::InitFailure;
-use sc_observability_types::{Remediation, v2::InitError as CanonicalInitError};
+use sc_observability_types::{ErrorContext, Remediation, v2::InitError as CanonicalInitError};
 
 use crate::sink::LogSink;
 use crate::{
@@ -61,14 +60,14 @@ impl CanonicalLoggerBuilder {
     pub fn new(config: LoggerConfig) -> Result<Self, CanonicalInitError> {
         if QueueCapacity::new(config.queue_capacity).is_none() {
             return Err(CanonicalInitError::Configuration {
-                context: InitFailure::logger_initialization(
+                context: Box::new(ErrorContext::new(
+                    crate::error_codes::LOGGER_INIT_FAILED,
                     "logger queue capacity must be greater than zero",
                     Remediation::recoverable(
                         "set LoggerConfig.queue_capacity to a positive value before constructing the logger",
                         ["increase queue_capacity to at least 1"],
                     ),
-                )
-                .into_context(),
+                )),
             });
         }
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
@@ -124,7 +123,8 @@ impl CanonicalLoggerBuilder {
         } = self;
         if sinks.is_empty() {
             return Err(CanonicalInitError::Configuration {
-                context: InitFailure::logger_initialization(
+                context: Box::new(ErrorContext::new(
+                    crate::error_codes::LOGGER_INIT_FAILED,
                     "logger must have at least one registered sink",
                     Remediation::recoverable(
                         "enable a built-in sink or register a sink before building the logger",
@@ -133,20 +133,19 @@ impl CanonicalLoggerBuilder {
                             "register a sink with v2::LoggerBuilder::register_sink",
                         ],
                     ),
-                )
-                .into_context(),
+                )),
             });
         }
         let queue_capacity = QueueCapacity::new(config.queue_capacity).ok_or_else(|| {
             CanonicalInitError::Configuration {
-                context: InitFailure::logger_initialization(
+                context: Box::new(ErrorContext::new(
+                    crate::error_codes::LOGGER_INIT_FAILED,
                     "logger queue capacity must be positive",
                     Remediation::recoverable(
                         "set LoggerConfig.queue_capacity to a positive value",
                         ["use a queue capacity of at least one record"],
                     ),
-                )
-                .into_context(),
+                )),
             }
         })?;
         let config = Arc::new(config);

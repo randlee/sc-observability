@@ -6,8 +6,7 @@ use std::sync::RwLock;
 use std::time::SystemTime;
 
 use sc_observability_types::ErrorContext;
-use sc_observability_types::typed::EventFailure;
-use sc_observability_types::v2::{InitError, LogSinkError};
+use sc_observability_types::v2::{EventError, InitError, LogSinkError};
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, Level, LogEvent, Remediation, SinkHealth, SinkHealthState,
     SinkName, Timestamp,
@@ -41,10 +40,10 @@ pub(crate) fn serialize_event_bounded(event: &LogEvent) -> Result<Vec<u8>, Box<E
     Ok(writer.bytes)
 }
 
-pub(crate) fn validate_event_size(event: &LogEvent) -> Result<(), EventFailure> {
+pub(crate) fn validate_event_size(event: &LogEvent) -> Result<(), EventError> {
     serialize_event_bounded(event)
         .map(drop)
-        .map_err(EventFailure::from_context)
+        .map_err(|context| EventError::Validation { context })
 }
 
 fn event_too_large_context() -> Box<ErrorContext> {
@@ -723,11 +722,6 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::Duration;
 
-    #[cfg(feature = "fault-injection")]
-    use sc_observability_types::DiagnosticInfo;
-    #[cfg(feature = "fault-injection")]
-    use sc_observability_types::typed::LogSinkFailure;
-
     struct TestRoot(tempfile::TempDir);
 
     struct FailingConsoleWriter;
@@ -1071,15 +1065,5 @@ mod tests {
         );
         assert!(std::error::Error::source(&console_error).is_some());
         assert_eq!(console.health().state, SinkHealthState::DegradedDropping);
-    }
-
-    #[cfg(feature = "fault-injection")]
-    #[test]
-    fn fault_injected_failure_matches_owning_registry() {
-        let failure = LogSinkFailure::fault_injected("x", Remediation::not_recoverable("test"));
-        assert_eq!(
-            failure.diagnostic().code,
-            error_codes::LOGGER_SINK_FAULT_INJECTED
-        );
     }
 }

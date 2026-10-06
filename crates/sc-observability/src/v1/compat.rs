@@ -27,9 +27,7 @@ use crate::{
     error_codes,
 };
 use sc_observability_types::SinkHealth;
-use sc_observability_types::{
-    EventError, FlushError, InitError, LogEvent, LogSinkError, QueryError,
-};
+use sc_observability_types::{EventError, InitError, LogEvent, LogSinkError, QueryError};
 use std::sync::Arc;
 
 /// Released 1.x sink trait. Its error type remains the published
@@ -552,14 +550,14 @@ impl Logger<Running> {
         deprecated,
         reason = "the released 1.x method retains its deprecated error wrapper"
     )]
-    pub fn flush(&self) -> Result<(), FlushError> {
+    pub fn flush(&self) -> Result<(), FlushFailure> {
         self.inner.flush().map_err(legacy_flush)
     }
 
     /// Flushes the shared writer through the released typed failure.
     #[deprecated(note = "use crate::v2::Logger::flush; see docs/migration/phase-f.md")]
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
-        self.flush().map_err(Into::into)
+        self.inner.flush().map_err(FlushFailure::from)
     }
 }
 
@@ -646,8 +644,8 @@ fn legacy_event_from_log(error: LogError) -> EventError {
     }
 }
 
-pub(crate) fn legacy_flush(error: CanonicalFlushError) -> FlushError {
-    FlushFailure::from_context(error.into_context()).into()
+pub(crate) fn legacy_flush(error: CanonicalFlushError) -> FlushFailure {
+    FlushFailure::from_context(error.into_context())
 }
 
 #[cfg(test)]

@@ -412,26 +412,41 @@ impl SubmissionError {
 
 #[cfg(test)]
 mod tests {
-    use super::{context, remediation};
-    use crate::{ErrorCode, Remediation, error_codes};
+    use super::context;
+    #[cfg(feature = "v1")]
+    use super::remediation;
+    #[cfg(feature = "v1")]
+    use crate::ErrorCode;
+    use crate::{Remediation, error_codes};
 
+    #[cfg(feature = "v1")]
     #[test]
     fn every_submission_code_has_specific_remediation() {
         let fallback = remediation(&ErrorCode::new_static("UNREGISTERED"));
         let mut seen = Vec::new();
-        let submission_prefixes = [
-            "SUBMIT_",
-            "ADMIT_",
-            "DELIVERY_",
-            "TELEMETRY_",
-            "TEST_DOUBLE_",
-        ];
-        for code in error_codes::ALL.iter().filter(|c| {
-            c.as_str()
-                .strip_prefix("SC_OBSERVABILITY_")
-                .is_some_and(|rest| submission_prefixes.iter().any(|p| rest.starts_with(p)))
-        }) {
-            let advice = remediation(code);
+        for code in [
+            error_codes::SC_OBSERVABILITY_SUBMIT_INVALID_JSON,
+            error_codes::SC_OBSERVABILITY_SUBMIT_UNSUPPORTED_VERSION,
+            error_codes::SC_OBSERVABILITY_SUBMIT_EMPTY,
+            error_codes::SC_OBSERVABILITY_SUBMIT_VALIDATION,
+            error_codes::SC_OBSERVABILITY_SUBMIT_VALUE_OUT_OF_RANGE,
+            error_codes::SC_OBSERVABILITY_SUBMIT_CORRELATION_CONFLICT,
+            error_codes::SC_OBSERVABILITY_SUBMIT_TIMING_CONFLICT,
+            error_codes::SC_OBSERVABILITY_SUBMIT_DICTIONARY_REFERENCE,
+            error_codes::SC_OBSERVABILITY_ADMIT_STORE_UNAVAILABLE,
+            error_codes::SC_OBSERVABILITY_ADMIT_DISK_BOUND,
+            error_codes::SC_OBSERVABILITY_ADMIT_PERSISTENCE,
+            error_codes::SC_OBSERVABILITY_ADMIT_SCHEMA_TOO_NEW,
+            error_codes::SC_OBSERVABILITY_ADMIT_CLOSED,
+            error_codes::SC_OBSERVABILITY_DELIVERY_DEADLINE,
+            error_codes::SC_OBSERVABILITY_DELIVERY_FAILED,
+            error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE,
+            error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_MISSING,
+            error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_INVALID,
+            error_codes::SC_OBSERVABILITY_TELEMETRY_UNSUPPORTED,
+            error_codes::SC_OBSERVABILITY_TEST_DOUBLE_SCRIPTED_FAILURE,
+        ] {
+            let advice = remediation(&code);
             assert_ne!(advice, fallback, "{code} uses the generic remediation");
             assert!(
                 !seen.contains(&advice),

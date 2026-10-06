@@ -3,20 +3,24 @@
 use super::implementation::{SdkAdapterSet, build_exporter_set};
 use crate::config::{validated_backend_connection, validated_telemetry_bounds};
 use sc_observability_types::otlp::{OtlpCompleteSpan, OtlpLogRecord, OtlpRecord};
-use sc_observability_types::typed::InitFailure;
-use sc_observability_types::v2::{ExportError, MetricRecord};
+use sc_observability_types::v2::{ExportError, InitError, MetricRecord};
 
 pub(crate) struct SdkFixture {
     adapter: SdkAdapterSet,
 }
 
 impl SdkFixture {
-    pub(super) fn new(config: &crate::v2::TelemetryConfig) -> Result<Self, InitFailure> {
+    pub(super) fn new(config: &crate::v2::TelemetryConfig) -> Result<Self, InitError> {
         let bounds = validated_telemetry_bounds(config)?;
-        let connection = validated_backend_connection(&config.transport)
-            .map_err(|error| InitFailure::from_context(error.into_context()))?;
-        let adapter = build_exporter_set(&connection, &bounds)
-            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+        let connection = validated_backend_connection(&config.transport).map_err(|error| {
+            InitError::Configuration {
+                context: error.into_context(),
+            }
+        })?;
+        let adapter =
+            build_exporter_set(&connection, &bounds).map_err(|error| InitError::Runtime {
+                context: error.into_context(),
+            })?;
         Ok(Self { adapter })
     }
 

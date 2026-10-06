@@ -17,7 +17,6 @@ members = [
   "examples/log-settings",
   "tests/sc-observability-composition",
 ]
-exclude = ["examples/atm-adapter-example"]
 resolver = "2"
 
 [workspace.package]

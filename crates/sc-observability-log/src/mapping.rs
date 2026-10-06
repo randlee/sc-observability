@@ -11,7 +11,6 @@
 
 use std::borrow::Cow;
 
-use sc_observability_types::typed::IdentityFailure;
 use sc_observability_types::v2::IdentityError as CanonicalIdentityError;
 use sc_observability_types::{
     ActionName, ErrorContext, Level, LogEvent, OBSERVATION_SCHEMA_VERSION, ProcessIdentity,
@@ -192,13 +191,7 @@ pub(crate) fn resolve_identity(
                                 ],
                             ),
                         )
-                        // The released root error's context moves unchanged into the
-                        // canonical error kept as the source.
-                        .source(Box::new(
-                            CanonicalIdentityError::Process {
-                                context: IdentityFailure::from(source).into_context(),
-                            },
-                        )),
+                        .source(Box::new(source)),
                     ),
                 })
         }
@@ -406,10 +399,17 @@ pub(crate) fn assemble_event(
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        deprecated,
+        reason = "the F8 regression exercises the released resolver trait accepted by ProcessIdentityPolicy"
+    )]
+
     use std::sync::Arc;
 
-    use sc_observability_types::v2::{IdentityError, ProcessIdentityResolver};
-    use sc_observability_types::{ErrorCode, ErrorContext, Remediation, constants};
+    use sc_observability_types::v2::IdentityError as CanonicalIdentityError;
+    use sc_observability_types::{
+        ErrorCode, ErrorContext, ProcessIdentityResolver, Remediation, constants,
+    };
 
     use super::*;
 
@@ -712,7 +712,7 @@ mod tests {
 
     struct OkResolver;
     impl ProcessIdentityResolver for OkResolver {
-        fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
+        fn resolve(&self) -> Result<ProcessIdentity, CanonicalIdentityError> {
             Ok(ProcessIdentity {
                 hostname: Some("resolved".to_owned()),
                 pid: Some(1),
@@ -722,8 +722,8 @@ mod tests {
 
     struct FailingResolver;
     impl ProcessIdentityResolver for FailingResolver {
-        fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
-            Err(IdentityError::Process {
+        fn resolve(&self) -> Result<ProcessIdentity, CanonicalIdentityError> {
+            Err(CanonicalIdentityError::Process {
                 context: Box::new(ErrorContext::new(
                     ErrorCode::new_static("TEST_RESOLVER_FAILED"),
                     "resolver failed",
@@ -761,12 +761,12 @@ mod tests {
 
     #[test]
     fn identity_resolver_ok_and_err() {
-        let ok = ProcessIdentityPolicy::v2_resolver(Arc::new(OkResolver));
+        let ok = ProcessIdentityPolicy::Resolver(Arc::new(OkResolver));
         assert_eq!(
             resolve_identity(&ok).unwrap().hostname.as_deref(),
             Some("resolved")
         );
-        let failing = ProcessIdentityPolicy::v2_resolver(Arc::new(FailingResolver));
+        let failing = ProcessIdentityPolicy::Resolver(Arc::new(FailingResolver));
         let error = resolve_identity(&failing).unwrap_err();
         assert_eq!(
             error.diagnostic().code,
@@ -784,12 +784,12 @@ mod tests {
         );
         // The resolver's own error is kept as the source.
         let source = std::error::Error::source(error.context())
-            .and_then(|source| source.downcast_ref::<IdentityError>())
+            .and_then(|source| source.downcast_ref::<CanonicalIdentityError>())
             .unwrap();
         assert_eq!(source.diagnostic().code.as_str(), "TEST_RESOLVER_FAILED");
     }
 
-    fn assert_auto_hostname_failure(error: &IdentityError) {
+    fn assert_auto_hostname_failure(error: &CanonicalIdentityError) {
         assert_eq!(
             error.diagnostic().code,
             crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED

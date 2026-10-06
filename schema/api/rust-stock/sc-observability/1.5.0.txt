@@ -128,7 +128,7 @@ impl sc_observability::v1::Logger<sc_observability::Running>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::builder(sc_observability::LoggerConfig) -> core::result::Result<sc_observability::v1::LoggerBuilder, sc_observability_types::errors::InitError>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::builder_typed(sc_observability::LoggerConfig) -> core::result::Result<sc_observability::v1::LoggerBuilder, sc_observability_types::typed::InitFailure>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::emit(&self, sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::EventError>
-pub fn sc_observability::v1::Logger<sc_observability::Running>::flush(&self) -> core::result::Result<(), sc_observability_types::errors::FlushError>
+pub fn sc_observability::v1::Logger<sc_observability::Running>::flush(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::log(&self, sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability::LogError>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::log_typed(&self, sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogFailure>
@@ -416,7 +416,7 @@ impl sc_observability::v1::Logger<sc_observability::Running>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::builder(sc_observability::LoggerConfig) -> core::result::Result<sc_observability::v1::LoggerBuilder, sc_observability_types::errors::InitError>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::builder_typed(sc_observability::LoggerConfig) -> core::result::Result<sc_observability::v1::LoggerBuilder, sc_observability_types::typed::InitFailure>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::emit(&self, sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::EventError>
-pub fn sc_observability::v1::Logger<sc_observability::Running>::flush(&self) -> core::result::Result<(), sc_observability_types::errors::FlushError>
+pub fn sc_observability::v1::Logger<sc_observability::Running>::flush(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::log(&self, sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability::LogError>
 pub fn sc_observability::v1::Logger<sc_observability::Running>::log_typed(&self, sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogFailure>

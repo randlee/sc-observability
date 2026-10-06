@@ -40,7 +40,7 @@ DEPRECATED_OWNER_BASELINE: dict[str, tuple[str, ...]] = {
     "crates/sc-observability-otlp/src/assembly.rs": ("push",),
 }
 
-# The phase-F lead ruling restores these released v1 error-code paths as
+# Phase-F lead rulings retain these v1-only error-code compatibility paths as
 # deprecated while their eventual migration remains in flight.
 RESTORED_V1_DEPRECATED_OWNERS: dict[str, tuple[str, ...]] = {
     "crates/sc-observability/src/error_codes.rs": (
@@ -48,6 +48,7 @@ RESTORED_V1_DEPRECATED_OWNERS: dict[str, tuple[str, ...]] = {
         "LOGGER_MAINTENANCE_JOIN_TIMEOUT",
         "LOGGER_MAINTENANCE_WORKER_FAILED",
     ),
+    "crates/sc-observability-types/src/error_codes.rs": ("ALL", "ALL"),
 }
 
 # Path segments only: `foo_compat::` and `compatibility::` are not references.
@@ -57,6 +58,7 @@ COMPAT_MODULE_DECLARATION = re.compile(r"\bmod\s+compat\b")
 
 _ITEM_NAME = re.compile(r"\b(?:fn|struct|enum|trait|type|const|static|mod|union)\s+([A-Za-z_]\w*)")
 _FIELD_OR_VARIANT_NAME = re.compile(r"(?:pub(?:\([^)]*\))?\s+)?([A-Za-z_]\w*)")
+_REEXPORT_NAME = re.compile(r"\bpub(?:\([^)]*\))?\s+use\s+([^;]+);")
 
 
 def has_placeholder_baseline_signature(signature: str) -> bool:
@@ -207,6 +209,12 @@ def deprecated_owner_names(text: str) -> list[str]:
         consumed = _owner_start(text, _attribute_end(text, start))
         end = text.find("\n", consumed)
         owner = text[consumed : len(text) if end < 0 else end].strip()
+        reexport = _REEXPORT_NAME.search(owner)
+        if reexport:
+            target = reexport.group(1).strip()
+            match = re.search(r"([A-Za-z_]\w*)$", target)
+            names.append(match.group(1) if match else target)
+            continue
         match = _ITEM_NAME.search(owner) or _FIELD_OR_VARIANT_NAME.match(owner)
         names.append(match.group(1) if match else owner)
     return names

@@ -393,10 +393,11 @@ use sc_observability_otlp::{
     LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
     TelemetryConfigBuilder, TracesConfig,
 };
+use sc_observability_types::v2::{AggregationTemporality, FiniteF64, MetricRecord, MetricValue};
 use sc_observability_types::{
-    ActionName, DurationMs, Level, LogEvent, MetricKind, MetricName, MetricRecord, ProcessIdentity,
-    SchemaVersion, ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus,
-    TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+    ActionName, DurationMs, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion,
+    ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, TargetCategory,
+    TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
 };
 
 const SERVICE: &str = "sdk-http-binary";
@@ -457,15 +458,18 @@ fn span_signals() -> [SpanSignal; 2] {
 }
 
 fn metric() -> MetricRecord {
-    MetricRecord {
-        timestamp: Timestamp::UNIX_EPOCH,
-        service: service_name(),
-        name: MetricName::new(METRIC_NAME).expect("valid metric"),
-        kind: MetricKind::Counter,
-        value: 1.0,
-        unit: None,
-        attributes: serde_json::Map::new(),
-    }
+    MetricRecord::try_new(
+        Timestamp::UNIX_EPOCH,
+        service_name(),
+        MetricName::new(METRIC_NAME).expect("valid metric"),
+        MetricValue::Sum {
+            value: FiniteF64::new(1.0).expect("finite counter"),
+            monotonic: true,
+            temporality: AggregationTemporality::Cumulative,
+            start_time: Timestamp::UNIX_EPOCH,
+        },
+    )
+    .expect("valid counter")
 }
 
 fn canonical_span_signals() -> [sc_observability_types::v2::SpanSignal; 2] {
@@ -489,17 +493,6 @@ fn canonical_span_signals() -> [sc_observability_types::v2::SpanSignal; 2] {
         v2::SpanSignal::Started(started),
         v2::SpanSignal::Ended(ended),
     ]
-}
-
-fn canonical_metric() -> sc_observability_types::v2::MetricRecord {
-    use sc_observability_types::v2;
-    v2::MetricRecord::try_new(
-        Timestamp::UNIX_EPOCH,
-        service_name(),
-        MetricName::new(METRIC_NAME).expect("valid metric"),
-        v2::MetricValue::Gauge(v2::FiniteF64::new(1.0).expect("finite gauge")),
-    )
-    .expect("valid canonical gauge")
 }
 
 fn released_config(transport: OtelConfig) -> sc_observability_otlp::TelemetryConfig {
@@ -636,9 +629,7 @@ fn v2_default_http_binary_exports_lossless_protobuf_for_every_signal() {
         for signal in canonical_span_signals() {
             telemetry.emit_span(&signal).expect("admit span");
         }
-        telemetry
-            .emit_metric(&canonical_metric())
-            .expect("admit metric");
+        telemetry.emit_metric(&metric()).expect("admit metric");
 
         telemetry
             .flush_async_typed()

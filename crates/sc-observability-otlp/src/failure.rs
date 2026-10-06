@@ -1,9 +1,10 @@
 //! Canonical failure conversions for telemetry admission, flush and
 //! shutdown; each keeps the original error as its native source.
 
-use sc_observability_types::typed::{FlushFailure, ShutdownFailure};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
-use sc_observability_types::v2::{EventError as CanonicalEventError, ExportError};
+use sc_observability_types::v2::{
+    EventError as CanonicalEventError, ExportError, FlushError, ShutdownError,
+};
 use sc_observability_types::{DiagnosticSummary, ErrorContext, Remediation};
 use serde_json::Value;
 
@@ -20,21 +21,26 @@ pub(crate) fn export_failure_from_canonical_event(
 }
 
 /// Preserves a shared-lifecycle failure as the source of a facade flush error.
-pub(crate) fn flush_lifecycle_failure(error: ExportError) -> FlushFailure {
-    FlushFailure::telemetry_flush(
-        "the shared telemetry lifecycle did not complete its flush barrier",
-        Remediation::recoverable(
-            "inspect the exporter lifecycle and retry after it recovers",
-            ["retry flush"],
+pub(crate) fn flush_lifecycle_failure(error: ExportError) -> FlushError {
+    FlushError::Drain {
+        context: Box::new(
+            ErrorContext::new(
+                error_codes::OTLP_FLUSH_FAILED,
+                "the shared telemetry lifecycle did not complete its flush barrier",
+                Remediation::recoverable(
+                    "inspect the exporter lifecycle and retry after it recovers",
+                    ["retry flush"],
+                ),
+            )
+            .source(Box::new(error)),
         ),
-    )
-    .source(Box::new(error))
+    }
 }
 
 pub(crate) fn shutdown_export_failure_typed(
     error: ExportError,
     diagnostic_summary: Option<DiagnosticSummary>,
-) -> ShutdownFailure {
+) -> ShutdownError {
     // The legacy shutdown path selected `runtime.last_error` after incomplete
     // span accounting. Preserve that diagnostic selection exactly, while the
     // typed source chain keeps the actual exporter failure available to callers.
@@ -54,5 +60,7 @@ pub(crate) fn shutdown_export_failure_typed(
             Value::String(code.as_str().to_owned()),
         );
     }
-    ShutdownFailure::from_context(Box::new(context.source(Box::new(error))))
+    ShutdownError::Drain {
+        context: Box::new(context.source(Box::new(error))),
+    }
 }

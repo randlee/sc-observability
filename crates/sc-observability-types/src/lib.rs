@@ -13,16 +13,15 @@ mod errors_v2;
 mod events;
 mod health;
 mod level;
-mod metric;
 mod observation_v2;
 pub mod otlp;
 mod primitives;
 mod process;
-mod projection;
 mod query;
 mod signals_v2;
 mod span;
 mod tracing;
+#[cfg(feature = "v1")]
 pub mod typed;
 mod validation;
 
@@ -60,14 +59,11 @@ pub use diagnostic::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, RecoverableSteps, Remediation,
 };
 #[doc(inline)]
-#[allow(
-    deprecated,
-    reason = "the root exports retain released compatibility wrappers during the transition"
-)]
-pub use errors::{
-    EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
-    ProjectionError, ShutdownError, SubscriberError, TelemetryError,
-};
+pub use errors::ObservationError;
+#[cfg(feature = "v1")]
+#[doc(inline)]
+#[allow(deprecated, reason = "released v1 wrappers remain feature-gated")]
+pub use errors::{EventError, IdentityError, InitError, LogSinkError, TelemetryError};
 #[doc(inline)]
 pub use errors_v2::{ConfigFailure, FailureClassification, MetricModelError};
 #[doc(inline)]
@@ -85,16 +81,9 @@ pub use level::{
     LevelFilter, LevelState, OperationDiagnostic,
 };
 #[doc(inline)]
-pub use metric::{MetricKind, MetricRecord};
-#[doc(inline)]
 pub use primitives::{DurationMs, ErrorCode, Timestamp};
 #[doc(inline)]
 pub use process::{ProcessIdentity, ProcessIdentityPolicy, ProcessIdentityResolver};
-#[doc(inline)]
-pub use projection::{
-    LogProjector, MetricProjector, ObservationFilter, ObservationSubscriber,
-    ProjectionRegistration, SpanProjector, SubscriberRegistration,
-};
 #[doc(inline)]
 pub use query::{LogFieldMatch, LogOrder, LogQuery, LogSnapshot, QueryError};
 #[doc(inline)]
@@ -124,8 +113,8 @@ pub mod v2 {
     };
     #[doc(inline)]
     pub use crate::observation_v2::{
-        LogProjector, MetricProjector, ObservationSubscriber, ProcessIdentityResolver,
-        ProjectionRegistration, SpanProjector, SubscriberRegistration,
+        LogProjector, MetricProjector, ObservationFilter, ObservationSubscriber,
+        ProcessIdentityResolver, ProjectionRegistration, SpanProjector, SubscriberRegistration,
     };
     #[doc(inline)]
     pub use crate::signals_v2::{

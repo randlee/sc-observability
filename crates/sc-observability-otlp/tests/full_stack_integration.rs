@@ -1,3 +1,4 @@
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 use std::net::TcpListener;
 #[cfg(feature = "otlp-sdk")]
 use std::sync::Arc;
@@ -16,6 +17,9 @@ use sc_observability_otlp::v2::{
     TelemetryConfig as V2TelemetryConfig, TelemetryConfigBuilder as V2TelemetryConfigBuilder,
 };
 use sc_observability_otlp::{LogsConfig, MetricsConfig, TracesConfig};
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
+use sc_observability_types::TelemetryHealthState;
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 use sc_observability_types::v2::{
     AggregationTemporality as CanonicalAggregationTemporality,
     AttributeValue as CanonicalAttributeValue, Attributes as CanonicalAttributes, FiniteF64,
@@ -25,13 +29,16 @@ use sc_observability_types::v2::{
     SpanStarted as CanonicalSpanStarted, SpanStatus as CanonicalSpanStatus,
     TraceContext as CanonicalTraceContext, TraceFlags,
 };
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 use sc_observability_types::{
-    ActionName, Diagnostic, DiagnosticInfo, DurationMs, ErrorCode, Level, LogEvent, MetricName,
-    OutcomeLabel, ProcessIdentity, Remediation, SchemaVersion, ServiceName, SpanId,
-    StateTransition, TargetCategory, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricName, OutcomeLabel, ProcessIdentity,
+    Remediation, SchemaVersion, SpanId, StateTransition, TargetCategory, Timestamp, TraceContext,
+    TraceId,
 };
+use sc_observability_types::{DurationMs, ServiceName};
 #[cfg(feature = "sync-http")]
 use serde_json::Value;
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 use serde_json::{Map, json};
 
 #[cfg(feature = "otlp-sdk")]
@@ -276,6 +283,7 @@ fn service_name() -> ServiceName {
     ServiceName::new("test-service").expect("valid service")
 }
 
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn trace_context() -> TraceContext {
     TraceContext {
         trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
@@ -284,6 +292,7 @@ fn trace_context() -> TraceContext {
     }
 }
 
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn log_event(service: ServiceName, message: &str) -> LogEvent {
     LogEvent {
         version: SchemaVersion::new(
@@ -322,11 +331,13 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
     }
 }
 
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn canonical_timestamp(seconds: i64) -> Timestamp {
     serde_json::from_str(&format!("\"1970-01-01T00:00:{seconds:02}Z\""))
         .expect("valid canonical timestamp")
 }
 
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn canonical_trace_context() -> CanonicalTraceContext {
     CanonicalTraceContext::new(
         TraceId::new("1234567890abcdef1234567890abcdef").expect("valid trace id"),
@@ -336,6 +347,7 @@ fn canonical_trace_context() -> CanonicalTraceContext {
     .with_parent(SpanId::new("abcdef0123456789").expect("valid parent span id"))
 }
 
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn canonical_completed_span_signals() -> [CanonicalSpanSignal; 3] {
     let trace = canonical_trace_context();
     let link = SpanLink::new(
@@ -375,6 +387,7 @@ fn canonical_completed_span_signals() -> [CanonicalSpanSignal; 3] {
     ]
 }
 
+#[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 fn canonical_metrics() -> Vec<CanonicalMetricRecord> {
     let metric = |name: &str, value| {
         CanonicalMetricRecord::try_new(
@@ -690,9 +703,8 @@ fn public_sdk_factory_reports_retry_exhaustion_after_the_default_attempts() {
             .flush_async_typed()
             .await
             .expect_err("retryable collector failures exhaust the SDK retry budget");
-        let export_error = std::error::Error::source(&error)
-            .and_then(std::error::Error::source)
-            .and_then(|source| source.downcast_ref::<sc_observability_types::v2::ExportError>())
+        let export_error = error
+            .export_cause()
             .expect("the typed flush failure retains its typed export cause");
         assert_eq!(
             export_error.code(),
@@ -1240,15 +1252,12 @@ fn public_factory_scenario_child(name: &str) -> bool {
 #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 #[cfg(feature = "otlp-sdk")]
 fn public_flush_export_cause(
-    failure: &sc_observability_types::typed::FlushFailure,
+    failure: &sc_observability_types::v2::FlushError,
 ) -> &sc_observability_types::v2::ExportError {
-    use sc_observability_types::typed::{ClassifiedError, FlushFailureKind};
-    assert_eq!(failure.kind(), FlushFailureKind::TelemetryFlush);
-    let context = std::error::Error::source(failure).expect("flush context");
-    context
-        .source()
-        .and_then(|cause| cause.downcast_ref())
-        .expect("native typed exporter cause")
+    let sc_observability_types::v2::FlushError::Drain { context: _ } = failure else {
+        panic!("expected a drain failure from the unavailable collector");
+    };
+    failure.export_cause().expect("native typed exporter cause")
 }
 
 #[cfg(feature = "otlp-sdk")]
@@ -1459,10 +1468,8 @@ fn public_sync_http_factory_reports_stalled_collector_timeout() {
     let _ = release_tx.send(());
     collector.join().expect("collector reaped");
     let error = result.expect_err("request exhausted retry deadline");
-    let context = std::error::Error::source(&error).expect("flush context");
-    let cause = context.source().expect("native exporter error");
     assert!(matches!(
-        cause.downcast_ref::<sc_observability_types::v2::ExportError>(),
+        error.export_cause(),
         Some(sc_observability_types::v2::ExportError::RetryDeadlineExhausted { .. })
     ));
     assert_eq!(telemetry.health().state, TelemetryHealthState::Degraded);

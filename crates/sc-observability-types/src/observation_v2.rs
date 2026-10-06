@@ -3,15 +3,14 @@
 //! These traits and registrations report the canonical `v2` errors and project
 //! the canonical `v2` span and metric models. The released root traits in
 //! `projection` and `process` keep their 1.4.1 signatures; both families share
-//! [`ObservationFilter`] and convert into each other by moving the original
-//! error context. Model conversion between the families fails explicitly when
-//! a value has no representation on the other side.
+//! [`ObservationFilter`]. Model conversion between the families fails
+//! explicitly when a value has no representation on the other side.
 
 use std::sync::Arc;
 
 use crate::errors_v2::{IdentityError, ProjectionError, SubscriberError};
 use crate::signals_v2::{MetricRecord, SpanSignal};
-use crate::{LogEvent, Observable, Observation, ObservationFilter, ProcessIdentity};
+use crate::{LogEvent, Observable, Observation, ProcessIdentity};
 
 type SubscriberRegistrationParts<T> = (
     Arc<dyn ObservationSubscriber<T>>,
@@ -48,6 +47,15 @@ where
     /// Returns [`SubscriberError`] when the subscriber rejects or cannot
     /// process the observation.
     fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
+}
+
+/// Open filter contract evaluated before subscriber or projector execution.
+pub trait ObservationFilter<T>: Send + Sync
+where
+    T: Observable,
+{
+    /// Returns whether the observation should proceed to the subscriber or projector.
+    fn accepts(&self, observation: &Observation<T>) -> bool;
 }
 
 /// Open projector contract from typed observations into log events.

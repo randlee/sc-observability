@@ -7,9 +7,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
 
-use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
-use sc_observability_types::v2::{EventError as CanonicalEventError, ExportError};
+use sc_observability_types::v2::{
+    EventError as CanonicalEventError, ExportError, FlushError as CanonicalFlushError,
+    InitError as CanonicalInitError, ShutdownError as CanonicalShutdownError,
+};
 use sc_observability_types::v2::{
     MetricRecord as CanonicalMetricRecord, SpanSignal as CanonicalSpanSignal,
 };
@@ -139,12 +141,12 @@ static METRICS_EXPORTER_NAME: LazyLock<SinkName> =
 
 impl RuntimeTelemetry {
     /// Creates a telemetry runtime through the validated exporter factory.
-    pub fn new(config: RuntimeTelemetryConfig) -> Result<Self, InitFailure> {
+    pub fn new(config: RuntimeTelemetryConfig) -> Result<Self, CanonicalInitError> {
         Self::new_typed(config)
     }
 
     /// Creates a telemetry runtime with neutral initialization failures.
-    pub fn new_typed(config: RuntimeTelemetryConfig) -> Result<Self, InitFailure> {
+    pub fn new_typed(config: RuntimeTelemetryConfig) -> Result<Self, CanonicalInitError> {
         let bounds = validated_telemetry_bounds(&config)?;
         Self::new_prepared(config, &bounds)
     }
@@ -154,9 +156,12 @@ impl RuntimeTelemetry {
     pub(crate) fn new_prepared(
         config: RuntimeTelemetryConfig,
         bounds: &ValidatedTransportBounds,
-    ) -> Result<Self, InitFailure> {
-        let exporters = exporter_factory_prepared(&config, bounds)
-            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+    ) -> Result<Self, CanonicalInitError> {
+        let exporters = exporter_factory_prepared(&config, bounds).map_err(|error| {
+            CanonicalInitError::Runtime {
+                context: error.into_context(),
+            }
+        })?;
         Ok(Self::new_with_validated_exporter_set(config, exporters))
     }
 
@@ -166,7 +171,7 @@ impl RuntimeTelemetry {
         log_exporter: Arc<dyn LogExporter>,
         trace_exporter: Arc<dyn TraceExporter>,
         metric_exporter: Arc<dyn MetricExporter>,
-    ) -> Result<Self, InitFailure> {
+    ) -> Result<Self, CanonicalInitError> {
         validate_config_typed(&config)?;
         Ok(Self::new_with_validated_exporter_set(
             config,
@@ -321,13 +326,13 @@ impl RuntimeTelemetry {
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
-    pub fn flush(&self) -> Result<(), FlushFailure> {
+    pub fn flush(&self) -> Result<(), CanonicalFlushError> {
         self.flush_typed()
     }
 
     /// Flushes telemetry with a neutral flush failure while retaining fail-open
     /// exporter semantics.
-    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
+    pub fn flush_typed(&self) -> Result<(), CanonicalFlushError> {
         self.exporters
             .lifecycle
             .blocking_lifecycle_preflight()
@@ -343,7 +348,7 @@ impl RuntimeTelemetry {
     ///
     /// SDK callers must use this method from their entered runtime; it never
     /// blocks that runtime thread to emulate synchronous HTTP behavior.
-    pub async fn flush_async_typed(&self) -> Result<(), FlushFailure> {
+    pub async fn flush_async_typed(&self) -> Result<(), CanonicalFlushError> {
         let _ = self.flush_outcome();
         self.exporters
             .lifecycle
@@ -422,7 +427,7 @@ impl RuntimeTelemetry {
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing the final shutdown
     /// error state.
-    pub fn shutdown(&self) -> Result<(), ShutdownFailure> {
+    pub fn shutdown(&self) -> Result<(), CanonicalShutdownError> {
         self.shutdown_typed()
     }
 
@@ -433,7 +438,7 @@ impl RuntimeTelemetry {
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing final state.
-    pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
+    pub fn shutdown_typed(&self) -> Result<(), CanonicalShutdownError> {
         if self.exporters.lifecycle.is_shutdown() {
             return Ok(());
         }
@@ -458,7 +463,7 @@ impl RuntimeTelemetry {
     /// SDK callers use this method to await admitted RPC completion. Synchronous HTTP
     /// callers keep using [`RuntimeTelemetry::shutdown_typed`], whose backend owns a
     /// bounded blocking worker shutdown.
-    pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownFailure> {
+    pub async fn shutdown_async_typed(&self) -> Result<(), CanonicalShutdownError> {
         if self.exporters.lifecycle.is_shutdown() {
             return Ok(());
         }
@@ -472,7 +477,7 @@ impl RuntimeTelemetry {
         &self,
         flush_outcome: FlushOutcome,
         lifecycle_result: Result<(), ExportError>,
-    ) -> Result<(), ShutdownFailure> {
+    ) -> Result<(), CanonicalShutdownError> {
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let dropped = runtime.span_assembler.flush_incomplete() as u64;
         if dropped > 0 {
@@ -676,16 +681,18 @@ fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
     sc_observability_types::EntityId::new(entity_id)
         .map(|_| ())
         .map_err(|error| {
-            let failure = EventFailure::invalid_event(
-                "log event state transition entity_id is invalid",
-                Remediation::recoverable(
-                    "emit a valid entity_id or omit it",
-                    ["rebuild the state transition before emitting"],
-                ),
-            )
-            .source(Box::new(error));
             CanonicalTelemetryError::Event(CanonicalEventError::Validation {
-                context: failure.into_context(),
+                context: Box::new(
+                    ErrorContext::new(
+                        error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
+                        "log event state transition entity_id is invalid",
+                        Remediation::recoverable(
+                            "emit a valid entity_id or omit it",
+                            ["rebuild the state transition before emitting"],
+                        ),
+                    )
+                    .source(Box::new(error)),
+                ),
             })
         })
 }

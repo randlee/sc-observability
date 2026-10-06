@@ -5,8 +5,7 @@ use super::validation::{
     invalid_endpoint, invalid_header, is_valid_http_endpoint, validate_config_typed,
 };
 use crate::constants;
-use sc_observability_types::typed::InitFailure;
-use sc_observability_types::v2::ConfigFailure;
+use sc_observability_types::v2::{ConfigFailure, InitError};
 use sc_observability_types::{DurationMs, ServiceName};
 use serde_json::{Map, Value};
 
@@ -392,7 +391,7 @@ impl TelemetryConfigBuilder {
     /// assert_eq!(config.service_name.as_str(), "demo");
     /// ```
     /// Finalizes the telemetry configuration with a neutral initialization failure.
-    pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure> {
+    pub fn build_typed(self) -> Result<TelemetryConfig, InitError> {
         let config = TelemetryConfig {
             service_name: self.service_name,
             resource: self.resource,

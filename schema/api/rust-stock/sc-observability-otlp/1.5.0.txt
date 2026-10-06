@@ -1,7 +1,6 @@
 pub mod sc_observability_otlp
 pub use sc_observability_otlp::ExporterHealth
 pub use sc_observability_otlp::ExporterHealthState
-pub type sc_observability_otlp::TelemetryError = sc_observability_types::errors::TelemetryError
 pub use sc_observability_otlp::TelemetryHealthReport
 pub use sc_observability_otlp::TelemetryHealthState
 pub mod sc_observability_otlp::constants
@@ -102,17 +101,17 @@ pub fn sc_observability_otlp::SpanAssembler::default() -> Self
 pub struct sc_observability_otlp::v1::Telemetry
 impl sc_observability_otlp::v1::Telemetry
 pub fn sc_observability_otlp::v1::Telemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
-pub fn sc_observability_otlp::v1::Telemetry::emit_metric(&self, &sc_observability_types::metric::MetricRecord) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
+pub fn sc_observability_otlp::v1::Telemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::v1::Telemetry::emit_span(&self, &sc_observability_types::span::SpanSignal) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
-pub fn sc_observability_otlp::v1::Telemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors::FlushError>
-pub async fn sc_observability_otlp::v1::Telemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
-pub fn sc_observability_otlp::v1::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::v1::Telemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub async fn sc_observability_otlp::v1::Telemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_otlp::v1::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::v1::Telemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
 pub fn sc_observability_otlp::v1::Telemetry::new(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
 pub fn sc_observability_otlp::v1::Telemetry::new_typed(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
-pub fn sc_observability_otlp::v1::Telemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors::ShutdownError>
-pub async fn sc_observability_otlp::v1::Telemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
-pub fn sc_observability_otlp::v1::Telemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub fn sc_observability_otlp::v1::Telemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub async fn sc_observability_otlp::v1::Telemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observability_otlp::v1::Telemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::v1::Telemetry
 pub fn sc_observability_otlp::v1::Telemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
 impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::v1::Telemetry
@@ -136,12 +135,13 @@ pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::with_resource(self, sc
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::with_transport(self, sc_observability_otlp::v1::OtelConfig) -> Self
 pub struct sc_observability_otlp::v1::TelemetryProjectors<T> where T: sc_observability_types::events::Observable
 impl<T> sc_observability_otlp::v1::TelemetryProjectors<T> where T: sc_observability_types::events::Observable
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::projection::ProjectionRegistration<T>
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::new(alloc::sync::Arc<sc_observability_otlp::v1::Telemetry>) -> Self
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::projection::ObservationFilter<T>>) -> Self
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::LogProjector<T>>) -> Self
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::MetricProjector<T>>) -> Self
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::SpanProjector<T>>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::observation_v2::ProjectionRegistration<T>
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::new(&alloc::sync::Arc<sc_observability_otlp::v1::Telemetry>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::ObservationFilter<T>>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::LogProjector<T>>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::MetricProjector<T>>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::SpanProjector<T>>) -> Self
+pub type sc_observability_otlp::v1::TelemetryError = sc_observability_types::errors::TelemetryError
 pub mod sc_observability_otlp::v2
 pub use sc_observability_otlp::v2::ConfigFailure
 pub use sc_observability_otlp::v2::EventError
@@ -218,15 +218,15 @@ impl sc_observability_otlp::RuntimeTelemetry
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_span(&self, &sc_observability_types::signals_v2::SpanSignal) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
-pub fn sc_observability_otlp::RuntimeTelemetry::flush(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
-pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
-pub fn sc_observability_otlp::RuntimeTelemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::RuntimeTelemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
-pub fn sc_observability_otlp::RuntimeTelemetry::new(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
-pub fn sc_observability_otlp::RuntimeTelemetry::new_typed(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
-pub fn sc_observability_otlp::RuntimeTelemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
-pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
-pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::new(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
+pub fn sc_observability_otlp::RuntimeTelemetry::new_typed(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::RuntimeTelemetry
 pub fn sc_observability_otlp::RuntimeTelemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
 impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::RuntimeTelemetry
@@ -240,7 +240,7 @@ pub sc_observability_otlp::v2::TelemetryConfig::traces: core::option::Option<sc_
 pub sc_observability_otlp::v2::TelemetryConfig::transport: sc_observability_otlp::v2::OtelConfig
 pub struct sc_observability_otlp::v2::TelemetryConfigBuilder
 impl sc_observability_otlp::v2::TelemetryConfigBuilder
-pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::v2::TelemetryConfig, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::v2::TelemetryConfig, sc_observability_types::errors_v2::InitError>
 pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::enable_logs(self, sc_observability_otlp::LogsConfig) -> Self
 pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::enable_metrics(self, sc_observability_otlp::MetricsConfig) -> Self
 pub fn sc_observability_otlp::v2::TelemetryConfigBuilder::enable_traces(self, sc_observability_otlp::TracesConfig) -> Self
@@ -251,7 +251,7 @@ pub struct sc_observability_otlp::v2::TelemetryProjectors<T> where T: sc_observa
 impl<T> sc_observability_otlp::V2TelemetryProjectors<T> where T: sc_observability_types::events::Observable
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::observation_v2::ProjectionRegistration<T>
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::new(alloc::sync::Arc<sc_observability_otlp::RuntimeTelemetry>) -> Self
-pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::projection::ObservationFilter<T>>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::ObservationFilter<T>>) -> Self
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::LogProjector<T>>) -> Self
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::MetricProjector<T>>) -> Self
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::SpanProjector<T>>) -> Self
@@ -327,15 +327,15 @@ impl sc_observability_otlp::RuntimeTelemetry
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_span(&self, &sc_observability_types::signals_v2::SpanSignal) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
-pub fn sc_observability_otlp::RuntimeTelemetry::flush(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
-pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
-pub fn sc_observability_otlp::RuntimeTelemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::RuntimeTelemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
-pub fn sc_observability_otlp::RuntimeTelemetry::new(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
-pub fn sc_observability_otlp::RuntimeTelemetry::new_typed(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
-pub fn sc_observability_otlp::RuntimeTelemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
-pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
-pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub fn sc_observability_otlp::RuntimeTelemetry::new(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
+pub fn sc_observability_otlp::RuntimeTelemetry::new_typed(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::RuntimeTelemetry
 pub fn sc_observability_otlp::RuntimeTelemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
 impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::RuntimeTelemetry
@@ -366,17 +366,17 @@ pub sc_observability_otlp::SyncHttpRetryPolicy::retry_sequence_timeout_ms: core:
 pub struct sc_observability_otlp::Telemetry
 impl sc_observability_otlp::v1::Telemetry
 pub fn sc_observability_otlp::v1::Telemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
-pub fn sc_observability_otlp::v1::Telemetry::emit_metric(&self, &sc_observability_types::metric::MetricRecord) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
+pub fn sc_observability_otlp::v1::Telemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::v1::Telemetry::emit_span(&self, &sc_observability_types::span::SpanSignal) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
-pub fn sc_observability_otlp::v1::Telemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors::FlushError>
-pub async fn sc_observability_otlp::v1::Telemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
-pub fn sc_observability_otlp::v1::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observability_otlp::v1::Telemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub async fn sc_observability_otlp::v1::Telemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_otlp::v1::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::v1::Telemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
 pub fn sc_observability_otlp::v1::Telemetry::new(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
 pub fn sc_observability_otlp::v1::Telemetry::new_typed(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
-pub fn sc_observability_otlp::v1::Telemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors::ShutdownError>
-pub async fn sc_observability_otlp::v1::Telemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
-pub fn sc_observability_otlp::v1::Telemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
+pub fn sc_observability_otlp::v1::Telemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub async fn sc_observability_otlp::v1::Telemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observability_otlp::v1::Telemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::v1::Telemetry
 pub fn sc_observability_otlp::v1::Telemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
 impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::v1::Telemetry
@@ -400,12 +400,12 @@ pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::with_resource(self, sc
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::with_transport(self, sc_observability_otlp::v1::OtelConfig) -> Self
 pub struct sc_observability_otlp::TelemetryProjectors<T> where T: sc_observability_types::events::Observable
 impl<T> sc_observability_otlp::v1::TelemetryProjectors<T> where T: sc_observability_types::events::Observable
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::projection::ProjectionRegistration<T>
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::new(alloc::sync::Arc<sc_observability_otlp::v1::Telemetry>) -> Self
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::projection::ObservationFilter<T>>) -> Self
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::LogProjector<T>>) -> Self
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::MetricProjector<T>>) -> Self
-pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::projection::SpanProjector<T>>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::observation_v2::ProjectionRegistration<T>
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::new(&alloc::sync::Arc<sc_observability_otlp::v1::Telemetry>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::ObservationFilter<T>>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::LogProjector<T>>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::MetricProjector<T>>) -> Self
+pub fn sc_observability_otlp::v1::TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::SpanProjector<T>>) -> Self
 pub struct sc_observability_otlp::TracesConfig
 pub sc_observability_otlp::TracesConfig::batch_size: usize
 impl core::default::Default for sc_observability_otlp::TracesConfig
@@ -414,7 +414,8 @@ pub struct sc_observability_otlp::V2TelemetryProjectors<T> where T: sc_observabi
 impl<T> sc_observability_otlp::V2TelemetryProjectors<T> where T: sc_observability_types::events::Observable
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::into_registration(self) -> sc_observability_types::observation_v2::ProjectionRegistration<T>
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::new(alloc::sync::Arc<sc_observability_otlp::RuntimeTelemetry>) -> Self
-pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::projection::ObservationFilter<T>>) -> Self
+pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::ObservationFilter<T>>) -> Self
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::LogProjector<T>>) -> Self
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::MetricProjector<T>>) -> Self
 pub fn sc_observability_otlp::V2TelemetryProjectors<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::observation_v2::SpanProjector<T>>) -> Self
+pub type sc_observability_otlp::TelemetryError = sc_observability_types::errors::TelemetryError

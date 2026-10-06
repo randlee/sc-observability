@@ -271,16 +271,6 @@ if "atm-observability-adapter" not in arch:
 if "OTLP-017" not in req or "OTLP-018" not in req:
     raise SystemExit("requirements.md missing OTLP attachment/TelemetryConfig requirements")
 
-# Enforce proving-artifact continuity: ATM boundary example must remain present before compilation.
-if not (root / "examples/atm-adapter-example/Cargo.toml").exists():
-    raise SystemExit("examples/atm-adapter-example/Cargo.toml is missing")
-
-subprocess.run(
-    ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml", "--locked"],
-    cwd=root,
-    check=True,
-)
-
 # D.17's existing consumer migration replaces the temporary expected-failure gate.
 subprocess.run(
     ["cargo", "check", "--manifest-path", "examples/custom-sink-example/Cargo.toml", "--locked"],

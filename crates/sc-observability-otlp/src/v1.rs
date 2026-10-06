@@ -28,21 +28,18 @@ pub use crate::assembly::CompleteSpan;
 #[deprecated(note = "removed; see docs/migration/phase-f.md")]
 pub use crate::assembly::SpanAssembler;
 use crate::config::{ExporterBackend, SyncHttpRetryPolicy, TelemetryConfig as RuntimeConfig};
-use crate::projectors::{
-    AttachedLogProjector, AttachedMetricProjector, AttachedSpanProjector, ProjectorSet,
-    TelemetryEmit,
-};
+use crate::projectors::V2TelemetryProjectors;
 use crate::{RuntimeTelemetry, constants, error_codes};
-use sc_observability_types::typed::{
-    FlushFailure, InitFailure, ShutdownFailure, TypedLogProjector, TypedMetricProjector,
-    TypedSpanProjector, typed_log_projector, typed_metric_projector, typed_span_projector,
+use sc_observability_types::typed::InitFailure;
+use sc_observability_types::v2::{
+    FlushError, LogProjector, MetricProjector, MetricRecord, ObservationFilter,
+    ProjectionRegistration, ShutdownError, SpanProjector,
+    TelemetryError as CanonicalTelemetryError,
 };
-use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 #[allow(deprecated)]
 use sc_observability_types::{
-    DurationMs, ErrorContext, EventError, FlushError, InitError, LogEvent, LogProjector,
-    MetricProjector, MetricRecord, Observable, Observation, ObservationFilter, ProjectionError,
-    ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanProjector, SpanSignal,
+    DurationMs, ErrorContext, EventError, InitError, LogEvent, Observable, Remediation,
+    ServiceName, SpanSignal,
 };
 
 /// Released root telemetry error alias retained for the 1.x migration window.
@@ -451,7 +448,7 @@ fn validate_released_config(config: &TelemetryConfig) -> Result<(), InitFailure>
 )]
 #[deprecated(note = "use sc_observability_otlp::v2::Telemetry")]
 pub struct Telemetry {
-    inner: RuntimeTelemetry,
+    inner: Arc<RuntimeTelemetry>,
 }
 
 impl Telemetry {
@@ -470,11 +467,11 @@ impl Telemetry {
         validate_released_config(&config)?;
         let config = config.into_runtime();
         let bounds = crate::config::validated_telemetry_bounds(&config)?;
-        RuntimeTelemetry::new_prepared(config, &bounds).map(|inner| Self { inner })
-    }
-
-    pub(crate) fn runtime(&self) -> &RuntimeTelemetry {
-        &self.inner
+        Ok(
+            RuntimeTelemetry::new_prepared(config, &bounds).map(|inner| Self {
+                inner: Arc::new(inner),
+            })?,
+        )
     }
 
     /// Buffers one log event for export.
@@ -494,19 +491,8 @@ impl Telemetry {
     }
 
     /// Buffers one metric record for export.
-    pub fn emit_metric(
-        &self,
-        metric: &MetricRecord,
-    ) -> Result<(), sc_observability_types::TelemetryError> {
-        if metric.kind == sc_observability_types::MetricKind::Histogram {
-            return Ok(());
-        }
-        let metric = v1_metric_record(metric).map_err(|error| {
-            legacy_telemetry_error(CanonicalTelemetryError::ExportFailure(error))
-        })?;
-        self.inner
-            .emit_metric(&metric)
-            .map_err(legacy_telemetry_error)
+    pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
+        self.inner.emit_metric(metric)
     }
 
     /// Flushes all configured exporters with the released error type.
@@ -516,16 +502,16 @@ impl Telemetry {
         note = "Use Telemetry::flush_typed(); see migrate-error-api.md."
     )]
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.flush_typed().map_err(Into::into)
+        self.flush_typed()
     }
 
     /// Flushes all configured exporters with the typed error.
-    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
+    pub fn flush_typed(&self) -> Result<(), FlushError> {
         self.inner.flush_typed()
     }
 
     /// Awaits the canonical lifecycle flush barrier.
-    pub async fn flush_async_typed(&self) -> Result<(), FlushFailure> {
+    pub async fn flush_async_typed(&self) -> Result<(), FlushError> {
         self.inner.flush_async_typed().await
     }
 
@@ -536,41 +522,22 @@ impl Telemetry {
         note = "Use Telemetry::shutdown_typed(); see migrate-error-api.md."
     )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
-        self.shutdown_typed().map_err(Into::into)
+        self.shutdown_typed()
     }
 
     /// Shuts down all configured exporters with the typed error.
-    pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
+    pub fn shutdown_typed(&self) -> Result<(), ShutdownError> {
         self.inner.shutdown_typed()
     }
 
     /// Awaits canonical graceful shutdown of all configured exporters.
-    pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownFailure> {
+    pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownError> {
         self.inner.shutdown_async_typed().await
     }
 
     /// Returns the current exporter health report.
     pub fn health(&self) -> crate::TelemetryHealthReport {
         self.inner.health()
-    }
-}
-
-impl TelemetryEmit for Telemetry {
-    fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_log(event)
-    }
-
-    fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
-        let span = v1_span_signal(span)?;
-        self.runtime().emit_span(&span)
-    }
-
-    fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
-        if metric.kind == sc_observability_types::MetricKind::Histogram {
-            return Ok(());
-        }
-        let metric = v1_metric_record(metric)?;
-        self.runtime().emit_metric(&metric)
     }
 }
 
@@ -638,41 +605,6 @@ fn v1_trace_context(
     }
 }
 
-fn v1_metric_record(
-    metric: &MetricRecord,
-) -> Result<sc_observability_types::v2::MetricRecord, sc_observability_types::v2::ExportError> {
-    let value = match metric.kind {
-        sc_observability_types::MetricKind::Gauge => {
-            sc_observability_types::v2::MetricValue::Gauge(
-                sc_observability_types::v2::FiniteF64::new(metric.value)
-                    .map_err(|_| v1_transport_error("non-finite metric value"))?,
-            )
-        }
-        sc_observability_types::MetricKind::Counter => {
-            sc_observability_types::v2::MetricValue::Sum {
-                value: sc_observability_types::v2::FiniteF64::new(metric.value)
-                    .map_err(|_| v1_transport_error("non-finite metric value"))?,
-                monotonic: true,
-                temporality: sc_observability_types::v2::AggregationTemporality::Cumulative,
-                start_time: metric.timestamp,
-            }
-        }
-        sc_observability_types::MetricKind::Histogram => unreachable!("handled by caller"),
-    };
-    sc_observability_types::v2::MetricRecord::try_new(
-        metric.timestamp,
-        metric.service.clone(),
-        metric.name.clone(),
-        value,
-    )
-    .map_err(|_| v1_transport_error("metric violates canonical interval contract"))
-    .map(|record| {
-        record
-            .with_unit(metric.unit.clone())
-            .with_attributes(v1_attributes(&metric.attributes))
-    })
-}
-
 fn v1_attributes(
     values: &serde_json::Map<String, serde_json::Value>,
 ) -> sc_observability_types::v2::Attributes {
@@ -726,7 +658,7 @@ pub struct TelemetryProjectors<T>
 where
     T: Observable,
 {
-    inner: ProjectorSet<T, Telemetry>,
+    inner: V2TelemetryProjectors<T>,
 }
 
 impl<T> TelemetryProjectors<T>
@@ -734,33 +666,27 @@ where
     T: Observable,
 {
     /// Starts a wrapped projector set for one observation payload type.
-    pub fn new(telemetry: Arc<Telemetry>) -> Self {
+    pub fn new(telemetry: &Arc<Telemetry>) -> Self {
         Self {
-            inner: ProjectorSet::new(telemetry),
+            inner: V2TelemetryProjectors::new(Arc::clone(&telemetry.inner)),
         }
     }
 
     /// Attaches a log projector whose output is also forwarded into telemetry.
     pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
-        self.inner = self
-            .inner
-            .with_log_projector(typed_log_projector(projector));
+        self.inner = self.inner.with_log_projector(projector);
         self
     }
 
     /// Attaches a span projector whose output is also forwarded into telemetry.
     pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
-        self.inner = self
-            .inner
-            .with_span_projector(typed_span_projector(projector));
+        self.inner = self.inner.with_span_projector(projector);
         self
     }
 
     /// Attaches a metric projector whose output is also forwarded into telemetry.
     pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
-        self.inner = self
-            .inner
-            .with_metric_projector(typed_metric_projector(projector));
+        self.inner = self.inner.with_metric_projector(projector);
         self
     }
 
@@ -772,75 +698,7 @@ where
 
     /// Converts the wrapped helper into ordinary observation registration.
     pub fn into_registration(self) -> ProjectionRegistration<T> {
-        let (log, span, metric, filter) = self.inner.into_attached();
-        let mut registration = ProjectionRegistration::new();
-        if let Some(projector) = log {
-            registration = registration.with_log_projector(projector);
-        }
-        if let Some(projector) = span {
-            registration = registration.with_span_projector(projector);
-        }
-        if let Some(projector) = metric {
-            registration = registration.with_metric_projector(projector);
-        }
-        if let Some(filter) = filter {
-            registration = registration.with_filter(filter);
-        }
-        registration
-    }
-}
-
-// The released projector traits report the retained root error; the context is
-// moved from the typed failure unchanged.
-
-#[allow(
-    deprecated,
-    reason = "the released projector trait returns the retained root ProjectionError"
-)]
-impl<T, R> LogProjector<T> for AttachedLogProjector<T, R>
-where
-    T: Observable,
-    R: TelemetryEmit,
-{
-    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
-        TypedLogProjector::project_logs(self, observation)
-            .map_err(|failure| ProjectionError(failure.into_context()))
-    }
-}
-
-#[allow(
-    deprecated,
-    reason = "the released projector trait returns the retained root ProjectionError"
-)]
-impl<T, R> SpanProjector<T> for AttachedSpanProjector<T, R>
-where
-    T: Observable,
-    R: TelemetryEmit,
-{
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        TypedSpanProjector::project_spans(self, observation)
-            .map_err(|failure| ProjectionError(failure.into_context()))
-    }
-}
-
-#[allow(
-    deprecated,
-    reason = "the released projector trait returns the retained root ProjectionError"
-)]
-impl<T, R> MetricProjector<T> for AttachedMetricProjector<T, R>
-where
-    T: Observable,
-    R: TelemetryEmit,
-{
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        TypedMetricProjector::project_metrics(self, observation)
-            .map_err(|failure| ProjectionError(failure.into_context()))
+        self.inner.into_registration()
     }
 }
 

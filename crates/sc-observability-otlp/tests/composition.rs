@@ -5,8 +5,8 @@ use sc_observability_otlp::v2::{
     TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::{
-    ActionName, DiagnosticInfo, ErrorCode, Level, LogEvent, ProcessIdentity, SchemaVersion,
-    ServiceName, TargetCategory, TelemetryHealthState, Timestamp,
+    ActionName, ErrorCode, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName,
+    TargetCategory, TelemetryHealthState, Timestamp,
 };
 use serde_json::Map;
 

@@ -237,15 +237,19 @@
         "IdentityError",
         "InitError",
         "EventError",
-        "FlushError",
-        "ShutdownError",
-        "ProjectionError",
-        "SubscriberError",
-        "LogSinkError",
-        "ExportError"
+        "LogSinkError"
       ],
-      "reason": "errors.rs already holds only the nine released root error wrappers; the canonical errors live in errors_v2.rs. The error_wrapper! macro seals each wrapper and implements DiagnosticInfo in place. lib.rs re-exports them at the crate root, and typed.rs and diagnostic.rs import them through crate::errors. The types crate has no compat module, and its lib.rs is not a compat_root_reexport_exceptions root. Moving the wrappers would add a new compat module and root re-export exception and rewrite those imports, but would separate nothing that errors.rs does not already separate.",
-      "removal_point": "At the next major version, delete the nine released wrapper declarations in errors.rs, their crate-root re-export in lib.rs and the Legacy* conversions in typed.rs that name them. errors_v2.rs is unaffected."
+      "reason": "errors.rs retains only the four v1 root wrappers that remain behind the v1 feature. The deleted root FlushError, ShutdownError, ProjectionError, SubscriberError, and ExportError use their v2 canonical equivalents directly.",
+      "removal_point": "Remove the remaining v1 wrappers and their crate-root re-exports when the v1 feature is retired."
+    },
+    {
+      "file": "crates/sc-observability-types/src/error_codes.rs",
+      "deprecated_symbols": [
+        "ALL",
+        "ALL"
+      ],
+      "reason": "The v1-only aggregate and its deprecated root re-export preserve the released enumeration path while canonical error-code users route through v2 contracts.",
+      "removal_point": "Remove both v1 aggregate paths when the v1 feature is retired."
     }
   ],
   "compat_root_reexport_exceptions": [

@@ -11,53 +11,15 @@
 
 use std::path::PathBuf;
 
-use sc_observability::LogError;
+use sc_observability_types::InitError as LegacyInitError;
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
-use sc_observability_types::{DiagnosticInfo, DiagnosticSummary, LogEvent, ServiceName, ToolName};
-use sc_observability_types::{
-    FlushError as LegacyFlushError, InitError as LegacyInitError,
-    ShutdownError as LegacyShutdownError,
-};
+use sc_observability_types::{ServiceName, ToolName};
 
-use crate::{
-    Observability, ObservabilityBuilder, ObservabilityConfig, RunningFlushError, RunningLogger,
-};
+use crate::{Observability, ObservabilityBuilder, ObservabilityConfig, RunningFlushError};
 
 fn legacy_init_error(error: InitError) -> LegacyInitError {
     LegacyInitError(error.into_context())
-}
-
-fn legacy_flush_error(error: FlushError) -> LegacyFlushError {
-    LegacyFlushError(error.into_context())
-}
-
-fn legacy_running_flush_error(error: RunningFlushError) -> LegacyFlushError {
-    legacy_flush_error(error.into_canonical())
-}
-
-fn released_log_error_summary(error: LogError) -> DiagnosticSummary {
-    match error {
-        LogError::InvalidEvent(error) => DiagnosticSummary::from(error.diagnostic()),
-        LogError::WriterDegraded(error) | LogError::ShutdownTimedOut(error) => {
-            DiagnosticSummary::from(error.diagnostic())
-        }
-    }
-}
-
-impl RunningLogger {
-    pub(crate) fn log(&self, event: LogEvent) -> Result<(), DiagnosticSummary> {
-        match self {
-            Self::Canonical(logger) => logger
-                .log(event)
-                .map_err(|error| crate::canonical_log_error_summary(&error)),
-            Self::Released(logger) => logger.log(event).map_err(released_log_error_summary),
-        }
-    }
-}
-
-fn legacy_shutdown_error(error: ShutdownError) -> LegacyShutdownError {
-    LegacyShutdownError(error.into_context())
 }
 
 impl ObservabilityConfig {
@@ -126,8 +88,9 @@ impl Observability {
         since = "1.4.0",
         note = "Use Observability::flush_typed(); see migrate-error-api.md."
     )]
-    pub fn flush(&self) -> Result<(), LegacyFlushError> {
-        self.flush_running().map_err(legacy_running_flush_error)
+    pub fn flush(&self) -> Result<(), FlushError> {
+        self.flush_running()
+            .map_err(RunningFlushError::into_canonical)
     }
 
     /// Shuts down the shared runtime with the released root failure contract.
@@ -141,8 +104,8 @@ impl Observability {
         since = "1.4.0",
         note = "Use Observability::shutdown_typed(); see migrate-error-api.md."
     )]
-    pub fn shutdown(&self) -> Result<(), LegacyShutdownError> {
-        self.shutdown_v2().map_err(legacy_shutdown_error)
+    pub fn shutdown(&self) -> Result<(), ShutdownError> {
+        self.shutdown_v2()
     }
 
     /// Constructs the existing runtime with the released typed failure contract.
@@ -214,46 +177,10 @@ mod tests {
     }
 
     #[test]
-    fn direct_root_error_adapters_preserve_canonical_context_and_source() {
+    fn legacy_init_error_preserves_canonical_context_and_source() {
         let init = legacy_init_error(InitError::Runtime {
             context: context("root init native source"),
         });
         assert_legacy_root_error(&init, "root init native source");
-
-        let flush = legacy_flush_error(FlushError::Drain {
-            context: context("root flush native source"),
-        });
-        assert_legacy_root_error(&flush, "root flush native source");
-
-        let shutdown = legacy_shutdown_error(ShutdownError::Drain {
-            context: context("root shutdown native source"),
-        });
-        assert_legacy_root_error(&shutdown, "root shutdown native source");
-    }
-    #[test]
-    fn legacy_running_flush_error_preserves_context_and_source_identity() {
-        // The proof begins at the facade input; it does not claim end-to-end
-        // sink-source identity.
-        fn identity(context: &ErrorContext) -> (*const (), *const ()) {
-            let source = std::error::Error::source(context).expect("context keeps its source");
-            (
-                std::ptr::from_ref(context).cast::<()>(),
-                std::ptr::from_ref(source).cast::<()>(),
-            )
-        }
-
-        let boxed = context("root flush arm native source");
-        let before = identity(&boxed);
-        let legacy = legacy_running_flush_error(RunningFlushError::Released(
-            FlushFailure::from_context(boxed),
-        ));
-        assert_eq!(identity(&legacy.0), before);
-
-        let boxed = context("root canonical arm native source");
-        let before = identity(&boxed);
-        let legacy = legacy_running_flush_error(RunningFlushError::Canonical(FlushError::Drain {
-            context: boxed,
-        }));
-        assert_eq!(identity(&legacy.0), before);
     }
 }

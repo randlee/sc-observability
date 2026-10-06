@@ -48,19 +48,19 @@ pub fn sc_observe::Observability::builder(sc_observe::ObservabilityConfig) -> sc
 pub fn sc_observe::Observability::emit<T>(&self, sc_observability_types::events::Observation<T>) -> core::result::Result<(), sc_observability_types::errors::ObservationError> where T: sc_observability_types::events::Observable
 pub fn sc_observe::Observability::health(&self) -> sc_observability_types::health::ObservabilityHealthReport
 impl sc_observe::Observability
-pub fn sc_observe::Observability::flush(&self) -> core::result::Result<(), sc_observability_types::errors::FlushError>
+pub fn sc_observe::Observability::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observe::Observability::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
 pub fn sc_observe::Observability::new(sc_observe::ObservabilityConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
 pub fn sc_observe::Observability::new_typed(sc_observe::ObservabilityConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
-pub fn sc_observe::Observability::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors::ShutdownError>
+pub fn sc_observe::Observability::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 pub fn sc_observe::Observability::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
 pub struct sc_observe::ObservabilityBuilder
 impl sc_observe::ObservabilityBuilder
 pub fn sc_observe::ObservabilityBuilder::build(self) -> core::result::Result<sc_observe::Observability, sc_observability_types::errors::InitError>
 pub fn sc_observe::ObservabilityBuilder::build_typed(self) -> core::result::Result<sc_observe::Observability, sc_observability_types::typed::InitFailure>
 impl sc_observe::ObservabilityBuilder
-pub fn sc_observe::ObservabilityBuilder::register_projection<T>(self, sc_observability_types::projection::ProjectionRegistration<T>) -> Self where T: sc_observability_types::events::Observable
-pub fn sc_observe::ObservabilityBuilder::register_subscriber<T>(self, sc_observability_types::projection::SubscriberRegistration<T>) -> Self where T: sc_observability_types::events::Observable
+pub fn sc_observe::ObservabilityBuilder::register_projection<T>(self, sc_observability_types::observation_v2::ProjectionRegistration<T>) -> Self where T: sc_observability_types::events::Observable
+pub fn sc_observe::ObservabilityBuilder::register_subscriber<T>(self, sc_observability_types::observation_v2::SubscriberRegistration<T>) -> Self where T: sc_observability_types::events::Observable
 pub fn sc_observe::ObservabilityBuilder::with_observability_health_provider(self, impl sc_observability_types::health::ObservabilityHealthProvider + core::marker::Send + core::marker::Sync + 'static) -> Self
 pub struct sc_observe::ObservabilityConfig
 pub sc_observe::ObservabilityConfig::env_prefix: sc_observability_types::validation::EnvPrefix

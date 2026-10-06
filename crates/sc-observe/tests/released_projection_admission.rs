@@ -1,3 +1,5 @@
+#![cfg(feature = "v1")]
+
 //! Projection admission follows the facade that built the runtime.
 //!
 //! A root-built runtime keeps exact 1.4.1 acceptance of a projected
@@ -14,11 +16,10 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sc_observability_types::ProjectionError;
+use sc_observability_types::v2::{LogProjector, ProjectionError, ProjectionRegistration};
 use sc_observability_types::{
-    ActionName, Level, LogEvent, LogProjector, Observation, OutcomeLabel, ProcessIdentity,
-    ProjectionRegistration, SchemaVersion, ServiceName, StateName, StateTransition, TargetCategory,
-    Timestamp, ToolName,
+    ActionName, Level, LogEvent, Observation, OutcomeLabel, ProcessIdentity, SchemaVersion,
+    ServiceName, StateName, StateTransition, TargetCategory, Timestamp, ToolName,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -146,7 +147,7 @@ fn v2_runtime(name: &str, id: &'static str) -> Running<sc_observe::v2::Observabi
     let config = sc_observe::v2::ObservabilityConfig::default_for(tool_name(), root.0.clone())
         .expect("v2 config");
     let runtime = sc_observe::v2::Observability::builder(config)
-        .register_projection(registration(id).into())
+        .register_projection(registration(id))
         .build()
         .expect("v2 runtime");
     Running {

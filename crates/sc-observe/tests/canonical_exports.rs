@@ -1,19 +1,19 @@
+#![cfg(feature = "v1")]
+
 //! Compile-only public-signature proof for the opt-in observation facade.
 
 use std::{path::PathBuf, sync::Arc};
 
 use sc_observability_types::v2::{
+    FlushError as LegacyFlushError, ProjectionRegistration,
     ProjectionRegistration as CanonicalProjectionRegistration,
-    SubscriberRegistration as CanonicalSubscriberRegistration,
+    ShutdownError as LegacyShutdownError,
+    SubscriberRegistration as CanonicalSubscriberRegistration, SubscriberRegistration,
 };
 #[allow(deprecated)]
-use sc_observability_types::{
-    FlushError as LegacyFlushError, InitError as LegacyInitError, ServiceName,
-    ShutdownError as LegacyShutdownError, ToolName,
-};
+use sc_observability_types::{InitError as LegacyInitError, ServiceName, ToolName};
 use sc_observability_types::{
     ObservabilityHealthProvider, ObservabilityHealthReport, Observation, ObservationError,
-    ProjectionRegistration, SubscriberRegistration,
     typed::{FlushFailure, InitFailure, ShutdownFailure},
 };
 use sc_observe::v2::{

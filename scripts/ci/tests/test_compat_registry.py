@@ -404,6 +404,7 @@ class DeprecatedOwnerExceptionRecordTests(unittest.TestCase):
         registry = json.loads((REPO_ROOT / "docs/compatibility/registry.json").read_text(encoding="utf-8"))
         records = deprecated_owner_exception_records(registry)
         self.assertEqual(sorted(records), [
+            "crates/sc-observability-types/src/error_codes.rs",
             "crates/sc-observability-types/src/errors.rs",
             "crates/sc-observability/src/error_codes.rs",
         ])
@@ -427,6 +428,10 @@ class DeprecatedOwnerNameTests(unittest.TestCase):
 
     def test_same_line_owner_at_end_of_file_is_taken_from_the_attribute_line(self):
         contents = "pub fn current() {}\n#[deprecated(note = \"use v2\")] pub struct Legacy;"
+        self.assertEqual(deprecated_owner_names(contents), ["Legacy"])
+
+    def test_deprecated_reexport_uses_the_exported_symbol_name(self):
+        contents = "#[deprecated(note = \"use v2\")]\npub use v1::Legacy;\n"
         self.assertEqual(deprecated_owner_names(contents), ["Legacy"])
 
     def test_recorded_baseline_matches_pinned_release_source(self):

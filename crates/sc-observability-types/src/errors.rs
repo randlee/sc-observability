@@ -6,9 +6,12 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{Diagnostic, DiagnosticInfo, ErrorContext, sealed};
+use crate::ErrorContext;
+#[cfg(feature = "v1")]
+use crate::{Diagnostic, DiagnosticInfo, sealed};
 
 /// Error returned when process identity resolution fails.
+#[cfg(feature = "v1")]
 #[deprecated(
     since = "1.4.0",
     note = "Use sc_observability_types::typed::IdentityFailure; see migrate-error-api.md."
@@ -17,107 +20,70 @@ use crate::{Diagnostic, DiagnosticInfo, ErrorContext, sealed};
 #[error("{0}")]
 pub struct IdentityError(#[source] pub Box<ErrorContext>);
 
+#[cfg(feature = "v1")]
 impl sealed::Sealed for IdentityError {}
 
 #[allow(
     deprecated,
     reason = "IdentityError remains a retained compatibility wrapper"
 )]
+#[cfg(feature = "v1")]
 impl DiagnosticInfo for IdentityError {
     fn diagnostic(&self) -> &Diagnostic {
         self.0.diagnostic()
     }
 }
 
-macro_rules! error_wrapper {
-    ($(#[$meta:meta])* $name:ident) => {
-        $(#[$meta])*
-        #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
-        #[error("{0}")]
-        pub struct $name(#[source] pub Box<ErrorContext>);
+/// Initialization error returned by public construction entry points.
+#[cfg(feature = "v1")]
+#[deprecated(since = "1.5.0", note = "use sc_observability_types::v2::InitError")]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+#[error("{0}")]
+pub struct InitError(#[source] pub Box<ErrorContext>);
 
-        #[allow(
-            deprecated,
-            reason = "legacy error wrapper remains a retained compatibility boundary"
-        )]
-        impl sealed::Sealed for $name {}
+#[cfg(feature = "v1")]
+impl sealed::Sealed for InitError {}
 
-        #[allow(
-            deprecated,
-            reason = "legacy error wrapper retains its DiagnosticInfo implementation"
-        )]
-        impl DiagnosticInfo for $name {
-            fn diagnostic(&self) -> &Diagnostic {
-                self.0.diagnostic()
-            }
-        }
-    };
+#[cfg(feature = "v1")]
+impl DiagnosticInfo for InitError {
+    fn diagnostic(&self) -> &Diagnostic {
+        self.0.diagnostic()
+    }
 }
 
-error_wrapper!(
-    /// Initialization error returned by public construction entry points.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use sc_observability_types::typed::InitFailure; see migrate-error-api.md."
-    )]
-    InitError
-);
-error_wrapper!(
-    /// Event validation or lifecycle error returned during emit paths.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use sc_observability_types::typed::EventFailure; see migrate-error-api.md."
-    )]
-    EventError
-);
-error_wrapper!(
-    /// Flush error returned by explicit flush operations.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use sc_observability_types::typed::FlushFailure; see migrate-error-api.md."
-    )]
-    FlushError
-);
-error_wrapper!(
-    /// Shutdown error returned when graceful shutdown fails.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use sc_observability_types::typed::ShutdownFailure; see migrate-error-api.md."
-    )]
-    ShutdownError
-);
-error_wrapper!(
-    /// Projection error returned by log/span/metric projectors.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md."
-    )]
-    ProjectionError
-);
-error_wrapper!(
-    /// Subscriber error returned by observation subscribers.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use sc_observability_types::typed::SubscriberFailure; see migrate-error-api.md."
-    )]
-    SubscriberError
-);
-error_wrapper!(
-    /// Logging sink error returned by concrete sink implementations.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use sc_observability_types::typed::LogSinkFailure; see migrate-error-api.md."
-    )]
-    LogSinkError
-);
-error_wrapper!(
-    /// Export error returned by concrete telemetry exporters.
-    #[deprecated(
-        since = "1.4.0",
-        note = "Use sc_observability_types::typed::ExportFailure; see migrate-error-api.md."
-    )]
-    ExportError
-);
+/// Event validation or lifecycle error returned during emit paths.
+#[cfg(feature = "v1")]
+#[deprecated(since = "1.5.0", note = "use sc_observability_types::v2::EventError")]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+#[error("{0}")]
+pub struct EventError(#[source] pub Box<ErrorContext>);
+
+#[cfg(feature = "v1")]
+impl sealed::Sealed for EventError {}
+
+#[cfg(feature = "v1")]
+impl DiagnosticInfo for EventError {
+    fn diagnostic(&self) -> &Diagnostic {
+        self.0.diagnostic()
+    }
+}
+
+/// Logging sink error returned by concrete sink implementations.
+#[cfg(feature = "v1")]
+#[deprecated(since = "1.5.0", note = "use sc_observability_types::v2::LogSinkError")]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+#[error("{0}")]
+pub struct LogSinkError(#[source] pub Box<ErrorContext>);
+
+#[cfg(feature = "v1")]
+impl sealed::Sealed for LogSinkError {}
+
+#[cfg(feature = "v1")]
+impl DiagnosticInfo for LogSinkError {
+    fn diagnostic(&self) -> &Diagnostic {
+        self.0.diagnostic()
+    }
+}
 
 /// Routing/runtime error returned by `Observability::emit`.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
@@ -134,6 +100,7 @@ pub enum ObservationError {
 }
 
 /// Telemetry emit error returned by the released root `Telemetry` operations.
+#[cfg(feature = "v1")]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum TelemetryError {
     /// The telemetry runtime has already been shut down.
@@ -144,7 +111,7 @@ pub enum TelemetryError {
     ExportFailure(#[source] Box<ErrorContext>),
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "v1"))]
 mod tests {
     use super::*;
     use crate::{Remediation, error_codes};

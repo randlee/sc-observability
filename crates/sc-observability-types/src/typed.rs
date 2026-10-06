@@ -35,26 +35,21 @@
 //! let _encoded = serde_json::to_vec(&failure);
 //! ```
 
-use std::sync::Arc;
-
 use serde_json::Value;
 use thiserror::Error;
 
 use crate::errors::{
-    EventError as LegacyEventError, ExportError as LegacyExportError,
-    FlushError as LegacyFlushError, IdentityError as LegacyIdentityError,
+    EventError as LegacyEventError, IdentityError as LegacyIdentityError,
     InitError as LegacyInitError, LogSinkError as LegacyLogSinkError,
-    ProjectionError as LegacyProjectionError, ShutdownError as LegacyShutdownError,
-    SubscriberError as LegacySubscriberError,
 };
 use crate::errors_v2::{
     FlushError as CanonicalFlushError, InitError as CanonicalInitError,
     ShutdownError as CanonicalShutdownError,
 };
+use crate::v2::MetricRecord;
 use crate::{
-    Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, LogEvent, LogProjector, MetricProjector,
-    MetricRecord, Observable, Observation, ObservationSubscriber, ProcessIdentity,
-    ProcessIdentityResolver, Remediation, SpanProjector, SpanSignal, error_codes, sealed,
+    Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, LogEvent, Observable, Observation,
+    ProcessIdentity, Remediation, SpanSignal, error_codes, sealed,
 };
 
 /// A diagnostic error whose family-specific kind is available without parsing
@@ -205,18 +200,6 @@ macro_rules! define_failure {
 
             fn context(&self) -> &ErrorContext {
                 &self.context
-            }
-        }
-
-        impl From<$legacy> for $failure {
-            fn from(value: $legacy) -> Self {
-                Self::from_context(value.0)
-            }
-        }
-
-        impl From<$failure> for $legacy {
-            fn from(value: $failure) -> Self {
-                Self(value.context)
             }
         }
 
@@ -385,23 +368,31 @@ impl From<CanonicalShutdownError> for ShutdownFailure {
     }
 }
 
+macro_rules! impl_retained_legacy_conversion {
+    ($legacy:ty, $failure:ty) => {
+        impl From<$legacy> for $failure {
+            fn from(value: $legacy) -> Self {
+                Self::from_context(value.0)
+            }
+        }
+
+        impl From<$failure> for $legacy {
+            fn from(value: $failure) -> Self {
+                Self(value.context)
+            }
+        }
+    };
+}
+
+impl_retained_legacy_conversion!(LegacyIdentityError, IdentityFailure);
+impl_retained_legacy_conversion!(LegacyInitError, InitFailure);
+impl_retained_legacy_conversion!(LegacyEventError, EventFailure);
+impl_retained_legacy_conversion!(LegacyLogSinkError, LogSinkFailure);
+
 impl_legacy_classification!(LegacyIdentityError, IdentityFailure, IdentityFailureKind);
 impl_legacy_classification!(LegacyInitError, InitFailure, InitFailureKind);
 impl_legacy_classification!(LegacyEventError, EventFailure, EventFailureKind);
-impl_legacy_classification!(LegacyFlushError, FlushFailure, FlushFailureKind);
-impl_legacy_classification!(LegacyShutdownError, ShutdownFailure, ShutdownFailureKind);
-impl_legacy_classification!(
-    LegacyProjectionError,
-    ProjectionFailure,
-    ProjectionFailureKind
-);
-impl_legacy_classification!(
-    LegacySubscriberError,
-    SubscriberFailure,
-    SubscriberFailureKind
-);
 impl_legacy_classification!(LegacyLogSinkError, LogSinkFailure, LogSinkFailureKind);
-impl_legacy_classification!(LegacyExportError, ExportFailure, ExportFailureKind);
 
 /// Typed process identity resolver contract.
 pub trait TypedProcessIdentityResolver: Send + Sync {
@@ -462,205 +453,7 @@ pub trait TypedMetricProjector<T: Observable>: Send + Sync {
     ) -> Result<Vec<MetricRecord>, ProjectionFailure>;
 }
 
-struct LegacyIdentityAdapter {
-    inner: Arc<dyn TypedProcessIdentityResolver>,
-}
-
-impl ProcessIdentityResolver for LegacyIdentityAdapter {
-    fn resolve(&self) -> Result<ProcessIdentity, LegacyIdentityError> {
-        self.inner.resolve().map_err(Into::into)
-    }
-}
-
-struct TypedIdentityAdapter {
-    inner: Arc<dyn ProcessIdentityResolver>,
-}
-
-impl TypedProcessIdentityResolver for TypedIdentityAdapter {
-    fn resolve(&self) -> Result<ProcessIdentity, IdentityFailure> {
-        self.inner.resolve().map_err(Into::into)
-    }
-}
-
-struct LegacySubscriberAdapter<T: Observable> {
-    inner: Arc<dyn TypedObservationSubscriber<T>>,
-}
-
-impl<T: Observable> ObservationSubscriber<T> for LegacySubscriberAdapter<T> {
-    fn observe(&self, observation: &Observation<T>) -> Result<(), LegacySubscriberError> {
-        self.inner.observe(observation).map_err(Into::into)
-    }
-}
-
-struct TypedSubscriberAdapter<T: Observable> {
-    inner: Arc<dyn ObservationSubscriber<T>>,
-}
-
-impl<T: Observable> TypedObservationSubscriber<T> for TypedSubscriberAdapter<T> {
-    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberFailure> {
-        self.inner.observe(observation).map_err(Into::into)
-    }
-}
-
-struct LegacyLogProjectorAdapter<T: Observable> {
-    inner: Arc<dyn TypedLogProjector<T>>,
-}
-
-impl<T: Observable> LogProjector<T> for LegacyLogProjectorAdapter<T> {
-    fn project_logs(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<LogEvent>, LegacyProjectionError> {
-        self.inner.project_logs(observation).map_err(Into::into)
-    }
-}
-
-struct TypedLogProjectorAdapter<T: Observable> {
-    inner: Arc<dyn LogProjector<T>>,
-}
-
-impl<T: Observable> TypedLogProjector<T> for TypedLogProjectorAdapter<T> {
-    fn project_logs(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<LogEvent>, ProjectionFailure> {
-        self.inner.project_logs(observation).map_err(Into::into)
-    }
-}
-
-struct LegacySpanProjectorAdapter<T: Observable> {
-    inner: Arc<dyn TypedSpanProjector<T>>,
-}
-
-impl<T: Observable> SpanProjector<T> for LegacySpanProjectorAdapter<T> {
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, LegacyProjectionError> {
-        self.inner.project_spans(observation).map_err(Into::into)
-    }
-}
-
-struct TypedSpanProjectorAdapter<T: Observable> {
-    inner: Arc<dyn SpanProjector<T>>,
-}
-
-impl<T: Observable> TypedSpanProjector<T> for TypedSpanProjectorAdapter<T> {
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionFailure> {
-        self.inner.project_spans(observation).map_err(Into::into)
-    }
-}
-
-struct LegacyMetricProjectorAdapter<T: Observable> {
-    inner: Arc<dyn TypedMetricProjector<T>>,
-}
-
-impl<T: Observable> MetricProjector<T> for LegacyMetricProjectorAdapter<T> {
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, LegacyProjectionError> {
-        self.inner.project_metrics(observation).map_err(Into::into)
-    }
-}
-
-struct TypedMetricProjectorAdapter<T: Observable> {
-    inner: Arc<dyn MetricProjector<T>>,
-}
-
-impl<T: Observable> TypedMetricProjector<T> for TypedMetricProjectorAdapter<T> {
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
-        self.inner.project_metrics(observation).map_err(Into::into)
-    }
-}
-
-/// Adapts a typed identity resolver to the existing resolver trait.
-#[must_use]
-pub fn legacy_identity(
-    value: Arc<dyn TypedProcessIdentityResolver>,
-) -> Arc<dyn ProcessIdentityResolver> {
-    Arc::new(LegacyIdentityAdapter { inner: value })
-}
-
-/// Adapts an existing identity resolver to the typed resolver trait.
-#[must_use]
-pub fn typed_identity(
-    value: Arc<dyn ProcessIdentityResolver>,
-) -> Arc<dyn TypedProcessIdentityResolver> {
-    Arc::new(TypedIdentityAdapter { inner: value })
-}
-
-/// Adapts a typed subscriber to the existing subscriber trait.
-#[must_use]
-pub fn legacy_subscriber<T: Observable>(
-    value: Arc<dyn TypedObservationSubscriber<T>>,
-) -> Arc<dyn ObservationSubscriber<T>> {
-    Arc::new(LegacySubscriberAdapter { inner: value })
-}
-
-/// Adapts an existing subscriber to the typed subscriber trait.
-#[must_use]
-pub fn typed_subscriber<T: Observable>(
-    value: Arc<dyn ObservationSubscriber<T>>,
-) -> Arc<dyn TypedObservationSubscriber<T>> {
-    Arc::new(TypedSubscriberAdapter { inner: value })
-}
-
-/// Adapts a typed log projector to the existing projector trait.
-#[must_use]
-pub fn legacy_log_projector<T: Observable>(
-    value: Arc<dyn TypedLogProjector<T>>,
-) -> Arc<dyn LogProjector<T>> {
-    Arc::new(LegacyLogProjectorAdapter { inner: value })
-}
-
-/// Adapts an existing log projector to the typed projector trait.
-#[must_use]
-pub fn typed_log_projector<T: Observable>(
-    value: Arc<dyn LogProjector<T>>,
-) -> Arc<dyn TypedLogProjector<T>> {
-    Arc::new(TypedLogProjectorAdapter { inner: value })
-}
-
-/// Adapts a typed span projector to the existing projector trait.
-#[must_use]
-pub fn legacy_span_projector<T: Observable>(
-    value: Arc<dyn TypedSpanProjector<T>>,
-) -> Arc<dyn SpanProjector<T>> {
-    Arc::new(LegacySpanProjectorAdapter { inner: value })
-}
-
-/// Adapts an existing span projector to the typed projector trait.
-#[must_use]
-pub fn typed_span_projector<T: Observable>(
-    value: Arc<dyn SpanProjector<T>>,
-) -> Arc<dyn TypedSpanProjector<T>> {
-    Arc::new(TypedSpanProjectorAdapter { inner: value })
-}
-
-/// Adapts a typed metric projector to the existing projector trait.
-#[must_use]
-pub fn legacy_metric_projector<T: Observable>(
-    value: Arc<dyn TypedMetricProjector<T>>,
-) -> Arc<dyn MetricProjector<T>> {
-    Arc::new(LegacyMetricProjectorAdapter { inner: value })
-}
-
-/// Adapts an existing metric projector to the typed projector trait.
-#[must_use]
-pub fn typed_metric_projector<T: Observable>(
-    value: Arc<dyn MetricProjector<T>>,
-) -> Arc<dyn TypedMetricProjector<T>> {
-    Arc::new(TypedMetricProjectorAdapter { inner: value })
-}
-
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::errors::{

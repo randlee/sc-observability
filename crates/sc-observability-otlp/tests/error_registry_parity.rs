@@ -10,6 +10,7 @@
 //! string-matching drift. Compatibility constructors whose legacy literals
 //! remain types-owned are intentionally not asserted against this transport
 //! registry: D.21 exposes only the types-owned OTLP registry.
+#![cfg(feature = "v1")]
 
 use sc_observability_types::Remediation;
 use sc_observability_types::typed::{
@@ -78,10 +79,6 @@ fn event_failure_matches_owning_registry() {
     assert_owning_code!(
         EventFailure::invalid_event("x", remediation()),
         sc_observability::error_codes::LOGGER_INVALID_EVENT
-    );
-    assert_owning_code!(
-        EventFailure::closed("x", remediation()),
-        sc_observability::error_codes::LOGGER_SHUTDOWN
     );
     assert_owning_code!(
         EventFailure::queue_full("x", remediation()),

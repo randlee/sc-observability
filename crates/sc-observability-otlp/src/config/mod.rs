@@ -50,8 +50,8 @@ use serde_json::{Map, Value};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_types::ServiceName;
     use sc_observability_types::v2::ConfigFailure;
-    use sc_observability_types::{DiagnosticInfo, ServiceName};
 
     #[test]
     fn otlp_endpoint_accepts_valid_http_and_https_values() {

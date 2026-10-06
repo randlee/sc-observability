@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use sc_observability_types::typed::FlushFailure;
+use sc_observability_types::v2::FlushError;
 use sc_observability_types::{
     DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport, MaintenanceWorkerState,
     Remediation, Timestamp, WriterState,
@@ -149,57 +149,71 @@ impl WriterRuntime {
         self.writer_tracker.record_queue_full_drop()
     }
 
-    pub(crate) fn flush(&self) -> Result<(), FlushFailure> {
+    pub(crate) fn flush(&self) -> Result<(), FlushError> {
         let (tx, rx) = mpsc::channel();
-        self.sender.send(WriterCommand::Flush(tx)).map_err(|_| {
-            FlushFailure::writer_degraded(
-                "writer thread is not available for flush",
-                Remediation::recoverable(
-                    "inspect logger writer-thread health",
-                    [
-                        "inspect logger.health().writer_state",
-                        "inspect logger.health().last_writer_error",
-                    ],
-                ),
-            )
-        })?;
+        self.sender
+            .send(WriterCommand::Flush(tx))
+            .map_err(|_| FlushError::Drain {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_WRITER_DEGRADED,
+                    "writer thread is not available for flush",
+                    Remediation::recoverable(
+                        "inspect logger writer-thread health",
+                        [
+                            "inspect logger.health().writer_state",
+                            "inspect logger.health().last_writer_error",
+                        ],
+                    ),
+                )),
+            })?;
         match rx.recv_timeout(self.join_timeout) {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(summary)) => Err(FlushFailure::logger_flush(
-                "writer flush failed",
-                Remediation::recoverable(
-                    "inspect the writer-thread flush failure",
-                    [
-                        "inspect logger.health().last_writer_error",
-                        "retry the flush after the writer recovers",
-                    ],
+            Ok(Err(summary)) => Err(FlushError::Drain {
+                context: Box::new(
+                    ErrorContext::new(
+                        error_codes::LOGGER_FLUSH_FAILED,
+                        "writer flush failed",
+                        Remediation::recoverable(
+                            "inspect the writer-thread flush failure",
+                            [
+                                "inspect logger.health().last_writer_error",
+                                "retry the flush after the writer recovers",
+                            ],
+                        ),
+                    )
+                    .cause(summary.message.clone()),
                 ),
-            )
-            .cause(summary.message.clone())),
-            Err(mpsc::RecvTimeoutError::Timeout) => Err(FlushFailure::writer_degraded(
-                format!(
-                    "writer thread did not complete flush within {}ms",
-                    self.join_timeout.as_millis()
-                ),
-                Remediation::recoverable(
-                    "inspect logger writer-thread health",
-                    [
-                        "inspect logger.health().writer_state",
-                        "inspect logger.health().last_writer_error",
-                        "retry the flush after the writer recovers",
-                    ],
-                ),
-            )),
-            Err(mpsc::RecvTimeoutError::Disconnected) => Err(FlushFailure::writer_degraded(
-                "writer thread disconnected during flush",
-                Remediation::recoverable(
-                    "inspect logger writer-thread health",
-                    [
-                        "inspect logger.health().writer_state",
-                        "inspect logger.health().last_writer_error",
-                    ],
-                ),
-            )),
+            }),
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(FlushError::Drain {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_WRITER_DEGRADED,
+                    format!(
+                        "writer thread did not complete flush within {}ms",
+                        self.join_timeout.as_millis()
+                    ),
+                    Remediation::recoverable(
+                        "inspect logger writer-thread health",
+                        [
+                            "inspect logger.health().writer_state",
+                            "inspect logger.health().last_writer_error",
+                            "retry the flush after the writer recovers",
+                        ],
+                    ),
+                )),
+            }),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(FlushError::Drain {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_WRITER_DEGRADED,
+                    "writer thread disconnected during flush",
+                    Remediation::recoverable(
+                        "inspect logger writer-thread health",
+                        [
+                            "inspect logger.health().writer_state",
+                            "inspect logger.health().last_writer_error",
+                        ],
+                    ),
+                )),
+            }),
         }
     }
 
