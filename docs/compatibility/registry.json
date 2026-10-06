@@ -237,9 +237,10 @@
         "IdentityError",
         "InitError",
         "EventError",
-        "LogSinkError"
+        "LogSinkError",
+        "TelemetryError"
       ],
-      "reason": "errors.rs retains only the four v1 root wrappers that remain behind the v1 feature. The deleted root FlushError, ShutdownError, ProjectionError, SubscriberError, and ExportError use their v2 canonical equivalents directly.",
+      "reason": "errors.rs retains only the five v1 root wrappers that remain behind the v1 feature: IdentityError, InitError, EventError, LogSinkError, and TelemetryError. The deleted root FlushError, ShutdownError, ProjectionError, SubscriberError, and ExportError use their v2 canonical equivalents directly.",
       "removal_point": "Remove the remaining v1 wrappers and their crate-root re-exports when the v1 feature is retired."
     },
     {

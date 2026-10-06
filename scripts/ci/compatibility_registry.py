@@ -40,9 +40,10 @@ DEPRECATED_OWNER_BASELINE: dict[str, tuple[str, ...]] = {
     "crates/sc-observability-otlp/src/assembly.rs": ("push",),
 }
 
-# Phase-F lead rulings retain these v1-only error-code compatibility paths as
-# deprecated while their eventual migration remains in flight.
+# Phase-F lead rulings retain these v1-only compatibility owners as deprecated
+# while their eventual migration remains in flight.
 RESTORED_V1_DEPRECATED_OWNERS: dict[str, tuple[str, ...]] = {
+    "crates/sc-observability-types/src/errors.rs": ("TelemetryError",),
     "crates/sc-observability/src/error_codes.rs": (
         "LOGGER_SHUTDOWN",
         "LOGGER_MAINTENANCE_JOIN_TIMEOUT",
