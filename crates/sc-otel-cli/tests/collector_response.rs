@@ -279,6 +279,9 @@ fn collector_deadline_stops_after_serving_the_expected_request() {
         Collector::start_with_request_deadline("{}".to_owned(), Duration::from_secs(1));
     let mut stream = TcpStream::connect(collector.address).expect("connect collector");
     stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("set client response read timeout");
+    stream
         .write_all(b"POST /v1/logs HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{}")
         .expect("write request");
     let mut response = String::new();
