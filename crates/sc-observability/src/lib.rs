@@ -647,7 +647,6 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
 mod tests {
     use super::*;
     use crate::runtime::LevelLifecycle;
-    use crate::sinks::ConsoleWriter;
     use crate::v2::LogSink;
     use sc_observability_types::v2::LogSinkError;
     use sc_observability_types::v2::{
@@ -668,20 +667,6 @@ mod tests {
 
     fn legacy_sink_error(context: Box<ErrorContext>) -> LogSinkError {
         LogSinkError::Write { context }
-    }
-
-    struct SharedBuffer {
-        lines: Arc<Mutex<Vec<String>>>,
-    }
-
-    impl ConsoleWriter for SharedBuffer {
-        fn write_line(&self, line: &str) -> std::io::Result<()> {
-            self.lines
-                .lock()
-                .expect("buffer poisoned")
-                .push(line.to_string());
-            Ok(())
-        }
     }
 
     struct SourceRedactor {
@@ -714,26 +699,6 @@ mod tests {
     impl Redactor for Arc<SourceRedactor> {
         fn redact(&self, key: &str, value: &mut Value) {
             (**self).redact(key, value);
-        }
-    }
-
-    struct FailSink;
-
-    impl LogSink for FailSink {
-        fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
-            Err(legacy_sink_error(Box::new(ErrorContext::new(
-                error_codes::LOGGER_SINK_WRITE_FAILED,
-                "fail sink write failed",
-                Remediation::not_recoverable("test sink intentionally fails"),
-            ))))
-        }
-
-        fn health(&self) -> SinkHealth {
-            SinkHealth {
-                name: sink_name("fail"),
-                state: SinkHealthState::DegradedDropping,
-                last_error: None,
-            }
         }
     }
 
@@ -1340,25 +1305,6 @@ mod tests {
     }
 
     #[test]
-    fn sink_failures_are_fail_open_and_counted_in_health() {
-        let root = temp_path("fail-open");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_file_sink = false;
-        let mut builder = Logger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::typed(Arc::new(FailSink)));
-        let logger = builder.build();
-
-        logger
-            .emit(log_event(service_name()))
-            .expect("emit still succeeds");
-
-        let health = logger.health();
-        assert_eq!(health.state, LoggingHealthState::DegradedDropping);
-        assert_eq!(health.dropped_events_total, 1);
-        assert!(health.last_error.is_some());
-    }
-
-    #[test]
     fn flush_failures_propagate_and_are_counted_in_health() {
         struct FlushFailSink;
 
@@ -1532,59 +1478,6 @@ mod tests {
         assert_eq!(health.sink_statuses[0].state, SinkHealthState::Unavailable);
         assert_eq!(health.dropped_events_total, 1);
         assert!(health.last_error.is_some());
-    }
-
-    #[test]
-    fn sink_filter_blocks_event_delivery() {
-        struct DenyAll;
-
-        impl LogFilter for DenyAll {
-            fn accepts(&self, _event: &LogEvent) -> bool {
-                false
-            }
-        }
-
-        let root = temp_path("filter");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_file_sink = false;
-        let mut builder = Logger::builder(config).expect("logger builder");
-
-        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        builder.register_sink(
-            SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
-                lines: lines.clone(),
-            }))))
-            .with_filter(Arc::new(DenyAll)),
-        );
-        let logger = builder.build();
-
-        logger.emit(log_event(service_name())).expect("emit");
-
-        assert!(lines.lock().expect("lines poisoned").is_empty());
-    }
-
-    #[test]
-    fn shutdown_blocks_future_emits() {
-        let root = temp_path("shutdown");
-        let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
-        let stopped = logger.shutdown();
-        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
-    }
-
-    #[test]
-    fn shutdown_flushes_registered_sinks_before_marking_shutdown() {
-        let root = temp_path("shutdown-flush");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_file_sink = false;
-        let mut builder = Logger::builder(config).expect("logger builder");
-        let sink = Arc::new(RecordingFlushSink::default());
-        builder.register_sink(SinkRegistration::typed(sink.clone()));
-        let logger = builder.build();
-
-        let _stopped = logger.shutdown();
-
-        assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -1860,12 +1753,6 @@ mod tests {
         // been observed. Its completion channel is already disconnected, so
         // shutdown joins the terminated worker without an unbounded wait.
         let _stopped = logger.shutdown();
-    }
-
-    #[test]
-    fn queue_capacity_rejects_zero_at_construction() {
-        assert!(QueueCapacity::new(0).is_none());
-        assert_eq!(QueueCapacity::new(1).expect("positive").get(), 1);
     }
 
     #[test]
@@ -2987,6 +2874,28 @@ mod canonical_behavior_tests {
         }
     }
 
+    struct CanonicalFailSink;
+
+    impl crate::sink::LogSink for CanonicalFailSink {
+        fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            Err(sc_observability_types::v2::LogSinkError::Write {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_SINK_WRITE_FAILED,
+                    "fail sink write failed",
+                    Remediation::not_recoverable("test sink intentionally fails"),
+                )),
+            })
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: SinkName::new("canonical-fail").expect("valid sink name"),
+                state: SinkHealthState::DegradedDropping,
+                last_error: None,
+            }
+        }
+    }
+
     struct PrefixRedactor;
 
     impl Redactor for PrefixRedactor {
@@ -3029,6 +2938,89 @@ mod canonical_behavior_tests {
         let lines = lines.lock().expect("lines poisoned");
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains("logger.core"));
+    }
+
+    #[test]
+    fn sink_failures_are_fail_open_and_counted_in_health() {
+        let root = temp_path("fail-open");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::typed(Arc::new(CanonicalFailSink)));
+        let logger = builder.build().expect("logger");
+
+        logger
+            .log(log_event(service_name()))
+            .expect("emit remains fail-open");
+        logger.flush().expect("wait for sink delivery");
+
+        let health = logger.health();
+        assert_eq!(health.state, LoggingHealthState::DegradedDropping);
+        assert_eq!(health.dropped_events_total, 1);
+        assert!(health.last_error.is_some());
+    }
+
+    #[test]
+    fn sink_filter_blocks_event_delivery() {
+        struct DenyAll;
+
+        impl LogFilter for DenyAll {
+            fn accepts(&self, _event: &LogEvent) -> bool {
+                false
+            }
+        }
+
+        let root = temp_path("filter");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        builder.register_sink(
+            SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
+                lines: lines.clone(),
+            }))))
+            .with_filter(Arc::new(DenyAll)),
+        );
+        let logger = builder.build().expect("logger");
+
+        logger.log(log_event(service_name())).expect("log");
+
+        assert!(lines.lock().expect("lines poisoned").is_empty());
+    }
+
+    #[test]
+    fn shutdown_blocks_future_emits() {
+        let root = temp_path("shutdown");
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
+        let logger = CanonicalLogger::new(config).expect("logger");
+        let stopped = logger.shutdown();
+
+        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
+    }
+
+    #[test]
+    fn shutdown_flushes_registered_sinks_before_marking_shutdown() {
+        let root = temp_path("shutdown-flush");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let sink = Arc::new(CanonicalCountingSink::default());
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
+        let logger = builder.build().expect("logger");
+
+        let stopped = logger.shutdown();
+
+        assert_eq!(sink.flushes.load(Ordering::SeqCst), 1);
+        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
+    }
+
+    #[test]
+    fn queue_capacity_rejects_zero_at_construction() {
+        assert!(QueueCapacity::new(0).is_none());
+        assert_eq!(QueueCapacity::new(1).expect("positive").get(), 1);
     }
 
     #[test]
