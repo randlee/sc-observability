@@ -6,11 +6,15 @@ mod compat;
 pub use compat::{LogError, TryLogError};
 #[allow(deprecated)]
 pub use compat::{LogSink, TypedLogSink, legacy_sink, typed_sink};
-#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+#[deprecated(
+    note = "use sc_observability_types::v2::EventError; see docs/migration/phase-f.md"
+)]
 pub use sc_observability_types::typed::{LogFailure, TryLogFailure};
 
 /// Released 1.x typed-sink compatibility items.
-#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+#[deprecated(
+    note = "use crate::v2::LogSink and SinkRegistration::typed; see docs/migration/phase-f.md"
+)]
 pub mod typed {
     #[doc(inline)]
     pub use super::{TypedLogSink, legacy_sink, typed_sink};
