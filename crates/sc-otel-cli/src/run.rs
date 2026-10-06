@@ -19,15 +19,20 @@ use std::str::FromStr;
 
 pub(crate) fn run(cli: &Cli) -> u8 {
     let format = cli.output;
+    let outcome = execute(cli);
+    let exit_code = outcome.exit_code;
+    output::print(format, &outcome);
+    exit_code
+}
+
+fn execute(cli: &Cli) -> Outcome {
     let outcome = match &cli.command {
         Command::Validate(args) => validate(args),
         Command::Emit(args) => emit(cli, args),
         Command::Flush(args) => flush(cli, args),
         Command::Status(args) => status(cli, args),
     };
-    let exit_code = outcome.exit_code;
-    output::print(format, &outcome);
-    exit_code
+    outcome
 }
 
 fn validate(args: &crate::cli::InputArgs) -> Outcome {
@@ -232,8 +237,8 @@ mod tests {
     use crate::client::UnitClientPaths;
     use clap::Parser;
     use sc_observability_types::otlp::submission::{
-        AdmissionError, AdmissionReceipt, ConfigOverrides, ConfigSources, FlushReport, Signal,
-        StatusQuery, StoreStatus, SubmissionEnvelope, SubmissionId, resolve_config,
+        AdmissionError, AdmissionReceipt, ConfigOverrides, ConfigSources, FlushReport, Secret,
+        Signal, StatusQuery, StoreStatus, SubmissionEnvelope, SubmissionId, resolve_config,
     };
     use sc_observability_types::{ErrorCode, ErrorContext, Remediation, Timestamp};
     use std::{path::PathBuf, sync::Mutex, time::Duration};
@@ -376,6 +381,54 @@ mod tests {
             );
             assert_eq!(run(&cli), expected, "{name}");
         }
+    }
+
+    #[test]
+    fn scripted_unit_client_redacts_explicit_credentials_from_serialized_outcomes() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let secret = "Bearer regression-secret";
+        let script = directory.path().join("delivery.json");
+        std::fs::write(
+            &script,
+            r#"{"deliveries":[{"signal":"logs","outcome":"fail"},{"signal":"metrics","outcome":"stall"}]}"#,
+        )
+        .expect("script writes");
+        let mut cli = test_cli(
+            &[
+                "sc-otel".to_owned(),
+                "--store".to_owned(),
+                directory.path().join("store.sqlite").display().to_string(),
+                "emit".to_owned(),
+                "--log".to_owned(),
+                "{}".to_owned(),
+                "--metric".to_owned(),
+                fixture_component("metric_gauge", "metrics"),
+            ],
+            UnitClientPaths {
+                script: Some(script),
+                record: None,
+            },
+        );
+        let mut overrides = ConfigOverrides::default();
+        overrides.auth_header = Some(Secret::new(secret.to_owned()));
+        cli.unit_config_overrides = Some(overrides);
+
+        assert_eq!(
+            config::resolve(&cli)
+                .expect("resolved telemetry config")
+                .auth_header
+                .as_ref()
+                .expect("explicit credential")
+                .expose(),
+            secret
+        );
+        let outcome = execute(&cli);
+
+        assert_eq!(outcome.exit_code, constants::EXIT_DELIVERY_FAILED);
+        assert!(
+            !output::as_json(&outcome).to_string().contains(secret),
+            "serialized result must never reveal configured credentials"
+        );
     }
 
     #[test]

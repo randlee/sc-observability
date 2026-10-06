@@ -4,6 +4,8 @@
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 #[cfg(test)]
+use sc_observability_types::otlp::submission::ConfigOverrides;
+#[cfg(test)]
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
@@ -27,6 +29,9 @@ pub(crate) struct Cli {
     #[cfg(test)]
     #[arg(skip)]
     pub(crate) unit_client_paths: Option<crate::client::UnitClientPaths>,
+    #[cfg(test)]
+    #[arg(skip)]
+    pub(crate) unit_config_overrides: Option<ConfigOverrides>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
