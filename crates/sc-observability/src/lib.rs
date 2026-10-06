@@ -63,9 +63,12 @@ pub use sc_observability_types::{
     SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp, WriterState,
 };
 #[cfg(feature = "v1")]
-#[deprecated(note = "use crate::v2 APIs; see docs/migration/phase-f.md")]
+pub use v1::typed;
+#[cfg(feature = "v1")]
 #[doc(inline)]
 pub use v1::{LogError, LogSink, TryLogError};
+#[cfg(feature = "v1")]
+pub use v1::{LogFailure, TryLogFailure};
 
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -82,15 +85,12 @@ pub use sinks::RetainedSinkFaultInjector;
 pub use sinks::{ConsoleSink, JsonlFileSink};
 
 #[cfg(feature = "v1")]
-#[deprecated(note = "use crate::v2::Logger; see docs/migration/phase-f.md")]
 #[doc(inline)]
 pub use v1::Logger;
 #[cfg(feature = "v1")]
-#[deprecated(note = "use crate::v2::LoggerBuilder; see docs/migration/phase-f.md")]
 #[doc(inline)]
 pub use v1::LoggerBuilder;
 #[cfg(feature = "v1")]
-#[deprecated(note = "see docs/migration/phase-f.md")]
 #[doc(inline)]
 pub use v1::{RetentionPolicy, RotationPolicy};
 
@@ -1333,7 +1333,7 @@ mod tests {
         let mut builder = Logger::builder(config).expect("logger builder");
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
+        builder.register_sink(SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(
             Box::new(SharedBuffer {
                 lines: lines.clone(),
             }),
@@ -1363,7 +1363,7 @@ mod tests {
         let mut builder = Logger::builder(config).expect("logger builder");
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
+        builder.register_sink(SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(
             Box::new(SharedBuffer {
                 lines: lines.clone(),
             }),
@@ -1425,7 +1425,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::new(Arc::new(FailSink)));
+        builder.register_sink(SinkRegistration::typed(Arc::new(FailSink)));
         let logger = builder.build();
 
         logger
@@ -1468,7 +1468,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
+        builder.register_sink(SinkRegistration::typed(Arc::new(FlushFailSink)));
         let logger = builder.build();
 
         let error = logger.flush().expect_err("flush error should propagate");
@@ -1569,7 +1569,7 @@ mod tests {
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
-        builder.register_sink(SinkRegistration::new(Arc::new(
+        builder.register_sink(SinkRegistration::typed(Arc::new(
             injector.fault_sink(Arc::new(RecordingFlushSink::default())),
         )));
         let logger = builder.build();
@@ -1597,7 +1597,7 @@ mod tests {
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
-        builder.register_sink(SinkRegistration::new(Arc::new(
+        builder.register_sink(SinkRegistration::typed(Arc::new(
             injector.fault_sink(Arc::new(RecordingFlushSink::default())),
         )));
         let logger = builder.build();
@@ -1631,7 +1631,7 @@ mod tests {
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
         builder.register_sink(
-            SinkRegistration::new(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
+            SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
                 lines: lines.clone(),
             }))))
             .with_filter(Arc::new(DenyAll)),
@@ -1659,7 +1659,7 @@ mod tests {
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let sink = Arc::new(RecordingFlushSink::default());
-        builder.register_sink(SinkRegistration::new(sink.clone()));
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
         let logger = builder.build();
 
         let _stopped = logger.shutdown();
@@ -1963,7 +1963,7 @@ mod tests {
         config.enable_console_sink = false;
         let (entered_tx, entered_rx) = std::sync::mpsc::channel();
         let mut builder = CanonicalLogger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::new(Arc::new(PanicSink {
+        builder.register_sink(SinkRegistration::typed(Arc::new(PanicSink {
             entered: entered_tx,
         })));
         let logger = builder.build().expect("logger");
@@ -2401,7 +2401,7 @@ mod tests {
         config.level = LevelFilter::Off;
         let sink = Arc::new(RecordingEventSink::default());
         let mut builder = Logger::builder(config).expect("builder");
-        builder.register_sink(SinkRegistration::new(sink.clone()));
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
         let (logger, mut owner) = builder.build_with_level_owner().expect("owner logger");
 
         owner
@@ -2452,7 +2452,7 @@ mod tests {
             .push(Box::new(redactor.clone()));
         let sink = Arc::new(RecordingEventSink::default());
         let mut builder = CanonicalLogger::builder(config).expect("builder");
-        builder.register_sink(SinkRegistration::new(sink.clone()));
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
         let (logger, mut owner) = builder.build_with_level_owner().expect("owner logger");
         redactor.attach(&logger.level_control);
 

@@ -3,11 +3,21 @@
 
 mod compat;
 
-#[deprecated(note = "use crate::v2::LogSink; see docs/migration/phase-f.md")]
-pub use crate::v2::LogSink;
 pub use compat::{LogError, TryLogError};
+#[allow(deprecated)]
+pub use compat::{LogSink, TypedLogSink, legacy_sink, typed_sink};
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+pub use sc_observability_types::typed::{LogFailure, TryLogFailure};
+
+/// Released 1.x typed-sink compatibility items.
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+pub mod typed {
+    #[doc(inline)]
+    pub use super::{TypedLogSink, legacy_sink, typed_sink};
+}
 
 #[deprecated(note = "use crate::v2::LoggerBuilder; see docs/migration/phase-f.md")]
+/// Released 1.x logger builder facade.
 #[expect(
     missing_debug_implementations,
     reason = "the wrapper deliberately hides the canonical builder's sink trait objects"
@@ -17,6 +27,7 @@ pub struct LoggerBuilder {
 }
 
 #[deprecated(note = "use crate::v2::Logger; see docs/migration/phase-f.md")]
+/// Released 1.x logger facade over the canonical runtime.
 #[expect(
     missing_debug_implementations,
     reason = "the wrapper deliberately hides runtime handles and trait-object sinks"

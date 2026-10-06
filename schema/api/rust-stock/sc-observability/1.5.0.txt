@@ -13,6 +13,7 @@ pub use sc_observability::LevelChangeError
 pub use sc_observability::LevelChangeSource
 pub use sc_observability::LevelState
 pub use sc_observability::LogEvent
+pub use sc_observability::LogFailure
 pub use sc_observability::LogQuery
 pub use sc_observability::LogSnapshot
 pub use sc_observability::LoggingHealthReport
@@ -31,6 +32,7 @@ pub use sc_observability::SinkHealthState
 pub use sc_observability::SinkName
 pub use sc_observability::TargetCategory
 pub use sc_observability::Timestamp
+pub use sc_observability::TryLogFailure
 pub use sc_observability::WriterState
 pub mod sc_observability::constants
 pub const sc_observability::constants::CONSOLE_SINK_NAME: &str
@@ -56,7 +58,10 @@ pub const sc_observability::error_codes::LOGGER_FLUSH_FAILED: sc_observability_t
 pub const sc_observability::error_codes::LOGGER_INIT_FAILED: sc_observability_types::primitives::ErrorCode
 pub const sc_observability::error_codes::LOGGER_INVALID_EVENT: sc_observability_types::primitives::ErrorCode
 pub const sc_observability::error_codes::LOGGER_MAINTENANCE_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability::error_codes::LOGGER_MAINTENANCE_JOIN_TIMEOUT: sc_observability_types::primitives::ErrorCode
+pub const sc_observability::error_codes::LOGGER_MAINTENANCE_WORKER_FAILED: sc_observability_types::primitives::ErrorCode
 pub const sc_observability::error_codes::LOGGER_QUEUE_FULL: sc_observability_types::primitives::ErrorCode
+pub const sc_observability::error_codes::LOGGER_SHUTDOWN: sc_observability_types::primitives::ErrorCode
 pub const sc_observability::error_codes::LOGGER_SHUTDOWN_TIMED_OUT: sc_observability_types::primitives::ErrorCode
 pub const sc_observability::error_codes::LOGGER_SINK_WRITE_FAILED: sc_observability_types::primitives::ErrorCode
 pub const sc_observability::error_codes::LOGGER_WRITER_DEGRADED: sc_observability_types::primitives::ErrorCode
@@ -68,7 +73,39 @@ pub const sc_observability::error_codes::LOG_UNKNOWN_KEY: sc_observability_types
 pub const sc_observability::error_codes::SC_LOG_SINK_REGISTRATION_CLOSED: sc_observability_types::primitives::ErrorCode
 pub const sc_observability::error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE: sc_observability_types::primitives::ErrorCode
 pub const sc_observability::error_codes::SC_LOG_SINK_REGISTRATION_INVALID: sc_observability_types::primitives::ErrorCode
+pub mod sc_observability::typed
+pub trait sc_observability::typed::TypedLogSink: core::marker::Send + core::marker::Sync
+pub fn sc_observability::typed::TypedLogSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::typed::TypedLogSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::typed::TypedLogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v1::TypedLogSink for sc_observability::ConsoleSink
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v1::TypedLogSink for sc_observability::JsonlFileSink
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::typed::legacy_sink(alloc::sync::Arc<dyn sc_observability::v1::TypedLogSink>) -> alloc::sync::Arc<dyn sc_observability::LogSink>
+pub fn sc_observability::typed::typed_sink(alloc::sync::Arc<dyn sc_observability::LogSink>) -> alloc::sync::Arc<dyn sc_observability::v1::TypedLogSink>
 pub mod sc_observability::v1
+pub use sc_observability::v1::LogFailure
+pub use sc_observability::v1::TryLogFailure
+pub mod sc_observability::v1::typed
+pub trait sc_observability::v1::typed::TypedLogSink: core::marker::Send + core::marker::Sync
+pub fn sc_observability::v1::typed::TypedLogSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::v1::typed::TypedLogSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::v1::typed::TypedLogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v1::TypedLogSink for sc_observability::ConsoleSink
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v1::TypedLogSink for sc_observability::JsonlFileSink
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::v1::typed::legacy_sink(alloc::sync::Arc<dyn sc_observability::v1::TypedLogSink>) -> alloc::sync::Arc<dyn sc_observability::LogSink>
+pub fn sc_observability::v1::typed::typed_sink(alloc::sync::Arc<dyn sc_observability::LogSink>) -> alloc::sync::Arc<dyn sc_observability::v1::TypedLogSink>
 pub enum sc_observability::v1::LogError
 pub sc_observability::v1::LogError::InvalidEvent(sc_observability_types::errors::EventError)
 pub sc_observability::v1::LogError::ShutdownTimedOut(alloc::boxed::Box<sc_observability_types::diagnostic::ErrorContext>)
@@ -124,7 +161,7 @@ pub fn sc_observability::v1::LoggerBuilder::build_with_level_owner_typed(self) -
 pub fn sc_observability::v1::LoggerBuilder::new(sc_observability::LoggerConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
 pub fn sc_observability::v1::LoggerBuilder::new_typed(sc_observability::LoggerConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
 pub fn sc_observability::v1::LoggerBuilder::register_sink(&mut self, sc_observability::SinkRegistration) -> &mut Self
-pub fn sc_observability::v1::LoggerBuilder::register_typed_sink(&mut self, alloc::sync::Arc<dyn sc_observability::LogSink>) -> core::result::Result<&mut Self, sc_observability::SinkRegistrationError>
+pub fn sc_observability::v1::LoggerBuilder::register_typed_sink(&mut self, alloc::sync::Arc<dyn sc_observability::v2::LogSink>) -> core::result::Result<&mut Self, sc_observability::SinkRegistrationError>
 impl core::convert::From<sc_observability::v1::LoggerBuilder> for sc_observability::v2::LoggerBuilder
 pub fn sc_observability::v2::LoggerBuilder::from(sc_observability::v1::LoggerBuilder) -> Self
 impl core::convert::From<sc_observability::v2::LoggerBuilder> for sc_observability::v1::LoggerBuilder
@@ -139,17 +176,31 @@ pub sc_observability::v1::RotationPolicy::max_files: sc_observability_types::hea
 impl core::default::Default for sc_observability::v1::RotationPolicy
 pub fn sc_observability::v1::RotationPolicy::default() -> Self
 pub trait sc_observability::v1::LogSink: core::marker::Send + core::marker::Sync
-pub fn sc_observability::v1::LogSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::v1::LogSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 pub fn sc_observability::v1::LogSink::health(&self) -> sc_observability_types::health::SinkHealth
-pub fn sc_observability::v1::LogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::v1::LogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 impl sc_observability::LogSink for sc_observability::ConsoleSink
-pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
-pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 impl sc_observability::LogSink for sc_observability::JsonlFileSink
-pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
-pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+pub trait sc_observability::v1::TypedLogSink: core::marker::Send + core::marker::Sync
+pub fn sc_observability::v1::TypedLogSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::v1::TypedLogSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::v1::TypedLogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v1::TypedLogSink for sc_observability::ConsoleSink
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v1::TypedLogSink for sc_observability::JsonlFileSink
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::v1::legacy_sink(alloc::sync::Arc<dyn sc_observability::v1::TypedLogSink>) -> alloc::sync::Arc<dyn sc_observability::LogSink>
+pub fn sc_observability::v1::typed_sink(alloc::sync::Arc<dyn sc_observability::LogSink>) -> alloc::sync::Arc<dyn sc_observability::v1::TypedLogSink>
 pub mod sc_observability::v2
 pub use sc_observability::v2::EventError
 pub use sc_observability::v2::FlushError
@@ -160,6 +211,14 @@ impl sc_observability::ConsoleSink
 pub fn sc_observability::ConsoleSink::stderr() -> Self
 pub fn sc_observability::ConsoleSink::stdout() -> Self
 impl sc_observability::LogSink for sc_observability::ConsoleSink
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+impl sc_observability::v1::TypedLogSink for sc_observability::ConsoleSink
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v2::LogSink for sc_observability::ConsoleSink
 pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
 pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
 pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
@@ -170,6 +229,14 @@ impl sc_observability::JsonlFileSink
 pub fn sc_observability::JsonlFileSink::open(std::path::PathBuf, sc_observability::RetainedLogPolicy) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
 pub fn sc_observability::JsonlFileSink::path(&self) -> &std::path::Path
 impl sc_observability::LogSink for sc_observability::JsonlFileSink
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+impl sc_observability::v1::TypedLogSink for sc_observability::JsonlFileSink
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v2::LogSink for sc_observability::JsonlFileSink
 pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
 pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
 pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
@@ -229,11 +296,11 @@ pub trait sc_observability::v2::LogSink: core::marker::Send + core::marker::Sync
 pub fn sc_observability::v2::LogSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
 pub fn sc_observability::v2::LogSink::health(&self) -> sc_observability_types::health::SinkHealth
 pub fn sc_observability::v2::LogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
-impl sc_observability::LogSink for sc_observability::ConsoleSink
+impl sc_observability::v2::LogSink for sc_observability::ConsoleSink
 pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
 pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
 pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
-impl sc_observability::LogSink for sc_observability::JsonlFileSink
+impl sc_observability::v2::LogSink for sc_observability::JsonlFileSink
 pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
 pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
 pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
@@ -280,6 +347,14 @@ impl sc_observability::ConsoleSink
 pub fn sc_observability::ConsoleSink::stderr() -> Self
 pub fn sc_observability::ConsoleSink::stdout() -> Self
 impl sc_observability::LogSink for sc_observability::ConsoleSink
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+impl sc_observability::v1::TypedLogSink for sc_observability::ConsoleSink
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v2::LogSink for sc_observability::ConsoleSink
 pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
 pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
 pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
@@ -294,6 +369,14 @@ impl sc_observability::JsonlFileSink
 pub fn sc_observability::JsonlFileSink::open(std::path::PathBuf, sc_observability::RetainedLogPolicy) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
 pub fn sc_observability::JsonlFileSink::path(&self) -> &std::path::Path
 impl sc_observability::LogSink for sc_observability::JsonlFileSink
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
+impl sc_observability::v1::TypedLogSink for sc_observability::JsonlFileSink
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
+impl sc_observability::v2::LogSink for sc_observability::JsonlFileSink
 pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
 pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
 pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
@@ -366,7 +449,7 @@ pub fn sc_observability::v1::LoggerBuilder::build_with_level_owner_typed(self) -
 pub fn sc_observability::v1::LoggerBuilder::new(sc_observability::LoggerConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
 pub fn sc_observability::v1::LoggerBuilder::new_typed(sc_observability::LoggerConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
 pub fn sc_observability::v1::LoggerBuilder::register_sink(&mut self, sc_observability::SinkRegistration) -> &mut Self
-pub fn sc_observability::v1::LoggerBuilder::register_typed_sink(&mut self, alloc::sync::Arc<dyn sc_observability::LogSink>) -> core::result::Result<&mut Self, sc_observability::SinkRegistrationError>
+pub fn sc_observability::v1::LoggerBuilder::register_typed_sink(&mut self, alloc::sync::Arc<dyn sc_observability::v2::LogSink>) -> core::result::Result<&mut Self, sc_observability::SinkRegistrationError>
 impl core::convert::From<sc_observability::v1::LoggerBuilder> for sc_observability::v2::LoggerBuilder
 pub fn sc_observability::v2::LoggerBuilder::from(sc_observability::v1::LoggerBuilder) -> Self
 impl core::convert::From<sc_observability::v2::LoggerBuilder> for sc_observability::v1::LoggerBuilder
@@ -447,7 +530,7 @@ pub struct sc_observability::SinkRegistration
 impl sc_observability::SinkRegistration
 pub fn sc_observability::SinkRegistration::new(alloc::sync::Arc<dyn sc_observability::LogSink>) -> Self
 impl sc_observability::SinkRegistration
-pub fn sc_observability::SinkRegistration::typed(alloc::sync::Arc<dyn sc_observability::LogSink>) -> Self
+pub fn sc_observability::SinkRegistration::typed(alloc::sync::Arc<dyn sc_observability::v2::LogSink>) -> Self
 impl sc_observability::SinkRegistration
 pub fn sc_observability::SinkRegistration::with_filter(self, alloc::sync::Arc<dyn sc_observability::LogFilter>) -> Self
 pub struct sc_observability::Stopped
@@ -464,17 +547,17 @@ pub fn sc_observability::WriterShutdownTimeout::deserialize<D>(D) -> core::resul
 pub trait sc_observability::LogFilter: core::marker::Send + core::marker::Sync
 pub fn sc_observability::LogFilter::accepts(&self, &sc_observability_types::events::LogEvent) -> bool
 pub trait sc_observability::LogSink: core::marker::Send + core::marker::Sync
-pub fn sc_observability::LogSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::LogSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 pub fn sc_observability::LogSink::health(&self) -> sc_observability_types::health::SinkHealth
-pub fn sc_observability::LogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::LogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 impl sc_observability::LogSink for sc_observability::ConsoleSink
-pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
-pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 impl sc_observability::LogSink for sc_observability::JsonlFileSink
-pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
-pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors_v2::LogSinkError>
+pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::LogSinkError>
 pub trait sc_observability::Redactor: core::marker::Send + core::marker::Sync
 pub fn sc_observability::Redactor::redact(&self, &str, &mut serde_json::value::Value)
 pub type sc_observability::SinkRegistrationError = sc_observability_types::errors_v2::InitError

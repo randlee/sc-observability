@@ -222,6 +222,16 @@
   },
   "deprecated_owner_exceptions": [
     {
+      "file": "crates/sc-observability/src/error_codes.rs",
+      "deprecated_symbols": [
+        "LOGGER_SHUTDOWN",
+        "LOGGER_MAINTENANCE_JOIN_TIMEOUT",
+        "LOGGER_MAINTENANCE_WORKER_FAILED"
+      ],
+      "reason": "Lead ruling obs-f-6.group-dev.f6-v1-restore restores the released v1 error-code paths under the v1 feature, marked deprecated while the phase-F migration remains in flight.",
+      "removal_point": "Remove these compatibility constants after the phase-F v1 feature and all released 1.x consumers are retired."
+    },
+    {
       "file": "crates/sc-observability-types/src/errors.rs",
       "deprecated_symbols": [
         "IdentityError",
@@ -236,14 +246,6 @@
       ],
       "reason": "errors.rs already holds only the nine released root error wrappers; the canonical errors live in errors_v2.rs. The error_wrapper! macro seals each wrapper and implements DiagnosticInfo in place. lib.rs re-exports them at the crate root, and typed.rs and diagnostic.rs import them through crate::errors. The types crate has no compat module, and its lib.rs is not a compat_root_reexport_exceptions root. Moving the wrappers would add a new compat module and root re-export exception and rewrite those imports, but would separate nothing that errors.rs does not already separate.",
       "removal_point": "At the next major version, delete the nine released wrapper declarations in errors.rs, their crate-root re-export in lib.rs and the Legacy* conversions in typed.rs that name them. errors_v2.rs is unaffected."
-    },
-    {
-      "file": "crates/sc-observability/src/lib.rs",
-      "deprecated_symbols": [
-        "max_age_days"
-      ],
-      "reason": "max_age_days is a deprecated public field of RetentionPolicy, and RetentionPolicy is not deprecated: JsonlFileSink::new in sinks.rs still takes it. Rust declares a field only inside its struct, so the field cannot move to src/compat without moving the whole struct.",
-      "removal_point": "At the next major version, delete the RetentionPolicy::max_age_days field, its Default initializer and its read in the JsonlFileSink legacy retention path. RetentionPolicy itself is kept."
     }
   ],
   "compat_root_reexport_exceptions": [

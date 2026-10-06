@@ -6,6 +6,11 @@ use sc_observability_types::ErrorCode;
 /// Recovery: provide an event with valid fields and values.
 pub const LOGGER_INVALID_EVENT: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_INVALID_EVENT");
+/// The logger was used after shutdown began or completed.
+/// Recovery: stop emitting to the closed owner and construct a new logger.
+#[cfg(feature = "v1")]
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+pub const LOGGER_SHUTDOWN: ErrorCode = ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SHUTDOWN");
 /// A configured sink rejected or failed to write an admitted event.
 /// Recovery: inspect sink health and its I/O configuration before retrying.
 pub const LOGGER_SINK_WRITE_FAILED: ErrorCode =
@@ -34,6 +39,18 @@ pub const LOGGER_FLUSH_FAILED: ErrorCode =
 /// Recovery: correct storage access or retention configuration and retry maintenance.
 pub const LOGGER_MAINTENANCE_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_FAILED");
+/// The maintenance worker did not join before the shutdown deadline.
+/// Recovery: inspect worker health and complete shutdown with a bounded retry.
+#[cfg(feature = "v1")]
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+pub const LOGGER_MAINTENANCE_JOIN_TIMEOUT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_JOIN_TIMEOUT");
+/// The maintenance worker terminated with a failure.
+/// Recovery: inspect the retained worker error and construct a new logger owner.
+#[cfg(feature = "v1")]
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+pub const LOGGER_MAINTENANCE_WORKER_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_WORKER_FAILED");
 /// A retained sink deliberately injected a test failure.
 /// Recovery: disable fault injection outside the test and retry the operation.
 #[cfg(feature = "fault-injection")]
@@ -42,6 +59,13 @@ pub const LOGGER_SINK_FAULT_INJECTED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SINK_FAULT_INJECTED");
 
 /// All stable error codes exported by this crate.
+#[cfg_attr(
+    feature = "v1",
+    expect(
+        deprecated,
+        reason = "the released v1 error-code registry retains these codes"
+    )
+)]
 pub const ALL: &[ErrorCode] = &[
     LOG_PREFIX_COLLISION,
     LOG_INVALID_ENVIRONMENT,
@@ -52,6 +76,8 @@ pub const ALL: &[ErrorCode] = &[
     SC_LOG_SINK_REGISTRATION_INVALID,
     SC_LOG_SINK_REGISTRATION_CLOSED,
     LOGGER_INVALID_EVENT,
+    #[cfg(feature = "v1")]
+    LOGGER_SHUTDOWN,
     LOGGER_SINK_WRITE_FAILED,
     LOGGER_QUEUE_FULL,
     LOGGER_WRITER_DEGRADED,
@@ -59,6 +85,10 @@ pub const ALL: &[ErrorCode] = &[
     LOGGER_INIT_FAILED,
     LOGGER_FLUSH_FAILED,
     LOGGER_MAINTENANCE_FAILED,
+    #[cfg(feature = "v1")]
+    LOGGER_MAINTENANCE_JOIN_TIMEOUT,
+    #[cfg(feature = "v1")]
+    LOGGER_MAINTENANCE_WORKER_FAILED,
     #[cfg(feature = "fault-injection")]
     LOGGER_SINK_FAULT_INJECTED,
 ];

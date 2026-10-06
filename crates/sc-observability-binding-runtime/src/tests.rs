@@ -889,6 +889,7 @@ impl sc_observability::LogSink for FlushFailSink {
     }
 }
 
+#[allow(deprecated)]
 fn core_with_sink(
     config: sc_observability::LoggerConfig,
     sink: Arc<dyn sc_observability::LogSink>,

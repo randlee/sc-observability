@@ -205,6 +205,8 @@ class CompatibilitySourcePathTests(unittest.TestCase):
     def test_v1_migration_module_is_accepted(self):
         self.assertTrue(is_compat_source_path(
             "crates/sc-observability-otlp/src/v1.rs"))
+        self.assertTrue(is_compat_source_path(
+            "crates/sc-observability/src/v1/compat.rs"))
 
     def test_compatibility_file_is_rejected(self):
         self.assertFalse(is_compat_source_path(
@@ -403,7 +405,7 @@ class DeprecatedOwnerExceptionRecordTests(unittest.TestCase):
         records = deprecated_owner_exception_records(registry)
         self.assertEqual(sorted(records), [
             "crates/sc-observability-types/src/errors.rs",
-            "crates/sc-observability/src/lib.rs",
+            "crates/sc-observability/src/error_codes.rs",
         ])
         for relative, symbols in records.items():
             with self.subTest(relative=relative):

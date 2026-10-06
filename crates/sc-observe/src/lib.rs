@@ -33,10 +33,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
+#[allow(
+    deprecated,
+    reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
+)]
+use sc_observability::Logger as ReleasedLogger;
 use sc_observability::v2::Logger;
-use sc_observability::{
-    Logger as ReleasedLogger, LoggerConfig, RetainedLogPolicy, Running, Stopped,
-};
+use sc_observability::{LoggerConfig, RetainedLogPolicy, Running, Stopped};
 use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::v2::{
     EventError, FlushError as CanonicalFlushError, InitError as CanonicalInitError,
@@ -370,6 +373,10 @@ enum RuntimeAdmission {
 /// Running logger pinned to the admission mode of the facade that built it.
 enum RunningLogger {
     Canonical(Logger<Running>),
+    #[allow(
+        deprecated,
+        reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
+    )]
     Released(ReleasedLogger<Running>),
 }
 
@@ -408,6 +415,10 @@ impl RunningLogger {
     fn flush(&self) -> Result<(), RunningFlushError> {
         match self {
             Self::Canonical(logger) => logger.flush().map_err(RunningFlushError::Canonical),
+            #[allow(
+                deprecated,
+                reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
+            )]
             Self::Released(logger) => logger.flush_typed().map_err(RunningFlushError::Released),
         }
     }
@@ -415,6 +426,10 @@ impl RunningLogger {
     fn health(&self) -> sc_observability_types::LoggingHealthReport {
         match self {
             Self::Canonical(logger) => logger.health(),
+            #[allow(
+                deprecated,
+                reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
+            )]
             Self::Released(logger) => logger.health(),
         }
     }
@@ -422,6 +437,10 @@ impl RunningLogger {
     fn shutdown(self) -> Logger<Stopped> {
         match self {
             Self::Canonical(logger) => logger.shutdown(),
+            #[allow(
+                deprecated,
+                reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
+            )]
             Self::Released(logger) => Logger::from(logger.shutdown()),
         }
     }
@@ -928,6 +947,10 @@ impl ObservabilityBuilder {
         let logger = Logger::new(self.config.logger_config()?)?;
         let logger = match mode {
             RuntimeAdmission::Canonical => RunningLogger::Canonical(logger),
+            #[allow(
+                deprecated,
+                reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
+            )]
             RuntimeAdmission::Released => RunningLogger::Released(ReleasedLogger::from(logger)),
         };
         Ok(Observability {

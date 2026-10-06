@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use sc_observability_types::typed::{
-    EventFailure, FlushFailure, InitFailure, LogFailure, TryLogFailure,
+    EventFailure, FlushFailure, InitFailure, LogFailure, LogSinkFailure, TryLogFailure,
 };
 use sc_observability_types::v2::{
     EventError as CanonicalEventError, FlushError as CanonicalFlushError,
@@ -22,17 +22,190 @@ use sc_observability_types::v2::{
 
 use crate::builder::CanonicalLoggerBuilder;
 use crate::{
-    AdmissionOutcome, CanonicalLogger, ErrorContext, LevelOwner, LevelState, LogEvent, LogQuery,
-    Logger, LoggerBuilder, LoggerConfig, LoggingHealthReport, Running, SinkRegistration, Stopped,
+    AdmissionOutcome, CanonicalLogger, ErrorContext, LevelOwner, LevelState, LogQuery, Logger,
+    LoggerBuilder, LoggerConfig, LoggingHealthReport, Running, SinkRegistration, Stopped,
     error_codes,
 };
-use sc_observability_types::{EventError, FlushError, InitError, QueryError};
+use sc_observability_types::SinkHealth;
+use sc_observability_types::{
+    EventError, FlushError, InitError, LogEvent, LogSinkError, QueryError,
+};
 use std::sync::Arc;
+
+/// Released 1.x sink trait. Its error type remains the published
+/// `sc_observability_types::LogSinkError` for downstream implementations.
+#[deprecated(note = "use crate::v2::LogSink; see docs/migration/phase-f.md")]
+#[allow(
+    deprecated,
+    reason = "the released trait signature must retain its 1.x LogSinkError type"
+)]
+pub trait LogSink: Send + Sync {
+    /// Writes one event to the sink.
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
+
+    /// Flushes buffered sink state.
+    fn flush(&self) -> Result<(), LogSinkError> {
+        Ok(())
+    }
+
+    /// Returns the current sink health snapshot.
+    fn health(&self) -> SinkHealth;
+}
+
+/// Released typed sink interoperability trait.
+#[deprecated(note = "use crate::v2::LogSink; see docs/migration/phase-f.md")]
+pub trait TypedLogSink: Send + Sync {
+    /// Writes one event to the sink.
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>;
+
+    /// Flushes buffered sink state.
+    fn flush(&self) -> Result<(), LogSinkFailure> {
+        Ok(())
+    }
+
+    /// Returns the current sink health snapshot.
+    fn health(&self) -> SinkHealth;
+}
+
+/// Compatibility adapter removed after the 1.x migration.
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+#[must_use]
+pub fn legacy_sink(value: Arc<dyn TypedLogSink>) -> Arc<dyn LogSink> {
+    Arc::new(LegacySinkAdapter { value })
+}
+
+/// Compatibility adapter removed after the 1.x migration.
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+#[must_use]
+pub fn typed_sink(value: Arc<dyn LogSink>) -> Arc<dyn TypedLogSink> {
+    Arc::new(TypedSinkAdapter { value })
+}
+
+struct LegacySinkAdapter {
+    value: Arc<dyn TypedLogSink>,
+}
+
+impl LogSink for LegacySinkAdapter {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        self.value.write(event).map_err(Into::into)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        self.value.flush().map_err(Into::into)
+    }
+
+    fn health(&self) -> SinkHealth {
+        self.value.health()
+    }
+}
+
+struct TypedSinkAdapter {
+    value: Arc<dyn LogSink>,
+}
+
+impl TypedLogSink for TypedSinkAdapter {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
+        self.value.write(event).map_err(Into::into)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkFailure> {
+        self.value.flush().map_err(Into::into)
+    }
+
+    fn health(&self) -> SinkHealth {
+        self.value.health()
+    }
+}
+
+struct RootSinkAdapter {
+    value: Arc<dyn LogSink>,
+}
+
+impl crate::sink::LogSink for RootSinkAdapter {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        self.value
+            .write(event)
+            .map_err(|error| sc_observability_types::v2::LogSinkError::Write { context: error.0 })
+    }
+
+    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        self.value
+            .flush()
+            .map_err(|error| sc_observability_types::v2::LogSinkError::Flush { context: error.0 })
+    }
+
+    fn health(&self) -> SinkHealth {
+        self.value.health()
+    }
+}
+
+fn legacy_sink_error(error: sc_observability_types::v2::LogSinkError) -> LogSinkError {
+    LogSinkFailure::from_context(error.into_context()).into()
+}
+
+fn typed_sink_error(error: sc_observability_types::v2::LogSinkError) -> LogSinkFailure {
+    LogSinkFailure::from_context(error.into_context())
+}
+
+impl LogSink for crate::JsonlFileSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::write(self, event).map_err(legacy_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
+
+impl LogSink for crate::ConsoleSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::write(self, event).map_err(legacy_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
+
+impl TypedLogSink for crate::JsonlFileSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
+        crate::sink::LogSink::write(self, event).map_err(typed_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkFailure> {
+        crate::sink::LogSink::flush(self).map_err(typed_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
+
+impl TypedLogSink for crate::ConsoleSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
+        crate::sink::LogSink::write(self, event).map_err(typed_sink_error)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkFailure> {
+        crate::sink::LogSink::flush(self).map_err(typed_sink_error)
+    }
+
+    fn health(&self) -> SinkHealth {
+        crate::sink::LogSink::health(self)
+    }
+}
 impl SinkRegistration {
     /// Registers a released root sink through the canonical typed registration.
-    #[deprecated(note = "use SinkRegistration::typed; see docs/migration/phase-f.md")]
-    pub fn new(sink: Arc<dyn crate::sink::LogSink>) -> Self {
-        Self::typed(sink)
+    pub fn new(sink: Arc<dyn LogSink>) -> Self {
+        Self::typed(Arc::new(RootSinkAdapter { value: sink }))
     }
 }
 

@@ -73,6 +73,7 @@ fn init_failure_matches_owning_registry() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn event_failure_matches_owning_registry() {
     assert_owning_code!(
         EventFailure::invalid_event("x", remediation()),
