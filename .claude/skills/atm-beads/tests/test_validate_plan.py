@@ -174,7 +174,12 @@ class CiCheck(Repo):
         self.bd_ran = self.base / "bd-ran"
         (bin_dir / "bd").write_text(f"#!/bin/sh\ntouch {self.bd_ran}\nexit 1\n")
         (bin_dir / "bd").chmod(0o755)
-        self.env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+        # CI runners have no pydantic: make it unimportable so --ci must not need it.
+        blocked = self.base / "no-pydantic/pydantic"
+        blocked.mkdir(parents=True)
+        (blocked / "__init__.py").write_text("raise ImportError('pydantic is not installed')\n")
+        self.env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+                    "PYTHONPATH": str(blocked.parent)}
         (self.repo / "plans").mkdir()
         (self.repo / "plans/phase-t.jsonl").write_text(lines(PLAN))
 

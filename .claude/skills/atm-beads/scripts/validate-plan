@@ -38,7 +38,6 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import bead_schema  # noqa: E402
 import sprint_index_common as plan_io  # noqa: E402
 from plan_contract import SPRINT_LABEL  # noqa: E402
 
@@ -133,6 +132,7 @@ def plan_text(repo: Path, config: dict, index: Path | None) -> tuple[str, str]:
 
 
 def check(beads: Beads, config: dict, rows: list[dict], problems: list[str], before_import: bool) -> None:
+    import bead_schema  # pydantic; --ci never loads it
     root_id = config["root"]
     prefix = plan_io.bead_prefix(root_id, Path("."))
     root = beads.get(root_id)

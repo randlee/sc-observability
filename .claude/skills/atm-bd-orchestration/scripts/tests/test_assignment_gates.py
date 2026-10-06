@@ -151,6 +151,16 @@ class AssignmentGateTests(unittest.TestCase):
         behind = dev_runner({("git", "-C", "/other", "merge-base", "--is-ancestor", "origin/target", "HEAD"): (1, "")})
         self.assertEqual(gates.evaluate(ns("dev", worktree="/other"), behind), "WRONG_BASE")
 
+    def test_dev_gate_names_why_the_plan_check_refused(self):
+        plan = (gates.VALIDATE_PLAN, "--root", "obs-phase-d")
+        for code, stderr, expected in ((5, "e-1: missing sprint bead", "PLAN_INVALID"),
+                                       (2, "phase-d.toml does not exist", "GATE_CANNOT_RUN")):
+            with self.subTest(code=code):
+                err = io.StringIO()
+                with redirect_stderr(err):
+                    self.assertEqual(gates.evaluate(ns("dev"), dev_runner({plan: (code, "", stderr)})), expected)
+                self.assertIn(stderr, err.getvalue())
+
     def test_sanity_refusals_and_ready(self):
         cases = [
             ("pr-required.json", ns("sanity", pr_number=""), sanity_runner()),

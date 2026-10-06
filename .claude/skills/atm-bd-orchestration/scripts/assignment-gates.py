@@ -166,8 +166,12 @@ def stacked_base(runner: Runner, pr_number: str) -> str | None:
 
 
 def dev_gate(args: argparse.Namespace, runner: Runner, identity: str) -> str:
-    if runner([VALIDATE_PLAN, "--root", args.root], capture_output=True, text=True, cwd=str(PRIMARY)).returncode:
+    plan = runner([VALIDATE_PLAN, "--root", args.root], capture_output=True, text=True, cwd=str(PRIMARY))
+    if plan.returncode == 5:
+        print((plan.stdout + plan.stderr).strip(), file=sys.stderr)
         return "PLAN_INVALID"
+    if plan.returncode:
+        raise RuntimeError(f"validate-plan exit {plan.returncode}: {(plan.stderr or plan.stdout).strip()}")
     ready = run_json(runner, "bd", "ready", "-n", "0", "--json")
     if not any(row.get("id") == args.bead for row in ready):
         return "NOT_READY"
