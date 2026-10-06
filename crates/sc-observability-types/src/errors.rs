@@ -14,7 +14,7 @@ use crate::{Diagnostic, DiagnosticInfo, sealed};
 #[cfg(feature = "v1")]
 #[deprecated(
     since = "1.4.0",
-    note = "Use sc_observability_types::typed::IdentityFailure; see migrate-error-api.md."
+    note = "use sc_observability_types::v2::IdentityError"
 )]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 #[error("{0}")]
@@ -101,6 +101,7 @@ pub enum ObservationError {
 
 /// Telemetry emit error returned by the released root `Telemetry` operations.
 #[cfg(feature = "v1")]
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum TelemetryError {
     /// The telemetry runtime has already been shut down.
