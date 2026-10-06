@@ -28,7 +28,16 @@ WRAPPERS = (
     ("ExportError", "ExportFailure"),
 )
 
-METHODS = ()
+METHODS = (
+    ("otlp_config", "OtlpEndpoint::new", "OtlpEndpoint::new_typed"),
+    ("otlp_config", "AuthHeader::new", "AuthHeader::new_typed"),
+    (
+        "otlp_config",
+        "TelemetryConfigBuilder::build",
+        "TelemetryConfigBuilder::build_typed",
+    ),
+    ("otlp_assembly", "SpanAssembler::push", "SpanAssembler::push_typed"),
+)
 
 RETAINED_FACADE_METHODS = (
     ("logger", "LoggerBuilder::new", "LoggerBuilder::new_typed"),
@@ -44,11 +53,23 @@ RETAINED_FACADE_METHODS = (
     ("observe", "ObservabilityBuilder::build", "ObservabilityBuilder::build_typed"),
     ("observe", "Observability::flush", "Observability::flush_typed"),
     ("observe", "Observability::shutdown", "Observability::shutdown_typed"),
+    ("otlp_runtime", "Telemetry::new", "Telemetry::new_typed"),
+    ("otlp_runtime", "Telemetry::flush", "Telemetry::flush_typed"),
+    ("otlp_runtime", "Telemetry::shutdown", "Telemetry::shutdown_typed"),
 )
 
 # PHF-002 ships released typed helpers behind default-on v1 in the next 1.5.0
 # release; a later release may remove them after deprecation, without a major
-# version bump. Migrated fixtures exercise the canonical replacements.
+# version bump. Migrated fixtures exercise the canonical replacements. The
+# released OTLP v1 methods are source-checked but need no fixture uses.
+
+
+def fixture_method_rows() -> tuple[tuple[str, str, str], ...]:
+    return tuple(
+        row
+        for row in METHODS + RETAINED_FACADE_METHODS
+        if not row[0].startswith("otlp_")
+    )
 
 
 def migration_notes() -> tuple[str, ...]:
@@ -57,7 +78,7 @@ def migration_notes() -> tuple[str, ...]:
         for _, typed in WRAPPERS
     )
     method_notes = tuple(
-        f"Use {typed}(); see migrate-error-api.md." for _, _, typed in METHODS + RETAINED_FACADE_METHODS
+        f"Use {typed}(); see migrate-error-api.md." for _, _, typed in fixture_method_rows()
     )
     return wrapper_notes + method_notes
 
@@ -182,8 +203,15 @@ def check_source_contract() -> None:
         "logger": ROOT / "crates" / "sc-observability" / "src" / "compat.rs",
         "runtime": ROOT / "crates" / "sc-observability" / "src" / "compat.rs",
         "observe": ROOT / "crates" / "sc-observe" / "src" / "compat.rs",
+        # Phase F consolidated the released OTLP facade into v1.rs.
+        "otlp_config": ROOT / "crates" / "sc-observability-otlp" / "src" / "v1.rs",
+        "otlp_runtime": ROOT / "crates" / "sc-observability-otlp" / "src" / "v1.rs",
+        "otlp_assembly": ROOT / "crates" / "sc-observability-otlp" / "src" / "v1.rs",
     }
     text = {name: path.read_text(encoding="utf-8") for name, path in sources.items()}
+
+    for source in ("otlp_config", "otlp_runtime", "otlp_assembly"):
+        check_b1e_marker(text[source], source)
 
     for legacy, typed in WRAPPERS:
         item_window(
@@ -192,7 +220,11 @@ def check_source_contract() -> None:
             f"Use sc_observability_types::typed::{typed}; see migrate-error-api.md.",
         )
 
-    assert_true(len(WRAPPERS) == 9, "B.1e wrapper inventory is not 9 items")
+    assert_true(len(WRAPPERS) + len(METHODS) == 13, "B.1e target inventory is not 13 items")
+    otlp_method_rows = tuple(
+        row for row in METHODS + RETAINED_FACADE_METHODS if row[0].startswith("otlp_")
+    )
+    assert_true(len(otlp_method_rows) == 7, "OTLP v1 migration inventory is not 7 methods")
     for source, legacy, typed in METHODS + RETAINED_FACADE_METHODS:
         item_window(
             text[source],
@@ -307,7 +339,7 @@ def fixture_spans(source: str, expected_notes: tuple[str, ...]) -> dict[str, lis
         "Telemetry::shutdown": lambda _index, line: "telemetry.shutdown(" in line,
         "SpanAssembler::push": lambda _index, line: "assembler.push(" in line,
     }
-    for _source, legacy, typed in METHODS + RETAINED_FACADE_METHODS:
+    for _source, legacy, typed in fixture_method_rows():
         note = f"Use {typed}(); see migrate-error-api.md."
         if legacy == "ObservabilityBuilder::build":
             add(

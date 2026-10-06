@@ -9,6 +9,7 @@ from unittest.mock import patch
 from scripts.ci import validate_error_migration as validator
 
 ROOT = Path(__file__).resolve().parents[3]
+OTLP = Path('crates/sc-observability-otlp/src/v1.rs')
 LOGGER = Path('crates/sc-observability/src/compat.rs')
 
 
@@ -18,6 +19,7 @@ class SourceContractTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         paths = [
+            OTLP,
             LOGGER,
             Path('crates/sc-observability-types/src/errors.rs'),
             Path('crates/sc-observe/src/compat.rs'),
@@ -42,14 +44,41 @@ class SourceContractTests(unittest.TestCase):
         self.addCleanup(fixture_patch.stop)
 
     def test_retained_typed_helpers_and_warning_contract_pass(self):
+        source = (self.root / OTLP).read_text()
+        for method in ('new_typed', 'build_typed', 'flush_typed', 'shutdown_typed'):
+            self.assertIn(f'pub fn {method}(', source)
         validator.check_source_contract()
 
     def test_each_relocated_wrapper_rejects_missing_deprecation(self):
         for key, owner, replacement in validator.METHODS + validator.RETAINED_FACADE_METHODS:
             with self.subTest(owner=owner):
                 self.remove_attribute_and_reject(
-                    Path('crates/sc-observe/src/compat.rs') if key == 'observe' else LOGGER,
+                    OTLP if key.startswith('otlp_') else (
+                        Path('crates/sc-observe/src/compat.rs') if key == 'observe' else LOGGER
+                    ),
                     f'Use {replacement}(); see migrate-error-api.md.', owner)
+
+    def test_missing_all_otlp_markers_names_the_marker_check(self):
+        path = self.root / OTLP
+        original = path.read_text()
+        self.assertIn('since = "1.4.0"', original)
+        try:
+            mutated = original.replace('since = "1.4.0"', '')
+            path.write_text(mutated)
+            for name in ('otlp_config', 'otlp_runtime', 'otlp_assembly'):
+                with self.subTest(source=name):
+                    validator.check_b1e_marker(original, name)
+                    with self.assertRaisesRegex(
+                        AssertionError, f'^{name} has no B.1e deprecation marker$'
+                    ):
+                        validator.check_b1e_marker(mutated, name)
+            with self.assertRaisesRegex(
+                AssertionError, '^otlp_config has no B.1e deprecation marker$'
+            ):
+                validator.check_source_contract()
+        finally:
+            path.write_text(original)
+        validator.check_source_contract()
 
     def test_supported_methods_reject_deprecation(self):
         path = self.root / LOGGER
