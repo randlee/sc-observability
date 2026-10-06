@@ -22,6 +22,6 @@
   ],
   "files_outside_owned_paths": [],
   "base_sha": "sprint/d-3-otlp-config",
-  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-orchestration-0.10",
+  "primary_checkout": "/path/to/sc-observability",
   "lint_command": "make lint"
 }

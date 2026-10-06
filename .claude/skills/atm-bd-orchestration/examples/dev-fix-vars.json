@@ -6,7 +6,7 @@
   "branch": "fix/d-4-otlp-sync-exporter-sanity",
   "sanity_bead": "obs-d-4-sanity",
   "pr_target": "sprint/d-4-otlp-sync-exporter",
-  "primary_checkout": "/Users/randlee/github/sc-observability-worktrees/chore/atm-bd-orchestration-0.10",
+  "primary_checkout": "/path/to/sc-observability",
   "phase_root": "obs-phase-d",
   "test_command": "make test"
 }
