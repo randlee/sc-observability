@@ -6,7 +6,8 @@ reconstructed evidence for earlier releases. Once accepted, retain the files
 unchanged; an intentional contract change selects a new package version.
 ADR-020 compatibility requirements still apply.
 
-Rust compatibility baselines are the ten native text files under `rust-stock/`.
+Rust compatibility baselines are the native text files under `rust-stock/`, one
+for each `publish = true` Rust crate.
 `scripts/ci/stock_public_api.py setup` prepares the current native text in its
 caller-owned target directory; its `check` mode reads supplied rustdoc JSON with
 the pinned stock tool and compares it with those committed text baselines. The

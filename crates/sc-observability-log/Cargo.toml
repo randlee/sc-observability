@@ -11,6 +11,8 @@ description = "log facade bridge and tracing-compatible macros for sc-observabil
 publish = true
 
 [features]
+default = ["v1"]
+v1 = ["sc-observability-types/v1", "sc-observability/v1"]
 # CI-only release fixture; it proves initialization rejects a baseline above
 # log::STATIC_MAX_LEVEL without imposing a production facade cap.
 static_level_cap_test = ["log/release_max_level_info"]

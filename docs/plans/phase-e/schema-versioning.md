@@ -74,8 +74,8 @@ is the remedy for an actual contract change, not overwriting accepted history.
 
 Rust uses the pinned stock `cargo public-api` tool, not a compiler-metadata
 reader or a project-defined row format. `setup` is the only build-producing
-candidate step: it generates current rustdoc JSON for every one of the ten
-`publish = true` Rust crates named in `release/publish-artifacts.toml`, including
+candidate step: it generates current rustdoc JSON for every `publish = true`
+Rust crate named in `release/publish-artifacts.toml`, including
 the standalone Tauri crate, and writes the tool's unmodified `-sss` text only
 under its caller-owned target directory. It never writes the committed baseline.
 

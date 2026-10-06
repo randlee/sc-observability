@@ -12,6 +12,8 @@ homepage.workspace = true
 description = "Standalone shared types for observability records and config."
 
 [features]
+default = ["v1"]
+v1 = []
 test-double = ["dep:uuid"]
 
 [dependencies]

@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime};
 
 use sc_observability_types::ErrorContext;
 use sc_observability_types::typed::EventFailure;
-use sc_observability_types::v2::LogSinkError;
+use sc_observability_types::v2::{InitError, LogSinkError};
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, Level, LogEvent, Remediation, SinkHealth, SinkHealthState,
     SinkName, Timestamp,
@@ -133,6 +133,31 @@ impl JsonlFileSink {
 
     pub(crate) fn for_logger(path: PathBuf) -> Self {
         Self::with_legacy_policy(path, None)
+    }
+
+    /// Opens a retained JSONL file sink and applies its rotation and retention policy.
+    ///
+    /// This is the canonical direct-file-sink constructor. It uses the same
+    /// maintenance path as logger-owned sinks, so an existing active file is
+    /// rotated and retained files are pruned before the caller writes.
+    pub fn open(path: PathBuf, policy: RetainedLogPolicy) -> Result<Self, InitError> {
+        let sink = Self::for_logger(path);
+        sink.perform_maintenance(&policy)
+            .map_err(|error| InitError::Runtime {
+                context: Box::new(
+                    ErrorContext::new(
+                        error_codes::LOGGER_INIT_FAILED,
+                        "could not prepare retained JSONL file sink",
+                        Remediation::recoverable(
+                            "fix the log path or retention policy and retry initialization",
+                            ["ensure the log directory is writable"],
+                        ),
+                    )
+                    .cause(error.to_string())
+                    .source(Box::new(error)),
+                ),
+            })?;
+        Ok(sink)
     }
 
     fn with_legacy_policy(path: PathBuf, legacy_policy: Option<LegacyRetentionPolicy>) -> Self {
@@ -873,6 +898,42 @@ mod tests {
 
     fn join_secs(value: u64) -> crate::WriterShutdownTimeout {
         crate::WriterShutdownTimeout::new(Duration::from_secs(value))
+    }
+
+    #[test]
+    fn open_applies_rotation_and_retention_policy() {
+        let root = temp_root("open-policy");
+        let active_path = root.join("logs/service.log.jsonl");
+        fs::create_dir_all(active_path.parent().expect("parent")).expect("create parent");
+        fs::write(&active_path, "active record").expect("seed active file");
+        fs::write(
+            active_path.with_file_name("service.log.jsonl.1"),
+            "previous record",
+        )
+        .expect("seed retained file");
+
+        let sink = JsonlFileSink::open(
+            active_path.clone(),
+            RetainedLogPolicy {
+                rotation_max_bytes: bytes(1),
+                rotation_max_files: file_count(1),
+                retention_max_age: retention_secs(3600),
+                maintenance_cadence: cadence_secs(60),
+                writer_shutdown_timeout: join_secs(5),
+                maintenance_max_work_per_pass: None,
+            },
+        )
+        .expect("open applies retained-log policy");
+
+        assert_eq!(sink.path(), active_path);
+        assert_eq!(
+            fs::read_to_string(sink.rotated_path(1)).expect("rotated file"),
+            "active record"
+        );
+        assert!(
+            !sink.rotated_path(2).exists(),
+            "retention cap prunes older files"
+        );
     }
 
     #[test]

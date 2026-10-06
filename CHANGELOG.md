@@ -39,7 +39,7 @@ Public API reference for this release:
 - `LoggingHealthReport` queue/writer health fields, including queue depth, queue capacity, queue high-water mark, queue-full drop count, writer state, last writer error, and maintenance health.
 - Explicit open-contract doc comments on the public `LogSink`, `LogFilter`, and `Redactor` traits.
 - Queue-backed writer runtime with a single writer thread that owns batching, sink writes, rotation, pruning, flush, and shutdown sequencing.
-- Public API governance CI gates: `validate_public_api_diff.sh`, `validate_public_api_semver.py`, and `validate_public_api_docs.sh`.
+- Public API history is checked with the stock `cargo public-api` baseline gate.
 - Consumer documentation in `CONSUMING.md`, including dedicated `Queue Admission And Durability` and `Migrating From emit()` sections.
 - `WriterShutdownTimeout` / `writer_shutdown_timeout` as the configurable writer-shutdown timeout threshold.
 

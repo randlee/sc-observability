@@ -10,6 +10,8 @@ rust-version.workspace = true
 description = "Bounded native logging backends for language bindings"
 
 [features]
+default = ["v1"]
+v1 = ["sc-observability-log/v1"]
 test-hooks = ["sc-observability/fault-injection"]
 
 [dependencies]

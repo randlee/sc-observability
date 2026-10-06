@@ -54,6 +54,8 @@ pub use constants::DEFAULT_ENV_PREFIX_SEPARATOR;
 #[doc(inline)]
 pub use constants::OBSERVATION_ENVELOPE_VERSION;
 #[doc(inline)]
+pub use constants::OBSERVATION_SCHEMA_VERSION;
+#[doc(inline)]
 pub use diagnostic::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, RecoverableSteps, Remediation,
 };

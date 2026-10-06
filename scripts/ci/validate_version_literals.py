@@ -5,14 +5,70 @@ import re
 import tomllib
 from pathlib import Path
 
-from validate_public_api import validate_compatible_policy
-
-
 HISTORICAL_LOCKS = {
     Path("crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-baseline/Cargo.lock"),
     Path("crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-consumer/Cargo.lock"),
     Path("docs/plans/phase-b/evidence/b3-final/Cargo.lock"),
 }
+
+APPROVED_DEFERRED_STANDALONE_PACKAGES = [
+    {
+        "package": "sc-observability-tauri",
+        "baselineVersion": "1.4.1",
+        "reason": (
+            "The Tauri adapter is a separate workspace and remains pending its "
+            "standalone API/publication qualification in "
+            "release/bindings-artifacts.toml; it is not one of this candidate's "
+            "nine workspace API packages."
+        ),
+    },
+]
+
+
+def validate_api_package_roster(inventory: dict, publish_artifacts: dict) -> None:
+    """Require release inventory coverage for every published Rust crate."""
+    candidate = inventory.get("qualificationCandidate")
+    if not isinstance(candidate, dict):
+        raise ValueError("release inventory must define qualificationCandidate")
+    candidate_names = candidate.get("packages")
+    deferred = candidate.get("deferredStandalonePackages")
+    artifact_crates = publish_artifacts.get("crates")
+    if not isinstance(candidate_names, list) or any(
+        not isinstance(name, str) or not name for name in candidate_names
+    ):
+        raise ValueError("qualificationCandidate.packages must be a list of package names")
+    if not isinstance(deferred, list) or any(not isinstance(item, dict) for item in deferred):
+        raise ValueError(
+            "qualificationCandidate.deferredStandalonePackages must be a list of package records"
+        )
+    deferred_names = [item.get("package") for item in deferred]
+    if any(not isinstance(name, str) or not name for name in deferred_names):
+        raise ValueError("deferred standalone API package records must name a package")
+    if not isinstance(artifact_crates, list) or any(
+        not isinstance(item, dict) for item in artifact_crates
+    ):
+        raise ValueError("publish-artifacts manifest must define a crates list")
+    published_names = [item.get("package") for item in artifact_crates]
+    if any(not isinstance(name, str) or not name for name in published_names):
+        raise ValueError("every publish-artifacts crate must name a package")
+    all_names = candidate_names + deferred_names
+    if len(candidate_names) != len(set(candidate_names)):
+        raise ValueError("qualificationCandidate.packages contains duplicate packages")
+    if len(deferred_names) != len(set(deferred_names)):
+        raise ValueError("qualificationCandidate.deferredStandalonePackages contains duplicate packages")
+    if len(published_names) != len(set(published_names)):
+        raise ValueError("publish-artifacts manifest contains duplicate crate packages")
+    if len(all_names) != len(set(all_names)):
+        raise ValueError("candidate and deferred API package sets overlap")
+    if deferred != APPROVED_DEFERRED_STANDALONE_PACKAGES:
+        raise ValueError("deferred standalone API package metadata differs from the exact approved exemption")
+    if set(all_names) != set(published_names):
+        missing = sorted(set(published_names) - set(all_names))
+        unknown = sorted(set(all_names) - set(published_names))
+        raise ValueError(
+            "candidate and deferred API package sets must exactly match publish-artifacts crates "
+            f"(omitted={missing}, unknown={unknown})"
+        )
 
 
 def is_candidate_package(name: str) -> bool:
@@ -90,7 +146,9 @@ def validate(root: Path) -> None:
     api_policy = json.loads((root / "release/public-api-policy.json").read_text(encoding="utf-8"))
     if api_policy.get("candidate_version") != version:
         raise ValueError("public API policy candidate must match the workspace release version")
-    validate_compatible_policy(api_policy, root)
+    inventory = json.loads((root / "release/release-inventory.json").read_text(encoding="utf-8"))
+    publish_manifest = tomllib.loads((root / "release/publish-artifacts.toml").read_text(encoding="utf-8"))
+    validate_api_package_roster(inventory, publish_manifest)
     workspace_lock = tomllib.loads((root / "Cargo.lock").read_text(encoding="utf-8"))
     locked_packages = {item["name"]: item["version"] for item in workspace_lock.get("package", [])}
     for crate in api_policy["crates"]:
@@ -123,10 +181,7 @@ def validate(root: Path) -> None:
             return workspace["package"]["version"] if value == {"workspace": True} else value
         return json.loads(path.read_text(encoding="utf-8"))["version"]
 
-    publish_manifest = tomllib.loads((root / "release/publish-artifacts.toml").read_text(encoding="utf-8"))
     release_crates = publish_manifest.get("crates", [])
-    if len(release_crates) != 10:
-        raise ValueError(f"release artifact manifest must contain all ten Rust packages, found {len(release_crates)}")
     for item in release_crates:
         manifest_path = root / item["cargo_toml"]
         if package_version(manifest_path) != version:

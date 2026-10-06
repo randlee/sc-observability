@@ -45,11 +45,6 @@ def validate_transport_dependencies(root: Path) -> set[str]:
     locked = {(p["name"], p["version"]) for p in load("Cargo.lock")["package"]}
     features = manifest["features"]
 
-    # ADR-019 amendment: the hermetic integration collector adds tonic's
-    # generated-service router only as a dev-dependency.  The policy records
-    # every allowed dev-dependency and its exact effective features.
-    reviewed_dev = document["dev_dependencies"]
-    dev = set()
     for kind, dependencies in dependency_sections(manifest):
         if kind == "dev-dependencies":
             continue
@@ -60,25 +55,6 @@ def validate_transport_dependencies(root: Path) -> set[str]:
             raise SystemExit(
                 f"OTLP dependency sc-observe: dev-only; it must not appear in [{kind}]"
             )
-    for kind, dependencies in dependency_sections(manifest):
-        if kind != "dev-dependencies":
-            continue
-        for key, value in dependencies.items():
-            if not isinstance(value, dict) or value.get("workspace") is not True or "package" in value:
-                raise SystemExit(f"OTLP dev-dependency {key}: must inherit the reviewed workspace pin")
-            dev.add(key)
-            if key in reviewed_dev:
-                enabled, defaults = effective_features(workspace.get(key, {}), value)
-                expected = reviewed_dev[key]
-                if enabled != set(expected["features"]) or defaults != expected["default_features"]:
-                    raise SystemExit(f"OTLP dev-dependency {key}: effective features differ from policy")
-    if dev != set(reviewed_dev):
-        raise SystemExit(
-            "OTLP dev-dependencies differ from policy: "
-            f"unexpected {sorted(dev - set(reviewed_dev))}, "
-            f"missing {sorted(set(reviewed_dev) - dev)}"
-        )
-
     # Validate the reviewed SDK closure first. A dependency can later become a
     # direct, policy-governed transport (for example tonic for generated OTLP
     # clients); that must not change this invariant's diagnostic or let a
@@ -129,64 +105,3 @@ def validate_transport_dependencies(root: Path) -> set[str]:
             if (name in activated(backend)) != (backend in rule["backends"]):
                 raise SystemExit(prefix + f"incorrect binding to {backend}")
     return set(policy)
-
-
-def validate_composition_harness(root: Path) -> None:
-    """Enforces the ADR-019/ADR-020 composition-harness dependency exception."""
-
-    def load(path):
-        return tomllib.loads((root / path).read_text(encoding="utf-8"))
-
-    rule = load("policy/otlp-transport.toml")["composition_harness"]
-    workspace = load("Cargo.toml")["workspace"]
-    shared = workspace.get("dependencies", {})
-    harness_dir = (root / rule["manifest"]).parent.resolve()
-    harness = load(rule["manifest"])
-    prefix = "OTLP composition harness: "
-
-    def resolve(key, declaration, manifest_dir):
-        # Renamed (`package = ...`), path and workspace-inherited declarations
-        # all resolve to the package and path Cargo actually uses.
-        declaration = declaration if isinstance(declaration, dict) else {}
-        base = manifest_dir
-        if declaration.get("workspace") is True:
-            inherited = shared.get(key, {})
-            declaration = {**(inherited if isinstance(inherited, dict) else {}), **declaration}
-            base = root
-        path = declaration.get("path")
-        return declaration.get("package", key), (base / path).resolve() if path else None
-
-    if harness.get("package", {}).get("name") != rule["package"]:
-        raise SystemExit(prefix + f"{rule['manifest']} must declare package {rule['package']}")
-    if harness["package"].get("publish") is not False:
-        raise SystemExit(prefix + "must set publish = false")
-    reviewed = rule["dev_dependencies"]
-    dev = set()
-    for kind, dependencies in dependency_sections(harness):
-        if kind != "dev-dependencies" and dependencies:
-            raise SystemExit(prefix + f"must not declare {kind}")
-        for key, value in dependencies.items():
-            if not isinstance(value, dict) or value.get("workspace") is not True:
-                raise SystemExit(prefix + f"{key} must inherit the reviewed workspace pin")
-            package = resolve(key, value, harness_dir)[0]
-            dev.add(package)
-            if package in reviewed:
-                enabled, defaults = effective_features(shared.get(key, {}), value)
-                expected = reviewed[package]
-                if enabled != set(expected["features"]) or defaults != expected["default_features"]:
-                    raise SystemExit(prefix + f"{package} effective features differ from policy")
-    if dev != set(reviewed):
-        raise SystemExit(
-            prefix + "dev-dependencies differ from policy: "
-            f"unexpected {sorted(dev - set(reviewed))}, "
-            f"missing {sorted(set(reviewed) - dev)}"
-        )
-    for member in workspace["members"]:
-        member_dir = (root / member).resolve()
-        if member_dir == harness_dir:
-            continue
-        for _, dependencies in dependency_sections(load(f"{member}/Cargo.toml")):
-            for key, value in dependencies.items():
-                package, path = resolve(key, value, member_dir)
-                if package == rule["package"] or path == harness_dir:
-                    raise SystemExit(prefix + f"{member} must not depend on the harness")

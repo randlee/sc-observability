@@ -26,14 +26,6 @@ test:
     cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked
     python3 -m unittest scripts.ci.tests.test_prepare_release_staged_packages scripts.ci.tests.test_publish_retry_idempotency scripts.ci.tests.test_stock_public_api scripts.integrate.tests.test_dispatch scripts.integrate.tests.test_runner_workflow scripts.api.test_history scripts.api.test_python_surface
 
-# Public API checks; these need the nightly toolchain (see .github/workflows/ci.yml).
-public-api:
-    python3 -m unittest discover -s scripts/ci/tests -p test_validate_public_api.py -v
-    # Exit 1 means a diff to review; semver and docs remain mandatory below.
-    status=0; bash scripts/ci/validate_public_api_diff.sh || status=$?; if [ "$status" -gt 1 ]; then exit "$status"; fi
-    python3 scripts/ci/validate_public_api_semver.py
-    bash scripts/ci/validate_public_api_docs.sh
-
 # cargo-deny with policy/deny-durable-store.toml over the durable-store, otlp-telemetry and sc-otel-cli graphs.
 deny:
     cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store --locked check --config policy/deny-durable-store.toml licenses bans advisories

@@ -255,26 +255,15 @@ At each crate freeze gate:
 Intentional public API changes must satisfy all of the following before they
 land:
 
-- `scripts/ci/validate_public_api_diff.sh` must expose the additive public API
-  diff against the latest published baseline for each workspace crate
-- `scripts/ci/validate_public_api_semver.py` must pass against the current
-  release baseline
-- `scripts/ci/validate_public_api_docs.sh` must pass
+- `python3 scripts/ci/stock_public_api.py check --target-dir <target>` must
+  pass against the committed release baselines
 - `docs/public-api-checklist.md` must be updated in the same branch
 - at least one normative API doc must be updated in the same branch:
   - `docs/requirements.md`
   - `docs/architecture.md`
   - `docs/api-design.md`
-- one approval artifact per intentional API change must exist under
-  `docs/api-approvals/` using the required headings:
-  - `## Scope`
-  - `## Approval`
-  - `## Affected Artifacts`
-
-Steady-state rule:
-
-- when no public API diff exists, `docs/api-approvals/README.md` may be the
-  only file under `docs/api-approvals/`
+- the affected stock baseline diff is the review record for an intentional
+  removed or changed API line
 
 ## 8. Phase B additions
 
@@ -285,7 +274,7 @@ entries do not alter the finalized items above.
 - [ ] Neutral runtime level state/results and an opaque core mutation capability,
   owner-deferred to Phase B completion; see the
   [runtime contract](plans/phase-b/runtime-level-contract.md) and
-  [approval record](api-approvals/phase-b-runtime-level.md). Preserve
+  [runtime-level contract](plans/phase-b/runtime-level-contract.md). Preserve
   existing LoggerConfig and health struct shapes and constructor signatures.
 - [ ] Initial companion bridge/control/error/health API and exact-pinned macros;
   see [target matrix](plans/phase-b/target-bridge-api.md). BTIT implements the

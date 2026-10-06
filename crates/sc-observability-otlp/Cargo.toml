@@ -11,7 +11,8 @@ description = "Standalone OTLP export adapter for sc-observability."
 
 [features]
 durable-store = ["sync-http", "dep:rusqlite", "dep:serde-saphyr", "dep:uuid"]
-default = []
+default = ["v1"]
+v1 = ["sc-observability-types/v1"]
 otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest"]
 # Unstable, non-default support for the D.7 external consumer fixture. This
 # deliberately does not activate the production Telemetry factory (D.18).

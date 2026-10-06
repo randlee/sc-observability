@@ -2324,8 +2324,7 @@ scoped TYP-030 exception in proposed ADR-011; core shared types remain neutral.
 The [runtime-level contract](plans/phase-b/runtime-level-contract.md) specifies
 additive core owner construction, read-only level snapshots and typed elevate/
 reset outcomes. Existing LoggerConfig and LoggingHealthReport remain unchanged.
-Its owner deferral is recorded in
-[`api-approvals/phase-b-runtime-level.md`](api-approvals/phase-b-runtime-level.md).
+Its owner deferral is recorded in the phase-B runtime-level contract.
 The new OperationDiagnostic provides required code, message, remediation and
 timestamp for operation outcomes; existing DiagnosticSummary remains an optional
 code plus message/time summary. Conversions preserve available original data

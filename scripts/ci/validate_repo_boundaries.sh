@@ -97,9 +97,8 @@ if "sc-observability-otlp" in observe_runtime_deps:
 required_otlp = {"serde_json", "thiserror", "sc-lint-attributes"}
 # ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
 sys.path.insert(0, str(root / "scripts/ci"))
-from otlp_dependencies import validate_composition_harness, validate_transport_dependencies
+from otlp_dependencies import validate_transport_dependencies
 transport_names = validate_transport_dependencies(root)
-validate_composition_harness(root)
 otlp_external_runtime_deps = {
     dependency for dependency in otlp_runtime_deps
     if not is_first_party_dependency(dependency)

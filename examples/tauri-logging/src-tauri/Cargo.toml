@@ -7,12 +7,12 @@ publish = false
 [workspace]
 
 [dependencies]
-sc-observability = { path = "../../../crates/sc-observability" }
-sc-observability-binding-runtime = { path = "../../../crates/sc-observability-binding-runtime" }
+sc-observability = { path = "../../../crates/sc-observability", default-features = false }
+sc-observability-binding-runtime = { path = "../../../crates/sc-observability-binding-runtime", default-features = false }
 sc-observability-dto = { path = "../../../crates/sc-observability-dto" }
-sc-observability-log = { path = "../../../crates/sc-observability-log" }
+sc-observability-log = { path = "../../../crates/sc-observability-log", default-features = false }
 sc-observability-tauri = { path = "../../../bindings/tauri", features = ["tauri"] }
-sc-observability-types = { path = "../../../crates/sc-observability-types" }
+sc-observability-types = { path = "../../../crates/sc-observability-types", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["wry"] }

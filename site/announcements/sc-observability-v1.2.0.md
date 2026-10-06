@@ -22,7 +22,7 @@ The health surface grows to match: `LoggingHealthReport` now exposes queue depth
 
 **As an observability developer, I want shared contracts (identifiers, diagnostics, health reports) stable across components, so that telemetry from different SC products composes cleanly.**
 
-Public API governance is now enforced in CI. `validate_public_api_diff.sh`, `validate_public_api_semver.py`, and `validate_public_api_docs.sh` gate every change against approved diffs, so the shared contracts in `sc-observability-types` can't drift silently. The release ships with docs.rs API references for all four crates and a new `CONSUMING.md` covering queue admission, durability, and migration off `emit()`.
+Public API history is checked in CI with the stock `cargo public-api` baseline gate, so the shared contracts in `sc-observability-types` cannot drift silently. The release ships with docs.rs API references for all four crates and a new `CONSUMING.md` covering queue admission, durability, and migration off `emit()`.
 
 ---
 

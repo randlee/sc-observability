@@ -1,7 +1,19 @@
 //! Shared cross-crate constants owned by `sc-observability-types`.
 
+use std::sync::LazyLock;
+
+use crate::SchemaVersion;
+
 /// Current version string for the observation envelope contract.
 pub const OBSERVATION_ENVELOPE_VERSION: &str = "v1";
+/// Validated schema version used by newly-created observation envelopes.
+///
+/// This is a static because `SchemaVersion` owns a `String` and validates its
+/// input, so it cannot be constructed in a `const` initializer.
+pub static OBSERVATION_SCHEMA_VERSION: LazyLock<SchemaVersion> = LazyLock::new(|| {
+    SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION)
+        .expect("shared schema version constant is valid")
+});
 /// Required character length for W3C trace identifiers.
 pub const TRACE_ID_LEN: usize = 32;
 /// Required character length for W3C span identifiers.
@@ -112,3 +124,17 @@ pub(crate) const TELEMETRY_MAX_STORE_BYTES_LIMIT: u64 = 1024 * 1024 * 1024 * 102
 pub(crate) const TELEMETRY_RETRY_DURATION_MAX_MS: u64 = 24 * 3600 * 1000;
 /// Maximum synchronous HTTP retry jitter percentage.
 pub(crate) const TELEMETRY_RETRY_JITTER_PERCENT_MAX: u8 = 100;
+
+#[cfg(test)]
+mod tests {
+    use super::{OBSERVATION_ENVELOPE_VERSION, OBSERVATION_SCHEMA_VERSION};
+    use crate::SchemaVersion;
+
+    #[test]
+    fn observation_schema_version_matches_the_envelope_version() {
+        assert_eq!(
+            *OBSERVATION_SCHEMA_VERSION,
+            SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version")
+        );
+    }
+}
