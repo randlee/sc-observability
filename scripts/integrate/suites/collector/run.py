@@ -23,19 +23,24 @@ CASE_TIMEOUT_SECONDS = 15 * 60
 
 CASES = (
     (
-        "canonical-ingress-sdk",
+        "sdk-full-stack",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "canonical_ingress", "--features", "otlp-sdk,sync-http", "--",
-            "canonical_ingress_exports_every_field_over_the_sdk_backend", "--nocapture",
+            "--test", "full_stack_integration", "--features", "otlp-sdk", "--", "--nocapture",
         ],
     ),
     (
-        "canonical-ingress-sync-http",
+        "sync-http-full-stack",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "canonical_ingress", "--features", "otlp-sdk,sync-http", "--",
-            "canonical_ingress_exports_every_field_over_the_sync_http_backend", "--nocapture",
+            "--test", "full_stack_integration", "--features", "sync-http", "--", "--nocapture",
+        ],
+    ),
+    (
+        "combined-full-stack",
+        [
+            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
+            "--test", "full_stack_integration", "--features", "otlp-sdk,sync-http", "--", "--nocapture",
         ],
     ),
 )
