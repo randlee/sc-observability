@@ -45,10 +45,10 @@ use crate::errors_v2::{
     FlushError as CanonicalFlushError, InitError as CanonicalInitError,
     ShutdownError as CanonicalShutdownError,
 };
-use crate::v2::MetricRecord;
+use crate::v2::{MetricRecord, SpanSignal};
 use crate::{
     Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, LogEvent, Observable, Observation,
-    ProcessIdentity, Remediation, SpanSignal, error_codes, sealed,
+    ProcessIdentity, Remediation, error_codes, sealed,
 };
 
 #[deprecated(note = "removed; see docs/migration/phase-f.md")]

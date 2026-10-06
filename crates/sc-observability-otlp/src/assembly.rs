@@ -18,6 +18,13 @@
         reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
     )
 )]
+#![cfg_attr(
+    feature = "v1",
+    allow(
+        deprecated,
+        reason = "the feature-gated released assembler preserves its v1 span types"
+    )
+)]
 use std::collections::{HashMap, VecDeque};
 
 use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};

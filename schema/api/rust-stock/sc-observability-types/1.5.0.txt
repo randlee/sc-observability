@@ -1223,7 +1223,7 @@ pub fn sc_observability_types::typed::TypedObservationSubscriber::observe(&self,
 pub trait sc_observability_types::typed::TypedProcessIdentityResolver: core::marker::Send + core::marker::Sync
 pub fn sc_observability_types::typed::TypedProcessIdentityResolver::resolve(&self) -> core::result::Result<sc_observability_types::ProcessIdentity, sc_observability_types::typed::IdentityFailure>
 pub trait sc_observability_types::typed::TypedSpanProjector<T: sc_observability_types::Observable>: core::marker::Send + core::marker::Sync
-pub fn sc_observability_types::typed::TypedSpanProjector::project_spans(&self, &sc_observability_types::Observation<T>) -> core::result::Result<alloc::vec::Vec<sc_observability_types::SpanSignal>, sc_observability_types::typed::ProjectionFailure>
+pub fn sc_observability_types::typed::TypedSpanProjector::project_spans(&self, &sc_observability_types::Observation<T>) -> core::result::Result<alloc::vec::Vec<sc_observability_types::v2::SpanSignal>, sc_observability_types::typed::ProjectionFailure>
 pub mod sc_observability_types::v2
 #[non_exhaustive] pub enum sc_observability_types::v2::AggregationTemporality
 pub sc_observability_types::v2::AggregationTemporality::Cumulative

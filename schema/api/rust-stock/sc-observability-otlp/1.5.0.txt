@@ -59,8 +59,8 @@ pub fn sc_observability_otlp::v1::AuthHeader::fmt(&self, &mut core::fmt::Formatt
 impl core::fmt::Display for sc_observability_otlp::v1::AuthHeader
 pub fn sc_observability_otlp::v1::AuthHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct sc_observability_otlp::v1::CompleteSpan
-pub sc_observability_otlp::v1::CompleteSpan::events: alloc::vec::Vec<sc_observability_types::span::SpanEvent>
-pub sc_observability_otlp::v1::CompleteSpan::record: sc_observability_types::span::SpanRecord<sc_observability_types::span::SpanEnded>
+pub sc_observability_otlp::v1::CompleteSpan::events: alloc::vec::Vec<sc_observability_types::v1::span::SpanEvent>
+pub sc_observability_otlp::v1::CompleteSpan::record: sc_observability_types::v1::span::SpanRecord<sc_observability_types::span::SpanEnded>
 pub struct sc_observability_otlp::v1::OtelConfig
 pub sc_observability_otlp::v1::OtelConfig::auth_header: core::option::Option<sc_observability_otlp::v1::AuthHeader>
 pub sc_observability_otlp::v1::OtelConfig::ca_file: core::option::Option<std::path::PathBuf>
@@ -91,18 +91,18 @@ pub struct sc_observability_otlp::v1::SpanAssembler
 impl sc_observability_otlp::SpanAssembler
 pub fn sc_observability_otlp::SpanAssembler::flush_incomplete(&mut self) -> usize
 pub fn sc_observability_otlp::SpanAssembler::new() -> Self
-pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::v1::typed::EventFailure>
+pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::v1::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::v1::typed::EventFailure>
 pub fn sc_observability_otlp::SpanAssembler::take_loss(&mut self) -> sc_observability_otlp::SpanAssemblyLoss
 pub fn sc_observability_otlp::SpanAssembler::with_limits(usize, usize) -> Self
 impl sc_observability_otlp::SpanAssembler
-pub fn sc_observability_otlp::SpanAssembler::push(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::errors::EventError>
+pub fn sc_observability_otlp::SpanAssembler::push(&mut self, sc_observability_types::v1::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::errors::EventError>
 impl core::default::Default for sc_observability_otlp::SpanAssembler
 pub fn sc_observability_otlp::SpanAssembler::default() -> Self
 pub struct sc_observability_otlp::v1::Telemetry
 impl sc_observability_otlp::v1::Telemetry
 pub fn sc_observability_otlp::v1::Telemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
 pub fn sc_observability_otlp::v1::Telemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
-pub fn sc_observability_otlp::v1::Telemetry::emit_span(&self, &sc_observability_types::span::SpanSignal) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
+pub fn sc_observability_otlp::v1::Telemetry::emit_span(&self, &sc_observability_types::v1::span::SpanSignal) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
 pub fn sc_observability_otlp::v1::Telemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub async fn sc_observability_otlp::v1::Telemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::v1::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
@@ -283,8 +283,8 @@ pub fn sc_observability_otlp::v1::AuthHeader::fmt(&self, &mut core::fmt::Formatt
 impl core::fmt::Display for sc_observability_otlp::v1::AuthHeader
 pub fn sc_observability_otlp::v1::AuthHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct sc_observability_otlp::CompleteSpan
-pub sc_observability_otlp::CompleteSpan::events: alloc::vec::Vec<sc_observability_types::span::SpanEvent>
-pub sc_observability_otlp::CompleteSpan::record: sc_observability_types::span::SpanRecord<sc_observability_types::span::SpanEnded>
+pub sc_observability_otlp::CompleteSpan::events: alloc::vec::Vec<sc_observability_types::v1::span::SpanEvent>
+pub sc_observability_otlp::CompleteSpan::record: sc_observability_types::v1::span::SpanRecord<sc_observability_types::span::SpanEnded>
 pub struct sc_observability_otlp::LogsConfig
 pub sc_observability_otlp::LogsConfig::batch_size: usize
 impl core::default::Default for sc_observability_otlp::LogsConfig
@@ -344,11 +344,11 @@ pub struct sc_observability_otlp::SpanAssembler
 impl sc_observability_otlp::SpanAssembler
 pub fn sc_observability_otlp::SpanAssembler::flush_incomplete(&mut self) -> usize
 pub fn sc_observability_otlp::SpanAssembler::new() -> Self
-pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::v1::typed::EventFailure>
+pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::v1::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::v1::typed::EventFailure>
 pub fn sc_observability_otlp::SpanAssembler::take_loss(&mut self) -> sc_observability_otlp::SpanAssemblyLoss
 pub fn sc_observability_otlp::SpanAssembler::with_limits(usize, usize) -> Self
 impl sc_observability_otlp::SpanAssembler
-pub fn sc_observability_otlp::SpanAssembler::push(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::errors::EventError>
+pub fn sc_observability_otlp::SpanAssembler::push(&mut self, sc_observability_types::v1::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::errors::EventError>
 impl core::default::Default for sc_observability_otlp::SpanAssembler
 pub fn sc_observability_otlp::SpanAssembler::default() -> Self
 pub struct sc_observability_otlp::SpanAssemblyLoss
@@ -367,7 +367,7 @@ pub struct sc_observability_otlp::Telemetry
 impl sc_observability_otlp::v1::Telemetry
 pub fn sc_observability_otlp::v1::Telemetry::emit_log(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
 pub fn sc_observability_otlp::v1::Telemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
-pub fn sc_observability_otlp::v1::Telemetry::emit_span(&self, &sc_observability_types::span::SpanSignal) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
+pub fn sc_observability_otlp::v1::Telemetry::emit_span(&self, &sc_observability_types::v1::span::SpanSignal) -> core::result::Result<(), sc_observability_types::errors::TelemetryError>
 pub fn sc_observability_otlp::v1::Telemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub async fn sc_observability_otlp::v1::Telemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::v1::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>

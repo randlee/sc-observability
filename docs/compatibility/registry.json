@@ -254,6 +254,7 @@
     }
   ],
   "compat_root_reexport_exceptions": [
+    "crates/sc-observability-types/src/lib.rs",
     "crates/sc-observability/src/lib.rs",
     "crates/sc-observability-log/src/lib.rs",
     "crates/sc-observability-otlp/src/lib.rs",

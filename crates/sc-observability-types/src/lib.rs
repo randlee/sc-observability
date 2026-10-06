@@ -31,12 +31,13 @@ pub use v1::typed;
 #[cfg(feature = "v1")]
 #[allow(
     deprecated,
-    reason = "released v1 metric and routing paths remain feature-gated"
+    reason = "released v1 compatibility paths remain feature-gated"
 )]
 #[doc(inline)]
 pub use v1::{
     LogProjector, MetricKind, MetricProjector, MetricRecord, ObservationSubscriber,
-    ProjectionRegistration, SpanProjector, SubscriberRegistration,
+    ProjectionRegistration, SpanEvent, SpanProjector, SpanRecord, SpanSignal,
+    SubscriberRegistration,
 };
 
 mod sealed {
@@ -101,7 +102,7 @@ pub use process::{ProcessIdentity, ProcessIdentityPolicy, ProcessIdentityResolve
 #[doc(inline)]
 pub use query::{LogFieldMatch, LogOrder, LogQuery, LogSnapshot, QueryError};
 #[doc(inline)]
-pub use span::{SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted, SpanStatus};
+pub use span::{SpanEnded, SpanStarted, SpanStatus};
 #[doc(inline)]
 pub use tracing::{SpanId, StateTransition, TraceContext, TraceId};
 #[doc(inline)]
