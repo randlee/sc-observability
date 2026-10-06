@@ -133,8 +133,9 @@ The production-readiness review approved these source-breaking API updates:
 
 1. Move shared crate usage in ATM to the published standalone crates.
 2. Keep ATM-specific adapter code in ATM-owned code.
-3. Copy the example adapter pattern and replace the sample ATM-shaped structs
-   with ATM-owned structs.
+3. Treat the retired `docs/atm-adapter-example.md` as historical context only
+   ([architecture §10](architecture.md#10-atm-proving-artifact-retired-in-phase-f));
+   do not copy its pattern or cite it as evidence.
 4. Verify health projection and fail-open behavior against ATM requirements.
 5. Remove obsolete ATM-local copies of the shared crate implementations after
    parity is confirmed.

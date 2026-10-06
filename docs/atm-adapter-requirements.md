@@ -125,6 +125,7 @@ atm-observability-adapter
   docs alone.
 - ADP-024 ATM migration confidence shall require an ATM-owned proving plan or
   implementation that exercises the adapter contract against the shared crates.
-- ADP-025 The unpublished proving artifact in this repo may be used as boundary
-  evidence only; it shall not be used as the sole evidence that ATM migration is
-  fully specified.
+- ADP-025 The unpublished proving artifact in this repo is retired and retained
+  as historical context only ([architecture §10](architecture.md#10-atm-proving-artifact-retired-in-phase-f));
+  do not copy it as an active pattern or cite it as boundary evidence, and do
+  not use it as the sole evidence that ATM migration is fully specified.
