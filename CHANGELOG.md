@@ -9,13 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Compatible additive APIs and implementation updates for the next 1.x release.
+- Compatible additive APIs and implementation updates for the next transition release.
 
 ### Deprecated
 
-- Existing deprecations remain available through the next compatible 1.5.0
-  release behind default-on `v1`; PHF-002 removes them only after that
-  deprecation release, without a major-version bump.
+- Phase F documents the 2.0 consumer migration paths for logging, typed
+  routing, and OTLP export in `docs/migration/phase-f.md`.
 
 ## [1.2.0] - 2026-05-26
 

@@ -6,7 +6,7 @@
 - [`architecture.md`](./architecture.md)
 - [`requirements.md`](./requirements.md)
 - [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
-- [`atm-adapter-example.md`](./atm-adapter-example.md)
+- [`migration/phase-f.md`](./migration/phase-f.md)
 
 ## 1. Purpose
 

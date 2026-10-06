@@ -8,7 +8,7 @@
 - [`api-design.md`](./api-design.md)
 - [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
 - [`atm-adapter-architecture.md`](./atm-adapter-architecture.md)
-- [`atm-adapter-example.md`](./atm-adapter-example.md)
+- [`migration/phase-f.md`](./migration/phase-f.md)
 
 ## 1. Purpose
 
@@ -165,6 +165,7 @@ The intended path is:
 4. ATM-owned adapter code projects shared health and durability behavior back
    into ATM-specific operational surfaces
 
-See [`atm-adapter-example.md`](./atm-adapter-example.md) for the boundary-proof
+See [`migration/phase-f.md`](./migration/phase-f.md) for the boundary and
+migration
 example and [`atm-adapter-requirements.md`](./atm-adapter-requirements.md) for
 the normative ATM-owned obligations.

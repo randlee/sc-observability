@@ -175,14 +175,14 @@ Must not own:
 - ATM-specific metadata rules
 - ATM path conventions
 
-### 6.3 `sc-observe`
+### 6.3 `sc_observe::v2`
 
 Owns typed observation routing and projection.
 
 Owns:
 
-- `Observability`
-- typed observation admission via `Observability::emit`
+- `v2::Observability`
+- typed observation admission via `v2::Observability::emit`
 - subscriber registry
 - projector registry
 - routing from typed observations into logging outputs and generic downstream
@@ -195,10 +195,8 @@ Design intent:
 - applications use this when one emitted observation should fan out to logs,
   generic projectors, and typed subscribers
 - this crate depends on `sc-observability` and `sc-observability-types`
-- v1 scope is intentionally limited to registration, filtering, projection, and
-  fan-out
-- v1 does not need a large general-purpose workflow engine beyond those routing
-  responsibilities
+- the canonical surface is the explicit `v2` namespace; applications do not
+  need a general-purpose workflow engine beyond these routing responsibilities
 
 Must not own:
 
@@ -211,8 +209,8 @@ Owns remote telemetry infrastructure.
 
 Owns:
 
-- `Telemetry`
-- `TelemetryConfig`
+- `v2::Telemetry`
+- `v2::TelemetryConfig`
 - OTLP exporters
 - OTLP transport concerns
 - batching, retry, timeout, flush, shutdown
@@ -221,7 +219,7 @@ Owns:
 Design intent:
 
 - this crate sits at the top of the stack
-- the application constructs `TelemetryConfig` independently and passes it
+- the application constructs `v2::TelemetryConfig` independently and passes it
   directly to `sc-observability-otlp`
 - this crate attaches to `sc-observe` by registering `LogProjector`,
   `SpanProjector`, and `MetricProjector` implementations with
@@ -374,8 +372,8 @@ Composition rules inside `sc-observe`:
 - `LoggerConfig.level`, `redaction`, and `process_identity` use
   documented `sc-observe` defaults unless those knobs are exposed separately in
   a future expansion of `ObservabilityConfig`
-- `sc-observe` does not derive or own `TelemetryConfig`
-- `TelemetryConfig` is constructed independently by the application layer and
+- `sc-observe` does not derive or own `v2::TelemetryConfig`
+- `v2::TelemetryConfig` is constructed independently by the application layer and
   passed directly to `sc-observability-otlp`
 
 Registrations are config-time only:
@@ -586,7 +584,7 @@ Ownership and usage:
 - `ServiceName`
   - owner: `sc-observability-types`
   - underlying type: validated `String`
-  - used by: `LoggerConfig`, `TelemetryConfig`, `LogEvent`, `MetricRecord`,
+  - used by: `LoggerConfig`, `v2::TelemetryConfig`, `LogEvent`, `MetricRecord`,
     `SpanRecord`
   - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
 - `TargetCategory`
@@ -767,7 +765,6 @@ pub trait ProcessIdentityResolver: Send + Sync {
 ```
 
 `ProcessIdentityResolver` is intentionally open for consumer implementation.
-Changes to its signature are breaking.
 
 Rationale:
 
@@ -1077,8 +1074,7 @@ pub struct DiagnosticSummary {
 ### 9.11 Public Error Type Pattern
 
 The published baseline uses diagnostic wrappers as described below. Phase B
-proposes additive improved errors and warning-only migration in §21; these
-baseline definitions are preserved, not replaced in place.
+records improved errors and migration guidance in §21.
 
 Design direction:
 
@@ -1671,29 +1667,20 @@ Health rules:
 
 ## 12. Telemetry Surface (`sc-observability-otlp`)
 
-In v1, the telemetry surface is OTLP-backed and lives in
-`sc-observability-otlp`.
+The canonical OTLP surface is opt-in and lives in `sc-observability-otlp`.
 
-### 12.1 `TelemetryConfig`
+### 12.1 `v2::TelemetryConfig`
 
 Design direction:
 
-```rust
-pub struct TelemetryConfig {
-    pub service_name: ServiceName,
-    pub resource: ResourceAttributes,
-    pub transport: OtelConfig,
-    pub logs: Option<LogsConfig>,
-    pub traces: Option<TracesConfig>,
-    pub metrics: Option<MetricsConfig>,
-}
-```
+`v2::TelemetryConfig` carries `service_name`, `resource`, `transport`, and
+optional logs, traces, and metrics settings.
 
 Composition rule:
 
-- `TelemetryConfig` is constructed independently by the application layer
-- `TelemetryConfig` is passed directly to `sc-observability-otlp`
-- `TelemetryConfig.service_name`, `resource`, `transport`, and signal-specific
+- `v2::TelemetryConfig` is constructed independently by the application layer
+- `v2::TelemetryConfig` is passed directly to `sc-observability-otlp`
+- `v2::TelemetryConfig.service_name`, `resource`, `transport`, and signal-specific
   settings are owned by the OTLP setup path, not by `ObservabilityConfig`
 
 Recommended construction shape:
@@ -1704,15 +1691,15 @@ pub struct TelemetryConfigBuilder { /* opaque */ }
 impl TelemetryConfigBuilder {
     pub fn new(service_name: ServiceName) -> Self;
     pub fn with_resource(self, resource: ResourceAttributes) -> Self;
-    pub fn with_transport(self, transport: OtelConfig) -> Self;
+    pub fn with_transport(self, transport: v2::OtelConfig) -> Self;
     pub fn enable_logs(self, config: LogsConfig) -> Self;
     pub fn enable_traces(self, config: TracesConfig) -> Self;
     pub fn enable_metrics(self, config: MetricsConfig) -> Self;
-    pub fn build(self) -> TelemetryConfig;
+    pub fn build(self) -> v2::TelemetryConfig;
 }
 ```
 
-### 12.1.1 `OtelConfig`
+### 12.1.1 `v2::OtelConfig`
 
 The initial OTEL transport configuration should carry forward the proven core
 shape from the existing `agent-team-mail` implementation, but without any
@@ -1720,33 +1707,16 @@ ATM-specific env naming baked into the shared API.
 
 Design direction:
 
-```rust
-pub enum OtlpProtocol {
-    HttpBinary,
-    HttpJson,
-    Grpc,
-}
-
-pub struct OtelConfig {
-    pub enabled: bool,
-    pub endpoint: Option<String>,
-    pub protocol: OtlpProtocol,
-    pub auth_header: Option<String>,
-    pub ca_file: Option<std::path::PathBuf>,
-    pub insecure_skip_verify: bool,
-    pub timeout_ms: DurationMs,
-    pub debug_local_export: bool,
-    pub max_retries: u32,
-    pub initial_backoff_ms: DurationMs,
-    pub max_backoff_ms: DurationMs,
-}
-```
+`v2::OtelConfig` carries the enabled switch, endpoint, protocol, optional
+authentication and CA inputs, TLS override, timeout, debug-export option, and
+bounded retry configuration. `v2::OtlpProtocol` selects HTTP binary, HTTP JSON,
+or gRPC transport.
 
 Defaults:
 
 - `enabled = false`
 - `endpoint = None`
-- `protocol = OtlpProtocol::HttpBinary`
+- `protocol = v2::OtlpProtocol::HttpBinary`
 - `auth_header = None`
 - `ca_file = None`
 - `insecure_skip_verify = false`
@@ -1770,15 +1740,13 @@ Initial intent of each field:
 - `initial_backoff_ms`: initial retry backoff
 - `max_backoff_ms`: maximum retry backoff
 
-This shape is the v1 transport contract. It preserves the proven transport
-knobs while neutralizing the old ATM-specific surface.
-
-This section and its unconditional retry defaults remain the released 1.x baseline. ADR-020 requires retaining these public contracts. D22 freezes the opt-in canonical backend-aware configuration and compatibility conversion contract; D26 implements the adapter while preserving the accepted backend validation/lifecycle behavior. New incompatible owners use the canonical namespace; they do not replace released root types in 1.x.
+This canonical shape keeps transport configuration independent of
+ATM-specific environment naming.
 
 Rule:
 
 - invalid OTLP transport configuration, including unsupported protocol values,
-  is detected at `Telemetry::new(...)` and returns `InitError`
+  is rejected during canonical telemetry initialization with `InitError`
 
 ### 12.1.2 Signal Configs
 
@@ -1812,23 +1780,13 @@ pub struct ResourceAttributes {
 }
 ```
 
-### 12.3 `Telemetry`
+### 12.3 `v2::Telemetry`
 
 Design direction:
 
-```rust
-pub struct Telemetry { /* opaque */ }
-
-impl Telemetry {
-    pub fn new(config: TelemetryConfig) -> Result<Self, InitError>;
-    pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError>;
-    pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>;
-    pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>;
-    pub fn flush(&self) -> Result<(), FlushError>;
-    pub fn shutdown(&self) -> Result<(), ShutdownError>;
-    pub fn health(&self) -> TelemetryHealthReport;
-}
-```
+`v2::Telemetry` is an opaque handle initialized from `v2::TelemetryConfig`.
+It emits logs, spans, and metrics; supports flush and shutdown; and reports
+telemetry health.
 
 Telemetry receives `SpanSignal` values but exports completed spans only after
 assembly.
@@ -1845,7 +1803,7 @@ Rule:
 ### 12.4 Exporter Traits
 
 ```rust
-pub struct CompleteSpan {
+pub struct OtlpSpanEnvelope {
     pub record: SpanRecord<SpanEnded>,
     pub events: Vec<SpanEvent>,
 }
@@ -1853,7 +1811,7 @@ pub struct CompleteSpan {
 pub struct SpanAssembler { /* opaque */ }
 
 impl SpanAssembler {
-    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError>;
+    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<OtlpSpanEnvelope>, EventError>;
     pub fn flush_incomplete(&mut self) -> usize;
 }
 
@@ -1862,7 +1820,7 @@ pub(crate) trait LogExporter: Send + Sync {
 }
 
 pub(crate) trait TraceExporter: Send + Sync {
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
+    fn export_spans(&self, batch: &[OtlpSpanEnvelope]) -> Result<(), ExportError>;
 }
 
 pub(crate) trait MetricExporter: Send + Sync {
@@ -1875,7 +1833,7 @@ Rules:
 - `SpanAssembler` buffers `SpanSignal::Started`
 - `SpanAssembler` attaches subsequent `SpanSignal::Event` items to the active
   span by `span_id`
-- `SpanAssembler` emits `CompleteSpan` only on `SpanSignal::Ended`
+- `SpanAssembler` emits `OtlpSpanEnvelope` only on `SpanSignal::Ended`
 - in-flight started spans without a matching end are dropped at flush/shutdown
   and counted in telemetry dropped-export accounting
 - `LogExporter`, `TraceExporter`, and `MetricExporter` are crate-local runtime
@@ -2288,35 +2246,12 @@ B.P1 runtime-level core acceptance is owner-deferred to Phase B completion
 unless its own contract says otherwise. This does not approve registry
 publication, an owner signature, or an independent QA PASS.
 
-### 21.1 Published API Preservation And Issue #92
+### 21.1 Migration Inventory
 
-The nine diagnostic wrappers (Identity, Init, Event, Flush, Shutdown, Projection,
-Subscriber, LogSink and Export) remain available with their existing construction,
-trait implementations, metadata and Serde representation. New typed failure
-implementations and distinctly named operation/extension entry points coexist.
-Classification of custom/unknown legacy diagnostics is total and preserves the
-original error. DiagnosticInfo stays sealed; no new required method or bound is
-added to an existing consumer-implemented trait. New trait implementations must
-not make existing unqualified method calls ambiguous, including glob-import
-consumers; compatibility fixtures exercise unchanged source.
-
-Improved methods use typed errors from the failure site and share the runtime
-with legacy adapters. Working replacements precede actionable compiler
-`#[deprecated]` warnings; removal has no scheduled release. Rust warning-denial
-policies may require migration, which the adoption guide explains explicitly.
-No in-place struct-to-enum conversion, existing-enum non-exhaustive annotation,
-required public-struct field, changed return type or wire-shape change is planned.
-Review the [error sprint contract](plans/phase-b/sprint-b-1a-error-api.md) and its
-successors for the exact replacement inventory before implementation approval.
-
-B.1e migration implementation records that inventory in
-[`plans/phase-b/warning-inventory-b-1e.md`](plans/phase-b/warning-inventory-b-1e.md)
-and routes adopters through
-`.claude/skills/sc-observability-adopting/references/migrate-error-api.md`.
-The record activated the authorized warning attributes at the exact next-minor
-version after the B.P2 staged prerequisite; B.2 qualified that
-result. The two B.P1 owner constructors remain method-level
-exemptions, while explicit `InitError` wrapper use is documented separately.
+The current consumer migration inventory, replacement APIs, and the rule for
+removing compatibility surfaces live in the [Phase F migration guide](migration/phase-f.md).
+The guide is the authoritative handoff for application teams and downstream
+consumer repositories.
 
 ### 21.2 Bridge And Runtime Level Contracts
 
@@ -2371,23 +2306,10 @@ schema contract without changing native published serialization.
 
 ## Phase D canonical types and wire handoff
 
-D.12 stages this contract in `sc_observability_types::v2` at the current
-workspace package version. D.21 activates workspace version 2.0 atomically;
-D.18 activates the ADR-017 canonical error exports and retires their
-superseded compatibility surfaces after consumers migrate. Neutral signal
-models remain additive under `v2`; the existing root `MetricRecord`,
-`TraceContext`, and `SpanRecord` keep their published construction, trait
-and serialization contracts under ADR-012. Consumers opt into the new models
-through the explicit `v2` path. Root signal replacement is not part of this
-handoff, and neither a version bump nor a break-manifest entry authorizes it.
-ADR-017/018 were accepted through PR #225 and ADR-019 through PR #227.
-PHB-003/004/005 continue governing 1.x; PHD-001/002 govern the reviewed major
-migration. A staged module is not a release-baseline approval.
-
-A future root signal replacement requires a separately accepted ADR that
-explicitly supersedes ADR-012 for those named breaks, followed by the PHD-002
-manifest, migration evidence and API approval before activation. D.18 still
-owns the manifest and release gates for the approved error migration.
+D.12 stages canonical contracts in `sc_observability_types::v2`; D.21
+coordinates the workspace version transition and D.18 owns the migration
+inventory, release gates, and consumer evidence. Applications opt into
+canonical signal models through the explicit `v2` path.
 
 ### Canonical errors
 
@@ -2624,7 +2546,7 @@ The factory validates this closed matrix before allocating providers/workers:
 
 Delete public/production `Noop*Exporter` fallbacks; disabled construction is an
 explicit private disabled set and an enabled selection can never reach it.
-Every existing `OtelConfig` field receives one disposition: endpoint,
+Every existing `v2::OtelConfig` field receives one disposition: endpoint,
 headers/auth, CA/TLS and `timeout_ms` map to the SDK/synchronous HTTP builders;
 `debug_local_export` is a separate diagnostic mirror outside exporter
 selection; `insecure_skip_verify` is either implemented by the backend with an
@@ -2753,7 +2675,7 @@ pub(crate) enum BackendTransportBounds {
 }
 
 impl ValidatedTransportBounds {
-    fn try_from_config(config: &OtelConfig) -> Result<Self, ConfigFailure>;
+    fn try_from_config(config: &v2::OtelConfig) -> Result<Self, ConfigFailure>;
 }
 ```
 

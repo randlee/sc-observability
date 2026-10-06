@@ -42,8 +42,7 @@ Use these repo artifacts as the implementation baseline:
 - [`docs/atm-adapter-requirements.md`](./atm-adapter-requirements.md)
 - [`docs/atm-adapter-architecture.md`](./atm-adapter-architecture.md)
 - [`docs/atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
-- [`docs/atm-adapter-example.md`](./atm-adapter-example.md)
-- `examples/atm-adapter-example/`
+- [`docs/migration/phase-f.md`](./migration/phase-f.md)
 
 ## Logging-Only Consumers
 
@@ -90,7 +89,7 @@ For consumers that export to OTLP:
 1. Construct `TelemetryConfig` directly in the adapter/application layer.
 2. Keep OTLP env/config parsing outside the shared crates.
 3. Attach OTLP by wrapping projector implementations locally, following the
-   pattern used by `examples/atm-adapter-example`.
+   canonical `v2` configuration pattern in `docs/migration/phase-f.md`.
 
 ## Phase D compatible 1.x migration
 

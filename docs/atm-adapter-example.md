@@ -39,13 +39,10 @@ This repo must not own:
 Those belong in an ATM-owned adapter crate or module, referred to in the
 architecture as `atm-observability-adapter`.
 
-## Proving Artifact
+## Boundary evidence
 
-The proving artifact for this repo is the unpublished crate:
-
-- `examples/atm-adapter-example`
-
-It demonstrates the intended integration pattern:
+The shared repository documents the intended integration pattern without
+owning an ATM implementation:
 
 1. ATM-shaped payload types are defined locally in the example crate
 2. logging uses the lower-level `sc-observability` crate
@@ -55,7 +52,7 @@ It demonstrates the intended integration pattern:
 5. top-level routing health includes the attached telemetry health snapshot via
    `ObservabilityBuilder::with_observability_health_provider(...)`
 
-## What The Example Must Prove
+## What Boundary Evidence Must Prove
 
 - the shared repo boundaries are sufficient for ATM integration
 - OTLP attachment uses the shipped `TelemetryProjectors<T>` registration path,
@@ -64,7 +61,7 @@ It demonstrates the intended integration pattern:
 
 ## What The Example Does Not Prove
 
-This example is intentionally boundary-focused and is not sufficient evidence
+This documentation is intentionally boundary-focused and is not sufficient evidence
 that ATM migration is fully specified.
 
 It does not prove:
