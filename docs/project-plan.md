@@ -548,6 +548,16 @@ PR #227. The former 2.0 activation sequence above is historical. Planning or imp
 does not authorize a release, tag, registry publication or downstream atm-core
 change. Issue #88 (Python OTEL/structured logging) remains excluded.
 
+## Phase F — Purpose Test and Migration Path
+
+The Phase F landing ledger is tracked in
+[`plans/phase-f.jsonl`](plans/phase-f.jsonl). Its sprints are f-1 (purpose-test
+contract), f-2 (OTLP 1.x removal), f-3 (CLI test-double removal), f-4 (logging
+and binding-runtime compatibility), f-6 (logging typed duplicates), f-7
+(consumer migration guide and user docs), and f-8 (types and observation
+compatibility, then phase closure). The ledger intentionally has no f-5; its
+work is not executed.
+
 ## Consumer Usability Baseline
 
 This follow-up work defines the minimum consumer-facing usability baseline for
