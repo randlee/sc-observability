@@ -48,7 +48,7 @@ pub struct sc_observability_otlp::v1::AuthHeader(_)
 impl sc_observability_otlp::v1::AuthHeader
 pub fn sc_observability_otlp::v1::AuthHeader::as_str(&self) -> &str
 pub fn sc_observability_otlp::v1::AuthHeader::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::errors::InitError>
-pub fn sc_observability_otlp::v1::AuthHeader::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v1::AuthHeader::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::v1::typed::InitFailure>
 impl core::convert::AsRef<str> for sc_observability_otlp::v1::AuthHeader
 pub fn sc_observability_otlp::v1::AuthHeader::as_ref(&self) -> &str
 impl core::convert::TryFrom<alloc::string::String> for sc_observability_otlp::v1::AuthHeader
@@ -79,7 +79,7 @@ pub struct sc_observability_otlp::v1::OtlpEndpoint(_)
 impl sc_observability_otlp::v1::OtlpEndpoint
 pub fn sc_observability_otlp::v1::OtlpEndpoint::as_str(&self) -> &str
 pub fn sc_observability_otlp::v1::OtlpEndpoint::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::errors::InitError>
-pub fn sc_observability_otlp::v1::OtlpEndpoint::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v1::OtlpEndpoint::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::v1::typed::InitFailure>
 impl core::convert::AsRef<str> for sc_observability_otlp::v1::OtlpEndpoint
 pub fn sc_observability_otlp::v1::OtlpEndpoint::as_ref(&self) -> &str
 impl core::convert::TryFrom<alloc::string::String> for sc_observability_otlp::v1::OtlpEndpoint
@@ -91,7 +91,7 @@ pub struct sc_observability_otlp::v1::SpanAssembler
 impl sc_observability_otlp::SpanAssembler
 pub fn sc_observability_otlp::SpanAssembler::flush_incomplete(&mut self) -> usize
 pub fn sc_observability_otlp::SpanAssembler::new() -> Self
-pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::typed::EventFailure>
+pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::v1::typed::EventFailure>
 pub fn sc_observability_otlp::SpanAssembler::take_loss(&mut self) -> sc_observability_otlp::SpanAssemblyLoss
 pub fn sc_observability_otlp::SpanAssembler::with_limits(usize, usize) -> Self
 impl sc_observability_otlp::SpanAssembler
@@ -108,7 +108,7 @@ pub async fn sc_observability_otlp::v1::Telemetry::flush_async_typed(&self) -> c
 pub fn sc_observability_otlp::v1::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::v1::Telemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
 pub fn sc_observability_otlp::v1::Telemetry::new(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
-pub fn sc_observability_otlp::v1::Telemetry::new_typed(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v1::Telemetry::new_typed(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::v1::typed::InitFailure>
 pub fn sc_observability_otlp::v1::Telemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 pub async fn sc_observability_otlp::v1::Telemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 pub fn sc_observability_otlp::v1::Telemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
@@ -126,7 +126,7 @@ pub sc_observability_otlp::v1::TelemetryConfig::transport: sc_observability_otlp
 pub struct sc_observability_otlp::v1::TelemetryConfigBuilder
 impl sc_observability_otlp::v1::TelemetryConfigBuilder
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::build(self) -> core::result::Result<sc_observability_otlp::v1::TelemetryConfig, sc_observability_types::errors::InitError>
-pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::v1::TelemetryConfig, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::v1::TelemetryConfig, sc_observability_types::v1::typed::InitFailure>
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::enable_logs(self, sc_observability_otlp::LogsConfig) -> Self
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::enable_metrics(self, sc_observability_otlp::MetricsConfig) -> Self
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::enable_traces(self, sc_observability_otlp::TracesConfig) -> Self
@@ -272,7 +272,7 @@ pub struct sc_observability_otlp::AuthHeader(_)
 impl sc_observability_otlp::v1::AuthHeader
 pub fn sc_observability_otlp::v1::AuthHeader::as_str(&self) -> &str
 pub fn sc_observability_otlp::v1::AuthHeader::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::errors::InitError>
-pub fn sc_observability_otlp::v1::AuthHeader::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v1::AuthHeader::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::v1::typed::InitFailure>
 impl core::convert::AsRef<str> for sc_observability_otlp::v1::AuthHeader
 pub fn sc_observability_otlp::v1::AuthHeader::as_ref(&self) -> &str
 impl core::convert::TryFrom<alloc::string::String> for sc_observability_otlp::v1::AuthHeader
@@ -312,7 +312,7 @@ pub struct sc_observability_otlp::OtlpEndpoint(_)
 impl sc_observability_otlp::v1::OtlpEndpoint
 pub fn sc_observability_otlp::v1::OtlpEndpoint::as_str(&self) -> &str
 pub fn sc_observability_otlp::v1::OtlpEndpoint::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::errors::InitError>
-pub fn sc_observability_otlp::v1::OtlpEndpoint::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v1::OtlpEndpoint::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::v1::typed::InitFailure>
 impl core::convert::AsRef<str> for sc_observability_otlp::v1::OtlpEndpoint
 pub fn sc_observability_otlp::v1::OtlpEndpoint::as_ref(&self) -> &str
 impl core::convert::TryFrom<alloc::string::String> for sc_observability_otlp::v1::OtlpEndpoint
@@ -344,7 +344,7 @@ pub struct sc_observability_otlp::SpanAssembler
 impl sc_observability_otlp::SpanAssembler
 pub fn sc_observability_otlp::SpanAssembler::flush_incomplete(&mut self) -> usize
 pub fn sc_observability_otlp::SpanAssembler::new() -> Self
-pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::typed::EventFailure>
+pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::v1::typed::EventFailure>
 pub fn sc_observability_otlp::SpanAssembler::take_loss(&mut self) -> sc_observability_otlp::SpanAssemblyLoss
 pub fn sc_observability_otlp::SpanAssembler::with_limits(usize, usize) -> Self
 impl sc_observability_otlp::SpanAssembler
@@ -373,7 +373,7 @@ pub async fn sc_observability_otlp::v1::Telemetry::flush_async_typed(&self) -> c
 pub fn sc_observability_otlp::v1::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::v1::Telemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
 pub fn sc_observability_otlp::v1::Telemetry::new(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
-pub fn sc_observability_otlp::v1::Telemetry::new_typed(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v1::Telemetry::new_typed(sc_observability_otlp::v1::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::v1::typed::InitFailure>
 pub fn sc_observability_otlp::v1::Telemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 pub async fn sc_observability_otlp::v1::Telemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 pub fn sc_observability_otlp::v1::Telemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
@@ -391,7 +391,7 @@ pub sc_observability_otlp::TelemetryConfig::transport: sc_observability_otlp::v1
 pub struct sc_observability_otlp::TelemetryConfigBuilder
 impl sc_observability_otlp::v1::TelemetryConfigBuilder
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::build(self) -> core::result::Result<sc_observability_otlp::v1::TelemetryConfig, sc_observability_types::errors::InitError>
-pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::v1::TelemetryConfig, sc_observability_types::typed::InitFailure>
+pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::v1::TelemetryConfig, sc_observability_types::v1::typed::InitFailure>
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::enable_logs(self, sc_observability_otlp::LogsConfig) -> Self
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::enable_metrics(self, sc_observability_otlp::MetricsConfig) -> Self
 pub fn sc_observability_otlp::v1::TelemetryConfigBuilder::enable_traces(self, sc_observability_otlp::TracesConfig) -> Self

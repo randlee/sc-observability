@@ -671,7 +671,7 @@ mod sdk_backend {
         TelemetryProjectors,
     };
     use sc_observability_types::{TelemetryError, ToolName};
-    use sc_observe::{Observability, ObservabilityConfig};
+    use sc_observe::v2::{Observability, ObservabilityConfig};
 
     use super::grpc_collector::{GrpcCollector, Received};
     use super::support::{SERVICE, TempRoot, assert_healthy, log_event};
@@ -954,7 +954,7 @@ mod sync_http_backend {
         TelemetryProjectors,
     };
     use sc_observability_types::{TelemetryError, ToolName};
-    use sc_observe::{Observability, ObservabilityConfig};
+    use sc_observe::v2::{Observability, ObservabilityConfig};
 
     use super::http_collector::{Captured, Collector};
     use super::support::{SERVICE, TempRoot, assert_healthy, log_event};

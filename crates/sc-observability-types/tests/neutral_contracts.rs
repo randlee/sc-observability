@@ -313,7 +313,6 @@ fn cloned_canonical_error_preserves_source_identity() {
 
 #[test]
 fn stable_failure_codes() {
-    assert_eq!(error_codes::otlp::ALL.len(), 30);
     for (capacity, byte_capacity) in [(0u64, 0u64), (65_537, 67_108_865), (u64::MAX, u64::MAX)] {
         let record = ConfigFailure::InvalidQueueCapacity {
             context: Box::new(

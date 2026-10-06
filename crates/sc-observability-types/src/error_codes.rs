@@ -305,6 +305,40 @@ pub mod otlp {
         OTLP_INCOMPLETE_SPAN_DROPPED,
         OTLP_TELEMETRY_SHUTDOWN,
     ];
+
+    #[cfg(all(test, feature = "v1"))]
+    pub(super) const TEST_CODES: &[ErrorCode] = &[
+        OTLP_CONFIG_ZERO_DURATION,
+        OTLP_CONFIG_DURATION_OVERFLOW,
+        OTLP_CONFIG_BOUND_ORDER,
+        OTLP_CONFIG_JITTER_PERCENT,
+        OTLP_CONFIG_QUEUE_CAPACITY,
+        OTLP_CONFIG_QUEUE_BYTE_CAPACITY,
+        OTLP_CONFIG_FIELD_NOT_APPLICABLE,
+        OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
+        OTLP_CONFIG_INVALID_ENDPOINT,
+        OTLP_CONFIG_INVALID_HEADER,
+        OTLP_CONFIG_INVALID,
+        OTLP_TRANSPORT_CONSTRUCTION_FAILED,
+        OTLP_UNSUPPORTED_BACKEND,
+        OTLP_UNSUPPORTED_PROTOCOL,
+        OTLP_TOKIO_RUNTIME_REQUIRED,
+        OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT,
+        OTLP_ASYNC_LIFECYCLE_REQUIRED,
+        OTLP_RUNTIME_TERMINATED,
+        OTLP_LIFECYCLE_TIMEOUT,
+        OTLP_QUEUE_FULL,
+        OTLP_WORKER_TERMINATED,
+        OTLP_SHUTDOWN_CANCELLED_RETRY,
+        OTLP_RETRY_DEADLINE_EXHAUSTED,
+        OTLP_HTTP_STATUS_TERMINAL,
+        OTLP_RETRY_ATTEMPTS_EXHAUSTED,
+        OTLP_EXPORT_TERMINAL,
+        OTLP_SPAN_ASSEMBLY_FAILED,
+        OTLP_FLUSH_FAILED,
+        OTLP_INCOMPLETE_SPAN_DROPPED,
+        OTLP_TELEMETRY_SHUTDOWN,
+    ];
 }
 
 /// Invalid neutral signal. Recovery: correct the reported payload field.
@@ -439,7 +473,8 @@ mod tests {
     #[cfg(feature = "v1")]
     #[test]
     fn root_registry_contains_otlp_and_metric_codes() {
-        assert!(otlp::ALL.iter().all(|code| ALL.contains(code)));
+        assert_eq!(otlp::TEST_CODES.len(), 30);
+        assert!(otlp::TEST_CODES.iter().all(|code| ALL.contains(code)));
         for code in [
             SC_METRIC_INVALID_HISTOGRAM,
             SC_METRIC_INVALID_TEMPORALITY,

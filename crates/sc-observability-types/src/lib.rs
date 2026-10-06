@@ -22,8 +22,12 @@ mod signals_v2;
 mod span;
 mod tracing;
 #[cfg(feature = "v1")]
-pub mod typed;
+mod v1;
 mod validation;
+
+#[cfg(feature = "v1")]
+#[doc(inline)]
+pub use v1::typed;
 
 mod sealed {
     pub trait Sealed {}
