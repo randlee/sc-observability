@@ -245,6 +245,12 @@ impl V2SpanAssembler {
         }
     }
 
+    /// Returns the live-span and per-span event bounds in effect.
+    #[cfg(test)]
+    pub(crate) fn limits(&self) -> (usize, usize) {
+        (self.max_live_spans, self.max_events_per_span)
+    }
+
     pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
         self.started.contains_key(&span_key(trace_id, span_id))
     }

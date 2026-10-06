@@ -21,6 +21,8 @@ mod contract_tests;
 mod contracts;
 mod export_records;
 mod exporter_factory;
+#[cfg(test)]
+mod facade_tests;
 mod failure;
 mod lifecycle;
 #[cfg(test)]
@@ -44,9 +46,6 @@ mod sync_http;
 pub mod constants;
 pub mod error_codes;
 
-#[cfg(feature = "v1")]
-use sc_observability_types::telemetry_health_provider_sealed;
-// `facade_tests` reaches the runtime's collaborators through `super::*`.
 #[doc(inline)]
 pub use assembly::SpanAssemblyLoss;
 #[doc(inline)]
@@ -58,6 +57,8 @@ pub use config::{
 pub use projectors::V2TelemetryProjectors;
 #[doc(inline)]
 pub use runtime::RuntimeTelemetry;
+#[cfg(feature = "v1")]
+use sc_observability_types::telemetry_health_provider_sealed;
 #[doc(inline)]
 pub use sc_observability_types::{
     ExporterHealth, ExporterHealthState, TelemetryHealthReport, TelemetryHealthState,
