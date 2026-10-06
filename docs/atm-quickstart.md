@@ -95,6 +95,12 @@ Shared assumptions here:
 ### 3.2 Minimal OTLP Attachment
 
 ```rust
+use sc_observability_otlp::v2::{
+    LogsConfig, MetricsConfig, OtelConfig, OtlpProtocol, Telemetry, TelemetryConfigBuilder,
+    TracesConfig,
+};
+use sc_observability_types::{DurationMs, ServiceName};
+
 let telemetry_config = TelemetryConfigBuilder::new(ServiceName::new("atm")?)
     .with_transport(OtelConfig {
         enabled: true,
