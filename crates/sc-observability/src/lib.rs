@@ -1588,6 +1588,23 @@ mod tests {
     }
 
     #[test]
+    fn explicit_flush_command_flushes_each_registered_sink_once_after_admission() {
+        let root = temp_path("explicit-flush-once");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        let sink = Arc::new(RecordingFlushSink::default());
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
+        let logger = builder.build().expect("logger build");
+
+        logger.log(log_event(service_name())).expect("admit event");
+        logger.flush().expect("flush barrier");
+
+        assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
     fn maintenance_health_reflects_last_pass_and_last_error() {
         let root = temp_path("maintenance-health");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
