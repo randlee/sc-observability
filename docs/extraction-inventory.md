@@ -14,7 +14,7 @@ surface to its destination and expected proof artifact.
 | Shared neutral contracts | generic diagnostics, trace ids, shared health/value types | `sc-observability-types` | move/stay | shared workspace docs | must remain ATM-free |
 | Lightweight logging | logger, file/console sinks, redaction, rotation | `sc-observability` | move/stay | shared workspace docs | no routing, no OTLP |
 | Observation routing | subscriber/projector registration, fan-out, routing health | `sc-observe` | move/new | shared workspace docs | layered on logging only |
-| OTLP transport | exporters, batching, retry, TelemetryConfig, OTLP protocol | `sc-observability-otlp` | move/stay | shared workspace docs | top-of-stack only |
+| OTLP transport | exporters, batching, retry, `v2::TelemetryConfig`, OTLP protocol | `sc-observability-otlp` | move/stay | shared workspace docs | top-of-stack only |
 | `LogEventV1` | ATM-specific event shape | ATM adapter | stay outside | `atm-adapter-requirements.md` | map through adapter, not shared repo |
 | `LifecycleTraceRecord` | ATM lifecycle record shape | ATM adapter | stay outside | `atm-adapter-requirements.md` | neutral payload mapping documented separately |
 | ATM-specific projector implementations | projector behavior that promotes ATM semantics into generic projections | ATM adapter | stay outside | `atm-adapter-architecture.md` | shared repo exposes hooks only |
