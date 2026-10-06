@@ -70,12 +70,10 @@ atm-observability-adapter
   fallback, and shutdown-safe durability behavior.
 - ADP-005 The ATM adapter shall own ATM health JSON projection from shared
   health models.
-- ADP-006 The ATM adapter shall preserve parity across `atm status`,
-  `atm doctor`, and `atm daemon status` health surfaces until an explicit
-  breaking change is approved.
-- ADP-007 The ATM adapter shall preserve compatibility for currently shipped ATM
-  observability schemas until an explicit migration or breaking change is
-  approved.
+- ADP-006 The ATM adapter shall document how shared health models are projected
+  across `atm status`, `atm doctor`, and `atm daemon status`.
+- ADP-007 The ATM adapter shall document the mapping of currently shipped ATM
+  observability schemas and any consumer migration of those schemas.
 
 ## 3. Mapping Semantics
 

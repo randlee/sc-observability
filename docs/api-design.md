@@ -1842,14 +1842,8 @@ Rules:
 
 ### 12.5 Constants And Error Registry Modules
 
-`sc-observability-otlp` should ship:
-
-The retry constants below describe the frozen 1.x baseline and remain available
-under ADR-020. D22 specifies any additive canonical constants and D26
-implements compatibility; backend implementations do not independently
-redefine registry values. PHF-002 deprecates released 1.x items behind `v1` in
-the next 1.5.0 release, without a major-version bump, before a later release
-may remove them.
+`sc-observability-otlp` keeps its canonical configuration defaults and error
+codes in the registry modules shown here.
 
 - `src/constants.rs`
   - `DEFAULT_OTLP_TIMEOUT_MS`

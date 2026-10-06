@@ -10,7 +10,7 @@ manifest instead.
 
 ## Distribution Channels
 
-- **crates.io**: every publishable Rust crate in
+- **crates.io**: all ten published Rust crates listed in
   `release/publish-artifacts.toml`, in dependency order
   - [`sc-observability-types`](https://crates.io/crates/sc-observability-types)
   - [`sc-observability`](https://crates.io/crates/sc-observability)
