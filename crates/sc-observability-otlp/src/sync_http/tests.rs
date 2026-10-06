@@ -579,17 +579,14 @@ fn start_tls_test_server(cert: &PathBuf, key: &PathBuf) -> (process::Child, std:
         }
         Err(error) => panic!("read TLS test server readiness: {error}"),
     };
-    let address = match ready
+    let Some(address) = ready
         .trim()
         .strip_prefix("READY ")
         .and_then(|address| address.parse::<std::net::SocketAddr>().ok())
-    {
-        Some(address) => address,
-        None => {
-            let _ = server.kill();
-            let _ = server.wait();
-            panic!("local TLS server returned an invalid ready address: {ready:?}");
-        }
+    else {
+        let _ = server.kill();
+        let _ = server.wait();
+        panic!("local TLS server returned an invalid ready address: {ready:?}");
     };
     (server, address)
 }
