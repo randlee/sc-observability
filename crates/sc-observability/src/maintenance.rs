@@ -277,6 +277,7 @@ impl WriterRuntime {
         snapshot_from_trackers(&self.writer_tracker, self.maintenance_tracker.as_ref())
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn maintenance_active(&self) -> bool {
         self.maintenance_tracker
             .as_ref()
@@ -457,6 +458,7 @@ impl WriterTracker {
 /// timestamps, counters, and degraded-state transitions because maintenance
 /// updates occur on the writer thread without a single global snapshot lock.
 pub(crate) struct MaintenanceTracker {
+    #[cfg(feature = "v1")]
     pass_active: AtomicBool,
     // MUTEX: The writer updates this after each pass and health snapshots read it read-mostly; this lock does not make the whole report atomic.
     last_pass_at: RwLock<Option<Timestamp>>,
@@ -471,6 +473,7 @@ pub(crate) struct MaintenanceTracker {
 impl MaintenanceTracker {
     fn new() -> Self {
         Self {
+            #[cfg(feature = "v1")]
             pass_active: AtomicBool::new(false),
             last_pass_at: RwLock::new(None),
             last_error: RwLock::new(None),
@@ -515,10 +518,12 @@ impl MaintenanceTracker {
         *self.state.write().expect("maintenance state poisoned") = MaintenanceWorkerState::Running;
     }
 
+    #[cfg(feature = "v1")]
     fn mark_pass_active(&self, active: bool) {
         self.pass_active.store(active, Ordering::SeqCst);
     }
 
+    #[cfg(feature = "v1")]
     fn pass_active(&self) -> bool {
         self.pass_active.load(Ordering::SeqCst)
     }
@@ -816,7 +821,9 @@ fn run_maintenance_if_due(
     }
 
     if let Some(tracker) = maintenance_tracker {
+        #[cfg(feature = "v1")]
         tracker.mark_pass_active(true);
+        #[cfg(test)]
         maybe_run_test_delay(
             #[cfg(test)]
             test_pass_delay,
@@ -827,8 +834,10 @@ fn run_maintenance_if_due(
             Ok(stats) => tracker.record_pass(stats),
             Err(error) => tracker.record_failure(error.context()),
         }
+        #[cfg(feature = "v1")]
         tracker.mark_pass_active(false);
     } else {
+        #[cfg(test)]
         maybe_run_test_delay(
             #[cfg(test)]
             test_pass_delay,
@@ -841,6 +850,7 @@ fn run_maintenance_if_due(
 }
 
 #[cfg(test)]
+#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 #[derive(Debug, Default)]
 pub(crate) struct TestPassDelaySignal {
     active: AtomicBool,
@@ -854,9 +864,11 @@ pub(crate) struct TestPassDelaySignal {
 }
 
 #[cfg(test)]
+#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 pub(crate) struct TestPassDelayReleaseGuard(Arc<TestPassDelaySignal>);
 
 #[cfg(test)]
+#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TestPassDelayWait {
     NotBlocked,
@@ -872,6 +884,7 @@ impl Drop for TestPassDelayReleaseGuard {
 }
 
 #[cfg(test)]
+#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 impl TestPassDelaySignal {
     fn set_active(&self, active: bool) {
         let _gate = self.gate.lock().expect("test gate poisoned");
@@ -987,9 +1000,6 @@ impl TestPassDelaySignal {
         self.wait_timed_out.load(Ordering::SeqCst)
     }
 }
-
-#[cfg(not(test))]
-fn maybe_run_test_delay() {}
 
 #[cfg(test)]
 fn maybe_run_test_delay(

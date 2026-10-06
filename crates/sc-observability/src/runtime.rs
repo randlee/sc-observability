@@ -571,22 +571,9 @@ impl CanonicalLogger<Running> {
         CanonicalLoggerBuilder::new(config)
     }
 
-    /// Starts a construction-time builder that reports the released typed
-    /// initialization failure.
-    pub fn builder_typed(
-        config: crate::LoggerConfig,
-    ) -> Result<CanonicalLoggerBuilder, InitFailure> {
-        CanonicalLoggerBuilder::new_typed(config)
-    }
-
     /// Creates a logger with the configured built-in sinks and runtime state.
     pub fn new(config: crate::LoggerConfig) -> Result<Self, CanonicalInitError> {
         CanonicalLoggerBuilder::new(config)?.build()
-    }
-
-    /// Creates a logger with the released typed initialization failure.
-    pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, InitFailure> {
-        CanonicalLoggerBuilder::new_typed(config)?.build_typed()
     }
 
     /// Creates a logger together with weak authority for runtime level changes.
@@ -594,14 +581,6 @@ impl CanonicalLogger<Running> {
         config: crate::LoggerConfig,
     ) -> Result<(Self, LevelOwner), CanonicalInitError> {
         CanonicalLoggerBuilder::new(config)?.build_with_level_owner()
-    }
-
-    /// Creates a logger and level owner with the released typed startup
-    /// failure.
-    pub fn new_with_level_owner_typed(
-        config: crate::LoggerConfig,
-    ) -> Result<(Self, LevelOwner), InitFailure> {
-        CanonicalLoggerBuilder::new_typed(config)?.build_with_level_owner_typed()
     }
 
     /// Validates, redacts, and admits one structured log event into the writer queue.
@@ -614,6 +593,7 @@ impl CanonicalLogger<Running> {
     }
 
     /// Released root-facade admission: exact 1.4.1 acceptance, no entity check.
+    #[cfg(feature = "v1")]
     pub(crate) fn log_released(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
         self.log_in_mode(event, AdmissionMode::Released)
     }
@@ -638,12 +618,6 @@ impl CanonicalLogger<Running> {
         })
     }
 
-    /// Admits one event with the released typed failure contract.
-    pub fn log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
-        self.log(event)
-            .map_err(|error| EventFailure::from_context(error.into_context()))
-    }
-
     /// Attempts non-blocking queue admission for one structured log event.
     ///
     /// # Panics
@@ -651,12 +625,6 @@ impl CanonicalLogger<Running> {
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn try_log(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
         self.try_log_with_outcome(event).map(|_| ())
-    }
-
-    /// Attempts non-blocking admission with the released typed failure contract.
-    pub fn try_log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
-        self.try_log(event)
-            .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
     /// Attempts non-blocking admission and reports whether level policy filtered the event.
@@ -672,6 +640,7 @@ impl CanonicalLogger<Running> {
     }
 
     /// Released root-facade non-blocking admission: exact 1.4.1 acceptance, no entity check.
+    #[cfg(feature = "v1")]
     pub(crate) fn try_log_with_outcome_released(
         &self,
         event: LogEvent,
@@ -722,16 +691,8 @@ impl CanonicalLogger<Running> {
         }
     }
 
-    /// Attempts non-blocking admission and returns the released typed failure.
-    pub fn try_log_with_outcome_typed(
-        &self,
-        event: LogEvent,
-    ) -> Result<AdmissionOutcome, EventFailure> {
-        self.try_log_with_outcome(event)
-            .map_err(|error| EventFailure::from_context(error.into_context()))
-    }
-
     /// Emits one structured log event through the compatibility path.
+    #[cfg(feature = "v1")]
     pub(crate) fn emit_legacy(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
         self.log_released(event)?;
         if !self
@@ -769,13 +730,6 @@ impl CanonicalLogger<Running> {
             });
         }
         Ok(())
-    }
-
-    /// Flushes with the released typed failure contract.
-    pub fn flush_typed(&self) -> Result<(), sc_observability_types::typed::FlushFailure> {
-        self.flush().map_err(|error| {
-            sc_observability_types::typed::FlushFailure::from_context(error.into_context())
-        })
     }
 
     /// Queries the current JSONL log set synchronously using the shared query contract.
@@ -854,6 +808,8 @@ impl CanonicalLogger<Running> {
         event: LogEvent,
         mode: AdmissionMode,
     ) -> Result<Option<LogEvent>, EventFailure> {
+        #[cfg(not(feature = "v1"))]
+        let _ = mode;
         validate_event(&event, &self.config.service_name)?;
         // Filtering and mutation share this short critical section. Redaction,
         // queue waits, and writer work are intentionally outside it.
@@ -865,9 +821,12 @@ impl CanonicalLogger<Running> {
             return Ok(None);
         }
         drop(control);
+        #[cfg(feature = "v1")]
         if mode == AdmissionMode::Canonical {
             validate_entity_id(&event)?;
         }
+        #[cfg(not(feature = "v1"))]
+        validate_entity_id(&event)?;
         let event = self.redact_event(event);
         validate_event_size(&event)?;
         Ok(Some(event))
@@ -1046,6 +1005,7 @@ impl<State> CanonicalLogger<State> {
 
 impl LevelOwner {
     #[cfg(feature = "fault-injection")]
+    #[doc(hidden)]
     /// Sets the actual runtime revision to its terminal value for binding tests.
     pub fn force_revision_exhaustion_for_test(&mut self) -> bool {
         let Some(control) = self.control.upgrade() else {
@@ -1270,6 +1230,7 @@ fn level_enabled(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AdmissionMode {
     Canonical,
+    #[cfg(feature = "v1")]
     Released,
 }
 

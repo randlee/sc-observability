@@ -3,7 +3,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use sc_observability_types::ErrorContext;
 use sc_observability_types::typed::EventFailure;
@@ -92,10 +92,7 @@ impl Write for BoundedEventWriter {
 use std::sync::{Arc, Mutex};
 
 use crate::sink::LogSink;
-use crate::{
-    RetainedLogPolicy, RetentionMaxAge, RetentionPolicy, RotationPolicy, constants, error_codes,
-    rotated_log_path,
-};
+use crate::{RetainedLogPolicy, RetentionMaxAge, constants, error_codes, rotated_log_path};
 
 #[expect(
     missing_debug_implementations,
@@ -106,33 +103,23 @@ pub struct JsonlFileSink {
     path: PathBuf,
     // MUTEX: sink operations update health while callers snapshot it; existing expect sites intentionally panic on poison.
     health: RwLock<SinkHealth>,
-    legacy_policy: Option<LegacyRetentionPolicy>,
+    #[cfg(feature = "v1")]
+    pub(crate) legacy_policy: Option<RetainedLogPolicy>,
 }
 
 impl JsonlFileSink {
-    /// Creates a JSONL file sink at the given active log path.
-    ///
-    /// This constructor is the legacy low-level sink surface. It uses
-    /// `RotationPolicy` and `RetentionPolicy` directly and does not attach the
-    /// logger-owned background retained-log maintenance worker. New code should
-    /// prefer `LoggerConfig.retained_log_policy` and `Logger::new(...)`.
-    ///
-    /// # Panics
-    ///
-    /// Panics only if the workspace-owned `JSONL_FILE_SINK_NAME` constant ever
-    /// becomes invalid for `SinkName`, which would indicate a programming bug.
-    pub fn new(path: PathBuf, rotation: RotationPolicy, retention: RetentionPolicy) -> Self {
-        Self::with_legacy_policy(
-            path,
-            Some(LegacyRetentionPolicy {
-                rotation,
-                retention,
-            }),
-        )
-    }
-
     pub(crate) fn for_logger(path: PathBuf) -> Self {
-        Self::with_legacy_policy(path, None)
+        Self {
+            path,
+            health: RwLock::new(SinkHealth {
+                name: SinkName::new(constants::JSONL_FILE_SINK_NAME)
+                    .expect("jsonl sink constant is valid"),
+                state: SinkHealthState::Healthy,
+                last_error: None,
+            }),
+            #[cfg(feature = "v1")]
+            legacy_policy: None,
+        }
     }
 
     /// Opens a retained JSONL file sink and applies its rotation and retention policy.
@@ -164,19 +151,6 @@ impl JsonlFileSink {
                 ),
             })?;
         Ok(sink)
-    }
-
-    fn with_legacy_policy(path: PathBuf, legacy_policy: Option<LegacyRetentionPolicy>) -> Self {
-        Self {
-            path,
-            health: RwLock::new(SinkHealth {
-                name: SinkName::new(constants::JSONL_FILE_SINK_NAME)
-                    .expect("jsonl sink constant is valid"),
-                state: SinkHealthState::Healthy,
-                last_error: None,
-            }),
-            legacy_policy,
-        }
     }
 
     /// Returns the active JSONL file path for the sink.
@@ -248,48 +222,6 @@ impl JsonlFileSink {
 
     pub(crate) fn rotated_path(&self, index: usize) -> PathBuf {
         rotated_log_path(&self.path, index)
-    }
-
-    #[expect(
-        deprecated,
-        reason = "legacy RetentionPolicy remains supported for direct JsonlFileSink construction"
-    )]
-    fn prune_old_files(&self, retention: RetentionPolicy) -> Result<(), LogSinkError> {
-        let Some(parent) = self.path.parent() else {
-            return Ok(());
-        };
-
-        let entries = fs::read_dir(parent).map_err(|error| self.mark_failure(error))?;
-        let retention_cutoff = SystemTime::now()
-            - Duration::from_secs(u64::from(retention.max_age_days) * constants::SECS_PER_DAY);
-
-        for entry in entries {
-            let entry = entry.map_err(|error| self.mark_failure(error))?;
-            let path = entry.path();
-            let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
-                continue;
-            };
-
-            let active_name = self
-                .path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or_default();
-
-            if !file_name.starts_with(active_name) || file_name == active_name {
-                continue;
-            }
-
-            let metadata = entry.metadata().map_err(|error| self.mark_failure(error))?;
-            if metadata
-                .modified()
-                .map_err(|error| self.mark_failure(error))?
-                < retention_cutoff
-            {
-                fs::remove_file(path).map_err(|error| self.mark_failure(error))?;
-            }
-        }
-        Ok(())
     }
 
     fn prune_retained_files(
@@ -421,13 +353,9 @@ impl LogSink for JsonlFileSink {
         let mut line =
             serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
         line.push(b'\n');
+        #[cfg(feature = "v1")]
         if let Some(policy) = self.legacy_policy {
-            self.rotate_if_needed(
-                policy.rotation.max_bytes.as_u64(),
-                policy.rotation.max_files.as_usize(),
-                line.len() as u64,
-            )?;
-            self.prune_old_files(policy.retention)?;
+            self.perform_maintenance(&policy)?;
         }
 
         let mut file = OpenOptions::new()
@@ -450,12 +378,6 @@ impl LogSink for JsonlFileSink {
             .expect("file sink health poisoned")
             .clone()
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct LegacyRetentionPolicy {
-    rotation: RotationPolicy,
-    retention: RetentionPolicy,
 }
 
 #[derive(Debug, Clone)]
@@ -580,6 +502,7 @@ impl LogSink for ConsoleSink {
 
 #[cfg(feature = "fault-injection")]
 #[derive(Clone, Default)]
+#[doc(hidden)]
 #[expect(
     missing_debug_implementations,
     reason = "fault injector state is a small validation-only mutex wrapper without a useful stable Debug contract"
@@ -598,16 +521,19 @@ pub struct RetainedSinkFaultInjector {
 #[cfg(feature = "fault-injection")]
 impl RetainedSinkFaultInjector {
     /// Creates a new injector with no forced sink fault.
+    #[doc(hidden)]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Forces the wrapped retained sink into the degraded-dropping state.
+    #[doc(hidden)]
     pub fn force_degraded(&self) {
         self.set_state(SinkHealthState::DegradedDropping);
     }
 
     /// Forces the wrapped retained sink into the unavailable state.
+    #[doc(hidden)]
     pub fn force_unavailable(&self) {
         self.set_state(SinkHealthState::Unavailable);
     }
@@ -618,6 +544,7 @@ impl RetainedSinkFaultInjector {
     /// # Panics
     ///
     /// Panics if the retained-sink fault-state mutex has been poisoned.
+    #[doc(hidden)]
     pub fn clear(&self) {
         *self
             .forced_state
@@ -631,6 +558,12 @@ impl RetainedSinkFaultInjector {
             inner,
             forced_state: self.forced_state.clone(),
         }
+    }
+
+    /// Wraps a canonical sink so validation can force its reported health.
+    #[doc(hidden)]
+    pub fn wrap(&self, inner: Arc<dyn LogSink>) -> Arc<dyn LogSink> {
+        Arc::new(self.fault_sink(inner))
     }
 
     fn set_state(&self, state: SinkHealthState) {
@@ -1104,16 +1037,12 @@ mod tests {
     }
 
     #[test]
-    fn built_in_write_failures_mark_sink_health_for_legacy_and_typed_calls() {
+    fn built_in_write_failures_mark_sink_health() {
         let root = temp_root("legacy-write-error");
         let file_parent = root.join("logs");
         fs::create_dir_all(root.path_buf()).expect("create root");
         fs::write(&file_parent, "not-a-directory").expect("block parent as file");
-        let sink = JsonlFileSink::new(
-            file_parent.join("service.log.jsonl"),
-            RotationPolicy::default(),
-            RetentionPolicy::default(),
-        );
+        let sink = JsonlFileSink::for_logger(file_parent.join("service.log.jsonl"));
 
         let error = sink.write(&log_event()).expect_err("write failure");
 
@@ -1142,28 +1071,6 @@ mod tests {
         );
         assert!(std::error::Error::source(&console_error).is_some());
         assert_eq!(console.health().state, SinkHealthState::DegradedDropping);
-    }
-
-    #[test]
-    fn legacy_prune_failures_mark_sink_health_and_return_error() {
-        let root = temp_root("legacy-prune-error");
-        let file_parent = root.join("logs");
-        fs::write(&file_parent, "not-a-directory").expect("block parent as file");
-        let sink = JsonlFileSink::new(
-            file_parent.join("service.log.jsonl"),
-            RotationPolicy::default(),
-            RetentionPolicy::default(),
-        );
-
-        let error = sink
-            .prune_old_files(RetentionPolicy::default())
-            .expect_err("prune failure");
-
-        assert_eq!(
-            error.diagnostic().code,
-            error_codes::LOGGER_SINK_WRITE_FAILED
-        );
-        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
     }
 
     #[cfg(feature = "fault-injection")]

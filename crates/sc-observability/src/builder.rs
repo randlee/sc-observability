@@ -5,13 +5,12 @@
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 use sc_observability_types::typed::InitFailure;
-use sc_observability_types::{ErrorContext, Remediation, v2::InitError as CanonicalInitError};
+use sc_observability_types::{Remediation, v2::InitError as CanonicalInitError};
 
 use crate::sink::LogSink;
 use crate::{
     CanonicalLogger, ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, LoggerConfig,
-    LoggerRuntime, QueueCapacity, Running, SinkHealthState, SinkRegistration, default_log_path,
-    error_codes,
+    LoggerRuntime, QueueCapacity, Running, SinkRegistration, default_log_path,
 };
 
 impl SinkRegistration {
@@ -93,95 +92,18 @@ impl CanonicalLoggerBuilder {
         })
     }
 
-    /// Creates a builder with the released typed initialization failure.
-    pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
-        Self::new(config).map_err(|error| InitFailure::from_context(error.into_context()))
-    }
-
     /// Registers one additional sink before the logger runtime is built.
     ///
     /// This is the released infallible registration path: the registration is
-    /// stored as provided, including its filter, without the duplicate or
-    /// health validation that [`Self::register_typed_sink`] performs.
+    /// stored as provided, including its filter.
     pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self {
         self.sinks.push(registration);
         self
     }
 
-    /// Registers a canonical sink before the logger runtime is built.
-    ///
-    /// The canonical owner of this registration is [`crate::v2::LoggerBuilder`]
-    /// and the sink trait is [`crate::v2::LogSink`]. This is equivalent to
-    /// registering [`SinkRegistration::typed`] after validating the exact
-    /// stored [`Arc`] against every sink already registered, including
-    /// built-ins and raw [`Self::register_sink`] registrations, and returns the
-    /// builder so callers can continue fluent configuration.
-    ///
-    /// # Errors
-    ///
-    /// Returns a canonical initialization failure with a stable registration code
-    /// when the sink is duplicated, degraded, or unavailable.
-    pub fn register_typed_sink(
-        &mut self,
-        sink: Arc<dyn LogSink>,
-    ) -> Result<&mut Self, SinkRegistrationError> {
-        if self
-            .sinks
-            .iter()
-            .any(|registered| Arc::ptr_eq(&registered.sink, &sink))
-        {
-            return Err(CanonicalInitError::Configuration {
-                context: Box::new(ErrorContext::new(
-                    error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE,
-                    "typed sink is already registered",
-                    Remediation::recoverable(
-                        "register each typed sink instance only once",
-                        ["remove the duplicate registration"],
-                    ),
-                )),
-            });
-        }
-
-        match sink.health().state {
-            SinkHealthState::Healthy => {}
-            SinkHealthState::DegradedDropping => {
-                return Err(CanonicalInitError::Configuration {
-                    context: Box::new(ErrorContext::new(
-                        error_codes::SC_LOG_SINK_REGISTRATION_INVALID,
-                        "typed sink is degraded and cannot be registered",
-                        Remediation::recoverable(
-                            "restore the sink to a healthy state before registration",
-                            ["repair the sink", "register a healthy sink"],
-                        ),
-                    )),
-                });
-            }
-            SinkHealthState::Unavailable => {
-                return Err(CanonicalInitError::Configuration {
-                    context: Box::new(ErrorContext::new(
-                        error_codes::SC_LOG_SINK_REGISTRATION_CLOSED,
-                        "typed sink is unavailable and closed to registration",
-                        Remediation::recoverable(
-                            "create a healthy replacement sink before registration",
-                            ["create a replacement sink"],
-                        ),
-                    )),
-                });
-            }
-        }
-
-        Ok(self.register_sink(SinkRegistration::typed(sink)))
-    }
-
     /// Finalizes construction with the canonical recoverable error surface.
     pub fn build(self) -> Result<CanonicalLogger<Running>, CanonicalInitError> {
         self.build_inner().map(|(logger, _)| logger)
-    }
-
-    /// Finalizes construction with the released typed initialization failure.
-    pub fn build_typed(self) -> Result<CanonicalLogger<Running>, InitFailure> {
-        self.build()
-            .map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     /// Finalizes construction and returns the logger with weak level ownership.
@@ -190,14 +112,6 @@ impl CanonicalLoggerBuilder {
     ) -> Result<(CanonicalLogger<Running>, LevelOwner), CanonicalInitError> {
         let (logger, control) = self.build_inner()?;
         Ok((logger, LevelOwner::new(&control)))
-    }
-
-    /// Finalizes construction with the released typed initialization failure.
-    pub fn build_with_level_owner_typed(
-        self,
-    ) -> Result<(CanonicalLogger<Running>, LevelOwner), InitFailure> {
-        self.build_with_level_owner()
-            .map_err(|error| InitFailure::from_context(error.into_context()))
     }
 
     fn build_inner(

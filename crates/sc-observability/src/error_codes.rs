@@ -6,9 +6,6 @@ use sc_observability_types::ErrorCode;
 /// Recovery: provide an event with valid fields and values.
 pub const LOGGER_INVALID_EVENT: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_INVALID_EVENT");
-/// The logger was used after shutdown began or completed.
-/// Recovery: stop emitting to the closed owner and construct a new logger.
-pub const LOGGER_SHUTDOWN: ErrorCode = ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SHUTDOWN");
 /// A configured sink rejected or failed to write an admitted event.
 /// Recovery: inspect sink health and its I/O configuration before retrying.
 pub const LOGGER_SINK_WRITE_FAILED: ErrorCode =
@@ -37,17 +34,10 @@ pub const LOGGER_FLUSH_FAILED: ErrorCode =
 /// Recovery: correct storage access or retention configuration and retry maintenance.
 pub const LOGGER_MAINTENANCE_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_FAILED");
-/// The maintenance worker did not join before the shutdown deadline.
-/// Recovery: inspect worker health and complete shutdown with a bounded retry.
-pub const LOGGER_MAINTENANCE_JOIN_TIMEOUT: ErrorCode =
-    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_JOIN_TIMEOUT");
-/// The maintenance worker terminated with a failure.
-/// Recovery: inspect the retained worker error and construct a new logger owner.
-pub const LOGGER_MAINTENANCE_WORKER_FAILED: ErrorCode =
-    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_WORKER_FAILED");
 /// A retained sink deliberately injected a test failure.
 /// Recovery: disable fault injection outside the test and retry the operation.
 #[cfg(feature = "fault-injection")]
+#[doc(hidden)]
 pub const LOGGER_SINK_FAULT_INJECTED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SINK_FAULT_INJECTED");
 
@@ -62,7 +52,6 @@ pub const ALL: &[ErrorCode] = &[
     SC_LOG_SINK_REGISTRATION_INVALID,
     SC_LOG_SINK_REGISTRATION_CLOSED,
     LOGGER_INVALID_EVENT,
-    LOGGER_SHUTDOWN,
     LOGGER_SINK_WRITE_FAILED,
     LOGGER_QUEUE_FULL,
     LOGGER_WRITER_DEGRADED,
@@ -70,8 +59,6 @@ pub const ALL: &[ErrorCode] = &[
     LOGGER_INIT_FAILED,
     LOGGER_FLUSH_FAILED,
     LOGGER_MAINTENANCE_FAILED,
-    LOGGER_MAINTENANCE_JOIN_TIMEOUT,
-    LOGGER_MAINTENANCE_WORKER_FAILED,
     #[cfg(feature = "fault-injection")]
     LOGGER_SINK_FAULT_INJECTED,
 ];

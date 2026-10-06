@@ -12,246 +12,33 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure};
+use sc_observability_types::typed::{
+    EventFailure, FlushFailure, InitFailure, LogFailure, TryLogFailure,
+};
 use sc_observability_types::v2::{
     EventError as CanonicalEventError, FlushError as CanonicalFlushError,
     InitError as CanonicalInitError,
 };
 
 use crate::builder::CanonicalLoggerBuilder;
-#[cfg(feature = "fault-injection")]
-use crate::sinks::FaultInjectingSink;
-use crate::sinks::{ConsoleSink, JsonlFileSink};
 use crate::{
-    AdmissionOutcome, CanonicalLogger, ErrorContext, EventError, FlushError, InitError, LevelOwner,
-    LevelState, LogEvent, LogFailure, LogQuery, LogSinkError, Logger, LoggerBuilder, LoggerConfig,
-    LoggingHealthReport, Running, SinkHealth, SinkRegistration, Stopped, TryLogFailure,
+    AdmissionOutcome, CanonicalLogger, ErrorContext, LevelOwner, LevelState, LogEvent, LogQuery,
+    Logger, LoggerBuilder, LoggerConfig, LoggingHealthReport, Running, SinkRegistration, Stopped,
     error_codes,
 };
-use sc_observability_types::QueryError;
-use sc_observability_types::typed::LogSinkFailure;
-use sc_observability_types::v2::LogSinkError as CanonicalLogSinkError;
+use sc_observability_types::{EventError, FlushError, InitError, QueryError};
 use std::sync::Arc;
-
-/// One concrete event sink used by the logger runtime.
-///
-/// This trait is intentionally open for downstream implementations. Adding
-/// required methods or tightening object-safety guarantees is therefore a
-/// semver-significant public API change.
-#[allow(
-    deprecated,
-    reason = "LogSink preserves its published LogSinkError trait signature"
-)]
-pub trait LogSink: Send + Sync {
-    /// Writes one event to the sink.
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
-
-    /// Flushes any buffered sink state.
-    fn flush(&self) -> Result<(), LogSinkError> {
-        Ok(())
-    }
-
-    /// Returns the current sink health snapshot.
-    fn health(&self) -> SinkHealth;
-}
-
-/// A logger sink that reports neutral typed failures.
-pub trait TypedLogSink: Send + Sync {
-    /// Writes one event to the sink.
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>;
-
-    /// Flushes buffered state.
-    fn flush(&self) -> Result<(), LogSinkFailure> {
-        Ok(())
-    }
-
-    /// Returns the current sink health snapshot.
-    fn health(&self) -> SinkHealth;
-}
-
-/// Adapts a typed sink to the retained registration trait.
-#[must_use]
-pub fn legacy_sink(value: Arc<dyn TypedLogSink>) -> Arc<dyn LogSink> {
-    Arc::new(LegacySinkAdapter { value })
-}
-
-/// Adapts a retained sink to the typed sink trait.
-#[must_use]
-pub fn typed_sink(value: Arc<dyn LogSink>) -> Arc<dyn TypedLogSink> {
-    Arc::new(TypedSinkAdapter { value })
-}
-
-/// Released typed sink -> released root sink.
-struct LegacySinkAdapter {
-    value: Arc<dyn TypedLogSink>,
-}
-
-impl LogSink for LegacySinkAdapter {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        self.value.write(event).map_err(Into::into)
-    }
-
-    fn flush(&self) -> Result<(), LogSinkError> {
-        self.value.flush().map_err(Into::into)
-    }
-
-    fn health(&self) -> SinkHealth {
-        self.value.health()
-    }
-}
-
-/// Released root sink -> released typed sink.
-struct TypedSinkAdapter {
-    value: Arc<dyn LogSink>,
-}
-
-impl TypedLogSink for TypedSinkAdapter {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
-        self.value.write(event).map_err(Into::into)
-    }
-
-    fn flush(&self) -> Result<(), LogSinkFailure> {
-        self.value.flush().map_err(Into::into)
-    }
-
-    fn health(&self) -> SinkHealth {
-        self.value.health()
-    }
-}
-
-/// Released root sink -> canonical sink, applied once at registration.
-struct RootSinkAdapter {
-    value: Arc<dyn LogSink>,
-}
-
-impl crate::sink::LogSink for RootSinkAdapter {
-    fn write(&self, event: &LogEvent) -> Result<(), CanonicalLogSinkError> {
-        self.value
-            .write(event)
-            .map_err(|error| CanonicalLogSinkError::Write { context: error.0 })
-    }
-
-    fn flush(&self) -> Result<(), CanonicalLogSinkError> {
-        self.value
-            .flush()
-            .map_err(|error| CanonicalLogSinkError::Flush { context: error.0 })
-    }
-
-    fn health(&self) -> SinkHealth {
-        self.value.health()
-    }
-}
-
-/// Converts a canonical sink error at the released root trait boundary.
-///
-/// The released error wraps the typed failure's context, which keeps the exact
-/// nested legacy source shape.
-pub(crate) fn legacy_sink_error(error: CanonicalLogSinkError) -> LogSinkError {
-    LogSinkFailure::from_context(error.into_context()).into()
-}
-
-/// Converts a canonical sink error at the released typed sink boundary.
-fn typed_sink_error(error: CanonicalLogSinkError) -> LogSinkFailure {
-    LogSinkFailure::from_context(error.into_context())
-}
-
 impl SinkRegistration {
-    /// Wraps a released sink for logger registration.
-    ///
-    /// The released [`LogSink`] is adapted to the canonical sink trait exactly
-    /// once here; the registration stores the adapter and no filter.
-    pub fn new(sink: Arc<dyn LogSink>) -> Self {
-        Self::typed(Arc::new(RootSinkAdapter { value: sink }))
-    }
-}
-
-impl LogSink for JsonlFileSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        crate::sink::LogSink::write(self, event).map_err(legacy_sink_error)
-    }
-
-    fn flush(&self) -> Result<(), LogSinkError> {
-        crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
-    }
-
-    fn health(&self) -> SinkHealth {
-        crate::sink::LogSink::health(self)
-    }
-}
-
-impl LogSink for ConsoleSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        crate::sink::LogSink::write(self, event).map_err(legacy_sink_error)
-    }
-
-    fn flush(&self) -> Result<(), LogSinkError> {
-        crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
-    }
-
-    fn health(&self) -> SinkHealth {
-        crate::sink::LogSink::health(self)
-    }
-}
-
-impl TypedLogSink for JsonlFileSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
-        crate::sink::LogSink::write(self, event).map_err(typed_sink_error)
-    }
-
-    fn flush(&self) -> Result<(), LogSinkFailure> {
-        crate::sink::LogSink::flush(self).map_err(typed_sink_error)
-    }
-
-    fn health(&self) -> SinkHealth {
-        crate::sink::LogSink::health(self)
-    }
-}
-
-impl TypedLogSink for ConsoleSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
-        crate::sink::LogSink::write(self, event).map_err(typed_sink_error)
-    }
-
-    fn flush(&self) -> Result<(), LogSinkFailure> {
-        crate::sink::LogSink::flush(self).map_err(typed_sink_error)
-    }
-
-    fn health(&self) -> SinkHealth {
-        crate::sink::LogSink::health(self)
-    }
-}
-
-#[cfg(feature = "fault-injection")]
-impl LogSink for FaultInjectingSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        crate::sink::LogSink::write(self, event).map_err(legacy_sink_error)
-    }
-
-    fn flush(&self) -> Result<(), LogSinkError> {
-        crate::sink::LogSink::flush(self).map_err(legacy_sink_error)
-    }
-
-    fn health(&self) -> SinkHealth {
-        crate::sink::LogSink::health(self)
-    }
-}
-
-#[cfg(feature = "fault-injection")]
-impl crate::RetainedSinkFaultInjector {
-    /// Wraps one retained sink so its health can be forced during validation.
-    ///
-    /// `Arc<dyn LogSink>` is intentionally preserved in this public signature
-    /// because `SinkRegistration::new()` takes `Arc<dyn LogSink>` and this
-    /// helper exists solely to compose with that registration surface. The
-    /// released sink is adapted to the canonical trait once, wrapped by the
-    /// canonical fault sink, and returned through its released root impl.
-    pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink> {
-        Arc::new(self.fault_sink(Arc::new(RootSinkAdapter { value: sink })))
+    /// Registers a released root sink through the canonical typed registration.
+    #[deprecated(note = "use SinkRegistration::typed; see docs/migration/phase-f.md")]
+    pub fn new(sink: Arc<dyn crate::sink::LogSink>) -> Self {
+        Self::typed(sink)
     }
 }
 
 /// Blocking queue-admission error surface retained for 1.x callers.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+#[deprecated(note = "use crate::v2::EventError; see docs/migration/phase-f.md")]
 pub enum LogError {
     /// The event failed validation before queue admission.
     #[error(transparent)]
@@ -266,6 +53,7 @@ pub enum LogError {
 
 /// Non-blocking queue-admission error surface retained for 1.x callers.
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+#[deprecated(note = "use crate::v2::EventError; see docs/migration/phase-f.md")]
 pub enum TryLogError {
     /// The event failed validation before queue admission.
     #[error(transparent)]
@@ -351,7 +139,7 @@ impl LoggerBuilder {
     /// Creates a 1.x builder with the released initialization error wrapper.
     #[deprecated(
         since = "1.4.0",
-        note = "Use LoggerBuilder::new_typed(); see migrate-error-api.md."
+        note = "use crate::v2::LoggerBuilder::new; see docs/migration/phase-f.md"
     )]
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         CanonicalLoggerBuilder::new(config)
@@ -360,6 +148,7 @@ impl LoggerBuilder {
     }
 
     /// Creates a released typed builder facade.
+    #[deprecated(note = "see docs/migration/phase-f.md")]
     pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
         CanonicalLoggerBuilder::new(config)
             .map(Self::from)
@@ -367,17 +156,23 @@ impl LoggerBuilder {
     }
 
     /// Registers one released sink before building the shared runtime.
+    #[deprecated(
+        note = "use crate::v2::LoggerBuilder::register_sink; see docs/migration/phase-f.md"
+    )]
     pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self {
         self.inner.register_sink(registration);
         self
     }
 
     /// Registers a canonical typed sink before building the shared runtime.
+    #[deprecated(
+        note = "use crate::v2::LoggerBuilder::register_sink with SinkRegistration::typed; see docs/migration/phase-f.md"
+    )]
     pub fn register_typed_sink(
         &mut self,
         sink: Arc<dyn crate::sink::LogSink>,
     ) -> Result<&mut Self, crate::SinkRegistrationError> {
-        self.inner.register_typed_sink(sink)?;
+        self.inner.register_sink(SinkRegistration::typed(sink));
         Ok(self)
     }
 
@@ -387,6 +182,7 @@ impl LoggerBuilder {
     ///
     /// Panics if the writer runtime cannot start, preserving the released
     /// infallible builder contract.
+    #[deprecated(note = "use crate::v2::LoggerBuilder::build; see docs/migration/phase-f.md")]
     pub fn build(self) -> Logger<Running> {
         Logger::from(
             self.inner
@@ -396,6 +192,7 @@ impl LoggerBuilder {
     }
 
     /// Builds the released typed initialization facade.
+    #[deprecated(note = "see docs/migration/phase-f.md")]
     pub fn build_typed(self) -> Result<Logger<Running>, InitFailure> {
         self.inner
             .build()
@@ -405,6 +202,9 @@ impl LoggerBuilder {
 
     /// Finalizes construction and returns a level owner with the retained
     /// 1.x initialization error wrapper.
+    #[deprecated(
+        note = "use crate::v2::LoggerBuilder::build_with_level_owner; see docs/migration/phase-f.md"
+    )]
     pub fn build_with_level_owner(self) -> Result<(Logger<Running>, LevelOwner), InitError> {
         self.inner
             .build_with_level_owner()
@@ -413,6 +213,7 @@ impl LoggerBuilder {
     }
 
     /// Builds the released typed initialization facade with level ownership.
+    #[deprecated(note = "see docs/migration/phase-f.md")]
     pub fn build_with_level_owner_typed(
         self,
     ) -> Result<(Logger<Running>, LevelOwner), InitFailure> {
@@ -440,11 +241,13 @@ impl<State> From<Logger<State>> for CanonicalLogger<State> {
 
 impl Logger<Running> {
     /// Queries through the released facade.
+    #[deprecated(note = "use crate::v2::Logger::query; see docs/migration/phase-f.md")]
     pub fn query(&self, query: &LogQuery) -> Result<crate::LogSnapshot, QueryError> {
         self.inner.query(query)
     }
 
     /// Shuts down the shared canonical runtime and returns a stopped facade.
+    #[deprecated(note = "use crate::v2::Logger::shutdown; see docs/migration/phase-f.md")]
     pub fn shutdown(self) -> Logger<Stopped> {
         Logger::from(self.inner.shutdown())
     }
@@ -452,13 +255,14 @@ impl Logger<Running> {
     /// Starts a 1.x builder with the released initialization error wrapper.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Logger::builder_typed(); see migrate-error-api.md."
+        note = "use crate::v2::LoggerBuilder::new; see docs/migration/phase-f.md"
     )]
     pub fn builder(config: LoggerConfig) -> Result<LoggerBuilder, InitError> {
         LoggerBuilder::new(config)
     }
 
     /// Starts a released typed builder facade.
+    #[deprecated(note = "see docs/migration/phase-f.md")]
     pub fn builder_typed(config: LoggerConfig) -> Result<LoggerBuilder, InitFailure> {
         LoggerBuilder::new_typed(config)
     }
@@ -466,7 +270,7 @@ impl Logger<Running> {
     /// Creates a logger with the retained 1.x initialization error wrapper.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Logger::new_typed(); see migrate-error-api.md."
+        note = "use crate::v2::Logger::new; see docs/migration/phase-f.md"
     )]
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         CanonicalLogger::new(config)
@@ -475,6 +279,9 @@ impl Logger<Running> {
     }
 
     /// Creates a logger and level owner with the retained 1.x error wrapper.
+    #[deprecated(
+        note = "use crate::v2::Logger::new_with_level_owner; see docs/migration/phase-f.md"
+    )]
     pub fn new_with_level_owner(config: LoggerConfig) -> Result<(Self, LevelOwner), InitError> {
         CanonicalLogger::new_with_level_owner(config)
             .map(|(logger, owner)| (Self::from(logger), owner))
@@ -482,6 +289,7 @@ impl Logger<Running> {
     }
 
     /// Creates a released typed logger facade.
+    #[deprecated(note = "see docs/migration/phase-f.md")]
     pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
         CanonicalLogger::new(config)
             .map(Self::from)
@@ -489,6 +297,7 @@ impl Logger<Running> {
     }
 
     /// Creates a released typed logger facade with level ownership.
+    #[deprecated(note = "see docs/migration/phase-f.md")]
     pub fn new_with_level_owner_typed(
         config: LoggerConfig,
     ) -> Result<(Self, LevelOwner), InitFailure> {
@@ -500,7 +309,7 @@ impl Logger<Running> {
     /// Validates, redacts, and blocks for released queue admission.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Logger::log_typed(); see migrate-error-api.md."
+        note = "use crate::v2::Logger::log; see docs/migration/phase-f.md"
     )]
     pub fn log(&self, event: LogEvent) -> Result<(), LogError> {
         self.inner.log_released(event).map_err(legacy_log)
@@ -508,6 +317,7 @@ impl Logger<Running> {
 
     /// Validates, redacts, and blocks for queue admission using typed 1.x
     /// failures.
+    #[deprecated(note = "see docs/migration/phase-f.md")]
     pub fn log_typed(&self, event: LogEvent) -> Result<(), LogFailure> {
         self.log(event).map_err(Into::into)
     }
@@ -515,13 +325,14 @@ impl Logger<Running> {
     /// Attempts non-blocking queue admission using 1.x errors.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Logger::try_log_typed(); see migrate-error-api.md."
+        note = "use crate::v2::Logger::try_log; see docs/migration/phase-f.md"
     )]
     pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError> {
         self.try_log_with_outcome(event).map(|_| ())
     }
 
     /// Attempts non-blocking queue admission using typed 1.x failures.
+    #[deprecated(note = "see docs/migration/phase-f.md")]
     pub fn try_log_typed(&self, event: LogEvent) -> Result<(), TryLogFailure> {
         self.try_log(event).map_err(Into::into)
     }
@@ -529,7 +340,7 @@ impl Logger<Running> {
     /// Attempts non-blocking admission and reports filtering using 1.x errors.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Logger::try_log_with_outcome_typed(); see migrate-error-api.md."
+        note = "use crate::v2::Logger::try_log_with_outcome; see docs/migration/phase-f.md"
     )]
     pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, TryLogError> {
         self.inner
@@ -538,6 +349,9 @@ impl Logger<Running> {
     }
 
     /// Attempts non-blocking admission using typed 1.x failures.
+    #[deprecated(
+        note = "use crate::v2::Logger::try_log_with_outcome; see docs/migration/phase-f.md"
+    )]
     pub fn try_log_with_outcome_typed(
         &self,
         event: LogEvent,
@@ -548,7 +362,7 @@ impl Logger<Running> {
     /// Retained event-emission compatibility path.
     #[deprecated(
         since = "1.2.0",
-        note = "Use log() for blocking queue admission or try_log() for non-blocking logging."
+        note = "use crate::v2::Logger::log or try_log; see docs/migration/phase-f.md"
     )]
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError> {
         self.inner
@@ -559,7 +373,7 @@ impl Logger<Running> {
     /// Flushes the shared writer through the released typed failure.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Logger::flush_typed(); see migrate-error-api.md."
+        note = "use crate::v2::Logger::flush; see docs/migration/phase-f.md"
     )]
     #[expect(
         deprecated,
@@ -570,6 +384,7 @@ impl Logger<Running> {
     }
 
     /// Flushes the shared writer through the released typed failure.
+    #[deprecated(note = "use crate::v2::Logger::flush; see docs/migration/phase-f.md")]
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
         self.flush().map_err(Into::into)
     }
@@ -578,18 +393,21 @@ impl Logger<Running> {
 impl<State> Logger<State> {
     /// Returns the configured service identity through the released facade.
     #[must_use]
+    #[deprecated(note = "use crate::v2::Logger::service_name; see docs/migration/phase-f.md")]
     pub fn service_name(&self) -> &crate::ServiceName {
         self.inner.service_name()
     }
 
     /// Returns a coherent runtime level snapshot through the released facade.
     #[must_use]
+    #[deprecated(note = "use crate::v2::Logger::level_state; see docs/migration/phase-f.md")]
     pub fn level_state(&self) -> LevelState {
         self.inner.level_state()
     }
 
     /// Returns runtime health through the released facade.
     #[must_use]
+    #[deprecated(note = "use crate::v2::Logger::health; see docs/migration/phase-f.md")]
     pub fn health(&self) -> LoggingHealthReport {
         self.inner.health()
     }
@@ -597,6 +415,7 @@ impl<State> Logger<State> {
 
 impl Logger<Running> {
     /// Follows through the released facade.
+    #[deprecated(note = "use crate::v2::Logger::follow; see docs/migration/phase-f.md")]
     pub fn follow(&self, query: LogQuery) -> Result<crate::follow::LogFollowSession, QueryError> {
         self.inner.follow(query)
     }
