@@ -29,6 +29,10 @@ clean, easy to use, high-performance.
 - Never remove a capability because no current consumer uses it. Remove only
   duplicates of a kept item, 1.x surfaces with a canonical replacement, test
   seams (moved to `#[cfg(test)]`), and internal plumbing.
+- Deprecate before removing. A public 1.x item first ships behind the
+  default-on `v1` feature with `#[deprecated(note = "<2.0 replacement>")]`;
+  the next release deletes it. A deprecated item need not keep working: no
+  compatibility adapters, tests or baseline comparisons for it.
 - `sc-observability-log` replaces the same-named crate in
   beads-task-issue-tracker; keep every capability that app needs.
 
