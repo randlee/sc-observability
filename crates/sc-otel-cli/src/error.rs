@@ -1,6 +1,6 @@
 //! CLI-local failures that occur before the shared submission parser is reached.
 
-use crate::constants;
+use crate::error_codes;
 use sc_observability_types::{Remediation, otlp::submission::TelemetryClientError};
 use serde_json::Value;
 use std::{error::Error, fmt, path::PathBuf};
@@ -63,8 +63,8 @@ pub(crate) enum CliError {
 impl CliError {
     pub(crate) fn code(&self) -> &str {
         match self {
-            Self::Input(_) => constants::ERROR_INVALID_JSON,
-            Self::Internal(_) => constants::ERROR_INTERNAL,
+            Self::Input(_) => error_codes::ERROR_INVALID_JSON,
+            Self::Internal(_) => error_codes::ERROR_INTERNAL,
             Self::Telemetry(error) => error.code().as_str(),
         }
     }
