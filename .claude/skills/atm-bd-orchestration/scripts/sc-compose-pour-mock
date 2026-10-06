@@ -9,8 +9,9 @@
 Same CLI, same `sc-compose/beads/v1` request file, same receipt and JSON
 envelope as `sc-compose bead` 1.6.1 (ADR-0021). `render` and `validate` run
 the real `sc-compose bead`. `preview-pour` and `pour` run the real render,
-then `bd cook --dry-run`, `bd where --json` and the registry check, and then
-replace `bd mol pour` with an attach:
+then `bd cook --dry-run`, and then replace `bd mol pour` with an attach. The
+attach reads the rendered formula by path, so the mock has no active-registry
+step: the formula is never placed in bd's `formulas/` search path.
 
 - the formula's steps are created directly under the existing bead named by
   the Beads variable `parent`, with stable ids `<parent>.<ref>-<step>`
@@ -271,24 +272,6 @@ def attach_operation(operation: str, request_path: Path, request: dict) -> tuple
         receipt["stages"].append(stage("validate", argv, started, proc, "skipped"))
     else:
         receipt["stages"].append(stage("validate", argv, started, proc))
-
-    started = time.monotonic()
-    argv = [bd.executable, "where", "--json"]
-    proc = subprocess.run(argv, text=True, capture_output=True)
-    try:
-        active = Path(json.loads(proc.stdout)["path"]).resolve()
-    except (ValueError, KeyError, TypeError):
-        receipt["stages"].append(stage("resolve_active_registry", argv, started, proc, {"failed": {"code": "BEADS_WHERE_FAILED"}}))
-        return finish("BEADS_WHERE_FAILED", False)
-    name = request["formula_name"]
-    expected = {active / "formulas" / f"{name}.formula.toml", active / "formulas" / f"{name}.formula.json"}
-    if rendered.resolve() not in expected:
-        receipt["stages"].append(stage("resolve_active_registry", argv, started, proc, {"failed": {"code": "BEADS_FORMULA_OUTSIDE_ACTIVE_REGISTRY"}}))
-        return finish("BEADS_FORMULA_OUTSIDE_ACTIVE_REGISTRY", True)
-    if all(p.exists() for p in expected):
-        receipt["stages"].append(stage("resolve_active_registry", argv, started, proc, {"failed": {"code": "BEADS_FORMULA_REGISTRY_AMBIGUOUS"}}))
-        return finish("BEADS_FORMULA_REGISTRY_AMBIGUOUS", True)
-    receipt["stages"].append(stage("resolve_active_registry", argv, started, proc))
 
     started = time.monotonic()
     stage_name = "preview_pour" if operation == "preview-pour" else "pour"

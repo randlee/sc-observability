@@ -218,25 +218,25 @@ class Run:
             parent, ref = target["compose"]["parent"], target["compose"]["ref"]
             if any(self.bd.show(attach_id(parent, ref, step)) is None for step in self.steps(target)):
                 raise TargetError("BEAD_GROUPS_QA_CLOSED", f"{target['compose']['filed_by']} is closed; quality-mgr pours the fix groups of its blocking findings before closing it")
-        active = Path(json.loads(self.bd.run("where", "--json").stdout)["path"]).resolve()
         template = bead_formulas.template(formula, self.repo).resolve()
         try:
             template = template.relative_to(self.repo.resolve())
         except ValueError as exc:
             raise TargetError("BEAD_GROUPS_TEMPLATE_OUTSIDE_REPO", f"{template} is outside {self.repo}; sc-compose renders only inside the working directory") from exc
+        out = self.repo / ".atm-bd" / "pour"
+        out.mkdir(parents=True, exist_ok=True)
+        ignore = out / ".gitignore"  # requests, receipts and rendered formulas are run records; only .atm-bd/formula/ is tracked
+        if not ignore.exists():
+            ignore.write_text("*\n")
+        stem = f"{target['id']}.{target['compose']['ref']}.{formula}"
+        # The attach reads the rendered formula by path, so it stays beside its request; nothing goes in bd's registry.
         request = {
             "schema": "sc-compose/beads/v1", "operation": "pour", "working_directory": str(self.repo),
-            "template": str(template), "rendered_formula": str(active / "formulas" / f"{formula}.formula.toml"),
+            "template": str(template), "rendered_formula": str(out / f"{stem}.formula.toml"),
             "compose_variables": target["compose"], "formula_name": formula,
             "bead_variables": {"parent": target["compose"]["parent"], "ref": target["compose"]["ref"]},
             "bd_executable": None, "pour_authorization": None if self.validate else "CreatePersistentBeads",
         }
-        out = self.repo / ".atm-bd" / "pour"
-        out.mkdir(parents=True, exist_ok=True)
-        ignore = out / ".gitignore"  # requests and receipts are run records; only .atm-bd/formula/ is tracked
-        if not ignore.exists():
-            ignore.write_text("*\n")
-        stem = f"{target['id']}.{target['compose']['ref']}.{formula}"
         path = out / f"{stem}.request.json"
         path.write_text(json.dumps(request, indent=2) + "\n")
         operation = "preview-pour" if self.validate else "pour"
