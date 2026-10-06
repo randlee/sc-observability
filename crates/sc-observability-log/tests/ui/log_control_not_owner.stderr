@@ -4,16 +4,10 @@ error[E0599]: no method named `shutdown` found for struct `sc_observability_log:
 9 |     let _ = control.shutdown(Duration::from_secs(1));
   |                     ^^^^^^^^ method not found in `sc_observability_log::LogControl`
 
-error[E0308]: mismatched types
-  --> tests/ui/log_control_not_owner.rs:13:20
+error[E0277]: the trait bound `sc_observability_log::LogGuard: From<sc_observability_log::LogControl>` is not satisfied
+  --> tests/ui/log_control_not_owner.rs:13:13
    |
-13 |     LogGuard::from(control)
-   |     -------------- ^^^^^^^ expected `LogGuard`, found `LogControl`
-   |     |
-   |     arguments to this function are incorrect
+13 |     control.into()
+   |             ^^^^ the trait `From<sc_observability_log::LogControl>` is not implemented for `sc_observability_log::LogGuard`
    |
-note: associated function defined here
-  --> $RUST/core/src/convert/mod.rs
-   |
-   |     fn from(value: T) -> Self;
-   |        ^^^^
+   = note: required for `sc_observability_log::LogControl` to implement `Into<sc_observability_log::LogGuard>`
