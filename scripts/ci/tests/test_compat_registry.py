@@ -161,9 +161,9 @@ class TraitImplContractTests(unittest.TestCase):
             "baseline_declaration": f"impl crate::typed::TypedLogSink for {owner}",
             "current_declaration": f"impl TypedLogSink for {owner}",
             "baseline_source": {"revision": BASELINE_COMMIT, "path": "crates/sc-observability/src/sinks.rs", "owner": owner},
-            "current_source": {"revision": "selected_head", "path": "crates/sc-observability/src/compat.rs", "owner": owner},
+            "current_source": {"revision": "selected_head", "path": "crates/sc-observability/src/v1/compat.rs", "owner": owner},
             "conversion": "delegates to the canonical sink and converts its context into LogSinkFailure",
-            "removable_paths": ["crates/sc-observability/src/compat.rs"],
+            "removable_paths": ["crates/sc-observability/src/v1/compat.rs"],
             "removal_rationale": "remove this released trait implementation with compat.rs after the 1.x surface retires",
         }
         record.update(overrides)

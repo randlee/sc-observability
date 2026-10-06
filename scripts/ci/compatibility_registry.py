@@ -122,7 +122,7 @@ def validate_trait_impl_contracts(records: object) -> None:
             ):
                 raise ValueError(f"compatibility trait-impl contract has invalid {field}: {implementation}")
         removable = record["removable_paths"]
-        if not isinstance(removable, list) or removable != ["crates/sc-observability/src/compat.rs"]:
+        if not isinstance(removable, list) or removable != ["crates/sc-observability/src/v1/compat.rs"]:
             raise ValueError(f"compatibility trait-impl contract has invalid removable paths: {implementation}")
     duplicates = [name for name, count in Counter(implementations).items() if count > 1]
     if duplicates:
