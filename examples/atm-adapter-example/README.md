@@ -1,5 +1,9 @@
 # ATM Adapter Example
 
+**Retired in Phase F.** This example is retained only as historical context; it
+is not a current shared-repository contract or a production ATM adapter. See
+[Architecture, §10](../../docs/architecture.md#10-atm-proving-artifact-retired-in-phase-f).
+
 This unpublished crate demonstrates the intended ATM adapter pattern on top of:
 
 - `sc-observability`
