@@ -45,7 +45,7 @@ not a reason to silently reduce the reviewed set.
   must cite its authorization and follow-up owner/bead. Do not infer permission
   to defer from severity, closed status, or this reference.
 - **Open, regressed, absent, or unverified:** report the exact bead and missing
-  evidence. The lead routes it back to its owner; the reviewer does not silently
+  evidence. The task assigner routes it back to its owner; the reviewer does not silently
   close findings or invent a successful resolution.
 
 This reconciliation verifies carried findings. It does not dispatch baseline
@@ -65,7 +65,7 @@ integration source and receipt; do not classify its SHA as missing here.
 Use JEV to screen straightforward fixed-code determinations, following
 [post-mortem-jev.md](post-mortem-jev.md). Quality-mgr prepares the evidence,
 checks coverage, and investigates unsure or flagged results before filing
-beads or reporting defects to the lead. JEV results are not finding beads.
+beads or reporting defects to the task assigner. JEV results are not finding beads.
 When delegation is authorized, workers may prepare disjoint evidence packets;
 quality-mgr reconciles their IDs against the entire inventory. An ancestor SHA
 still requires current-source verification. Sampling cannot produce a phase

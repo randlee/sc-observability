@@ -36,6 +36,10 @@ def validate(values):
         raise ValueError("post-mortem counts must sum to total")
     if verdict == "PASS" and counts["unresolved"]:
         raise ValueError("PASS requires zero unresolved findings")
+    jev = values.get("post_mortem_jev")
+    if not isinstance(jev, dict) or jev.get("status") not in ("completed", "not_applicable"):
+        raise ValueError("post_mortem_jev.status must be completed or not_applicable; "
+                         "unavailable is a REVIEW_PENDING_JEV refusal, not a completion")
     evidence = values.get("post_mortem_md")
     if not isinstance(evidence, str) or not evidence.strip():
         raise ValueError("post_mortem_md must contain the per-finding evidence")

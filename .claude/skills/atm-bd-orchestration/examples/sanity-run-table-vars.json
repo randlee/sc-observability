@@ -9,17 +9,15 @@
       "phase": "d",
       "started_at": "2026-09-30T16:00:00Z",
       "completed_at": "2026-09-30T16:01:05Z",
+      "completed_local": "09-30 09:01",
       "duration": "1m05s",
       "duration_seconds": 65,
       "pr_number": 42,
       "iteration": 1,
       "verdict": "PASS",
+      "final_verdict": "PASS",
       "findings": 0,
-      "error": null,
-      "selection": null,
-      "reviewer_short": "LLM",
-      "pick": "—",
-      "completed_local": "09-30 09:01"
+      "error": null
     },
     {
       "run_id": "run-one",
@@ -30,38 +28,15 @@
       "phase": "d",
       "started_at": "2026-09-30T16:00:00Z",
       "completed_at": "2026-09-30T16:01:05Z",
+      "completed_local": "09-30 09:01",
       "duration": "1m05s",
       "duration_seconds": 65,
       "pr_number": 42,
       "iteration": 1,
       "verdict": "PASS",
+      "final_verdict": "PASS",
       "findings": 0,
-      "error": null,
-      "selection": null,
-      "reviewer_short": "JEV",
-      "pick": "—",
-      "completed_local": "09-30 09:01"
-    },
-    {
-      "run_id": "run-one",
-      "reviewer": "sanity-selected",
-      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "task": "obs-d-4-sanity",
-      "sprint": "d-4",
-      "phase": "d",
-      "started_at": "2026-09-30T16:00:00Z",
-      "completed_at": "2026-09-30T16:01:05Z",
-      "duration": "1m05s",
-      "duration_seconds": 65,
-      "pr_number": 42,
-      "iteration": 1,
-      "verdict": "PASS",
-      "findings": 0,
-      "error": null,
-      "selection": [{"deliverable": 1, "llm": "done", "jev": "done", "selected": "llm", "reason": "", "rerun": null, "checker_defect": false}],
-      "reviewer_short": "SEL",
-      "pick": "=1",
-      "completed_local": "09-30 09:01"
+      "error": null
     }
   ]
 }

@@ -4,7 +4,7 @@
 A review of an assigned fix dispatches only the agent that filed each carried
 finding (the finding bead's `metadata.reviewer`), locked to that finding's own id
 (`metadata.finding_ref`). The verifier reports fixed, open or regressed for those
-ids and files no new findings.
+ids and files no new findings. A carried id the verifier does not report stays open.
 
 Plan findings are not beads: they are report lines `<bead> <severity> <reviewer>
 <field>: <what is wrong>`, and a plan fix round carries them as text. With
@@ -79,7 +79,7 @@ def filter_result(reviewer: str, carried: list[dict], result: dict) -> dict:
         else:
             dropped.append(finding)
     dispositions = [{"bead": bead, "finding_ref": ref,
-                     "disposition": (reported[ref].get("disposition") or "open") if ref in reported else "fixed",
+                     "disposition": (reported[ref].get("disposition") or "open") if ref in reported else "open",
                      "evidence": reported.get(ref, {}).get("evidence", "")}
                     for ref, bead in scope.items()]
     return {"reviewer": reviewer, "dispositions": dispositions, "new_findings": [], "dropped_out_of_scope": dropped}

@@ -148,7 +148,6 @@ After initialization, use these repo-local skills to coordinate work:
 
 | Skill | Trigger |
 |-------|---------|
-| `/phase-orchestration` | Orchestrate a multi-sprint phase with fresh scrum-masters |
 | `/codex-orchestration` | Run phases with roster developers and pipelined QA via quality-mgr |
 | `/plan-hardening` | Harden a phase plan and create any missing sprint docs before implementation starts or resumes |
 | `/todo-triage` | Run the repo TODO scan during sprint-end or integration review and route TODOs into QA findings/Turtle triage instead of silent deferral |
@@ -159,8 +158,8 @@ Additional orchestration guides live in `.claude/skills/*/SKILL.md`.
 
 ### Phased Development — Mandatory
 
-For any multi-sprint phased development, `/codex-orchestration` or
-`/phase-orchestration` must be used as directed by the user.
+For any multi-sprint phased development, `/codex-orchestration` must be used
+as directed by the user.
 
 After every session start or context compaction, if a phase is in progress:
 1. identify which one skill governs the active phase

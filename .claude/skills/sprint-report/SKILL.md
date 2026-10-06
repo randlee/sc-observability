@@ -1,6 +1,6 @@
 ---
 name: sprint-report
-description: Generate a sprint status table or local dependency DAG from live beads; --view optionally opens Wyvern.
+description: Generate a sprint status table or dependency DAG from live beads. The DAG HTML is written locally; --view optionally opens Wyvern.
 ---
 
 # Sprint Report Skill
@@ -15,13 +15,13 @@ Run the repository-local report command from the checkout or worktree being used
 .claude/skills/sprint-report/scripts/sprint-report --table
 ```
 
-Use `--detailed` for one block per sprint. The command reads the configured
-canonical plan (historically `<plans_dir>/phase-<p>/sprints.jsonl`), then refreshes bead state and PR/CI state.
+Use `--detailed` for one block per sprint. The command reads the committed
+plan file `<plans_dir>/phase-<p>.jsonl`, then refreshes bead state and PR/CI state.
 Rows are never hand-typed.
 
 ## Dependency diagram
 
-Use `--dag` to render a local diagram without opening a viewer, or
+Use `--dag` to refresh the diagram without opening a viewer, or
 `--view` to also open its HTML artifact in Wyvern when available:
 
 ```bash
@@ -30,32 +30,32 @@ npm ci --prefix .claude/skills/sprint-report/renderer --ignore-scripts
 .claude/skills/sprint-report/scripts/sprint-report --view
 ```
 
-The dedicated [`sprint-review`](../sprint-review/SKILL.md) command also renders
-local outputs; neither command commits or pushes. No viewer opens by default.
-Wyvern runs detached with output sent to a log. Its absence or failure does not
-prevent local rendering; no alternative viewer launches automatically.
+The dedicated [`sprint-review`](../sprint-review/SKILL.md) command always
+writes the HTML; its `--view` flag is the only way it opens the diagram. No viewer is
+opened by default. Wyvern runs detached in the background, with output sent to
+a log, so the agent remains available. Missing or failing Wyvern does not
+prevent writing the HTML; no alternative viewer is launched automatically.
 
-Only the plan gate uses `validate-plan --root <root> --refresh` to write the
-canonical `<plans_dir>/<phase>-dag.html` beside the plan.
-The author commits configuration, plan, and canonical diagram through normal review.
-Report rendering never changes the canonical plan or publishes artifacts.
-The HTML embeds SVG, tooltips and zoom controls without external dependencies.
+By default, DAG generation writes `<plans_dir>/phase-<p>/phase-<p>-dag.html`
+locally; it never commits or pushes. It reads the committed plan file and
+never rewrites it from Beads state. The HTML embeds the SVG directly, including
+state tooltips and zoom controls, without external dependencies.
 
 Local render intermediates live under
 `scratchpad/phase-<p>-dag/phase-<p>-dag`: `.svg`, `.html`, `.png`, `.dot`,
-`-layout.svg`, `-data.json`, `-state.json`, and `-icons.json`.
-These scratch files are not committed; state-only refreshes reuse the layout.
+`-layout.svg`, `-data.json`, `-state.json`, and `-icons.json`. These scratch files are
+not committed. State-only refreshes reuse the existing layout.
 
-Pass `--output <prefix>` to `sprint-report --dag` or `--view` to choose a local export path.
-The legacy `--dag --open` explicitly opens the PNG in Preview on macOS
-(default image viewer elsewhere); do not use it for `/sprint-review`.
-Diagram modes are mutually exclusive with `--table` and `--detailed`.
-`--root` and `--index` work in every mode.
-Diagram generation requires Python, Node, `bd`, and `atm`; it does not query GitHub PRs or invoke `sc-compose`.
+To skip writing next to the plan, pass `--output <prefix>` to
+`sprint-report --dag` or `--view`. The legacy `--dag --open` option explicitly
+opens the PNG in Preview on macOS (default image viewer elsewhere); do not use
+it for `/sprint-review`. Diagram modes are mutually exclusive with `--table`
+and `--detailed`. `--root` and `--index` work in every mode. Diagram generation
+requires Python, Node, `bd` and `atm`;
+it does not query GitHub PRs or invoke `sc-compose`.
 
-The index explicitly records `dev_bead_id` and `sanity_bead_id` for each sprint
-only. Both are verified against live
-`blocks` edges, which also select upstream plan-review gates. No finding, fix, or sprint QA beads
+Each sprint's poured `<container>.group-dev` and `<container>.group-sanity`
+are verified against live `blocks` edges. No finding, fix, or sprint QA beads
 are drawn, and no dependency is inferred from index order or PR stacks. Every
 displayed arrow is a real bead dependency, drawn **prerequisite → dependent**:
 work → its sanity gate → downstream work. Missing or duplicate sanity gates
@@ -80,17 +80,18 @@ validates that gate. QA badges are overlays and do not change the DAG layout.
 
 ## Data sources
 
-The canonical phase plan is the source of graph truth. Each `sprints.jsonl`
-line is `[sprint_name, sanity_bead_id, depends_on_sprint_names]`; the dev ID
-is derived as `obs-<sprint_name>`. Beads supply only live state and content.
+The plan file is the source of graph truth. Each line is
+`{"sprint": "<name>", "depends_on"?: [...]}`; the sprint container is
+`obs-<sprint>` and its poured dev and sanity beads
+`<container>.group-dev` and `<container>.group-sanity`. Beads supply only live state and content.
 The report never derives or persists plan edges from a Beads snapshot.
 
 The report reads phase identity and integration branch from the root bead,
-and sprint names, titles, stack layers, and branches from live sprint beads.
+and sprint names, titles, stack layers, and branches from live sprint containers.
 Dependency order comes from the canonical plan. Table ordering follows current bead layer then sprint
 number. It verifies the indexed sanity pairing, derives QA beads from live
 graph edges, and counts open findings across QA rounds. Paginated `gh api`
-pull-request results match each dev bead's branch, then `gh pr view` fetches
+pull-request results match each sprint container's branch, then `gh pr view` fetches
 selected PR checks. The integration row matches the root bead's integration
 branch; the detailed block names the integration PR's own base (`→ <base>`),
 and no target when there is no PR.
@@ -157,7 +158,7 @@ temporary file and run the same command from the repository root.
 ```json
 {
   "mode": "detailed",
-  "sprint_rows": "Sprint: d-12  types 2.0 contract\nDEV: ✅\nQA: R1 FAIL (16 open)\nCI: 🏁\nPR: #233",
+  "sprint_rows": "Sprint: d-12  types 2.0 contract\nDEV: ✅ (closed)\nS: 3\nQA: R1 FAIL (16 open)\nFIND: 2:10:4\nCI: 🏁\nPR: #233",
   "integration_row": "Integration: integrate/phase-d → main\nCI: 🌀\nPR: #240"
 }
 ```
@@ -175,15 +176,3 @@ temporary file and run the same command from the repository root.
 | Blocked | 🚧 | | 🚧 |
 | Merged | | | 🏁 |
 | Ready to merge | | | 🚀 |
-
-## Configured phase index
-
-Tracked `.atm-bd/<phase>.toml` names `root`, `sprints = "<plans_dir>/<phase>.jsonl"`, and `integration_branch`.
-Each line has `sprint` and optional `depends_on`, with no other fields.
-The plan locks sprint membership and records only dependencies that completely block execution.
-Validation accepts each declared dependency as an edge to predecessor sanity or sprint.
-Sanity identities and live state are queried from Beads.
-The plan gate uses `validate-plan --root <root> --refresh` to write `<plans_dir>/<phase>-dag.html`.
-Assignment checks never write HTML or require a renderer; pre-import inputs never render.
-CI compares committed HTML sprint membership with the plan without querying Beads.
-Historical phases retain their tuple-file lookup until migrated.

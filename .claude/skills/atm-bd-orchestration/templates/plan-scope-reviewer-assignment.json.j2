@@ -1,7 +1,7 @@
 ---
 name: plan-scope-reviewer-assignment
-version: 1.1.1
-description: Render a fenced-JSON assignment for plan-scope-reviewer over a plan in beads. `plan_docs` are the files quality-mgr writes by piping `bd show <dev bead> --json` for every dev bead under the root; `phase_root_doc` is the same for the root. On plan QA-1, review the plan's shape in full; when `carry_forward_findings_json` has ids, verify only the reviewer's carried finding ids against their original acceptance criteria and do not recompute plan shape or file new findings. A round after the first refuses to render without them.
+version: 1.1.2
+description: Render a fenced-JSON assignment for plan-scope-reviewer over a plan in beads. `plan_docs` are the files quality-mgr writes by piping `bd show <sprint container> --json` for every sprint container under the root; `phase_root_doc` is the same for the root. On plan QA-1, review the plan's shape in full; when `carry_forward_findings_json` has ids, verify only the reviewer's carried finding ids against their original acceptance criteria and do not recompute plan shape or file new findings. A round after the first refuses to render without them.
 format: json
 required_variables:
   - root

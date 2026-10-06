@@ -1,6 +1,6 @@
 {
-  "task_id": "obs-d-4-qa1-f1-qa1",
-  "checked_bead": "obs-d-4-qa1-f1",
+  "task_id": "obs-d-4.qa1-f1-r1-qa",
+  "checked_bead": "obs-d-4.qa1-f1-r1-fix",
   "phase": "d",
   "phase_feature": "obs-phase-d",
   "sprint": "d-4",
@@ -11,9 +11,7 @@
   "commit": "9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5",
   "base": "sprint/d-5-otlp-logs",
   "worktree_path": "../sc-observability-worktrees/fix/d-4-qa1-f1-retry-jitter",
-  "carry_forward": "obs-d-4-qa1-f1",
-  "lead": "obs-lead",
-  "cc": "",
+  "carry_forward": "obs-d-4.qa1-f1-r1-fix",
   "sprint_bead": "obs-d-4",
   "policy_path": ".claude/project/quality-policy.md",
   "reviewers_round1": [

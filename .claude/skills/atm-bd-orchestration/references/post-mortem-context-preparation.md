@@ -93,7 +93,7 @@ A fix only on the stack does not count as landed on the pinned integration head.
 SHA, evidence, disposition, and UTC timestamp in
 `.sc/qa-logs/post-mortem-jev-phase-<x>-investigation.jsonl`. Verify non-code
 obligations from receipts. File only confirmed, deduplicated defects; send them
-to the lead for fixes and verify only the carried gaps afterward.
+to the task assigner for fixes and verify only the carried gaps afterward.
 
 ## Completion evidence
 
@@ -115,5 +115,7 @@ The review completion's required `post_mortem_jev` object contains `status`
 `integration_sha`, and `reason`. `completed` records execution, not PASS. Check
 that the cited JSONL rows exist at the reviewed SHA. `not_applicable` requires
 an inventory showing no code-screenable findings; `unavailable` leaves phase
-review pending. The existing post-mortem totals still account for every finding
+review pending: it is never a completion (`check-review-completion.py` rejects
+it) but goes, with the code findings, in the `REVIEW_PENDING_JEV` refusal's
+notes; announce a persistent Jev outage as a serious failure (`.claude/skills/atm-bd-orchestration/SKILL.md`, Lead Role). The existing post-mortem totals still account for every finding
 as verified fixed, justified nonfix, or unresolved.
