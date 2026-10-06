@@ -826,7 +826,7 @@ fn released_checked_delays_preserve_zero_without_weakening_canonical_validation(
             traces: None,
             metrics: None,
         };
-        let bounds = super::config::validated_released_telemetry_bounds(&config).unwrap();
+        let bounds = super::config::validated_test_telemetry_bounds(&config).unwrap();
         let BackendTransportBounds::SyncHttp(retry) = bounds.backend() else {
             panic!("sync-http bounds")
         };

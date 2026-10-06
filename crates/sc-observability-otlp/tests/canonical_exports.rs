@@ -2,7 +2,7 @@
 
 use sc_observability_otlp::v2::{OtelConfig, Telemetry, TelemetryConfig, TelemetryConfigBuilder};
 use sc_observability_types::ServiceName;
-use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
 use std::sync::Arc;
 
 fn requires_send_sync<T: Send + Sync>() {}
@@ -15,11 +15,11 @@ const _: fn(Arc<Telemetry>) -> sc_observability_otlp::v2::TelemetryProjectors<Si
 #[test]
 fn canonical_otlp_exports_have_real_public_signatures() {
     let _: fn(ServiceName) -> TelemetryConfigBuilder = TelemetryConfigBuilder::new;
-    let _: fn(TelemetryConfigBuilder) -> Result<TelemetryConfig, InitFailure> =
+    let _: fn(TelemetryConfigBuilder) -> Result<TelemetryConfig, InitError> =
         TelemetryConfigBuilder::build_typed;
-    let _: fn(TelemetryConfig) -> Result<Telemetry, InitFailure> = Telemetry::new;
-    let _: fn(&Telemetry) -> Result<(), FlushFailure> = Telemetry::flush;
-    let _: fn(&Telemetry) -> Result<(), ShutdownFailure> = Telemetry::shutdown;
+    let _: fn(TelemetryConfig) -> Result<Telemetry, InitError> = Telemetry::new;
+    let _: fn(&Telemetry) -> Result<(), FlushError> = Telemetry::flush;
+    let _: fn(&Telemetry) -> Result<(), ShutdownError> = Telemetry::shutdown;
     let _: fn(TelemetryConfigBuilder, OtelConfig) -> TelemetryConfigBuilder =
         TelemetryConfigBuilder::with_transport;
 

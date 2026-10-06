@@ -5,15 +5,14 @@ use std::sync::{Arc, Mutex, Weak};
 #[cfg(test)]
 use std::time::Duration;
 
-use sc_observability_types::typed::{EventFailure, InitFailure};
 use sc_observability_types::v2::{
     EventError as CanonicalEventError, FlushError as CanonicalFlushError,
     InitError as CanonicalInitError,
 };
 use sc_observability_types::{
-    AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, EntityId, EnvPrefix,
-    ErrorContext, FailureClassification, LevelChange, LevelChangeError, LevelChangeSource,
-    LevelFilter, LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
+    AdmissionOutcome, ChangeDiagnostic, DiagnosticSummary, EntityId, EnvPrefix, ErrorContext,
+    FailureClassification, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter,
+    LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
     MaintenanceHealthReport, MaintenanceWorkerState, OperationDiagnostic, QueryError,
     QueryHealthState, Remediation, SinkHealth, SinkHealthState, Timestamp, WriterState,
 };
@@ -445,12 +444,14 @@ fn unavailable_level_diagnostic(message: &str) -> OperationDiagnostic {
     }
 }
 
-fn unavailable_event_failure(message: &str) -> EventFailure {
-    EventFailure::from_context(Box::new(ErrorContext::new(
-        sc_observability_types::error_codes::LEVEL_STATE_UNAVAILABLE,
-        message,
-        Remediation::not_recoverable("inspect state and create a new logger"),
-    )))
+fn unavailable_event_failure(message: &str) -> CanonicalEventError {
+    CanonicalEventError::Routing {
+        context: Box::new(ErrorContext::new(
+            sc_observability_types::error_codes::LEVEL_STATE_UNAVAILABLE,
+            message,
+            Remediation::not_recoverable("inspect state and create a new logger"),
+        )),
+    }
 }
 
 fn diagnostic_identity(
@@ -517,7 +518,7 @@ impl LoggerRuntime {
         #[cfg(test)] test_pass_delay: Option<Duration>,
         #[cfg(test)] test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
         #[cfg(test)] writer_start_should_fail: bool,
-    ) -> Result<Self, InitFailure> {
+    ) -> Result<Self, CanonicalInitError> {
         let dropped_events_total = Arc::new(AtomicU64::new(0));
         let flush_errors_total = Arc::new(AtomicU64::new(0));
         let last_error = Arc::new(Mutex::new(None));
@@ -541,15 +542,18 @@ impl LoggerRuntime {
             #[cfg(test)]
             writer_start_should_fail,
         )
-        .map_err(|error| {
-            InitFailure::logger_initialization(
-                "failed to start logger writer thread",
-                Remediation::recoverable(
-                    "inspect the operating system thread-resource limits",
-                    ["retry logger construction after resources are available"],
-                ),
-            )
-            .source(Box::new(error))
+        .map_err(|error| CanonicalInitError::Runtime {
+            context: Box::new(
+                ErrorContext::new(
+                    crate::error_codes::LOGGER_INIT_FAILED,
+                    "failed to start logger writer thread",
+                    Remediation::recoverable(
+                        "inspect the operating system thread-resource limits",
+                        ["retry logger construction after resources are available"],
+                    ),
+                )
+                .source(Box::new(error)),
+            ),
         })?;
 
         Ok(Self {
@@ -571,22 +575,9 @@ impl CanonicalLogger<Running> {
         CanonicalLoggerBuilder::new(config)
     }
 
-    /// Starts a construction-time builder that reports the released typed
-    /// initialization failure.
-    pub fn builder_typed(
-        config: crate::LoggerConfig,
-    ) -> Result<CanonicalLoggerBuilder, InitFailure> {
-        CanonicalLoggerBuilder::new_typed(config)
-    }
-
     /// Creates a logger with the configured built-in sinks and runtime state.
     pub fn new(config: crate::LoggerConfig) -> Result<Self, CanonicalInitError> {
         CanonicalLoggerBuilder::new(config)?.build()
-    }
-
-    /// Creates a logger with the released typed initialization failure.
-    pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, InitFailure> {
-        CanonicalLoggerBuilder::new_typed(config)?.build_typed()
     }
 
     /// Creates a logger together with weak authority for runtime level changes.
@@ -594,14 +585,6 @@ impl CanonicalLogger<Running> {
         config: crate::LoggerConfig,
     ) -> Result<(Self, LevelOwner), CanonicalInitError> {
         CanonicalLoggerBuilder::new(config)?.build_with_level_owner()
-    }
-
-    /// Creates a logger and level owner with the released typed startup
-    /// failure.
-    pub fn new_with_level_owner_typed(
-        config: crate::LoggerConfig,
-    ) -> Result<(Self, LevelOwner), InitFailure> {
-        CanonicalLoggerBuilder::new_typed(config)?.build_with_level_owner_typed()
     }
 
     /// Validates, redacts, and admits one structured log event into the writer queue.
@@ -614,16 +597,13 @@ impl CanonicalLogger<Running> {
     }
 
     /// Released root-facade admission: exact 1.4.1 acceptance, no entity check.
+    #[cfg(feature = "v1")]
     pub(crate) fn log_released(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
         self.log_in_mode(event, AdmissionMode::Released)
     }
 
     fn log_in_mode(&self, event: LogEvent, mode: AdmissionMode) -> Result<(), CanonicalEventError> {
-        let event =
-            self.prepare_event(event, mode)
-                .map_err(|failure| CanonicalEventError::Validation {
-                    context: failure.into_context(),
-                })?;
+        let event = self.prepare_event(event, mode)?;
         let Some(event) = event else {
             return Ok(());
         };
@@ -638,12 +618,6 @@ impl CanonicalLogger<Running> {
         })
     }
 
-    /// Admits one event with the released typed failure contract.
-    pub fn log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
-        self.log(event)
-            .map_err(|error| EventFailure::from_context(error.into_context()))
-    }
-
     /// Attempts non-blocking queue admission for one structured log event.
     ///
     /// # Panics
@@ -651,12 +625,6 @@ impl CanonicalLogger<Running> {
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn try_log(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
         self.try_log_with_outcome(event).map(|_| ())
-    }
-
-    /// Attempts non-blocking admission with the released typed failure contract.
-    pub fn try_log_typed(&self, event: LogEvent) -> Result<(), EventFailure> {
-        self.try_log(event)
-            .map_err(|error| EventFailure::from_context(error.into_context()))
     }
 
     /// Attempts non-blocking admission and reports whether level policy filtered the event.
@@ -672,6 +640,7 @@ impl CanonicalLogger<Running> {
     }
 
     /// Released root-facade non-blocking admission: exact 1.4.1 acceptance, no entity check.
+    #[cfg(feature = "v1")]
     pub(crate) fn try_log_with_outcome_released(
         &self,
         event: LogEvent,
@@ -684,11 +653,7 @@ impl CanonicalLogger<Running> {
         event: LogEvent,
         mode: AdmissionMode,
     ) -> Result<AdmissionOutcome, CanonicalEventError> {
-        let event =
-            self.prepare_event(event, mode)
-                .map_err(|failure| CanonicalEventError::Validation {
-                    context: failure.into_context(),
-                })?;
+        let event = self.prepare_event(event, mode)?;
         let Some(event) = event else {
             return Ok(AdmissionOutcome::Filtered);
         };
@@ -722,16 +687,8 @@ impl CanonicalLogger<Running> {
         }
     }
 
-    /// Attempts non-blocking admission and returns the released typed failure.
-    pub fn try_log_with_outcome_typed(
-        &self,
-        event: LogEvent,
-    ) -> Result<AdmissionOutcome, EventFailure> {
-        self.try_log_with_outcome(event)
-            .map_err(|error| EventFailure::from_context(error.into_context()))
-    }
-
     /// Emits one structured log event through the compatibility path.
+    #[cfg(feature = "v1")]
     pub(crate) fn emit_legacy(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
         self.log_released(event)?;
         if !self
@@ -769,13 +726,6 @@ impl CanonicalLogger<Running> {
             });
         }
         Ok(())
-    }
-
-    /// Flushes with the released typed failure contract.
-    pub fn flush_typed(&self) -> Result<(), sc_observability_types::typed::FlushFailure> {
-        self.flush().map_err(|error| {
-            sc_observability_types::typed::FlushFailure::from_context(error.into_context())
-        })
     }
 
     /// Queries the current JSONL log set synchronously using the shared query contract.
@@ -853,7 +803,9 @@ impl CanonicalLogger<Running> {
         &self,
         event: LogEvent,
         mode: AdmissionMode,
-    ) -> Result<Option<LogEvent>, EventFailure> {
+    ) -> Result<Option<LogEvent>, CanonicalEventError> {
+        #[cfg(not(feature = "v1"))]
+        let _ = mode;
         validate_event(&event, &self.config.service_name)?;
         // Filtering and mutation share this short critical section. Redaction,
         // queue waits, and writer work are intentionally outside it.
@@ -865,9 +817,12 @@ impl CanonicalLogger<Running> {
             return Ok(None);
         }
         drop(control);
+        #[cfg(feature = "v1")]
         if mode == AdmissionMode::Canonical {
             validate_entity_id(&event)?;
         }
+        #[cfg(not(feature = "v1"))]
+        validate_entity_id(&event)?;
         let event = self.redact_event(event);
         validate_event_size(&event)?;
         Ok(Some(event))
@@ -1046,6 +1001,7 @@ impl<State> CanonicalLogger<State> {
 
 impl LevelOwner {
     #[cfg(feature = "fault-injection")]
+    #[doc(hidden)]
     /// Sets the actual runtime revision to its terminal value for binding tests.
     pub fn force_revision_exhaustion_for_test(&mut self) -> bool {
         let Some(control) = self.control.upgrade() else {
@@ -1270,11 +1226,12 @@ fn level_enabled(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AdmissionMode {
     Canonical,
+    #[cfg(feature = "v1")]
     Released,
 }
 
 /// Validates the optional state-transition entity identifier with `EntityId`.
-fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
+fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalEventError> {
     let Some(entity_id) = event
         .state_transition
         .as_ref()
@@ -1282,37 +1239,51 @@ fn validate_entity_id(event: &LogEvent) -> Result<(), EventFailure> {
     else {
         return Ok(());
     };
-    EntityId::new(entity_id).map(|_| ()).map_err(|error| {
-        EventFailure::invalid_event(
-            "log event state transition entity_id is invalid",
-            Remediation::recoverable(
-                "emit a valid entity_id or omit it",
-                ["rebuild the state transition before emitting"],
+    EntityId::new(entity_id)
+        .map(|_| ())
+        .map_err(|error| CanonicalEventError::Validation {
+            context: Box::new(
+                ErrorContext::new(
+                    crate::error_codes::LOGGER_INVALID_EVENT,
+                    "log event state transition entity_id is invalid",
+                    Remediation::recoverable(
+                        "emit a valid entity_id or omit it",
+                        ["rebuild the state transition before emitting"],
+                    ),
+                )
+                .source(Box::new(error)),
             ),
-        )
-        .source(Box::new(error))
-    })
+        })
 }
 
-fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<(), EventFailure> {
+fn validate_event(
+    event: &LogEvent,
+    expected_service: &ServiceName,
+) -> Result<(), CanonicalEventError> {
     if event.version.as_str() != sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION {
-        return Err(EventFailure::invalid_event(
-            "log event version is invalid",
-            Remediation::recoverable(
-                "emit an observation v1 log event",
-                ["recreate the event with the current contract"],
-            ),
-        ));
+        return Err(CanonicalEventError::Validation {
+            context: Box::new(ErrorContext::new(
+                crate::error_codes::LOGGER_INVALID_EVENT,
+                "log event version is invalid",
+                Remediation::recoverable(
+                    "emit an observation v1 log event",
+                    ["recreate the event with the current contract"],
+                ),
+            )),
+        });
     }
 
     if &event.service != expected_service {
-        return Err(EventFailure::invalid_event(
-            "log event service does not match logger service",
-            Remediation::recoverable(
-                "emit the event with the logger service name",
-                ["rebuild the event before emitting"],
-            ),
-        ));
+        return Err(CanonicalEventError::Validation {
+            context: Box::new(ErrorContext::new(
+                crate::error_codes::LOGGER_INVALID_EVENT,
+                "log event service does not match logger service",
+                Remediation::recoverable(
+                    "emit the event with the logger service name",
+                    ["rebuild the event before emitting"],
+                ),
+            )),
+        });
     }
 
     Ok(())

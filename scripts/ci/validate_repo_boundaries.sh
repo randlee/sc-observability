@@ -97,9 +97,8 @@ if "sc-observability-otlp" in observe_runtime_deps:
 required_otlp = {"serde_json", "thiserror", "sc-lint-attributes"}
 # ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
 sys.path.insert(0, str(root / "scripts/ci"))
-from otlp_dependencies import validate_composition_harness, validate_transport_dependencies
+from otlp_dependencies import validate_transport_dependencies
 transport_names = validate_transport_dependencies(root)
-validate_composition_harness(root)
 otlp_external_runtime_deps = {
     dependency for dependency in otlp_runtime_deps
     if not is_first_party_dependency(dependency)
@@ -271,16 +270,6 @@ if "atm-observability-adapter" not in arch:
     raise SystemExit("architecture.md missing explicit ATM adapter boundary")
 if "OTLP-017" not in req or "OTLP-018" not in req:
     raise SystemExit("requirements.md missing OTLP attachment/TelemetryConfig requirements")
-
-# Enforce proving-artifact continuity: ATM boundary example must remain present before compilation.
-if not (root / "examples/atm-adapter-example/Cargo.toml").exists():
-    raise SystemExit("examples/atm-adapter-example/Cargo.toml is missing")
-
-subprocess.run(
-    ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml", "--locked"],
-    cwd=root,
-    check=True,
-)
 
 # D.17's existing consumer migration replaces the temporary expected-failure gate.
 subprocess.run(

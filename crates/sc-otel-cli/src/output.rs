@@ -190,7 +190,7 @@ fn print_text(outcome: &Outcome) {
     println!("{text}");
 }
 
-fn as_json(outcome: &Outcome) -> Value {
+pub(crate) fn as_json(outcome: &Outcome) -> Value {
     let error = outcome.error().map(|error| {
         json!({
             "code": error.code(),

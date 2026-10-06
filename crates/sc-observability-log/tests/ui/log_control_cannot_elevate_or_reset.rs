@@ -1,3 +1,5 @@
+#![allow(deprecated)] // The compile-fail assertion pins the retained v1 path.
+
 // R-A4-005: a `LogControl` has no runtime-level mutation authority.
 use sc_observability_log::{LevelChangeSource, LevelFilter, LogControl};
 

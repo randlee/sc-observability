@@ -5,6 +5,7 @@ mod client;
 mod config;
 mod constants;
 mod error;
+mod error_codes;
 mod exit;
 mod input;
 mod output;

@@ -524,12 +524,12 @@ This crate is the top-of-stack OpenTelemetry layer.
 
 Owns:
 
-- `Telemetry`
-- `TelemetryConfig`
-- `OtelConfig`
-- `OtlpProtocol`
-- `SpanAssembler`
-- `CompleteSpan`
+- `sc_observability_otlp::v2::Telemetry` (`RuntimeTelemetry`)
+- `sc_observability_otlp::v2::TelemetryConfig`
+- `sc_observability_otlp::v2::OtelConfig`
+- `sc_observability_otlp::v2::OtlpProtocol`
+- the runtime's internal `V2SpanAssembler`
+- the canonical `sc_observability_types::otlp::OtlpCompleteSpan` record
 - internal OTLP exporter contracts used by the runtime implementation
 - OTLP batching, retry, timeout, flush, and shutdown
 - `TelemetryHealthReport`, `ExporterHealth`, and `ExporterHealthState` defined
@@ -545,8 +545,12 @@ Runtime role:
 
 Configuration model:
 
-- `TelemetryConfig` is constructed and owned by the application layer
-- `TelemetryConfig` is passed directly to `sc-observability-otlp`
+- `sc_observability_otlp::v2::TelemetryConfig` is constructed and owned by the
+  application layer
+- `sc_observability_otlp::v2::TelemetryConfig` is passed directly to
+  `sc-observability-otlp`
+- `sc_observability_otlp::v2::OtelConfig` selects the exporter backend and
+  typed `v2::OtlpProtocol`
 - `TelemetryConfig` is not embedded in or derived from `ObservabilityConfig`
 
 Must not push OTLP concerns into the lower crates.
@@ -694,7 +698,7 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts; Phase D wave 5 (ADR-021): the `otlp::signals` neutral signal types and the `otlp::submission` contracts (envelope, receipts, status, error codes, config and precedence, the `TelemetryClient` trait), with `InMemoryTelemetryClient`, `DoubleScript` and the conformance suite behind the `test-double` feature (optional `uuid`) |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts; Phase D wave 5 (ADR-021): the `otlp::signals` neutral signal types and the `otlp::submission` contracts (envelope, receipts, status, error codes, config and precedence, the `TelemetryClient` trait) |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types` (`sc-observability` and `sc-observe` dev-only for facade/integration tests; `tonic` with `router` dev-only for the collector; [ADR-019 amendments](#adr-019-amendment-otlp-hermetic-test-collector)) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
@@ -786,11 +790,14 @@ implementation review. No wildcard approval covers an unrelated dependency. ADR-
 amendment to ADR-018; the existing boundary manifest is the single machine
 allowlist and this section is its normative explanation.
 
-The OTLP crate's only dev-dependencies are `sc-observability`, `sc-observe`,
-and `tonic`. The first two support facade tests; `tonic` adds the `router`
-feature to the reviewed transport pin for the hermetic integration collector.
-The `[dev_dependencies]` section of the same policy file records them; `router`
-is never a normal dependency feature, and `tonic` stays bound to `otlp-sdk` only
+The OTLP crate's dev-dependencies support its tests: `sc-observability-types`
+with `test-double` supplies test fixtures, `tempfile` supports temporary-file
+tests, `sc-observability` and `sc-observe` support facade and error-registry
+tests, and `tokio` with `test-util` supports paused-time SDK tests. `tonic` adds
+the `router` feature for the hermetic integration collector. These remain
+test-only dependencies; the normal transport policy validates production
+dependency boundaries. `router` is enabled only through the dev-dependency
+declaration, while normal `tonic` use remains optional under `otlp-sdk`
 ([ADR-019 amendment](#adr-019-amendment-otlp-hermetic-test-collector)).
 
 ## 6.1 Query/Follow Dependency Order
@@ -848,11 +855,14 @@ ADR navigation index (status is recorded in each decision below):
   - producer code stays simple
   - logs and OTLP remain projections of the same observation
 
+**Phase F amendment:** Observation routing is `sc_observe::v2`; the 1.x
+facade is deprecated behind the default `v1` feature.
+
 ### ADR-002: Linear Dependency Order
 
 - **Status**: Accepted
 - **Context**: The prior document set collapsed the stack by making `sc-observe` depend on both logging and OTLP layers.
-- **Decision**: Enforce the linear dependency order `types <- logging <- observe <- otlp`.
+- **Decision**: The dependency order is `types <- sc-observability <- sc-observability-log`, `sc-observability <- sc-observe`, and `types <- sc-observability-otlp`; `sc-observability` and `sc-observe` are OTLP test dev-dependencies only.
 - **Consequences**:
   - OTLP remains optional
   - `sc-observe` can be used without OpenTelemetry
@@ -895,7 +905,8 @@ ADR navigation index (status is recorded in each decision below):
 - **Decision**: ATM-specific observability behavior belongs in an ATM-owned adapter boundary named `atm-observability-adapter`. Shared crates in this repo own only generic logging, routing, and OTLP infrastructure. ATM-specific contracts such as `LogEventV1`, daemon fan-in/spool compatibility, ATM-named env parsing, ATM health snapshots, and ATM-specific projector behavior move to the adapter boundary outside this repo.
 - **Consequences**:
   - the shared repo remains generic and publishable without ATM coupling
-  - ATM integration is still proven here through a separate example document and unpublished proving crate
+  - **Retired in Phase F**: the former in-repository ATM proving crate and
+    example proof are not shared-repo contract artifacts
   - production ATM compatibility logic is implemented in ATM-owned code, not in the shared repo
 
 ### ADR-007: Boot-Phase Observability Precedes Plugin Registration
@@ -929,12 +940,14 @@ ADR navigation index (status is recorded in each decision below):
   crate names and a few high-level doc strings.
 - **Decision**: Boundary CI must enforce no ATM-specific imports or env reads in
   shared crates, no home/path discovery in shared crates outside generic config
-  helpers, no OTLP/OpenTelemetry dependency outside `sc-observability-otlp`, and
-  successful compilation of the unpublished ATM proving artifact.
+  helpers, and no OTLP/OpenTelemetry dependency outside
+  `sc-observability-otlp`.
 - **Consequences**:
   - layer violations are caught before merge
 - ATM-specific behavior remains in the ATM-owned adapter boundary
-- the proving artifact remains executable evidence, not dead documentation
+- **Retired in Phase F**: the former ATM proving artifact is not executable
+  shared-repo evidence; ATM-owned integration evidence remains outside this
+  repository
 
 ### ADR-010: Queue-Backed Writer Thread Owns Logging And Maintenance
 
@@ -1015,7 +1028,11 @@ for generated bindings.
 
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 
-- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). ADR-017 (2026-09-26) described a scoped future 2.0 exception. ADR-020 confirms this additive 1.x decision governs the current release; no major-break manifest waives it.
+**Phase F amendment:** PHF-002 governs deprecation before removal. The next
+release remains 1.5.0 for every published crate; there is no major version
+bump.
+
+- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). ADR-020 and PHF-002 govern the current release.
 - **Context**: Issue #92 requests typed failure handling without a forced
   migration of consumers of published diagnostic wrappers and extension traits.
 - **Proposed decision**: Add improved failure types, classification and operation/
@@ -1023,18 +1040,17 @@ for generated bindings.
   trait implementations/signatures and existing method-call resolution. New
   typed extension traits must not make old unqualified calls ambiguous. Legacy
   adapters retain metadata and wire
-  shape, and deprecation warnings identify working replacements. Never replace
+  shape, and deprecation notes name the replacement. Never replace
   published structs in place, add required legacy trait methods or mark existing
   enums non-exhaustive. Total unclassified handling preserves custom diagnostics.
 - **Consequences**: One runtime implementation serves both APIs. Existing
   consumers continue with warnings under default lints; strict warning policies
   require deliberate migration. A practical adoption guide and old/new/custom
-  trait fixtures are release gates. No removal version or major conversion is
-  planned. The newly published B.P1 owner constructors remain exempt from
+  trait fixtures are release gates. Removal follows PHF-002. The newly published B.P1 owner constructors remain exempt from
   B.1e method deprecation, avoiding publish-then-deprecate churn. InitError
   wrapper warnings remain distinct; explicit legacy type users may need narrow
-  lint allowances, while typed alternatives are available. Scoped API approvals
-  review additions; they cannot authorize a break.
+  lint allowances, while typed alternatives are available. The stock public-API
+  check records the accepted release surface.
 - **Contracts**: PHB-003–006; [error migration](plans/phase-b/sprint-b-1a-error-api.md).
 
 ### ADR-013: Owner-Controlled Shared Runtime Level
@@ -1182,27 +1198,19 @@ in [the CI policy](ci-policy.md).
 
 ### ADR-017: Phase D 2.0 Error Surface
 
-**Current release scope:** ADR-020 governs the compatible 1.x release. Retain the technical error/backend/lifecycle decisions below, but any 2.0 replacement, compatibility removal or version activation is deferred to a separately authorized major release.
+**Phase F amendment:** PHF-002 governs deprecation before removal; the next release remains 1.5.0.
 
 - **Status**: Accepted 2026-09-26 by the technical lead (this PR is the acceptance record); D.4 may proceed.
 - **Context**: ADR-012 protected additive 1.x compatibility, while Phase D
   explicitly targets a major release that can replace opaque wrappers and the
   temporary parallel typed surface.
-- **Historical 2.0 decision (deferred by ADR-020)**: For a separately authorized
-  2.0 only, replace the nine inventoried wrappers
-  with same-name non-exhaustive discriminated enums, remove duplicate typed /
-  legacy adapters, and use an enumerated major-break manifest compared to the
-  frozen 1.4.1 API. This supersedes ADR-012 only for those reviewed breaks;
-  its historical 1.x decision remains intact.
-- **Current acceptance gate**: ADR-020 and PHB-003–005 govern the compatible
-  1.x release; every breaking change fails against the frozen released baseline.
-  The historical enumerated-break gate applies only after separate 2.0
-  authorization, not to current Phase D work.
-- **Contracts**: Phase D D.4; `release/public-api-major-breaks.toml`.
+- **Current acceptance gate**: The stock public-API check records 1.5.0
+  baselines and PHF-002 controls removal.
+- **Contracts**: Phase D D.4; PHF-002.
 
 ### ADR-018: Dual OTLP Backends And Shared Lifecycle
 
-**Current release scope:** ADR-020 governs the compatible 1.x release. Retain the technical error/backend/lifecycle decisions below, but any 2.0 replacement, compatibility removal or version activation is deferred to a separately authorized major release.
+**Phase F amendment:** PHF-002 governs deprecation before removal.
 
 - **Status**: Accepted 2026-09-26 by the technical lead (this PR is the acceptance record); D.6 may proceed.
 - **Context**: Tokio-hosted consumers need the official SDK while synchronous
@@ -1220,14 +1228,12 @@ in [the CI policy](ci-policy.md).
   dependency may be added under the OTLP feature.
 - **Acceptance gate**: The technical lead accepts the backend/protocol/runtime
   matrix, canonical async lifecycle, queue/deadline behavior, and source provenance
-  before D.6 lands production code. ADR-020 retains that technical behavior
-  while preserving released 1.x lifecycle entry points through adapters;
-  this is not permission to replace released signatures.
+  before D.6 lands production code.
 - **Contracts**: OTLP-001–024; Phase D D.5–D.8.
 
 ### ADR-019: Phase D Implementation Decisions
 
-**Current release scope:** ADR-020 governs the compatible 1.x release. Retain the technical error/backend/lifecycle decisions below, but any 2.0 replacement, compatibility removal or version activation is deferred to a separately authorized major release.
+**Phase F amendment:** PHF-002 governs deprecation before removal.
 
 - **Status**: Accepted 2026-09-26 by the technical lead (PR #227 is the acceptance record).
 - **Context**: ADR-017/018 established the original 2.0 surface proposal and dual
@@ -1249,7 +1255,7 @@ in [the CI policy](ci-policy.md).
   Companion-only detach codes live in the bridge's sole error_codes.rs;
   core-only registration/settings codes live in core's sole error_codes.rs.
   obs-d-12 owns the shared names and registry rows. Constants remain separate.
-- **Decision — retained telemetry shutdown boundary**: The root
+- **Decision — retained telemetry shutdown boundary (retired in Phase F)**: The root
   `sc_observability_types::TelemetryError::Shutdown` remains the retained 1.x
   unit variant until the final facade migration, so existing unit-pattern
   consumers keep their source-compatible boundary. The canonical,
@@ -1277,7 +1283,7 @@ in [the CI policy](ci-policy.md).
   deprecated usage denied. It does not reimplement runtime mappings or remove
   1.x wrappers. Under ADR-020, obs-d-18 owns combined compatibility/semver
   evidence and does not remove released wrappers; D27 owns release-validation
-  tooling. Removal requires a separately authorized 2.0 release.
+  tooling.
 - **Decision — facade event-error boundary**: `Logger::emit` returns the
   retained `EventError`, whose signature cannot carry the separate
   `v2::ShutdownError::{Timeout, Drain}` variants. At this boundary only, a
@@ -1325,10 +1331,8 @@ was reworded accordingly to describe the remaining validation.
   neutral signals under `sc_observability_types::v2` at the current workspace
   package version. Existing root exports retain their 1.x behavior during
   migration. ADR-020 supersedes the original D.21 2.0 activation and D.18 root
-  replacement/removal sequence: D27 keeps coordinated compatible 1.x versions,
-  and D18 integrates canonical namespaces with functioning deprecated roots.
-  The compatibility surface remains throughout 1.x; its future removal and
-  namespace disposition require separate 2.0 authorization. Neutral types remain owned
+  replacement/removal sequence. PHF-002 determines removal through the `v1`
+  feature and deprecation attributes. Neutral types remain owned
   by `sc-observability-types`, without runtime, transport or upper-layer
   dependencies (LAY-001, PHB-002, TYP-001/002).
 - **Decision — neutral values**: `Attributes` is an ordered
@@ -1377,7 +1381,7 @@ was reworded accordingly to describe the remaining validation.
   D.12 owns the types and specification, D.19/20 consume them, and D.18
   qualifies their final composition. ADR-019 remains in D.12's bead ADR list.
 
-#### ADR-019 amendment: external SDK fixture seam
+#### ADR-019 amendment: external SDK fixture seam (retired in Phase F)
 
 - **Status**: Accepted 2026-09-28 by the Phase D lead for the D.7 external
   fixture scope; final release/API approval remains D.18's responsibility.
@@ -1386,7 +1390,7 @@ was reworded accordingly to describe the remaining validation.
   deadlines, asynchronous completion and host-runtime teardown. The fixture
   cannot use the production `Telemetry` factory without moving D.18-owned
   facade composition into the adapter layer.
-- **Decision**: Add the non-default `sdk-test-support` feature to
+- **Decision (retired)**: The former non-default `sdk-test-support` feature
   `sc-observability-otlp`. It enables the existing `otlp-sdk` implementation
   and exposes the unstable `sdk::fixture::SdkFixture` type through the crate
   root only while that feature is selected. `SdkFixture` is a thin external
@@ -1394,7 +1398,7 @@ was reworded accordingly to describe the remaining validation.
   exposes signal export plus async flush/shutdown and requires the caller's
   Tokio runtime. The example's `sdk-fixture` feature is the consumer-facing
   alias for this crate feature.
-- **Scope boundary**: `sdk-test-support` is external-fixture-only, is never a
+- **Scope boundary (retired)**: `sdk-test-support` was external-fixture-only,
   default feature, does not activate or alter production `Telemetry`, does not
   add a third transport choice, and does not add dependencies beyond the
   already reviewed `otlp-sdk` allowlist. The fixture surface is unstable test
@@ -1472,14 +1476,19 @@ was reworded accordingly to describe the remaining validation.
 
 ### ADR-020: Compatible 1.x Adoption Of Phase D
 
-- **Status**: Accepted by the user in the compatibility-planning decision (2026-09-29): release as the next 1.x version, retain deprecated released APIs, and remove them only in a future separately authorized 2.0. This records that decision; it grants no implementation merge or publication authority.
-- **Decision**: Preserve released 1.4.1 signatures, type identity where reexports/aliases suffice, trait implementability/object safety, struct construction, error variants, serialization and lifecycle behavior. Apply PHB-003/004/005 to this release. The new implementation remains authoritative; old entry points adapt to it at the boundary.
-- **Namespace**: Put clean canonical APIs under `v2` only where changed released owners or signatures conflict. Genuinely additive APIs need no duplicate deprecated counterpart. All nine released crates, including the OTLP facade and macro expansion contracts, remain in the compatibility comparison. A compatibility audit row does not mandate an additional wrapper type.
-- **Removal boundary**: Keep deprecated owners/errors/conversions in separate `compat/` files wherever practical, with minimal root reexports and named deletion points. Canonical implementation must not depend on compatibility modules. Do not create another runtime, backend, queue, global logger or lifecycle to preserve old APIs.
-- **Registry ownership**: Compatibility adapters reuse the existing sole per-crate `error_codes` and constants registries (ADR-005, SRC-001–004); separate compatibility files do not authorize duplicate codes or constants.
-- **Retained architecture**: ADR-017's shared canonical diagnostic implementation, ADR-018's two backends/shared lifecycle and ADR-019's pins, registries and boundary constraints remain. Their 2.0-only root replacement/removal and version activation do not govern this release. `sc-observe` remains a dev-only OTLP dependency; this decision introduces no dependency exception.
-- **Acceptance**: Old consumers work at default lint settings; opt-in migrated consumers deny deprecated usage. Preserve diagnostic/source information through adapters, and test behavioral compatibility as well as exact released-package semver. No breaking approval entry can waive the 1.x contract. Future removal needs its own major-release decision.
-- **Contracts**: PHB-003–006, PHD-001–004 and the compatible 1.x amendment; D22 establishes usable compiled contracts, facade sprints implement adapters, D27 validates release tooling, and D18 owns the real combined proof alongside D9 collector conformance; both must pass before phase-ending review.
+- **Decision**: PHF-002 governs the release: deprecate public 1.x items behind
+  the default-on `v1` feature before removing them. A deprecated item need not
+  work and receives no compatibility adapter, test, or baseline comparison;
+  Phase F identifies removals by those attributes and the landing ledger.
+  Canonical implementation never uses `v1`, and released paths re-export the
+  deprecated item until the following release removes its module and feature.
+  Compatibility adapters reuse the existing sole per-crate `error_codes` and
+  constants registries (ADR-005, SRC-001–004); separate compatibility files do
+  not authorize duplicate codes or constants. The stock check guards committed
+  1.5.0 baselines, and a sprint changing an API re-captures only its affected
+  baselines in the same commit. This records Rand's 2026-10-06 direction that
+  deprecation avoids removal fallout and that unused code does not warrant a
+  major-version concern. **Contracts**: PHF-002 and NFR-012.
 
 #### ADR-019/ADR-020 amendment: composition test harness
 
@@ -1493,17 +1502,10 @@ was reworded accordingly to describe the remaining validation.
   exception.
 - **Decision**: The workspace member `sc-observability-composition`
   (`tests/sc-observability-composition`) sets `publish = false`, has no normal
-  or build dependencies, including target-specific sections, and takes
-  exactly these dev-dependencies: `sc-observability`, `sc-observability-log`,
-  `sc-observe`, `sc-observability-otlp`, `sc-observability-types`, `tokio`,
-  `serde_json`, `tempfile`, `tonic` and `opentelemetry-proto`. No workspace
+  or build dependencies, including target-specific sections. No workspace
   crate may depend on it.
-- **Enforcement**: The `[composition_harness]` section of
-  `policy/otlp-transport.toml` is the machine record.
-  `scripts/ci/otlp_dependencies.py` resolves renamed, path and
-  workspace-inherited declarations and rejects a published harness, any
-  normal or build dependency, any change to the dev-dependency set, and any
-  reverse edge from a workspace member. `validate_repo_boundaries.sh` runs it.
+- **Enforcement**: Repository boundary validation rejects a published harness,
+  normal or build dependencies, and reverse workspace edges.
 - **Scope boundary**: This is not a blanket test exception. Production OTLP
   ownership, the ADR-009 check that `sc-observability-types`,
   `sc-observability` and `sc-observe` take no OTLP/OpenTelemetry dependency,
@@ -1525,19 +1527,11 @@ was reworded accordingly to describe the remaining validation.
   listed `sc-observe` as the only OTLP dev-dependency. The facade tests also
   exercise core logging behavior, while production OTLP source does not use
   `sc-observability`; ADR-020 introduced no dependency exception.
-- **Decision**: `sc-observability-otlp` takes exactly three dev-dependencies:
-  `sc-observability`, `sc-observe`, and
-  `tonic = { workspace = true, features = ["router"] }`. Their effective
-  features are empty, empty, and `router` plus `transport` respectively, with
-  default features off for tonic. Move `sc-observability` from normal to
-  dev-dependencies without changing its workspace pin; no feature or version
-  changes.
-- **Enforcement**: The `[dev_dependencies]` section of
-  `policy/otlp-transport.toml` is the machine record, and
-  `scripts/ci/otlp_dependencies.py` is the single validation authority. It
-  rejects any other dev-dependency, including target-specific ones, renamed or
-  non-inherited declarations, and any change in effective features.
-  `validate_dependency_bans.sh` and `validate_repo_boundaries.sh` both run it.
+- **Decision**: `sc-observability-otlp` keeps test-only dependencies separate
+  from its normal transport dependencies; its normal sc-* dependency remains
+  `sc-observability-types`.
+- **Enforcement**: `scripts/ci/otlp_dependencies.py` validates normal
+  transport dependency boundaries.
 - **Scope boundary**: Production transport roles are unchanged. `tonic`
   remains an optional `otlp-sdk`-only transport with the reviewed `transport`
   feature, the transport table rejects it in `sync-http`, and the SDK
@@ -1681,7 +1675,7 @@ was reworded accordingly to describe the remaining validation.
   type. Such a difference must be reported and resolved, not hidden by excluding
   that implementation class.
 - **Scope**: The published set is derived from `release/publish-artifacts.toml`:
-  every `publish = true` Rust package (ten packages, including the separately
+  every `publish = true` Rust package (including the separately
   workspaced `sc-observability-tauri` and the `_native` Python library) and
   the union of binary `release_targets` and wheel targets (six triples:
   `x86_64`/`aarch64` for Linux GNU, Apple Darwin and Windows MSVC). Adding
@@ -1705,8 +1699,7 @@ was reworded accordingly to describe the remaining validation.
   binary ABI, layout, target-dependent constant values, equal runtime
   behavior, identical private implementation or equal procedural-macro
   expansion. Document such limitations and retain platform behavior tests.
-  ADR-020's released compatibility requirements remain; semver checks
-  compare versions, this check compares targets.
+  ADR-020's release requirements remain; this check compares targets.
 - **Verification**: One comparison, `assert_public_api_equal` in
   `scripts/ci/public_api_parity.py compare`, consumes compiled API surfaces
   produced by `collect`: rustdoc JSON from the exact nightly in
@@ -1743,8 +1736,7 @@ was reworded accordingly to describe the remaining validation.
   API baselines under `schema/api/<surface>/<version>.json`, selected by the
   producing package's existing manifest version. Rust, Python and TypeScript
   surfaces have separate producing packages; no redundant version selector is
-  introduced. Accepted versions, including prereleases, cannot be edited or
-  deleted. A supplied local accepted git baseline verifies retained bytes;
+  introduced. A supplied local accepted git baseline verifies retained bytes;
   intentional API changes require a new version and retained prior snapshots.
   The first capture establishes the current implementation baseline, without
   fabricating earlier published history. ADR-020 compatibility still applies.
@@ -1791,22 +1783,16 @@ The document set now reflects the required cleanup:
 - OTLP integration is documented as attaching from the top of the stack rather
   than being constructed inside `sc-observe`
 
-## 10. ATM Proving Artifact
+## 10. ATM Proving Artifact (retired in Phase F)
 
-The ATM integration proving artifacts owned by this repo are:
+**Retired.** The former ATM integration proving artifact is not a shared-repo
+contract artifact. The historical adapter example is retained only for context:
 
 - [`docs/atm-adapter-example.md`](./atm-adapter-example.md)
-- unpublished crate `examples/atm-adapter-example`
 
-These exist to prove interface sufficiency only. They do not replace the
-ATM-owned production adapter boundary.
-
-They are intentionally narrower than a full ATM migration proof:
-
-- they prove that ATM-shaped payloads and adapter-owned mapping layers can be
-  wired through the shared crates without `agent-team-mail-*` dependencies
-- they do not prove spool semantics, daemon fan-in merge behavior, ATM health
-  JSON compatibility, or complete ATM env/config translation
+It does not establish interface sufficiency or replace the ATM-owned production
+adapter boundary. ATM-owned integration evidence remains outside this
+repository.
 
 
 ### Phase D types staging
@@ -1818,10 +1804,9 @@ Their construction, trait and serialization contracts remain intact under
 ADR-012; the new neutral models remain additive at the explicit `v2` path,
 including after D.18 integration. Any future root signal replacement needs
 a separately accepted ADR explicitly superseding ADR-012 for those named
-breaks before implementation, plus the PHD-002 manifest and API approval.
-A manifest entry alone does not expand ADR-017's scope.
-D.12 retains `version.workspace = true`; D.21 performs the atomic
-workspace 2.0 activation. The producer contract, constructors, serde shape,
+breaks before implementation. PHF-002 governs any retirement of those paths.
+D.12 retains `version.workspace = true`; Phase F retains the workspace at
+version 1.5.0 with no major-version bump. The producer contract, constructors, serde shape,
 error inventory and DTO handoffs are specified in
 [API design](api-design.md#phase-d-canonical-types-and-wire-handoff).
 No transport implementation or runtime dependency enters the types layer.

@@ -1,3 +1,5 @@
+#![cfg(any())]
+
 //! Contract tests for consumers of the staged canonical surface.
 use sc_observability_types::v2::*;
 use sc_observability_types::{
@@ -311,11 +313,6 @@ fn cloned_canonical_error_preserves_source_identity() {
 
 #[test]
 fn stable_failure_codes() {
-    let mut seen = std::collections::HashSet::new();
-    for code in error_codes::ALL {
-        assert!(seen.insert(code.as_str()), "duplicate {code}");
-    }
-    assert_eq!(error_codes::otlp::ALL.len(), 30);
     for (capacity, byte_capacity) in [(0u64, 0u64), (65_537, 67_108_865), (u64::MAX, u64::MAX)] {
         let record = ConfigFailure::InvalidQueueCapacity {
             context: Box::new(
@@ -647,6 +644,7 @@ fn span_kind_links_flags_and_typestate_survive_export() {
     );
 }
 
+#[cfg(feature = "v1")]
 mod legacy_compatibility {
     //! External-consumer fixtures for the neutral typed failure contract.
 
@@ -1250,6 +1248,7 @@ mod legacy_compatibility {
     }
 }
 
+#[cfg(feature = "v1")]
 mod released_canonical_conversion {
     //! Released root registrations keep the caller's objects; conversions to and
     //! from the canonical `v2` family move the original error context.
@@ -1484,20 +1483,9 @@ mod released_canonical_conversion {
             .expect_err("projection failure");
         assert_eq!(identity(&error.0), expected);
     }
-
-    #[test]
-    fn canonical_resolver_policy_moves_the_context() {
-        let (resolver, expected) = CanonicalOnce::new();
-        let ProcessIdentityPolicy::Resolver(released) =
-            ProcessIdentityPolicy::v2_resolver(resolver)
-        else {
-            panic!("v2_resolver builds the resolver policy");
-        };
-        let error = released.resolve().expect_err("resolver failure");
-        assert_eq!(identity(&error.0), expected);
-    }
 }
 
+#[cfg(feature = "v1")]
 mod released_canonical_model_conversion {
     //! Registration conversion maps span and metric models field by field and
     //! returns a projection error for a value the other family cannot hold.

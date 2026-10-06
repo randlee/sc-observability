@@ -1,5 +1,7 @@
 //! Public integration coverage for the non-owning host attachment lifecycle.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::expect_used,
     clippy::unwrap_used,
     clippy::panic,

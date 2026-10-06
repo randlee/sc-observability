@@ -117,9 +117,7 @@ pub fn deliver<C: Consumer>(message: &str, consumer: Arc<C>, root: &Path, releas
     } else {
         let mut builder =
             sc_observability::v2::LoggerBuilder::new(config).expect("canonical core builder");
-        builder
-            .register_typed_sink(sink)
-            .expect("register forwarder");
+        builder.register_sink(sc_observability::SinkRegistration::typed(sink));
         builder.build().expect("canonical core runtime")
     };
     let logger = Arc::new(logger);
@@ -205,9 +203,7 @@ pub fn reject_closed<C: Consumer>(consumer: Arc<C>, root: &Path) {
     config.enable_console_sink = false;
     let mut builder =
         sc_observability::v2::LoggerBuilder::new(config).expect("closed-path core builder");
-    builder
-        .register_typed_sink(sink)
-        .expect("forwarder registration");
+    builder.register_sink(sc_observability::SinkRegistration::typed(sink));
     let logger = builder.build().expect("writer");
     logger
         .log(event)

@@ -527,6 +527,7 @@ fn file_identity_for_path_with_metadata(
 }
 
 #[cfg(test)]
+#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 pub(crate) fn file_identity_for_path(path: &Path) -> FileIdentity {
     let metadata = fs::metadata(path).expect("metadata");
     file_identity_for_path_with_metadata(path, &metadata).expect("file identity")

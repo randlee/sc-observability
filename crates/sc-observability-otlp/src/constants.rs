@@ -39,8 +39,6 @@ pub const DEFAULT_OTLP_INITIAL_BACKOFF_MS: u64 = 250;
 pub const DEFAULT_OTLP_MAX_BACKOFF_MS: u64 = 5_000;
 /// Default total deadline for one synchronous HTTP retry sequence.
 pub const DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 30_000;
-/// Minimum lifecycle and retry budget retained by released OTLP compatibility.
-pub(crate) const RELEASED_OTLP_BUDGET_FLOOR_MS: u64 = 30_000;
 /// Default upper bound for a synchronous HTTP Retry-After value.
 pub const DEFAULT_OTLP_RETRY_AFTER_CAP_MS: u64 = 5_000;
 /// Default synchronous HTTP retry jitter percentage.

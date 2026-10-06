@@ -1,3 +1,5 @@
+#![allow(deprecated)] // The compile-fail assertion pins the retained v1 path.
+
 // R-A4-005: a `LogControl` cannot shut the logger down or be turned into a `LogGuard`.
 use std::time::Duration;
 
@@ -8,7 +10,7 @@ fn shut_down_through_control(control: LogControl) {
 }
 
 fn control_into_owner(control: LogControl) -> LogGuard {
-    LogGuard::from(control)
+    control.into()
 }
 
 fn main() {}

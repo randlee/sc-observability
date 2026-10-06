@@ -220,18 +220,22 @@ impl ErrorContext {
         &self.backtrace
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn set_cause(&mut self, cause: impl Into<String>) {
         self.diagnostic.cause = Some(cause.into());
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn set_docs(&mut self, docs: impl Into<String>) {
         self.diagnostic.docs = Some(docs.into());
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn set_detail(&mut self, key: impl Into<String>, value: Value) {
         self.diagnostic.details.insert(key.into(), value);
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn set_source(
         &mut self,
         source: Box<dyn std::error::Error + Send + Sync + 'static>,
@@ -277,16 +281,12 @@ fn capture_backtrace() -> Backtrace {
 }
 
 #[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "diagnostic compatibility tests exercise the retained wrapper contract"
-)]
 mod tests {
     use super::*;
     use serde_json::json;
 
     use crate::error_codes;
-    use crate::errors::IdentityError;
+    use crate::errors_v2::IdentityError;
 
     #[test]
     fn remediation_construction_helpers_cover_both_variants() {
@@ -463,7 +463,9 @@ mod tests {
             Remediation::not_recoverable("configure a valid identity source"),
         )
         .detail("source", json!("test"));
-        let error = IdentityError(Box::new(context));
+        let error = IdentityError::Process {
+            context: Box::new(context),
+        };
 
         assert_eq!(
             error.diagnostic().code,

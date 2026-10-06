@@ -72,8 +72,8 @@ def published_packages(root: Path = ROOT) -> list[Package]:
         if isinstance(version, dict):
             version = workspace["version"]
         packages.append(Package(package["name"], path, cargo.get("lib", {}).get("name", package["name"].replace("-", "_")), str(version)))
-    if len(packages) != 10 or len({package.name for package in packages}) != len(packages):
-        raise SnapshotError("publish-artifacts must name exactly ten unique released Rust crates")
+    if len({package.name for package in packages}) != len(packages):
+        raise SnapshotError("publish-artifacts must not name duplicate released Rust crates")
     return packages
 
 

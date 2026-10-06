@@ -55,7 +55,7 @@ Layering requirements:
 - LAY-002 `sc-observability` shall depend on `sc-observability-types` only.
 - LAY-003 `sc-observe` shall depend on `sc-observability-types` and `sc-observability`.
 - LAY-004 `sc-observe` shall not depend on `sc-observability-otlp`.
-- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types` and `sc-observability`; `sc-observe` is permitted only as a dev-only dependency for integration tests.
+- LAY-005 `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observability` and `sc-observe` are dev-dependencies of its tests.
 - LAY-006 Higher-layer concerns shall not be required to understand or use lower-layer crates.
 - LAY-007 `sc-observability` requirements shall remain fully self-contained and shall not include routing or OTLP concerns.
 
@@ -76,12 +76,12 @@ This crate owns shared neutral contracts only.
 - TYP-011 `TraceId` shall validate 32-character lowercase hex W3C trace IDs.
 - TYP-012 `SpanId` shall validate 16-character lowercase hex W3C span IDs.
 - TYP-013 Request, session, runtime, and application metadata shall not be part of `TraceContext`.
-- TYP-014 Span lifecycle shall be encoded through typestate at the producer-facing API using `SpanRecord<SpanStarted>` and `SpanRecord<SpanEnded>`.
+- TYP-014 Span lifecycle shall use the canonical `sc_observability_types::v2` span record types.
 - TYP-015 `SpanRecord<SpanStarted>` shall have the only public constructor.
 - TYP-016 `SpanRecord<SpanEnded>` shall be reachable only through `SpanRecord<SpanStarted>::end(...)`.
 - TYP-017 Producer-facing `SpanRecord<S>` fields shall be private, with read access through accessors.
 - TYP-018 Final span duration shall be exposed only on `SpanRecord<SpanEnded>`.
-- TYP-019 `SpanState` serialization shall be derived from typestate at export/serialization time and shall not be a producer-facing mutable field. The `SpanStarted` and `SpanEnded` marker structs are the span-state mechanism; no additional producer-facing state type is required.
+- TYP-019 Canonical `sc_observability_types::v2` span-state serialization shall not expose a producer-facing mutable state field.
 - TYP-020 `Observable` shall remain an open trait for consumer-owned payload types.
 - TYP-021 `ObservationSubscriber<T>`, `ObservationFilter<T>`, `LogProjector<T>`, `SpanProjector<T>`, and `MetricProjector<T>` shall remain open extension points.
 - TYP-023 Traits used behind `Arc<dyn ...>` shall remain object-safe, with `T` fixed at each usage site.
@@ -309,30 +309,30 @@ This crate is the observation routing layer built on top of logging.
 
 ## 6. `sc-observability-otlp` Requirements
 
-This crate is the OTel/OTLP layer built on top of `sc-observe`.
+This crate is the OTel/OTLP layer built on `sc-observability-types`.
 
 - OTLP-001 `sc-observability-otlp` shall provide the OTLP-backed telemetry surface.
-- OTLP-002 `sc-observability-otlp` shall expose `Telemetry` and `TelemetryConfig`.
+- OTLP-002 `sc-observability-otlp` shall expose `v2::Telemetry` (`RuntimeTelemetry`) and `v2::TelemetryConfig`.
 - OTLP-003 `sc-observability-otlp` shall own all OpenTelemetry and OTLP transport concerns.
-- OTLP-004 `OtelConfig.protocol` shall be a typed `OtlpProtocol` enum rather than a free-form string.
-- OTLP-005 Invalid OTLP transport configuration shall fail at `Telemetry::new(...)` with `InitError`.
-- OTLP-006 `Telemetry` emit methods shall return `TelemetryError`.
-- OTLP-007 Calling `emit_log()`, `emit_span()`, or `emit_metric()` after `shutdown()` shall return `TelemetryError::Shutdown`.
-- OTLP-008 `SpanAssembler` shall buffer `SpanSignal::Started`, attach `SpanSignal::Event`, and emit `CompleteSpan` only on `SpanSignal::Ended`.
+- OTLP-004 `v2::OtelConfig.protocol` shall be a typed `v2::OtlpProtocol` enum rather than a free-form string.
+- OTLP-005 Invalid OTLP transport configuration shall fail at `RuntimeTelemetry::new(...)` with `sc_observability_types::v2::InitError`.
+- OTLP-006 `RuntimeTelemetry` emit methods shall return `sc_observability_types::v2::TelemetryError`.
+- OTLP-007 Calling an emit method after `shutdown()` shall return `v2::TelemetryError::Shutdown`.
+- OTLP-008 The canonical runtime `V2SpanAssembler` shall buffer a started span, attach events, and emit `sc_observability_types::otlp::OtlpCompleteSpan` only when the span ends.
 - OTLP-009 In-flight started spans without a matching end shall be dropped at flush/shutdown and counted as dropped exports.
-- OTLP-010 the internal trace-export path shall export `CompleteSpan`, not raw `SpanSignal`.
+- OTLP-010 The internal trace-export path shall export `sc_observability_types::otlp::OtlpCompleteSpan`, not a raw span signal.
 - OTLP-011 crate-local `LogExporter`, `TraceExporter`, and `MetricExporter` contracts may remain object-safe for `Arc<dyn ...>`, but they are implementation details rather than public extension points.
 - OTLP-012 Exporter failures after validation shall be fail-open and shall update health and dropped-export counters.
 - OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
   `ExporterHealth`, and typed `ExporterHealthState` (defined in
   `sc-observability-types` and re-exported by `sc-observability-otlp`).
-- OTLP-014 `sc-observability-otlp` shall use `sc-observe` only as a dev-only dependency for integration tests; runtime layering remains governed by [LAY-005](#2-layered-dependency-order).
+- OTLP-014 `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observe` is a dev-dependency of its tests.
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
 - OTLP-017 `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.
-- OTLP-018 `TelemetryConfig` shall be constructed independently of `ObservabilityConfig` and passed directly to `sc-observability-otlp` at setup time.
+- OTLP-018 `v2::TelemetryConfig` shall be constructed independently of `ObservabilityConfig` and passed directly to `sc-observability-otlp` at setup time.
 - OTLP-019 Zero-configuration OTLP behavior shall be disabled by default until the application explicitly enables telemetry or provides a valid endpoint.
-- OTLP-020 `TelemetryConfig` and `OtelConfig` shall define documented defaults for v1:
+- OTLP-020 `v2::TelemetryConfig` and `v2::OtelConfig` shall define documented defaults:
   - `enabled = false`
   - `protocol = HttpBinary`
   - `timeout_ms = 3000`
@@ -344,7 +344,7 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   D21 canonical backend contract is retained. D22 now owns the exact
   compatibility/namespace contract and D26 implements its adapter without
   redefining backend defaults or validation; D18 verifies both public paths.
-- OTLP-021 Upon technical-lead acceptance of ADR-018, `Telemetry` lifecycle
+- OTLP-021 Retired in Phase F. The former `Telemetry` lifecycle
   behavior shall be explicit as follows; until that acceptance these bullets
   are the gated Phase D candidate contract rather than an active requirement:
   - synchronous emit admission remains available for both backends; emit methods
@@ -406,10 +406,11 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
   internal workspace dependency version pins that reference local crate paths,
   and `RELEASE-NOTES*.md` documents. Within that tracked scope, every release
   version literal shall match `workspace.package.version`.
-- NFR-012 Public API surface changes to `sc-observability` shall be
-  accompanied by updates to the normative docs and shall pass the CI public-API
-  governance checks introduced in sprint A.2 before merge.
-  This blocking merge gate is strict on every PR base, push and manual run.
+- NFR-012 A public item is removed only in a release after one that shipped it
+  `#[deprecated]` behind `v1` under PHF-002. The merge gate is the stock check
+  against committed `schema/api/rust-stock/<crate>/1.5.0.txt` baselines:
+  additions pass, while a removed or changed line fails unless that sprint
+  re-captures and commits its affected baseline in the same change.
 
 ## 8. Source Organization Requirements
 
@@ -455,12 +456,7 @@ record the accepted architecture. No item below asserts implementation closure.
   to neutral DTOs without a reverse dependency from DTOs to the bridge. A shared
   native binding-runtime crate owns core/bridge backends and conversions for both
   Tauri and Python; language adapters do not repeat those runtime mappings.
-- PHB-003 For Phase B and the 1.x release line only, schedule no breaking change
-  to a published API. Preserve
-  existing signatures, trait implementability/object safety and method resolution,
-  public struct construction, error variants, serialization and lifecycle behavior. New error
-  types/methods/traits coexist with old ones; no existing enum gains
-  `#[non_exhaustive]`. An API approval artifact cannot waive this requirement.
+- PHB-003 Superseded by PHF-002 (Phase F): deprecate before removing.
 - PHB-004 For Phase B and the 1.x release line only, Issue #92 shall provide
   improved typed error implementations and usable
   improved operation/extension entry points, with total typed classification and
@@ -595,12 +591,20 @@ BTIT integration tests; current Phase D work also has no publication authority.
 
 ## 12. Phase D — Compatible 1.x Adoption
 
-ADR-020 records the user's current compatible 1.x release decision. PHB-003/004/005 govern every changed released API. ADR-017/018's original acceptance remains historical; no major-break approval waives the current 1.x obligations. A future 2.0 removal is separately authorized.
+ADR-020 records the Phase F deprecate-before-remove decision. The next release
+keeps version 1.5.0 for every published crate; there is no major version bump.
 
-- PHD-001 The shared canonical diagnostic error implementation shall provide typed cause variants preserving diagnostic code, remediation, structured context and available source data. In the current 1.x release, incompatible new identities use opt-in canonical namespaces and existing released identities/variants remain functional through boundary adapters. Root replacement is reserved for a separately authorized 2.0 release.
-- PHD-002 Current 1.x integration shall retain released wrappers, typed/legacy adapters and classification surfaces where needed for compatibility. Deprecated interfaces shall have functioning replacements, executable migration fixtures and named future removal points. Compare every released package against frozen 1.4.1; no breaking-change approval may turn a 1.x incompatibility into PASS. Removal and a new major baseline require separate 2.0 authorization.
+- PHD-001 Superseded by PHF-002 (Phase F): deprecate before removing.
+- PHD-002 Superseded by PHF-002 (Phase F): deprecate before removing.
 - PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a caller-owned runtime and a bounded plain-thread synchronous HTTP/JSON backend (feature `sync-http`) for callers without an async runtime. They shall share crate-private contracts, ordered admission/lifecycle barriers, deadlines and health/drop accounting. Backend/protocol/runtime combinations shall be validated at construction, and enabled transports shall never silently fall back to no-op.
-- PHD-004 Preserve the accepted Phase D canonical OTLP config/default/validation behavior: queue bounds limit record count and aggregate bytes, explicit validated config is not overridden by ambient OTEL_* values, and both backends satisfy OTLP-021. D22 specifies compatibility with released config literals/defaults; D26 supplies minimal adapters without changing backend contracts. Incompatible new configuration owners use the canonical namespace while the released root configuration retains its behavior.
+- PHD-004 Preserve the accepted Phase D canonical OTLP config/default/validation behavior: queue bounds limit record count and aggregate bytes, explicit validated config is not overridden by ambient OTEL_* values, and both backends satisfy the retired OTLP-021 lifecycle design. D22 specifies compatibility with released config literals/defaults; D26 supplies minimal adapters without changing backend contracts. Incompatible new configuration owners use the canonical namespace while the released root configuration retains its behavior.
+
+## 13. Phase F — Purpose test and migration path
+
+- PHF-001 Every published crate exposes only its 2.0 logging, observation-routing and OTel export primitives and their configuration. Application code and examples live in exactly one designated place: `examples/` or the consumer's own repository.
+- PHF-002 Deprecate before removing. Every public 1.x item in every published crate ships behind its crate's default-on `v1` Cargo feature with `#[deprecated(note = "<2.0 replacement>")]` (an item with no replacement: `"removed; see docs/migration/phase-f.md"`), re-exported from its released path; the next release deletes the `v1` modules and features. A deprecated item need not keep working: it needs no compatibility adapters, tests or baseline comparison. Deleted in Phase F: public items already `#[deprecated]` in published 1.4.1, items never released, and internal plumbing. Test seams follow PHF-003. Every 2.0 item stays (Product Bar, CLAUDE.md). Canonical code never uses a `v1` item.
+- PHF-003 A test seam that the instrumented Python wheel needs (`sc-observability-types` `test-double`, `sc-observability-binding-runtime` `test-hooks`, `sc-observability` `fault-injection` for revision exhaustion) stays behind its off-by-default feature, `#[doc(hidden)]`, and out of the published API snapshot. Every other test seam is `#[cfg(test)]`.
+- PHF-004 `queue_capacity` is standard logger configuration with a recommended default that the logger enforces; no other layer carries a copy.
 
 ### Phase D wave 5 — Customer telemetry submission
 

@@ -6,9 +6,9 @@ publish = false
 
 [dev-dependencies]
 sc-observability.workspace = true
-sc-observability-log.workspace = true
+sc-observability-log = { workspace = true, features = ["v1"] }
 sc-observe.workspace = true
-sc-observability-otlp = { workspace = true, features = ["otlp-sdk", "sync-http"] }
+sc-observability-otlp = { workspace = true, features = ["v1", "otlp-sdk", "sync-http"] }
 sc-observability-types.workspace = true
 tokio.workspace = true
 serde_json.workspace = true

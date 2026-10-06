@@ -19,15 +19,19 @@ use std::str::FromStr;
 
 pub(crate) fn run(cli: &Cli) -> u8 {
     let format = cli.output;
-    let outcome = match &cli.command {
+    let outcome = execute(cli);
+    let exit_code = outcome.exit_code;
+    output::print(format, &outcome);
+    exit_code
+}
+
+fn execute(cli: &Cli) -> Outcome {
+    match &cli.command {
         Command::Validate(args) => validate(args),
         Command::Emit(args) => emit(cli, args),
         Command::Flush(args) => flush(cli, args),
         Command::Status(args) => status(cli, args),
-    };
-    let exit_code = outcome.exit_code;
-    output::print(format, &outcome);
-    exit_code
+    }
 }
 
 fn validate(args: &crate::cli::InputArgs) -> Outcome {
@@ -166,7 +170,11 @@ fn with_session(
         Ok(config) => config,
         Err(error) => return failure(command, error),
     };
-    let client = match client::open_client(config.clone()) {
+    let client = match client::open_client(
+        config.clone(),
+        #[cfg(test)]
+        cli.unit_client_paths.as_ref(),
+    ) {
         Ok(client) => client,
         Err(error) => return failure(command, error),
     };
@@ -225,12 +233,448 @@ fn finish_shutdown(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::UnitClientPaths;
+    use clap::Parser;
     use sc_observability_types::otlp::submission::{
-        AdmissionError, AdmissionReceipt, ConfigOverrides, ConfigSources, FlushReport, Signal,
-        StatusQuery, StoreStatus, SubmissionEnvelope, SubmissionId, resolve_config,
+        AdmissionError, AdmissionReceipt, ConfigOverrides, ConfigSources, FlushReport, Secret,
+        Signal, StatusQuery, StoreStatus, SubmissionEnvelope, SubmissionId, resolve_config,
     };
     use sc_observability_types::{ErrorCode, ErrorContext, Remediation, Timestamp};
     use std::{path::PathBuf, sync::Mutex, time::Duration};
+
+    fn test_cli(args: &[String], paths: UnitClientPaths) -> Cli {
+        let mut cli = Cli::try_parse_from(args).expect("test CLI arguments parse");
+        cli.unit_client_paths = Some(paths);
+        cli
+    }
+
+    fn recorded_run(
+        directory: &std::path::Path,
+        command: &[String],
+        script: Option<&str>,
+    ) -> (u8, Vec<serde_json::Value>, Option<serde_json::Value>) {
+        let store = directory.join("store.sqlite");
+        let record = directory.join("record.json");
+        let script = script.map(|contents| {
+            let path = directory.join("script.json");
+            std::fs::write(&path, contents).expect("script writes");
+            path
+        });
+        let args = std::iter::once("sc-otel".to_owned())
+            .chain(["--store".to_owned(), store.display().to_string()])
+            .chain(command.iter().cloned())
+            .collect::<Vec<_>>();
+        let exit_code = run(&test_cli(
+            &args,
+            UnitClientPaths {
+                script,
+                record: Some(record.clone()),
+            },
+        ));
+        let calls = std::fs::read_to_string(record.with_extension("calls.jsonl"))
+            .ok()
+            .map(|calls| {
+                calls
+                    .lines()
+                    .map(|line| serde_json::from_str(line).expect("recorded call JSON"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let envelope = std::fs::read(record)
+            .ok()
+            .map(|bytes| serde_json::from_slice(&bytes).expect("recorded envelope JSON"));
+        (exit_code, calls, envelope)
+    }
+
+    fn fixture_component(name: &str, field: &str) -> String {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../sc-observability-types/tests/fixtures/otlp_submission/golden")
+            .join(name)
+            .join("input.json");
+        let input: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(fixture).expect("fixture reads"))
+                .expect("fixture JSON");
+        input[field]
+            .as_array()
+            .and_then(|values| values.first())
+            .unwrap_or(&input[field])
+            .to_string()
+    }
+
+    fn test_stdin(cli: &mut Cli, input: &serde_json::Value) {
+        let Command::Emit(args) = &mut cli.command else {
+            panic!("test stdin is only supported for emit");
+        };
+        args.input.stdin_input = Some(input.to_string());
+    }
+
+    #[test]
+    fn run_uses_explicit_unit_client_paths_without_environment_mutation() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let script = directory.path().join("double.json");
+        let record = directory.path().join("record.json");
+        std::fs::write(&script, "{}").expect("script writes");
+        let store = directory.path().join("store.sqlite");
+        let cli = test_cli(
+            &[
+                "sc-otel",
+                "--store",
+                store.to_str().expect("UTF-8 store"),
+                "emit",
+                "--log",
+                "{}",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>(),
+            UnitClientPaths {
+                script: Some(script),
+                record: Some(record.clone()),
+            },
+        );
+
+        assert_eq!(run(&cli), constants::EXIT_OK);
+        assert!(
+            record.is_file(),
+            "the test-only client records its envelope"
+        );
+        assert!(record.with_extension("calls.jsonl").is_file());
+    }
+
+    #[test]
+    fn scripted_unit_client_preserves_admission_and_delivery_exit_codes() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let store = directory.path().join("store.sqlite");
+        for (name, script, expected) in [
+            (
+                "rejected",
+                r#"{"admissions":[{"outcome":"reject","kind":"disk_bound_exceeded"}]}"#,
+                constants::EXIT_ADMISSION,
+            ),
+            (
+                "pending",
+                r#"{"deliveries":[{"signal":"logs","outcome":"stall"}]}"#,
+                constants::EXIT_DELIVERY_PENDING,
+            ),
+            (
+                "failed",
+                r#"{"deliveries":[{"signal":"logs","outcome":"fail"}]}"#,
+                constants::EXIT_DELIVERY_FAILED,
+            ),
+        ] {
+            let script_path = directory.path().join(format!("{name}.json"));
+            std::fs::write(&script_path, script).expect("script writes");
+            let cli = test_cli(
+                &[
+                    "sc-otel".to_owned(),
+                    "--store".to_owned(),
+                    store.display().to_string(),
+                    "emit".to_owned(),
+                    "--log".to_owned(),
+                    "{}".to_owned(),
+                ],
+                UnitClientPaths {
+                    script: Some(script_path),
+                    record: None,
+                },
+            );
+            assert_eq!(run(&cli), expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn scripted_unit_client_redacts_explicit_credentials_from_serialized_outcomes() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let secret = "Bearer regression-secret";
+        let script = directory.path().join("delivery.json");
+        std::fs::write(
+            &script,
+            r#"{"deliveries":[{"signal":"logs","outcome":"fail"},{"signal":"metrics","outcome":"stall"}]}"#,
+        )
+        .expect("script writes");
+        let mut cli = test_cli(
+            &[
+                "sc-otel".to_owned(),
+                "--store".to_owned(),
+                directory.path().join("store.sqlite").display().to_string(),
+                "emit".to_owned(),
+                "--log".to_owned(),
+                "{}".to_owned(),
+                "--metric".to_owned(),
+                fixture_component("metric_gauge", "metrics"),
+            ],
+            UnitClientPaths {
+                script: Some(script),
+                record: None,
+            },
+        );
+        let mut overrides = ConfigOverrides::default();
+        overrides.auth_header = Some(Secret::new(secret.to_owned()));
+        cli.unit_config_overrides = Some(overrides);
+
+        assert_eq!(
+            config::resolve(&cli)
+                .expect("resolved telemetry config")
+                .auth_header
+                .as_ref()
+                .expect("explicit credential")
+                .expose(),
+            secret
+        );
+        let outcome = execute(&cli);
+
+        assert_eq!(outcome.exit_code, constants::EXIT_DELIVERY_FAILED);
+        assert!(
+            !output::as_json(&outcome).to_string().contains(secret),
+            "serialized result must never reveal configured credentials"
+        );
+    }
+
+    #[test]
+    fn unit_client_covers_direct_signal_arguments_and_the_default_script() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let span = fixture_component("traces", "spans");
+        let metric = fixture_component("metric_gauge", "metrics");
+        let profile = fixture_component("profiles", "profiles");
+        for (arguments, expected_field) in [
+            (
+                vec!["emit".to_owned(), "--log".to_owned(), "{}".to_owned()],
+                "logs",
+            ),
+            (vec!["emit".to_owned(), "--span".to_owned(), span], "traces"),
+            (
+                vec!["emit".to_owned(), "--metric".to_owned(), metric],
+                "metrics",
+            ),
+            (
+                vec!["emit".to_owned(), "--profile".to_owned(), profile],
+                "profiles",
+            ),
+        ] {
+            let (exit_code, _, envelope) = recorded_run(directory.path(), &arguments, None);
+            assert_eq!(exit_code, constants::EXIT_OK, "{expected_field}");
+            assert!(
+                !envelope
+                    .expect("recorded envelope")
+                    .get(match expected_field {
+                        "traces" => "spans",
+                        field => field,
+                    })
+                    .expect("signal field")
+                    .is_null(),
+                "{expected_field} reaches the unit-only client"
+            );
+        }
+
+        let (exit_code, _, _) = recorded_run(
+            directory.path(),
+            &[
+                "emit".to_owned(),
+                "--no-flush".to_owned(),
+                "--log".to_owned(),
+                "{}".to_owned(),
+            ],
+            None,
+        );
+        assert_eq!(exit_code, constants::EXIT_OK);
+    }
+
+    #[test]
+    fn unit_client_covers_combined_signal_arguments() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let arguments = [
+            "emit".to_owned(),
+            "--log".to_owned(),
+            "{}".to_owned(),
+            "--span".to_owned(),
+            fixture_component("traces", "spans"),
+            "--metric".to_owned(),
+            fixture_component("metric_gauge", "metrics"),
+            "--profile".to_owned(),
+            fixture_component("profiles", "profiles"),
+        ];
+
+        let (exit_code, _, envelope) = recorded_run(directory.path(), &arguments, None);
+
+        assert_eq!(exit_code, constants::EXIT_OK);
+        let envelope = envelope.expect("recorded envelope");
+        for field in ["logs", "spans", "metrics"] {
+            assert_eq!(
+                envelope[field].as_array().expect("signal array").len(),
+                1,
+                "{field} reaches the unit-only client"
+            );
+        }
+        assert!(
+            envelope["profiles"].is_object(),
+            "profiles reaches the unit-only client"
+        );
+    }
+
+    #[test]
+    fn unit_client_covers_combined_stdin_without_mutating_process_environment() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let script = directory.path().join("script.json");
+        let record = directory.path().join("record.json");
+        std::fs::write(&script, "{}").expect("script writes");
+        let span = serde_json::from_str::<serde_json::Value>(&fixture_component("traces", "spans"))
+            .expect("span JSON");
+        let metric = serde_json::from_str::<serde_json::Value>(&fixture_component(
+            "metric_gauge",
+            "metrics",
+        ))
+        .expect("metric JSON");
+        let profile =
+            serde_json::from_str::<serde_json::Value>(&fixture_component("profiles", "profiles"))
+                .expect("profile JSON");
+        let args = [
+            "sc-otel".to_owned(),
+            "--store".to_owned(),
+            directory.path().join("store.sqlite").display().to_string(),
+            "emit".to_owned(),
+            "--stdin".to_owned(),
+        ];
+        let mut cli = test_cli(
+            &args,
+            UnitClientPaths {
+                script: Some(script),
+                record: Some(record.clone()),
+            },
+        );
+        test_stdin(
+            &mut cli,
+            &serde_json::json!({
+                "version": 1,
+                "logs": [{}],
+                "spans": [span],
+                "metrics": [metric],
+                "profiles": profile,
+            }),
+        );
+
+        assert_eq!(run(&cli), constants::EXIT_OK);
+        let envelope: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(record).expect("record reads"))
+                .expect("recorded envelope JSON");
+        for field in ["logs", "spans", "metrics", "profiles"] {
+            assert!(
+                !envelope[field].is_null(),
+                "{field} reaches the unit-only client"
+            );
+        }
+    }
+
+    #[test]
+    fn unit_client_preserves_documented_flags_and_status_flush_contracts() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let fragment = directory.path().join("log.json");
+        let fragment_json =
+            r#"{"body":{"kind":"string","data":"file-specific payload"},"event_name":"from-file"}"#;
+        std::fs::write(&fragment, fragment_json).expect("fragment writes");
+        let (exit_code, calls, envelope) = recorded_run(
+            directory.path(),
+            &[
+                "--endpoint".to_owned(),
+                "http://localhost:54321".to_owned(),
+                "emit".to_owned(),
+                "--record-key".to_owned(),
+                "flag-record".to_owned(),
+                "--log".to_owned(),
+                format!("@{}", fragment.display()),
+            ],
+            None,
+        );
+        assert_eq!(exit_code, constants::EXIT_OK);
+        assert_eq!(calls[0]["endpoint"], "http://localhost:54321");
+        assert_eq!(
+            envelope.expect("recorded envelope")["record_key"],
+            "flag-record"
+        );
+
+        let (exit_code, calls, _) = recorded_run(
+            directory.path(),
+            &[
+                "status".to_owned(),
+                "--record-key".to_owned(),
+                "K".to_owned(),
+                "--record-key".to_owned(),
+                "J".to_owned(),
+            ],
+            None,
+        );
+        assert_eq!(exit_code, constants::EXIT_OK);
+        assert_eq!(
+            calls.last().expect("status call")["query"],
+            serde_json::json!({"kind":"record_keys","keys":["K","J"]})
+        );
+
+        let (exit_code, calls, _) = recorded_run(
+            directory.path(),
+            &["flush".to_owned(), "--timeout".to_owned(), "0".to_owned()],
+            None,
+        );
+        assert_eq!(exit_code, constants::EXIT_OK);
+        assert_eq!(
+            calls
+                .iter()
+                .find(|call| call["method"] == "flush")
+                .expect("flush call")["deadline_ms"],
+            0
+        );
+    }
+
+    #[test]
+    fn unit_client_preserves_every_non_usage_exit_code_and_delivery_precedence() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let missing_config = directory.path().join("missing.toml");
+        for (expected_exit, arguments, script) in [
+            (
+                constants::EXIT_OK,
+                vec!["validate".to_owned(), "--log".to_owned(), "{}".to_owned()],
+                None,
+            ),
+            (
+                constants::EXIT_INVALID_INPUT,
+                vec!["validate".to_owned(), "--log".to_owned(), "{".to_owned()],
+                None,
+            ),
+            (
+                constants::EXIT_CONFIG,
+                vec![
+                    "--config".to_owned(),
+                    missing_config.display().to_string(),
+                    "flush".to_owned(),
+                ],
+                None,
+            ),
+            (
+                constants::EXIT_ADMISSION,
+                vec!["emit".to_owned(), "--log".to_owned(), "{}".to_owned()],
+                Some(r#"{"admissions":[{"outcome":"reject","kind":"disk_bound_exceeded"}]}"#),
+            ),
+            (
+                constants::EXIT_DELIVERY_PENDING,
+                vec!["emit".to_owned(), "--log".to_owned(), "{}".to_owned()],
+                Some(r#"{"deliveries":[{"signal":"logs","outcome":"stall"}]}"#),
+            ),
+            (
+                constants::EXIT_DELIVERY_FAILED,
+                vec![
+                    "emit".to_owned(),
+                    "--log".to_owned(),
+                    "{}".to_owned(),
+                    "--metric".to_owned(),
+                    fixture_component("metric_gauge", "metrics"),
+                ],
+                Some(
+                    r#"{"deliveries":[{"signal":"logs","outcome":"fail"},{"signal":"metrics","outcome":"stall"}]}"#,
+                ),
+            ),
+        ] {
+            let (exit_code, _, _) = recorded_run(directory.path(), &arguments, script);
+            assert_eq!(exit_code, expected_exit, "{arguments:?}");
+        }
+    }
 
     struct ShutdownDeadlineRecorder(Mutex<Option<Duration>>);
 

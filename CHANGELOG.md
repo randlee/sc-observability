@@ -9,12 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Compatible additive APIs and implementation updates for the next 1.x release.
+- Compatible additive APIs and implementation updates for the next transition release.
 
 ### Deprecated
 
-- Existing deprecations remain available through the compatible 1.x release;
-  deprecated API removal requires a separately authorized major release.
+- Phase F documents the 2.0 consumer migration paths for logging, typed
+  routing, and OTLP export in `docs/migration/phase-f.md`.
 
 ## [1.2.0] - 2026-05-26
 
@@ -39,7 +39,7 @@ Public API reference for this release:
 - `LoggingHealthReport` queue/writer health fields, including queue depth, queue capacity, queue high-water mark, queue-full drop count, writer state, last writer error, and maintenance health.
 - Explicit open-contract doc comments on the public `LogSink`, `LogFilter`, and `Redactor` traits.
 - Queue-backed writer runtime with a single writer thread that owns batching, sink writes, rotation, pruning, flush, and shutdown sequencing.
-- Public API governance CI gates: `validate_public_api_diff.sh`, `validate_public_api_semver.py`, and `validate_public_api_docs.sh`.
+- Public API history is checked with the stock `cargo public-api` baseline gate.
 - Consumer documentation in `CONSUMING.md`, including dedicated `Queue Admission And Durability` and `Migrating From emit()` sections.
 - `WriterShutdownTimeout` / `writer_shutdown_timeout` as the configurable writer-shutdown timeout threshold.
 

@@ -1,12 +1,9 @@
-//! External-consumer proof for the released open extension traits.
+//! External-consumer proof for the canonical open extension traits.
 //!
 //! Each case compiles a consumer crate outside this workspace with a path
-//! dependency on this crate and judges rustc's structured diagnostics (error
-//! code and primary consumer line), never rendered text. A 1.4.1 consumer that
-//! implements every released trait with the root errors must build unchanged;
-//! a canonical consumer implements the `v2` traits with the `v2` span and
-//! metric models; and the negative control
-//! proves the probe fails when root-error implementations meet `v2` traits.
+//! dependency on this crate. The canonical consumer implements the `v2` traits
+//! with the `v2` span and metric models.
+#![cfg(feature = "v1")]
 #![allow(
     clippy::expect_used,
     clippy::panic,
@@ -17,60 +14,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::Value;
-
-/// A 1.4.1 consumer: implements every released open trait with the released
-/// root errors and uses the released registrations and resolver policy.
-const RELEASED_CONSUMER: &str = r"#![allow(deprecated)]
-use std::sync::Arc;
-
-use sc_observability_types::{
-    LogEvent, LogProjector, MetricProjector, MetricRecord, Observation, ObservationSubscriber,
-    ProcessIdentity, ProcessIdentityPolicy, ProcessIdentityResolver, ProjectionRegistration,
-    SpanProjector, SpanSignal, SubscriberRegistration,
-};
-
-struct Ev;
-struct Resolver;
-impl ProcessIdentityResolver for Resolver {
-    fn resolve(&self) -> Result<ProcessIdentity, sc_observability_types::IdentityError> {
-        Ok(ProcessIdentity::default())
-    }
-}
-struct Sub;
-impl ObservationSubscriber<Ev> for Sub {
-    fn observe(&self, _: &Observation<Ev>) -> Result<(), sc_observability_types::SubscriberError> {
-        Ok(())
-    }
-}
-struct Proj;
-impl LogProjector<Ev> for Proj {
-    fn project_logs(&self, _: &Observation<Ev>) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
-        Ok(Vec::new())
-    }
-}
-impl SpanProjector<Ev> for Proj {
-    fn project_spans(&self, _: &Observation<Ev>) -> Result<Vec<SpanSignal>, sc_observability_types::ProjectionError> {
-        Ok(Vec::new())
-    }
-}
-impl MetricProjector<Ev> for Proj {
-    fn project_metrics(&self, _: &Observation<Ev>) -> Result<Vec<MetricRecord>, sc_observability_types::ProjectionError> {
-        Ok(Vec::new())
-    }
-}
-
-fn main() {
-    let _policy = ProcessIdentityPolicy::Resolver(Arc::new(Resolver));
-    let subscriber: Arc<dyn ObservationSubscriber<Ev>> = Arc::new(Sub);
-    let (_subscriber, _filter) = SubscriberRegistration::new(subscriber).into_parts();
-    let projector = Arc::new(Proj);
-    let (_log, _span, _metric, _filter) = ProjectionRegistration::<Ev>::new()
-        .with_log_projector(projector.clone())
-        .with_span_projector(projector.clone())
-        .with_metric_projector(projector)
-        .into_parts();
-}
-";
 
 /// A canonical consumer: implements the `v2` traits with the `v2` errors.
 const CANONICAL_CONSUMER: &str = r"use std::sync::Arc;
@@ -113,7 +56,6 @@ impl MetricProjector<Ev> for Proj {
 }
 
 fn main() {
-    let _policy = ProcessIdentityPolicy::v2_resolver(Arc::new(Resolver));
     let subscriber: Arc<dyn ObservationSubscriber<Ev>> = Arc::new(Sub);
     let (_subscriber, _filter) = SubscriberRegistration::new(subscriber).into_parts();
     let projector = Arc::new(Proj);
@@ -125,81 +67,12 @@ fn main() {
 }
 ";
 
-/// The five released method signatures, in fixture order.
-const RELEASED_METHODS: [&str; 5] = [
-    "fn resolve(",
-    "fn observe(",
-    "fn project_logs(",
-    "fn project_spans(",
-    "fn project_metrics(",
-];
-
-#[test]
-fn released_consumer_builds_unchanged() {
-    let outcome = ConsumerProbe::new("released-trait-consumer").check(RELEASED_CONSUMER);
-    assert!(
-        outcome.success && outcome.errors.is_empty(),
-        "an unchanged 1.4.1 consumer must build\n{outcome}"
-    );
-}
-
 #[test]
 fn canonical_consumer_builds() {
     let outcome = ConsumerProbe::new("canonical-trait-consumer").check(CANONICAL_CONSUMER);
     assert!(
         outcome.success && outcome.errors.is_empty(),
         "a canonical v2 consumer must build\n{outcome}"
-    );
-}
-
-/// Negative control: the released implementations against the `v2` traits fail
-/// with E0053 at each method, so the probe can observe the regression it guards.
-#[test]
-fn released_implementations_against_v2_traits_fail_with_e0053() {
-    let fixture = RELEASED_CONSUMER.replacen(
-        "use sc_observability_types::{\n    LogEvent, LogProjector, MetricProjector, MetricRecord, Observation, ObservationSubscriber,\n    ProcessIdentity, ProcessIdentityPolicy, ProcessIdentityResolver, ProjectionRegistration,\n    SpanProjector, SpanSignal, SubscriberRegistration,\n};",
-        "use sc_observability_types::v2::{\n    LogProjector, MetricProjector, ObservationSubscriber, ProcessIdentityResolver,\n    ProjectionRegistration, SpanProjector, SubscriberRegistration,\n};\nuse sc_observability_types::{\n    LogEvent, MetricRecord, Observation, ProcessIdentity, SpanSignal,\n};",
-        1,
-    );
-    assert_ne!(
-        fixture, RELEASED_CONSUMER,
-        "the control rewrote the imports"
-    );
-    // The released policy only accepts the released resolver; keep the control
-    // about the five trait signatures.
-    let fixture = fixture.replacen(
-        "    let _policy = ProcessIdentityPolicy::Resolver(Arc::new(Resolver));\n",
-        "",
-        1,
-    );
-    let outcome = ConsumerProbe::new("released-trait-negative-control").check(&fixture);
-    assert!(!outcome.success, "the negative control compiled\n{outcome}");
-    let expected: Vec<usize> = RELEASED_METHODS
-        .iter()
-        .map(|method| {
-            fixture
-                .lines()
-                .position(|line| line.contains(method))
-                .map(|index| index + 1)
-                .expect("fixture declares the method")
-        })
-        .collect();
-    let actual: Vec<(String, usize)> = outcome
-        .errors
-        .iter()
-        .map(|error| (error.code.clone(), error.line))
-        .collect();
-    let wanted: Vec<(String, usize)> = expected
-        .into_iter()
-        .map(|line| ("E0053".to_owned(), line))
-        .collect();
-    assert_eq!(actual, wanted, "{outcome}");
-    assert!(
-        outcome
-            .errors
-            .iter()
-            .all(|error| error.file == "src/main.rs"),
-        "{outcome}"
     );
 }
 

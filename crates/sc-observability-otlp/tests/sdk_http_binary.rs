@@ -19,7 +19,7 @@ mod http_collector {
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener, TcpStream};
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex, PoisonError};
+    use std::sync::{Arc, Condvar, Mutex, PoisonError};
     use std::thread::{self, JoinHandle};
     use std::time::{Duration, Instant};
 
@@ -49,6 +49,8 @@ mod http_collector {
     struct Shared {
         requests: Mutex<Vec<Captured>>,
         replies: Mutex<VecDeque<Reply>>,
+        gate_first_reply_until_retry: bool,
+        first_reply_gate: (Mutex<bool>, Condvar),
     }
 
     /// Loopback OTLP/HTTP collector owned by the test.
@@ -64,6 +66,15 @@ mod http_collector {
         /// Starts a collector that answers requests with `replies` in arrival
         /// order and with an immediate `200` once they are used up.
         pub fn start(replies: &[Reply]) -> Self {
+            Self::start_inner(replies, false)
+        }
+
+        /// Holds the first reply until a retry request is captured.
+        pub fn start_with_first_reply_gated_until_retry() -> Self {
+            Self::start_inner(&[], true)
+        }
+
+        fn start_inner(replies: &[Reply], gate_first_reply_until_retry: bool) -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
             listener
                 .set_nonblocking(true)
@@ -73,6 +84,8 @@ mod http_collector {
             let shared = Arc::new(Shared {
                 requests: Mutex::new(Vec::new()),
                 replies: Mutex::new(replies.iter().copied().collect()),
+                gate_first_reply_until_retry,
+                first_reply_gate: (Mutex::new(false), Condvar::new()),
             });
             let handle = {
                 let stop = Arc::clone(&stop);
@@ -104,6 +117,7 @@ mod http_collector {
 
         fn join(&mut self) {
             self.stop.store(true, Ordering::SeqCst);
+            release_first_reply_gate(&self.shared);
             if let Some(handle) = self.handle.take() {
                 // A panicking collector thread is reported by the missing capture.
                 let _ = handle.join();
@@ -151,11 +165,25 @@ mod http_collector {
         // Serve every request on a kept-alive connection until the client closes it.
         while let Some(captured) = read_request(&mut stream) {
             // Record before answering so a completed export implies a recorded request.
-            shared
-                .requests
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push(captured);
+            let request_count = {
+                let mut requests = shared
+                    .requests
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                requests.push(captured);
+                requests.len()
+            };
+            if shared.gate_first_reply_until_retry {
+                if request_count == 1 {
+                    let (released, gate) = &shared.first_reply_gate;
+                    let mut released = released.lock().unwrap_or_else(PoisonError::into_inner);
+                    while !*released {
+                        released = gate.wait(released).unwrap_or_else(PoisonError::into_inner);
+                    }
+                } else {
+                    release_first_reply_gate(shared);
+                }
+            }
             let (status, delay) = shared
                 .replies
                 .lock()
@@ -170,6 +198,12 @@ mod http_collector {
                 return;
             }
         }
+    }
+
+    fn release_first_reply_gate(shared: &Shared) {
+        let (released, gate) = &shared.first_reply_gate;
+        *released.lock().unwrap_or_else(PoisonError::into_inner) = true;
+        gate.notify_all();
     }
 
     fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -393,10 +427,11 @@ use sc_observability_otlp::{
     LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
     TelemetryConfigBuilder, TracesConfig,
 };
+use sc_observability_types::v2::{AggregationTemporality, FiniteF64, MetricRecord, MetricValue};
 use sc_observability_types::{
-    ActionName, DurationMs, Level, LogEvent, MetricKind, MetricName, MetricRecord, ProcessIdentity,
-    SchemaVersion, ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus,
-    TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+    ActionName, DurationMs, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion,
+    ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, TargetCategory,
+    TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
 };
 
 const SERVICE: &str = "sdk-http-binary";
@@ -457,15 +492,18 @@ fn span_signals() -> [SpanSignal; 2] {
 }
 
 fn metric() -> MetricRecord {
-    MetricRecord {
-        timestamp: Timestamp::UNIX_EPOCH,
-        service: service_name(),
-        name: MetricName::new(METRIC_NAME).expect("valid metric"),
-        kind: MetricKind::Counter,
-        value: 1.0,
-        unit: None,
-        attributes: serde_json::Map::new(),
-    }
+    MetricRecord::try_new(
+        Timestamp::UNIX_EPOCH,
+        service_name(),
+        MetricName::new(METRIC_NAME).expect("valid metric"),
+        MetricValue::Sum {
+            value: FiniteF64::new(1.0).expect("finite counter"),
+            monotonic: true,
+            temporality: AggregationTemporality::Cumulative,
+            start_time: Timestamp::UNIX_EPOCH,
+        },
+    )
+    .expect("valid counter")
 }
 
 fn canonical_span_signals() -> [sc_observability_types::v2::SpanSignal; 2] {
@@ -489,17 +527,6 @@ fn canonical_span_signals() -> [sc_observability_types::v2::SpanSignal; 2] {
         v2::SpanSignal::Started(started),
         v2::SpanSignal::Ended(ended),
     ]
-}
-
-fn canonical_metric() -> sc_observability_types::v2::MetricRecord {
-    use sc_observability_types::v2;
-    v2::MetricRecord::try_new(
-        Timestamp::UNIX_EPOCH,
-        service_name(),
-        MetricName::new(METRIC_NAME).expect("valid metric"),
-        v2::MetricValue::Gauge(v2::FiniteF64::new(1.0).expect("finite gauge")),
-    )
-    .expect("valid canonical gauge")
 }
 
 fn released_config(transport: OtelConfig) -> sc_observability_otlp::TelemetryConfig {
@@ -636,9 +663,7 @@ fn v2_default_http_binary_exports_lossless_protobuf_for_every_signal() {
         for signal in canonical_span_signals() {
             telemetry.emit_span(&signal).expect("admit span");
         }
-        telemetry
-            .emit_metric(&canonical_metric())
-            .expect("admit metric");
+        telemetry.emit_metric(&metric()).expect("admit metric");
 
         telemetry
             .flush_async_typed()
@@ -730,9 +755,9 @@ fn http_binary_client_error_is_terminal_without_retry() {
 
 #[test]
 fn http_binary_request_timeout_is_retried_within_the_deadline() {
-    // The first answer arrives well after the 100 ms request timeout; the
-    // retry is answered immediately.
-    let collector = Collector::start(&[(200, Duration::from_secs(1))]);
+    // Keep the first response gated until a second request proves the client
+    // timed out and retried; the retry then receives an immediate success.
+    let collector = Collector::start_with_first_reply_gated_until_retry();
     runtime().block_on(async {
         let mut transport = v2_default_transport(&collector.endpoint());
         transport.timeout_ms = Some(DurationMs::from(100));

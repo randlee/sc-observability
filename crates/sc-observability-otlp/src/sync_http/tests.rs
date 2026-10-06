@@ -25,6 +25,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 // This is a test watchdog, not the production handshake deadline (1 ms).
 const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
+const TLS_SERVER_READY_WATCHDOG: Duration = Duration::from_secs(10);
 const REQUEST_FIXTURE_WATCHDOG: Duration = Duration::from_secs(2);
 const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 8_000;
 // Leave the client-wide timeout much longer than the final attempt's remaining
@@ -551,18 +552,13 @@ fn custom_ca_file(contents: &str) -> PathBuf {
     path
 }
 
-fn start_tls_test_server(
-    cert: &PathBuf,
-    key: &PathBuf,
-    address: std::net::SocketAddr,
-) -> process::Child {
+fn start_tls_test_server(cert: &PathBuf, key: &PathBuf) -> (process::Child, std::net::SocketAddr) {
     let server = Command::new("python3")
         .args([
             "-u",
             "-c",
-            "import http.server, ssl, sys\nclass H(http.server.BaseHTTPRequestHandler):\n def do_POST(self):\n  n=int(self.headers.get('Content-Length','0')); self.rfile.read(n); self.send_response(200); self.send_header('Content-Length','0'); self.end_headers()\n def log_message(self,*args): pass\ns=http.server.HTTPServer(('127.0.0.1',int(sys.argv[1])),H); c=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); c.load_cert_chain(sys.argv[2],sys.argv[3]); s.socket=c.wrap_socket(s.socket,server_side=True); print('READY',flush=True); s.serve_forever()",
+            "import http.server, ssl, sys\nclass H(http.server.BaseHTTPRequestHandler):\n def do_POST(self):\n  n=int(self.headers.get('Content-Length','0')); self.rfile.read(n); self.send_response(200); self.send_header('Content-Length','0'); self.end_headers()\n def log_message(self,*args): pass\ns=http.server.HTTPServer(('127.0.0.1',0),H); c=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); c.load_cert_chain(sys.argv[1],sys.argv[2]); s.socket=c.wrap_socket(s.socket,server_side=True); print(f'READY {s.server_address[0]}:{s.server_address[1]}',flush=True); s.serve_forever()",
         ])
-        .arg(address.port().to_string())
         .arg(cert)
         .arg(key)
         .stdin(Stdio::null())
@@ -571,12 +567,79 @@ fn start_tls_test_server(
         .spawn()
         .expect("start standard-library local TLS server");
     let mut server = server;
-    let mut ready = String::new();
-    std::io::BufReader::new(server.stdout.take().expect("TLS server ready output"))
-        .read_line(&mut ready)
-        .expect("read TLS server readiness");
-    assert_eq!(ready.trim(), "READY", "local TLS server became ready");
-    server
+    let ready = match read_line_with_watchdog(
+        server.stdout.take().expect("TLS server ready output"),
+        TLS_SERVER_READY_WATCHDOG,
+    ) {
+        Ok(ready) => ready,
+        Err(error) if error.kind() == ErrorKind::TimedOut => {
+            let _ = server.kill();
+            let _ = server.wait();
+            panic!("timed out waiting for TLS test server readiness: {error}");
+        }
+        Err(error) => panic!("read TLS test server readiness: {error}"),
+    };
+    let Some(address) = ready
+        .trim()
+        .strip_prefix("READY ")
+        .and_then(|address| address.parse::<std::net::SocketAddr>().ok())
+    else {
+        let _ = server.kill();
+        let _ = server.wait();
+        panic!("local TLS server returned an invalid ready address: {ready:?}");
+    };
+    (server, address)
+}
+
+fn read_line_with_watchdog<R>(reader: R, watchdog: Duration) -> std::io::Result<String>
+where
+    R: Read + Send + 'static,
+{
+    let (ready_tx, ready_rx) = mpsc::channel();
+    thread::spawn(move || {
+        let mut ready = String::new();
+        let result = std::io::BufReader::new(reader)
+            .read_line(&mut ready)
+            .map(|_| ready);
+        let _ = ready_tx.send(result);
+    });
+
+    match ready_rx.recv_timeout(watchdog) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(std::io::Error::new(
+            ErrorKind::TimedOut,
+            "timed out waiting for readiness line",
+        )),
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(std::io::Error::new(
+            ErrorKind::UnexpectedEof,
+            "readiness reader exited without a result",
+        )),
+    }
+}
+
+#[test]
+fn tls_server_readiness_wait_times_out_if_stdout_stalls() {
+    struct GatedReader(mpsc::Receiver<()>);
+
+    impl Read for GatedReader {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            self.0
+                .recv()
+                .expect("test releases the stalled readiness reader");
+            let line = b"READY\n";
+            buffer[..line.len()].copy_from_slice(line);
+            Ok(line.len())
+        }
+    }
+
+    let (release_tx, release_rx) = mpsc::channel();
+    let error = read_line_with_watchdog(GatedReader(release_rx), Duration::from_millis(20))
+        .expect_err("a stalled readiness read must time out");
+
+    assert_eq!(error.kind(), ErrorKind::TimedOut);
+    release_tx
+        .send(())
+        .expect("release the detached readiness reader");
 }
 
 fn retry_policy(
@@ -852,10 +915,7 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
     assert!(generated.status.success(), "generate local TLS certificate");
     let unrelated = custom_ca_file(CUSTOM_CA_PEM);
     let ca = custom_ca_file(&fs::read_to_string(&cert).expect("read server CA"));
-    let listener = TcpListener::bind("127.0.0.1:0").expect("reserve TLS port");
-    let address = listener.local_addr().expect("TLS address");
-    drop(listener);
-    let mut server = start_tls_test_server(&cert, &key, address);
+    let (mut server, address) = start_tls_test_server(&cert, &key);
     let exporter =
         OtlpHttpExporter::for_test_config(format!("https://{address}"), None, Some(ca.clone()))
             .expect("construct exporter with trusted CA");
@@ -871,10 +931,7 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
         "trusted CA completes TLS export: {trusted:?}"
     );
 
-    let listener = TcpListener::bind("127.0.0.1:0").expect("reserve TLS port");
-    let address = listener.local_addr().expect("TLS address");
-    drop(listener);
-    let mut server = start_tls_test_server(&cert, &key, address);
+    let (mut server, address) = start_tls_test_server(&cert, &key);
     let exporter = OtlpHttpExporter::for_test_config(
         format!("https://{address}"),
         None,
@@ -1801,7 +1858,7 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
         traces: None,
         metrics: None,
     };
-    let bounds = crate::config::validated_released_telemetry_bounds(&config).unwrap();
+    let bounds = crate::config::validated_test_telemetry_bounds(&config).unwrap();
     let connection =
         crate::config::prepared_backend_connection(&config.transport, &bounds).unwrap();
     let (delay_tx, delay_rx) = mpsc::channel();

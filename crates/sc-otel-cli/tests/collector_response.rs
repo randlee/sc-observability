@@ -1,5 +1,3 @@
-#![cfg(not(feature = "test-double"))]
-
 //! Real HTTP acknowledgements must drive durable state, not merely HTTP status.
 #[path = "common/assert_result_v1.rs"]
 mod assert_result_v1;
@@ -143,7 +141,21 @@ fn scrub_telemetry_environment(command: &mut Command) -> &mut Command {
     command
 }
 
-fn emit(body: String, flag: &str, payload: &str, signal: &str, path: &str, rejected: bool) {
+#[derive(Clone, Copy)]
+struct SignalCase<'a> {
+    flag: &'a str,
+    payload: &'a str,
+    signal: &'a str,
+    path: &'a str,
+}
+
+fn emit(body: String, case: SignalCase<'_>, rejected: bool) {
+    let SignalCase {
+        flag,
+        payload,
+        signal,
+        path,
+    } = case;
     let mut collector = Collector::start(body);
     let store = tempfile::tempdir().expect("fresh durable store");
     let mut emit = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
@@ -260,7 +272,16 @@ fn every_signal_honors_collector_partial_success_through_durable_cli() {
             ),
             ("{}".to_owned(), false),
         ] {
-            emit(body, flag, &payload, signal, path, rejected);
+            emit(
+                body,
+                SignalCase {
+                    flag,
+                    payload: &payload,
+                    signal,
+                    path,
+                },
+                rejected,
+            );
         }
     }
 }
@@ -271,7 +292,16 @@ fn unreadable_or_oversized_acknowledgements_never_become_delivered_or_retried() 
         "not JSON".to_owned(),
         json!({"message": "x".repeat(64 * 1024)}).to_string(),
     ] {
-        emit(body, "--log", "{}", "logs", "/v1/logs", true);
+        emit(
+            body,
+            SignalCase {
+                flag: "--log",
+                payload: "{}",
+                signal: "logs",
+                path: "/v1/logs",
+            },
+            true,
+        );
     }
 }
 
@@ -280,6 +310,9 @@ fn collector_deadline_stops_after_serving_the_expected_request() {
     let mut collector =
         Collector::start_with_request_deadline("{}".to_owned(), Duration::from_secs(1));
     let mut stream = TcpStream::connect(collector.address).expect("connect collector");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("set client response read timeout");
     stream
         .write_all(b"POST /v1/logs HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{}")
         .expect("write request");

@@ -1,34 +1,42 @@
 # ATM Adapter Example
 
+> **Retired in Phase F.** This document preserves historical context for the
+> former ATM proving artifact. It is not a shared-repository contract artifact,
+> does not establish interface sufficiency, and does not replace the ATM-owned
+> production adapter boundary. See [architecture section 10](./architecture.md#10-atm-proving-artifact-retired-in-phase-f).
+
 ## Purpose
 
-This document describes the proving-artifact pattern for ATM integration without
-placing ATM production code in the shared `sc-observability` workspace.
+This document records the former proving-artifact pattern that was used to
+describe ATM integration without placing ATM production code in the shared
+`sc-observability` workspace.
 
-The goal is to verify that:
+The artifact was intended to show that:
 
-- ATM-shaped event types can remain outside the shared crates
-- ATM can attach logging, routing, and OTLP behavior using shared extension
+- ATM-shaped event types could remain outside the shared crates
+- ATM could attach logging, routing, and OTLP behavior using shared extension
   points only
-- no `agent-team-mail-*` dependency is required in this repo to prove the
+- no `agent-team-mail-*` dependency was required in this repo to demonstrate the
   integration path
-- the shared repo can provide boundary evidence without pretending to be the
+- the shared repo could provide boundary evidence without pretending to be the
   full ATM migration specification
 
-For the minimal ATM production configuration and shared out-of-the-box
-defaults, see [`atm-quickstart.md`](./atm-quickstart.md).
+Its former references to ATM production configuration and shared defaults are
+historical; the retirement notice in [architecture section 10](./architecture.md#10-atm-proving-artifact-retired-in-phase-f)
+governs this document.
 
 ## Boundary
 
-This repo does **not** own the real ATM adapter implementation.
+The former pattern did not make this repository the owner of the real ATM
+adapter implementation.
 
-This repo may own:
+The historical artifact described:
 
-- documentation of the adapter boundary
-- an unpublished ATM-shaped proving crate
-- tests/examples that validate the shared interfaces are sufficient
+- documentation of the adapter boundary;
+- an unpublished ATM-shaped proving crate; and
+- tests/examples that illustrated the shared interfaces.
 
-This repo must not own:
+It did not make this repository the owner of:
 
 - `LogEventV1` production definitions
 - daemon fan-in or spool compatibility logic
@@ -39,13 +47,10 @@ This repo must not own:
 Those belong in an ATM-owned adapter crate or module, referred to in the
 architecture as `atm-observability-adapter`.
 
-## Proving Artifact
+## Boundary evidence
 
-The proving artifact for this repo is the unpublished crate:
-
-- `examples/atm-adapter-example`
-
-It demonstrates the intended integration pattern:
+The historical artifact documented the intended integration pattern without
+owning an ATM implementation:
 
 1. ATM-shaped payload types are defined locally in the example crate
 2. logging uses the lower-level `sc-observability` crate
@@ -55,19 +60,19 @@ It demonstrates the intended integration pattern:
 5. top-level routing health includes the attached telemetry health snapshot via
    `ObservabilityBuilder::with_observability_health_provider(...)`
 
-## What The Example Must Prove
+## What The Historical Evidence Was Intended To Show
 
-- the shared repo boundaries are sufficient for ATM integration
-- OTLP attachment uses the shipped `TelemetryProjectors<T>` registration path,
+- the shared repo boundaries appeared sufficient for ATM integration
+- OTLP attachment used the shipped `TelemetryProjectors<T>` registration path,
   not a special internal OTLP hook
-- the shared repo remains free of `agent-team-mail-*` dependencies
+- the shared repo remained free of `agent-team-mail-*` dependencies
 
-## What The Example Does Not Prove
+## What The Historical Example Did Not Prove
 
-This example is intentionally boundary-focused and is not sufficient evidence
-that ATM migration is fully specified.
+This documentation was intentionally boundary-focused and was not sufficient
+evidence that ATM migration was fully specified.
 
-It does not prove:
+It did not prove:
 
 - complete `EventFields -> LogEventV1` compatibility semantics
 - ATM direct-spool or daemon fan-in durability behavior
@@ -77,5 +82,6 @@ It does not prove:
 
 ## Follow-On Ownership
 
-Once the shared boundaries are accepted, the real adapter implementation should
-be built in an ATM-owned repository or module, not in this repo.
+The real adapter implementation belongs in an ATM-owned repository or module,
+not in this repository. The retired proving artifact does not provide current
+integration evidence.

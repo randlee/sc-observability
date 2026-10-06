@@ -10,8 +10,8 @@ high-performance.
 | --- | --- |
 | [`sc-observability-types`](./crates/sc-observability-types/) | Shared contracts: identifiers, timestamps, diagnostics, health reports, query/follow value types, and error surfaces. |
 | [`sc-observability`](./crates/sc-observability/) | Logging-only runtime: `Logger`, built-in file/console sinks, custom sink registration, redaction, health, query, and follow. |
-| [`sc-observe`](./crates/sc-observe/) | Observation routing layer on top of logging for subscribers and projectors. |
-| [`sc-observability-otlp`](./crates/sc-observability-otlp/) | OTLP/OTel export layer for logs, spans, and metrics. |
+| [`sc-observe`](./crates/sc-observe/) | Typed routing over logging and OTLP, including combined health. |
+| [`sc-observability-otlp`](./crates/sc-observability-otlp/) | OTel export layer; choose `otlp-sdk` or `sync-http`. |
 | [`sc-observability-log`](./crates/sc-observability-log/) | Additive bridge/logging API and typed error surface. |
 | [`sc-observability-log-macros`](./crates/sc-observability-log-macros/) | Procedural macros used by the bridge/logging API. |
 | [`sc-observability-dto`](./crates/sc-observability-dto/) | Language-neutral wire DTOs and checked conversions. |
@@ -26,6 +26,13 @@ high-performance.
 | Routing one observation to logs and subscribers | `sc-observe` + `sc-observability` + `sc-observability-types` |
 | OTLP export | `sc-observability-otlp` + lower layers |
 | Shared value types only | `sc-observability-types` |
+
+The three consumer entry points are:
+
+- `sc-observability` for structured logging;
+- `sc-observability-otlp` for OTel export with either `otlp-sdk` or
+  `sync-http`; and
+- `sc-observe` for typed routing over both surfaces and their combined health.
 
 The PyO3 extension is a root-workspace crate and is published as a Rust
 support artifact; its Python wheel/sdist, the standalone Tauri host, and the
@@ -88,6 +95,11 @@ non-blocking best-effort path, and `flush()` when the caller needs a durability
 barrier after successful queue admission. `emit()` remains available only as a
 deprecated compatibility path.
 
+`LoggerConfig::queue_capacity` is the logger's bounded buffering
+configuration. Leave it at `DEFAULT_LOG_QUEUE_CAPACITY` unless the deployment
+has measured a reason to choose another admission bound; do not copy that
+capacity into another layer.
+
 ## Fault Injection For Retained Sinks
 
 The `fault-injection` feature exposes a `RetainedSinkFaultInjector` for live
@@ -109,7 +121,7 @@ Never enable `fault-injection` in production builds.
 - Public architecture: [docs/architecture.md](./docs/architecture.md)
 - Requirements and contract decisions: [docs/requirements.md](./docs/requirements.md)
 - Custom sink example: [`examples/custom-sink-example/`](./examples/custom-sink-example/)
-- ATM-shaped proving example: [`examples/atm-adapter-example/`](./examples/atm-adapter-example/)
+- Phase F consumer migration: [docs/migration/phase-f.md](./docs/migration/phase-f.md)
 
 ## Release / Publishing
 

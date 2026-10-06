@@ -179,7 +179,7 @@ fn classify(error: ExportError) -> SubmissionExportFailure {
 fn completed_retry_budgets_are_terminal_but_shutdown_is_recoverable() {
     let context = || {
         Box::new(ErrorContext::new(
-            crate::error_codes::SC_OBSERVABILITY_OTLP_SUBMISSION_EXPORT_UNWIRED,
+            crate::error_codes::OTLP_EXPORT_TERMINAL,
             "retry classification fixture",
             Remediation::recoverable("retry after restart", ["fixture"]),
         ))

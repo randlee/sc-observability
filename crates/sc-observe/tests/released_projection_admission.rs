@@ -1,3 +1,5 @@
+#![cfg(feature = "v1")]
+
 //! Projection admission follows the facade that built the runtime.
 //!
 //! A root-built runtime keeps exact 1.4.1 acceptance of a projected
@@ -14,11 +16,11 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use sc_observability_types::ProjectionError;
+use sc_observability_types::v2::{LogProjector, ProjectionError, ProjectionRegistration};
 use sc_observability_types::{
-    ActionName, Level, LogEvent, LogProjector, Observation, OutcomeLabel, ProcessIdentity,
-    ProjectionRegistration, SchemaVersion, ServiceName, StateName, StateTransition, TargetCategory,
-    Timestamp, ToolName,
+    ActionName, Level, LogEvent, LogProjector as LegacyLogProjector, Observation, OutcomeLabel,
+    ProcessIdentity, ProjectionRegistration as LegacyProjectionRegistration, SchemaVersion,
+    ServiceName, StateName, StateTransition, TargetCategory, Timestamp, ToolName,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -62,6 +64,15 @@ impl LogProjector<Payload> for EntityProjector {
             }),
             fields: Map::default(),
         }])
+    }
+}
+
+impl LegacyLogProjector<Payload> for EntityProjector {
+    fn project_logs(
+        &self,
+        observation: &Observation<Payload>,
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
+        <Self as LogProjector<Payload>>::project_logs(self, observation)
     }
 }
 
@@ -124,12 +135,16 @@ fn registration(id: &'static str) -> ProjectionRegistration<Payload> {
     ProjectionRegistration::new().with_log_projector(Arc::new(EntityProjector(id)))
 }
 
+fn legacy_registration(id: &'static str) -> LegacyProjectionRegistration<Payload> {
+    LegacyProjectionRegistration::new().with_log_projector(Arc::new(EntityProjector(id)))
+}
+
 fn root_runtime(name: &str, id: &'static str) -> Running<Observability> {
     let root = TempRoot(temp_path(name));
     let config =
         ObservabilityConfig::default_for_typed(tool_name(), root.0.clone()).expect("root config");
     let runtime = Observability::builder(config)
-        .register_projection(registration(id))
+        .register_projection(legacy_registration(id))
         .build_typed()
         .expect("root runtime");
     Running {
@@ -146,7 +161,7 @@ fn v2_runtime(name: &str, id: &'static str) -> Running<sc_observe::v2::Observabi
     let config = sc_observe::v2::ObservabilityConfig::default_for(tool_name(), root.0.clone())
         .expect("v2 config");
     let runtime = sc_observe::v2::Observability::builder(config)
-        .register_projection(registration(id).into())
+        .register_projection(registration(id))
         .build()
         .expect("v2 runtime");
     Running {

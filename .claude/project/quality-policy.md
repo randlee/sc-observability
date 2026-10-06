@@ -103,8 +103,7 @@ it in the foreground.
 - Additional enforcement surfaces (mandatory evidence):
   - `scripts/ci/validate_dependency_bans.sh`
   - `.github/scripts/release_artifacts.py validate-publish-order`
-  - `scripts/ci/validate_public_api_diff.sh`
-  - `scripts/ci/validate_public_api_semver.py`
+  - `python3 scripts/ci/stock_public_api.py check --target-dir <target>`
 - Boundary-relaxation rule: `arch-qa` RULE-007 below. quality-mgr rejects as
   BLOCKING any change that bypasses `scripts/ci/validate_repo_boundaries.sh`
   or `scripts/ci/validate_dependency_bans.sh`.

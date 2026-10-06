@@ -7,16 +7,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
 
-use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
-use sc_observability_types::v2::{EventError as CanonicalEventError, ExportError};
+use sc_observability_types::v2::{
+    EventError as CanonicalEventError, ExportError, FlushError as CanonicalFlushError,
+    InitError as CanonicalInitError, ShutdownError as CanonicalShutdownError,
+};
 use sc_observability_types::v2::{
     MetricRecord as CanonicalMetricRecord, SpanSignal as CanonicalSpanSignal,
 };
 use sc_observability_types::{
-    DiagnosticSummary, ErrorContext, ExporterHealth, ExporterHealthState, LogEvent, MetricKind,
-    MetricRecord, ObservabilityHealthProvider, Remediation, SinkName, SpanSignal,
-    TelemetryHealthReport, TelemetryHealthState, telemetry_health_provider_sealed,
+    DiagnosticSummary, ErrorContext, ExporterHealth, ExporterHealthState, LogEvent,
+    ObservabilityHealthProvider, Remediation, SinkName, TelemetryHealthReport,
+    TelemetryHealthState, telemetry_health_provider_sealed,
 };
 use serde_json::Value;
 
@@ -36,15 +38,12 @@ use crate::failure::{
 use crate::lifecycle::{LifecycleHealth, LifecycleState, Signal};
 #[cfg(test)]
 use crate::testing;
-use crate::{error_codes, legacy_projection};
+use crate::{error_codes, export_records};
 
 /// Metric admitted to the shared canonical buffer.
 enum BufferedMetric {
     /// Canonical record, exported with its full aggregation.
     Canonical(Box<ExportRecord<CanonicalMetricRecord>>),
-    /// Released scalar record, kept in its released shape until flush, where
-    /// the released facade has always reported conversion failures.
-    Released(MetricRecord),
 }
 
 /// OTLP-backed telemetry runtime.
@@ -142,12 +141,12 @@ static METRICS_EXPORTER_NAME: LazyLock<SinkName> =
 
 impl RuntimeTelemetry {
     /// Creates a telemetry runtime through the validated exporter factory.
-    pub fn new(config: RuntimeTelemetryConfig) -> Result<Self, InitFailure> {
+    pub fn new(config: RuntimeTelemetryConfig) -> Result<Self, CanonicalInitError> {
         Self::new_typed(config)
     }
 
     /// Creates a telemetry runtime with neutral initialization failures.
-    pub fn new_typed(config: RuntimeTelemetryConfig) -> Result<Self, InitFailure> {
+    pub fn new_typed(config: RuntimeTelemetryConfig) -> Result<Self, CanonicalInitError> {
         let bounds = validated_telemetry_bounds(&config)?;
         Self::new_prepared(config, &bounds)
     }
@@ -157,20 +156,13 @@ impl RuntimeTelemetry {
     pub(crate) fn new_prepared(
         config: RuntimeTelemetryConfig,
         bounds: &ValidatedTransportBounds,
-    ) -> Result<Self, InitFailure> {
-        let exporters = exporter_factory_prepared(&config, bounds)
-            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+    ) -> Result<Self, CanonicalInitError> {
+        let exporters = exporter_factory_prepared(&config, bounds).map_err(|error| {
+            CanonicalInitError::Runtime {
+                context: error.into_context(),
+            }
+        })?;
         Ok(Self::new_with_validated_exporter_set(config, exporters))
-    }
-
-    #[cfg(test)]
-    pub(crate) fn new_with_exporters(
-        config: RuntimeTelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
-    ) -> Result<Self, InitFailure> {
-        Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
     }
 
     #[cfg(test)]
@@ -179,8 +171,9 @@ impl RuntimeTelemetry {
         log_exporter: Arc<dyn LogExporter>,
         trace_exporter: Arc<dyn TraceExporter>,
         metric_exporter: Arc<dyn MetricExporter>,
-    ) -> Result<Self, InitFailure> {
-        Self::new_with_exporter_set_typed(
+    ) -> Result<Self, CanonicalInitError> {
+        validate_config_typed(&config)?;
+        Ok(Self::new_with_validated_exporter_set(
             config,
             ExporterSet {
                 logs: log_exporter,
@@ -188,16 +181,7 @@ impl RuntimeTelemetry {
                 metrics: metric_exporter,
                 lifecycle: Arc::new(testing::RecordingLifecycle::default()),
             },
-        )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn new_with_exporter_set_typed(
-        config: RuntimeTelemetryConfig,
-        exporters: ExporterSet,
-    ) -> Result<Self, InitFailure> {
-        validate_config_typed(&config)?;
-        Ok(Self::new_with_validated_exporter_set(config, exporters))
+        ))
     }
 
     fn new_with_validated_exporter_set(
@@ -236,21 +220,8 @@ impl RuntimeTelemetry {
         Ok(())
     }
 
-    /// Released root-facade log admission: exact 1.4.1 acceptance, no entity check.
-    pub(crate) fn emit_log_released(
-        &self,
-        event: &LogEvent,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.ensure_active()?;
-        if self.config.logs.is_none() || !self.config.transport.enabled {
-            return Ok(());
-        }
-        self.buffer_log(event);
-        Ok(())
-    }
-
     fn buffer_log(&self, event: &LogEvent) {
-        let record = legacy_projection::log_record(event);
+        let record = export_records::log_record(event);
         self.runtime
             .lock()
             .expect("telemetry runtime poisoned")
@@ -275,21 +246,6 @@ impl RuntimeTelemetry {
             return Ok(());
         }
         self.admit_span(span.clone())
-    }
-
-    /// Released root-facade span admission: the root signal is converted to
-    /// the canonical model and enters the same bounded assembler.
-    pub(crate) fn emit_span_released(
-        &self,
-        span: &SpanSignal,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.ensure_active()?;
-        if self.config.traces.is_none() || !self.config.transport.enabled {
-            return Ok(());
-        }
-        let span =
-            legacy_projection::span_signal(span).map_err(CanonicalTelemetryError::ExportFailure)?;
-        self.admit_span(span)
     }
 
     fn admit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError> {
@@ -323,7 +279,7 @@ impl RuntimeTelemetry {
             .push(span)
             .map_err(export_failure_from_canonical_event)?
         {
-            let resource = legacy_projection::resource(complete.record.service());
+            let resource = export_records::resource(complete.record.service());
             runtime.span_buffer.push(ExportRecord {
                 resource,
                 scope: contracts::InstrumentationScope::default(),
@@ -353,7 +309,7 @@ impl RuntimeTelemetry {
             return Ok(());
         }
         let record = ExportRecord {
-            resource: legacy_projection::resource(metric.service()),
+            resource: export_records::resource(metric.service()),
             scope: contracts::InstrumentationScope::default(),
             record: metric.clone(),
         };
@@ -365,43 +321,18 @@ impl RuntimeTelemetry {
         Ok(())
     }
 
-    /// Released root-facade metric admission with the 1.4.1 acceptance rules.
-    ///
-    /// A released scalar histogram is accepted and, as in 1.4.1, never
-    /// transported: it carries no bucket distribution to export and none is
-    /// fabricated. Other released records keep their released shape until
-    /// flush.
-    pub(crate) fn emit_metric_released(
-        &self,
-        metric: &MetricRecord,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.ensure_active()?;
-        if self.config.metrics.is_none()
-            || !self.config.transport.enabled
-            || metric.kind == MetricKind::Histogram
-        {
-            return Ok(());
-        }
-        self.runtime
-            .lock()
-            .expect("telemetry runtime poisoned")
-            .metric_buffer
-            .push(BufferedMetric::Released(metric.clone()));
-        Ok(())
-    }
-
     /// Flushes buffered logs, spans, and metrics through the configured exporters.
     ///
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
-    pub fn flush(&self) -> Result<(), FlushFailure> {
+    pub fn flush(&self) -> Result<(), CanonicalFlushError> {
         self.flush_typed()
     }
 
     /// Flushes telemetry with a neutral flush failure while retaining fail-open
     /// exporter semantics.
-    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
+    pub fn flush_typed(&self) -> Result<(), CanonicalFlushError> {
         self.exporters
             .lifecycle
             .blocking_lifecycle_preflight()
@@ -417,7 +348,7 @@ impl RuntimeTelemetry {
     ///
     /// SDK callers must use this method from their entered runtime; it never
     /// blocks that runtime thread to emulate synchronous HTTP behavior.
-    pub async fn flush_async_typed(&self) -> Result<(), FlushFailure> {
+    pub async fn flush_async_typed(&self) -> Result<(), CanonicalFlushError> {
         let _ = self.flush_outcome();
         self.exporters
             .lifecycle
@@ -474,7 +405,6 @@ impl RuntimeTelemetry {
                 .into_iter()
                 .map(|metric| match metric {
                     BufferedMetric::Canonical(record) => Ok(*record),
-                    BufferedMetric::Released(metric) => legacy_projection::metric_record(&metric),
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .and_then(|batch| self.exporters.metrics.export_metrics(&batch));
@@ -497,7 +427,7 @@ impl RuntimeTelemetry {
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing the final shutdown
     /// error state.
-    pub fn shutdown(&self) -> Result<(), ShutdownFailure> {
+    pub fn shutdown(&self) -> Result<(), CanonicalShutdownError> {
         self.shutdown_typed()
     }
 
@@ -508,7 +438,7 @@ impl RuntimeTelemetry {
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing final state.
-    pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
+    pub fn shutdown_typed(&self) -> Result<(), CanonicalShutdownError> {
         if self.exporters.lifecycle.is_shutdown() {
             return Ok(());
         }
@@ -533,7 +463,7 @@ impl RuntimeTelemetry {
     /// SDK callers use this method to await admitted RPC completion. Synchronous HTTP
     /// callers keep using [`RuntimeTelemetry::shutdown_typed`], whose backend owns a
     /// bounded blocking worker shutdown.
-    pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownFailure> {
+    pub async fn shutdown_async_typed(&self) -> Result<(), CanonicalShutdownError> {
         if self.exporters.lifecycle.is_shutdown() {
             return Ok(());
         }
@@ -547,7 +477,7 @@ impl RuntimeTelemetry {
         &self,
         flush_outcome: FlushOutcome,
         lifecycle_result: Result<(), ExportError>,
-    ) -> Result<(), ShutdownFailure> {
+    ) -> Result<(), CanonicalShutdownError> {
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let dropped = runtime.span_assembler.flush_incomplete() as u64;
         if dropped > 0 {
@@ -751,16 +681,18 @@ fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
     sc_observability_types::EntityId::new(entity_id)
         .map(|_| ())
         .map_err(|error| {
-            let failure = EventFailure::invalid_event(
-                "log event state transition entity_id is invalid",
-                Remediation::recoverable(
-                    "emit a valid entity_id or omit it",
-                    ["rebuild the state transition before emitting"],
-                ),
-            )
-            .source(Box::new(error));
             CanonicalTelemetryError::Event(CanonicalEventError::Validation {
-                context: failure.into_context(),
+                context: Box::new(
+                    ErrorContext::new(
+                        error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
+                        "log event state transition entity_id is invalid",
+                        Remediation::recoverable(
+                            "emit a valid entity_id or omit it",
+                            ["rebuild the state transition before emitting"],
+                        ),
+                    )
+                    .source(Box::new(error)),
+                ),
             })
         })
 }

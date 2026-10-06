@@ -1,6 +1,7 @@
 """Unit tests for the stock rustdoc-JSON snapshot wrapper."""
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,14 +10,16 @@ from scripts.ci import stock_public_api as snapshots
 
 
 class StockPublicApiTests(unittest.TestCase):
-    def test_release_roster_is_all_ten_published_rust_crates(self):
+    def test_release_roster_matches_publish_artifacts(self):
         packages = snapshots.published_packages()
-        self.assertEqual(len(packages), 10)
-        self.assertEqual({package.name for package in packages}, {
-            "sc-observability-types", "sc-observability", "sc-observe", "sc-observability-otlp",
-            "sc-observability-log-macros", "sc-observability-log", "sc-observability-dto",
-            "sc-observability-binding-runtime", "sc-observability-tauri", "sc-observability-py",
-        })
+        manifest = tomllib.loads(
+            (snapshots.ROOT / "release/publish-artifacts.toml").read_text(encoding="utf-8")
+        )
+        expected = {
+            item["package"] for item in manifest["crates"] if item.get("publish") is True
+        }
+        self.assertEqual({package.name for package in packages}, expected)
+        self.assertEqual(len(packages), len(expected))
 
     def test_check_requires_generated_json_before_invoking_stock_tool(self):
         package = snapshots.Package("demo", Path("demo/Cargo.toml"), "demo", "1.5.0")

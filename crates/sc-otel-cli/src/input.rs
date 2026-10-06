@@ -19,12 +19,41 @@ pub(crate) fn envelope(
     record_key: Option<&str>,
 ) -> Result<SubmissionEnvelope, CliError> {
     let json = if args.stdin {
-        read_stdin()?
+        #[cfg(test)]
+        {
+            override_or_read_stdin(args.stdin_input.clone(), read_stdin)?
+        }
+        #[cfg(not(test))]
+        {
+            read_stdin()?
+        }
     } else {
         fragments(args, record_key)?
     };
     SubmissionEnvelope::from_json(&json, &mut SystemIds::new())
         .map_err(|error| CliError::from(TelemetryClientError::from(error)))
+}
+
+#[cfg(test)]
+fn override_or_read_stdin(
+    stdin_input: Option<String>,
+    read: impl FnOnce() -> Result<String, CliError>,
+) -> Result<String, CliError> {
+    match stdin_input {
+        Some(input) => Ok(input),
+        None => read(),
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn stdin_override_does_not_read_process_stdin() {
+    let input = override_or_read_stdin(Some("{}".into()), || {
+        panic!("stdin reader must not run when an override is present")
+    })
+    .expect("override is returned");
+
+    assert_eq!(input, "{}");
 }
 
 fn read_stdin() -> Result<String, CliError> {

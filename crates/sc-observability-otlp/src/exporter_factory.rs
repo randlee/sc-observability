@@ -20,12 +20,27 @@ use crate::contracts::{
     self, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, LogRecord,
     MetricExporter, TraceExporter,
 };
-#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
-use crate::legacy_projection::transport_construction_failure;
 #[cfg(feature = "otlp-sdk")]
 use crate::sdk;
 #[cfg(feature = "sync-http")]
 use crate::sync_http;
+
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
+fn transport_construction_failure(error: ExportError) -> ConfigFailure {
+    ConfigFailure::TransportConstructionFailed {
+        context: Box::new(
+            ErrorContext::new(
+                sc_observability_types::error_codes::otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
+                "the selected exporter transport could not be constructed",
+                Remediation::recoverable(
+                    "correct the transport configuration",
+                    ["inspect the preserved exporter failure cause"],
+                ),
+            )
+            .source(Box::new(error)),
+        ),
+    }
+}
 
 /// Explicit disabled-transport exporters. They are never selected for an
 /// enabled backend; the factory rejects enabled selections until D.6-D.8
@@ -87,18 +102,6 @@ impl ExporterLifecycle for DisabledLifecycle {
         self.shutdown.store(true, Ordering::Release);
         Ok(())
     }
-}
-
-/// Consumes only fully validated transport bounds before selecting one common
-/// exporter shape. Protocol, feature, and caller-runtime availability are
-/// deliberately checked here, after the configuration's normative ordered
-/// validation, so an unavailable backend cannot mask a malformed config.
-#[cfg(test)]
-pub(crate) fn exporter_factory(
-    config: &RuntimeTelemetryConfig,
-    bounds: &ValidatedTransportBounds,
-) -> Result<ExporterSet, ConfigFailure> {
-    exporter_factory_prepared(config, bounds)
 }
 
 #[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]

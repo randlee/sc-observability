@@ -7,8 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TESTS = (
-    'public_sync_http_factory_exports_decoded_trace_counter_and_gauge',
-    'public_sync_http_factory_recovers_a_partial_log_export_failure',
+    'canonical_ingress_exports_every_field_over_the_sdk_backend',
+    'canonical_ingress_exports_every_field_over_the_sync_http_backend',
 )
 
 
@@ -17,13 +17,13 @@ def main() -> None:
         subprocess.run(
             [
                 'cargo', 'test', '--locked', '-p', 'sc-observability-otlp',
-                '--test', 'full_stack_integration', '--features', 'sync-http',
+                '--test', 'canonical_ingress', '--features', 'otlp-sdk,sync-http',
                 '--', test,
             ],
             cwd=ROOT,
             check=True,
         )
-    print('OTLP_DEV_INSTALL_SMOKE_PASS: hermetic_collector public factory checks')
+    print('OTLP_DEV_INSTALL_SMOKE_PASS: hermetic_collector canonical ingress checks')
 
 
 if __name__ == '__main__':

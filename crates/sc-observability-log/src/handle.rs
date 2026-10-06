@@ -196,7 +196,7 @@ struct ShutdownCoordinator {
 
 static SHUTDOWN_COORDINATOR: OnceLock<ShutdownCoordinator> = OnceLock::new();
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 static FAIL_NEXT_COORDINATOR_RESERVATION: AtomicBool = AtomicBool::new(false);
 
 type ShutdownCommand = Box<dyn FnOnce() + Send + 'static>;
@@ -246,20 +246,160 @@ fn shutdown_command(
     })
 }
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 struct SaveShutdownHook {
     entered: mpsc::SyncSender<()>,
     release: mpsc::Receiver<()>,
 }
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 static SAVE_SHUTDOWN_HOOK: OnceLock<Mutex<Option<SaveShutdownHook>>> = OnceLock::new();
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 static WAIT_STOPPED_HOOK: OnceLock<Mutex<Option<mpsc::SyncSender<()>>>> = OnceLock::new();
 
 #[cfg(test)]
 static SHUTDOWN_WORK_HOOK: OnceLock<Mutex<Option<ShutdownCommand>>> = OnceLock::new();
+
+#[cfg(test)]
+const ISOLATED_TEST_CHILD_DEADLINE: Duration = Duration::from_secs(30);
+#[cfg(test)]
+const ISOLATED_TEST_CHILD_POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+#[cfg(test)]
+struct ReapIsolatedTestChildOnDrop {
+    child: Option<std::process::Child>,
+}
+
+#[cfg(test)]
+impl ReapIsolatedTestChildOnDrop {
+    fn new(child: std::process::Child) -> Self {
+        Self { child: Some(child) }
+    }
+
+    fn child_mut(&mut self) -> &mut std::process::Child {
+        self.child
+            .as_mut()
+            .expect("isolated test child remains guarded until it is reaped")
+    }
+
+    fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        self.child_mut().try_wait()
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        self.child_mut().kill()
+    }
+
+    fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        let status = self.child_mut().wait()?;
+        self.child = None;
+        Ok(status)
+    }
+}
+
+#[cfg(test)]
+impl Drop for ReapIsolatedTestChildOnDrop {
+    fn drop(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug)]
+enum IsolatedTestChildRun {
+    Completed(std::process::Output),
+    TimedOut {
+        elapsed: Duration,
+        status: std::process::ExitStatus,
+        stdout: Vec<u8>,
+        stderr: Vec<u8>,
+        kill_error: Option<std::io::Error>,
+    },
+}
+
+#[cfg(test)]
+fn read_isolated_test_child_output(
+    reader: impl std::io::Read + Send + 'static,
+) -> std::thread::JoinHandle<std::io::Result<Vec<u8>>> {
+    std::thread::spawn(move || {
+        let mut reader = reader;
+        let mut output = Vec::new();
+        std::io::Read::read_to_end(&mut reader, &mut output)?;
+        Ok(output)
+    })
+}
+
+#[cfg(test)]
+fn collect_isolated_test_child_output(
+    reader: std::thread::JoinHandle<std::io::Result<Vec<u8>>>,
+) -> Vec<u8> {
+    match reader.join() {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => format!("<capture failed: {error}>").into_bytes(),
+        Err(_) => b"<capture thread panicked>".to_vec(),
+    }
+}
+
+#[cfg(test)]
+fn run_isolated_test_child(
+    command: &mut std::process::Command,
+    deadline: Duration,
+) -> IsolatedTestChildRun {
+    let mut child = ReapIsolatedTestChildOnDrop::new(
+        command
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn isolated library test"),
+    );
+    let stdout = read_isolated_test_child_output(
+        child
+            .child_mut()
+            .stdout
+            .take()
+            .expect("piped isolated test child stdout"),
+    );
+    let stderr = read_isolated_test_child_output(
+        child
+            .child_mut()
+            .stderr
+            .take()
+            .expect("piped isolated test child stderr"),
+    );
+    let started = Instant::now();
+    loop {
+        if child
+            .try_wait()
+            .expect("poll isolated library test child")
+            .is_some()
+        {
+            let status = child.wait().expect("reap isolated library test child");
+            return IsolatedTestChildRun::Completed(std::process::Output {
+                status,
+                stdout: collect_isolated_test_child_output(stdout),
+                stderr: collect_isolated_test_child_output(stderr),
+            });
+        }
+        if started.elapsed() >= deadline {
+            let kill_error = child.kill().err();
+            let status = child
+                .wait()
+                .expect("reap timed-out isolated library test child");
+            return IsolatedTestChildRun::TimedOut {
+                elapsed: started.elapsed(),
+                status,
+                stdout: collect_isolated_test_child_output(stdout),
+                stderr: collect_isolated_test_child_output(stderr),
+                kill_error,
+            };
+        }
+        std::thread::sleep(ISOLATED_TEST_CHILD_POLL_INTERVAL);
+    }
+}
 
 #[cfg(test)]
 pub(crate) fn is_isolated_test_child(test_name: &str) -> bool {
@@ -267,11 +407,24 @@ pub(crate) fn is_isolated_test_child(test_name: &str) -> bool {
     if std::env::var(CHILD_ENV).as_deref() == Ok(test_name) {
         return true;
     }
-    let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+    let mut command = std::process::Command::new(std::env::current_exe().expect("test executable"));
+    command
         .args(["--exact", test_name, "--nocapture", "--test-threads=1"])
-        .env(CHILD_ENV, test_name)
-        .output()
-        .expect("spawn isolated library test");
+        .env(CHILD_ENV, test_name);
+    let output = match run_isolated_test_child(&mut command, ISOLATED_TEST_CHILD_DEADLINE) {
+        IsolatedTestChildRun::Completed(output) => output,
+        IsolatedTestChildRun::TimedOut {
+            elapsed,
+            status,
+            stdout,
+            stderr,
+            kill_error,
+        } => panic!(
+            "isolated {test_name} exceeded {ISOLATED_TEST_CHILD_DEADLINE:?} and was killed after {elapsed:?}: status={status}; kill_error={kill_error:?}; stdout={}\\nstderr={}",
+            String::from_utf8_lossy(&stdout),
+            String::from_utf8_lossy(&stderr),
+        ),
+    };
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -300,7 +453,7 @@ fn run_shutdown_work_hook() {
 /// A failed reservation is therefore an initialization failure rather than a
 /// partially usable bridge that discovers it cannot complete its lifecycle.
 pub(crate) fn reserve_shutdown_coordinator() -> Result<(), std::io::Error> {
-    #[cfg(feature = "test_hooks")]
+    #[cfg(test)]
     if FAIL_NEXT_COORDINATOR_RESERVATION.swap(false, Ordering::SeqCst) {
         return Err(std::io::Error::other(
             "injected coordinator reservation failure",
@@ -328,16 +481,14 @@ pub(crate) fn reserve_shutdown_coordinator() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-#[cfg(feature = "test_hooks")]
-#[doc(hidden)]
-pub fn fail_next_shutdown_coordinator_reservation() {
+#[cfg(all(test, feature = "v1"))]
+fn fail_next_shutdown_coordinator_reservation() {
     FAIL_NEXT_COORDINATOR_RESERVATION.store(true, Ordering::SeqCst);
 }
 
 /// Pauses the next terminal shutdown save before it locks the coordinator.
-#[cfg(feature = "test_hooks")]
-#[doc(hidden)]
-pub fn block_next_shutdown_save(entered: mpsc::SyncSender<()>, release: mpsc::Receiver<()>) {
+#[cfg(test)]
+fn block_next_shutdown_save(entered: mpsc::SyncSender<()>, release: mpsc::Receiver<()>) {
     *SAVE_SHUTDOWN_HOOK
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -345,16 +496,15 @@ pub fn block_next_shutdown_save(entered: mpsc::SyncSender<()>, release: mpsc::Re
 }
 
 /// Signals immediately before the next in-progress waiter sleeps on completion.
-#[cfg(feature = "test_hooks")]
-#[doc(hidden)]
-pub fn notify_next_wait_stopped(entered: mpsc::SyncSender<()>) {
+#[cfg(test)]
+fn notify_next_wait_stopped(entered: mpsc::SyncSender<()>) {
     *WAIT_STOPPED_HOOK
         .get_or_init(|| Mutex::new(None))
         .lock()
         .unwrap_or_else(PoisonError::into_inner) = Some(entered);
 }
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 fn run_save_shutdown_hook() {
     let hook = SAVE_SHUTDOWN_HOOK
         .get_or_init(|| Mutex::new(None))
@@ -367,7 +517,7 @@ fn run_save_shutdown_hook() {
     }
 }
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 fn notify_wait_stopped_hook() {
     if let Some(entered) = WAIT_STOPPED_HOOK
         .get_or_init(|| Mutex::new(None))
@@ -405,7 +555,7 @@ fn save_shutdown(outcome: ShutdownOutcome, lifecycle: BridgeLifecycle) {
     let Some(coordinator) = shutdown_coordinator() else {
         return;
     };
-    #[cfg(feature = "test_hooks")]
+    #[cfg(test)]
     run_save_shutdown_hook();
     let mut state = coordinator
         .state
@@ -474,7 +624,7 @@ pub(crate) fn wait_stopped(timeout: Duration) -> Result<ShutdownReport, crate::W
                 if remaining.is_zero() {
                     return Err(crate::WaitError::TimedOut { timeout });
                 }
-                #[cfg(feature = "test_hooks")]
+                #[cfg(test)]
                 notify_wait_stopped_hook();
                 let (next, result) = coordinator
                     .complete
@@ -723,16 +873,15 @@ static DETACHED_HELPERS: AtomicU32 = AtomicU32::new(0);
 static FLUSH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 // MUTEX: transfers the one-shot observer into the next flush claim; no callback runs under it.
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 static FLUSH_COMPLETION: OnceLock<Mutex<Option<mpsc::SyncSender<bool>>>> = OnceLock::new();
 
 /// Observes whether the next claimed flush released its flag before notifying.
 ///
 /// Register before starting the flush. The isolated test must not start another
 /// flush until it receives the witness; `true` means the flag was clear at send.
-#[cfg(feature = "test_hooks")]
-#[doc(hidden)]
-pub fn notify_next_flush_complete(completed: mpsc::SyncSender<bool>) {
+#[cfg(test)]
+fn notify_next_flush_complete(completed: mpsc::SyncSender<bool>) {
     *FLUSH_COMPLETION
         .get_or_init(|| Mutex::new(None))
         .lock()
@@ -764,7 +913,7 @@ impl Drop for HelperExit {
 /// Exclusive claim on a single-flight flag; released on drop, including during unwinding.
 struct Flight {
     flag: &'static AtomicBool,
-    #[cfg(feature = "test_hooks")]
+    #[cfg(test)]
     completion: Option<mpsc::SyncSender<bool>>,
 }
 
@@ -775,7 +924,7 @@ impl Flight {
             .ok()
             .map(|_| Self {
                 flag,
-                #[cfg(feature = "test_hooks")]
+                #[cfg(test)]
                 completion: if std::ptr::eq(flag, &raw const FLUSH_IN_FLIGHT) {
                     FLUSH_COMPLETION
                         .get_or_init(|| Mutex::new(None))
@@ -792,7 +941,7 @@ impl Flight {
 impl Drop for Flight {
     fn drop(&mut self) {
         self.flag.store(false, Ordering::SeqCst);
-        #[cfg(feature = "test_hooks")]
+        #[cfg(test)]
         if let Some(completed) = self.completion.take() {
             // Capture at the notification site: an early notification must not
             // pass just because the receiver happens to run after the clear.
@@ -1141,9 +1290,185 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "unit tests retain coverage of the released v1 facade"
+)]
 mod tests {
     use super::*;
+    use std::sync::mpsc::sync_channel;
     use std::time::Instant;
+
+    #[test]
+    fn isolated_test_child_timeout_kills_and_reaps() {
+        const CHILD_ENV: &str = "SC_OBSERVABILITY_LOG_ISOLATED_TEST_TIMEOUT_CHILD";
+        const TEST_NAME: &str = "handle::tests::isolated_test_child_timeout_kills_and_reaps";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            std::thread::sleep(Duration::from_secs(60));
+            return;
+        }
+
+        let mut command =
+            std::process::Command::new(std::env::current_exe().expect("test executable"));
+        command
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, "1");
+        let started = Instant::now();
+        let run = run_isolated_test_child(&mut command, Duration::from_millis(100));
+        let (elapsed, kill_error) = match run {
+            IsolatedTestChildRun::TimedOut {
+                elapsed,
+                kill_error,
+                ..
+            } => (elapsed, kill_error),
+            other @ IsolatedTestChildRun::Completed(_) => {
+                panic!("hung isolated test child must time out: {other:?}")
+            }
+        };
+        assert!(
+            kill_error.is_none(),
+            "timed-out child must be killed: {kill_error:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "deadline was not bounded: {elapsed:?}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "parent must return after killing and reaping the timed-out child"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "v1")]
+    fn coordinator_failure_returns_runtime_start_before_global_install() {
+        if !is_isolated_test_child(
+            "handle::tests::coordinator_failure_returns_runtime_start_before_global_install",
+        ) {
+            return;
+        }
+        let root = tempfile::tempdir().expect("temporary log root");
+        let options = crate::BridgeOptions {
+            default_action: crate::ActionName::new("log.record").expect("action"),
+            parse_bracket_action: false,
+        };
+        let mut failed = crate::LoggerConfig::default_for(
+            crate::ServiceName::new("runtime-start").expect("service"),
+            root.path().to_path_buf(),
+        );
+        failed.level = crate::LevelFilter::Info;
+        failed.enable_console_sink = false;
+        fail_next_shutdown_coordinator_reservation();
+        let error = crate::init(failed, options.clone()).expect_err("injected startup failure");
+        assert_eq!(
+            error.code().as_str(),
+            "SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED"
+        );
+
+        let mut retry = crate::LoggerConfig::default_for(
+            crate::ServiceName::new("runtime-start").expect("service"),
+            root.path().to_path_buf(),
+        );
+        retry.level = crate::LevelFilter::Info;
+        retry.enable_console_sink = false;
+        crate::v2::init(retry, options)
+            .expect("retry starts")
+            .shutdown(Duration::from_secs(5))
+            .expect("retry shuts down");
+    }
+
+    #[test]
+    fn health_snapshot_failure_notifies_and_retains_unavailable_for_all_controls() {
+        if !is_isolated_test_child(
+            "handle::tests::health_snapshot_failure_notifies_and_retains_unavailable_for_all_controls",
+        ) {
+            return;
+        }
+        let root = tempfile::tempdir().expect("temporary log root");
+        let mut config = crate::LoggerConfig::default_for(
+            crate::ServiceName::new("shutdown-snapshot-unavailable").expect("service"),
+            root.path().to_path_buf(),
+        );
+        config.level = crate::LevelFilter::Info;
+        config.enable_console_sink = false;
+        let guard = crate::v2::init(
+            config,
+            crate::BridgeOptions {
+                default_action: crate::ActionName::new("log.record").expect("action"),
+                parse_bracket_action: false,
+            },
+        )
+        .expect("starts");
+        let first_control = guard.control();
+        let second_control = first_control.clone();
+
+        let (save_entered_tx, save_entered_rx) = sync_channel(1);
+        let (save_release_tx, save_release_rx) = sync_channel(1);
+        block_next_shutdown_save(save_entered_tx, save_release_rx);
+        health::fail_next_health_snapshot();
+        let (shutdown_tx, shutdown_rx) = sync_channel(1);
+        let _shutdown = std::thread::spawn(move || {
+            let _ = shutdown_tx.send(guard.shutdown(Duration::from_secs(5)));
+        });
+        save_entered_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("shutdown reaches terminal save gate");
+
+        let (wait_entered_tx, wait_entered_rx) = sync_channel(1);
+        notify_next_wait_stopped(wait_entered_tx);
+        let (waiter_tx, waiter_rx) = sync_channel(1);
+        let _waiter = std::thread::spawn(move || {
+            let _ = waiter_tx.send(first_control.wait_stopped(Duration::from_secs(5)));
+        });
+        wait_entered_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("control begins waiting");
+
+        save_release_tx.send(()).expect("release terminal save");
+        let first = waiter_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("waiting control notified promptly");
+        shutdown_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("shutdown completes")
+            .expect("terminal shutdown result");
+
+        let second = second_control.wait_stopped(Duration::ZERO);
+        let first_diagnostic = match first {
+            Err(crate::WaitError::Unavailable { diagnostic }) => diagnostic,
+            other => panic!("expected retained unavailable result, got {other:?}"),
+        };
+        let second_diagnostic = match second {
+            Err(crate::WaitError::Unavailable { diagnostic }) => diagnostic,
+            other => panic!("expected repeated unavailable result, got {other:?}"),
+        };
+        assert_eq!(
+            first_diagnostic.code.as_str(),
+            "SC_OBSERVABILITY_LOG_STATUS_UNAVAILABLE"
+        );
+        assert_eq!(
+            serde_json::to_value(first_diagnostic).expect("serialize first diagnostic"),
+            serde_json::to_value(second_diagnostic).expect("serialize second diagnostic"),
+            "repeated wait_stopped retains the terminal diagnostic"
+        );
+    }
+
+    #[test]
+    fn flush_completion_observer_confirms_release_before_notification() {
+        FLUSH_IN_FLIGHT.store(false, Ordering::SeqCst);
+        let (completed_tx, completed_rx) = sync_channel(1);
+        notify_next_flush_complete(completed_tx);
+        let flight = Flight::claim(&FLUSH_IN_FLIGHT).expect("claim flush flight");
+        assert!(FLUSH_IN_FLIGHT.load(Ordering::SeqCst));
+        drop(flight);
+        assert!(
+            completed_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("completion witness"),
+            "the flight flag is clear before observer notification"
+        );
+        assert!(!FLUSH_IN_FLIGHT.load(Ordering::SeqCst));
+    }
 
     #[test]
     fn shared_level_gate_covers_every_level_and_filter() {
@@ -1490,12 +1815,13 @@ mod tests {
             })
         ));
         assert_eq!(lifecycle(), BridgeLifecycle::Failed);
-        assert!(matches!(
-            crate::LogControl::new().flush(Duration::ZERO),
-            Err(crate::FlushError::NotRunning {
-                phase: crate::LifecyclePhase::Failed,
-            })
-        ));
+        let error = crate::v2::LogControl::new()
+            .flush(Duration::ZERO)
+            .expect_err("failed lifecycle rejects flush");
+        assert_eq!(
+            error.diagnostic().code.as_str(),
+            crate::error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING.as_str()
+        );
     }
 
     /// Signals its channel when dropped: the work closure has returned.

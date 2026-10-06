@@ -10,26 +10,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features:
-          - otlp-sdk
-          - sync-http
-          - otlp-sdk,sync-http
+        features: [otlp-sdk, sync-http, otlp-sdk,sync-http]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: '1.94.1'
           components: clippy, rustfmt
-      - name: Run hermetic collector conformance (${{ matrix.features }})
+      - name: Run the canonical span and histogram corpus through each production feature set
         run: >-
           cargo test --locked -p sc-observability-otlp
           --test full_stack_integration --features ${{ matrix.features }}
-
-      - name: Run the canonical span and histogram corpus through both production backends
-        if: matrix.features == 'otlp-sdk,sync-http'
-        run: >-
-          cargo test --locked -p sc-observability-otlp
-          --test canonical_ingress --features otlp-sdk,sync-http
 
   desktop-viewer-factory-conformance:
     name: desktop-viewer-factory-conformance (macOS arm64)

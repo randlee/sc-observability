@@ -1,5 +1,7 @@
 //! Compile-time lock for the accepted B.P3 native bridge surface.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::items_after_statements,
     reason = "signature probes are adjacent to the contract they pin"
 )]

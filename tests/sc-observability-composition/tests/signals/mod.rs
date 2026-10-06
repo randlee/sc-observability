@@ -15,6 +15,7 @@ const METRIC: &str = "composition.payload";
 const START: u64 = 1_000_000_000;
 
 pub struct Projector;
+pub struct ReleasedProjector;
 fn timestamp(seconds: u8) -> Timestamp {
     serde_json::from_str(&format!("\"1970-01-01T00:00:{seconds:02}Z\"")).expect("fixture timestamp")
 }
@@ -94,53 +95,49 @@ impl v2::MetricProjector<LogEvent> for Projector {
         ])
     }
 }
-impl sc_observability_types::SpanProjector<LogEvent> for Projector {
+impl v2::SpanProjector<LogEvent> for ReleasedProjector {
     fn project_spans(
         &self,
         observation: &Observation<LogEvent>,
-    ) -> Result<Vec<sc_observability_types::SpanSignal>, sc_observability_types::ProjectionError>
-    {
-        use sc_observability_types::{SpanRecord, SpanSignal, TraceContext};
+    ) -> Result<Vec<v2::SpanSignal>, v2::ProjectionError> {
         let event = &observation.payload;
-        let started = SpanRecord::<SpanStarted>::new(
+        let started = v2::SpanRecord::<SpanStarted>::new(
             timestamp(1),
             event.service.clone(),
             event.action.clone(),
-            TraceContext {
-                trace_id: TraceId::new(TRACE).expect("trace"),
-                span_id: SpanId::new(SPAN).expect("span"),
-                parent_span_id: Some(SpanId::new(PARENT).expect("parent")),
-            },
-            serde_json::Map::from_iter([(
+            trace(),
+            v2::Attributes::from([(
                 "bridge.message".to_owned(),
-                serde_json::json!(event.message),
+                v2::AttributeValue::String(event.message.clone().expect("bridge message")),
             )]),
         );
         let ended = started.clone().end(SpanStatus::Ok, DurationMs::from(25));
-        Ok(vec![SpanSignal::Started(started), SpanSignal::Ended(ended)])
+        Ok(vec![
+            v2::SpanSignal::Started(started),
+            v2::SpanSignal::Ended(ended),
+        ])
     }
 }
-impl sc_observability_types::MetricProjector<LogEvent> for Projector {
+impl v2::MetricProjector<LogEvent> for ReleasedProjector {
     fn project_metrics(
         &self,
         observation: &Observation<LogEvent>,
-    ) -> Result<Vec<sc_observability_types::MetricRecord>, sc_observability_types::ProjectionError>
-    {
-        Ok(vec![sc_observability_types::MetricRecord {
-            timestamp: timestamp(2),
-            service: observation.payload.service.clone(),
-            name: MetricName::new(METRIC).expect("metric"),
-            kind: sc_observability_types::MetricKind::Gauge,
-            value: f64::from(
-                u32::try_from(observation.payload.message.as_ref().expect("message").len())
-                    .expect("short fixture"),
-            ),
-            unit: None,
-            attributes: serde_json::Map::new(),
-        }])
+    ) -> Result<Vec<v2::MetricRecord>, v2::ProjectionError> {
+        let value = f64::from(
+            u32::try_from(observation.payload.message.as_ref().expect("message").len())
+                .expect("short fixture"),
+        );
+        Ok(vec![
+            v2::MetricRecord::try_new(
+                timestamp(2),
+                observation.payload.service.clone(),
+                MetricName::new(METRIC).expect("metric"),
+                v2::MetricValue::Gauge(v2::FiniteF64::new(value).expect("finite gauge")),
+            )
+            .expect("metric record"),
+        ])
     }
 }
-
 pub fn assert_grpc(exports: &super::grpc_collector::Exports, message: &str, released: bool) {
     use opentelemetry_proto::tonic::common::v1::any_value::Value;
     use opentelemetry_proto::tonic::metrics::v1::{metric::Data, number_data_point};

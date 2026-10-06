@@ -12,11 +12,12 @@ from scripts.integrate import dispatch, run_suite
 
 
 class SelectionTests(unittest.TestCase):
-    def test_defaults_select_eighteen_distinct_pairs(self):
+    def test_defaults_select_fifteen_distinct_pairs_without_retired_rust_viewer(self):
         _, _, matrix, coverage = dispatch.selection(",".join(dispatch.SUITES), ",".join(dispatch.RUNNERS))
         cells = matrix["include"]
-        self.assertEqual(18, len(cells))
-        self.assertEqual(18, len({(cell["suite"], cell["os"]) for cell in cells}))
+        self.assertNotIn("rust-viewer", dispatch.SUITES)
+        self.assertEqual(15, len(cells))
+        self.assertEqual(15, len({(cell["suite"], cell["os"]) for cell in cells}))
         self.assertIn("Full selection", coverage)
 
     def test_cli_defaults_match_full_selection(self):
@@ -24,7 +25,7 @@ class SelectionTests(unittest.TestCase):
         with patch.dict("os.environ", {"GITHUB_OUTPUT": "", "GITHUB_STEP_SUMMARY": ""}), redirect_stdout(output):
             self.assertEqual(0, dispatch.main(["--matrix"]))
         cells = json.loads(output.getvalue())["include"]
-        self.assertEqual(18, len(cells))
+        self.assertEqual(15, len(cells))
         self.assertEqual({"macos", "windows", "linux"}, {cell["os"] for cell in cells})
 
     def test_subset_is_exact_and_partial(self):

@@ -70,12 +70,10 @@ atm-observability-adapter
   fallback, and shutdown-safe durability behavior.
 - ADP-005 The ATM adapter shall own ATM health JSON projection from shared
   health models.
-- ADP-006 The ATM adapter shall preserve parity across `atm status`,
-  `atm doctor`, and `atm daemon status` health surfaces until an explicit
-  breaking change is approved.
-- ADP-007 The ATM adapter shall preserve compatibility for currently shipped ATM
-  observability schemas until an explicit migration or breaking change is
-  approved.
+- ADP-006 The ATM adapter shall document how shared health models are projected
+  across `atm status`, `atm doctor`, and `atm daemon status`.
+- ADP-007 The ATM adapter shall document the mapping of currently shipped ATM
+  observability schemas and any consumer migration of those schemas.
 
 ## 3. Mapping Semantics
 
@@ -127,6 +125,7 @@ atm-observability-adapter
   docs alone.
 - ADP-024 ATM migration confidence shall require an ATM-owned proving plan or
   implementation that exercises the adapter contract against the shared crates.
-- ADP-025 The unpublished proving artifact in this repo may be used as boundary
-  evidence only; it shall not be used as the sole evidence that ATM migration is
-  fully specified.
+- ADP-025 The unpublished proving artifact in this repo is retired and retained
+  as historical context only ([architecture §10](architecture.md#10-atm-proving-artifact-retired-in-phase-f));
+  do not copy it as an active pattern or cite it as boundary evidence, and do
+  not use it as the sole evidence that ATM migration is fully specified.
