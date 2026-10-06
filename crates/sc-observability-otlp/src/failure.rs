@@ -43,6 +43,7 @@ pub(crate) fn flush_lifecycle_failure(error: ExportError) -> FlushFailure {
 /// below so a regression in its error-context/source chaining is still
 /// caught even while the call site is dormant.
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
     ShutdownFailure::from_context(Box::new(
         ErrorContext::new(

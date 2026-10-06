@@ -23,7 +23,7 @@ test:
     python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
     python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
     cargo test --workspace --no-fail-fast
-    cargo test --manifest-path examples/otlp-sdk/Cargo.toml --features sdk-fixture --locked
+    cargo test --manifest-path examples/otlp-sdk/Cargo.toml --locked
     python3 -m unittest scripts.ci.tests.test_prepare_release_staged_packages scripts.ci.tests.test_publish_retry_idempotency scripts.ci.tests.test_stock_public_api scripts.integrate.tests.test_dispatch scripts.integrate.tests.test_runner_workflow scripts.api.test_history scripts.api.test_python_surface
 
 # cargo-deny with policy/deny-durable-store.toml over the durable-store, otlp-telemetry and sc-otel-cli graphs.

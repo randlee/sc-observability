@@ -1,14 +1,8 @@
-//! External Tokio-hosted exercise of the D.7 SDK fixture seam.
-//!
-//! This consumer lives outside `sc-observability-otlp`. It proves the
-//! non-default fixture can drive real signal projection, bounded admission,
-//! ordered asynchronous completion, and host-runtime teardown without
-//! activating D.18's production `Telemetry` factory.
+//! Crate-local SDK fixture tests for canonical adapter projection and lifecycle.
 
-#![cfg(feature = "sdk-fixture")]
-
-use sc_observability_otlp::SdkFixture;
-use sc_observability_otlp::v2::{
+use crate::config::{validated_backend_connection, validated_telemetry_bounds};
+use crate::sdk::implementation::{SdkAdapterSet, build_exporter_set};
+use crate::v2::{
     ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
     TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
@@ -16,6 +10,8 @@ use sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL;
 use sc_observability_types::otlp::{
     OtlpCompleteSpan, OtlpInstrumentationScope, OtlpLogRecord, OtlpRecord, OtlpResource,
 };
+use sc_observability_types::typed::InitFailure;
+use sc_observability_types::v2::ExportError;
 use sc_observability_types::v2::{
     AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint, MetricRecord,
     MetricValue, SpanEvent, SpanKind, SpanRecord, TraceContext as V2TraceContext, TraceFlags,
@@ -30,6 +26,41 @@ use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+
+struct SdkFixture {
+    adapter: SdkAdapterSet,
+}
+
+impl SdkFixture {
+    fn new(config: &TelemetryConfig) -> Result<Self, InitFailure> {
+        let bounds = validated_telemetry_bounds(config)?;
+        let connection = validated_backend_connection(&config.transport)
+            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+        let adapter = build_exporter_set(&connection, &bounds)
+            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+        Ok(Self { adapter })
+    }
+
+    fn export_logs(&self, records: &[OtlpRecord<OtlpLogRecord>]) -> Result<(), ExportError> {
+        self.adapter.exporters.logs.export_logs(records)
+    }
+
+    fn export_spans(&self, records: &[OtlpRecord<OtlpCompleteSpan>]) -> Result<(), ExportError> {
+        self.adapter.exporters.traces.export_spans(records)
+    }
+
+    fn export_metrics(&self, records: &[OtlpRecord<MetricRecord>]) -> Result<(), ExportError> {
+        self.adapter.exporters.metrics.export_metrics(records)
+    }
+
+    async fn flush(&self) -> Result<(), ExportError> {
+        self.adapter.exporters.lifecycle.flush_async().await
+    }
+
+    async fn shutdown(&self) -> Result<(), ExportError> {
+        self.adapter.exporters.lifecycle.shutdown_async().await
+    }
+}
 
 fn fixture_config(queue_byte_capacity: usize) -> TelemetryConfig {
     fixture_config_for_endpoint(queue_byte_capacity, "http://127.0.0.1:9")
@@ -46,7 +77,7 @@ fn fixture_config_for_endpoint(queue_byte_capacity: usize, endpoint: &str) -> Te
     transport.lifecycle_flush_timeout_ms = Some(DurationMs::from(100));
     transport.lifecycle_shutdown_timeout_ms = Some(DurationMs::from(100));
 
-    TelemetryConfigBuilder::new(ServiceName::new("otlp-sdk-fixture").expect("service"))
+    TelemetryConfigBuilder::new(ServiceName::new("otlp-sdk-test").expect("service"))
         .with_transport(transport)
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
@@ -99,7 +130,7 @@ fn log_record() -> OtlpRecord<OtlpLogRecord> {
                 version: SchemaVersion::new("v1").expect("schema version"),
                 timestamp: Timestamp::UNIX_EPOCH,
                 level: Level::Info,
-                service: ServiceName::new("otlp-sdk-fixture").expect("service"),
+                service: ServiceName::new("otlp-sdk-test").expect("service"),
                 target: TargetCategory::new("fixture.sdk").expect("target"),
                 action: ActionName::new("fixture.export").expect("action"),
                 message: Some("real external SDK fixture".to_owned()),
@@ -129,7 +160,7 @@ fn span_record() -> OtlpRecord<OtlpCompleteSpan> {
         record: OtlpCompleteSpan {
             record: SpanRecord::new(
                 Timestamp::UNIX_EPOCH,
-                ServiceName::new("otlp-sdk-fixture").expect("service"),
+                ServiceName::new("otlp-sdk-test").expect("service"),
                 ActionName::new("fixture.span").expect("action"),
                 trace.clone(),
                 Attributes::default(),
@@ -153,7 +184,7 @@ fn metric_record() -> OtlpRecord<MetricRecord> {
         scope: scope(),
         record: MetricRecord::try_new(
             Timestamp::UNIX_EPOCH,
-            ServiceName::new("otlp-sdk-fixture").expect("service"),
+            ServiceName::new("otlp-sdk-test").expect("service"),
             MetricName::new("fixture.duration").expect("metric name"),
             MetricValue::Histogram {
                 point: HistogramPoint::try_new(

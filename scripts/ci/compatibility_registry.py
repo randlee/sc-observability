@@ -130,6 +130,8 @@ def is_compat_source_path(relative_path: str) -> bool:
         normalized == "src/compat.rs"
         or normalized.endswith("/src/compat.rs")
         or "/src/compat/" in f"/{normalized}"
+        or normalized == "src/v1.rs"
+        or normalized.endswith("/src/v1.rs")
     )
 
 

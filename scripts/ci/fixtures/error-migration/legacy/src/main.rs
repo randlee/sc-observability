@@ -1,12 +1,9 @@
 use sc_observability::{Logger, LoggerConfig};
-use sc_observability_otlp::{
-    AuthHeader, OtlpEndpoint, SpanAssembler, Telemetry, TelemetryConfigBuilder,
-};
+use sc_observability_otlp::v2::{AuthHeader, OtlpEndpoint, Telemetry, TelemetryConfigBuilder};
 use sc_observability_types::{
     ActionName, Diagnostic, ErrorCode, ErrorContext, InitError, LogEvent, Level, ProcessIdentity,
     ProjectionRegistration, Remediation, SchemaVersion,
-    ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, TargetCategory, Timestamp, ToolName,
-    TraceContext, TraceId,
+    ServiceName, TargetCategory, Timestamp, ToolName,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 
@@ -75,16 +72,16 @@ fn main() {
     routed.flush().expect("legacy observation flush");
     routed.shutdown().expect("legacy observation shutdown");
 
-    let endpoint = OtlpEndpoint::new("https://otel.example.invalid").expect("legacy endpoint");
-    let _header = AuthHeader::new("Bearer fixture").expect("legacy auth header");
+    let endpoint = OtlpEndpoint::new_typed("https://otel.example.invalid").expect("canonical endpoint");
+    let _header = AuthHeader::new_typed("Bearer fixture").expect("canonical auth header");
     let telemetry_config = TelemetryConfigBuilder::new(
         ServiceName::new("b1e-legacy").expect("valid service"),
     )
-    .build()
-    .expect("legacy telemetry config");
-    let telemetry = Telemetry::new(telemetry_config).expect("legacy telemetry");
-    telemetry.flush().expect("legacy telemetry flush");
-    telemetry.shutdown().expect("legacy telemetry shutdown");
+    .build_typed()
+    .expect("canonical telemetry config");
+    let telemetry = Telemetry::new_typed(telemetry_config).expect("canonical telemetry");
+    telemetry.flush_typed().expect("canonical telemetry flush");
+    telemetry.shutdown_typed().expect("canonical telemetry shutdown");
     assert_eq!(endpoint.as_str(), "https://otel.example.invalid");
 
     let legacy = InitError(Box::new(ErrorContext::new(
@@ -104,19 +101,6 @@ fn main() {
     assert_eq!(actual, expected);
     assert_eq!(legacy.0.diagnostic().code.as_str(), "SC_OBSERVABILITY_OTLP_INVALID_CONFIG");
 
-    let mut assembler = SpanAssembler::new();
-    let signal = SpanSignal::Started(SpanRecord::<SpanStarted>::new(
-        Timestamp::UNIX_EPOCH,
-        ServiceName::new("b1e-legacy-span").expect("service"),
-        ActionName::new("fixture.span").expect("action"),
-        TraceContext {
-            trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("trace"),
-            span_id: SpanId::new("0123456789abcdef").expect("span"),
-            parent_span_id: None,
-        },
-        serde_json::Map::new(),
-    ));
-    assert!(assembler.push(signal).expect("legacy span push").is_none());
 }
 
 fn exercise_legacy_wrapper_inventory() {

@@ -58,9 +58,12 @@ impl SpanAssemblyLoss {
 }
 
 /// Stateful span assembler used by telemetry export.
-#[expect(
-    missing_debug_implementations,
-    reason = "the assembler is an internal state machine with no stable public debug contract beyond its functional behavior"
+#[cfg_attr(
+    feature = "v1",
+    expect(
+        missing_debug_implementations,
+        reason = "the assembler is an internal state machine with no stable public debug contract beyond its functional behavior"
+    )
 )]
 pub struct SpanAssembler {
     started: HashMap<String, SpanRecord<SpanStarted>>,
@@ -109,6 +112,7 @@ impl SpanAssembler {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
         self.started.contains_key(&span_key(trace_id, span_id))
     }
@@ -220,6 +224,7 @@ impl SpanAssembler {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn remove_event_buffer(&mut self, key: &str) -> Option<Vec<SpanEvent>> {
         self.events.remove(key)
     }
@@ -245,6 +250,7 @@ impl V2SpanAssembler {
 
     /// Live-span and per-span event bounds in effect.
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn limits(&self) -> (usize, usize) {
         (self.max_live_spans, self.max_events_per_span)
     }

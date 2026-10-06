@@ -202,6 +202,10 @@ class CompatibilitySourcePathTests(unittest.TestCase):
         self.assertTrue(is_compat_source_path(
             "crates/sc-observability-otlp/src/compat/mod.rs"))
 
+    def test_v1_migration_module_is_accepted(self):
+        self.assertTrue(is_compat_source_path(
+            "crates/sc-observability-otlp/src/v1.rs"))
+
     def test_compatibility_file_is_rejected(self):
         self.assertFalse(is_compat_source_path(
             "crates/sc-observability-otlp/src/compatibility.rs"))

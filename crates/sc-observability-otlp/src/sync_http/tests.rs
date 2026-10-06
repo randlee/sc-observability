@@ -1801,7 +1801,7 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
         traces: None,
         metrics: None,
     };
-    let bounds = crate::config::validated_released_telemetry_bounds(&config).unwrap();
+    let bounds = crate::config::validated_test_telemetry_bounds(&config).unwrap();
     let connection =
         crate::config::prepared_backend_connection(&config.transport, &bounds).unwrap();
     let (delay_tx, delay_rx) = mpsc::channel();

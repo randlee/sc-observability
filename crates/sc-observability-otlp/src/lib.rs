@@ -14,24 +14,19 @@
 #[cfg(feature = "durable-store")]
 pub mod durable;
 
+#[allow(dead_code)]
 mod assembly;
-mod compat;
 mod config;
 #[cfg(test)]
 mod contract_tests;
 mod contracts;
+mod export_records;
 mod exporter_factory;
-#[cfg(test)]
-#[allow(
-    deprecated,
-    reason = "telemetry compatibility tests exercise retained lifecycle and error wrappers"
-)]
-mod facade_tests;
 mod failure;
-mod legacy_projection;
 mod lifecycle;
 #[cfg(test)]
 mod lifecycle_tests;
+#[allow(dead_code)]
 mod projectors;
 mod runtime;
 #[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
@@ -39,6 +34,9 @@ mod severity;
 #[cfg(all(test, feature = "otlp-sdk", feature = "sync-http"))]
 mod severity_tests;
 mod testing;
+
+#[cfg(feature = "v1")]
+pub mod v1;
 
 #[cfg(feature = "otlp-sdk")]
 mod sdk;
@@ -48,40 +46,11 @@ mod sync_http;
 pub mod constants;
 pub mod error_codes;
 
+#[cfg(feature = "v1")]
 use sc_observability_types::telemetry_health_provider_sealed;
 // `facade_tests` reaches the runtime's collaborators through `super::*`.
 #[doc(inline)]
-pub use sc_observability_types::{
-    ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
-    TelemetryHealthState,
-};
-#[cfg(test)]
-use {
-    crate::assembly::V2SpanAssembler,
-    crate::config::{TelemetryConfig as RuntimeTelemetryConfig, validated_transport_bounds},
-    crate::contracts::{ExportRecord, ExporterSet, LogExporter, LogRecord},
-    crate::exporter_factory::exporter_factory,
-    crate::failure::{export_failure_from_canonical_event, shutdown_flush_failure},
-    crate::legacy_projection::trace_context,
-    sc_observability_types::typed::FlushFailure,
-    sc_observability_types::v2::TelemetryError as CanonicalTelemetryError,
-    sc_observability_types::v2::{
-        ConfigFailure, EventError as CanonicalEventError, ExportError,
-        MetricRecord as CanonicalMetricRecord,
-    },
-    sc_observability_types::{ErrorContext, MetricRecord, Remediation, SpanSignal},
-    serde_json::Value,
-    std::sync::Arc,
-    std::sync::atomic::Ordering,
-};
-
-#[doc(inline)]
-pub use assembly::{CompleteSpan, SpanAssembler, SpanAssemblyLoss};
-#[doc(inline)]
-pub use compat::{
-    AuthHeader, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry, TelemetryConfig,
-    TelemetryConfigBuilder, TelemetryProjectors,
-};
+pub use assembly::SpanAssemblyLoss;
 #[doc(inline)]
 pub use config::{
     ExporterBackend, LogsConfig, MetricsConfig, ResourceAttributes, SyncHttpRetryPolicy,
@@ -91,6 +60,20 @@ pub use config::{
 pub use projectors::V2TelemetryProjectors;
 #[doc(inline)]
 pub use runtime::RuntimeTelemetry;
+#[doc(inline)]
+pub use sc_observability_types::{
+    ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
+    TelemetryHealthState,
+};
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "the root keeps the released v1 paths while v1 items direct consumers to v2"
+)]
+pub use v1::{
+    AuthHeader, CompleteSpan, OtelConfig, OtlpEndpoint, OtlpProtocol, SpanAssembler, Telemetry,
+    TelemetryConfig, TelemetryConfigBuilder, TelemetryProjectors,
+};
 
 /// Opt-in canonical OTLP facade for the compatible 1.x transition.
 ///
@@ -113,6 +96,3 @@ pub mod v2 {
         ConfigFailure, EventError, FlushError, InitError, ShutdownError, TelemetryError,
     };
 }
-#[cfg(feature = "sdk-test-support")]
-#[doc(inline)]
-pub use sdk::SdkFixture;

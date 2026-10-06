@@ -28,12 +28,7 @@ WRAPPERS = (
     ("ExportError", "ExportFailure"),
 )
 
-METHODS = (
-    ("otlp_config", "OtlpEndpoint::new", "OtlpEndpoint::new_typed"),
-    ("otlp_config", "AuthHeader::new", "AuthHeader::new_typed"),
-    ("otlp_config", "TelemetryConfigBuilder::build", "TelemetryConfigBuilder::build_typed"),
-    ("otlp_assembly", "SpanAssembler::push", "SpanAssembler::push_typed"),
-)
+METHODS = ()
 
 RETAINED_FACADE_METHODS = (
     ("logger", "LoggerBuilder::new", "LoggerBuilder::new_typed"),
@@ -49,9 +44,6 @@ RETAINED_FACADE_METHODS = (
     ("observe", "ObservabilityBuilder::build", "ObservabilityBuilder::build_typed"),
     ("observe", "Observability::flush", "Observability::flush_typed"),
     ("observe", "Observability::shutdown", "Observability::shutdown_typed"),
-    ("otlp_runtime", "Telemetry::new", "Telemetry::new_typed"),
-    ("otlp_runtime", "Telemetry::flush", "Telemetry::flush_typed"),
-    ("otlp_runtime", "Telemetry::shutdown", "Telemetry::shutdown_typed"),
 )
 
 # ADR-020 retains released typed helpers for compatible 1.x; their removal
@@ -189,16 +181,8 @@ def check_source_contract() -> None:
         "logger": ROOT / "crates" / "sc-observability" / "src" / "compat.rs",
         "runtime": ROOT / "crates" / "sc-observability" / "src" / "compat.rs",
         "observe": ROOT / "crates" / "sc-observe" / "src" / "compat.rs",
-        # Released wrapper methods live in the compatibility facade, not the
-        # canonical implementation modules or their re-exporting roots.
-        "otlp_config": ROOT / "crates" / "sc-observability-otlp" / "src" / "compat.rs",
-        "otlp_runtime": ROOT / "crates" / "sc-observability-otlp" / "src" / "compat.rs",
-        "otlp_assembly": ROOT / "crates" / "sc-observability-otlp" / "src" / "compat.rs",
     }
     text = {name: path.read_text(encoding="utf-8") for name, path in sources.items()}
-
-    for source in ("otlp_config", "otlp_assembly"):
-        check_b1e_marker(text[source], source)
 
     for legacy, typed in WRAPPERS:
         item_window(
@@ -207,7 +191,7 @@ def check_source_contract() -> None:
             f"Use sc_observability_types::typed::{typed}; see migrate-error-api.md.",
         )
 
-    assert_true(len(WRAPPERS) + len(METHODS) == 13, "B.1e target inventory is not 13 items")
+    assert_true(len(WRAPPERS) == 9, "B.1e wrapper inventory is not 9 items")
     for source, legacy, typed in METHODS + RETAINED_FACADE_METHODS:
         item_window(
             text[source],
@@ -510,7 +494,7 @@ def main() -> int:
         legacy_diagnostics = check_fixture("legacy", migration_notes())
         assert_true(
             len({note for note in migration_notes() if any(note in rendered(d) for d in legacy_diagnostics)})
-            == 29,
+            == len(migration_notes()),
             "legacy fixture did not exercise every wrapper and mapped-method warning note",
         )
         wrapper_notes = {

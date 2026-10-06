@@ -14,9 +14,9 @@ use sc_observability_types::v2::{
     MetricRecord as CanonicalMetricRecord, SpanSignal as CanonicalSpanSignal,
 };
 use sc_observability_types::{
-    DiagnosticSummary, ErrorContext, ExporterHealth, ExporterHealthState, LogEvent, MetricKind,
-    MetricRecord, ObservabilityHealthProvider, Remediation, SinkName, SpanSignal,
-    TelemetryHealthReport, TelemetryHealthState, telemetry_health_provider_sealed,
+    DiagnosticSummary, ErrorContext, ExporterHealth, ExporterHealthState, LogEvent,
+    ObservabilityHealthProvider, Remediation, SinkName, TelemetryHealthReport,
+    TelemetryHealthState, telemetry_health_provider_sealed,
 };
 use serde_json::Value;
 
@@ -36,15 +36,12 @@ use crate::failure::{
 use crate::lifecycle::{LifecycleHealth, LifecycleState, Signal};
 #[cfg(test)]
 use crate::testing;
-use crate::{error_codes, legacy_projection};
+use crate::{error_codes, export_records};
 
 /// Metric admitted to the shared canonical buffer.
 enum BufferedMetric {
     /// Canonical record, exported with its full aggregation.
     Canonical(Box<ExportRecord<CanonicalMetricRecord>>),
-    /// Released scalar record, kept in its released shape until flush, where
-    /// the released facade has always reported conversion failures.
-    Released(MetricRecord),
 }
 
 /// OTLP-backed telemetry runtime.
@@ -164,6 +161,7 @@ impl RuntimeTelemetry {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn new_with_exporters(
         config: RuntimeTelemetryConfig,
         log_exporter: Arc<dyn LogExporter>,
@@ -174,6 +172,7 @@ impl RuntimeTelemetry {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn new_with_exporters_typed(
         config: RuntimeTelemetryConfig,
         log_exporter: Arc<dyn LogExporter>,
@@ -192,6 +191,7 @@ impl RuntimeTelemetry {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn new_with_exporter_set_typed(
         config: RuntimeTelemetryConfig,
         exporters: ExporterSet,
@@ -236,21 +236,8 @@ impl RuntimeTelemetry {
         Ok(())
     }
 
-    /// Released root-facade log admission: exact 1.4.1 acceptance, no entity check.
-    pub(crate) fn emit_log_released(
-        &self,
-        event: &LogEvent,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.ensure_active()?;
-        if self.config.logs.is_none() || !self.config.transport.enabled {
-            return Ok(());
-        }
-        self.buffer_log(event);
-        Ok(())
-    }
-
     fn buffer_log(&self, event: &LogEvent) {
-        let record = legacy_projection::log_record(event);
+        let record = export_records::log_record(event);
         self.runtime
             .lock()
             .expect("telemetry runtime poisoned")
@@ -275,21 +262,6 @@ impl RuntimeTelemetry {
             return Ok(());
         }
         self.admit_span(span.clone())
-    }
-
-    /// Released root-facade span admission: the root signal is converted to
-    /// the canonical model and enters the same bounded assembler.
-    pub(crate) fn emit_span_released(
-        &self,
-        span: &SpanSignal,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.ensure_active()?;
-        if self.config.traces.is_none() || !self.config.transport.enabled {
-            return Ok(());
-        }
-        let span =
-            legacy_projection::span_signal(span).map_err(CanonicalTelemetryError::ExportFailure)?;
-        self.admit_span(span)
     }
 
     fn admit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError> {
@@ -323,7 +295,7 @@ impl RuntimeTelemetry {
             .push(span)
             .map_err(export_failure_from_canonical_event)?
         {
-            let resource = legacy_projection::resource(complete.record.service());
+            let resource = export_records::resource(complete.record.service());
             runtime.span_buffer.push(ExportRecord {
                 resource,
                 scope: contracts::InstrumentationScope::default(),
@@ -353,7 +325,7 @@ impl RuntimeTelemetry {
             return Ok(());
         }
         let record = ExportRecord {
-            resource: legacy_projection::resource(metric.service()),
+            resource: export_records::resource(metric.service()),
             scope: contracts::InstrumentationScope::default(),
             record: metric.clone(),
         };
@@ -362,31 +334,6 @@ impl RuntimeTelemetry {
             .expect("telemetry runtime poisoned")
             .metric_buffer
             .push(BufferedMetric::Canonical(Box::new(record)));
-        Ok(())
-    }
-
-    /// Released root-facade metric admission with the 1.4.1 acceptance rules.
-    ///
-    /// A released scalar histogram is accepted and, as in 1.4.1, never
-    /// transported: it carries no bucket distribution to export and none is
-    /// fabricated. Other released records keep their released shape until
-    /// flush.
-    pub(crate) fn emit_metric_released(
-        &self,
-        metric: &MetricRecord,
-    ) -> Result<(), CanonicalTelemetryError> {
-        self.ensure_active()?;
-        if self.config.metrics.is_none()
-            || !self.config.transport.enabled
-            || metric.kind == MetricKind::Histogram
-        {
-            return Ok(());
-        }
-        self.runtime
-            .lock()
-            .expect("telemetry runtime poisoned")
-            .metric_buffer
-            .push(BufferedMetric::Released(metric.clone()));
         Ok(())
     }
 
@@ -474,7 +421,6 @@ impl RuntimeTelemetry {
                 .into_iter()
                 .map(|metric| match metric {
                     BufferedMetric::Canonical(record) => Ok(*record),
-                    BufferedMetric::Released(metric) => legacy_projection::metric_record(&metric),
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .and_then(|batch| self.exporters.metrics.export_metrics(&batch));

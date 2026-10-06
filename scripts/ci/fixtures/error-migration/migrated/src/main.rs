@@ -7,7 +7,7 @@
 mod compatibility_matrix;
 
 use sc_observability::{Logger, LoggerBuilder, LoggerConfig};
-use sc_observability_otlp::{
+use sc_observability_otlp::v2::{
     AuthHeader, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
 };
 use sc_observability_types::typed::{ClassifiedError, InitFailureKind};

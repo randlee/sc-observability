@@ -131,8 +131,10 @@ pub(crate) fn validated_telemetry_bounds(
     validated_telemetry_bounds_with_delays(config, false)
 }
 
-/// Released conversion admits immediate retry delays; every other bound remains checked.
-pub(crate) fn validated_released_telemetry_bounds(
+/// Test-only construction permits immediate retry delays so hermetic capture
+/// fixtures do not depend on scheduler time.
+#[cfg(test)]
+pub(crate) fn validated_test_telemetry_bounds(
     config: &TelemetryConfig,
 ) -> Result<ValidatedTransportBounds, InitFailure> {
     validated_telemetry_bounds_with_delays(config, true)
@@ -406,7 +408,7 @@ impl RetryDelay {
 
 /// Resolves defaults and validates a transport in the documented first-failure
 /// order. This is crate-visible for backend factories and contract tests.
-#[cfg(any(test, feature = "durable-store", feature = "sdk-test-support"))]
+#[cfg(any(test, feature = "durable-store"))]
 pub(crate) fn validated_transport_bounds(
     config: &OtelConfig,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
@@ -578,7 +580,7 @@ fn validate_queue_bounds(
 /// Returns the connection values only after the transport's ordinary ordered
 /// validation has succeeded. Enabled factories need an explicit endpoint and
 /// must never reconstruct it from environment defaults.
-#[cfg(any(feature = "sdk-test-support", all(test, feature = "otlp-sdk")))]
+#[cfg(all(test, feature = "otlp-sdk"))]
 pub(crate) fn validated_backend_connection(
     config: &OtelConfig,
 ) -> Result<ValidatedBackendConnection, ConfigFailure> {

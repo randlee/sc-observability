@@ -1,10 +1,14 @@
-//! Removable facade for the released 1.4.1 OTLP surface.
+//! Deprecated 1.x facade retained only for the Phase F migration window.
 //!
 //! These owners translate the released root API into the canonical v2
 //! configuration and runtime. They contain no exporter or lifecycle logic.
 #![expect(
     clippy::missing_errors_doc,
     reason = "compatibility errors follow the released OTLP API documentation"
+)]
+#![allow(
+    deprecated,
+    reason = "v1 intentionally contains the deprecated migration path"
 )]
 #![expect(
     clippy::must_use_candidate,
@@ -19,12 +23,16 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+pub use crate::assembly::CompleteSpan;
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
+pub use crate::assembly::SpanAssembler;
 use crate::config::{ExporterBackend, SyncHttpRetryPolicy, TelemetryConfig as RuntimeConfig};
 use crate::projectors::{
     AttachedLogProjector, AttachedMetricProjector, AttachedSpanProjector, ProjectorSet,
     TelemetryEmit,
 };
-use crate::{CompleteSpan, RuntimeTelemetry, constants, error_codes};
+use crate::{RuntimeTelemetry, constants, error_codes};
 use sc_observability_types::typed::{
     FlushFailure, InitFailure, ShutdownFailure, TypedLogProjector, TypedMetricProjector,
     TypedSpanProjector, typed_log_projector, typed_metric_projector, typed_span_projector,
@@ -39,6 +47,7 @@ use sc_observability_types::{
 };
 
 /// The released 1.4.1 OTLP protocol set.
+#[deprecated(note = "use sc_observability_otlp::v2::OtlpProtocol")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OtlpProtocol {
     /// OTLP over HTTP with protobuf/binary payloads.
@@ -60,6 +69,7 @@ impl From<OtlpProtocol> for crate::config::OtlpProtocol {
 }
 
 /// Released validated endpoint owner.
+#[deprecated(note = "use sc_observability_otlp::v2::OtlpEndpoint")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtlpEndpoint(crate::config::OtlpEndpoint);
 
@@ -109,6 +119,7 @@ impl TryFrom<String> for OtlpEndpoint {
 }
 
 /// Released validated authorization-header owner.
+#[deprecated(note = "use sc_observability_otlp::v2::AuthHeader")]
 #[derive(Clone, PartialEq, Eq)]
 pub struct AuthHeader(crate::config::AuthHeader);
 
@@ -164,6 +175,7 @@ impl TryFrom<String> for AuthHeader {
 }
 
 /// Released 1.4.1 transport configuration literal.
+#[deprecated(note = "use sc_observability_otlp::v2::OtelConfig")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtelConfig {
     /// Whether transport/export is enabled.
@@ -215,7 +227,7 @@ impl OtelConfig {
             OtlpProtocol::HttpJson => ExporterBackend::SyncHttp,
         };
         let budget = DurationMs::from(
-            u64::from(self.timeout_ms).max(constants::RELEASED_OTLP_BUDGET_FLOOR_MS),
+            u64::from(self.timeout_ms).max(constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS),
         );
         let retry = SyncHttpRetryPolicy {
             max_retries: Some(self.max_retries),
@@ -251,6 +263,7 @@ impl OtelConfig {
 }
 
 /// Released telemetry configuration literal.
+#[deprecated(note = "use sc_observability_otlp::v2::TelemetryConfig")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct TelemetryConfig {
     /// Service name attached to all exported telemetry.
@@ -285,6 +298,7 @@ impl TelemetryConfig {
     missing_debug_implementations,
     reason = "the released builder never exposed Debug"
 )]
+#[deprecated(note = "use sc_observability_otlp::v2::TelemetryConfigBuilder")]
 pub struct TelemetryConfigBuilder {
     service_name: ServiceName,
     resource: crate::ResourceAttributes,
@@ -432,6 +446,7 @@ fn validate_released_config(config: &TelemetryConfig) -> Result<(), InitFailure>
     missing_debug_implementations,
     reason = "the runtime state has no stable Debug contract"
 )]
+#[deprecated(note = "use sc_observability_otlp::v2::Telemetry")]
 pub struct Telemetry {
     inner: RuntimeTelemetry,
 }
@@ -451,7 +466,7 @@ impl Telemetry {
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
         validate_released_config(&config)?;
         let config = config.into_runtime();
-        let bounds = crate::config::validated_released_telemetry_bounds(&config)?;
+        let bounds = crate::config::validated_telemetry_bounds(&config)?;
         RuntimeTelemetry::new_prepared(config, &bounds).map(|inner| Self { inner })
     }
 
@@ -461,28 +476,34 @@ impl Telemetry {
 
     /// Wraps an injected runtime so tests can exercise the released facade.
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn from_runtime(inner: RuntimeTelemetry) -> Self {
         Self { inner }
     }
 
     /// Buffers one log event for export.
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError> {
-        self.inner
-            .emit_log_released(event)
-            .map_err(legacy_telemetry_error)
+        self.inner.emit_log(event).map_err(legacy_telemetry_error)
     }
 
     /// Buffers one span signal for export.
     pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError> {
-        self.inner
-            .emit_span_released(span)
-            .map_err(legacy_telemetry_error)
+        let span = v1_span_signal(span).map_err(|error| {
+            legacy_telemetry_error(CanonicalTelemetryError::ExportFailure(error))
+        })?;
+        self.inner.emit_span(&span).map_err(legacy_telemetry_error)
     }
 
     /// Buffers one metric record for export.
     pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError> {
+        if metric.kind == sc_observability_types::MetricKind::Histogram {
+            return Ok(());
+        }
+        let metric = v1_metric_record(metric).map_err(|error| {
+            legacy_telemetry_error(CanonicalTelemetryError::ExportFailure(error))
+        })?;
         self.inner
-            .emit_metric_released(metric)
+            .emit_metric(&metric)
             .map_err(legacy_telemetry_error)
     }
 
@@ -534,15 +555,162 @@ impl Telemetry {
 
 impl TelemetryEmit for Telemetry {
     fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_log_released(event)
+        self.runtime().emit_log(event)
     }
 
     fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_span_released(span)
+        let span = v1_span_signal(span)?;
+        self.runtime().emit_span(&span)
     }
 
     fn emit_metric(&self, metric: &MetricRecord) -> Result<(), CanonicalTelemetryError> {
-        self.runtime().emit_metric_released(metric)
+        if metric.kind == sc_observability_types::MetricKind::Histogram {
+            return Ok(());
+        }
+        let metric = v1_metric_record(metric)?;
+        self.runtime().emit_metric(&metric)
+    }
+}
+
+fn v1_span_signal(
+    signal: &SpanSignal,
+) -> Result<sc_observability_types::v2::SpanSignal, sc_observability_types::v2::ExportError> {
+    use sc_observability_types::v2::SpanSignal as Canonical;
+    Ok(match signal {
+        SpanSignal::Started(record) => Canonical::Started(v1_started_record(record)),
+        SpanSignal::Event(event) => Canonical::Event(sc_observability_types::v2::SpanEvent {
+            timestamp: event.timestamp,
+            trace: v1_trace_context(&event.trace),
+            name: event.name.clone(),
+            attributes: v1_attributes(&event.attributes),
+            diagnostic: event.diagnostic.clone(),
+        }),
+        SpanSignal::Ended(record) => {
+            let duration = record
+                .duration_ms()
+                .ok_or_else(|| v1_transport_error("completed span has no duration"))?;
+            Canonical::Ended(
+                v1_started_record(record).end(v1_span_status(record.status()), duration),
+            )
+        }
+    })
+}
+
+fn v1_started_record<S>(
+    record: &sc_observability_types::SpanRecord<S>,
+) -> sc_observability_types::v2::SpanRecord<sc_observability_types::v2::SpanStarted> {
+    let started = sc_observability_types::v2::SpanRecord::new(
+        record.timestamp(),
+        record.service().clone(),
+        record.name().clone(),
+        v1_trace_context(record.trace()),
+        v1_attributes(record.attributes()),
+    );
+    match record.diagnostic().cloned() {
+        Some(diagnostic) => started.with_diagnostic(diagnostic),
+        None => started,
+    }
+}
+
+fn v1_span_status(
+    status: sc_observability_types::SpanStatus,
+) -> sc_observability_types::v2::SpanStatus {
+    match status {
+        sc_observability_types::SpanStatus::Ok => sc_observability_types::v2::SpanStatus::Ok,
+        sc_observability_types::SpanStatus::Error => sc_observability_types::v2::SpanStatus::Error,
+        sc_observability_types::SpanStatus::Unset => sc_observability_types::v2::SpanStatus::Unset,
+    }
+}
+
+fn v1_trace_context(
+    trace: &sc_observability_types::TraceContext,
+) -> sc_observability_types::v2::TraceContext {
+    let context = sc_observability_types::v2::TraceContext::new(
+        trace.trace_id.clone(),
+        trace.span_id.clone(),
+        sc_observability_types::v2::TraceFlags::default(),
+    );
+    match trace.parent_span_id.clone() {
+        Some(parent) => context.with_parent(parent),
+        None => context,
+    }
+}
+
+fn v1_metric_record(
+    metric: &MetricRecord,
+) -> Result<sc_observability_types::v2::MetricRecord, sc_observability_types::v2::ExportError> {
+    let value = match metric.kind {
+        sc_observability_types::MetricKind::Gauge => {
+            sc_observability_types::v2::MetricValue::Gauge(
+                sc_observability_types::v2::FiniteF64::new(metric.value)
+                    .map_err(|_| v1_transport_error("non-finite metric value"))?,
+            )
+        }
+        sc_observability_types::MetricKind::Counter => {
+            sc_observability_types::v2::MetricValue::Sum {
+                value: sc_observability_types::v2::FiniteF64::new(metric.value)
+                    .map_err(|_| v1_transport_error("non-finite metric value"))?,
+                monotonic: true,
+                temporality: sc_observability_types::v2::AggregationTemporality::Cumulative,
+                start_time: metric.timestamp,
+            }
+        }
+        sc_observability_types::MetricKind::Histogram => unreachable!("handled by caller"),
+    };
+    sc_observability_types::v2::MetricRecord::try_new(
+        metric.timestamp,
+        metric.service.clone(),
+        metric.name.clone(),
+        value,
+    )
+    .map_err(|_| v1_transport_error("metric violates canonical interval contract"))
+    .map(|record| {
+        record
+            .with_unit(metric.unit.clone())
+            .with_attributes(v1_attributes(&metric.attributes))
+    })
+}
+
+fn v1_attributes(
+    values: &serde_json::Map<String, serde_json::Value>,
+) -> sc_observability_types::v2::Attributes {
+    values
+        .iter()
+        .map(|(key, value)| (key.clone(), v1_attribute(value)))
+        .collect()
+}
+
+fn v1_attribute(value: &serde_json::Value) -> sc_observability_types::v2::AttributeValue {
+    use sc_observability_types::v2::{AttributeValue, FiniteF64};
+    match value {
+        serde_json::Value::Null => AttributeValue::Null,
+        serde_json::Value::Bool(value) => AttributeValue::Bool(*value),
+        serde_json::Value::Number(value) => value
+            .as_i64()
+            .map(AttributeValue::Int)
+            .or_else(|| value.as_u64().map(AttributeValue::UInt))
+            .or_else(|| {
+                value
+                    .as_f64()
+                    .and_then(|value| FiniteF64::new(value).ok())
+                    .map(AttributeValue::Float)
+            })
+            .unwrap_or(AttributeValue::Null),
+        serde_json::Value::String(value) => AttributeValue::String(value.clone()),
+        serde_json::Value::Array(values) => {
+            AttributeValue::Array(values.iter().map(v1_attribute).collect())
+        }
+        serde_json::Value::Object(values) => AttributeValue::Object(v1_attributes(values)),
+    }
+}
+
+fn v1_transport_error(message: &str) -> sc_observability_types::v2::ExportError {
+    sc_observability_types::v2::ExportError::TerminalExportFailure {
+        context: Box::new(ErrorContext::new(
+            sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL,
+            message,
+            Remediation::not_recoverable("correct the signal before exporting"),
+        )),
     }
 }
 
@@ -551,6 +719,7 @@ impl TelemetryEmit for Telemetry {
     missing_debug_implementations,
     reason = "the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract"
 )]
+#[deprecated(note = "use sc_observability_otlp::v2::TelemetryProjectors")]
 pub struct TelemetryProjectors<T>
 where
     T: Observable,
@@ -774,12 +943,12 @@ mod tests {
             }
             .into_runtime();
             assert!(!runtime.transport.insecure_skip_verify);
-            let bounds = crate::config::validated_released_telemetry_bounds(&runtime).unwrap();
+            let bounds = crate::config::validated_test_telemetry_bounds(&runtime).unwrap();
             let crate::config::BackendTransportBounds::SyncHttp(retry) = bounds.backend() else {
                 panic!("enabled released HttpJson has retry bounds");
             };
             let budget = std::time::Duration::from_millis(
-                timeout.max(constants::RELEASED_OTLP_BUDGET_FLOOR_MS),
+                timeout.max(constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS),
             );
             assert_eq!(
                 bounds.request_timeout().get(),
