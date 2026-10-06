@@ -100,6 +100,21 @@ configuration. Leave it at `DEFAULT_LOG_QUEUE_CAPACITY` unless the deployment
 has measured a reason to choose another admission bound; do not copy that
 capacity into another layer.
 
+## Fault Injection For Retained Sinks
+
+The `fault-injection` feature exposes a `RetainedSinkFaultInjector` for live
+validation. It wraps one retained sink and forces that sink to report
+`SinkHealthState::DegradedDropping` or `SinkHealthState::Unavailable` through
+the normal `LoggingHealthReport` path without filesystem sabotage.
+
+Enable it only for validation runs:
+
+```bash
+cargo test --features fault-injection
+```
+
+Never enable `fault-injection` in production builds.
+
 ## Start Here
 
 - Consumer onboarding: [CONSUMING.md](./CONSUMING.md)
