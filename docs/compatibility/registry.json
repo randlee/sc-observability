@@ -4281,14 +4281,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "ObservabilityConfig",
         "member": "default_for"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::default_for wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::default_for wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::default_for_typed",
@@ -4309,10 +4309,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::service_name",
@@ -4333,14 +4333,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "ObservabilityConfig",
         "member": "service_name"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::service_name wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::service_name wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::service_name_typed",
@@ -4361,10 +4361,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::new",
@@ -4385,14 +4385,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "Observability",
         "member": "new"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::new wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::new wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::new_typed",
@@ -4413,10 +4413,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::builder",
@@ -4487,14 +4487,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "Observability",
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::flush wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::flush wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::flush_typed",
@@ -4515,10 +4515,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::shutdown",
@@ -4539,14 +4539,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "Observability",
         "member": "shutdown"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::shutdown wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::shutdown wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::shutdown_typed",
@@ -4567,10 +4567,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::health",
@@ -4693,14 +4693,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "ObservabilityBuilder",
         "member": "build"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityBuilder::build wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityBuilder::build wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::build_typed",
@@ -4721,10 +4721,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::new",

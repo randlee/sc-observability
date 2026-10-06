@@ -31,4 +31,5 @@ pub use errors::{
 
 /// Scripted client and reusable lifecycle conformance tests.
 #[cfg(feature = "test-double")]
+#[doc(hidden)]
 pub mod testing;

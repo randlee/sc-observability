@@ -24,10 +24,10 @@
     reason = "Observation is the producer-facing owned emission contract, so emit intentionally takes ownership"
 )]
 
-#[cfg(feature = "v1")]
-mod compat;
 pub mod constants;
 pub mod error_codes;
+#[cfg(feature = "v1")]
+mod v1;
 
 use std::any::{Any, TypeId};
 use std::path::PathBuf;
