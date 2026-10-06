@@ -64,6 +64,9 @@ dolt-pprof/
 # Backup data (auto-exported JSONL, local-only)
 backup/
 
+# Auto-exported issue snapshot (temporary, generally stale — never commit)
+*.jsonl
+
 # Per-project environment file (Dolt connection config, GH#2520)
 .env
 
@@ -79,3 +82,6 @@ bd.db
 # They would override fork protection in .git/info/exclude.
 # Config files (metadata.json, config.yaml) are tracked by git by default
 # since no pattern above ignores them.
+
+# Added by bd (missing required patterns)
+dolt-server-config.yaml

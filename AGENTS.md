@@ -1,4 +1,5 @@
 # AGENTS Instructions for sc-observability
+<!-- bd-doctor-divergence: ok -->
 
 ## Critical Workflow Rule
 

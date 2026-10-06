@@ -58,3 +58,10 @@ examples/tauri-logging/src-tauri/permissions/
 
 # atm-bd-orchestration: per-checkout current phase (formula overrides in .atm-bd/formula/ stay tracked)
 .atm-bd/current-phase.toml
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*
