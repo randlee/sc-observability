@@ -216,16 +216,19 @@ class TemplateContractTests(unittest.TestCase):
                 self.assertEqual(input_json["context"], [])
                 self.assertIn("Read only that evidence plus any `context` paths at the pinned commit; never request more.", text)
 
-    def test_sc_sanity_jev_names_a_request_jev_client_accepts(self):
+    def test_sc_sanity_jev_hands_the_client_an_assignment_it_accepts(self):
         import importlib.util
         text = (ROOT.parents[1] / "agents" / "sc-sanity-jev.md").read_text()
-        self.assertIn("python3 scripts/jev_client.py --request <file>", text)
-        request = json.loads(re.search(r"request is one Choice question.*?```json\n(.*?)\n\s*```", text, re.S).group(1))
-        spec = importlib.util.spec_from_file_location("jev_client", ROOT.parents[2] / "scripts" / "jev_client.py")
+        self.assertIn("python3 .claude/skills/atm-bd-orchestration/scripts/jev_client.py --assignment <file>", text)
+        self.assertNotIn("--request", text)
+        assignment = json.loads(re.search(r"## Inputs\n\n```json\n(.*?)\n```", text, re.S).group(1))
+        spec = importlib.util.spec_from_file_location("jev_client", ROOT / "scripts" / "jev_client.py")
         client = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(client)
-        client.validate_request(request)  # raises JevError on a shape the transport rejects
-        self.assertEqual(request["model"], client.MODEL)
+        # every field the client reads is in the documented input; only the example's paths are not a repository
+        with self.assertRaises(client.JevError) as raised:
+            client.assignment_request(assignment)
+        self.assertEqual(raised.exception.message, "Committed evidence unreadable at the pinned commits")
         for code in ("SANITY.JEV_UNAVAILABLE", "SANITY.JEV_RESPONSE_INVALID", "SANITY.JEV_INCONCLUSIVE"):
             self.assertIn(code, text)
 

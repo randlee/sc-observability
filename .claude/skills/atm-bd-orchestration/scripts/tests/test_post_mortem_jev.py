@@ -2,7 +2,7 @@ import copy,json,subprocess,sys,tempfile,unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1]))
 import post_mortem_jev as m
-REAL=m.load_client(Path(__file__).resolve().parents[5] / 'scripts/jev_client.py')
+REAL=m.load_client(Path(__file__).resolve().parents[1] / 'jev_client.py')
 
 def response():
  answers={}

@@ -8,13 +8,13 @@ normal workflow, or dropped. BV is optional; nothing waits on it.
 
 ## Running it
 
-From the repository root (`S` = this skill's `scripts/bv-analyze`):
+From the repository root:
 
 ```bash
-$S --epic <root>                                         # triage + alerts
-$S --epic <root> --modes triage alerts plan insights      # wave boundary
-$S --epic <root> --target <bead>                          # adds <bead>'s blocker chain
-$S --file <scratch>/plan.jsonl --modes triage plan insights   # before bd import
+.claude/skills/atm-bd-orchestration/scripts/bv-analyze --epic <root>                                         # triage + alerts
+.claude/skills/atm-bd-orchestration/scripts/bv-analyze --epic <root> --modes triage alerts plan insights      # wave boundary
+.claude/skills/atm-bd-orchestration/scripts/bv-analyze --epic <root> --target <bead>                          # adds <bead>'s blocker chain
+.claude/skills/atm-bd-orchestration/scripts/bv-analyze --file <scratch>/plan.jsonl --modes triage plan insights   # before bd import
 ```
 
 `<root>` is the phase root. The script runs `bd --readonly export --all` into
@@ -35,7 +35,7 @@ proves nothing.
 
 ## When to run it
 
-- **Before import and at plan review:** after `validate-plan --file` passes,
+- **Before import and at plan review:** after `.claude/skills/atm-beads/scripts/validate-plan --file` passes,
   run `--file`; after import, run `--epic` before the plan-review bead is
   dispatched. This is the only time plan shape changes: the planner fixes the
   plan file before `validate-plan` and `bd import`.

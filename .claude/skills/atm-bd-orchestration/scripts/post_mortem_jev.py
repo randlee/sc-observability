@@ -257,7 +257,7 @@ def load_client(path):
  spec=importlib.util.spec_from_file_location('jev_client',path);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--client',type=Path,default=Path('scripts/jev_client.py'))
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--client',type=Path,default=Path(__file__).resolve().parent / 'jev_client.py')
  sub=p.add_subparsers(dest='cmd',required=True)
  q=sub.add_parser('prepare');q.add_argument('--manifest',required=True,type=Path);q.add_argument('--repo',type=Path,default=Path('.'));q.add_argument('--out',required=True,type=Path)
  q=sub.add_parser('run');q.add_argument('packets',nargs='+',type=Path);q.add_argument('--phase',required=True);q.add_argument('--output-dir',type=Path,default=Path('.sc/qa-logs'));q.add_argument('--run-id');q.add_argument('--concurrency',type=int,default=2);q.add_argument('--attempt-role',choices=['initial','context_repair'],default='initial');q.add_argument('--minimum-probability',type=float,default=.8)

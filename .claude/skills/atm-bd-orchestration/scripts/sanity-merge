@@ -20,7 +20,7 @@ findings_count, findings, findings_md, lint_md). `findings` preserves the
 structured, per-finding evidence used to create child fix beads after FAIL.
 
 For `--reviewer sanity-jev` every reply is screened first: a success without a valid receipt from the Jev client
-(`data.jev`, verified with TYPESAFE_API_KEY by `--client`, default <repo>/scripts/jev_client.py), whose choice
+(`data.jev`, verified with TYPESAFE_API_KEY by `--client`, default .claude/skills/atm-bd-orchestration/scripts/jev_client.py), whose choice
 contradicts its findings or that reuses another deliverable's receipt, and a SANITY.JEV_* failure whose message is
 not the client's own text, becomes a SANITY.RESULT_INVALID failure for its deliverable; `rejected_results` keeps the
 replaced reply and reason. The selected merge rejects such a reply outright.
@@ -54,8 +54,8 @@ import sys
 
 # Tool lock and log files a clean worktree may hold; the same as `IGNORED_STATUS_PATHS` in assignment-gates.py.
 IGNORED_STATUS_PATHS = (".beads.gate.lock", ".sc-compose/")
-# The repository's Jev transport (installed at <repo>/scripts/jev_client.py); it alone writes and verifies receipts.
-CLIENT = Path(__file__).resolve().parents[4] / "scripts/jev_client.py"
+# The Jev transport, the sibling jev_client.py; it alone writes and verifies receipts.
+CLIENT = Path(__file__).resolve().parent / "jev_client.py"
 
 CHECKER_KIND = "skipped"
 RUSTC = re.compile(r"^\s*-->\s+(?P<file>[^:\s]+):(?P<line>\d+):\d+", re.M)
@@ -458,7 +458,7 @@ def main(argv):
     parser.add_argument("--llm-vars")
     parser.add_argument("--jev-vars")
     parser.add_argument("--selection")
-    parser.add_argument("--client", help="the Jev client that verifies sanity-jev receipts (default <repo>/scripts/jev_client.py)")
+    parser.add_argument("--client", help="the Jev client that verifies sanity-jev receipts (default .claude/skills/atm-bd-orchestration/scripts/jev_client.py)")
     try:
         args = parser.parse_args(argv[1:])
     except SystemExit:
