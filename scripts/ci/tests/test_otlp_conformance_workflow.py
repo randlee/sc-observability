@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW = ROOT / ".github" / "workflows" / "otlp-conformance.yml"
+VIEWER_MANIFEST = ROOT / "scripts" / "ci" / "fixtures" / "otlp" / "desktop-viewer" / "release.json"
 
 
 class OtlpConformanceWorkflowTests(unittest.TestCase):
@@ -36,6 +38,23 @@ class OtlpConformanceWorkflowTests(unittest.TestCase):
                       steps[state_step]["run"])
         self.assertIn('[ -d "$VIEWER_STATE_DIR" ]', steps[cleanup_step]["run"])
         self.assertIn('viewer_harness.py stop', steps[cleanup_step]["run"])
+
+    def test_retained_viewer_job_reads_platform_specific_manifest_digest(self) -> None:
+        workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+        jobs = workflow["jobs"]
+        self.assertIn("collector-conformance", jobs)
+        viewer_steps = jobs["desktop-viewer-factory-conformance"]["steps"]
+        manifest_step = next(step for step in viewer_steps
+                             if step.get("name") == "Read pinned viewer manifest")
+        self.assertIn("manifest['platforms']['darwin_arm64']", manifest_step["run"])
+        self.assertIn("platform['binary_sha256']", manifest_step["run"])
+        self.assertNotIn("manifest['binary_sha256']", manifest_step["run"])
+
+        manifest = json.loads(VIEWER_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(set(manifest["platforms"]), {
+            "darwin_arm64", "linux_amd64", "windows_amd64",
+        })
+        self.assertIn("binary_sha256", manifest["platforms"]["darwin_arm64"])
 
     def test_dispatch_trigger_and_actions_are_immutable(self) -> None:
         workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))

@@ -4,7 +4,7 @@ This new stack adds an on-demand integration workflow and `just integrate`. It d
 
 ## Execution and ownership
 
-`e-1` owns the shared workflow, small dispatch command and declared suite/viewer interfaces. Results use GitHub job conclusions and existing test reports; no new result schema or collector is required. After its sanity PASS, `e-2` through `e-7` can all start from `sprint/e-1-workflow`. They have no sibling dependencies and own separate suite directories. Each builds its own artifacts, including wheels where needed. They never require another suite's job to produce artifacts.
+`e-1` owns the shared workflow, small dispatch command and declared suite/viewer interfaces. Results use GitHub job conclusions and existing test reports; no new result schema or collector is required. After its sanity PASS, `e-2` through `e-7` can all start from `sprint/e-1-workflow`. They have no sibling dependencies and own separate suite directories. A suite normally builds its own artifacts, including wheels where needed. The sole permitted shared preparation is an explicitly compatible E3/E4 Rust compilation; it may remove redundant compilation, but never replaces either suite's selected execution or assertions.
 
 The bead branch targets are actual development bases: `integrate/phase-e` for e-1/e-8–e-12 and `sprint/e-1-workflow` for e-2–e-7. Planned publication layer numbers never block starting. There is no stale Phase D bead dependency. The six suite branches stack in completion order; the coordinator records the actual predecessor and layer before final publication. Parent branch movement affects finalization, not starting scoped work. Each sprint has separate dev, sanity and QA beads under the phase root; QA blocks on sanity. Keeping QA as a sibling avoids blocking dev closure on its own review. Sanity reviews every numbered deliverable; PASS dispatches QA immediately and failure returns to its dev owner. QA pins the actual sanity PASS commit before dispatch; no commit is invented during planning.
 
@@ -37,9 +37,30 @@ the checked-out repository root. Only `run_suite.py` checks HEAD against the
 supplied SHA (the run's pinned `GITHUB_SHA`) and rejects a missing runner. The
 suite builds its own artifacts, executes assertions, owns bounded cleanup and
 writes existing logs/reports beneath the supplied directory. Exit zero means all selected assertions passed;
-nonzero means failure. Missing runners fail explicitly. No result schema or
-sibling artifact exchange is introduced. e-1 owns dispatch; each suite owns its
-entrypoint and setup. The workflow calls only `run_suite.py`, not suite entrypoints directly. CI uploads its output directory even on failure.
+nonzero means failure. Missing runners fail explicitly. No result schema is
+introduced. Unqualified sibling artifact exchange is prohibited. e-1 owns dispatch;
+each suite owns its entrypoint and setup. The workflow calls only `run_suite.py`,
+not suite entrypoints directly. CI uploads its output directory even on failure.
+
+### Compatible shared preparation
+
+Explicit dispatch may reuse a prepared E3/E4 `sc-observability-otlp` test target
+only when every compatibility dimension matches: immutable source SHA, OS/architecture,
+Rust `1.94.1`, `Cargo.lock`, target/profile and `RUSTFLAGS`, the
+`otlp-sdk,sync-http` feature set, and the named test binary. This is a narrow
+compiled-dependency reuse, not a suite-result handoff: E3 still runs its public
+factory/viewer assertions and E4 still runs collector and canonical-ingress
+assertions. A mismatch, including E4's additional `canonical_ingress` binary,
+requires that suite to compile its own required target. The prepared target must
+be restored at the declared target path and must never cross OS, source SHA,
+toolchain, or feature boundaries.
+
+E2's installed wheel/CLI build and E6's Tauri/npm configuration are distinct
+candidate boundaries. E5's sdist wheel/embedding build and E7's external
+consumer build intentionally use isolated build roots and must not consume a
+sibling artifact. This exception creates neither an automatic integration build
+nor a generic cache framework; all integration execution remains explicit
+`workflow_dispatch` selection.
 
 Both viewer suites reuse
 `scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py` and its `release.json`.
@@ -64,7 +85,7 @@ and must not duplicate acquisition or claim synthetic probes as factory proof.
 | e-6 | tauri | Packaged npm/Rust artifacts through actual frontend/host IPC on CI runners |
 | e-7 | rust-consumers | Candidate packaged core, binding bridge, runtime-level and log-bridge consumers outside workspace |
 
-Existing wrappers often combine integration with unit, lint, schema, release or publication checks. Reuse the narrow integration entrypoints, not entire legacy workflows. Wheel builds in e-2/e-5 are intentional independent setup for different boundaries, not duplicated tests. Prefer small fixes to existing helpers over duplicate adapters. e-2 owns the shared viewer implementation; e-3 develops against the declared interface. Viewer availability affects only viewer suites, not completion of e-1 or the four unrelated suites.
+Existing wrappers often combine integration with unit, lint, schema, release or publication checks. Reuse the narrow integration entrypoints, not entire legacy workflows. E2's wheel/CLI and E5's isolated sdist/embedding builds are intentional independent setup for different boundaries, as are E6's Tauri/npm and E7's isolated consumer builds. Prefer small fixes to existing helpers over duplicate adapters. e-2 owns the shared viewer implementation; e-3 develops against the declared interface. Viewer availability affects only viewer suites, not completion of e-1 or the four unrelated suites.
 
 ## Concrete platform work
 
@@ -88,7 +109,7 @@ e-4 owns the shared retirement edit at final publication, including stale invoca
 
 ## Contract-versioning work
 
-The user added e-8 through e-12: public API, binding/IPC, CLI, configuration and durable-store history. See [schema-versioning.md](schema-versioning.md). They run independently of the seven integration sprints and add no integration matrix cells or automatic workflows. The earlier API-governance exclusion applies to integration runners, not this newly authorized work.
+The user added e-8 through e-12: public API, binding/IPC, CLI, configuration and durable-store history. See [schema-versioning.md](schema-versioning.md). They add no integration matrix cells or standalone workflows. E-8 resumed after e-1 sanity acceptance and adds a fast check against already-built public API metadata to the existing platform unit jobs. Release-cut setup creates versioned baselines outside that check; the check itself runs no additional build. The earlier API-governance exclusion applies to integration runners, not this newly authorized work.
 
 ## Bounded integration execution
 

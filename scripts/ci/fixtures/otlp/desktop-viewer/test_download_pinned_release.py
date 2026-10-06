@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import json
+import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import download_pinned_release as downloader
@@ -35,6 +39,17 @@ class ChunkedResponse:
 
 
 class PinnedReleaseDownloadTests(unittest.TestCase):
+    def _entry(self, **overrides: str) -> dict[str, str]:
+        entry = {
+            "artifact_url": "https://example.test/release.tgz",
+            "artifact_sha256": "a" * 64,
+            "binary_sha256": "b" * 64,
+            "binary_name": "viewer",
+            "archive": "tar.gz",
+        }
+        entry.update(overrides)
+        return entry
+
     def test_main_stages_on_destination_volume_before_atomic_publication(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             parent = Path(temp).resolve() / "destination"
@@ -66,14 +81,48 @@ class PinnedReleaseDownloadTests(unittest.TestCase):
             self.assertEqual(list(parent.iterdir()), [output])
 
     def test_manifest_requires_https_and_hex_sha256(self) -> None:
-        lock = {"artifact_url": "http://example.test/release.tgz",
-                "artifact_sha256": "a" * 64, "binary_sha256": "b" * 64}
+        lock = {"platforms": {"linux_amd64": self._entry(
+            artifact_url="http://example.test/release.tgz")}}
         with self.assertRaisesRegex(ValueError, "HTTPS"):
             downloader._validate_manifest(lock)
-        lock["artifact_url"] = "https://example.test/release.tgz"
-        lock["binary_sha256"] = "not-a-digest"
+        lock = {"platforms": {"linux_amd64": self._entry(binary_sha256="not-a-digest")}}
         with self.assertRaisesRegex(ValueError, "hexadecimal"):
             downloader._validate_manifest(lock)
+
+    def test_shipped_manifest_covers_all_supported_platforms(self) -> None:
+        lock = json.loads(downloader.LOCK.read_text())
+        downloader._validate_manifest(lock)
+        self.assertEqual(set(lock["platforms"]),
+                         {"darwin_arm64", "linux_amd64", "windows_amd64"})
+
+    def test_host_platform_normalizes_architecture_aliases(self) -> None:
+        for machine, system, expected in (
+                ("x86_64", "Linux", "linux_amd64"),
+                ("AMD64", "Windows", "windows_amd64"),
+                ("arm64", "Darwin", "darwin_arm64")):
+            with mock.patch.object(downloader.platform, "machine", return_value=machine), \
+                    mock.patch.object(downloader.platform, "system", return_value=system):
+                self.assertEqual(downloader._host_platform(), expected)
+
+    def test_zip_and_tar_extraction_verify_binary_digest(self) -> None:
+        content = b"viewer-bytes"
+        digest = hashlib.sha256(content).hexdigest()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = root / "viewer.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("viewer.exe", content)
+            entry = self._entry(archive="zip", binary_name="viewer.exe", binary_sha256=digest)
+            output = root / "viewer.exe"
+            self.assertEqual(downloader._extract_binary(archive, output, entry), digest)
+            self.assertEqual(output.read_bytes(), content)
+            tarball = root / "viewer.tar.gz"
+            payload = root / "viewer"
+            payload.write_bytes(content)
+            with tarfile.open(tarball, "w:gz") as bundle:
+                bundle.add(payload, arcname="viewer")
+            tar_entry = self._entry(binary_sha256=digest)
+            self.assertEqual(downloader._extract_binary(tarball, root / "tar-viewer", tar_entry), digest)
 
     def test_download_streams_with_timeout_and_checks_digest(self) -> None:
         content = b"pinned archive content"
@@ -103,16 +152,41 @@ class PinnedReleaseDownloadTests(unittest.TestCase):
                     downloader._download_archive("https://example.test/archive.tgz",
                                                  target, "0" * 64)
 
-    def test_refuses_symlink_output_without_touching_target(self) -> None:
+    def _assert_refuses_effective_symlink_output(self, system: str,
+                                                symlink_available: bool) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             target = root / "keep.bin"
             target.write_bytes(b"keep")
-            link = root / "viewer"
-            link.symlink_to(target)
-            with self.assertRaisesRegex(SystemExit, "symlink output"):
-                downloader._output_path(str(link))
+            requested = root / "viewer"
+            effective = requested.with_name("viewer.exe") if system == "Windows" else requested
+            platform = SimpleNamespace(system=lambda: system)
+            with mock.patch.object(downloader, "platform", platform):
+                if symlink_available:
+                    effective.symlink_to(target)
+                    with self.assertRaisesRegex(SystemExit, "symlink output"):
+                        downloader._output_path(str(requested))
+                else:
+                    # Windows can prohibit symlink creation without Developer Mode
+                    # or the necessary privilege. Exercise the same effective-path
+                    # refusal when no real link can be created by the test host.
+                    with mock.patch.object(
+                        Path,
+                        "is_symlink",
+                        autospec=True,
+                        side_effect=lambda candidate: candidate == effective,
+                    ):
+                        with self.assertRaisesRegex(SystemExit, "symlink output"):
+                            downloader._output_path(str(requested))
             self.assertEqual(target.read_bytes(), b"keep")
+
+    def test_refuses_effective_symlink_output_without_touching_target(self) -> None:
+        with self.subTest(platform="Linux", symlink_available=True):
+            self._assert_refuses_effective_symlink_output("Linux", True)
+        with self.subTest(platform="Windows", symlink_available=True):
+            self._assert_refuses_effective_symlink_output("Windows", True)
+        with self.subTest(platform="Windows", symlink_available=False):
+            self._assert_refuses_effective_symlink_output("Windows", False)
 
     def test_windows_output_path_appends_exe_suffix(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -125,9 +199,8 @@ class PinnedReleaseDownloadTests(unittest.TestCase):
                 self.assertEqual(downloader._output_path(str(requested.with_suffix(".EXE"))),
                                  requested.parent.resolve() / "viewer.EXE")
 
-    def test_main_refuses_unpinned_windows_before_selecting_an_output_path(self) -> None:
-        with mock.patch.object(downloader.platform, "system", return_value="Windows"), \
-                mock.patch.object(downloader.platform, "machine", return_value="AMD64"), \
+    def test_main_refuses_unknown_platform_before_selecting_an_output_path(self) -> None:
+        with mock.patch.object(downloader, "_host_platform", return_value="plan9_mips"), \
                 mock.patch.object(downloader.sys, "argv", ["download_pinned_release.py", "viewer"]), \
                 mock.patch.object(downloader, "_output_path") as output_path:
             self.assertEqual(downloader.main(), 2)

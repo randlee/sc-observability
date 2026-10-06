@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import socket
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import viewer_harness as harness
@@ -382,13 +384,15 @@ class ViewerHarnessSafetyTests(unittest.TestCase):
             proc = _owned_process(database, ignore_term=True)
             try:
                 _record(state, proc, database)
-                harness.stop(argparse.Namespace(state_dir=str(state), timeout=0.1,
-                                                remove_state=True))
+                posix_signal = SimpleNamespace(SIGTERM=15, SIGKILL=9)
+                with mock.patch.object(harness, "signal", posix_signal):
+                    harness.stop(argparse.Namespace(state_dir=str(state), timeout=0.1,
+                                                    remove_state=True))
                 proc.wait(timeout=5)
                 self.assertFalse(state.exists())
             finally:
                 if proc.poll() is None:
-                    proc.kill()
+                    os.kill(proc.pid, 9)
                     proc.wait(timeout=5)
 
     @unittest.skipUnless(sys.platform == "win32",

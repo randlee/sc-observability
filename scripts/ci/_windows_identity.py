@@ -277,7 +277,7 @@ class Identity:
                    'UCRTVERSION', 'WINDOWSSDKLIBVERSION', 'WINDOWSSDKDIR'}
         result = {key: value for key, value in os.environ.items() if key.upper() in allowed}
         for key, value in (extra or {}).items():
-            if key.upper() in allowed or key.startswith(('CARGO_', 'PYO3_', 'PYTHON', 'XDG_', 'SC_TAURI_QUALIFICATION_')) or key in {'RUSTC', 'RUSTDOC', 'RUSTFLAGS', 'SC_OBSERVABILITY_RUNTIME_TEST'}:
+            if key.upper() in allowed or key.startswith(('CARGO_', 'PYO3_', 'PYTHON', 'XDG_', 'SC_TAURI_QUALIFICATION_')) or key in {'RUSTC', 'RUSTDOC', 'RUSTFLAGS', 'SC_OBSERVABILITY_RUNTIME_TEST', 'SC_OBSERVABILITY_ATTACHED_PACKAGE'}:
                 result[key] = value
         profile = self.scratch / 'proof-profile'
         for path in (profile, profile / 'AppData' / 'Local', profile / 'AppData' / 'Roaming'):

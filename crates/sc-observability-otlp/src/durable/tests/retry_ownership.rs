@@ -63,10 +63,33 @@ fn scripted_retry_attempt_budgets_are_exact_for_logs_and_profiles() {
     ] {
         let dir = tempfile::tempdir().unwrap();
         let exporter = Arc::new(RetryableThenOkExporter::new(retryable_before_success));
-        let client =
+        let client = conformance::open_manual(|| {
             DurableTelemetryClient::open_with_exporter(retry_config(dir.path()), exporter.clone())
-                .unwrap();
+        })
+        .unwrap();
         let receipt = client.emit(fixture(name)).unwrap();
+
+        // The exact-count contract belongs to the persisted drain. Drive that
+        // drain synchronously, advancing its configured one-millisecond retry
+        // schedule, so an autonomous worker cannot race this foreground flush.
+        let signal = match name {
+            "logs" => Signal::Logs,
+            "profiles" => Signal::Profiles,
+            _ => unreachable!("the fixture table names durable signals"),
+        };
+        let _clock = FrozenClock::new();
+        for attempt in 0..expected_calls {
+            assert!(
+                drain_once_bounded(&client.owner.shared, exporter.as_ref(), signal),
+                "{name} attempt {attempt} drains the persisted retry"
+            );
+            if attempt + 1 < expected_calls {
+                let retry_due = frozen_now()
+                    .expect("manual drain freezes the retry schedule")
+                    .saturating_add(store::nanos(Duration::from_millis(1)));
+                FROZEN_NOW.set(Some(retry_due));
+            }
+        }
 
         let result = client.flush_submission(&receipt.submission_id, DEADLINE);
         if retryable_before_success == usize::MAX {
