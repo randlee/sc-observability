@@ -557,11 +557,25 @@ fn start_tls_test_server(
     key: &PathBuf,
     address: std::net::SocketAddr,
 ) -> process::Child {
-    let server = Command::new("python3")
+    let (mut server, output) = spawn_tls_test_server(cert, key, address);
+    if let Err(error) = wait_for_tls_test_server_ready(&output) {
+        let _ = server.kill();
+        let _ = server.wait();
+        panic!("local TLS server failed to start: {error}");
+    }
+    server
+}
+
+fn spawn_tls_test_server(
+    cert: &PathBuf,
+    key: &PathBuf,
+    address: std::net::SocketAddr,
+) -> (process::Child, mpsc::Receiver<Result<String, String>>) {
+    let mut server = Command::new("python3")
         .args([
             "-u",
             "-c",
-            "import http.server, ssl, sys\nclass H(http.server.BaseHTTPRequestHandler):\n def do_POST(self):\n  n=int(self.headers.get('Content-Length','0')); self.rfile.read(n); self.send_response(200); self.send_header('Content-Length','0'); self.end_headers()\n def log_message(self,*args): pass\ns=http.server.HTTPServer(('127.0.0.1',int(sys.argv[1])),H); c=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); c.load_cert_chain(sys.argv[2],sys.argv[3]); s.socket=c.wrap_socket(s.socket,server_side=True); print('READY',flush=True); s.serve_forever()",
+            "import errno, http.server, ssl, sys, time\nclass H(http.server.BaseHTTPRequestHandler):\n def do_POST(self):\n  n=int(self.headers.get('Content-Length','0')); self.rfile.read(n); self.send_response(200); self.send_header('Content-Length','0'); self.end_headers()\n def log_message(self,*args): pass\nfor attempt in range(40):\n try:\n  s=http.server.HTTPServer(('127.0.0.1',int(sys.argv[1])),H); break\n except OSError as error:\n  if error.errno != errno.EADDRINUSE: raise\n  if attempt == 39:\n   print(f'BIND_FAILED: {error}',flush=True); sys.exit(2)\n  print(f'BIND_RETRY: {attempt + 1}/40',flush=True); time.sleep(0.025)\nprint('BOUND',flush=True); c=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); c.load_cert_chain(sys.argv[2],sys.argv[3]); s.socket=c.wrap_socket(s.socket,server_side=True); print('READY',flush=True); s.serve_forever()",
         ])
         .arg(address.port().to_string())
         .arg(cert)
@@ -571,20 +585,76 @@ fn start_tls_test_server(
         .stderr(Stdio::null())
         .spawn()
         .expect("start standard-library local TLS server");
-    let mut server = server;
-    let ready = match read_line_with_watchdog(
-        server.stdout.take().expect("TLS server ready output"),
-        TLS_SERVER_READY_WATCHDOG,
-    ) {
-        Ok(ready) => ready,
-        Err(error) if error.kind() == ErrorKind::TimedOut => {
-            let _ = server.kill();
-            let _ = server.wait();
-            panic!("timed out waiting for TLS test server readiness: {error}");
+    let stdout = server.stdout.take().expect("TLS server ready output");
+    let (line_tx, line_rx) = mpsc::channel();
+    thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout).lines() {
+            if line_tx
+                .send(line.map_err(|error| error.to_string()))
+                .is_err()
+            {
+                break;
+            }
         }
-        Err(error) => panic!("read TLS test server readiness: {error}"),
-    };
-    assert_eq!(ready.trim(), "READY", "local TLS server became ready");
+    });
+    (server, line_rx)
+}
+
+fn wait_for_tls_test_server_ready(
+    output: &mpsc::Receiver<Result<String, String>>,
+) -> Result<(), String> {
+    let deadline = Instant::now() + TLS_SERVER_READY_WATCHDOG;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("timed out waiting for TLS server readiness".to_owned());
+        }
+        let message = output
+            .recv_timeout(remaining)
+            .map_err(|error| format!("waiting for TLS server startup output: {error}"))??;
+        if message == "READY" {
+            return Ok(());
+        }
+        if message.starts_with("BIND_FAILED:") {
+            return Err(message.to_owned());
+        }
+        if message == "BOUND" || message.starts_with("BIND_RETRY:") {
+            continue;
+        }
+        return Err(format!("unexpected TLS server startup output: {message}"));
+    }
+}
+
+fn start_tls_test_server_after_port_contention(
+    cert: &PathBuf,
+    key: &PathBuf,
+    listener: TcpListener,
+) -> process::Child {
+    let address = listener.local_addr().expect("TLS address");
+    let (mut server, output) = spawn_tls_test_server(cert, key, address);
+    let first_line_result = output
+        .recv_timeout(TLS_SERVER_READY_WATCHDOG)
+        .map_err(|error| format!("waiting for TLS bind retry: {error}"))
+        .and_then(|line| line);
+    drop(listener);
+    let saw_retry = first_line_result
+        .as_ref()
+        .is_ok_and(|line| line.starts_with("BIND_RETRY:"));
+    let ready_result = wait_for_tls_test_server_ready(&output);
+    if !saw_retry || ready_result.is_err() {
+        let _ = server.kill();
+        let _ = server.wait();
+    }
+    assert!(
+        saw_retry,
+        "server should report EADDRINUSE and retry while the reserved port is held; got {:?}",
+        first_line_result
+            .as_ref()
+            .map(|line| line.as_str())
+            .unwrap_or_else(|error| error.as_str())
+    );
+    ready_result
+        .unwrap_or_else(|error| panic!("local TLS server failed to start after retry: {error}"));
     server
 }
 
@@ -914,8 +984,7 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
     let ca = custom_ca_file(&fs::read_to_string(&cert).expect("read server CA"));
     let listener = TcpListener::bind("127.0.0.1:0").expect("reserve TLS port");
     let address = listener.local_addr().expect("TLS address");
-    drop(listener);
-    let mut server = start_tls_test_server(&cert, &key, address);
+    let mut server = start_tls_test_server_after_port_contention(&cert, &key, listener);
     let exporter =
         OtlpHttpExporter::for_test_config(format!("https://{address}"), None, Some(ca.clone()))
             .expect("construct exporter with trusted CA");
