@@ -13,9 +13,14 @@ use sc_observability_types::v2::{
     SpanRecord, SpanSignal, SubscriberError, SubscriberRegistration, TraceContext, TraceFlags,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, MetricName, MetricUnit,
-    Observation, OutcomeLabel, ProcessIdentity, Remediation, SchemaVersion, ServiceName, SpanId,
-    SpanStarted, TargetCategory, Timestamp, TraceContext as LegacyTraceContext, TraceId,
+    ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent,
+    LogProjector as LegacyLogProjector, MetricName, MetricProjector as LegacyMetricProjector,
+    MetricRecord as LegacyMetricRecord, MetricUnit, Observation,
+    ObservationSubscriber as LegacyObservationSubscriber, OutcomeLabel, ProcessIdentity,
+    ProjectionRegistration as LegacyProjectionRegistration, Remediation, SchemaVersion,
+    ServiceName, SpanId, SpanProjector as LegacySpanProjector, SpanSignal as LegacySpanSignal,
+    SpanStarted, SubscriberRegistration as LegacySubscriberRegistration, TargetCategory, Timestamp,
+    TraceContext as LegacyTraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -34,6 +39,12 @@ impl ObservationSubscriber<AgentEvent> for RecordingSubscriber {
     fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(())
+    }
+}
+
+impl LegacyObservationSubscriber<AgentEvent> for RecordingSubscriber {
+    fn observe(&self, observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
+        <Self as ObservationSubscriber<AgentEvent>>::observe(self, observation)
     }
 }
 
@@ -83,6 +94,15 @@ impl LogProjector<AgentEvent> for RecordingLogProjector {
     }
 }
 
+impl LegacyLogProjector<AgentEvent> for RecordingLogProjector {
+    fn project_logs(
+        &self,
+        observation: &Observation<AgentEvent>,
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
+        <Self as LogProjector<AgentEvent>>::project_logs(self, observation)
+    }
+}
+
 struct RecordingSpanProjector {
     count: Arc<AtomicU64>,
 }
@@ -100,6 +120,16 @@ impl SpanProjector<AgentEvent> for RecordingSpanProjector {
             v2_trace_context(),
             Attributes::new(),
         ))])
+    }
+}
+
+impl LegacySpanProjector<AgentEvent> for RecordingSpanProjector {
+    fn project_spans(
+        &self,
+        _observation: &Observation<AgentEvent>,
+    ) -> Result<Vec<LegacySpanSignal>, ProjectionError> {
+        self.count.fetch_add(1, Ordering::SeqCst);
+        Ok(Vec::new())
     }
 }
 
@@ -131,6 +161,15 @@ impl LogProjector<AgentEvent> for FailingLogProjector {
     }
 }
 
+impl LegacyLogProjector<AgentEvent> for FailingLogProjector {
+    fn project_logs(
+        &self,
+        observation: &Observation<AgentEvent>,
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
+        <Self as LogProjector<AgentEvent>>::project_logs(self, observation)
+    }
+}
+
 impl MetricProjector<AgentEvent> for RecordingMetricProjector {
     fn project_metrics(
         &self,
@@ -152,6 +191,16 @@ impl MetricProjector<AgentEvent> for RecordingMetricProjector {
             .expect("valid cumulative metric")
             .with_unit(Some(MetricUnit::new("1").expect("valid metric unit"))),
         ])
+    }
+}
+
+impl LegacyMetricProjector<AgentEvent> for RecordingMetricProjector {
+    fn project_metrics(
+        &self,
+        _observation: &Observation<AgentEvent>,
+    ) -> Result<Vec<LegacyMetricRecord>, ProjectionError> {
+        self.count.fetch_add(1, Ordering::SeqCst);
+        Ok(Vec::new())
     }
 }
 
@@ -208,12 +257,14 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
     let legacy_config =
         ObservabilityConfig::default_for(tool_name(), legacy_root.clone()).expect("config");
     let legacy = Observability::builder(legacy_config)
-        .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
-            id: "subscriber",
-            calls: subscriber_calls.clone(),
-        })))
+        .register_subscriber(LegacySubscriberRegistration::new(Arc::new(
+            RecordingSubscriber {
+                id: "subscriber",
+                calls: subscriber_calls.clone(),
+            },
+        )))
         .register_projection(
-            ProjectionRegistration::new()
+            LegacyProjectionRegistration::new()
                 .with_log_projector(Arc::new(RecordingLogProjector {
                     calls: log_calls.clone(),
                     id: "log",
@@ -230,8 +281,9 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
 
     let typed_root = temp_path("fanout-typed");
     let typed_config =
-        ObservabilityConfig::default_for(tool_name(), typed_root.clone()).expect("config");
-    let typed = Observability::builder(typed_config)
+        sc_observe::v2::ObservabilityConfig::default_for(tool_name(), typed_root.clone())
+            .expect("config");
+    let typed = sc_observe::v2::Observability::builder(typed_config)
         .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
             id: "subscriber",
             calls: subscriber_calls.clone(),
@@ -301,6 +353,12 @@ impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
     }
 }
 
+impl LegacyObservationSubscriber<AgentEvent> for FailingSubscriber {
+    fn observe(&self, observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
+        <Self as ObservationSubscriber<AgentEvent>>::observe(self, observation)
+    }
+}
+
 fn failing_subscriber(cause: &'static str) -> Arc<FailingSubscriber> {
     Arc::new(FailingSubscriber {
         context: Mutex::new(Some(routing_failure_context(cause))),
@@ -313,8 +371,21 @@ fn failing_log_projection(cause: &'static str) -> ProjectionRegistration<AgentEv
     }))
 }
 
+fn legacy_failing_log_projection(cause: &'static str) -> LegacyProjectionRegistration<AgentEvent> {
+    LegacyProjectionRegistration::new().with_log_projector(Arc::new(FailingLogProjector {
+        context: Mutex::new(Some(routing_failure_context(cause))),
+    }))
+}
+
 fn delivering_subscriber() -> SubscriberRegistration<AgentEvent> {
     SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+        id: "delivered",
+        calls: Arc::new(Mutex::new(Vec::new())),
+    }))
+}
+
+fn legacy_delivering_subscriber() -> LegacySubscriberRegistration<AgentEvent> {
+    LegacySubscriberRegistration::new(Arc::new(RecordingSubscriber {
         id: "delivered",
         calls: Arc::new(Mutex::new(Vec::new())),
     }))
@@ -342,9 +413,11 @@ fn released_and_canonical_registrations_route_failures_through_both_facades() {
         ObservabilityConfig::default_for(tool_name(), temp_path("released-trait-failures"))
             .expect("config");
     let released = Observability::builder(released_config)
-        .register_subscriber(SubscriberRegistration::new(failing_subscriber("released")))
-        .register_subscriber(delivering_subscriber())
-        .register_projection(failing_log_projection("released projector"))
+        .register_subscriber(LegacySubscriberRegistration::new(failing_subscriber(
+            "released",
+        )))
+        .register_subscriber(legacy_delivering_subscriber())
+        .register_projection(legacy_failing_log_projection("released projector"))
         .build()
         .expect("released runtime");
     released.emit(observation()).expect("delivered");

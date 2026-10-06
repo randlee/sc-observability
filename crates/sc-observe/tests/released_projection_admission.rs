@@ -18,7 +18,8 @@ use std::sync::Arc;
 
 use sc_observability_types::v2::{LogProjector, ProjectionError, ProjectionRegistration};
 use sc_observability_types::{
-    ActionName, Level, LogEvent, Observation, OutcomeLabel, ProcessIdentity, SchemaVersion,
+    ActionName, Level, LogEvent, LogProjector as LegacyLogProjector, Observation, OutcomeLabel,
+    ProcessIdentity, ProjectionRegistration as LegacyProjectionRegistration, SchemaVersion,
     ServiceName, StateName, StateTransition, TargetCategory, Timestamp, ToolName,
 };
 use sc_observe::{Observability, ObservabilityConfig};
@@ -63,6 +64,15 @@ impl LogProjector<Payload> for EntityProjector {
             }),
             fields: Map::default(),
         }])
+    }
+}
+
+impl LegacyLogProjector<Payload> for EntityProjector {
+    fn project_logs(
+        &self,
+        observation: &Observation<Payload>,
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
+        <Self as LogProjector<Payload>>::project_logs(self, observation)
     }
 }
 
@@ -125,12 +135,16 @@ fn registration(id: &'static str) -> ProjectionRegistration<Payload> {
     ProjectionRegistration::new().with_log_projector(Arc::new(EntityProjector(id)))
 }
 
+fn legacy_registration(id: &'static str) -> LegacyProjectionRegistration<Payload> {
+    LegacyProjectionRegistration::new().with_log_projector(Arc::new(EntityProjector(id)))
+}
+
 fn root_runtime(name: &str, id: &'static str) -> Running<Observability> {
     let root = TempRoot(temp_path(name));
     let config =
         ObservabilityConfig::default_for_typed(tool_name(), root.0.clone()).expect("root config");
     let runtime = Observability::builder(config)
-        .register_projection(registration(id))
+        .register_projection(legacy_registration(id))
         .build_typed()
         .expect("root runtime");
     Running {

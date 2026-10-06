@@ -50,6 +50,10 @@ RESTORED_V1_DEPRECATED_OWNERS: dict[str, tuple[str, ...]] = {
         "LOGGER_MAINTENANCE_WORKER_FAILED",
     ),
     "crates/sc-observability-types/src/error_codes.rs": ("ALL", "ALL"),
+    "crates/sc-observe/src/lib.rs": (
+        "register_subscriber",
+        "register_projection",
+    ),
 }
 
 # Path segments only: `foo_compat::` and `compatibility::` are not references.

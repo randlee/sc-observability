@@ -55,8 +55,8 @@ use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::v2::{
     FlushError as CanonicalFlushError, InitError as CanonicalInitError, ObservationFilter,
-    ProjectionRegistration, ProjectionRegistration as CanonicalProjectionRegistration,
-    ShutdownError as CanonicalShutdownError, SubscriberError, SubscriberRegistration,
+    ProjectionRegistration as CanonicalProjectionRegistration,
+    ShutdownError as CanonicalShutdownError, SubscriberError,
     SubscriberRegistration as CanonicalSubscriberRegistration,
 };
 use sc_observability_types::{
@@ -66,6 +66,15 @@ use sc_observability_types::{
 #[doc(inline)]
 pub use sc_observability_types::{
     ObservabilityHealthReport, ObservationError, ObservationHealthState,
+};
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "released root registration signatures remain available only through v1"
+)]
+use sc_observability_types::{
+    ProjectionRegistration as LegacyProjectionRegistration,
+    SubscriberRegistration as LegacySubscriberRegistration,
 };
 
 /// Opt-in canonical observation facade for the compatible 1.x transition.
@@ -789,11 +798,37 @@ impl ObservabilityBuilder {
     ///
     /// Panics if internal type-erased routing calls this registration with the
     /// wrong observation payload type.
-    pub fn register_subscriber<T>(self, registration: SubscriberRegistration<T>) -> Self
+    #[cfg(feature = "v1")]
+    #[deprecated(note = "use sc_observe::v2::ObservabilityBuilder::register_subscriber")]
+    #[allow(
+        deprecated,
+        reason = "the released v1 registration is routed directly while the feature is enabled"
+    )]
+    pub fn register_subscriber<T>(self, registration: LegacySubscriberRegistration<T>) -> Self
     where
         T: Observable,
     {
-        self.register_canonical_subscriber(registration)
+        let (subscriber, filter) = registration.into_parts();
+        let mut builder = self;
+        builder.subscribers.push(ErasedSubscriberRegistration {
+            type_id: TypeId::of::<T>(),
+            dispatch: Arc::new(move |observation_any| {
+                let observation = observation_any
+                    .downcast_ref::<Observation<T>>()
+                    .expect("type-erased routing matched wrong observation type");
+
+                if filter
+                    .as_ref()
+                    .is_some_and(|filter| !filter.accepts(observation))
+                {
+                    return Ok(DispatchMatch::Skipped);
+                }
+
+                subscriber.observe(observation)?;
+                Ok(DispatchMatch::Delivered)
+            }),
+        });
+        builder
     }
 
     /// Registers one canonical typed observation subscriber at construction time.
@@ -832,7 +867,13 @@ impl ObservabilityBuilder {
     ///
     /// Panics if internal type-erased routing calls this registration with the
     /// wrong observation payload type.
-    pub fn register_projection<T>(self, registration: ProjectionRegistration<T>) -> Self
+    #[cfg(feature = "v1")]
+    #[deprecated(note = "use sc_observe::v2::ObservabilityBuilder::register_projection")]
+    #[allow(
+        deprecated,
+        reason = "the released v1 registration is routed directly while the feature is enabled"
+    )]
+    pub fn register_projection<T>(self, registration: LegacyProjectionRegistration<T>) -> Self
     where
         T: Observable,
     {
@@ -1026,8 +1067,9 @@ mod tests {
     use sc_observability::{LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration};
     use sc_observability_types::v2::{
         AggregationTemporality, Attributes, FiniteF64, LogProjector, MetricProjector, MetricRecord,
-        MetricValue, ObservationFilter, ObservationSubscriber, ProjectionError, SpanProjector,
-        SpanRecord, SpanSignal, SubscriberError, TraceContext, TraceFlags,
+        MetricValue, ObservationFilter, ObservationSubscriber, ProjectionError,
+        ProjectionRegistration, SpanProjector, SpanRecord, SpanSignal, SubscriberError,
+        SubscriberRegistration, TraceContext, TraceFlags,
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricName, MetricUnit,

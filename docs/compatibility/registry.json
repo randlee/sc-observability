@@ -251,6 +251,15 @@
       ],
       "reason": "The v1-only aggregate and its deprecated root re-export preserve the released enumeration path while canonical error-code users route through v2 contracts.",
       "removal_point": "Remove both v1 aggregate paths when the v1 feature is retired."
+    },
+    {
+      "file": "crates/sc-observe/src/lib.rs",
+      "deprecated_symbols": [
+        "register_subscriber",
+        "register_projection"
+      ],
+      "reason": "The released root registration methods remain behind the v1 feature and accept their released v1 registration contracts; canonical registrations remain only on sc_observe::v2.",
+      "removal_point": "Remove these root v1 registration methods when the v1 feature and released 1.x consumers are retired."
     }
   ],
   "compat_root_reexport_exceptions": [
@@ -4636,7 +4645,7 @@
         "conversion: released callbacks keep their Arc identity and every error they return reaches routing with its original context and source"
       ],
       "treatment": "new_adapter",
-      "conversion": "the root method converts its released SubscriberRegistration with From into v2::SubscriberRegistration and registers it through the same private path as sc_observe::v2::ObservabilityBuilder::register_subscriber; the supplied objects and filter are kept",
+      "conversion": "the root method directly routes its released SubscriberRegistration contract while sc_observe::v2::ObservabilityBuilder accepts only v2::SubscriberRegistration; the supplied objects and filter are kept",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observe/src/lib.rs",
@@ -4649,7 +4658,9 @@
         "owner": "v2::ObservabilityBuilder",
         "member": "register_subscriber"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/lib.rs"
+      ]
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::register_projection",
@@ -4662,7 +4673,7 @@
         "conversion: released callbacks keep their Arc identity and every error they return reaches routing with its original context and source"
       ],
       "treatment": "new_adapter",
-      "conversion": "the root method converts its released ProjectionRegistration with From into v2::ProjectionRegistration and registers it through the same private path as sc_observe::v2::ObservabilityBuilder::register_projection; the supplied objects and filter are kept",
+      "conversion": "the root method directly routes its released ProjectionRegistration contract while sc_observe::v2::ObservabilityBuilder accepts only v2::ProjectionRegistration; the supplied objects and filter are kept",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observe/src/lib.rs",
@@ -4675,7 +4686,9 @@
         "owner": "v2::ObservabilityBuilder",
         "member": "register_projection"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/lib.rs"
+      ]
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::build",

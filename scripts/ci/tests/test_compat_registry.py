@@ -407,6 +407,7 @@ class DeprecatedOwnerExceptionRecordTests(unittest.TestCase):
             "crates/sc-observability-types/src/error_codes.rs",
             "crates/sc-observability-types/src/errors.rs",
             "crates/sc-observability/src/error_codes.rs",
+            "crates/sc-observe/src/lib.rs",
         ])
         for relative, symbols in records.items():
             with self.subTest(relative=relative):

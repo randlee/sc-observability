@@ -42,7 +42,7 @@ impl ObservabilityConfig {
     /// ```
     #[deprecated(
         since = "1.4.0",
-        note = "Use ObservabilityConfig::default_for_typed(); see migrate-error-api.md."
+        note = "Use sc_observe::v2::ObservabilityConfig::default_for(); see migrate-error-api.md."
     )]
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, LegacyInitError> {
         Self::default_for_v2(tool_name, log_root).map_err(legacy_init_error)
@@ -51,18 +51,26 @@ impl ObservabilityConfig {
     /// Derives a service name while retaining the released root failure contract.
     #[deprecated(
         since = "1.4.0",
-        note = "Use ObservabilityConfig::service_name_typed(); see migrate-error-api.md."
+        note = "Use sc_observe::v2::ObservabilityConfig::service_name(); see migrate-error-api.md."
     )]
     pub fn service_name(&self) -> Result<ServiceName, LegacyInitError> {
         self.service_name_v2().map_err(legacy_init_error)
     }
 
     /// Builds v1 defaults while retaining the released typed failure contract.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observe::v2::ObservabilityConfig::default_for(); see migrate-error-api.md."
+    )]
     pub fn default_for_typed(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitFailure> {
         Self::default_for_v2(tool_name, log_root).map_err(InitFailure::from)
     }
 
     /// Derives a service name while retaining the released typed failure contract.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observe::v2::ObservabilityConfig::service_name(); see migrate-error-api.md."
+    )]
     pub fn service_name_typed(&self) -> Result<ServiceName, InitFailure> {
         self.service_name_v2().map_err(InitFailure::from)
     }
@@ -72,7 +80,7 @@ impl Observability {
     /// Constructs the shared runtime with the released root failure contract.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Observability::new_typed(); see migrate-error-api.md."
+        note = "Use sc_observe::v2::Observability::new(); see migrate-error-api.md."
     )]
     pub fn new(config: ObservabilityConfig) -> Result<Self, LegacyInitError> {
         Self::new_released(config).map_err(legacy_init_error)
@@ -86,7 +94,7 @@ impl Observability {
     /// while waiting for an in-progress shutdown to finish.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Observability::flush_typed(); see migrate-error-api.md."
+        note = "Use sc_observe::v2::Observability::flush(); see migrate-error-api.md."
     )]
     pub fn flush(&self) -> Result<(), FlushError> {
         self.flush_running()
@@ -102,24 +110,36 @@ impl Observability {
     /// writer-snapshot or query-health mutexes.
     #[deprecated(
         since = "1.4.0",
-        note = "Use Observability::shutdown_typed(); see migrate-error-api.md."
+        note = "Use sc_observe::v2::Observability::shutdown(); see migrate-error-api.md."
     )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         self.shutdown_v2()
     }
 
     /// Constructs the existing runtime with the released typed failure contract.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observe::v2::Observability::new(); see migrate-error-api.md."
+    )]
     pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure> {
         Self::new_released(config).map_err(InitFailure::from)
     }
 
     /// Flushes the existing runtime with the released typed failure contract.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observe::v2::Observability::flush(); see migrate-error-api.md."
+    )]
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
         self.flush_running()
             .map_err(RunningFlushError::into_released)
     }
 
     /// Shuts down the existing runtime with the released typed failure contract.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observe::v2::Observability::shutdown(); see migrate-error-api.md."
+    )]
     pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
         self.shutdown_v2().map_err(ShutdownFailure::from)
     }
@@ -129,13 +149,17 @@ impl ObservabilityBuilder {
     /// Finalizes the shared builder with the released root failure contract.
     #[deprecated(
         since = "1.4.0",
-        note = "Use ObservabilityBuilder::build_typed(); see migrate-error-api.md."
+        note = "Use sc_observe::v2::ObservabilityBuilder::build(); see migrate-error-api.md."
     )]
     pub fn build(self) -> Result<Observability, LegacyInitError> {
         self.build_released().map_err(legacy_init_error)
     }
 
     /// Finalizes the existing builder with the released typed failure contract.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observe::v2::ObservabilityBuilder::build(); see migrate-error-api.md."
+    )]
     pub fn build_typed(self) -> Result<Observability, InitFailure> {
         self.build_released().map_err(InitFailure::from)
     }
