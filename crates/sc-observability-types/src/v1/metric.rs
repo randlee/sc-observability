@@ -1,9 +1,15 @@
+#![allow(
+    deprecated,
+    reason = "the v1 compatibility module intentionally exercises its deprecated metric items"
+)]
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{MetricName, MetricUnit, ServiceName, Timestamp};
 
 /// Supported metric aggregation shapes.
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum MetricKind {
     /// Monotonic counter metric.
@@ -15,6 +21,7 @@ pub enum MetricKind {
 }
 
 /// Structured metric observation projected from routing or telemetry layers.
+#[deprecated(note = "use sc_observability_types::v2::MetricRecord")]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricRecord {
     /// UTC metric timestamp.

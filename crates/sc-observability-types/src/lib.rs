@@ -28,6 +28,16 @@ mod validation;
 #[cfg(feature = "v1")]
 #[doc(inline)]
 pub use v1::typed;
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "released v1 metric and routing paths remain feature-gated"
+)]
+#[doc(inline)]
+pub use v1::{
+    LogProjector, MetricKind, MetricProjector, MetricRecord, ObservationSubscriber,
+    ProjectionRegistration, SpanProjector, SubscriberRegistration,
+};
 
 mod sealed {
     pub trait Sealed {}

@@ -256,7 +256,8 @@
   "compat_root_reexport_exceptions": [
     "crates/sc-observability/src/lib.rs",
     "crates/sc-observability-log/src/lib.rs",
-    "crates/sc-observability-otlp/src/lib.rs"
+    "crates/sc-observability-otlp/src/lib.rs",
+    "crates/sc-observability-types/src/lib.rs"
   ],
   "dispositions": {
     "restored_root": "Released root identity is present in the current source.",
@@ -980,7 +981,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "symbol": "root subscriber owner"
       },
       "removable_paths": [],
@@ -1008,7 +1009,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "symbol": "root projector owner"
       },
       "removable_paths": [],
@@ -2269,7 +2270,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "SubscriberRegistration",
         "member": "new"
       },
@@ -2294,7 +2295,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "SubscriberRegistration",
         "member": "with_filter"
       },
@@ -2319,7 +2320,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "SubscriberRegistration",
         "member": "into_parts"
       },
@@ -2344,7 +2345,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "new"
       },
@@ -2369,7 +2370,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "with_log_projector"
       },
@@ -2394,7 +2395,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "with_span_projector"
       },
@@ -2419,7 +2420,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "with_metric_projector"
       },
@@ -2444,7 +2445,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "with_filter"
       },
@@ -2469,7 +2470,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "into_parts"
       },
@@ -5849,7 +5850,7 @@
       "canonical_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), crate::v2::SubscriberError>",
       "obligations": [
         "signature: preserve sc_observability_types::ObservationSubscriber::observe exactly as recorded in this row baseline_signature: fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError>",
-        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root ObservationSubscriber at crates/sc-observability-types/src/projection.rs",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root ObservationSubscriber at crates/sc-observability-types/src/v1/projection.rs",
         "canonical: v2::ObservationSubscriber::observe keeps the same receiver and bounds and returns crate::v2::SubscriberError",
         "identity: conversion moves the Box<ErrorContext> between crate::SubscriberError and crate::v2::SubscriberError, keeping its code, message and source; it never wraps one error in the other"
       ],
@@ -5876,7 +5877,7 @@
       "canonical_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::v2::ProjectionError>",
       "obligations": [
         "signature: preserve sc_observability_types::LogProjector::project_logs exactly as recorded in this row baseline_signature: fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::ProjectionError>",
-        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root LogProjector at crates/sc-observability-types/src/projection.rs",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root LogProjector at crates/sc-observability-types/src/v1/projection.rs",
         "canonical: v2::LogProjector::project_logs keeps the same receiver and bounds and returns crate::v2::ProjectionError",
         "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
@@ -5903,7 +5904,7 @@
       "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<crate::v2::SpanSignal>, crate::v2::ProjectionError>",
       "obligations": [
         "signature: preserve sc_observability_types::SpanProjector::project_spans exactly as recorded in this row baseline_signature: fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>",
-        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root SpanProjector at crates/sc-observability-types/src/projection.rs",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root SpanProjector at crates/sc-observability-types/src/v1/projection.rs",
         "canonical: v2::SpanProjector::project_spans keeps the same receiver and bounds and returns canonical crate::v2::SpanSignal values or crate::v2::ProjectionError",
         "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
@@ -5930,7 +5931,7 @@
       "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<crate::v2::MetricRecord>, crate::v2::ProjectionError>",
       "obligations": [
         "signature: preserve sc_observability_types::MetricProjector::project_metrics exactly as recorded in this row baseline_signature: fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>",
-        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root MetricProjector at crates/sc-observability-types/src/projection.rs",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root MetricProjector at crates/sc-observability-types/src/v1/projection.rs",
         "canonical: v2::MetricProjector::project_metrics keeps the same receiver and bounds and returns canonical crate::v2::MetricRecord values or crate::v2::ProjectionError",
         "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
