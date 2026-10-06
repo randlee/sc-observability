@@ -1729,6 +1729,10 @@ pub enum sc_observability_types::MaintenanceWorkerState
 pub sc_observability_types::MaintenanceWorkerState::Degraded
 pub sc_observability_types::MaintenanceWorkerState::Running
 pub sc_observability_types::MaintenanceWorkerState::Stopped
+pub enum sc_observability_types::MetricKind
+pub sc_observability_types::MetricKind::Counter
+pub sc_observability_types::MetricKind::Gauge
+pub sc_observability_types::MetricKind::Histogram
 #[non_exhaustive] pub enum sc_observability_types::MetricModelError
 pub sc_observability_types::MetricModelError::InvalidHistogram
 pub sc_observability_types::MetricModelError::InvalidHistogram::context: alloc::boxed::Box<sc_observability_types::ErrorContext>
@@ -2035,6 +2039,14 @@ pub type sc_observability_types::MetricName::Error = sc_observability_types::Val
 pub fn sc_observability_types::MetricName::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
 impl core::fmt::Display for sc_observability_types::MetricName
 pub fn sc_observability_types::MetricName::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct sc_observability_types::MetricRecord
+pub sc_observability_types::MetricRecord::attributes: serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub sc_observability_types::MetricRecord::kind: sc_observability_types::MetricKind
+pub sc_observability_types::MetricRecord::name: sc_observability_types::MetricName
+pub sc_observability_types::MetricRecord::service: sc_observability_types::ServiceName
+pub sc_observability_types::MetricRecord::timestamp: sc_observability_types::Timestamp
+pub sc_observability_types::MetricRecord::unit: core::option::Option<sc_observability_types::MetricUnit>
+pub sc_observability_types::MetricRecord::value: f64
 pub struct sc_observability_types::MetricUnit(_)
 impl sc_observability_types::MetricUnit
 pub fn sc_observability_types::MetricUnit::as_str(&self) -> &str
@@ -2084,6 +2096,16 @@ pub fn sc_observability_types::OutcomeLabel::fmt(&self, &mut core::fmt::Formatte
 pub struct sc_observability_types::ProcessIdentity
 pub sc_observability_types::ProcessIdentity::hostname: core::option::Option<alloc::string::String>
 pub sc_observability_types::ProcessIdentity::pid: core::option::Option<u32>
+pub struct sc_observability_types::ProjectionRegistration<T> where T: sc_observability_types::Observable
+impl<T> sc_observability_types::ProjectionRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::ProjectionRegistration<T>::into_parts(self) -> (core::option::Option<alloc::sync::Arc<dyn sc_observability_types::LogProjector<T>>>, core::option::Option<alloc::sync::Arc<dyn sc_observability_types::SpanProjector<T>>>, core::option::Option<alloc::sync::Arc<dyn sc_observability_types::MetricProjector<T>>>, core::option::Option<alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>>)
+pub fn sc_observability_types::ProjectionRegistration<T>::new() -> Self
+pub fn sc_observability_types::ProjectionRegistration<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>) -> Self
+pub fn sc_observability_types::ProjectionRegistration<T>::with_log_projector(self, alloc::sync::Arc<dyn sc_observability_types::LogProjector<T>>) -> Self
+pub fn sc_observability_types::ProjectionRegistration<T>::with_metric_projector(self, alloc::sync::Arc<dyn sc_observability_types::MetricProjector<T>>) -> Self
+pub fn sc_observability_types::ProjectionRegistration<T>::with_span_projector(self, alloc::sync::Arc<dyn sc_observability_types::SpanProjector<T>>) -> Self
+impl<T> core::default::Default for sc_observability_types::ProjectionRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::ProjectionRegistration<T>::default() -> Self
 pub struct sc_observability_types::QueryHealthReport
 pub sc_observability_types::QueryHealthReport::last_error: core::option::Option<sc_observability_types::DiagnosticSummary>
 pub sc_observability_types::QueryHealthReport::state: sc_observability_types::QueryHealthState
@@ -2186,6 +2208,11 @@ pub sc_observability_types::StateTransition::from_state: sc_observability_types:
 pub sc_observability_types::StateTransition::reason: core::option::Option<alloc::string::String>
 pub sc_observability_types::StateTransition::to_state: sc_observability_types::StateName
 pub sc_observability_types::StateTransition::trigger: core::option::Option<sc_observability_types::ActionName>
+pub struct sc_observability_types::SubscriberRegistration<T> where T: sc_observability_types::Observable
+impl<T> sc_observability_types::SubscriberRegistration<T> where T: sc_observability_types::Observable
+pub fn sc_observability_types::SubscriberRegistration<T>::into_parts(self) -> (alloc::sync::Arc<dyn sc_observability_types::ObservationSubscriber<T>>, core::option::Option<alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>>)
+pub fn sc_observability_types::SubscriberRegistration<T>::new(alloc::sync::Arc<dyn sc_observability_types::ObservationSubscriber<T>>) -> Self
+pub fn sc_observability_types::SubscriberRegistration<T>::with_filter(self, alloc::sync::Arc<dyn sc_observability_types::v2::ObservationFilter<T>>) -> Self
 pub struct sc_observability_types::TargetCategory(_)
 impl sc_observability_types::TargetCategory
 pub fn sc_observability_types::TargetCategory::as_str(&self) -> &str
@@ -2324,11 +2351,19 @@ impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::Subs
 pub fn sc_observability_types::v2::SubscriberError::diagnostic(&self) -> &sc_observability_types::Diagnostic
 impl sc_observability_types::DiagnosticInfo for sc_observability_types::v2::TelemetryError
 pub fn sc_observability_types::v2::TelemetryError::diagnostic(&self) -> &sc_observability_types::Diagnostic
+pub trait sc_observability_types::LogProjector<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::LogProjector::project_logs(&self, &sc_observability_types::Observation<T>) -> core::result::Result<alloc::vec::Vec<sc_observability_types::LogEvent>, sc_observability_types::v2::ProjectionError>
+pub trait sc_observability_types::MetricProjector<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::MetricProjector::project_metrics(&self, &sc_observability_types::Observation<T>) -> core::result::Result<alloc::vec::Vec<sc_observability_types::MetricRecord>, sc_observability_types::v2::ProjectionError>
 pub trait sc_observability_types::ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + core::marker::Send + core::marker::Sync
 pub fn sc_observability_types::ObservabilityHealthProvider::telemetry_health(&self) -> sc_observability_types::TelemetryHealthReport
 impl<T> sc_observability_types::ObservabilityHealthProvider for alloc::sync::Arc<T> where T: sc_observability_types::ObservabilityHealthProvider + ?core::marker::Sized
 pub fn alloc::sync::Arc<T>::telemetry_health(&self) -> sc_observability_types::TelemetryHealthReport
 pub trait sc_observability_types::Observable: core::marker::Send + core::marker::Sync + 'static
 impl<T> sc_observability_types::Observable for T where T: core::marker::Send + core::marker::Sync + 'static
+pub trait sc_observability_types::ObservationSubscriber<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::ObservationSubscriber::observe(&self, &sc_observability_types::Observation<T>) -> core::result::Result<(), sc_observability_types::v2::SubscriberError>
 pub trait sc_observability_types::ProcessIdentityResolver: core::marker::Send + core::marker::Sync
 pub fn sc_observability_types::ProcessIdentityResolver::resolve(&self) -> core::result::Result<sc_observability_types::ProcessIdentity, sc_observability_types::v2::IdentityError>
+pub trait sc_observability_types::SpanProjector<T> where T: sc_observability_types::Observable: core::marker::Send + core::marker::Sync
+pub fn sc_observability_types::SpanProjector::project_spans(&self, &sc_observability_types::Observation<T>) -> core::result::Result<alloc::vec::Vec<sc_observability_types::SpanSignal>, sc_observability_types::v2::ProjectionError>
