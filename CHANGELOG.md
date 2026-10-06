@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 
-- Existing deprecations remain available through the compatible 1.x release;
-  deprecated API removal requires a separately authorized major release.
+- Existing deprecations remain available through the next compatible 1.5.0
+  release behind default-on `v1`; PHF-002 removes them only after that
+  deprecation release, without a major-version bump.
 
 ## [1.2.0] - 2026-05-26
 

@@ -1,6 +1,10 @@
-# Error API migration to 2.0 (deferred)
+# Error API migration to canonical v2
 
-> **Current release:** ADR-020 and the [compatible 1.x amendment](plans/phase-d/compatible-1x-amendment.md) supersede the removal instructions below. Released deprecated APIs and typed helpers remain supported in 1.x. The following recipe describes a future, separately authorized 2.0 migration.
+> **Current release:** PHF-002 and ADR-020 govern this migration. The next
+> release remains 1.5.0: released 1.x APIs ship behind default-on `v1` with
+> deprecation notes toward their canonical v2 replacement (or this migration
+> guide when no replacement exists). A later release may remove them after that
+> deprecation release, without a major-version bump.
 
 This is the ADR-017 replacement contract, not the historical Phase B additive
 `*_typed` rollout. D18 activates the canonical root re-exports and removes the
@@ -102,8 +106,9 @@ The existing consumers are under `scripts/ci/fixtures/error-migration/`.
 D18's final `python3 scripts/ci/validate_error_migration.py` must execute the
 migrated canonical recipes and reject the intentionally old source. The
 validator enforces the retained 1.x typed-sibling and deprecation contract
-through the `compat.rs` facade. Canonical removal is deferred to a separately
-authorized 2.0 release; D18 owns the full default/all-features workspace tests.
+through the `compat.rs` facade. PHF-002 permits canonical removal only after
+the next 1.5.0 deprecation release, without a major-version bump; D18 owns the
+full default/all-features workspace tests.
 
 No replacement source-text presence guard or exact `*_typed` inventory is
 intended. The compiled migration consumers already fail if a released typed

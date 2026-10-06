@@ -45,27 +45,21 @@ migration. Import canonical same-name enums after activation, not permanent
 parallel typed wrappers. Keep open trait implementations and host-owned logger
 lifecycle semantics intact.
 
-## Removals reserved for a later major release
+## Phase F deprecate-before-remove path
 
-None of the removals below happens in 1.x; the compatible 1.x break manifest
-enumerates none, and the released items stay public and deprecated. A future,
-separately authorized major release would enumerate each one rather than
-grant a crate-wide waiver. In that release, `sc-observability-types` retires
-wrapper structs, `ClassifiedError`, `*Failure` conversions, and kind aliases
-in favor of the ADR-017 named enums; `TelemetryError` remains but becomes a
-non-exhaustive canonical 2.0 enum. `sc-observability` and `sc-observe` retire legacy
-logging/routing errors and the duplicate `*_typed` surface; unsuffixed 2.0
-methods use canonical errors where a same-method replacement exists.
+PHF-002 governs the 1.x migration path. The next release remains 1.5.0: every
+released 1.x public item that continues to be exposed ships behind its
+default-on `v1` feature with a deprecation note naming its v2 replacement (or
+the Phase F migration guide when it has none). This transition does not require
+a major-version bump.
 
-`sc-observability-log` retires its local lifecycle error enums and their
-variants in favor of the shared `InitError`, `FlushError`, and `ShutdownError`
-families. `sc-observability-otlp` retires the old constants/error-code modules
-and changes construction, export, lifecycle, and span assembly signatures to
-the canonical configuration/error contracts. `sc-observability-dto` retires
-the legacy `Failure` and generic `WireEnvelope` forms in favor of the canonical
-DTO/schema projection. A removed item with no exact added public line has an
-empty `new` field in the manifest; that is intentional and must not be
-represented as a compatibility promise.
+The release after that deprecation release may remove the `v1` modules and
+features. Deprecated items need not retain compatibility adapters, behavioral
+tests, or baseline comparison. Phase F may delete items already deprecated in
+published 1.4.1, never-released items, and internal plumbing now; canonical
+code must not use a `v1` item. Consumers should use the named canonical
+replacement in the deprecation note rather than treating the retained legacy
+path as a compatibility promise.
 
 ### EmitError pattern matching
 

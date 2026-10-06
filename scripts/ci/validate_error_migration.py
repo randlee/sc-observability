@@ -46,8 +46,9 @@ RETAINED_FACADE_METHODS = (
     ("observe", "Observability::shutdown", "Observability::shutdown_typed"),
 )
 
-# ADR-020 retains released typed helpers for compatible 1.x; their removal
-# belongs to a separately authorized 2.0 release. Migrated fixtures exercise them.
+# PHF-002 ships released typed helpers behind default-on v1 in the next 1.5.0
+# release; a later release may remove them after deprecation, without a major
+# version bump. Migrated fixtures exercise the canonical replacements.
 
 
 def migration_notes() -> tuple[str, ...]:
