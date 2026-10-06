@@ -684,16 +684,6 @@ mod tests {
         }
     }
 
-    struct PrefixRedactor;
-
-    impl Redactor for PrefixRedactor {
-        fn redact(&self, key: &str, value: &mut Value) {
-            if key == "secret" {
-                *value = Value::String("custom-redacted".to_string());
-            }
-        }
-    }
-
     struct SourceRedactor {
         control: Mutex<Option<std::sync::Weak<Mutex<LevelControl>>>>,
         observed_unlocked: AtomicBool,
@@ -1312,76 +1302,6 @@ mod tests {
     }
 
     #[test]
-    fn file_only_logging_writes_jsonl_to_default_path() {
-        let root = temp_path("file-only");
-        let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
-        logger.emit(log_event(service_name())).expect("emit");
-        logger.flush().expect("flush");
-
-        let path = default_log_path(&root, &service_name());
-        let contents = fs::read_to_string(&path).expect("read log file");
-        assert!(contents.contains("\"level\":\"Info\""));
-        assert!(contents.contains("[REDACTED]"));
-    }
-
-    #[test]
-    fn file_and_console_fan_out_both_receive_event() {
-        let root = temp_path("fanout");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_console_sink = false;
-        let mut builder = Logger::builder(config).expect("logger builder");
-
-        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        builder.register_sink(SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(
-            Box::new(SharedBuffer {
-                lines: lines.clone(),
-            }),
-        ))));
-        let logger = builder.build();
-
-        logger.emit(log_event(service_name())).expect("emit");
-        logger.flush().expect("flush");
-
-        let path = default_log_path(&root, &service_name());
-        assert!(path.exists());
-        let lines = lines.lock().expect("lines poisoned");
-        assert_eq!(lines.len(), 1);
-        assert!(lines[0].contains("logger.core"));
-    }
-
-    #[test]
-    fn redaction_runs_before_sink_fan_out() {
-        let root = temp_path("redaction");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_console_sink = false;
-        config.redaction.denylist_keys.push("token".to_string());
-        config
-            .redaction
-            .custom_redactors
-            .push(Box::new(PrefixRedactor));
-        let mut builder = Logger::builder(config).expect("logger builder");
-
-        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        builder.register_sink(SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(
-            Box::new(SharedBuffer {
-                lines: lines.clone(),
-            }),
-        ))));
-        let logger = builder.build();
-
-        logger.emit(log_event(service_name())).expect("emit");
-        logger.flush().expect("flush");
-
-        let file_path = default_log_path(&root, &service_name());
-        let file_contents = fs::read_to_string(file_path).expect("read file");
-        let console_line = lines.lock().expect("lines poisoned")[0].clone();
-        assert!(file_contents.contains("[REDACTED]"));
-        assert!(file_contents.contains("custom-redacted"));
-        assert!(console_line.contains("[REDACTED]"));
-    }
-
-    #[test]
     fn invalid_event_returns_event_error() {
         let root = temp_path("invalid");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -1837,103 +1757,6 @@ mod tests {
                 .state,
             MaintenanceWorkerState::Stopped
         );
-    }
-
-    #[test]
-    fn shutdown_returns_after_join_timeout_without_waiting_for_blocked_writer() {
-        let root = temp_path("shutdown-maintenance-timeout");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.retained_log_policy.writer_shutdown_timeout = join_ms(10);
-        config.maintenance_test_pass_delay = Some(Duration::ZERO);
-        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
-        signal.block_delay_until_released();
-        let _release_delay = signal.release_on_drop();
-        config.maintenance_test_pass_signal = Some(signal.clone());
-        let logger = Logger::new(config).expect("logger");
-
-        logger.emit(log_event(service_name())).expect("emit");
-        assert!(
-            signal.wait_for_state(
-                TEST_WATCHDOG,
-                crate::maintenance::TestPassDelaySignal::is_active
-            ),
-            "expected maintenance worker to enter the delayed test pass"
-        );
-
-        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
-        let shutdown = std::thread::spawn(move || {
-            let stopped = logger.shutdown();
-            finished_tx
-                .send(())
-                .expect("test waits for shutdown to return");
-            stopped
-        });
-
-        assert!(
-            signal.wait_for_state(
-                TEST_WATCHDOG,
-                crate::maintenance::TestPassDelaySignal::shutdown_timeout_recorded
-            ),
-            "expected shutdown to record the configured timeout while maintenance is gated"
-        );
-        finished_rx.recv_timeout(TEST_WATCHDOG).expect(
-            "shutdown must return after the configured timeout without joining the blocked writer",
-        );
-        let stopped = shutdown
-            .join()
-            .expect("shutdown thread should complete after the configured timeout");
-        let maintenance = stopped.health().maintenance.expect("maintenance health");
-        assert!(maintenance.last_error.is_some());
-        assert_eq!(stopped.health().writer_state, WriterState::Degraded);
-        let timeout = stopped
-            .health()
-            .last_writer_error
-            .expect("actual writer shutdown timeout is retained in stopped health");
-        assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
-        assert_eq!(timeout.message, "writer thread did not stop within 10ms");
-        // Shutdown consumes Logger<Running>. The returned Logger<Stopped>
-        // exposes this diagnostic through health, not through Logger::emit.
-        assert!(
-            signal.is_active(),
-            "shutdown returned before the blocked writer left its maintenance pass"
-        );
-        release_test_pass_delay(&signal);
-    }
-
-    #[test]
-    fn try_log_reports_queue_full_on_saturated_queue() {
-        let root = temp_path("try-log-queue-full");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.queue_capacity = 1;
-        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.maintenance_test_pass_delay = Some(Duration::ZERO);
-        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
-        signal.block_delay_until_released();
-        let _release_delay = signal.release_on_drop();
-        config.maintenance_test_pass_signal = Some(signal.clone());
-        let logger = CanonicalLogger::new(config).expect("logger");
-
-        logger.log(log_event(service_name())).expect("initial log");
-        assert!(
-            signal.wait_for_state(
-                TEST_WATCHDOG,
-                crate::maintenance::TestPassDelaySignal::is_active
-            ),
-            "expected maintenance worker to enter the delayed test pass"
-        );
-
-        logger
-            .try_log(log_event_with_request(service_name(), "queued", 10))
-            .expect("first queued event should fit");
-        let result = logger.try_log(log_event_with_request(service_name(), "full", 10));
-
-        assert!(matches!(
-            result,
-            Err(CanonicalEventError::Routing { ref context })
-                if context.diagnostic().code == error_codes::LOGGER_QUEUE_FULL
-        ));
-        release_test_pass_delay(&signal);
     }
 
     #[test]
@@ -3061,8 +2884,252 @@ mod tests {
                 .contains("identity changed")
         );
     }
+}
 
-    /// Canonical sink that counts every call and optionally fails.
+#[cfg(test)]
+mod canonical_behavior_tests {
+    use super::*;
+    use crate::sinks::ConsoleWriter;
+    use sc_observability_types::v2::EventError as CanonicalEventError;
+    use sc_observability_types::{ActionName, ProcessIdentity, TargetCategory};
+    use serde_json::{Map, json};
+    use std::ops::Deref;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    };
+    use std::time::Duration;
+
+    const TEST_WATCHDOG: Duration = Duration::from_secs(30);
+
+    struct TestRoot(tempfile::TempDir);
+
+    impl TestRoot {
+        fn path_buf(&self) -> PathBuf {
+            self.0.path().to_path_buf()
+        }
+    }
+
+    impl Deref for TestRoot {
+        type Target = Path;
+        fn deref(&self) -> &Self::Target {
+            self.0.path()
+        }
+    }
+
+    fn temp_path(name: &str) -> TestRoot {
+        TestRoot(
+            tempfile::Builder::new()
+                .prefix(&format!("sc-observability-{name}-"))
+                .tempdir()
+                .expect("create temporary test root"),
+        )
+    }
+
+    fn service_name() -> ServiceName {
+        ServiceName::new("sc-observability").expect("valid service name")
+    }
+
+    fn log_event(service: ServiceName) -> LogEvent {
+        LogEvent {
+            version: sc_observability_types::SchemaVersion::new(
+                sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+            )
+            .expect("valid schema version"),
+            timestamp: Timestamp::UNIX_EPOCH,
+            level: Level::Info,
+            service,
+            target: TargetCategory::new("logger.core").expect("valid target"),
+            action: ActionName::new("emit").expect("valid action"),
+            message: Some("Authorization: Bearer abc123".to_string()),
+            identity: ProcessIdentity::default(),
+            trace: None,
+            request_id: None,
+            correlation_id: None,
+            outcome: None,
+            diagnostic: None,
+            state_transition: None,
+            fields: Map::from_iter([
+                ("token".to_string(), json!("Bearer secret")),
+                ("secret".to_string(), json!("raw")),
+            ]),
+        }
+    }
+
+    struct SharedBuffer {
+        lines: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl ConsoleWriter for SharedBuffer {
+        fn write_line(&self, line: &str) -> std::io::Result<()> {
+            self.lines
+                .lock()
+                .expect("buffer poisoned")
+                .push(line.to_string());
+            Ok(())
+        }
+    }
+
+    struct PrefixRedactor;
+
+    impl Redactor for PrefixRedactor {
+        fn redact(&self, key: &str, value: &mut Value) {
+            if key == "secret" {
+                *value = Value::String("custom-redacted".to_string());
+            }
+        }
+    }
+
+    #[test]
+    fn file_only_logging_writes_jsonl_to_default_path() {
+        let root = temp_path("file-only");
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
+        let logger = CanonicalLogger::new(config).expect("logger");
+        logger.log(log_event(service_name())).expect("log");
+        logger.flush().expect("flush");
+        let path = default_log_path(&root, &service_name());
+        let contents = std::fs::read_to_string(path).expect("read log file");
+        assert!(contents.contains("\"level\":\"Info\""));
+        assert!(contents.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn file_and_console_fan_out_both_receive_event() {
+        let root = temp_path("fanout");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_console_sink = false;
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        builder.register_sink(SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(
+            Box::new(SharedBuffer {
+                lines: lines.clone(),
+            }),
+        ))));
+        let logger = builder.build().expect("logger");
+        logger.log(log_event(service_name())).expect("log");
+        logger.flush().expect("flush");
+        assert!(default_log_path(&root, &service_name()).exists());
+        let lines = lines.lock().expect("lines poisoned");
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("logger.core"));
+    }
+
+    #[test]
+    fn redaction_runs_before_sink_fan_out() {
+        let root = temp_path("redaction");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_console_sink = false;
+        config.redaction.denylist_keys.push("token".to_string());
+        config
+            .redaction
+            .custom_redactors
+            .push(Box::new(PrefixRedactor));
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        builder.register_sink(SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(
+            Box::new(SharedBuffer {
+                lines: lines.clone(),
+            }),
+        ))));
+        let logger = builder.build().expect("logger");
+        logger.log(log_event(service_name())).expect("log");
+        logger.flush().expect("flush");
+        let file_contents =
+            std::fs::read_to_string(default_log_path(&root, &service_name())).expect("read file");
+        let console_line = lines.lock().expect("lines poisoned")[0].clone();
+        assert!(file_contents.contains("[REDACTED]"));
+        assert!(file_contents.contains("custom-redacted"));
+        assert!(console_line.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn shutdown_returns_after_join_timeout_without_waiting_for_blocked_writer() {
+        let root = temp_path("shutdown-maintenance-timeout");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.retained_log_policy.maintenance_cadence =
+            MaintenanceCadence::new(Duration::from_millis(5));
+        config.retained_log_policy.writer_shutdown_timeout =
+            WriterShutdownTimeout::new(Duration::from_millis(10));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let logger = CanonicalLogger::new(config).expect("logger");
+        logger.log(log_event(service_name())).expect("log");
+        assert!(signal.wait_for_state(
+            TEST_WATCHDOG,
+            crate::maintenance::TestPassDelaySignal::is_active
+        ));
+        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+        let shutdown = std::thread::spawn(move || {
+            let stopped = logger.shutdown();
+            finished_tx
+                .send(())
+                .expect("test waits for shutdown to return");
+            stopped
+        });
+        assert!(signal.wait_for_state(
+            TEST_WATCHDOG,
+            crate::maintenance::TestPassDelaySignal::shutdown_timeout_recorded
+        ));
+        finished_rx.recv_timeout(TEST_WATCHDOG).expect(
+            "shutdown must return after configured timeout without joining the blocked writer",
+        );
+        let stopped = shutdown
+            .join()
+            .expect("shutdown thread should complete after timeout");
+        let maintenance = stopped.health().maintenance.expect("maintenance health");
+        assert!(maintenance.last_error.is_some());
+        assert_eq!(stopped.health().writer_state, WriterState::Degraded);
+        let timeout = stopped
+            .health()
+            .last_writer_error
+            .expect("timeout retained in health");
+        assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
+        assert_eq!(timeout.message, "writer thread did not stop within 10ms");
+        assert!(
+            signal.is_active(),
+            "shutdown returned before blocked writer left pass"
+        );
+        signal.release_delay();
+    }
+
+    #[test]
+    fn try_log_reports_queue_full_on_saturated_queue() {
+        let root = temp_path("try-log-queue-full");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.queue_capacity = 1;
+        config.retained_log_policy.maintenance_cadence =
+            MaintenanceCadence::new(Duration::from_millis(5));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let logger = CanonicalLogger::new(config).expect("logger");
+        logger.log(log_event(service_name())).expect("initial log");
+        assert!(signal.wait_for_state(
+            TEST_WATCHDOG,
+            crate::maintenance::TestPassDelaySignal::is_active
+        ));
+        let mut queued = log_event(service_name());
+        queued.request_id =
+            Some(sc_observability_types::CorrelationId::new("queued").expect("valid request id"));
+        logger
+            .try_log(queued)
+            .expect("first queued event should fit");
+        let mut full = log_event(service_name());
+        full.request_id =
+            Some(sc_observability_types::CorrelationId::new("full").expect("valid request id"));
+        let result = logger.try_log(full);
+        assert!(
+            matches!(result, Err(CanonicalEventError::Routing { ref context })
+            if context.diagnostic().code == error_codes::LOGGER_QUEUE_FULL)
+        );
+        signal.release_delay();
+    }
+
     #[derive(Default)]
     struct CanonicalCountingSink {
         writes: AtomicU64,
@@ -3074,15 +3141,13 @@ mod tests {
             self.writes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
-
         fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
             self.flushes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
-
         fn health(&self) -> SinkHealth {
             SinkHealth {
-                name: sink_name("canonical-counting"),
+                name: SinkName::new("canonical-counting").expect("sink name"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }
@@ -3090,7 +3155,6 @@ mod tests {
     }
 
     struct AcceptAll;
-
     impl LogFilter for AcceptAll {
         fn accepts(&self, _event: &LogEvent) -> bool {
             true
@@ -3106,23 +3170,15 @@ mod tests {
         let sink = Arc::new(CanonicalCountingSink::default());
         let canonical: Arc<dyn crate::sink::LogSink> = sink.clone();
         let filter: Arc<dyn LogFilter> = Arc::new(AcceptAll);
-
         let registration = SinkRegistration::typed(canonical.clone()).with_filter(filter.clone());
-
-        // The private storage type is the canonical trait object, so this
-        // binding compiles only while the registration stores it directly.
         let stored: &Arc<dyn crate::sink::LogSink> = &registration.sink;
         assert!(Arc::ptr_eq(stored, &canonical));
         assert_eq!(thin_ptr(stored), thin_ptr(&sink));
-        // `sink`, `canonical`, and the registration own the same allocation;
-        // an adapter would have left only two strong owners of the input.
         assert_eq!(Arc::strong_count(&sink), 3);
         assert!(Arc::ptr_eq(
             registration.filter.as_ref().expect("filter stored"),
             &filter
         ));
-
-        let cloned = registration.clone();
-        assert!(Arc::ptr_eq(&cloned.sink, &canonical));
+        assert!(Arc::ptr_eq(&registration.clone().sink, &canonical));
     }
 }
