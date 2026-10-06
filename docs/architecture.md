@@ -1802,8 +1802,8 @@ ADR-012; the new neutral models remain additive at the explicit `v2` path,
 including after D.18 integration. Any future root signal replacement needs
 a separately accepted ADR explicitly superseding ADR-012 for those named
 breaks before implementation. PHF-002 governs any retirement of those paths.
-D.12 retains `version.workspace = true`; D.21 performs the atomic
-workspace 2.0 activation. The producer contract, constructors, serde shape,
+D.12 retains `version.workspace = true`; Phase F retains the workspace at
+version 1.5.0 with no major-version bump. The producer contract, constructors, serde shape,
 error inventory and DTO handoffs are specified in
 [API design](api-design.md#phase-d-canonical-types-and-wire-handoff).
 No transport implementation or runtime dependency enters the types layer.
