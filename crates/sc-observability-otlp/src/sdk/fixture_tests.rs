@@ -63,7 +63,7 @@ impl DeadlineTestServer {
             stream.set_read_timeout(Some(DEADLINE_TEST_SERVER_IO_TIMEOUT))?;
             let mut request_prefix = [0_u8; 1];
             stream.read_exact(&mut request_prefix)?;
-            accepted_tx.send(()).map_err(|_| {
+            accepted_tx.send(()).map_err(|()| {
                 io::Error::new(
                     io::ErrorKind::BrokenPipe,
                     "deadline test dropped acceptance receiver",
