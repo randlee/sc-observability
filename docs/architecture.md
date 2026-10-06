@@ -696,7 +696,7 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts; Phase D wave 5 (ADR-021): the `otlp::signals` neutral signal types and the `otlp::submission` contracts (envelope, receipts, status, error codes, config and precedence, the `TelemetryClient` trait), with `InMemoryTelemetryClient`, `DoubleScript` and the conformance suite behind the `test-double` feature (optional `uuid`) |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts; Phase D wave 5 (ADR-021): the `otlp::signals` neutral signal types and the `otlp::submission` contracts (envelope, receipts, status, error codes, config and precedence, the `TelemetryClient` trait) |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types` (`sc-observability` and `sc-observe` dev-only for facade/integration tests; `tonic` with `router` dev-only for the collector; [ADR-019 amendments](#adr-019-amendment-otlp-hermetic-test-collector)) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
@@ -900,7 +900,8 @@ facade is deprecated behind the default `v1` feature.
 - **Decision**: ATM-specific observability behavior belongs in an ATM-owned adapter boundary named `atm-observability-adapter`. Shared crates in this repo own only generic logging, routing, and OTLP infrastructure. ATM-specific contracts such as `LogEventV1`, daemon fan-in/spool compatibility, ATM-named env parsing, ATM health snapshots, and ATM-specific projector behavior move to the adapter boundary outside this repo.
 - **Consequences**:
   - the shared repo remains generic and publishable without ATM coupling
-  - ATM integration is still proven here through a separate example document and unpublished proving crate
+  - **Retired in Phase F**: the former in-repository ATM proving crate and
+    example proof are not shared-repo contract artifacts
   - production ATM compatibility logic is implemented in ATM-owned code, not in the shared repo
 
 ### ADR-007: Boot-Phase Observability Precedes Plugin Registration
@@ -934,12 +935,14 @@ facade is deprecated behind the default `v1` feature.
   crate names and a few high-level doc strings.
 - **Decision**: Boundary CI must enforce no ATM-specific imports or env reads in
   shared crates, no home/path discovery in shared crates outside generic config
-  helpers, no OTLP/OpenTelemetry dependency outside `sc-observability-otlp`, and
-  successful compilation of the unpublished ATM proving artifact.
+  helpers, and no OTLP/OpenTelemetry dependency outside
+  `sc-observability-otlp`.
 - **Consequences**:
   - layer violations are caught before merge
 - ATM-specific behavior remains in the ATM-owned adapter boundary
-- the proving artifact remains executable evidence, not dead documentation
+- **Retired in Phase F**: the former ATM proving artifact is not executable
+  shared-repo evidence; ATM-owned integration evidence remains outside this
+  repository
 
 ### ADR-010: Queue-Backed Writer Thread Owns Logging And Maintenance
 
@@ -1771,21 +1774,16 @@ The document set now reflects the required cleanup:
 - OTLP integration is documented as attaching from the top of the stack rather
   than being constructed inside `sc-observe`
 
-## 10. ATM Proving Artifact
+## 10. ATM Proving Artifact (retired in Phase F)
 
-The ATM integration proving artifacts owned by this repo are:
+**Retired.** The former ATM integration proving artifact is not a shared-repo
+contract artifact. The historical adapter example is retained only for context:
 
 - [`docs/atm-adapter-example.md`](./atm-adapter-example.md)
 
-These exist to prove interface sufficiency only. They do not replace the
-ATM-owned production adapter boundary.
-
-They are intentionally narrower than a full ATM migration proof:
-
-- they prove that ATM-shaped payloads and adapter-owned mapping layers can be
-  wired through the shared crates without `agent-team-mail-*` dependencies
-- they do not prove spool semantics, daemon fan-in merge behavior, ATM health
-  JSON compatibility, or complete ATM env/config translation
+It does not establish interface sufficiency or replace the ATM-owned production
+adapter boundary. ATM-owned integration evidence remains outside this
+repository.
 
 
 ### Phase D types staging
