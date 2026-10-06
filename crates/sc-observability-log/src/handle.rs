@@ -481,8 +481,7 @@ pub(crate) fn reserve_shutdown_coordinator() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-#[cfg(test)]
-#[allow(dead_code)] // The legacy failure-injection test is compiled only with `v1`.
+#[cfg(all(test, feature = "v1"))]
 fn fail_next_shutdown_coordinator_reservation() {
     FAIL_NEXT_COORDINATOR_RESERVATION.store(true, Ordering::SeqCst);
 }
