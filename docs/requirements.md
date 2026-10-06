@@ -318,9 +318,9 @@ This crate is the OTel/OTLP layer built on `sc-observability-types`.
 - OTLP-005 Invalid OTLP transport configuration shall fail at `RuntimeTelemetry::new(...)` with `sc_observability_types::v2::InitError`.
 - OTLP-006 `RuntimeTelemetry` emit methods shall return `sc_observability_types::v2::TelemetryError`.
 - OTLP-007 Calling an emit method after `shutdown()` shall return `v2::TelemetryError::Shutdown`.
-- OTLP-008 The canonical runtime span assembler shall buffer a started span, attach events, and emit the canonical completed-span record only when the span ends.
+- OTLP-008 The canonical runtime `V2SpanAssembler` shall buffer a started span, attach events, and emit `sc_observability_types::otlp::OtlpCompleteSpan` only when the span ends.
 - OTLP-009 In-flight started spans without a matching end shall be dropped at flush/shutdown and counted as dropped exports.
-- OTLP-010 the internal trace-export path shall export the canonical completed-span record, not a raw span signal.
+- OTLP-010 The internal trace-export path shall export `sc_observability_types::otlp::OtlpCompleteSpan`, not a raw span signal.
 - OTLP-011 crate-local `LogExporter`, `TraceExporter`, and `MetricExporter` contracts may remain object-safe for `Arc<dyn ...>`, but they are implementation details rather than public extension points.
 - OTLP-012 Exporter failures after validation shall be fail-open and shall update health and dropped-export counters.
 - OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
