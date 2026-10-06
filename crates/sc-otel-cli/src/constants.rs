@@ -38,11 +38,6 @@ pub(crate) const EXIT_CODE_MEANINGS: &[(u8, &str)] = &[
     (EXIT_DELIVERY_PENDING, "admitted_delivery_pending"),
     (EXIT_DELIVERY_FAILED, "admitted_delivery_failed"),
 ];
-#[cfg(feature = "test-double")]
-pub(crate) const TEST_DOUBLE_ENV: &str = "SC_OTEL_TEST_DOUBLE";
-#[cfg(feature = "test-double")]
-pub(crate) const TEST_DOUBLE_RECORD_ENV: &str = "SC_OTEL_TEST_DOUBLE_RECORD";
-
 // Keep the enum, its string mapping, and test-only contract list in one
 // declaration. A new variant therefore cannot be added without updating the
 // values exposed by the versioned result contract.

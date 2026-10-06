@@ -24,6 +24,9 @@ pub(crate) struct Cli {
     pub(crate) output: OutputFormat,
     #[command(subcommand)]
     pub(crate) command: Command,
+    #[cfg(test)]
+    #[arg(skip)]
+    pub(crate) unit_client_paths: Option<crate::client::UnitClientPaths>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -53,6 +56,9 @@ pub(crate) struct InputArgs {
     pub(crate) metric: Vec<String>,
     #[arg(long, group = "source", value_name = "JSON|@FILE")]
     pub(crate) profile: Option<String>,
+    #[cfg(test)]
+    #[arg(skip)]
+    pub(crate) stdin_input: Option<String>,
 }
 
 #[derive(Debug, Args)]

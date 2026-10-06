@@ -19,7 +19,14 @@ pub(crate) fn envelope(
     record_key: Option<&str>,
 ) -> Result<SubmissionEnvelope, CliError> {
     let json = if args.stdin {
-        read_stdin()?
+        #[cfg(test)]
+        {
+            args.stdin_input.clone().unwrap_or(read_stdin()?)
+        }
+        #[cfg(not(test))]
+        {
+            read_stdin()?
+        }
     } else {
         fragments(args, record_key)?
     };

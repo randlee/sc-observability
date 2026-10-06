@@ -1,5 +1,3 @@
-#![cfg(not(feature = "test-double"))]
-
 //! Real HTTP acknowledgements must drive durable state, not merely HTTP status.
 #[path = "common/assert_result_v1.rs"]
 mod assert_result_v1;

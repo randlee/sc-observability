@@ -14,9 +14,6 @@ description = "Telemetry submission command-line client"
 name = "sc-otel"
 path = "src/main.rs"
 
-[features]
-test-double = ["sc-observability-types/test-double"]
-
 [dependencies]
 sc-observability-types.workspace = true
 sc-observability-otlp = { workspace = true, features = ["durable-store"] }
@@ -25,6 +22,7 @@ serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+sc-observability-types = { workspace = true, features = ["test-double"] }
 
 [lints]
 workspace = true
