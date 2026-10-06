@@ -43,7 +43,7 @@ class RunnerWorkflowTests(unittest.TestCase):
         native = workflow.split('\n  native-public-api:\n', 1)[1]
         self.assertNotIn('needs:', native.split('\n    steps:\n', 1)[0])
         self.assertIn('os: [ubuntu-latest, macos-latest, windows-latest]', native)
-        self.assertIn("SC_API_ACCEPTED_BASE: ${{ inputs.accepted_base || 'origin/develop' }}", native)
+        self.assertNotIn('SC_API_ACCEPTED_BASE', native)
         self.assertIn('fetch-depth: 0', native)
 
     def test_native_public_api_setup_and_check_share_a_bash_runner_temp_path(self):

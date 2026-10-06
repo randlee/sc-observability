@@ -387,12 +387,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    env:
-      SC_API_ACCEPTED_BASE: ${{ inputs.accepted_base || 'origin/develop' }}
     steps:
       - uses: actions/checkout@v5
         with:
-          # The committed baseline is immutable; the accepted history remains available to API consumers.
           fetch-depth: 0
 
       - name: Install Rust toolchain
