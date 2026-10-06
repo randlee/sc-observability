@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 MODEL = "jev-1.13.0"
-MAX_REQUEST_BYTES = 24000  # jev_client.py refuses larger requests
+MAX_REQUEST_BYTES = 96000  # jev_client.py refuses larger requests
 KEEP = ("Requirement: {req}\nCompare state.candidate with state.original. Does state.candidate still "
         "explicitly require this, at least as clearly as state.original? Answer no if the candidate "
         "omits it, weakens it, or makes it optional.")

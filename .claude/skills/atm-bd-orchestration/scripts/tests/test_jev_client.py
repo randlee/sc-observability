@@ -214,6 +214,53 @@ class JevClientTests(unittest.TestCase):
             finally:
                 file.unlink()
 
+    def test_oversize_assignment_tells_the_agent_to_drop_context_and_retry(self):
+        import subprocess, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            def git(*args):
+                return subprocess.run(["git", "-C", tmp, "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                                      check=True, capture_output=True, text=True).stdout.strip()
+            git("init", "-q")
+            Path(tmp, "server.py").write_text("bind()\n")
+            Path(tmp, "big.md").write_text("x" * client.MAX_REQUEST_BYTES)
+            git("add", "-A"); git("commit", "-qm", "base")
+            base = git("rev-parse", "HEAD")
+            Path(tmp, "server.py").write_text("bind()\nhand_off_fd()\n")
+            git("commit", "-qam", "fix")
+            assignment = {"deliverable": {"number": 1, "text": "Hand the fd to the child."}, "worktree_path": tmp,
+                          "commit": git("rev-parse", "HEAD"), "base_sha": base,
+                          "changed_files": ["server.py"], "context": ["big.md"]}
+            file = Path(tmp, "..", Path(tmp).name + "-assignment.json").resolve()
+            file.write_text(json.dumps(assignment))
+            try:
+                output = io.StringIO()
+                with patch.dict(client.os.environ, {"TYPESAFE_API_KEY": "test-only-key"}), \
+                     patch.object(client.http.client, "HTTPSConnection") as https, contextlib.redirect_stdout(output):
+                    self.assertEqual(client.main(["--assignment", str(file)]), 2)
+                https.assert_not_called()
+                error = json.loads(output.getvalue())["error"]
+                self.assertEqual(error["code"], "SANITY.JEV_INCONCLUSIVE")
+                self.assertTrue(error["recoverable"] and client.is_client_message(error["message"]))
+                size = len(json.dumps(client.assignment_request(assignment), allow_nan=False).encode())
+                self.assertIn(f"The request is {size} bytes. Reduce context and retry", error["suggested_action"])
+                self.assertIn("`context`", error["suggested_action"])
+                client.validate_request(client.assignment_request({**assignment, "context": []}))  # the retry fits
+            finally:
+                file.unlink()
+
+    def test_each_known_error_returns_its_fix(self):
+        cases = {
+            ("SANITY.JEV_UNAVAILABLE", "Jev connection failed or timed out", True): "wait 60 seconds and run the same command once more",
+            ("SANITY.JEV_UNAVAILABLE", "Jev HTTP 503; response body withheld", True): "wait 60 seconds",
+            ("SANITY.JEV_UNAVAILABLE", "Jev HTTP 401; response body withheld", False): "Report this error unchanged",
+            ("VALIDATION.INPUT", "Committed evidence unreadable at the pinned commits", False): "git -C <worktree_path> fetch origin",
+            ("VALIDATION.INPUT", "Request file unavailable or invalid JSON", False): "Write the file as the JSON object",
+            ("SANITY.JEV_RESPONSE_INVALID", "Invalid Choice answer", False): "Report this error unchanged",
+        }
+        for (code, message, recoverable), fix in cases.items():
+            with self.subTest(message=message):
+                self.assertIn(fix, client.failure(client.JevError(code, message, recoverable))["error"]["suggested_action"])
+
     def test_every_failure_message_the_client_writes_is_recognised(self):
         source = (Path(__file__).parents[1] / "jev_client.py").read_text()
         import re

@@ -1,6 +1,6 @@
 ---
 name: sc-sanity-jev
-version: 0.8.1
+version: 0.8.2
 description: Jev-assisted dev sanity check of one numbered deliverable at an exact commit; reports whether it is done as JSON. Read-only, no lint, not QA.
 tools: Glob, Grep, LS, Read, BashOutput, Bash
 model: sonnet
@@ -56,7 +56,10 @@ Every field is present. `deliverable.text` is the only requirement you judge.
    `python3 .claude/skills/atm-bd-orchestration/scripts/jev_client.py --assignment <file>` from the repository
    root. The client builds the request (the deliverable text verbatim, the
    committed diff of `changed_files`, the `context` files); never write a
-   request yourself. Its answer is `data.answers.written.choice`. Choice `no` means exactly one
+   request yourself. If it exits 2, do what its `error.suggested_action` says
+   (for an oversized request: remove `context` entries, largest first, and run
+   it again); return its error only once that says to report it. Its answer is
+   `data.answers.written.choice`. Choice `no` means exactly one
    `skipped` finding; `yes` means none.
 4. Return the result with `commit_checked` exactly equal to `commit` and
    `jev` = the client's `data.receipt`, copied verbatim from its stdout. The

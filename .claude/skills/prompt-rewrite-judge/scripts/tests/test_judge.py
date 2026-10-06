@@ -124,7 +124,7 @@ class MainTests(unittest.TestCase):
 
     def test_oversized_request_is_refused_before_any_call(self):
         with self.assertRaises(SystemExit):
-            self.main(("big", "x " * 13000))
+            self.main(("big", "x " * (judge.MAX_REQUEST_BYTES // 2 + 1)))
         self.assertFalse((self.d / "jev/big.req.json").exists())
 
 
