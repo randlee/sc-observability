@@ -1025,6 +1025,10 @@ for generated bindings.
 
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 
+**Phase F amendment:** PHF-002 governs deprecation before removal. The next
+release remains 1.5.0 for every published crate; there is no major version
+bump.
+
 - **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). ADR-020 and PHF-002 govern the current release.
 - **Context**: Issue #92 requests typed failure handling without a forced
   migration of consumers of published diagnostic wrappers and extension traits.
