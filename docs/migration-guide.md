@@ -86,7 +86,8 @@ For consumers that emit typed observations:
 
 For consumers that export to OTLP:
 
-1. Construct `TelemetryConfig` directly in the adapter/application layer.
+1. Construct `sc_observability_otlp::v2::TelemetryConfig` directly in the
+   adapter/application layer.
 2. Keep OTLP env/config parsing outside the shared crates.
 3. Attach OTLP by wrapping projector implementations locally, following the
    canonical `v2` configuration pattern in `docs/migration/phase-f.md`.
