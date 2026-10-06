@@ -15,6 +15,11 @@
 use std::sync::Arc;
 
 use crate::RuntimeTelemetry;
+#[cfg(feature = "v1")]
+use sc_observability_types::MetricRecord;
+#[cfg(feature = "v1")]
+use sc_observability_types::SpanSignal;
+#[cfg(feature = "v1")]
 use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
 };
@@ -23,11 +28,10 @@ use sc_observability_types::v2::{
     LogProjector, MetricProjector, MetricRecord as V2MetricRecord, ProjectionError,
     ProjectionRegistration, SpanProjector, SpanSignal as V2SpanSignal,
 };
-use sc_observability_types::{
-    LogEvent, MetricRecord, Observable, Observation, ObservationFilter, SpanSignal,
-};
+use sc_observability_types::{LogEvent, Observable, Observation, ObservationFilter};
 
 /// Public helper for attaching telemetry export to ordinary observation projection registration.
+#[cfg(feature = "v1")]
 pub(crate) struct ProjectorSet<T, R>
 where
     T: Observable,
@@ -41,6 +45,7 @@ where
 }
 
 /// Telemetry-forwarding projectors and the filter taken from a [`ProjectorSet`].
+#[cfg(feature = "v1")]
 pub(crate) type AttachedParts<T, R> = (
     Option<Arc<AttachedLogProjector<T, R>>>,
     Option<Arc<AttachedSpanProjector<T, R>>>,
@@ -48,6 +53,7 @@ pub(crate) type AttachedParts<T, R> = (
     Option<Arc<dyn ObservationFilter<T>>>,
 );
 
+#[cfg(feature = "v1")]
 impl<T, R> ProjectorSet<T, R>
 where
     T: Observable,
@@ -115,6 +121,7 @@ where
     }
 }
 
+#[cfg(feature = "v1")]
 pub(crate) trait TelemetryEmit: Send + Sync + 'static {
     fn emit_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError>;
     fn emit_span(&self, span: &SpanSignal) -> Result<(), CanonicalTelemetryError>;
@@ -263,6 +270,7 @@ fn telemetry_to_projection_error(error: CanonicalTelemetryError) -> ProjectionEr
     }
 }
 
+#[cfg(feature = "v1")]
 pub(crate) struct AttachedLogProjector<T, R>
 where
     T: Observable,
@@ -272,6 +280,7 @@ where
     inner: Arc<dyn TypedLogProjector<T>>,
 }
 
+#[cfg(feature = "v1")]
 impl<T, R> TypedLogProjector<T> for AttachedLogProjector<T, R>
 where
     T: Observable,
@@ -291,6 +300,7 @@ where
     }
 }
 
+#[cfg(feature = "v1")]
 pub(crate) struct AttachedSpanProjector<T, R>
 where
     T: Observable,
@@ -300,6 +310,7 @@ where
     inner: Arc<dyn TypedSpanProjector<T>>,
 }
 
+#[cfg(feature = "v1")]
 impl<T, R> TypedSpanProjector<T> for AttachedSpanProjector<T, R>
 where
     T: Observable,
@@ -319,6 +330,7 @@ where
     }
 }
 
+#[cfg(feature = "v1")]
 pub(crate) struct AttachedMetricProjector<T, R>
 where
     T: Observable,
@@ -328,6 +340,7 @@ where
     inner: Arc<dyn TypedMetricProjector<T>>,
 }
 
+#[cfg(feature = "v1")]
 impl<T, R> TypedMetricProjector<T> for AttachedMetricProjector<T, R>
 where
     T: Observable,
@@ -347,6 +360,7 @@ where
     }
 }
 
+#[cfg(feature = "v1")]
 fn telemetry_to_projection_failure(error: CanonicalTelemetryError) -> ProjectionFailure {
     ProjectionFailure::from_context(error.into_context())
 }

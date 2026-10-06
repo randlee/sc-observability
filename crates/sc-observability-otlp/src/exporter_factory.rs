@@ -104,19 +104,6 @@ impl ExporterLifecycle for DisabledLifecycle {
     }
 }
 
-/// Consumes only fully validated transport bounds before selecting one common
-/// exporter shape. Protocol, feature, and caller-runtime availability are
-/// deliberately checked here, after the configuration's normative ordered
-/// validation, so an unavailable backend cannot mask a malformed config.
-#[cfg(test)]
-#[allow(dead_code)]
-pub(crate) fn exporter_factory(
-    config: &RuntimeTelemetryConfig,
-    bounds: &ValidatedTransportBounds,
-) -> Result<ExporterSet, ConfigFailure> {
-    exporter_factory_prepared(config, bounds)
-}
-
 #[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
 pub(crate) fn exporter_factory_prepared(
     config: &RuntimeTelemetryConfig,

@@ -120,12 +120,6 @@ impl SpanAssembler {
         }
     }
 
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
-        self.started.contains_key(&span_key(trace_id, span_id))
-    }
-
     /// Pushes one lifecycle signal through the assembler with a neutral failure.
     ///
     /// # Panics
@@ -231,12 +225,6 @@ impl SpanAssembler {
         self.started.remove(key);
         self.started_order.retain(|candidate| candidate != key);
     }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn remove_event_buffer(&mut self, key: &str) -> Option<Vec<SpanEvent>> {
-        self.events.remove(key)
-    }
 }
 
 impl V2SpanAssembler {
@@ -255,13 +243,6 @@ impl V2SpanAssembler {
             max_events_per_span: max_events_per_span.max(1),
             loss: SpanAssemblyLoss::default(),
         }
-    }
-
-    /// Live-span and per-span event bounds in effect.
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn limits(&self) -> (usize, usize) {
-        (self.max_live_spans, self.max_events_per_span)
     }
 
     pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {

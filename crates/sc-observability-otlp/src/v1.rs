@@ -477,13 +477,6 @@ impl Telemetry {
         &self.inner
     }
 
-    /// Wraps an injected runtime so tests can exercise the released facade.
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn from_runtime(inner: RuntimeTelemetry) -> Self {
-        Self { inner }
-    }
-
     /// Buffers one log event for export.
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), sc_observability_types::TelemetryError> {
         self.inner.emit_log(event).map_err(legacy_telemetry_error)

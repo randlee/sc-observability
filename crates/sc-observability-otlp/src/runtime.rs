@@ -2,8 +2,6 @@
 //! flush and shutdown, and the health view merged with the shared exporter
 //! lifecycle.
 
-#[cfg(test)]
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
 
@@ -21,21 +19,15 @@ use sc_observability_types::{
 use serde_json::Value;
 
 use crate::assembly::{SpanAssemblyLoss, V2SpanAssembler};
-#[cfg(test)]
-use crate::config::validate_config_typed;
 use crate::config::{
     TelemetryConfig as RuntimeTelemetryConfig, ValidatedTransportBounds, validated_telemetry_bounds,
 };
 use crate::contracts::{self, ExportRecord, ExporterSet, LogRecord};
-#[cfg(test)]
-use crate::contracts::{LogExporter, MetricExporter, TraceExporter};
 use crate::exporter_factory::exporter_factory_prepared;
 use crate::failure::{
     export_failure_from_canonical_event, flush_lifecycle_failure, shutdown_export_failure_typed,
 };
 use crate::lifecycle::{LifecycleHealth, LifecycleState, Signal};
-#[cfg(test)]
-use crate::testing;
 use crate::{error_codes, export_records};
 
 /// Metric admitted to the shared canonical buffer.
@@ -157,46 +149,6 @@ impl RuntimeTelemetry {
     ) -> Result<Self, InitFailure> {
         let exporters = exporter_factory_prepared(&config, bounds)
             .map_err(|error| InitFailure::from_context(error.into_context()))?;
-        Ok(Self::new_with_validated_exporter_set(config, exporters))
-    }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn new_with_exporters(
-        config: RuntimeTelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
-    ) -> Result<Self, InitFailure> {
-        Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
-    }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn new_with_exporters_typed(
-        config: RuntimeTelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
-    ) -> Result<Self, InitFailure> {
-        Self::new_with_exporter_set_typed(
-            config,
-            ExporterSet {
-                logs: log_exporter,
-                traces: trace_exporter,
-                metrics: metric_exporter,
-                lifecycle: Arc::new(testing::RecordingLifecycle::default()),
-            },
-        )
-    }
-
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn new_with_exporter_set_typed(
-        config: RuntimeTelemetryConfig,
-        exporters: ExporterSet,
-    ) -> Result<Self, InitFailure> {
-        validate_config_typed(&config)?;
         Ok(Self::new_with_validated_exporter_set(config, exporters))
     }
 

@@ -14,7 +14,6 @@
 #[cfg(feature = "durable-store")]
 pub mod durable;
 
-#[allow(dead_code)]
 mod assembly;
 mod config;
 #[cfg(test)]
@@ -26,7 +25,6 @@ mod failure;
 mod lifecycle;
 #[cfg(test)]
 mod lifecycle_tests;
-#[allow(dead_code)]
 mod projectors;
 mod runtime;
 #[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
