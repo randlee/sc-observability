@@ -1,6 +1,8 @@
 # sc-observability
 
-Shared structured logging, routing, and OTLP observability crates.
+A general-purpose Rust logging library: any new project gets structured logging
+and OpenTelemetry (OTLP) export immediately. Consistent, clean, easy to use, and
+high-performance.
 
 ## Workspace Crates
 
