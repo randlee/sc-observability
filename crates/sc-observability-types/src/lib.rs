@@ -111,13 +111,12 @@ pub use validation::{
     ValueValidationError,
 };
 
-/// Canonical error contracts and additive neutral signal models.
+/// Canonical error contracts and neutral signal models.
 ///
 /// The package remains at the workspace version until the atomic D.21 bump.
-/// ADR-017 authorizes integration's canonical error migration. Neutral signal
-/// models remain under `v2`: the existing root `MetricRecord`, `TraceContext`,
-/// and `SpanRecord` APIs and serialization remain unchanged under ADR-012.
-/// The version bump does not authorize replacing those root signal types.
+/// ADR-017 authorizes integration's canonical error migration. Canonical
+/// metric, trace, and span models live under `v2`; released 1.x counterparts
+/// are retained only through the default-on `v1` compatibility feature.
 pub mod v2 {
     #[doc(inline)]
     pub use crate::errors_v2::{

@@ -1015,21 +1015,22 @@ impl ObservabilityBuilder {
     }
 }
 
-#[cfg(all(test, feature = "v1"))]
-#[allow(
-    deprecated,
-    reason = "routing compatibility tests exercise retained legacy registrations and errors"
-)]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use sc_observability::{LogSink, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration};
+    use crate::v2::{
+        Observability as CanonicalObservability,
+        ObservabilityConfig as CanonicalObservabilityConfig,
+    };
+    use sc_observability::v2::LogSink;
+    use sc_observability::{LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration};
     use sc_observability_types::v2::{
         AggregationTemporality, Attributes, FiniteF64, LogProjector, MetricProjector, MetricRecord,
         MetricValue, ObservationFilter, ObservationSubscriber, ProjectionError, SpanProjector,
         SpanRecord, SpanSignal, SubscriberError, TraceContext, TraceFlags,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, DiagnosticInfo, ErrorCode, Level, LogEvent, MetricName, MetricUnit,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricName, MetricUnit,
         ProcessIdentity, SpanId, SpanStarted, TargetCategory, TelemetryHealthReport,
         TelemetryHealthState, Timestamp, TraceContext as LegacyTraceContext, TraceId,
     };
@@ -1268,8 +1269,8 @@ mod tests {
     fn registration_order_routing_is_deterministic() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let root = temp_path("order");
-        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config)
+        let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                 id: "first",
                 calls: calls.clone(),
@@ -1293,8 +1294,8 @@ mod tests {
     fn filter_acceptance_and_rejection_are_respected() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let root = temp_path("filter");
-        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config)
+        let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_subscriber(
                 SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                     id: "allowed",
@@ -1315,8 +1316,8 @@ mod tests {
     fn subscriber_failures_are_isolated() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let root = temp_path("subscriber-failure");
-        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config)
+        let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_subscriber(SubscriberRegistration::new(Arc::new(FailingSubscriber)))
             .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                 id: "still-runs",
@@ -1339,8 +1340,8 @@ mod tests {
         let span_count = Arc::new(AtomicU64::new(0));
         let metric_count = Arc::new(AtomicU64::new(0));
         let root = temp_path("projector-failure");
-        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config)
+        let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_projection(
                 ProjectionRegistration::new()
                     .with_log_projector(Arc::new(FailingProjector))
@@ -1372,8 +1373,8 @@ mod tests {
     #[test]
     fn routing_failure_occurs_when_no_eligible_path_remains() {
         let root = temp_path("routing-failure");
-        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config)
+        let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_subscriber(
                 SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                     id: "filtered",
@@ -1393,8 +1394,8 @@ mod tests {
     #[test]
     fn routing_failure_occurs_when_all_projectors_fail() {
         let root = temp_path("projector-routing-failure");
-        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config)
+        let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_projection(
                 ProjectionRegistration::new().with_log_projector(Arc::new(FailingProjector)),
             )
@@ -1412,8 +1413,8 @@ mod tests {
     #[test]
     fn post_shutdown_emission_returns_shutdown_error() {
         let root = temp_path("shutdown");
-        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config)
+        let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                 id: "shutdown",
                 calls: Arc::new(Mutex::new(Vec::new())),
@@ -1432,8 +1433,9 @@ mod tests {
     #[test]
     fn top_level_health_aggregates_logging_and_routing_state() {
         let root = temp_path("health");
-        let config = ObservabilityConfig::default_for(tool_name(), root.clone()).expect("config");
-        let runtime = Observability::builder(config)
+        let config =
+            CanonicalObservabilityConfig::default_for(tool_name(), root.clone()).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_projection(
                 ProjectionRegistration::new().with_log_projector(Arc::new(FailingProjector)),
             )
@@ -1453,8 +1455,8 @@ mod tests {
     #[test]
     fn top_level_health_exposes_attached_telemetry_provider() {
         let root = temp_path("telemetry-health");
-        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config)
+        let config = CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = CanonicalObservability::builder(config)
             .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                 id: "telemetry-health",
                 calls: Arc::new(Mutex::new(Vec::new())),
@@ -1477,7 +1479,8 @@ mod tests {
     #[test]
     fn queue_capacity_override_propagates_to_logger_config() {
         let root = temp_path("queue-capacity");
-        let mut config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let mut config =
+            CanonicalObservabilityConfig::default_for(tool_name(), root).expect("config");
         config.queue_capacity = 2048;
 
         let logger_config = config.logger_config().expect("logger config");
@@ -1512,7 +1515,12 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
+    #[allow(
+        deprecated,
+        reason = "released compatibility behavior is intentionally tested only with v1"
+    )]
     fn released_root_init_error_preserves_canonical_context_and_source() {
         let init_error = ObservabilityConfig::default_for(
             ToolName::new(".").expect("fixture tool name is an identifier"),
@@ -1542,12 +1550,11 @@ mod tests {
         // test-control channel. A timeout/disconnect releases failed tests.
         release: Mutex<mpsc::Receiver<()>>,
     }
-    #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
     impl LogSink for BlockingFlushSink {
-        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             Ok(())
         }
-        fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
             if self.armed.swap(false, Ordering::SeqCst) {
                 let _ = self.entered.send(());
                 let _ = self
@@ -1561,13 +1568,13 @@ mod tests {
             if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 0 {
                 let _ = self.seed_completed.send(());
             }
-            Err(sc_observability_types::LogSinkError(Box::new(
-                ErrorContext::new(
+            Err(sc_observability_types::v2::LogSinkError::Flush {
+                context: Box::new(ErrorContext::new(
                     sc_observability::error_codes::LOGGER_FLUSH_FAILED,
                     "controlled flush failure",
                     Remediation::not_recoverable("test fixture"),
-                ),
-            )))
+                )),
+            })
         }
         fn health(&self) -> SinkHealth {
             SinkHealth {
@@ -1597,7 +1604,7 @@ mod tests {
         config.enable_file_sink = false;
         config.enable_console_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink {
+        builder.register_sink(SinkRegistration::typed(Arc::new(BlockingFlushSink {
             flush_calls: AtomicU64::new(0),
             seed_completed,
             armed: armed.clone(),
@@ -1684,7 +1691,7 @@ mod tests {
         let (repeat_tx, repeat_rx) = mpsc::channel();
         let repeated_runtime = runtime.clone();
         let repeated = std::thread::spawn(move || {
-            let _ = repeat_tx.send(repeated_runtime.shutdown());
+            let _ = repeat_tx.send(repeated_runtime.shutdown_v2());
         });
         repeat_rx
             .recv_timeout(Duration::from_secs(1))
@@ -1808,7 +1815,7 @@ mod tests {
                         if health {
                             let _ = runtime.health();
                         } else {
-                            let _ = runtime.flush();
+                            let _ = runtime.flush_v2();
                         }
                     }));
                     let _ = done_tx.send(result.is_err());
@@ -1834,9 +1841,8 @@ mod tests {
     }
 
     #[test]
-    #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
     fn flush_forwards_logger_flush_behavior_directly() {
-        use sc_observability_types::LogSinkError;
+        use sc_observability_types::v2::LogSinkError;
 
         struct FlushFailSink {
             flush_calls: Arc<AtomicU64>,
@@ -1850,11 +1856,13 @@ mod tests {
 
             fn flush(&self) -> Result<(), LogSinkError> {
                 let call = self.flush_calls.fetch_add(1, Ordering::SeqCst);
-                let result = Err(LogSinkError(Box::new(ErrorContext::new(
-                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                    "flush failed",
-                    Remediation::not_recoverable("test sink intentionally fails flush"),
-                ))));
+                let result = Err(LogSinkError::Flush {
+                    context: Box::new(ErrorContext::new(
+                        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                        "flush failed",
+                        Remediation::not_recoverable("test sink intentionally fails flush"),
+                    )),
+                });
                 if call == 0 {
                     let _ = self.flush_completed.send(());
                 }
@@ -1871,9 +1879,9 @@ mod tests {
         }
 
         let ok_root = temp_path("flush-ok");
-        let ok_config =
-            ObservabilityConfig::default_for(tool_name(), ok_root.clone()).expect("config");
-        let ok_runtime = Observability::builder(ok_config)
+        let ok_config = CanonicalObservabilityConfig::default_for(tool_name(), ok_root.clone())
+            .expect("config");
+        let ok_runtime = CanonicalObservability::builder(ok_config)
             .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                 id: "flush-ok",
                 calls: Arc::new(Mutex::new(Vec::new())),
@@ -1893,7 +1901,7 @@ mod tests {
             logger_config.enable_console_sink = false;
             let mut builder =
                 sc_observability::v2::Logger::builder(logger_config).expect("logger builder");
-            builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink {
+            builder.register_sink(SinkRegistration::typed(Arc::new(FlushFailSink {
                 flush_calls: flush_calls.clone(),
                 flush_completed,
             })));
@@ -1917,7 +1925,7 @@ mod tests {
             build_failing_runtime("flush-legacy");
         let (typed_runtime, typed_flush_calls, typed_flush_rx) =
             build_failing_runtime("flush-typed");
-        let Err(legacy_error) = legacy_runtime.flush() else {
+        let Err(legacy_error) = legacy_runtime.flush_v2() else {
             panic!("legacy flush must report sink failure");
         };
         legacy_flush_rx
@@ -1942,10 +1950,14 @@ mod tests {
             assert!(logging.last_error.is_some());
         }
     }
+    #[cfg(feature = "v1")]
     #[test]
-    #[expect(deprecated, reason = "fixture implements retained LogSink boundary")]
+    #[allow(
+        deprecated,
+        reason = "released compatibility behavior is intentionally tested only with v1"
+    )]
     fn flush_failure_reports_the_same_diagnostic_per_facade() {
-        use sc_observability_types::LogSinkError;
+        use sc_observability_types::v2::LogSinkError;
 
         struct SourceFailSink;
 
@@ -1955,14 +1967,16 @@ mod tests {
             }
 
             fn flush(&self) -> Result<(), LogSinkError> {
-                Err(LogSinkError(Box::new(
-                    ErrorContext::new(
-                        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                        "flush failed",
-                        Remediation::not_recoverable("test sink intentionally fails flush"),
-                    )
-                    .source(Box::new(std::io::Error::other("native flush sink source"))),
-                )))
+                Err(LogSinkError::Flush {
+                    context: Box::new(
+                        ErrorContext::new(
+                            sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                            "flush failed",
+                            Remediation::not_recoverable("test sink intentionally fails flush"),
+                        )
+                        .source(Box::new(std::io::Error::other("native flush sink source"))),
+                    ),
+                })
             }
 
             fn health(&self) -> SinkHealth {
@@ -1983,7 +1997,7 @@ mod tests {
             logger_config.enable_console_sink = false;
             let mut builder =
                 sc_observability::v2::Logger::builder(logger_config).expect("logger builder");
-            builder.register_sink(SinkRegistration::new(Arc::new(SourceFailSink)));
+            builder.register_sink(SinkRegistration::typed(Arc::new(SourceFailSink)));
             let logger = builder.build().expect("built logger");
             let logger = match mode {
                 RuntimeAdmission::Canonical => RunningLogger::Canonical(logger),
@@ -2034,6 +2048,7 @@ mod tests {
         assert_eq!(mapped.diagnostic().message, "writer flush failed");
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     #[allow(deprecated)]
     fn running_flush_error_arms_preserve_context_and_source_identity() {
