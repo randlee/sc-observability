@@ -13,6 +13,7 @@
 #![cfg(feature = "v1")]
 
 use sc_observability_types::Remediation;
+#[allow(deprecated)]
 use sc_observability_types::typed::{
     ClassifiedError, EventFailure, ExportFailure, FlushFailure, IdentityFailure, InitFailure,
     LogSinkFailure, ProjectionFailure, ShutdownFailure, SubscriberFailure,
@@ -38,6 +39,7 @@ macro_rules! assert_owning_code {
 }
 
 #[test]
+#[allow(deprecated)]
 fn identity_failure_matches_owning_registry() {
     assert_owning_code!(
         IdentityFailure::resolution_failed("x", remediation()),
@@ -46,6 +48,7 @@ fn identity_failure_matches_owning_registry() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn init_failure_matches_owning_registry() {
     assert_owning_code!(
         InitFailure::logger_initialization("x", remediation()),
@@ -99,6 +102,7 @@ fn event_failure_matches_owning_registry() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn flush_failure_matches_owning_registry() {
     assert_owning_code!(
         FlushFailure::logger_flush("x", remediation()),
@@ -123,6 +127,7 @@ fn flush_failure_matches_owning_registry() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn shutdown_failure_matches_owning_registry() {
     assert_owning_code!(
         ShutdownFailure::telemetry_flush("x", remediation()),
@@ -143,6 +148,7 @@ fn shutdown_failure_matches_owning_registry() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn projection_failure_matches_owning_registry() {
     assert_owning_code!(
         ProjectionFailure::telemetry_closed("x", remediation()),
@@ -163,6 +169,7 @@ fn projection_failure_matches_owning_registry() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn subscriber_failure_matches_owning_registry() {
     assert_owning_code!(
         SubscriberFailure::routing("x", remediation()),
@@ -171,6 +178,7 @@ fn subscriber_failure_matches_owning_registry() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn log_sink_failure_matches_owning_registry() {
     assert_owning_code!(
         LogSinkFailure::write("x", remediation()),
@@ -191,6 +199,7 @@ fn log_sink_failure_matches_owning_registry() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn export_failure_matches_owning_registry() {
     assert_owning_code!(
         ExportFailure::export("x", remediation()),

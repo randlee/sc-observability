@@ -23,6 +23,7 @@ use std::collections::{HashMap, VecDeque};
 use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::error_codes;
 #[cfg(feature = "v1")]
+#[allow(deprecated)]
 use sc_observability_types::typed::EventFailure;
 use sc_observability_types::{ErrorContext, Remediation, SpanId, TraceId};
 #[cfg(feature = "v1")]
@@ -126,6 +127,7 @@ impl SpanAssembler {
     ///
     /// Panics if internal lifecycle bookkeeping loses the event buffer paired
     /// with a started span; that condition indicates corrupted assembler state.
+    #[allow(deprecated)]
     pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure> {
         match signal {
             SpanSignal::Started(record) => {
@@ -143,6 +145,7 @@ impl SpanAssembler {
             SpanSignal::Event(event) => {
                 let key = span_key(&event.trace.trace_id, &event.trace.span_id);
                 if !self.started.contains_key(&key) {
+                    #[allow(deprecated)]
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received span event without a matching started span",
@@ -152,6 +155,7 @@ impl SpanAssembler {
                     ))));
                 }
                 if self.started[&key].trace() != &event.trace {
+                    #[allow(deprecated)]
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received span event with mismatched trace context",
@@ -171,6 +175,7 @@ impl SpanAssembler {
             SpanSignal::Ended(record) => {
                 let key = span_key(&record.trace().trace_id, &record.trace().span_id);
                 let Some(started) = self.started.get(&key) else {
+                    #[allow(deprecated)]
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received ended span without a matching started span",
@@ -180,6 +185,7 @@ impl SpanAssembler {
                     ))));
                 };
                 if started.trace() != record.trace() {
+                    #[allow(deprecated)]
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received ended span with mismatched trace context",

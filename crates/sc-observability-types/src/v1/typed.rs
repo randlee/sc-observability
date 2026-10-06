@@ -227,6 +227,23 @@ macro_rules! define_failure {
     };
 }
 
+macro_rules! impl_legacy_classification {
+    ($legacy:ident, $failure:ident, $kind:ident) => {
+        #[allow(deprecated)]
+        impl ClassifiedError for $legacy {
+            type Kind = $kind;
+
+            fn kind(&self) -> Self::Kind {
+                <$failure>::classify_context(&self.0)
+            }
+
+            fn context(&self) -> &ErrorContext {
+                &self.0
+            }
+        }
+    };
+}
+
 define_failure! {
     #[deprecated(note = "use sc_observability_types::v2::IdentityError")]
     /// Typed process identity resolution failure.
@@ -410,6 +427,11 @@ impl_retained_legacy_conversion!(LegacyIdentityError, IdentityFailure);
 impl_retained_legacy_conversion!(LegacyInitError, InitFailure);
 impl_retained_legacy_conversion!(LegacyEventError, EventFailure);
 impl_retained_legacy_conversion!(LegacyLogSinkError, LogSinkFailure);
+
+impl_legacy_classification!(LegacyIdentityError, IdentityFailure, IdentityFailureKind);
+impl_legacy_classification!(LegacyInitError, InitFailure, InitFailureKind);
+impl_legacy_classification!(LegacyEventError, EventFailure, EventFailureKind);
+impl_legacy_classification!(LegacyLogSinkError, LogSinkFailure, LogSinkFailureKind);
 
 /// Typed process identity resolver contract.
 #[deprecated(note = "removed; see docs/migration/phase-f.md")]
