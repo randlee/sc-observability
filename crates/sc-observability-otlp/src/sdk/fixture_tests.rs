@@ -1,7 +1,6 @@
 //! Crate-local SDK fixture tests for canonical adapter projection and lifecycle.
 
-use crate::config::{validated_backend_connection, validated_telemetry_bounds};
-use crate::sdk::implementation::{SdkAdapterSet, build_exporter_set};
+use crate::sdk::fixture::SdkFixture;
 use crate::v2::{
     ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
     TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
@@ -10,8 +9,6 @@ use sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL;
 use sc_observability_types::otlp::{
     OtlpCompleteSpan, OtlpInstrumentationScope, OtlpLogRecord, OtlpRecord, OtlpResource,
 };
-use sc_observability_types::typed::InitFailure;
-use sc_observability_types::v2::ExportError;
 use sc_observability_types::v2::{
     AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint, MetricRecord,
     MetricValue, SpanEvent, SpanKind, SpanRecord, TraceContext as V2TraceContext, TraceFlags,
@@ -26,41 +23,6 @@ use std::net::TcpListener;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-
-struct SdkFixture {
-    adapter: SdkAdapterSet,
-}
-
-impl SdkFixture {
-    fn new(config: &TelemetryConfig) -> Result<Self, InitFailure> {
-        let bounds = validated_telemetry_bounds(config)?;
-        let connection = validated_backend_connection(&config.transport)
-            .map_err(|error| InitFailure::from_context(error.into_context()))?;
-        let adapter = build_exporter_set(&connection, &bounds)
-            .map_err(|error| InitFailure::from_context(error.into_context()))?;
-        Ok(Self { adapter })
-    }
-
-    fn export_logs(&self, records: &[OtlpRecord<OtlpLogRecord>]) -> Result<(), ExportError> {
-        self.adapter.exporters.logs.export_logs(records)
-    }
-
-    fn export_spans(&self, records: &[OtlpRecord<OtlpCompleteSpan>]) -> Result<(), ExportError> {
-        self.adapter.exporters.traces.export_spans(records)
-    }
-
-    fn export_metrics(&self, records: &[OtlpRecord<MetricRecord>]) -> Result<(), ExportError> {
-        self.adapter.exporters.metrics.export_metrics(records)
-    }
-
-    async fn flush(&self) -> Result<(), ExportError> {
-        self.adapter.exporters.lifecycle.flush_async().await
-    }
-
-    async fn shutdown(&self) -> Result<(), ExportError> {
-        self.adapter.exporters.lifecycle.shutdown_async().await
-    }
-}
 
 fn fixture_config(queue_byte_capacity: usize) -> TelemetryConfig {
     fixture_config_for_endpoint(queue_byte_capacity, "http://127.0.0.1:9")
