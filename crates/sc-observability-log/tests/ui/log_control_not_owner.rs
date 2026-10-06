@@ -10,7 +10,7 @@ fn shut_down_through_control(control: LogControl) {
 }
 
 fn control_into_owner(control: LogControl) -> LogGuard {
-    LogGuard::from(control)
+    control.into()
 }
 
 fn main() {}
