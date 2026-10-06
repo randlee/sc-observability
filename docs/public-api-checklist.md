@@ -203,18 +203,16 @@ Phase-A rule:
 ### Finalized Public Types
 
 - [x] `error_codes`
-- [x] `TelemetryConfig`
-- [x] `TelemetryConfigBuilder`
-- [x] `Telemetry`
-- [x] `OtlpProtocol`
-- [x] `OtelConfig`
-- [x] `LogsConfig`
-- [x] `TracesConfig`
-- [x] `MetricsConfig`
-- [x] `ResourceAttributes`
-- [x] `SpanAssembler`
-- [x] `CompleteSpan`
-- [x] `TelemetryProjectors<T>`
+- [x] `v2::TelemetryConfig`
+- [x] `v2::TelemetryConfigBuilder`
+- [x] `v2::Telemetry`
+- [x] `v2::OtlpProtocol`
+- [x] `v2::OtelConfig`
+- [x] `v2::LogsConfig`
+- [x] `v2::TracesConfig`
+- [x] `v2::MetricsConfig`
+- [x] `v2::ResourceAttributes`
+- [x] `v2::TelemetryProjectors<T>`
 
 Internal-only:
 
@@ -224,10 +222,10 @@ Internal-only:
 
 ### Finalized Public Rules
 
-- `TelemetryConfig` is application-constructed
+- `v2::TelemetryConfig` is application-constructed
 - OTLP attaches through shipped projector-registration helpers
-- invalid OTLP config fails at `Telemetry::new(...)`
-- `TelemetryError::Shutdown` is returned after shutdown
+- invalid OTLP config fails at `v2::Telemetry::new(...)`
+- `v2::TelemetryError::Shutdown` is returned after shutdown
 
 ## 6. API Freeze Gates
 
