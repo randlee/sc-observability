@@ -1,6 +1,7 @@
 pub mod sc_observability_otlp
 pub use sc_observability_otlp::ExporterHealth
 pub use sc_observability_otlp::ExporterHealthState
+pub type sc_observability_otlp::TelemetryError = sc_observability_types::errors::TelemetryError
 pub use sc_observability_otlp::TelemetryHealthReport
 pub use sc_observability_otlp::TelemetryHealthState
 pub mod sc_observability_otlp::constants
