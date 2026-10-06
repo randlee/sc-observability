@@ -11,10 +11,16 @@ on:
         type: string
         required: true
         description: 'Accepted ancestor SHA for immutable API history checks'
+      api_only:
+        type: boolean
+        required: false
+        default: false
+        description: 'Run only the native public API qualification matrix'
 
 jobs:
   fmt:
     name: Format check
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.api_only != true }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -29,6 +35,7 @@ jobs:
         run: cargo fmt --check --all
 
   clippy:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.api_only != true }}
     needs: [fmt]
     runs-on: ubuntu-latest
     steps:
@@ -87,6 +94,7 @@ jobs:
 
   docs-consistency:
     name: docs-consistency (ubuntu)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.api_only != true }}
     needs: [clippy]
     runs-on: ubuntu-latest
     steps:
@@ -106,6 +114,7 @@ jobs:
 
   version-literals:
     name: version-literals (ubuntu)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.api_only != true }}
     needs: [clippy]
     runs-on: ubuntu-latest
     steps:
@@ -121,6 +130,7 @@ jobs:
 
   manifest-validation:
     name: manifest-validation (ubuntu)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.api_only != true }}
     needs: [clippy, docs-consistency, version-literals]
     runs-on: ubuntu-latest
     steps:
@@ -182,6 +192,7 @@ jobs:
         run: bash scripts/ci/validate_repo_boundaries.sh
 
   test:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.api_only != true }}
     needs: [clippy, manifest-validation]
     strategy:
       fail-fast: false
@@ -232,22 +243,8 @@ jobs:
           python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
           python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
 
-      - name: Install Linux native prerequisites for public API setup
-        uses: ./.github/actions/install-linux-native-deps
-
-      - name: Generate native public API JSON and stock text snapshots
-        shell: bash
-        run: |
-          toolchain="$(cat scripts/ci/public-api-toolchain)"
-          rustup toolchain install "$toolchain" --profile minimal
-          cargo +stable install cargo-public-api --version 0.52.0 --locked
-          python3 scripts/ci/stock_public_api.py setup --target-dir "$RUNNER_TEMP/e-api-public-api"
-
       - name: Run workspace tests
         run: cargo test --locked --no-fail-fast --workspace --all-targets
-
-      - name: Compare native public API text without a build
-        run: python3 scripts/ci/stock_public_api.py check --target-dir "$RUNNER_TEMP/e-api-public-api"
 
       - name: Run workspace doctests
         run: cargo test --locked --no-fail-fast --workspace --doc
@@ -263,7 +260,7 @@ jobs:
 
   windows-clippy:
     name: clippy (windows-latest top)
-    if: github.event_name == 'workflow_dispatch' || ((github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep') || (github.event_name == 'push' && github.ref == 'refs/heads/integrate/phase-d'))
+    if: (github.event_name != 'workflow_dispatch' || inputs.api_only != true) && (github.event_name == 'workflow_dispatch' || ((github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep') || (github.event_name == 'push' && github.ref == 'refs/heads/integrate/phase-d')))
     needs: [fmt]
     runs-on: windows-latest
     steps:
@@ -309,7 +306,7 @@ jobs:
   windows-test:
     name: test (windows-latest top)
     # Integration pushes already include Windows in the original test matrix.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep')
+    if: (github.event_name != 'workflow_dispatch' || inputs.api_only != true) && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'fix/recovery-windows-ci-sweep'))
     needs: [fmt]
     runs-on: windows-latest
     steps:
@@ -359,23 +356,9 @@ jobs:
           python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
           python3 -m unittest discover -s scripts/ci/fixtures/otlp/desktop-viewer -p 'test_*.py'
 
-      - name: Generate native public API JSON and stock text snapshots
-        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
-        shell: bash
-        run: |
-          toolchain="$(cat scripts/ci/public-api-toolchain)"
-          rustup toolchain install "$toolchain" --profile minimal
-          cargo +stable install cargo-public-api --version 0.52.0 --locked
-          python3 scripts/ci/stock_public_api.py setup --target-dir "$RUNNER_TEMP/e-api-public-api"
-
       - name: Run workspace tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         run: cargo test --locked --no-fail-fast --workspace --all-targets
-
-      - name: Compare native public API text without a build
-        if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
-        shell: bash
-        run: python3 scripts/ci/stock_public_api.py check --target-dir "$RUNNER_TEMP/e-api-public-api"
 
       - name: Run OTLP feature unit tests
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
@@ -396,3 +379,36 @@ jobs:
       - name: Run imported log bridge release runtime-level fixture
         if: ${{ !cancelled() && steps.windows_toolchain.outcome == 'success' }}
         run: cargo test --locked --no-fail-fast -p sc-observability-log --release --test runtime_level_bridge
+
+  native-public-api:
+    name: native public API (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustc-dev
+
+      - name: Install Linux native prerequisites for public API setup
+        uses: ./.github/actions/install-linux-native-deps
+
+      - name: Generate native public API JSON and stock text snapshots
+        shell: bash
+        run: |
+          toolchain="$(cat scripts/ci/public-api-toolchain)"
+          rustup toolchain install "$toolchain" --profile minimal
+          cargo +stable install cargo-public-api --version 0.52.0 --locked
+          python3 scripts/ci/stock_public_api.py setup --target-dir "$RUNNER_TEMP/e-api-public-api"
+
+      - name: Compare native public API text without a build
+        shell: bash
+        run: python3 scripts/ci/stock_public_api.py check --target-dir "$RUNNER_TEMP/e-api-public-api"
