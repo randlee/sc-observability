@@ -63,6 +63,12 @@ struct CapturingLogsService {
 }
 
 #[cfg(feature = "otlp-sdk")]
+struct AvailabilityLogsService {
+    sender: tokio::sync::mpsc::Sender<ExportLogsServiceRequest>,
+    available: tokio::sync::watch::Receiver<bool>,
+}
+
+#[cfg(feature = "otlp-sdk")]
 fn assert_sdk_default_resource_and_scope(
     resource: &opentelemetry_proto::tonic::resource::v1::Resource,
     scope: &opentelemetry_proto::tonic::common::v1::InstrumentationScope,
@@ -103,6 +109,26 @@ impl LogsService for CapturingLogsService {
         &self,
         request: tonic::Request<ExportLogsServiceRequest>,
     ) -> Result<tonic::Response<ExportLogsServiceResponse>, tonic::Status> {
+        self.sender
+            .send(request.into_inner())
+            .await
+            .map_err(|_| tonic::Status::unavailable("collector receiver closed"))?;
+        Ok(tonic::Response::new(ExportLogsServiceResponse {
+            partial_success: None,
+        }))
+    }
+}
+
+#[cfg(feature = "otlp-sdk")]
+#[tonic::async_trait]
+impl LogsService for AvailabilityLogsService {
+    async fn export(
+        &self,
+        request: tonic::Request<ExportLogsServiceRequest>,
+    ) -> Result<tonic::Response<ExportLogsServiceResponse>, tonic::Status> {
+        if !*self.available.borrow() {
+            return Err(tonic::Status::unavailable("collector is unavailable"));
+        }
         self.sender
             .send(request.into_inner())
             .await
@@ -1272,9 +1298,24 @@ fn public_sdk_factory_recovers_after_collector_unavailability() {
         .build()
         .expect("caller runtime");
     runtime.block_on(async {
-        let reservation = TcpListener::bind("127.0.0.1:0").expect("reserve collector endpoint");
-        let address = reservation.local_addr().expect("endpoint");
-        drop(reservation);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind collector endpoint");
+        let address = listener.local_addr().expect("endpoint");
+        let (availability, available) = tokio::sync::watch::channel(false);
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+        let collector = tokio::spawn(async move {
+            tonic::transport::Server::builder()
+                .add_service(LogsServiceServer::new(AvailabilityLogsService {
+                    sender,
+                    available,
+                }))
+                .serve_with_incoming(
+                    tonic::codegen::tokio_stream::wrappers::TcpListenerStream::new(listener),
+                )
+                .await
+                .expect("serve recovering collector");
+        });
         let mut config = enabled_sdk_grpc_config(address);
         config.transport.timeout_ms = Some(2_000_u64.into());
         let telemetry = V2Telemetry::new_typed(config).expect("public SDK factory");
@@ -1284,15 +1325,9 @@ fn public_sdk_factory_recovers_after_collector_unavailability() {
         assert_eq!(telemetry.health().state, TelemetryHealthState::Degraded);
         assert_eq!(telemetry.health().dropped_exports_total, 1);
         assert!(telemetry.health().last_error.is_some());
+        assert!(receiver.try_recv().is_err(), "unavailable collector accepted no payload");
 
-        let listener = tokio::net::TcpListener::bind(address).await.expect("recover same endpoint");
-        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
-        let collector = tokio::spawn(async move {
-            tonic::transport::Server::builder().serve_with_incoming(
-                LogsServiceServer::new(CapturingLogsService { sender }),
-                tonic::codegen::tokio_stream::wrappers::TcpListenerStream::new(listener),
-            ).await.expect("serve recovered collector");
-        });
+        availability.send(true).expect("collector state receiver");
         telemetry.emit_log(&log_event(service_name(), "recovered SDK")).expect("admission after recovery");
         telemetry.flush_async_typed().await.expect("same factory delivers after recovery");
         let request = tokio::time::timeout(std::time::Duration::from_secs(5), receiver.recv())
