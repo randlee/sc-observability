@@ -62,8 +62,7 @@ pub use projectors::V2TelemetryProjectors;
 pub use runtime::RuntimeTelemetry;
 #[doc(inline)]
 pub use sc_observability_types::{
-    ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
-    TelemetryHealthState,
+    ExporterHealth, ExporterHealthState, TelemetryHealthReport, TelemetryHealthState,
 };
 #[cfg(feature = "v1")]
 #[allow(
