@@ -20,6 +20,18 @@ It contains:
 This repo is intentionally independent from ATM. Do not introduce
 `agent-team-mail-*` dependencies or ATM spool/socket/runtime assumptions.
 
+## Product Bar
+
+sc-observability is a general-purpose logging library: a new project gets
+structured logging and OTel immediately. Every change is held to: consistent,
+clean, easy to use, high-performance.
+
+- Never remove a capability because no current consumer uses it. Remove only
+  duplicates of a kept item, 1.x surfaces with a canonical replacement, test
+  seams (moved to `#[cfg(test)]`), and internal plumbing.
+- `sc-observability-log` replaces the same-named crate in
+  beads-task-issue-tracker; keep every capability that app needs.
+
 ## Key Documents
 
 - [`docs/requirements.md`](./docs/requirements.md)
