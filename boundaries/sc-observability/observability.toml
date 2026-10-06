@@ -22,6 +22,7 @@ forbidden = []
 allowed_test_double_paths = [
     "crates/sc-observability/src/error_codes.rs",
     "crates/sc-observability/src/lib.rs",
+    "crates/sc-observability/src/maintenance.rs",
     "crates/sc-observability/src/runtime.rs",
     "crates/sc-observability/src/sinks.rs",
 ]
