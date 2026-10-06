@@ -1,32 +1,32 @@
 error[E0599]: no method named `log` found for struct `sc_observability::v2::Logger<sc_observability::Stopped>` in the current scope
- --> tests/ui/v2_logger_stopped_operations.rs:9:20
-  |
-9 |     let _ = logger.log(event);
-  |                    ^^^ method not found in `sc_observability::v2::Logger<sc_observability::Stopped>`
-  |
-  = note: the method was found for
-          - `sc_observability::v2::Logger`
+  --> tests/ui/v2_logger_stopped_operations.rs:12:20
+   |
+12 |     let _ = logger.log(event);
+   |                    ^^^ method not found in `sc_observability::v2::Logger<sc_observability::Stopped>`
+   |
+   = note: the method was found for
+           - `sc_observability::v2::Logger`
 
 error[E0599]: no method named `flush` found for struct `sc_observability::v2::Logger<sc_observability::Stopped>` in the current scope
-  --> tests/ui/v2_logger_stopped_operations.rs:10:20
+  --> tests/ui/v2_logger_stopped_operations.rs:13:20
    |
-10 |     let _ = logger.flush();
+13 |     let _ = logger.flush();
    |                    ^^^^^ method not found in `sc_observability::v2::Logger<sc_observability::Stopped>`
    |
    = note: the method was found for
            - `sc_observability::v2::Logger`
 
 error[E0599]: no method named `query` found for struct `sc_observability::v2::Logger<sc_observability::Stopped>` in the current scope
-  --> tests/ui/v2_logger_stopped_operations.rs:11:20
+  --> tests/ui/v2_logger_stopped_operations.rs:14:20
    |
-11 |     let _ = logger.query(&query);
+14 |     let _ = logger.query(&query);
    |                    ^^^^^ method not found in `sc_observability::v2::Logger<sc_observability::Stopped>`
    |
    = note: the method was found for
            - `sc_observability::v2::Logger`
 
 error[E0599]: no method named `shutdown` found for struct `sc_observability::v2::Logger<sc_observability::Stopped>` in the current scope
-  --> tests/ui/v2_logger_stopped_operations.rs:12:20
+  --> tests/ui/v2_logger_stopped_operations.rs:15:20
    |
-12 |     let _ = logger.shutdown();
+15 |     let _ = logger.shutdown();
    |                    ^^^^^^^^ private field, not a method

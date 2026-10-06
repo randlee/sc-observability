@@ -1,8 +1,11 @@
 use sc_observability::{LogEvent, LogQuery, Stopped};
-use sc_observability::v2::Logger;
+
+// Keep rustc's diagnostic path stable with and without the legacy v1 `Logger`.
+#[allow(dead_code)]
+struct Logger<T>(std::marker::PhantomData<T>);
 
 fn stopped_logger_has_no_running_operations(
-    logger: Logger<Stopped>,
+    logger: sc_observability::v2::Logger<Stopped>,
     event: LogEvent,
     query: LogQuery,
 ) {
