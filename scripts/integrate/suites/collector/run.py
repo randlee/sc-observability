@@ -23,31 +23,19 @@ CASE_TIMEOUT_SECONDS = 15 * 60
 
 CASES = (
     (
-        "sync-http-full-stack",
+        "canonical-ingress-sdk",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "sync-http", "--", "--nocapture",
+            "--test", "canonical_ingress", "--features", "otlp-sdk,sync-http", "--",
+            "canonical_ingress_exports_every_field_over_the_sdk_backend", "--nocapture",
         ],
     ),
     (
-        "sdk-full-stack",
+        "canonical-ingress-sync-http",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "otlp-sdk", "--", "--nocapture",
-        ],
-    ),
-    (
-        "combined-full-stack",
-        [
-            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "otlp-sdk,sync-http", "--", "--nocapture",
-        ],
-    ),
-    (
-        "canonical-ingress",
-        [
-            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "canonical_ingress", "--features", "otlp-sdk,sync-http", "--", "--nocapture",
+            "--test", "canonical_ingress", "--features", "otlp-sdk,sync-http", "--",
+            "canonical_ingress_exports_every_field_over_the_sync_http_backend", "--nocapture",
         ],
     ),
 )

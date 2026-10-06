@@ -26,3 +26,4 @@ lint_rules = ["LINT-SC-OBSERVABILITY-OTLP-BOUNDARY"]
 review_gates = ["workspace_dependency_policy"]
 [status]
 state = "concrete_landed"
+release_cut_baseline = "schema/api/rust-stock/sc-observability-otlp/1.5.0.txt"

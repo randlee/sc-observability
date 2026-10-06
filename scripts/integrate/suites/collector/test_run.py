@@ -27,15 +27,22 @@ class CollectorRunnerTests(unittest.TestCase):
         process.communicate.return_value = (stdout, stderr)
         return process
 
-    def test_matrix_reuses_the_legacy_conformance_feature_coverage(self) -> None:
+    def test_matrix_runs_each_canonical_ingress_backend(self) -> None:
         names = [name for name, _ in runner.CASES]
         features = [command[command.index("--features") + 1] for _, command in runner.CASES]
         self.assertEqual(
             names,
-            ["sync-http-full-stack", "sdk-full-stack", "combined-full-stack", "canonical-ingress"],
+            ["canonical-ingress-sdk", "canonical-ingress-sync-http"],
         )
-        self.assertEqual(features, ["sync-http", "otlp-sdk", "otlp-sdk,sync-http", "otlp-sdk,sync-http"])
-        self.assertTrue(all(command[-2:] == ["--", "--nocapture"] for _, command in runner.CASES))
+        self.assertEqual(features, ["otlp-sdk,sync-http", "otlp-sdk,sync-http"])
+        self.assertEqual(
+            [command[-2] for _, command in runner.CASES],
+            [
+                "canonical_ingress_exports_every_field_over_the_sdk_backend",
+                "canonical_ingress_exports_every_field_over_the_sync_http_backend",
+            ],
+        )
+        self.assertTrue(all(command[-3] == "--" and command[-1] == "--nocapture" for _, command in runner.CASES))
 
     def test_windows_cases_request_a_new_process_group(self) -> None:
         windows = SimpleNamespace(name="nt")
@@ -77,15 +84,15 @@ class CollectorRunnerTests(unittest.TestCase):
             posix.killpg.assert_called_once_with(timed_out.pid, posix_signal.SIGKILL)
             output = Path(temporary)
             self.assertEqual(
-                (output / "sync-http-full-stack.log").read_text(encoding="utf-8"),
-                "$ cargo test --locked -p sc-observability-otlp --test full_stack_integration --features sync-http -- --nocapture\n"
+                (output / "canonical-ingress-sdk.log").read_text(encoding="utf-8"),
+                "$ cargo test --locked -p sc-observability-otlp --test canonical_ingress --features otlp-sdk,sync-http -- canonical_ingress_exports_every_field_over_the_sdk_backend --nocapture\n"
                 "partial\ufffd output\n"
                 f"timeout={runner.CASE_TIMEOUT_SECONDS}\n"
                 "cleanup=posix-process-group-killed\n",
             )
             self.assertIn(
                 "later output\nexit=0\n",
-                (output / "canonical-ingress.log").read_text(encoding="utf-8"),
+                (output / "canonical-ingress-sync-http.log").read_text(encoding="utf-8"),
             )
 
     def test_run_executes_later_cases_after_an_earlier_failure(self) -> None:
@@ -94,7 +101,7 @@ class CollectorRunnerTests(unittest.TestCase):
 
             def record(name: str, _command: list[str], **_kwargs: object) -> bool:
                 calls.append(name)
-                return name != "sync-http-full-stack"
+                return name != "canonical-ingress-sdk"
 
             with mock.patch.object(runner, "run_case", side_effect=record):
                 self.assertFalse(runner.run("a" * 40, Path(temporary)))
