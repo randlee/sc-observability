@@ -269,9 +269,11 @@ obs-d-6 produces lifecycle.rs barrier, shutdown ordering and admission control. 
 
 ## Integration scope
 
-Every 2.0 breaking change is authorized solely by ADR-017’s
-`release/public-api-major-breaks.toml` manifest. ADR-012 remains historical
-1.x guidance and is partly superseded only for those enumerated 2.0 breaks.
+At the time of this Phase D plan, every 2.0 breaking change was authorized
+solely by ADR-017’s `release/public-api-major-breaks.toml` manifest. Phase F
+later retired that manifest; this sentence records the Phase D authorization
+policy. ADR-012 remains historical 1.x guidance and is partly superseded only
+for those enumerated 2.0 breaks.
 
 Final wrapper/classifier/adapter deletion is owned here only, following PHD-002. Verify no routing implementation is moved out of sc-observe (LAY-003/NFR-003), no ATM adapter behavior enters shared crates (ADR-006), and layer docs remain self-contained (NFR-008). Validate the imported provenance set under OTLP-023 during composition; no new provenance ledger is created. Release inventory includes npm under the existing shared publishing channel (PHC-002), never a repository-local substitute.
 
