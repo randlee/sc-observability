@@ -53,7 +53,7 @@ pub trait LogSink: Send + Sync {
 }
 
 /// Released typed sink interoperability trait.
-#[deprecated(note = "use crate::v2::LogSink; see docs/migration/phase-f.md")]
+#[deprecated(note = "removed; see docs/migration/phase-f.md")]
 pub trait TypedLogSink: Send + Sync {
     /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>;
