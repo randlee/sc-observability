@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 
@@ -98,12 +99,14 @@ class TauriRunnerTests(unittest.TestCase):
             output = root / "output"
             process = Mock(pid=42)
             process.wait.side_effect = [subprocess.TimeoutExpired(["proof"], 1), 0]
+            posix = SimpleNamespace(name="posix", killpg=Mock())
+            posix_signal = SimpleNamespace(SIGKILL=object())
             with patch.object(tauri_runner.subprocess, "Popen", return_value=process), \
-                    patch.object(tauri_runner.os, "name", "posix"), \
-                    patch.object(tauri_runner.os, "killpg", create=True) as killpg:
+                    patch.object(tauri_runner, "os", posix), \
+                    patch.object(tauri_runner, "signal", posix_signal):
                 with self.assertRaisesRegex(RuntimeError, "Tauri qualification timed out after 1800s"):
                     tauri_runner.run_qualification("Linux", {}, evidence, output)
-            killpg.assert_called_once_with(42, tauri_runner.signal.SIGKILL)
+            posix.killpg.assert_called_once_with(42, posix_signal.SIGKILL)
             self.assertEqual("timed out\n", (output / "qualification" / "viewer.log").read_text())
 
     def test_artifacts_are_immutable_and_tied_to_selected_source(self):
