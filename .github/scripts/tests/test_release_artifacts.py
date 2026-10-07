@@ -2506,7 +2506,7 @@ def test_root_release_workflow_threads_retry_provenance_and_builds_from_main() -
     assert 'git tag "$tag" "$main_sha"' in workflow
     assert "build_ref: ${{ steps.release-ref.outputs.build_ref }}" in workflow
     assert workflow.count('echo "build_ref=$main_sha" >> "$GITHUB_OUTPUT"') == 1
-    assert workflow.count("needs.gate-and-tag.outputs.build_ref") == 10
+    assert workflow.count("needs.gate-and-tag.outputs.build_ref") == 11
     assert "gate-and-tag.outputs.release_ref" not in workflow
     assert "ref: ${{ needs.gate-and-tag.outputs.release_tag }}" not in workflow
     assert "ref: ${{ needs.gate-and-tag.outputs.release_ref }}" not in workflow
