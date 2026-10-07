@@ -107,9 +107,10 @@ defaults and signal serde.
 `sc_observability_dto::from_canonical_core_health` is the explicit infallible
 projection that returns `LogHealthDto` directly. Both produce the same DTO.
 
-Removing deprecated API belongs only to a future, separately authorized major
-release. Until then the released items, their `*_typed` counterparts and the
-opt-in `v2` modules coexist.
+The 1.5.0 compatible release deprecates the released API while retaining those
+items alongside their `*_typed` counterparts and the opt-in `v2` modules.
+Migrate to the canonical `v2` APIs before a future major release removes the
+compatibility paths.
 
 Before rollout, run the public-API semver gate against 1.4.1, which accepts
 no enumerated breaks for a compatible 1.x release, plus real bindings/schema
