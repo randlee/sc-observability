@@ -46,8 +46,8 @@ class ReleaseStagePlanningTests(unittest.TestCase):
         selected = ordered_closure(roster, {"top", "leaf", "middle"})
         self.assertEqual(selected, ["leaf", "middle", "top"])
         self.assertEqual(
-            package_command(selected, Path("stage/target")),
-            ["cargo", "package", "--locked", "--target-dir", "stage/target",
+            package_command(selected, Path("stage") / "target"),
+            ["cargo", "package", "--locked", "--target-dir", str(Path("stage") / "target"),
              "-p", "leaf", "-p", "middle", "-p", "top"],
         )
 

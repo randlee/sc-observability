@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/sc-otel-cli",
   "crates/sc-observability-types",
   "crates/sc-observability",
   "crates/sc-observe",
@@ -11,13 +12,16 @@ members = [
   "crates/sc-observability-binding-runtime",
   "bindings/python/sc-observability-py",
   "examples/rust-python-logging",
+  "examples/otlp-sync-http",
+  "examples/otlp-sdk",
+  "examples/log-settings",
+  "tests/sc-observability-composition",
 ]
-exclude = ["examples/atm-adapter-example"]
 resolver = "2"
 
 [workspace.package]
 authors = ["Rand Lee"]
-version = "1.4.1"
+version = "1.5.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.94.1"
@@ -25,23 +29,38 @@ repository = "https://github.com/randlee/sc-observability"
 homepage = "https://github.com/randlee/sc-observability"
 
 [workspace.dependencies]
-sc-observability-dto = { version = "1.4.1", path = "crates/sc-observability-dto" }
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
+serde-saphyr = { version = "=1.3.0", default-features = false, features = ["deserialize"] }
+clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+uuid = { version = "=1.26.1", default-features = false, features = ["std", "v7"] }
+sc-observability-dto = { version = "1.5.0", path = "crates/sc-observability-dto" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
-sc-observability-types = { version = "1.4.1", path = "crates/sc-observability-types" }
-sc-observability = { version = "1.4.1", path = "crates/sc-observability" }
-sc-observability-log = { version = "1.4.1", path = "crates/sc-observability-log" }
-sc-observe = { version = "1.4.1", path = "crates/sc-observe" }
-sc-observability-otlp = { version = "1.4.1", path = "crates/sc-observability-otlp" }
-sc-observability-log-macros = { version = "=1.4.1", path = "crates/sc-observability-log-macros" }
+sc-observability-types = { version = "1.5.0", path = "crates/sc-observability-types", default-features = false }
+sc-observability = { version = "1.5.0", path = "crates/sc-observability", default-features = false }
+sc-observability-log = { version = "1.5.0", path = "crates/sc-observability-log", default-features = false }
+sc-observe = { version = "1.5.0", path = "crates/sc-observe", default-features = false }
+sc-observability-otlp = { version = "1.5.0", path = "crates/sc-observability-otlp", default-features = false }
+sc-observability-binding-runtime = { version = "1.5.0", path = "crates/sc-observability-binding-runtime", default-features = false }
+sc-observability-log-macros = { version = "=1.5.0", path = "crates/sc-observability-log-macros" }
 log = { version = "0.4", features = ["std", "kv"] }
 hostname = "0.4"
 tempfile = "3"
 trybuild = "1"
 tracing = "0.1"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
+tokio = { version = "=1.53.1", features = ["rt", "rt-multi-thread", "macros", "time"] }
+opentelemetry = "=0.33.0"
+opentelemetry_sdk = { version = "=0.33.0", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "=0.33.0", default-features = false, features = ["trace", "metrics", "logs", "grpc-tonic", "tls-ring", "tls-webpki-roots", "http-proto", "reqwest-client", "reqwest-rustls"] }
+opentelemetry-proto = { version = "=0.33.0", default-features = false, features = ["gen-tonic", "trace", "metrics", "logs"] }
+tonic = { version = "=0.14.6", default-features = false, features = ["transport"] }
+prost = { version = "=0.14.4", default-features = false, features = ["std"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+httpdate = "=1.0.3"
+getrandom = "=0.4.3"
+bytes = "=1.12.1"
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"

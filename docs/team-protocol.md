@@ -5,23 +5,36 @@ This protocol is mandatory for all ATM team communications.
 ## Required Flow
 
 1. Read every ATM message that requires action (see Message Classes), then
-   start the assigned task when its `task_ready` line arrives.
+   start the assigned task when its `task_ready` line arrives and claim its
+   matching bead with `bd update <task-id> --claim`.
 2. Execute the requested task.
 3. Send a completion message with a concise summary of what was done. When
-   closing a tracked task, use `atm task close <task-id> completed --stdin`
-   or its alias, `atm send <assigner> --task-id <task-id> --task-complete
-   --stdin`, to deliver the completion report and close the task atomically.
+   closing a tracked task, use `atm task close <task-id> completed
+   --template <complete-template> --vars <file>` to deliver the completion
+   report and close the task atomically; then close the matching bead with
+   `bd close <task-id>`. Every close uses the complete template that pairs
+   with the assignment template (see Close Templates), so ATM records the
+   template sha and the `*-complete` workflow state that ends the task's
+   lifecycle and span.
 - Example: `task complete: <summary>`
 4. A task close is terminal. The assigner does not acknowledge it; the
    daemon's close receipt is the record, and the assigner closes the mirror
    task on its own side. Only plain requires-ack messages get an ack.
-5. No silent processing. Every requires-ack message must receive a response.
+5. No silent blocking or completion. Routine execution may be quiet.
+   Acknowledge every `requires_ack` message immediately; terminal task closes
+   need no extra acknowledgement.
 
 An acknowledgement is message hygiene only: an ack never changes task state.
 If work cannot be completed, close it with the typed outcome `refused` or
 `cancelled` and supply the reason as the optional third positional argument
 (or provide a report source such as `--stdin`). Never close a task as
 `reassigned`; reassign it in place with `atm task assign` and its existing id.
+
+For development, fix, and QA work, the bead id is also the ATM task id. The
+lead creates and dependency-wires the bead before dispatch, assigns it to the
+recipient's ATM identity, and runs `bd ready` after paired task/bead closes to
+dispatch newly unblocked work. A refused ATM task leaves its bead open with a
+note. Rejected completed work is reopened or represented by a child bead.
 
 ## Task Commands
 
@@ -30,11 +43,34 @@ The task surface is a closed set:
 ```bash
 atm task assign solar --task-id BA-123 --stdin
 atm task start BA-123 "starting: reading the sprint doc"
-atm task close BA-123 completed --stdin
+atm task close BA-123 completed --template .claude/skills/codex-orchestration/dev-complete.md.j2 --vars <scratch>/dev-complete-BA-123-vars.json
 atm task move BA-123 --head
 atm task list --all
 atm task events BA-123
 ```
+
+An agent's queue releases the next task only when the current one closes.
+Every assignment is closed, and every close uses its complete template.
+
+### Close Templates
+
+| Assignment template | Close template |
+| --- | --- |
+| `codex-orchestration/dev-template.xml.j2` | `codex-orchestration/dev-complete.md.j2` |
+| `codex-orchestration/fix-assignment.xml.j2` | `codex-orchestration/fix-complete.md.j2` |
+| `codex-orchestration/review-template.xml.j2` | `codex-orchestration/review-complete.md.j2` |
+| `codex-orchestration/qa-template.xml.j2` | `quality-management-gh/findings-report.md.j2` (FAIL/IN-FLIGHT) or `quality-management-gh/quality-report.md.j2` (PASS) |
+| `plan-hardening/01-plan-scope-review.xml.j2` | `plan-hardening/plan-scope-review-complete.md.j2` |
+| `plan-hardening/02-sprint-scope-hardening.xml.j2` | `plan-hardening/plan-sprint-hardening-complete.md.j2` |
+| `plan-hardening/03-consistency-hardening.xml.j2` | `plan-hardening/plan-consistency-hardening-complete.md.j2` |
+| `plan-hardening/plan-critical-review.xml.j2` | `plan-hardening/plan-critical-review-complete.md.j2` |
+
+Every assignment pairs `atm task start` with `atm task close --template`; that
+pair is the task's span. When the task id is also a bead, `bd update <id>
+--claim` runs with the start and `bd close <id>` with the close.
+
+Paths are under `.claude/skills/`. `refused` and `cancelled` closes carry
+a reason instead of a report.
 
 `atm send <agent> --task-id <id> ...` aliases `atm task assign`.
 `atm send <assigner> --task-id <id> --task-complete ...` aliases
@@ -72,7 +108,7 @@ Two classes of message exist. Handling differs per class.
   "class": "informational",
   "examples": ["task assignment (dev sprint, fix round, QA dispatch)", "status update", "idle ping", "self-echo", "terminal confirmation (e.g. \"Noted.\")"],
   "read_with": "atm peek",
-  "respond_with": "atm send <to> \"<reply>\" (omit --requires-ack; never use atm ack)"
+  "respond_with": "No acknowledgement required; substantive replies use atm send without --requires-ack"
 }
 ```
 
@@ -87,7 +123,7 @@ when the task pass emits `task_ready`.
 - Task ready:
   - `atm task start <task-id> "<one-line plan>"` immediately on `task_ready`.
 - Completion sent:
-  - `atm task close <task-id> completed <report>` (or `--task-complete`) after the work.
+  - `atm task close <task-id> completed --template <complete-template> --vars <file>` after the work.
 - Close received (assigner side, no message back):
   - `atm read --message-id <receipt>` then `atm task close <task-id> completed`
     on the mirror task.
@@ -98,7 +134,7 @@ when the task pass emits `task_ready`.
 - Doing work without `atm task start`.
 - Closing with no start row.
 - Sending a status update without clear completion or next action.
-- Letting a message sit without response while processing internally.
+- Leaving a `requires_ack` message unacknowledged or a blocker unreported.
 
 ## Send Content, Not Paths
 
@@ -124,6 +160,24 @@ not a sender-local path.
 
 ## Notes
 
+## Phase Dispatch Gate
+
+For a phase development, fix, sanity, or QA assignment, the assignee first
+runs `validate-plan --root <phase> --scope <bead>` and checks `bd ready`.
+The claim must succeed without force. A dev or fix branch is based only on its
+bead's declared `pr_target`; its difficulty must fit the assignee's roster
+model. Sanity refuses a stale, dirty, zero-delta, or previously PASSed check.
+QA refuses a PR whose base differs from `pr_target` or whose head differs from
+the sanity PASS commit (`SANITY_STALE`). Every refusal reuses the workflow
+class bead for its failure signature (append task id, head, command and
+evidence; cite the class id), or cites the lead message reporting a new
+signature.
+
+- A sanity PASS creates and dispatches QA immediately.
+- QA with only minor findings is PASS with those findings retained as backlog.
+- Blocking or important findings get exactly one fix round; a second FAIL is
+  `ROUND_CAP` and stops for root cause.
+
 - If blocked, start the task anyway with the blocker in the start line (`atm task start <task-id> "blocked: <why>"`), or close it `refused` with the reason; never leave a task-linked message unanswered.
-- If work will take time, send periodic progress updates.
+- Report blockers, meaningful state changes, and completion; omit routine narration.
 - Prefer concise, explicit messages with branch/commit/test context when relevant.

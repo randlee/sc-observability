@@ -6,18 +6,19 @@ value. `?v` and `%v` always record the `Debug` / `Display` string
 lives in `crates/sc-observability-log/src/callsite.rs`, and the expansion in
 `crates/sc-observability-log-macros/src/event.rs`.
 
-## Kind selection by autoref
+## Kind selection by deref
 
 A bare field `k = v` / shorthand `v` expands to
 
 ```rust
-{ let __v = &v; (&&FieldValue(__v)).__sc_field_kind().record(__v) }
+{ let __v = &v; (&SerializeProbe(FieldValue(__v))).__sc_field_kind().record(__v) }
 ```
 
-with `SerializeKindTag` and `DebugKindTag` in scope. `SerializeKindTag` is
-implemented for `&FieldValue<'_, T>` only `where T: Serialize` and resolves at
-the first probe step; `DebugKindTag` is implemented for `FieldValue<'_, T>` for
-**every** `T` and resolves one autoderef later. A type implementing both takes
+with `SerializeKindTag` and `DebugKindTag` in scope. `SerializeProbe` is the
+level-0 probe and derefs to its contained `FieldValue`, the level-1 probe.
+`SerializeKindTag` is implemented for `SerializeProbe<'_, T>` only `where T:
+Serialize`; `DebugKindTag` is implemented for `FieldValue<'_, T>` for **every**
+`T` and resolves after the probe dereference. A type implementing both takes
 the Serialize path.
 
 ## Static-type dispatch
@@ -65,16 +66,22 @@ pub fn debug_value<T: ?Sized + core::fmt::Debug>(v: &T) -> FieldRecord;     // `
 pub fn display_value<T: ?Sized + core::fmt::Display>(v: &T) -> FieldRecord; // `%v`
 
 pub struct FieldValue<'a, T: ?Sized>(pub &'a T);
+pub struct SerializeProbe<'a, T: ?Sized>(pub FieldValue<'a, T>);
+impl<'a, T: ?Sized> core::ops::Deref for SerializeProbe<'a, T> {
+    type Target = FieldValue<'a, T>;
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
 pub struct SerializeKind;
 pub struct DebugKind;
 
-/// Autoref level 0: selected only when `T: Serialize`.
+/// Level 0 (`SerializeProbe`): selected only when `T: Serialize`.
 pub trait SerializeKindTag {
     fn __sc_field_kind(&self) -> SerializeKind { SerializeKind }
 }
-impl<T: ?Sized + serde::Serialize> SerializeKindTag for &FieldValue<'_, T> {}
+impl<T: ?Sized + serde::Serialize> SerializeKindTag for SerializeProbe<'_, T> {}
 
-/// Autoref level 1: selected for every `T`; the bound is checked by `DebugKind::record`.
+/// Level 1 (`FieldValue`, reached through `SerializeProbe::deref`): selected for every `T`;
+/// the bound is checked by `DebugKind::record`.
 pub trait DebugKindTag {
     fn __sc_field_kind(&self) -> DebugKind { DebugKind }
 }

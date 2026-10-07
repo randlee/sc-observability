@@ -1,8 +1,9 @@
 # C.1 legacy publish asset inventory
 
-This is the C.1 disposition inventory. The superseded C.1 qualification pin
-was `61568d813550ac7faab0fd9c887c731d975d1264`; the current installed and
-qualified pin is `7b899fea2325b6bda55a5d061f2c507366246974`, recorded in
+This is the C.1 disposition inventory. The superseded C.1 qualification pins
+were `61568d813550ac7faab0fd9c887c731d975d1264` and later
+`7b899fea2325b6bda55a5d061f2c507366246974`; the current installed and
+qualified pin is `22137c2da13bf4638b4267b69c6c2f021617da73`, recorded in
 `release/sc-publish-pin.toml`.
 The remaining acceptance evidence is the repeat no-drift parity and consumer
 compatibility qualification described by the sprint checklist.

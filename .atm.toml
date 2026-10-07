@@ -5,9 +5,9 @@ default_team = "sc-obs"
 [rmux]
 session = "sc-obs"
 
-# Window 1: core agents (lead + primary codex + QA)
+# Window 1: lead (team-lead + astra)
 [[rmux.windows]]
-name = "agents"
+name = "lead"
 layout = "even-horizontal"
 
 [[rmux.windows.panes]]
@@ -18,9 +18,14 @@ color = "blue"
 env = { ATM_IDENTITY = "team-lead", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
-name = "cobs"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
-env = { ATM_IDENTITY = "cobs", ATM_TEAM = "sc-obs" }
+name = "aobs"
+command = "codex -c features.hooks=true --yolo --model gpt-6-astra"
+env = { ATM_IDENTITY = "aobs", ATM_TEAM = "sc-obs" }
+
+# Window 2: quality (quality-mgr + sanity)
+[[rmux.windows]]
+name = "quality"
+layout = "even-horizontal"
 
 [[rmux.windows.panes]]
 name = "quality-mgr"
@@ -29,48 +34,118 @@ model = "sonnet"
 color = "blue"
 env = { ATM_IDENTITY = "quality-mgr", ATM_TEAM = "sc-obs" }
 
-# Window 2: additional workers (luna + astra)
+[[rmux.windows.panes]]
+name = "obs-sanity"
+command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+env = { ATM_IDENTITY = "obs-sanity", ATM_TEAM = "sc-obs" }
+
+# Window 3: dev (terra + luna)
 [[rmux.windows]]
-name = "workers"
+name = "dev"
 layout = "even-horizontal"
 
 [[rmux.windows.panes]]
-name = "lobs"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-luna"
-env = { ATM_IDENTITY = "lobs", ATM_TEAM = "sc-obs" }
+name = "cobs"
+command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+env = { ATM_IDENTITY = "cobs", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
-name = "aobs"
-command = "codex -c features.hooks=true --yolo --model gpt-6-astra"
-env = { ATM_IDENTITY = "aobs", ATM_TEAM = "sc-obs" }
+name = "lobs"
+command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
+env = { ATM_IDENTITY = "lobs", ATM_TEAM = "sc-obs" }
+
+# Window 4: dev2 (terra + luna)
+[[rmux.windows]]
+name = "dev2"
+layout = "even-horizontal"
+
+[[rmux.windows.panes]]
+name = "cobs2"
+command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+env = { ATM_IDENTITY = "cobs2", ATM_TEAM = "sc-obs" }
+
+[[rmux.windows.panes]]
+name = "lobs2"
+command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-6-luna"
+env = { ATM_IDENTITY = "lobs2", ATM_TEAM = "sc-obs" }
+
+# Window 5: info (publisher + empty terminal)
+[[rmux.windows]]
+name = "info"
+layout = "even-horizontal"
+
+[[rmux.windows.panes]]
+name = "publisher"
+alias = "obs-publisher"
+command = "codex -c features.hooks=true --yolo --model gpt-5.6-terra"
+env = { ATM_IDENTITY = "publisher", ATM_TEAM = "sc-obs" }
+
+[[rmux.windows.panes]]
+name = "terminal"
+command = ""
 
 [startup.team-lead]
 all = [
-  "Use native atm send or atm ack for messages to cobs, lobs, aobs, or quality-mgr",
+  "Your role is lead under atm-bd-orchestration: read .claude/skills/atm-bd-orchestration/SKILL.md (Lead Role and Loop) and .claude/skills/atm-beads/SKILL.md now (again after every compaction); on each Loop pass run .claude/skills/atm-bd-orchestration/scripts/bead-queues --phase <x> and act on every row",
+  "Use native atm send or atm ack for messages to cobs, lobs, aobs, quality-mgr, or obs-sanity",
   "Use native atm read to read messages from team-members",
 ]
+compact = ["Phase in progress: read .claude/skills/atm-bd-orchestration/SKILL.md in full before any dispatch."]
 
 [startup.cobs]
 all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
 [startup.lobs]
 all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
+  "Use native atm send or atm ack for messages to team-lead or quality-mgr",
+  "Use native atm read to read messages from team-members",
+]
+
+[startup.cobs2]
+all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
+  "Use native atm send or atm ack for messages to team-lead or quality-mgr",
+  "Use native atm read to read messages from team-members",
+]
+
+[startup.lobs2]
+all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
 [startup.aobs]
 all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
+  "You may also be assigned to lead a phase under atm-bd-orchestration: then read .claude/skills/atm-bd-orchestration/SKILL.md (Lead Role and Loop) and .claude/skills/atm-beads/SKILL.md and act as lead (lead=<you> in dispatch vars) until the phase closes",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
 [startup.quality-mgr]
 all = [
+  "Your role is quality-mgr under atm-bd-orchestration: read .claude/skills/atm-bd-orchestration/roles/quality-mgr.md now (again after every compaction); where it and quality-mgr.md differ, the role file wins",
   "read .claude/agents/quality-mgr.md for directive",
-  "Use native atm send or atm ack for messages to team-lead, cobs, lobs, or aobs",
+  "Use native atm send or atm ack for messages to team-lead, cobs, lobs, aobs, cobs2, or lobs2",
+  "Use native atm read to read messages from team-members",
+]
+
+[startup.publisher]
+all = [
+  "read .claude/agents/publisher.md for directive",
+  "Use native atm send or atm ack for messages to team-lead",
+  "Use native atm read to read messages from team-members",
+]
+
+[startup.obs-sanity]
+all = [
+  "Your role is dev-sanity under atm-bd-orchestration: read .claude/agents/dev-sanity.md now (again after every compaction) and run its Startup section",
+  "Use native atm send or atm ack for messages to team-lead",
   "Use native atm read to read messages from team-members",
 ]

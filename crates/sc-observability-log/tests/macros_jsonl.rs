@@ -3,7 +3,9 @@
 //!
 //! One `init` per test binary: every sub-case runs inside the single test fn, so
 //! the `DropCause::InvalidEvent` deltas asserted here cannot race.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
@@ -79,10 +81,14 @@ impl serde::Serialize for Both {
 }
 
 /// Implements only `Debug`: records the Debug string.
-#[derive(Debug)]
-#[allow(dead_code, reason = "read through Debug only")]
 struct DebugOnly {
     b: i64,
+}
+
+impl fmt::Debug for DebugOnly {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DebugOnly").field("b", &self.b).finish()
+    }
 }
 
 /// A `Serialize` impl that fails.

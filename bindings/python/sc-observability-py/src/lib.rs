@@ -14,13 +14,15 @@ pub use sc_observability_binding_runtime::{
     BridgeControlBackend, CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation,
     OperationState,
 };
-use sc_observability_binding_runtime::{ProducerOrigin, create_core_backend};
+use sc_observability_binding_runtime::{
+    OPERATION_OBSERVER_CAPACITY, ProducerOrigin, create_core_backend,
+};
 #[cfg(feature = "test-hooks")]
 use sc_observability_binding_runtime::{TestWriterGate, create_test_blocking_core_backend};
 use sc_observability_dto::{
     CompletionDto, Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto, ResultDto,
 };
-use sc_observability_types::{LevelChangeSource, LevelFilter, ServiceName};
+use sc_observability_types::{self as native, LevelChangeSource, LevelFilter, ServiceName, v2};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
@@ -32,6 +34,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
+
+#[cfg(feature = "otlp-telemetry")]
+mod telemetry;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -78,6 +83,122 @@ fn unavailable_failure(code: &str, message: impl Into<String>) -> Failure {
     }
 }
 
+/// Names and projects the staged D.12 errors without inspecting display text.
+///
+/// The binding-runtime remains the owner of core conversion. This narrow
+/// projection is the language-boundary handoff used when a canonical v2 error
+/// is already available, and deliberately retains only the neutral diagnostic.
+pub trait CanonicalProjection {
+    /// Returns the canonical enum and variant name.
+    fn canonical_name(&self) -> &'static str;
+    /// Returns the original native diagnostic without parsing display text.
+    fn canonical_diagnostic(&self) -> &native::Diagnostic;
+}
+
+macro_rules! canonical_projection {
+    ($type:ty, { $( $variant:ident => $name:literal ),+ $(,)? }) => {
+        impl CanonicalProjection for $type {
+            fn canonical_name(&self) -> &'static str {
+                match self {
+                    $(Self::$variant { .. } => $name,)+
+                    _ => "canonical::unknown",
+                }
+            }
+
+            fn canonical_diagnostic(&self) -> &native::Diagnostic {
+                <$type>::diagnostic(self)
+            }
+        }
+    };
+}
+
+canonical_projection!(v2::IdentityError, { Process => "IdentityError::Process" });
+canonical_projection!(v2::InitError, {
+    Configuration => "InitError::Configuration",
+    Runtime => "InitError::Runtime",
+});
+canonical_projection!(v2::EventError, {
+    Validation => "EventError::Validation",
+    Routing => "EventError::Routing",
+});
+canonical_projection!(v2::FlushError, { Drain => "FlushError::Drain" });
+canonical_projection!(v2::ShutdownError, {
+    Timeout => "ShutdownError::Timeout",
+    Drain => "ShutdownError::Drain",
+});
+canonical_projection!(v2::ProjectionError, { Projection => "ProjectionError::Projection" });
+canonical_projection!(v2::SubscriberError, { Subscriber => "SubscriberError::Subscriber" });
+canonical_projection!(v2::LogSinkError, {
+    Write => "LogSinkError::Write",
+    Flush => "LogSinkError::Flush",
+});
+canonical_projection!(v2::ConfigFailure, {
+    ZeroDuration => "ConfigFailure::ZeroDuration",
+    DurationOverflow => "ConfigFailure::DurationOverflow",
+    InvalidBoundOrdering => "ConfigFailure::InvalidBoundOrdering",
+    InvalidJitterPercent => "ConfigFailure::InvalidJitterPercent",
+    InvalidQueueCapacity => "ConfigFailure::InvalidQueueCapacity",
+    InvalidQueueByteCapacity => "ConfigFailure::InvalidQueueByteCapacity",
+    ConfigFieldNotApplicable => "ConfigFailure::ConfigFieldNotApplicable",
+    InsecureTransportRejected => "ConfigFailure::InsecureTransportRejected",
+    InvalidEndpoint => "ConfigFailure::InvalidEndpoint",
+    InvalidHeader => "ConfigFailure::InvalidHeader",
+    TransportConstructionFailed => "ConfigFailure::TransportConstructionFailed",
+    UnsupportedBackend => "ConfigFailure::UnsupportedBackend",
+    UnsupportedProtocol => "ConfigFailure::UnsupportedProtocol",
+    TokioRuntimeRequired => "ConfigFailure::TokioRuntimeRequired",
+});
+canonical_projection!(v2::MetricModelError, {
+    InvalidHistogram => "MetricModelError::InvalidHistogram",
+    InvalidTemporality => "MetricModelError::InvalidTemporality",
+    InvalidInterval => "MetricModelError::InvalidInterval",
+});
+canonical_projection!(v2::ExportError, {
+    Transport => "ExportError::Transport",
+    BlockingBackendInAsyncContext => "ExportError::BlockingBackendInAsyncContext",
+    AsyncLifecycleRequired => "ExportError::AsyncLifecycleRequired",
+    RuntimeTerminated => "ExportError::RuntimeTerminated",
+    LifecycleTimeout => "ExportError::LifecycleTimeout",
+    QueueFull => "ExportError::QueueFull",
+    WorkerTerminated => "ExportError::WorkerTerminated",
+    ShutdownCancelledRetry => "ExportError::ShutdownCancelledRetry",
+    RetryDeadlineExhausted => "ExportError::RetryDeadlineExhausted",
+    NonRetryableHttpStatus => "ExportError::NonRetryableHttpStatus",
+    RetryAttemptsExhausted => "ExportError::RetryAttemptsExhausted",
+    TerminalExportFailure => "ExportError::TerminalExportFailure",
+});
+
+#[derive(Clone, Copy, Debug)]
+pub enum CanonicalWireKind {
+    /// A checked input or event failure.
+    Validation,
+    /// A persistence or transport failure.
+    Io,
+    /// A worker or runtime availability failure.
+    Unavailable,
+    /// A bounded operation deadline failure.
+    Timeout,
+    /// A closed lifecycle failure.
+    Closed,
+}
+
+/// Projects a canonical D.12 error into the neutral tagged wire failure.
+pub fn project_canonical_failure<T: CanonicalProjection>(
+    error: &T,
+    kind: CanonicalWireKind,
+) -> Failure {
+    let classification = match kind {
+        CanonicalWireKind::Validation => {
+            v2::FailureClassification::validation(error.canonical_name())
+        }
+        CanonicalWireKind::Io => v2::FailureClassification::Io,
+        CanonicalWireKind::Unavailable => v2::FailureClassification::Unavailable,
+        CanonicalWireKind::Timeout => v2::FailureClassification::timeout(error.canonical_name()),
+        CanonicalWireKind::Closed => v2::FailureClassification::Closed,
+    };
+    sc_observability_dto::failure_from_classification(error.canonical_diagnostic(), classification)
+}
+
 fn result_json<T: Serialize>(value: Result<T, Failure>) -> String {
     let envelope = match value {
         Ok(value) => ResultDto::Ok { value },
@@ -100,6 +221,15 @@ fn contained_json(call: impl FnOnce() -> String) -> String {
 }
 
 fn parse_value(value: &str, field: &str) -> Result<Value, Failure> {
+    if value.len() > sc_observability_dto::constants::MAX_WIRE_PAYLOAD_BYTES {
+        return Err(sc_observability_dto::invalid_input(
+            field,
+            format!(
+                "request exceeds {} UTF-8 bytes",
+                sc_observability_dto::constants::MAX_WIRE_PAYLOAD_BYTES
+            ),
+        ));
+    }
     serde_json::from_str(value)
         .map_err(|error| sc_observability_dto::invalid_input(field, error.to_string()))
 }
@@ -201,7 +331,7 @@ impl NativeObserverIdentity {
         use std::sync::atomic::Ordering;
         self.count
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                if count < 64 { Some(count + 1) } else { None }
+                (count < OPERATION_OBSERVER_CAPACITY).then_some(count + 1)
             })
             .ok()?;
         Some(NativeObserverPermit {
@@ -256,10 +386,12 @@ fn start_flush_backend(
     timeout: &str,
 ) -> (Option<Py<NativeFlushOperation>>, String) {
     let operation = parse_timeout(timeout).and_then(|timeout| {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            backend.start_flush(timeout)
-        }))
-        .unwrap_or_else(|_| Err(internal_failure("native flush start panicked")))
+        py.detach(|| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                backend.start_flush(timeout)
+            }))
+            .unwrap_or_else(|_| Err(internal_failure("native flush start panicked")))
+        })
     });
     match operation {
         Ok(operation) => match Py::new(py, NativeFlushOperation { operation }) {
@@ -338,9 +470,12 @@ impl HostLoggingBackend for TestBlockedBackend {
     }
 }
 
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "the normal extension compiles this CI seam as a no-op; test-hooks returns a tagged failure"
+#[cfg_attr(
+    not(feature = "test-hooks"),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "the normal extension compiles this CI seam as a no-op; test-hooks returns a tagged failure"
+    )
 )]
 fn test_fault(operation: &str) -> Result<(), Failure> {
     #[cfg(feature = "test-hooks")]
@@ -461,13 +596,22 @@ fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str
     result_json(result)
 }
 
-fn query_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, query: &str) -> String {
-    let result = parse_value(query, "query")
-        .and_then(sc_observability_dto::decode_query)
-        .and_then(|query: LogQueryDto| {
+fn query_backend(
+    backend: Arc<dyn HostLoggingBackend>,
+    py: Python<'_>,
+    query: &str,
+    timeout: &str,
+) -> String {
+    let result = parse_timeout(timeout)
+        .and_then(|timeout| {
+            parse_value(query, "query")
+                .and_then(sc_observability_dto::decode_query)
+                .map(|query| (query, timeout))
+        })
+        .and_then(|(query, timeout): (LogQueryDto, Duration)| {
             py.detach(move || {
                 let operation = backend.start_query(query)?;
-                operation.wait(Duration::from_millis(2_000))
+                operation.wait(timeout)
             })
         });
     result_json(result)
@@ -552,16 +696,19 @@ impl NativeLogger {
         })
     }
 
-    fn query(&self, py: Python<'_>, query: &str) -> String {
+    fn query(&self, py: Python<'_>, query: &str, timeout: &str) -> String {
         contained_json(|| match test_fault("query") {
-            Ok(()) => query_backend(Arc::new(self.backend.clone()), py, query),
+            Ok(()) => query_backend(Arc::new(self.backend.clone()), py, query, timeout),
             Err(error) => result_json::<()>(Err(error)),
         })
     }
 
-    fn health(&self) -> String {
+    fn health(&self, py: Python<'_>) -> String {
         contained_json(|| match test_fault("health") {
-            Ok(()) => result_json(self.backend.health()),
+            Ok(()) => {
+                let backend = self.backend.clone();
+                result_json(py.detach(move || backend.health()))
+            }
             Err(error) => result_json::<()>(Err(error)),
         })
     }
@@ -663,16 +810,19 @@ impl NativeAttachedLogger {
         })
     }
 
-    fn query(&self, py: Python<'_>, query: &str) -> String {
+    fn query(&self, py: Python<'_>, query: &str, timeout: &str) -> String {
         contained_json(|| match test_fault("query") {
-            Ok(()) => query_backend(self.backend.clone(), py, query),
+            Ok(()) => query_backend(self.backend.clone(), py, query, timeout),
             Err(error) => result_json::<()>(Err(error)),
         })
     }
 
-    fn health(&self) -> String {
+    fn health(&self, py: Python<'_>) -> String {
         contained_json(|| match test_fault("health") {
-            Ok(()) => result_json(self.backend.health()),
+            Ok(()) => {
+                let backend = self.backend.clone();
+                result_json(py.detach(move || backend.health()))
+            }
             Err(error) => result_json::<()>(Err(error)),
         })
     }
@@ -922,6 +1072,8 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(_validate_event, module)?)?;
     module.add_function(wrap_pyfunction!(create_owned, module)?)?;
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
+    #[cfg(feature = "otlp-telemetry")]
+    telemetry::register(module)?;
     #[cfg(feature = "test-hooks")]
     module.add_function(wrap_pyfunction!(_test_force_failure, module)?)?;
     #[cfg(feature = "test-hooks")]
@@ -936,7 +1088,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[cfg(test)]
-#[allow(
+#[expect(
     clippy::assertions_on_constants,
     clippy::manual_let_else,
     clippy::needless_borrow,
@@ -955,6 +1107,97 @@ mod tests {
     };
     use std::thread;
     use std::time::Instant;
+
+    #[test]
+    fn canonical_v2_projection_preserves_variant_name_and_code() {
+        let error = v2::EventError::Validation {
+            context: Box::new(native::ErrorContext::new(
+                native::error_codes::VALUE_VALIDATION_FAILED,
+                "invalid event",
+                native::Remediation::recoverable("correct the event", [] as [&str; 0]),
+            )),
+        };
+        let projected = project_canonical_failure(&error, CanonicalWireKind::Validation);
+        assert_eq!(error.canonical_name(), "EventError::Validation");
+        assert_eq!(
+            error.canonical_diagnostic().code,
+            native::error_codes::VALUE_VALIDATION_FAILED
+        );
+        assert!(matches!(
+            projected,
+            Failure::Validation { ref diagnostic, ref field }
+                if field == "EventError::Validation"
+                    && diagnostic.code == native::error_codes::VALUE_VALIDATION_FAILED.as_str()
+        ));
+        assert_ne!(error.canonical_name(), "ValidationError");
+    }
+
+    #[test]
+    fn native_failure_classifications_drive_all_wire_kinds() {
+        let context = |message| {
+            Box::new(native::ErrorContext::new(
+                native::error_codes::DIAGNOSTIC_INVALID,
+                message,
+                native::Remediation::recoverable("inspect the native failure", [] as [&str; 0]),
+            ))
+        };
+
+        let validation = v2::EventError::Validation {
+            context: context("invalid event"),
+        };
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                validation.diagnostic(),
+                validation.failure_classification(),
+            ),
+            Failure::Validation { ref field, .. } if field == "event"
+        ));
+
+        let io = v2::LogSinkError::Write {
+            context: context("sink write failed"),
+        };
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                io.diagnostic(),
+                io.failure_classification(),
+            ),
+            Failure::Io { .. }
+        ));
+
+        let unavailable = v2::InitError::Runtime {
+            context: context("runtime unavailable"),
+        };
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                unavailable.diagnostic(),
+                unavailable.failure_classification(),
+            ),
+            Failure::Unavailable { .. }
+        ));
+
+        let timeout = v2::ShutdownError::Timeout {
+            context: context("shutdown timed out"),
+        };
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                timeout.diagnostic(),
+                timeout.failure_classification(),
+            ),
+            Failure::Timeout { ref operation, .. } if operation == "shutdown"
+        ));
+
+        let closed = v2::SubscriberError::classified_subscriber(
+            context("subscriber closed"),
+            v2::FailureClassification::Closed,
+        );
+        assert!(matches!(
+            sc_observability_dto::failure_from_classification(
+                closed.diagnostic(),
+                closed.failure_classification(),
+            ),
+            Failure::Closed { .. }
+        ));
+    }
 
     #[test]
     fn host_installation_is_immutable_per_module() {
@@ -1062,18 +1305,18 @@ mod tests {
                 .is_ok();
             let attached_revision = attached
                 .borrow(py)
-                .health()
+                .health(py)
                 .contains("\"effective_level\":\"debug\"")
                 && attached
                     .borrow(py)
-                    .health()
+                    .health(py)
                     .contains("\"level_revision\":\"1\"");
             let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
             let closed = attached
                 .borrow(py)
                 .log(py, event)
                 .contains(sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED);
-            let retained_health = attached.borrow(py).health().contains("\"kind\":\"ok\"");
+            let retained_health = attached.borrow(py).health(py).contains("\"kind\":\"ok\"");
             missing_is_tagged
                 && admitted
                 && level_changed
@@ -1254,7 +1497,7 @@ mod tests {
             attached
                 .bind(py)
                 .borrow()
-                .health()
+                .health(py)
                 .contains("\"kind\":\"ok\"")
         });
         assert!(active && stopped && retained);

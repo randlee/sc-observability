@@ -1,15 +1,12 @@
 name: Binding runtime
 on:
-  pull_request:
-  push:
-    branches: ['feature/phase-b-3b-native-runtime', develop, main, 'integrate/*']
   workflow_dispatch:
 jobs:
   native-contract:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main') && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -18,6 +15,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'
@@ -25,13 +23,21 @@ jobs:
         shell: bash
         run: bash scripts/ci/validate_binding_runtime.sh --platform-only
       - name: Retain complete platform proof
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v6
         with:
           name: binding-runtime-${{ matrix.os }}
           path: target/binding-runtime-platforms
           if-no-files-found: error
+      - name: Retain failed platform logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: binding-runtime-failure-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/binding-runtime-platforms
+          if-no-files-found: warn
   packaged-consumer:
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -40,6 +46,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'
@@ -53,6 +60,7 @@ jobs:
             target/binding-runtime-bundle-manifest.json
           if-no-files-found: error
   complete-gate:
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     needs: [native-contract, packaged-consumer]
     runs-on: ubuntu-latest
     steps:
@@ -60,6 +68,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+          components: clippy, rustfmt
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'

@@ -87,24 +87,77 @@ def inspect_archive(
         }
 
 
-def verify_stage(stage: Path, version: str, source_commit: str | None = None) -> dict:
-    evidence = json.loads((stage / "stage-manifest.json").read_text())
-    if (evidence.get("schema_version") != 1 or evidence.get("candidate_version") != version
+def read_stage_manifest(stage: Path) -> dict:
+    """Load the stage manifest once and reject non-object JSON explicitly."""
+    evidence = json.loads((stage / "stage-manifest.json").read_text(encoding="utf-8"))
+    if not isinstance(evidence, dict):
+        raise ValueError("stage manifest must be a JSON object")
+    return evidence
+
+
+def validate_package_item(item: object) -> dict:
+    """Validate package evidence before any required field is indexed."""
+    if not isinstance(item, dict):
+        raise ValueError("stage package item must be an object")
+    for key in ("name", "version", "archive", "archive_sha256", "normalized_manifest", "manifest_sha256"):
+        if not isinstance(item.get(key), str):
+            raise ValueError(f"stage package field {key} must be a string")
+    if not isinstance(item.get("files"), dict):
+        raise ValueError("stage package field files must be an object")
+    return item
+
+
+def validate_stage_manifest(
+    evidence: object,
+    version: str | None = None,
+    source_commit: str | None = None,
+    workspace_version: str | None = None,
+) -> dict:
+    """Validate every field consumed by stage verification and extraction."""
+    if not isinstance(evidence, dict):
+        raise ValueError("stage manifest must be a JSON object")
+    if (evidence.get("schema_version") != 1
+            or not isinstance(evidence.get("candidate_version"), str)
+            or (version is not None and evidence.get("candidate_version") != version)
             or evidence.get("publication") != "pending_B.7"):
         raise ValueError("stage schema/version/publication mismatch")
+    if workspace_version is not None and not isinstance(workspace_version, str):
+        raise ValueError("workspace candidate version mismatch")
     actual_source = evidence.get("source_commit", "")
-    if not re.fullmatch(r"[0-9a-f]{40}", actual_source) or (source_commit and actual_source != source_commit):
+    if not isinstance(actual_source, str) or not re.fullmatch(r"[0-9a-f]{40}", actual_source) or (
+        source_commit and actual_source != source_commit
+    ):
         raise ValueError("stage source commit mismatch")
-    packages = evidence.get("packages", [])
-    if tuple(item.get("name") for item in packages) != PACKAGES:
-        raise ValueError("stage must contain exactly the six public packages in release order")
+    packages = evidence.get("packages")
+    if not isinstance(packages, list) or not all(isinstance(item, dict) for item in packages):
+        raise ValueError("stage packages must be a list of objects")
     for item in packages:
-        if item.get("version") != version:
-            raise ValueError("package version mismatch")
+        validate_package_item(item)
+    if tuple(item["name"] for item in packages) != PACKAGES:
+        raise ValueError("stage must contain exactly the six public packages in release order")
+    expected_version = version or evidence["candidate_version"]
+    if any(item["version"] != expected_version for item in packages):
+        raise ValueError("package version mismatch")
+    return evidence
+
+
+def verify_stage(
+    stage: Path,
+    version: str | None = None,
+    source_commit: str | None = None,
+    *,
+    evidence: dict | None = None,
+    workspace_version: str | None = None,
+) -> dict:
+    evidence = read_stage_manifest(stage) if evidence is None else evidence
+    validate_stage_manifest(evidence, version, source_commit, workspace_version)
+    qualified_version = evidence["candidate_version"]
+    actual_source = evidence["source_commit"]
+    for item in evidence["packages"]:
         archive = safe_path(stage, item["archive"])
         if sha256(archive) != item["archive_sha256"]:
             raise ValueError(f"archive checksum mismatch: {item['name']}")
-        inspected = inspect_archive(archive, item["name"], version, actual_source)
+        inspected = inspect_archive(archive, item["name"], qualified_version, actual_source)
         for key in ("files", "normalized_manifest", "manifest_sha256"):
             if inspected[key] != item[key]:
                 raise ValueError(f"archive {key} mismatch: {item['name']}")
@@ -112,6 +165,7 @@ def verify_stage(stage: Path, version: str, source_commit: str | None = None) ->
 
 
 def extract_verified(stage: Path, evidence: dict, destination: Path) -> dict[str, Path]:
+    validate_stage_manifest(evidence)
     paths = {}
     for item in evidence["packages"]:
         archive = safe_path(stage, item["archive"])

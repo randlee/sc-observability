@@ -15,6 +15,24 @@ Historical recovery and pre-publish planning documents remain valuable
 reference material, but they are no longer the controlling phase for current
 work.
 
+## npm publishing follow-up
+
+Active: [npm scope and shared publishing adoption](plans/npm-publish-adoption/sprint.md). Lead: aobs; developer: cobs. Correct the active package identity and adopt reviewed shared publishing updates on a branch from develop, without another publication.
+
+## Dev sanity Jev investigation
+
+Completed investigation and draft adapter: [sanity-jev](investigations/sanity-jev.md)
+(`obs-sanity-jev-1`, branch `feature/sanity-jev`, stacked on PR #216).
+Live Jev evaluation and switching the obs-sanity directive remain user decisions.
+
+## Phase D beads import
+
+Plan translation: `obs-phase-d-import`, branch `plan/phase-d-beads-import`,
+worktree `/Users/randlee/github/sc-observability-worktrees/plan/phase-d-beads-import`.
+[Phase D source](plans/phase-d/plan-phase-d.md) supplies eleven development
+beads and eleven sanity checks under `obs-phase-d`. `obs-phase-d-plan-qa`
+gates the root sprints before dispatch; the lead owns synchronization.
+
 ## Near-Term Work
 
 1. Keep repo workflow and review discipline aligned with ATM.
@@ -37,16 +55,15 @@ work.
 9. Preserve the completed `v1.2.0` Phase A record and route new migration,
    additive API and binding work through the proposed Phase B plan.
 
-## v1.4.1 release preparation
+## Phase F — canonical consumer surface
 
-The coordinated 1.4.1 preparation is complete on
-`release/v1.4.1-preparation`, targeting `main` through PR197 per the owner
-correction. It aligns every publishable
-Rust, Python, and npm package plus internal dependency pin at 1.4.1, regenerates
-the lockfile, and records the release notes and inventory without rewriting the
-qualified 1.4.0 evidence. Publication, immutable-release settings, and final
-main preflight remain lead-owned follow-through items in
-[`docs/releases/v1.4.1-checklist.md`](releases/v1.4.1-checklist.md).
+Phase F moves the published workspace to its canonical logging, typed-routing,
+and OTel export surface while preserving a documented `v1` migration path for
+current consumers. Its execution graph is
+[`plans/phase-f.jsonl`](plans/phase-f.jsonl): f-1 establishes the contract;
+f-2, f-3, f-4, f-6, and f-7 follow it; and f-8 closes after those five
+sprints. The consumer-facing migration record is
+[`migration/phase-f.md`](migration/phase-f.md).
 
 ## Issue #70 / v1.1.0
 
@@ -278,8 +295,8 @@ against the merged B.1d API. The implementation activates the nine wrapper
 and 20 method warnings at `1.4.0`, migrates ordinary routing call sites,
 preserves narrow compatibility boundaries, and validates legacy/migrated/
 partial external Cargo consumers with JSON diagnostics and a Serde golden.
-B.2 qualification and later publication remain separately gated; no removal
-schedule is introduced. Publication follows Phase-C `sc-publish` migration and
+B.2 qualification and later publication were separately gated; no removal
+schedule was introduced. Publication followed Phase-C `sc-publish` migration and
 separate authorization.
 
 ### B.1 integration — Combined B.1a-B.1d reconciliation and registry parity
@@ -329,8 +346,8 @@ accepted, and the B.1 copy section above records that this validator's real
 The phase-end publication sprint is tracked in
 [`plans/phase-b/sprint-b-7-publish-bindings.md`](./plans/phase-b/sprint-b-7-publish-bindings.md),
 built from `feature/phase-b-6-python-async`. **Owner sequencing correction:
-no mid-phase publication.** B.P2/B.2 are reviewed immutable release
-candidates, B.3-B.6 and these bindings consume prepublication bundles, and
+no mid-phase publication.** B.P2/B.2 were reviewed immutable release
+candidates, B.3-B.6 and these bindings consumed prepublication bundles, and
 B.7 readiness packet covers all of Phase B (core, bridge/macros, and bindings)
 -- but Phase B records readiness only. Until the
 phase merges, no publication workflow is dispatched and no registry
@@ -491,6 +508,56 @@ principles:
 The detailed sprint-by-sprint execution record remains in
 [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) for reference.
 
+## Phase D — Host logging, OTLP restoration, and distribution completion
+
+**Current release decision:** ADR-020 and the [compatible 1.x amendment](plans/phase-d/compatible-1x-amendment.md) supersede the historical 2.0 activation/removal sequence below. Active work is D22 contracts plus independent D27 release tooling, then parallel D23–D26/D28 adapters, then D18 combined integration alongside retained D9 conformance. D9 consumes D22/D26, not D18 test/report output. No implementation merge to develop precedes full phase-ending review and user authorization.
+
+### Historical execution record (not current dispatch scope)
+
+The authoritative execution plan is the obs-phase-d bead, projected in
+[the Phase D plan](plans/phase-d/plan-phase-d.md). Its corrected boundaries are:
+
+1. obs-d-12 owns the canonical error/signal contracts and normative docs.
+   obs-d-21 owns the OTLP config/default/validation contracts, atomic Cargo
+   2.0 version bump and module registration.
+   obs-d-13 owns the independent logging-contract specification.
+2. obs-d-1–8 and obs-d-14–17 implement their own logging/observation/transport
+   boundaries after the relevant contract sanity gates. obs-d-19 owns DTO/schema
+   and generated models; obs-d-20 owns language adapters. These implementations
+   run in wave 2 with disjoint fences; stack order is not a dependency chain.
+3. obs-d-18 integrates completed artifacts, activates canonical exports, removes
+   1.x compatibility and owns the final release baseline, approvals, migration
+   guide, inventories and semver gates. obs-d-4 is a core error migration, not
+   the owner of the Cargo version bump or release baseline.
+4. obs-d-10 combines native Windows ARM64 preparation and the former obs-d-11
+   open-ended Python guard. obs-d-9 is the sole wave-4 collector qualification
+   bead; the lead accepted that fourth wave and critical path four on 2026-09-26
+   under authority delegated by the user.
+
+The Python contract is PyO3 abi3-py310, cp310-abi3 wheels and requires-python
+>=3.10 without an upper/exclusion cap. The target matrix has six platforms and
+29 native installed-suite cells at one immutable source (Windows ARM64 runs
+3.11–3.14 because native CPython 3.10 is unavailable). Raising the floor or
+adding a cap requires a separately approved compatibility decision, an updated
+supported-interpreter matrix and guard expectations; it is not an incidental
+packaging edit. obs-d-10 supplies the guard and policy specification; obs-d-18
+activates release policy/inventory and checks combined release evidence.
+
+ADR-017/018 were accepted through PR #225 on 2026-09-26 and ADR-019 through
+PR #227. The former 2.0 activation sequence above is historical. Planning or implementation
+does not authorize a release, tag, registry publication or downstream atm-core
+change. Issue #88 (Python OTEL/structured logging) remains excluded.
+
+## Phase F — Purpose Test and Migration Path
+
+The Phase F landing ledger is tracked in
+[`plans/phase-f.jsonl`](plans/phase-f.jsonl). Its sprints are f-1 (purpose-test
+contract), f-2 (OTLP 1.x removal), f-3 (CLI test-double removal), f-4 (logging
+and binding-runtime compatibility), f-6 (logging typed duplicates), f-7
+(consumer migration guide and user docs), and f-8 (types and observation
+compatibility, then phase closure). The ledger intentionally has no f-5; its
+work is not executed.
+
 ## Consumer Usability Baseline
 
 This follow-up work defines the minimum consumer-facing usability baseline for
@@ -553,3 +620,5 @@ that integrate against the shipped public API.
      CLI surface precisely enough for implementation and review
    - `qm-comp` cross-document consistency review passes; all three docs are
      confirmed mutually consistent before merge
+
+Follow-up: [complete immutable installer adoption](plans/npm-publish-adoption/followup.md), lead aobs, developer cobs; child of PR199.

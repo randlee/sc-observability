@@ -46,6 +46,64 @@ fn decimal_domains_are_canonical() {
     );
     assert!(serde_json::from_value::<DecimalDto>(json!(1)).is_err());
 }
+
+#[test]
+fn decimal_dto_failures_use_registered_boundary_diagnostics() {
+    let cases = [
+        (
+            DecimalDto::new("01").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL,
+            "Use a canonical base-10 integer with no leading zeros or negative zero",
+        ),
+        (
+            DecimalDto::new("-9223372036854775809").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW,
+            "Use a value within the signed 64-bit integer range",
+        ),
+        (
+            DecimalDto::new("18446744073709551616").unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW,
+            "Use a value within the unsigned 64-bit integer range",
+        ),
+        (
+            DecimalDto::new("-1").unwrap().as_u64().unwrap_err(),
+            error_codes::SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED,
+            "Use a non-negative canonical integer for this counter",
+        ),
+    ];
+
+    for (error, code, remediation) in cases {
+        assert_eq!(error.code(), code);
+        let diagnostic = boundary_diagnostic(error.code(), error.to_string());
+        assert_eq!(diagnostic.code, code);
+        assert_eq!(
+            diagnostic.remediation,
+            RemediationDto::Recoverable {
+                steps: vec![remediation.into()],
+            }
+        );
+    }
+}
+
+#[test]
+fn json_number_projection_is_total_in_every_workspace_number_domain() {
+    let value = json!({
+        "signed": -1,
+        "unsigned": u64::MAX,
+        "float": 1.5,
+        "nested": [-2, 2.5]
+    });
+
+    let projected = from_json_value(value).unwrap();
+    assert!(matches!(
+        projected,
+        ValueDto::Object { value }
+            if matches!(value["signed"], ValueDto::Integer { ref value } if value.as_str() == "-1")
+                && matches!(value["unsigned"], ValueDto::Integer { ref value } if value.as_str() == u64::MAX.to_string())
+                && matches!(value["float"], ValueDto::Float { value } if value == 1.5)
+                && matches!(value["nested"], ValueDto::Array { ref value } if matches!(value[..], [ValueDto::Integer { .. }, ValueDto::Float { value: 2.5 }]))
+    ));
+}
 #[test]
 fn checked_event_preserves_integer_and_host_stamp() {
     let mut raw = event();
@@ -74,13 +132,67 @@ fn inputs_reject_missing_unknown_and_invalid_versions() {
     let mut raw = event();
     raw["schema_version"] = json!(2);
     assert!(matches!(
-        decode_event(raw),
+        to_core_event(decode_event(raw).unwrap(), stamp()),
         Err(Failure::UnsupportedVersion { received: 2, .. })
     ));
     let mut raw = event();
     raw["level"] = json!("fatal");
     assert!(decode_event(raw).is_err());
     assert!(decode_level_request(json!({"kind":"reset","level":"trace"})).is_err());
+}
+
+#[test]
+fn typed_constructor_codes_survive_dto_validation() {
+    let source_error = core::TargetCategory::new("invalid target").unwrap_err();
+    let source_message = source_error.to_string();
+    let mut raw = event();
+    raw["target"] = json!("invalid target");
+    let Err(Failure::Validation { diagnostic, field }) =
+        to_core_event(decode_event(raw).unwrap(), stamp())
+    else {
+        panic!("invalid target must fail DTO validation");
+    };
+    assert_eq!(field, "target");
+    assert_eq!(
+        diagnostic.code,
+        core::error_codes::VALUE_VALIDATION_FAILED.as_str()
+    );
+    assert!(
+        diagnostic
+            .message
+            .contains(std::any::type_name::<core::ValueValidationError>())
+    );
+    assert!(diagnostic.message.contains(&source_message));
+    assert!(matches!(
+        diagnostic.remediation,
+        RemediationDto::Recoverable { ref steps } if !steps.is_empty()
+    ));
+}
+
+#[test]
+fn serde_conversion_errors_include_type_and_preserve_fallback_context() {
+    let mut raw = event();
+    raw["level"] = json!(false);
+    let source_message = serde_json::from_value::<LogEventDto>(raw.clone())
+        .unwrap_err()
+        .to_string();
+
+    let Err(Failure::Validation { diagnostic, field }) = decode_event(raw) else {
+        panic!("invalid level shape must fail DTO decoding");
+    };
+
+    assert_eq!(field, "event");
+    assert_eq!(diagnostic.code, "SC_OBSERVABILITY_BINDING_INVALID_INPUT");
+    assert!(
+        diagnostic
+            .message
+            .contains(std::any::type_name::<serde_json::Error>())
+    );
+    assert!(diagnostic.message.contains(&source_message));
+    assert!(matches!(
+        diagnostic.remediation,
+        RemediationDto::Recoverable { ref steps } if !steps.is_empty()
+    ));
 }
 #[test]
 fn spoofed_provenance_is_rejected_at_all_depths() {
@@ -136,7 +248,7 @@ fn query_defaults_and_inclusive_bounds() {
         json!({"schema_version":1,"since":"1970-01-01T01:00:00+01:00"}),
         json!({"schema_version":1,"field_matches":[{"field":"","value":{"kind":"null"}}]}),
     ] {
-        assert!(decode_query(raw).is_err());
+        assert!(decode_query(raw).and_then(to_core_query).is_err());
     }
     let query=decode_query(json!({"schema_version":1,"limit":1000,"field_matches":[{"field":"sc_observability.binding.language","value":{"kind":"string","value":"python"}}]})).unwrap();
     assert_eq!(query.limit, 1000);
@@ -217,8 +329,9 @@ fn malformed_unknown_and_oversized_remote_errors_differ() {
 #[test]
 fn paths_keep_absence_and_non_unicode() {
     assert_eq!(from_path(None), PathDto::Absent);
-    assert!(to_path("", std::path::Path::new("/tmp")).is_err());
-    assert!(to_path("a\0b", std::path::Path::new("/tmp")).is_err());
+    let temp_dir = std::env::temp_dir();
+    assert!(to_path("", &temp_dir).is_err());
+    assert!(to_path("a\0b", &temp_dir).is_err());
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStringExt;
@@ -229,7 +342,7 @@ fn paths_keep_absence_and_non_unicode() {
 #[test]
 fn registry_has_unique_literals_and_exact_remediation() {
     let mut codes = std::collections::BTreeSet::new();
-    assert_eq!(error_codes::REGISTRY.len(), 18);
+    assert_eq!(error_codes::REGISTRY.len(), 22);
     assert!(
         error_codes::REGISTRY
             .iter()
@@ -246,6 +359,21 @@ fn registry_has_unique_literals_and_exact_remediation() {
         );
         validate_diagnostic(&diagnostic, "test").unwrap();
     }
+}
+
+#[test]
+fn unregistered_boundary_code_has_explicit_recovery() {
+    let diagnostic = boundary_diagnostic("SC_EXTERNAL_COMPONENT_FAILURE", "external failure");
+    assert_eq!(
+        diagnostic.remediation,
+        RemediationDto::Recoverable {
+            steps: vec![
+                "Inspect the diagnostic code and follow the emitting component's recovery guidance"
+                    .into()
+            ]
+        }
+    );
+    validate_diagnostic(&diagnostic, "test").unwrap();
 }
 
 #[test]
@@ -300,7 +428,7 @@ fn all_stored_event_fields_and_trusted_output_survive() {
     });
     native.state_transition = Some(core::StateTransition {
         entity_kind: core::TargetCategory::new("worker").unwrap(),
-        entity_id: Some("worker-1".into()),
+        entity_id: Some("worker-1".to_string()),
         from_state: core::StateName::new("idle").unwrap(),
         to_state: core::StateName::new("active").unwrap(),
         reason: Some("work".into()),
@@ -335,7 +463,7 @@ fn all_stored_event_fields_and_trusted_output_survive() {
 }
 
 #[test]
-fn complete_health_projection_and_unsigned_wire_counters() {
+fn complete_health_projection_and_unsigned_wire_counters() -> Result<(), Failure> {
     let summary = core::DiagnosticSummary {
         code: None,
         message: "summary".into(),
@@ -370,15 +498,16 @@ fn complete_health_projection_and_unsigned_wire_counters() {
         }),
         last_error: Some(summary),
     };
-    let dto = from_core_health(
-        native,
-        core::LevelState {
-            configured_level: core::LevelFilter::Info,
-            effective_level: core::LevelFilter::Debug,
-            revision: u64::MAX,
-        },
-    )
-    .unwrap();
+    let level = core::LevelState {
+        configured_level: core::LevelFilter::Info,
+        effective_level: core::LevelFilter::Debug,
+        revision: u64::MAX,
+    };
+    let released: fn(core::LoggingHealthReport, core::LevelState) -> Result<LogHealthDto, Failure> =
+        from_core_health;
+    let canonical = from_canonical_core_health(native.clone(), level);
+    let dto = released(native, level)?;
+    assert_eq!(dto, canonical);
     let mut value = serde_json::to_value(&dto).unwrap();
     assert_eq!(value["logging"].as_object().unwrap().len(), 14);
     assert_eq!(
@@ -397,6 +526,7 @@ fn complete_health_projection_and_unsigned_wire_counters() {
     );
     value["level_state"]["level_revision"] = json!("-1");
     assert!(serde_json::from_value::<LogHealthDto>(value).is_err());
+    Ok(())
 }
 
 #[test]
@@ -507,4 +637,26 @@ fn diagnostic_string_and_step_bounds_are_exact_and_never_truncate() {
     );
     diagnostic.remediation = RemediationDto::Recoverable { steps: vec![] };
     validate_diagnostic(&diagnostic, "response.error").unwrap();
+}
+#[test]
+fn telemetry_event_error_projects_as_validation_not_internal() {
+    let error = core::v2::TelemetryError::Event(core::v2::EventError::Validation {
+        context: Box::new(core::ErrorContext::new(
+            core::error_codes::DIAGNOSTIC_INVALID,
+            "entity id rejected",
+            core::Remediation::recoverable("fix the id", ["rebuild the event"]),
+        )),
+    });
+    let projected = CanonicalFailureDto::try_from(&error).expect("projection succeeds");
+    match projected {
+        CanonicalFailureDto::Validation { diagnostic, field } => {
+            assert_eq!(field, "event");
+            assert_eq!(
+                diagnostic.diagnostic.code,
+                core::error_codes::DIAGNOSTIC_INVALID.as_str()
+            );
+            assert_eq!(diagnostic.diagnostic.message, "entity id rejected");
+        }
+        other => panic!("expected Validation, got {other:?}"),
+    }
 }

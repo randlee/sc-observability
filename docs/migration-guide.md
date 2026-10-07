@@ -42,8 +42,7 @@ Use these repo artifacts as the implementation baseline:
 - [`docs/atm-adapter-requirements.md`](./atm-adapter-requirements.md)
 - [`docs/atm-adapter-architecture.md`](./atm-adapter-architecture.md)
 - [`docs/atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
-- [`docs/atm-adapter-example.md`](./atm-adapter-example.md)
-- `examples/atm-adapter-example/`
+- [`docs/migration/phase-f.md`](./migration/phase-f.md)
 
 ## Logging-Only Consumers
 
@@ -87,39 +86,45 @@ For consumers that emit typed observations:
 
 For consumers that export to OTLP:
 
-1. Construct `TelemetryConfig` directly in the adapter/application layer.
+1. Construct `sc_observability_otlp::v2::TelemetryConfig` directly in the
+   adapter/application layer.
 2. Keep OTLP env/config parsing outside the shared crates.
 3. Attach OTLP by wrapping projector implementations locally, following the
-   pattern used by `examples/atm-adapter-example`.
+   canonical `v2` configuration pattern in `docs/migration/phase-f.md`.
 
-## Typed Error Adoption (B.1e warning rollout)
+## Phase D compatible 1.x migration
 
-The additive typed error methods and B.1e warning rollout are implemented and
-validated on the current stack. B.2 qualifies the result before B.7
-publication. For exact old/new symbols, nine wrapper families, typed kind matching,
-source retention, custom-trait adapters, rollback and narrow warning policy,
-use the [typed error migration reference](../.claude/skills/sc-observability-adopting/references/migrate-error-api.md)
-and its [source inventory](plans/phase-b/warning-inventory-b-1e.md).
+Phase D ships as the next compatible 1.x release. The released 1.4.1 API is
+retained, so no source change is required; start with
+[Adopting the compatible 1.x release](migration/compatible-1x.md), then use
+[the compatible 1.x migration reference](migration.md) and
+[the nine-family error migration](migrate-error-api.md) for named cause
+variants, source/remediation retention, custom sinks/projectors, config
+defaults and signal serde.
 
-`LoggerBuilder::build`, `Logger::new_with_level_owner` and
-`LoggerBuilder::build_with_level_owner` remain supported without method-level
-deprecation; their `_typed` methods are additive. `Logger::emit` retains its
-existing v1.2.0 warning and behavior; new migration guidance uses
-`log_typed()` for blocking admission and `try_log_typed()` for nonblocking
-admission. The corrected telemetry projector path
-uses explicit `sc_observability_types::typed::legacy_*` adapters with the
-unchanged `with_log_projector`, `with_span_projector` and
-`with_metric_projector` methods; no `with_typed_*` builders exist.
+`sc_observability_dto::from_core_health` keeps its released
+`Result<LogHealthDto, Failure>` signature and always returns `Ok`. The new
+`sc_observability_dto::from_canonical_core_health` is the explicit infallible
+projection that returns `LogHealthDto` directly. Both produce the same DTO.
 
-This guide does not promise warning-free legacy compilation under
-`-D deprecated`, introduce a removal schedule or claim B.2/B.7 completion.
+The 1.5.0 compatible release deprecates the released API while retaining those
+items alongside their `*_typed` counterparts and the opt-in `v2` modules.
+Migrate to the canonical `v2` APIs before a future major release removes the
+compatibility paths.
+
+Before rollout, run the public-API semver gate against 1.4.1, which accepts
+no enumerated breaks for a compatible 1.x release, plus real bindings/schema
+composition and default/all-features workspace tests. A scoped DTO pass does
+not authorize final baseline generation or publication.
 
 ## Breaking API Renames
 
 The production-readiness review approved these source-breaking API updates:
 
-1. The sealed telemetry-health provider trait now uses the
-   `ObservabilityHealthProvider` name.
+1. The telemetry-health provider trait now uses the
+   `ObservabilityHealthProvider` name. Workspace-owned implementations are
+   supported; external implementations are possible but unsupported, with no
+   compatibility guarantee for their implementation hooks.
 2. `ObservabilityBuilder` now exposes
    `with_observability_health_provider(...)`.
 3. `ObservationSubscriber<T>` implementations now provide
@@ -129,8 +134,9 @@ The production-readiness review approved these source-breaking API updates:
 
 1. Move shared crate usage in ATM to the published standalone crates.
 2. Keep ATM-specific adapter code in ATM-owned code.
-3. Copy the example adapter pattern and replace the sample ATM-shaped structs
-   with ATM-owned structs.
+3. Treat the retired `docs/atm-adapter-example.md` as historical context only
+   ([architecture §10](architecture.md#10-atm-proving-artifact-retired-in-phase-f));
+   do not copy its pattern or cite it as evidence.
 4. Verify health projection and fail-open behavior against ATM requirements.
 5. Remove obsolete ATM-local copies of the shared crate implementations after
    parity is confirmed.

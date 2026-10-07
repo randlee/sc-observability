@@ -1,4 +1,5 @@
 import {
+  CANONICAL_ERROR_CODES,
   type Failure,
   type RemediationDto,
   SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
@@ -7,6 +8,34 @@ import {
   SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
   validate,
 } from "./generated/index";
+
+export { CANONICAL_ERROR_CODES } from "./generated/index";
+
+/** Canonical D.12 variant names and codes carried by language projections. */
+export type CanonicalErrorName = keyof typeof CANONICAL_ERROR_CODES;
+
+export function canonicalErrorCode(name: CanonicalErrorName): string {
+  return CANONICAL_ERROR_CODES[name];
+}
+
+export function canonicalErrorNamesForCode(code: string): readonly CanonicalErrorName[] {
+  return (Object.keys(CANONICAL_ERROR_CODES) as CanonicalErrorName[]).filter(
+    (name) => CANONICAL_ERROR_CODES[name] === code,
+  );
+}
+
+/**
+ * Resolves a code only when it identifies one canonical variant.
+ *
+ * Several canonical variants intentionally share a diagnostic code. Returning
+ * `undefined` for those ambiguous codes prevents a language binding from
+ * inventing a singular variant identity; callers that need the candidates can
+ * use `canonicalErrorNamesForCode`.
+ */
+export function canonicalErrorNameForCode(code: string): CanonicalErrorName | undefined {
+  const names = canonicalErrorNamesForCode(code);
+  return names.length === 1 ? names[0] : undefined;
+}
 
 export type Result<T> = { kind: "ok"; value: T } | { kind: "error"; error: Failure };
 

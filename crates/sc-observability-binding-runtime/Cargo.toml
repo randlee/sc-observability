@@ -10,6 +10,8 @@ rust-version.workspace = true
 description = "Bounded native logging backends for language bindings"
 
 [features]
+default = ["v1"]
+v1 = ["sc-observability-log/v1"]
 test-hooks = ["sc-observability/fault-injection"]
 
 [dependencies]
@@ -21,6 +23,7 @@ arc-swap = "1.7"
 serde_json.workspace = true
 
 [dev-dependencies]
+sc-observability-log.workspace = true
 tempfile.workspace = true
 
 [lints]

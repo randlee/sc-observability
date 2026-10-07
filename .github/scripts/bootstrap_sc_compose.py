@@ -76,9 +76,9 @@ def provision_pinned_wheel(python: Path) -> None:
     require_pinned_version(existing)
 
 
-def renderer_cli_path(venv: Path) -> Path:
+def renderer_cli_path(venv: Path, *, platform: str | None = None) -> Path:
     """Return the platform-specific renderer CLI path in a virtual environment."""
-    directory = "Scripts" if sys.platform == "win32" else "bin"
+    directory = "Scripts" if (platform or sys.platform) == "win32" else "bin"
     return venv / directory / "renderer"
 
 

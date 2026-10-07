@@ -3,6 +3,7 @@
 //! Backend handles admit work without owning shutdown. Only `CoreLoggerOwner`
 //! holds core shutdown and level-mutation authority; bridge owners stay with hosts.
 mod callback;
+mod constants;
 mod conversion;
 mod coordinator;
 mod error;
@@ -12,14 +13,18 @@ mod sync;
 #[cfg(test)]
 mod tests;
 mod timer;
+#[cfg(feature = "v1")]
+mod v1;
+pub use constants::{
+    CALLBACK_REGISTRATION_CAPACITY, OPERATION_OBSERVER_CAPACITY, TAURI_DEFAULT_QUERY_TIMEOUT_MS,
+    TAURI_MAX_QUERY_TARGETS, TAURI_REDACTED_VALUE,
+};
 use coordinator::Coordinator;
 pub use operation::{CompletionSubscription, Operation, OperationState};
 use sc_observability_dto::{
     AdmissionDto, CompletionDto, Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto,
     LogSnapshotDto,
 };
-#[cfg(feature = "test-hooks")]
-use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::{LevelChangeSource, LevelFilter};
 use std::sync::{Arc, atomic::Ordering};
 use std::time::Duration;
@@ -171,30 +176,46 @@ pub fn create_core_backend(
 
 /// Feature-only gate for proving that a real logger sink can retain its writer.
 #[cfg(feature = "test-hooks")]
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct TestWriterGate {
-    state: StdMutex<(bool, bool)>,
+    // MUTEX: keeps the entered/released Condvar predicates together; reads
+    // report poison as false, release is a no-op on poison, and the sink recovers.
+    state: StdMutex<TestWriterGateState>,
     changed: Condvar,
+}
+
+#[cfg(feature = "test-hooks")]
+#[derive(Debug)]
+struct TestWriterGateState {
+    entered: bool,
+    released: bool,
 }
 
 #[cfg(feature = "test-hooks")]
 impl TestWriterGate {
     fn new() -> Arc<Self> {
         Arc::new(Self {
-            state: StdMutex::new((false, false)),
+            state: StdMutex::new(TestWriterGateState {
+                entered: false,
+                released: false,
+            }),
             changed: Condvar::new(),
         })
     }
 
     /// Returns whether the real sink writer entered its held write.
     pub fn entered(&self) -> bool {
-        self.state.lock().map(|state| state.0).unwrap_or(false)
+        self.state
+            .lock()
+            .map(|state| state.entered)
+            .unwrap_or(false)
     }
 
     /// Releases the real sink writer after another binding operation has run.
     pub fn release(&self) {
         if let Ok(mut state) = self.state.lock() {
-            state.1 = true;
+            state.released = true;
             self.changed.notify_all();
         }
     }
@@ -206,20 +227,19 @@ struct TestBlockingSink {
 }
 
 #[cfg(feature = "test-hooks")]
-#[allow(
-    deprecated,
-    reason = "the test-only sink implements the published compatibility trait signature"
-)]
-impl sc_observability::LogSink for TestBlockingSink {
-    fn write(&self, _: &sc_observability::LogEvent) -> Result<(), sc_observability::LogSinkError> {
+impl sc_observability::v2::LogSink for TestBlockingSink {
+    fn write(
+        &self,
+        _: &sc_observability::LogEvent,
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
         let mut state = self
             .gate
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.0 = true;
+        state.entered = true;
         self.gate.changed.notify_all();
-        while !state.1 {
+        while !state.released {
             state = self
                 .gate
                 .changed
@@ -244,6 +264,7 @@ impl sc_observability::LogSink for TestBlockingSink {
 /// # Errors
 /// Returns the same tagged construction failure as a production core backend.
 #[cfg(feature = "test-hooks")]
+#[doc(hidden)]
 pub fn create_test_blocking_core_backend(
     config: sc_observability::LoggerConfig,
 ) -> Result<(CoreLoggerOwner, CoreLoggerBackend, Arc<TestWriterGate>), Failure> {
@@ -255,17 +276,16 @@ pub fn create_test_blocking_core_backend(
             timestamp: sc_observability_types::Timestamp::now_utc(),
             identity: sc_observability_types::ProcessIdentity::default(),
         };
-        let mut builder = sc_observability::Logger::builder_typed(config).map_err(|error| {
-            conversion::context(error.diagnostic(), conversion::Kind::Unavailable)
-        })?;
-        builder.register_sink(sc_observability::SinkRegistration::new(Arc::new(
+        let mut builder = sc_observability::v2::Logger::builder(config)
+            .map_err(|error| conversion::canonical(&error, conversion::Kind::Internal))?;
+        builder.register_sink(sc_observability::v2::SinkRegistration::typed(Arc::new(
             TestBlockingSink {
                 gate: gate_for_sink,
             },
         )));
-        let (logger, level) = builder.build_with_level_owner_typed().map_err(|error| {
-            conversion::context(error.diagnostic(), conversion::Kind::Unavailable)
-        })?;
+        let (logger, level) = builder
+            .build_with_level_owner()
+            .map_err(|error| conversion::canonical(&error, conversion::Kind::Internal))?;
         Ok((stamp, logger, level))
     })?;
     Ok((
@@ -276,12 +296,19 @@ pub fn create_test_blocking_core_backend(
         gate,
     ))
 }
-/// Attaches bounded operations to an existing host-owned bridge control.
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "the released root path re-exports the deprecated v1 migration facade"
+)]
+pub use v1::bridge_backend;
+
+/// Attaches bounded operations to an existing canonical bridge control.
 ///
 /// # Errors
 /// Returns initialization or unavailable native snapshot diagnostics.
-pub fn bridge_backend(
-    control: sc_observability_log::LogControl,
+pub fn bridge_backend_v2(
+    control: sc_observability_log::v2::LogControl,
 ) -> Result<BridgeControlBackend, Failure> {
     Ok(BridgeControlBackend {
         shared: coordinator::bridge(control)?,
@@ -289,6 +316,7 @@ pub fn bridge_backend(
 }
 impl CoreLoggerOwner {
     #[cfg(feature = "test-hooks")]
+    #[doc(hidden)]
     /// Forces the owned core's real level revision to exhaustion for binding tests.
     ///
     /// # Errors

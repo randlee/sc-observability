@@ -1,0 +1,122 @@
+# d-19: neutral DTO/schema and generated models
+
+Generated projection of `obs-d-19`; the bead is authoritative.
+
+## Plan metadata
+
+- Wave: 2
+- Layer: 710
+- Stack: 712 (PR #710)
+- Assignee / model: aobs / terra
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: neutral DTO/schema and generated models
+- Branch: `fix/canonical-telemetry-ingress`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/fix/canonical-telemetry-ingress`
+- PR target (merge order only): `fix/python-native-wire-parity`
+- Blocked by: `obs-d-13-sanity, obs-phase-d-plan-qa, obs-d-12-sanity`
+- Requirements: LAY-001, PHB-002, PHB-010, PHB-012, PHB-013, PHD-001, PHD-002, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007
+- ADRs: ADR-002, ADR-005, ADR-011, ADR-014, ADR-017, ADR-019
+- Owned paths (metadata projection):
+  - `bindings/conformance/v1/conversion-cases.json`
+  - `bindings/conformance/v1/schema-cases.json`
+  - `bindings/python/sc-observability-py/python/sc_observability/generated/__init__.py`
+  - `bindings/python/sc-observability-py/python/sc_observability/generated/__init__.pyi`
+  - `bindings/python/sc-observability-py/python/sc_observability/generated/py.typed`
+  - `bindings/schema-generator/src/main.rs`
+  - `bindings/schema-generator/tests/conformance.rs`
+  - `bindings/schema/errors-v1.json`
+  - `bindings/schema/v1.json`
+  - `bindings/typescript/src/generated/index.ts`
+  - `bindings/typescript/src/generated/package.json`
+  - `crates/sc-observability-dto/src/conversion.rs`
+  - `crates/sc-observability-dto/src/lib.rs`
+  - `crates/sc-observability-dto/src/wire.rs`
+  - `crates/sc-observability-dto/src/wire/events.rs`
+  - `crates/sc-observability-dto/src/wire/health.rs`
+  - `crates/sc-observability-dto/src/wire/operations.rs`
+  - `crates/sc-observability-dto/src/wire/primitives.rs`
+  - `crates/sc-observability-dto/tests/**`
+  - `docs/plans/phase-d/sprint-d-19-dto-and-schema-migration.md`
+  - `scripts/generate_python_bindings.py`
+  - `crates/sc-observability-dto/src/conversion_impl/**`
+- Constants ownership: Read-only existing constants.rs except separately root-authorized source task; no blanket write authorization
+
+## Goal
+
+Close the neutral DTO/schema boundary against obs-d-12's canonical error/signal and wire-projection contract for the compatible 1.x release governed by ADR-020. Historical 2.0 activation and wrapper removal remain deferred by ADR-020.
+
+## Deliverables
+
+1. Migrate DTO checked conversions and error projections to canonical cause variants while preserving stable code/remediation fields and lossless histogram/temporal values. Preserve PHB-002's neutral-only dependency boundary.
+
+2. Update schema-generator source, canonical JSON/error schemas, schema/conversion conformance corpus, and generated TypeScript/Python model outputs to match those DTOs. Existing generators remain the only generation path; records/unknown values retain checked numeric/path/variant validation.
+
+3. Run DTO/schema/generator conformance and generated-model typing checks, including valid/invalid histogram, typed operational error and unknown-variant fixtures.
+
+## This Sprint Does Not Close
+
+obs-d-20 owns language transport/extraction adapters and runtime tests; obs-d-18 integrates both completed artifacts with functioning deprecated roots and closes compatible 1.x semver/release approvals. Nonempty DTO attribute projection is deferred outside the Phase D completion gates (ADR-019 amendment: deferred DTO attribute projection). No registry definition, manifest change, runtime policy or publication belongs here.
+
+
+## Existing accepted scope amendment
+Root reconciliation of existing Rand2026-09-27 ruling recorded in known-limitations.md: nonempty DTO attribute projection is deferred outside PhaseD completion gates, not fixed and not QA PASS. Remaining numeric/histogram/temporal/error/schema requirements stay intact. Compatible1.x ADR020 governs release; 2.0 activation/removal deferred. Existing actual conversion_impl/** source ownership now explicit. Documentation owner obs-d-19-qa-containing-pr710-f1 carries f3 and updates faithful sprint/ADR projection.
+
+## Design
+
+## Independent boundary closure
+
+Consume obs-d-12's frozen neutral types and wire-projection specification after its sanity gate. DTO owns projection only, never native runtime/bridge mapping. obs-d-19 owns canonical schema and generated model output together, preventing a same-wave generation dependency on obs-d-20. Operational envelope field names and discriminants used by obs-d-20 are frozen by obs-d-12; adapters compile/test against the existing compatible envelope plus local fixtures, not unfinished new schema output. New neutral signal fields remain additive/staged until integration activation. Reject invalid histograms and temporal intervals on checked conversion; never lose count/sum/bounds or coerce an unknown error into success. Existing generator commands consume the canonical schema. Do not modify error_codes.rs: consume obs-d-12's registry read-only. Existing constants.rs is read-only except for a separately authorized future named-constant task.
+
+PHD-001/PHD-002 and ADR-019 govern the canonical DTO/error projection and integration handoff consumed by this sprint.
+
+## Handoff from obs-d-12
+
+obs-d-12 freezes canonical errors/signals and wire-projection specifications in docs/api-design.md; obs-d-19 consumes them after obs-d-12-sanity with types/registry files read-only.
+
+## Handoff to obs-d-18
+
+obs-d-19 produces completed DTO/schema/generated models. obs-d-18 consumes them after obs-d-19-sanity, runs combined binding/schema tests and activates canonical exports; it does not reimplement DTO or generation work. Owned files remain read-only to obs-d-18 unless a separately approved integration correction is assigned.
+
+
+## Release gate and scope
+
+This boundary releases only its named artifact to obs-d-18 after its paired sanity check; compatible 1.x semver/API approval and release inventory are obs-d-18 gates. Historical 2.0 activation and obsolete-wrapper removal remain deferred by ADR-020. The phase-root workspace invariant applies once to every sprint.
+
+## Acceptance criteria
+
+- [ ] #1: cargo test --locked -p sc-observability-dto passes canonical_error_projection_preserves_context, histogram_conversion_is_lossless and invalid_histogram_rejected, added to owned DTO tests with nonzero test counts.
+- [ ] #2: cargo test --locked --manifest-path bindings/schema-generator/Cargo.toml passes; cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- --output bindings/schema/v1.json --errors-output bindings/schema/errors-v1.json --check reports no drift.
+- [ ] #2–3: bash scripts/ci/validate_binding_schema.sh passes its existing schema, generator and typing consumers using the pinned toolchains; conformance covers unknown variants and tagged failures without success conversion.
+- [ ] #1–3: root workspace invariant passes; no runtime adapter or registry definition was introduced in the DTO boundary.
+
+## Implemented staged boundary
+
+`MetricRecordDto`, `MetricValueDto`, `HistogramPointDto`, `SpanSignalDto`,
+`SpanRecordDto`, `SpanEventDto`, `SpanLinkDto`, and `TraceContextV2Dto` project
+D.12's `v2` models. Checked conversions replay histogram validation, temporal
+validation, correlation constructors and span typestate transitions. Integer
+counts/durations use `DecimalDto`; nonempty attribute projection is deferred
+(ADR-019 amendment: deferred DTO attribute projection); the verified metric
+path uses empty attributes. No scalar histogram is synthesized.
+
+`CanonicalDiagnosticDto`, `CanonicalFailureDto` and `CanonicalWireEnvelope`
+retain the existing schema-version/kind/value/error envelope and add optional
+redacted cause/docs/details. Existing `Diagnostic`, `Failure` and their Rust
+struct literals remain compatible for the independent D.20 boundary.
+
+`Failure`/`WireEnvelope` and `CanonicalFailureDto`/`CanonicalWireEnvelope`
+remain separate concrete wire types because canonical diagnostics carry
+cause/docs/details that retained diagnostics cannot serialize losslessly. They
+must not be Rust aliases. Native error classification and
+canonical-to-stored-diagnostic conversion are shared at the conversion boundary
+so both representations use the same failure category, field and operation
+metadata without changing either JSON contract.
+`TryFrom<&v2::...Error>` matches canonical variants and preserves native
+code/remediation; native source objects remain attached to the borrowed error.
+`decode_canonical_envelope` retains unknown error kinds as `UnknownRemote`.
+
+The canonical schema generator registers these additions. The frozen schema
+and conversion corpus covers maximum-width integer histograms, invalid bounds,
+counts/intervals, unknown signal states, operational failures and span flags.
+TypeScript/Python output is regenerated by the existing generator commands.

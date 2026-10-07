@@ -10,10 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from prepare_log_staged_packages import package_command
-from _log_staging import PRIVATE_PACKAGE, PACKAGES, inspect_archive, sha256, verify_stage
+from _log_staging import PRIVATE_PACKAGE, PACKAGES, extract_verified, inspect_archive, sha256, verify_stage
 from validate_log_staged_consumer import validate_resolution
-from validate_public_api import approval_for
-from _log_release_adaptations import apply_release_adaptations, blob
 from wait_for_registry_version import wait
 from prepare_runtime_level_staged_packages import candidate_workspace_manifest, normalized_lock
 
@@ -95,6 +93,11 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'version'):
             verify_stage(self.root, '1.3.0')
 
+    def test_accepts_qualified_stage_when_workspace_candidate_is_newer(self):
+        # The immutable stage verifies its recorded candidate version; a later
+        # workspace candidate is not allowed to rewrite qualification evidence.
+        verify_stage(self.root, workspace_version='2.0.0')
+
     def test_rejects_changed_source_even_with_updated_manifest(self):
         self.manifest['source_commit'] = 'b' * 40
         self.save()
@@ -105,8 +108,79 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'source commit'):
             verify_stage(self.root, VERSION, 'b' * 40)
 
+    def test_rejects_non_string_source_commit(self):
+        self.manifest['source_commit'] = 5
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'source commit'):
+            verify_stage(self.root, VERSION)
+
+    def test_rejects_non_list_packages(self):
+        self.manifest['packages'] = {}
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            verify_stage(self.root, VERSION)
+
+    def test_rejects_non_object_package(self):
+        self.manifest['packages'][0] = 5
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            verify_stage(self.root, VERSION)
+
+    def test_rejects_missing_package_evidence_fields(self):
+        original = self.manifest['packages'][0].copy()
+        for field in ('archive', 'archive_sha256', 'normalized_manifest', 'manifest_sha256', 'files'):
+            with self.subTest(field=field):
+                self.manifest['packages'][0] = original.copy()
+                self.manifest['packages'][0].pop(field)
+                self.save()
+                with self.assertRaisesRegex(ValueError, f'package field {field}'):
+                    verify_stage(self.root, VERSION)
+
+    def test_rejects_wrong_package_evidence_field_types(self):
+        original = self.manifest['packages'][0].copy()
+        for field, value in (
+            ('archive', 5),
+            ('archive_sha256', 5),
+            ('normalized_manifest', 5),
+            ('manifest_sha256', 5),
+            ('files', []),
+        ):
+            with self.subTest(field=field):
+                self.manifest['packages'][0] = original.copy()
+                self.manifest['packages'][0][field] = value
+                self.save()
+                with self.assertRaisesRegex(ValueError, f'package field {field}'):
+                    verify_stage(self.root, VERSION)
+
+    def test_extract_verified_rejects_malformed_package_evidence(self):
+        evidence = json.loads(json.dumps(self.manifest))
+        evidence['packages'][0].pop('archive')
+        with self.assertRaisesRegex(ValueError, 'package field archive'):
+            extract_verified(self.root, evidence, self.root / 'extracted')
+
+    def test_rejects_missing_or_wrong_package_name_and_version(self):
+        original = self.manifest['packages'][0].copy()
+        for field, value in (('name', None), ('version', 5)):
+            with self.subTest(field=field):
+                self.manifest['packages'][0] = original.copy()
+                if value is None:
+                    self.manifest['packages'][0].pop(field)
+                else:
+                    self.manifest['packages'][0][field] = value
+                self.save()
+                with self.assertRaisesRegex(ValueError, f'package field {field}'):
+                    verify_stage(self.root, VERSION)
+
+    def test_extract_verified_rejects_missing_top_level_packages(self):
+        evidence = json.loads(json.dumps(self.manifest))
+        evidence.pop('packages')
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            extract_verified(self.root, evidence, self.root / 'extracted')
+
     def test_rejects_private_package_leak(self):
-        self.manifest['packages'].append({'name': 'sc-observability-log-consumer-check'})
+        private = self.manifest['packages'][0].copy()
+        private['name'] = PRIVATE_PACKAGE
+        self.manifest['packages'].append(private)
         self.save()
         with self.assertRaisesRegex(ValueError, 'six public'):
             verify_stage(self.root, VERSION)
@@ -159,37 +233,6 @@ class StageTests(unittest.TestCase):
             wait('sc-observability', VERSION, 3, 0)
             self.assertEqual(probe.call_count, 2)
 
-    def test_release_adaptation_rejects_unrelated_manifest_and_license_edits(self):
-        import hashlib
-        root = self.root / 'release'
-        root.mkdir()
-        (root / 'LICENSE').write_bytes(b'MIT license bytes')
-        expected, flags, licenses = {}, {}, {}
-        for name in PACKAGES:
-            directory = root / 'crates' / name
-            directory.mkdir(parents=True)
-            (directory / 'LICENSE').write_bytes((root / 'LICENSE').read_bytes())
-            licenses[f'crates/{name}/LICENSE'] = blob((root / 'LICENSE').read_bytes())
-        for name in ('sc-observability-log', 'sc-observability-log-macros'):
-            relative = f'crates/{name}/Cargo.toml'
-            before = f'[package]\nname = "{name}"\npublish = false\n'.encode()
-            after = before.replace(b'false', b'true')
-            (root / relative).write_bytes(after)
-            expected[relative] = blob(before)
-            flags[relative] = {'before_blob': blob(before), 'after_blob': blob(after)}
-        record = root / 'record.json'
-        record.write_text(json.dumps({'schema_version': 1, 'candidate_version': VERSION, 'root_license_sha256': hashlib.sha256((root / 'LICENSE').read_bytes()).hexdigest(), 'license_copies': licenses, 'publish_flags': flags}))
-        apply_release_adaptations(expected, root, record)
-        changed = root / 'crates/sc-observability-log/Cargo.toml'
-        original = changed.read_bytes()
-        changed.write_bytes(original + b'description = "unrelated edit"\n')
-        with self.assertRaisesRegex(ValueError, 'exceeds'):
-            apply_release_adaptations(expected, root, record)
-        changed.write_bytes(original)
-        (root / 'crates/sc-observability-log/LICENSE').write_bytes(b'wrong license')
-        with self.assertRaisesRegex(ValueError, 'license copy'):
-            apply_release_adaptations(expected, root, record)
-
     def test_historical_staging_derives_current_workspace_version(self):
         import tomllib
         for baseline in ('1.2.0', '1.4.0', '2.7.9'):
@@ -203,20 +246,6 @@ class StageTests(unittest.TestCase):
             normalized = tomllib.loads(normalized_lock(lock, '1.3.0').decode())['package']
             self.assertEqual(normalized[0]['version'], '1.3.0')
             self.assertEqual(normalized[1]['version'], baseline)
-
-    def test_unrelated_or_pending_approval_is_not_a_waiver(self):
-        directory = self.root / 'approvals'
-        directory.mkdir()
-        record = {'schema_version': 1, 'candidate_version': VERSION, 'crates': {PACKAGES[0]: {'status': 'approved', 'reviewer': 'reviewer', 'evidence': 'review-report', 'scope': ['public-api'], 'api_sha256': 'a' * 64}}}
-        (directory / 'scoped.json').write_text(json.dumps(record))
-        self.assertTrue(approval_for(PACKAGES[0], VERSION, directory, 'a' * 64))
-        self.assertFalse(approval_for(PACKAGES[1], VERSION, directory, 'a' * 64))
-        self.assertFalse(approval_for(PACKAGES[0], '1.3.0', directory, 'a' * 64))
-        self.assertFalse(approval_for(PACKAGES[0], VERSION, directory, 'b' * 64))
-        record['crates'][PACKAGES[0]]['status'] = 'pending'
-        (directory / 'scoped.json').write_text(json.dumps(record))
-        self.assertFalse(approval_for(PACKAGES[0], VERSION, directory, 'a' * 64))
-
 
 if __name__ == '__main__':
     unittest.main()

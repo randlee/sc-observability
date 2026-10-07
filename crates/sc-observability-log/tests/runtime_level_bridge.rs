@@ -1,5 +1,7 @@
 //! B.P3 direct-path and shared-core runtime-level fixture.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

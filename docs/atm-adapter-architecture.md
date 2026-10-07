@@ -6,7 +6,7 @@
 - [`architecture.md`](./architecture.md)
 - [`requirements.md`](./requirements.md)
 - [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
-- [`atm-adapter-example.md`](./atm-adapter-example.md)
+- [`migration/phase-f.md`](./migration/phase-f.md)
 
 ## 1. Purpose
 
@@ -104,7 +104,7 @@ This preserves the intended split:
 
 ATM OTLP export uses the shared top-of-stack OTLP layer:
 
-1. ATM constructs `TelemetryConfig` through ATM-owned env/config translation
+1. ATM constructs `sc_observability_otlp::v2::TelemetryConfig` through ATM-owned env/config translation
 2. ATM adapter composes `sc-observability-otlp` with `sc-observe`
 3. OTLP behavior attaches through projector registration with
    `ObservabilityBuilder`

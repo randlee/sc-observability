@@ -12,7 +12,7 @@ def validate(stage: Path, directory: Path, version: str, source: str) -> None:
     archives = {item['name']: item['archive_sha256'] for item in manifest['packages']}
     for platform in PLATFORMS:
         result_path = directory / f'{platform}.json'
-        result = json.loads(result_path.read_text())
+        result = json.loads(result_path.read_text(encoding="utf-8"))
         if (result.get('status') != 'passed' or result.get('platform') != platform
                 or result.get('candidate_version') != version or result.get('source_commit') != source
                 or result.get('stage_manifest_sha256') != sha256(stage / 'stage-manifest.json')

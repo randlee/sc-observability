@@ -1,4 +1,5 @@
 //! B.6 real embedded writer holds: only this executable owns test controls.
+use crate::installed_package_root;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use sc_observability_binding_runtime::{HostLoggingBackend, Operation, ProducerOrigin};
@@ -119,7 +120,7 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
                 Some(Arc::new(backend))
             }
             "bridge" => {
-                let guard = sc_observability_log::init(
+                let guard = sc_observability_log::v2::init(
                     config,
                     sc_observability_log::BridgeOptions {
                         default_action: sc_observability_types::ActionName::new("async.host")
@@ -128,7 +129,7 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
                     },
                 )
                 .map_err(failure)?;
-                let backend = sc_observability_binding_runtime::bridge_backend(guard.control())
+                let backend = sc_observability_binding_runtime::bridge_backend_v2(guard.control())
                     .map_err(failure)?;
                 bridge_owner = Some(guard);
                 Some(Arc::new(backend))
@@ -184,7 +185,7 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
                 .map_err(failure)?;
         }
         if let Some(guard) = bridge_owner {
-            py.detach(move || guard.shutdown(Duration::from_secs(5)))
+            py.detach(move || guard.shutdown_with_timeout(Duration::from_secs(5)))
                 .map_err(failure)?;
         }
         result?;
@@ -214,7 +215,7 @@ pub fn finalize(mode: &str) -> Result<(), String> {
     let mut core_owner = None;
     let mut bridge_owner = None;
     let backend: Arc<dyn HostLoggingBackend> = if mode == "bridge" {
-        let guard = sc_observability_log::init(
+        let guard = sc_observability_log::v2::init(
             config,
             sc_observability_log::BridgeOptions {
                 default_action: sc_observability_types::ActionName::new("finalize.host")
@@ -223,7 +224,7 @@ pub fn finalize(mode: &str) -> Result<(), String> {
             },
         )
         .map_err(|e| format!("{e:?}"))?;
-        let backend = sc_observability_binding_runtime::bridge_backend(guard.control())
+        let backend = sc_observability_binding_runtime::bridge_backend_v2(guard.control())
             .map_err(|e| format!("{e:?}"))?;
         bridge_owner = Some(guard);
         Arc::new(backend)
@@ -255,10 +256,9 @@ pub fn finalize(mode: &str) -> Result<(), String> {
                 sys.getattr("modules")?
                     .cast_into::<PyDict>()?
                     .set_item("sc_observability._native", module)?;
-                let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../bindings/python/sc-observability-py/python");
+                let package_root = installed_package_root()?;
                 sys.getattr("path")?
-                    .call_method1("insert", (0, source.to_string_lossy().as_ref()))?;
+                    .call_method1("insert", (0, package_root.to_string_lossy().as_ref()))?;
                 py.run(c"import asyncio\nfrom sc_observability import Ok,LogEvent,get_host_logger\nfrom sc_observability.async_logging import _pools\nlogger=get_host_logger().value\nreceipt=logger.submit(LogEvent(level='info',target='finalize.host',action='held'))\nassert isinstance(receipt,Ok)\nloop=asyncio.new_event_loop()\nwait=logger.flush_async(60000)\nloop.call_soon(wait.send,None)\nloop.run_until_complete(asyncio.sleep(0))\nassert len(_pools[logger._native.observer_key()].observers)==1\nloop.close()", None, None)
             };
             action().map_err(|error| error.to_string())
@@ -289,7 +289,7 @@ pub fn finalize(mode: &str) -> Result<(), String> {
     }
     if let Some(guard) = bridge_owner {
         guard
-            .shutdown(Duration::from_secs(5))
+            .shutdown_with_timeout(Duration::from_secs(5))
             .map_err(|e| format!("{e:?}"))?;
     }
     python_result?;

@@ -7,25 +7,12 @@
 //! remains a directly serializable data contract, so consumers never parse a
 //! display string.
 
+use sc_observability_types::v2::FailureClassification;
+use sc_observability_types::{ErrorCode, ErrorContext, Remediation};
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use sc_observability_types::{DiagnosticInfo, ErrorCode, LevelFilter, Remediation};
-use serde::{Deserialize, Serialize};
-
 use crate::error_codes;
-
-/// Projects a core diagnostic without retaining its opaque source error.
-pub(crate) fn diagnostic_from_info(
-    source: &impl DiagnosticInfo,
-) -> sc_observability_types::OperationDiagnostic {
-    let diagnostic = source.diagnostic();
-    sc_observability_types::OperationDiagnostic {
-        code: diagnostic.code.clone(),
-        message: diagnostic.message.clone(),
-        remediation: diagnostic.remediation.clone(),
-        at: diagnostic.timestamp,
-    }
-}
 
 /// Lifecycle projection used by the reviewed B.P3 direct/control contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +49,7 @@ pub enum FieldKeyError {
 /// Typed direct-admission failure; each path has already recorded exactly one drop cause.
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum EmitError {
     /// A producer field cannot be represented safely.
     #[error("invalid field {raw_key:?}: {reason}")]
@@ -107,6 +95,9 @@ pub enum EmitError {
     /// A logger callback panic was contained.
     #[error("logger callback panicked")]
     Panicked,
+    /// The saved attachment no longer occupies the bridge slot.
+    #[error("logger attachment is not installed")]
+    NotInstalled,
 }
 
 /// Failure of a read-only control operation.
@@ -202,6 +193,7 @@ impl EmitError {
     #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
+            Self::NotInstalled => error_codes::SC_LOG_DETACH_NOT_INSTALLED,
             Self::InvalidField { .. } => error_codes::SC_OBSERVABILITY_LOG_INVALID_FIELD,
             Self::InvalidEvent { diagnostic }
             | Self::QueueFull { diagnostic }
@@ -217,6 +209,13 @@ impl EmitError {
     #[must_use]
     pub fn remediation(&self) -> Remediation {
         match self {
+            Self::NotInstalled => Remediation::recoverable(
+                "the saved attachment no longer occupies the bridge slot",
+                [
+                    "discard the stale control",
+                    "obtain a control from the current attachment",
+                ],
+            ),
             Self::InvalidEvent { diagnostic }
             | Self::QueueFull { diagnostic }
             | Self::WriterDegraded { diagnostic }
@@ -293,237 +292,86 @@ impl WaitError {
     }
 }
 
-/// Error returned by [`init`](crate::init).
-#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
-pub enum InitError {
-    /// The bridge is already installed (or being installed) in this process.
-    #[error("sc-observability-log is already initialized in this process")]
-    AlreadyInitialized,
-    /// Another `log::Log` implementation owns the `log` facade.
-    #[error("another log::Log implementation is already installed")]
-    ForeignLoggerInstalled,
-    /// The requested baseline cannot be represented by the executable's
-    /// compile-time `log` cap. This is rejected before global installation.
-    #[error("configured level {configured:?} exceeds available static level {available:?}")]
-    UnsupportedLevel {
-        /// Requested configured baseline.
-        configured: LevelFilter,
-        /// Most verbose facade level compiled into this executable.
-        available: LevelFilter,
-    },
-    /// `ProcessIdentityPolicy::Resolver` failed, or `Auto` could not resolve a non-empty hostname.
-    #[error("process identity resolution failed: {diagnostic}")]
-    IdentityResolution {
-        /// Stable diagnostic projected from the resolver failure.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
-    /// `sc_observability::Logger::new` failed.
-    #[error("sc-observability logger construction failed: {diagnostic}")]
-    Logger {
-        /// Stable diagnostic projected from the core construction failure.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
-    /// Required lifecycle coordination could not be reserved before facade installation.
-    #[error("could not start bridge lifecycle coordination: {diagnostic}")]
-    RuntimeStart {
-        /// Stable startup diagnostic without an opaque helper source.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
+/// Canonical operation errors used by the public bridge API.
+pub(crate) use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
+
+/// Build the original operation context carried by the canonical error families.
+pub(crate) fn operation_context(
+    code: ErrorCode,
+    message: impl Into<String>,
+    remediation: Remediation,
+) -> Box<ErrorContext> {
+    Box::new(ErrorContext::new(code, message, remediation))
 }
 
-/// Error returned by [`LogGuard::flush`](crate::LogGuard::flush) and [`LogControl::flush`](crate::LogControl::flush).
-#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
-pub enum FlushError {
-    /// The writer did not acknowledge the flush within `timeout`.
-    #[error("flush did not complete within {timeout:?}")]
-    TimedOut {
-        /// The timeout that elapsed.
-        timeout: Duration,
-    },
-    /// A sink flush failed or the writer disconnected.
-    #[error("sc-observability flush failed: {diagnostic}")]
-    Logger {
-        /// Stable diagnostic projected from the core flush failure.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
-    /// The flush helper thread could not be started.
-    #[error("could not start the flush helper thread: {diagnostic}")]
-    HelperSpawn {
-        /// Stable diagnostic for the helper-start failure.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
-    /// The flush helper thread ended without a result.
-    #[error("the flush helper thread ended without a result: {diagnostic}")]
-    HelperLost {
-        /// Stable diagnostic for the missing helper result.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
-    /// A previous flush helper is still running (possibly detached after its caller's
-    /// timeout); no new helper was started and nothing new was flushed.
-    #[error("a previous flush is still running; no new flush was started")]
-    InProgress,
-    /// The owner has stopped accepting flush requests.
-    #[error("the logger is not running: {phase:?}")]
-    NotRunning {
-        /// The lifecycle phase observed when the flush was requested.
-        phase: LifecyclePhase,
-    },
+pub(crate) fn operation_context_with_source<E>(
+    code: ErrorCode,
+    message: impl Into<String>,
+    remediation: Remediation,
+    source: E,
+) -> Box<ErrorContext>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    Box::new(ErrorContext::new(code, message, remediation).source(Box::new(source)))
 }
 
-/// Error returned by [`LogGuard::shutdown`](crate::LogGuard::shutdown).
-#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
-pub enum ShutdownError {
-    /// Sole ownership, final flush and writer join did not finish within `timeout`.
-    #[error("shutdown did not complete within {timeout:?}")]
-    TimedOut {
-        /// The timeout that elapsed.
-        timeout: Duration,
-    },
-    /// The final flush failed; the logger was still shut down.
-    #[error("final flush failed; the logger was still shut down: {diagnostic}")]
-    FinalFlush {
-        /// Stable diagnostic projected from the final core flush failure.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
-    /// The shutdown helper thread could not be started.
-    #[error("could not start the shutdown helper thread: {diagnostic}")]
-    HelperSpawn {
-        /// Stable diagnostic for the coordinator-send failure.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
-    /// The shutdown helper thread ended without a result.
-    #[error("the shutdown helper thread ended without a result: {diagnostic}")]
-    HelperLost {
-        /// Stable diagnostic for the missing coordinator result.
-        diagnostic: sc_observability_types::OperationDiagnostic,
-    },
-}
-
-impl InitError {
-    /// Stable code per variant; wrapped sc-observability errors return their own code.
-    #[must_use]
-    pub fn code(&self) -> ErrorCode {
-        match self {
-            Self::AlreadyInitialized => error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED,
-            Self::ForeignLoggerInstalled => {
-                error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED
-            }
-            Self::UnsupportedLevel { .. } => error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL,
-            Self::IdentityResolution { diagnostic } | Self::Logger { diagnostic } => {
-                diagnostic.code.clone()
-            }
-            Self::RuntimeStart { .. } => error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED,
-        }
-    }
-
-    /// Mandatory remediation per variant; wrapped errors return their own remediation.
-    #[must_use]
-    pub fn remediation(&self) -> Remediation {
-        match self {
-            Self::AlreadyInitialized => Remediation::not_recoverable(
-                "the log facade logger cannot be replaced; keep the first LogGuard",
-            ),
-            Self::ForeignLoggerInstalled => {
-                Remediation::not_recoverable("choose one application logger before startup")
-            }
-            Self::UnsupportedLevel { .. } => Remediation::not_recoverable(
-                "rebuild without the static cap or choose a supported startup baseline",
-            ),
-            Self::IdentityResolution { diagnostic } | Self::Logger { diagnostic } => {
-                diagnostic.remediation.clone()
-            }
-            Self::RuntimeStart { .. } => Remediation::recoverable(
-                "inspect thread and resource availability, then retry initialization explicitly",
-                std::iter::empty::<String>(),
-            ),
-        }
+pub(crate) fn init_configuration(
+    code: ErrorCode,
+    message: impl Into<String>,
+    remediation: Remediation,
+) -> InitError {
+    InitError::Configuration {
+        context: operation_context(code, message, remediation),
     }
 }
 
-impl FlushError {
-    /// Stable code per variant; wrapped sc-observability errors return their own code.
-    #[must_use]
-    pub fn code(&self) -> ErrorCode {
-        match self {
-            Self::TimedOut { .. } => error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT,
-            Self::Logger { diagnostic } => diagnostic.code.clone(),
-            Self::HelperSpawn { .. } => error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
-            Self::HelperLost { .. } => error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-            Self::NotRunning { .. } => error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING,
-            Self::InProgress => error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS,
-        }
-    }
-
-    /// Mandatory remediation per variant; wrapped errors return their own remediation.
-    #[must_use]
-    pub fn remediation(&self) -> Remediation {
-        match self {
-            Self::TimedOut { .. } => Remediation::recoverable(
-                "retry the flush later or raise the timeout",
-                ["a shutdown before the detached flush returns reports ShutdownError::TimedOut"],
-            ),
-            Self::Logger { diagnostic } => diagnostic.remediation.clone(),
-            Self::HelperSpawn { .. } => Remediation::not_recoverable(
-                "inspect resource availability and retained logger health; completion is unconfirmed",
-            ),
-            Self::HelperLost { .. } => Remediation::not_recoverable(
-                "inspect retained lifecycle and health; do not claim worker completion",
-            ),
-            Self::NotRunning { .. } => Remediation::not_recoverable(
-                "the lifecycle owner has shut the logger down; the final shutdown flushed what was queued",
-            ),
-            Self::InProgress => Remediation::recoverable(
-                "wait for the previous flush to finish, then retry",
-                ["wait for the in-flight flush before making an explicit new request"],
-            ),
-        }
+pub(crate) fn init_runtime(
+    code: ErrorCode,
+    message: impl Into<String>,
+    remediation: Remediation,
+) -> InitError {
+    InitError::Runtime {
+        context: operation_context(code, message, remediation),
     }
 }
 
-impl ShutdownError {
-    /// Stable code per variant; wrapped sc-observability errors return their own code.
-    #[must_use]
-    pub fn code(&self) -> ErrorCode {
-        match self {
-            Self::TimedOut { .. } => error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT,
-            Self::FinalFlush { diagnostic } => diagnostic.code.clone(),
-            Self::HelperSpawn { .. } => error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
-            Self::HelperLost { .. } => error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-        }
-    }
+pub(crate) fn flush_drain(context: Box<ErrorContext>) -> FlushError {
+    FlushError::Drain { context }
+}
 
-    /// Mandatory remediation per variant; wrapped errors return their own remediation.
-    #[must_use]
-    pub fn remediation(&self) -> Remediation {
-        match self {
-            Self::TimedOut { .. } => Remediation::recoverable(
-                "use control.wait_stopped to observe the original shutdown",
-                std::iter::empty::<String>(),
-            ),
-            Self::FinalFlush { diagnostic } => diagnostic.remediation.clone(),
-            Self::HelperSpawn { .. } => Remediation::not_recoverable(
-                "inspect resource availability and logger health; completion is unconfirmed",
-            ),
-            Self::HelperLost { .. } => Remediation::not_recoverable(
-                "inspect saved lifecycle and health; do not claim worker completion",
-            ),
-        }
-    }
+pub(crate) fn flush_drain_as(
+    context: Box<ErrorContext>,
+    classification: FailureClassification,
+) -> FlushError {
+    FlushError::classified_drain(context, classification)
+}
+
+pub(crate) fn shutdown_timeout(context: Box<ErrorContext>) -> ShutdownError {
+    ShutdownError::Timeout { context }
+}
+
+pub(crate) fn shutdown_drain(context: Box<ErrorContext>) -> ShutdownError {
+    ShutdownError::Drain { context }
+}
+
+pub(crate) fn shutdown_drain_as(
+    context: Box<ErrorContext>,
+    classification: FailureClassification,
+) -> ShutdownError {
+    ShutdownError::classified_drain(context, classification)
 }
 
 /// Why an event was dropped on the non-blocking emit path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DropCause {
-    /// `TryLogError::QueueFull`: the bounded writer queue was full.
+    /// The bounded writer queue was full.
     QueueFull,
-    /// `TryLogError::InvalidEvent`, or a runtime label or field key failing the sanitizer.
+    /// An invalid event or a runtime label/field key failing the sanitizer.
     InvalidEvent,
-    /// `TryLogError::WriterDegraded`: the writer thread is degraded.
+    /// The writer thread is degraded.
     WriterDegraded,
-    /// `TryLogError::ShutdownTimedOut`: the logger exceeded its shutdown threshold.
+    /// The logger exceeded its shutdown threshold.
     ShutdownTimedOut,
     /// No logger was installed (after shutdown took it), or a structured submission after shutdown.
     NotInstalled,
@@ -550,16 +398,6 @@ impl DropCause {
 mod tests {
     use super::*;
 
-    fn assert_non_empty(remediation: &Remediation) {
-        match remediation {
-            Remediation::Recoverable { steps } => {
-                assert!(!steps.steps().is_empty());
-                assert!(steps.steps().iter().all(|step| !step.is_empty()));
-            }
-            Remediation::NotRecoverable { justification } => assert!(!justification.is_empty()),
-        }
-    }
-
     fn projected(code: &'static str) -> sc_observability_types::OperationDiagnostic {
         sc_observability_types::OperationDiagnostic {
             code: ErrorCode::new_static(code),
@@ -569,126 +407,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn init_error_codes_and_remediations() {
-        let cases = [
-            (
-                InitError::AlreadyInitialized,
-                error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED,
-            ),
-            (
-                InitError::ForeignLoggerInstalled,
-                error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED,
-            ),
-            (
-                InitError::IdentityResolution {
-                    diagnostic: projected("SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED"),
-                },
-                error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED,
-            ),
-            (
-                InitError::Logger {
-                    diagnostic: projected("SC_OBSERVABILITY_LOGGER_INIT_FAILED"),
-                },
-                ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_INIT_FAILED"),
-            ),
-        ];
-        for (error, code) in cases {
-            assert_eq!(error.code(), code);
-            assert_non_empty(&error.remediation());
-        }
-        let wrapped = InitError::Logger {
-            diagnostic: projected("W"),
-        };
-        assert_eq!(
-            wrapped.remediation(),
-            Remediation::recoverable("follow the diagnostic", ["then retry"])
-        );
-        let identity = InitError::IdentityResolution {
-            diagnostic: projected("I"),
-        };
-        assert_eq!(identity.code(), ErrorCode::new_static("I"));
-        assert_eq!(
-            identity.remediation(),
-            Remediation::recoverable("follow the diagnostic", ["then retry"])
-        );
-    }
-
-    #[test]
-    fn flush_error_codes_and_remediations() {
-        let cases = [
-            (
-                FlushError::TimedOut {
-                    timeout: Duration::from_millis(5),
-                },
-                error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT,
-            ),
-            (
-                FlushError::Logger {
-                    diagnostic: projected("SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"),
-                },
-                ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"),
-            ),
-            (
-                FlushError::HelperSpawn {
-                    diagnostic: projected("SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED"),
-                },
-                error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
-            ),
-            (
-                FlushError::HelperLost {
-                    diagnostic: projected("SC_OBSERVABILITY_LOG_HELPER_LOST"),
-                },
-                error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-            ),
-            (
-                FlushError::NotRunning {
-                    phase: LifecyclePhase::Stopped,
-                },
-                error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING,
-            ),
-            (
-                FlushError::InProgress,
-                error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS,
-            ),
-        ];
-        for (error, code) in cases {
-            assert_eq!(error.code(), code);
-            assert_non_empty(&error.remediation());
-        }
-    }
-
-    #[test]
-    fn shutdown_error_codes_and_remediations() {
-        let cases = [
-            (
-                ShutdownError::TimedOut {
-                    timeout: Duration::from_millis(5),
-                },
-                error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT,
-            ),
-            (
-                ShutdownError::FinalFlush {
-                    diagnostic: projected("SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"),
-                },
-                ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"),
-            ),
-            (
-                ShutdownError::HelperSpawn {
-                    diagnostic: projected("SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED"),
-                },
-                error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
-            ),
-            (
-                ShutdownError::HelperLost {
-                    diagnostic: projected("SC_OBSERVABILITY_LOG_HELPER_LOST"),
-                },
-                error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
-            ),
-        ];
-        for (error, code) in cases {
-            assert_eq!(error.code(), code);
-            assert_non_empty(&error.remediation());
+    fn assert_non_empty(remediation: &Remediation) {
+        match remediation {
+            Remediation::Recoverable { steps } => {
+                assert!(!steps.steps().is_empty());
+                assert!(steps.steps().iter().all(|step| !step.is_empty()));
+            }
+            Remediation::NotRecoverable { justification } => assert!(!justification.is_empty()),
         }
     }
 
@@ -727,187 +452,132 @@ mod tests {
     }
 
     #[test]
-    #[allow(
-        clippy::too_many_lines,
-        reason = "the target contract requires this one exhaustive, auditable variant fixture"
-    )]
-    fn every_native_operation_error_variant_is_data_only_and_round_trips() {
-        let diagnostic = || projected("SC_OBSERVABILITY_LOG_NATIVE_DIAGNOSTIC");
-
-        assert_operation_contract!(
-            InitError::AlreadyInitialized,
-            error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED
+    fn canonical_operation_errors_preserve_context_source_and_codes() {
+        let context = ErrorContext::new(
+            ErrorCode::new_static("SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT"),
+            "flush deadline elapsed",
+            Remediation::recoverable("retry explicitly", ["check writer health"]),
+        )
+        .source(Box::new(std::io::Error::other("native flush source")));
+        let flush = FlushError::Drain {
+            context: Box::new(context),
+        };
+        assert_eq!(
+            flush.diagnostic().code.as_str(),
+            "SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT"
         );
-        assert_operation_contract!(
-            InitError::ForeignLoggerInstalled,
-            error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED
+        assert_eq!(
+            std::error::Error::source(&flush).unwrap().to_string(),
+            "native flush source"
         );
-        assert_operation_contract!(
-            InitError::UnsupportedLevel {
-                configured: LevelFilter::Trace,
-                available: LevelFilter::Info,
-            },
+        assert!(
+            std::error::Error::source(&flush)
+                .unwrap()
+                .downcast_ref::<std::io::Error>()
+                .is_some()
+        );
+        let init = init_configuration(
+            error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL,
+            "configured baseline exceeds static level cap",
+            Remediation::not_recoverable("choose an executable-supported baseline"),
+        );
+        assert_eq!(
+            init.diagnostic().code,
             error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL
         );
-        assert_operation_contract!(
-            InitError::IdentityResolution {
-                diagnostic: diagnostic(),
-            },
-            ErrorCode::new_static("SC_OBSERVABILITY_LOG_NATIVE_DIAGNOSTIC")
-        );
-        assert_operation_contract!(
-            InitError::Logger {
-                diagnostic: diagnostic(),
-            },
-            ErrorCode::new_static("SC_OBSERVABILITY_LOG_NATIVE_DIAGNOSTIC")
-        );
-        assert_operation_contract!(
-            InitError::RuntimeStart {
-                diagnostic: diagnostic(),
-            },
-            error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED
-        );
-
-        assert_operation_contract!(
-            FlushError::TimedOut {
-                timeout: Duration::from_millis(1),
-            },
-            error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT
-        );
-        assert_operation_contract!(
-            FlushError::Logger {
-                diagnostic: diagnostic(),
-            },
-            ErrorCode::new_static("SC_OBSERVABILITY_LOG_NATIVE_DIAGNOSTIC")
-        );
-        assert_operation_contract!(
-            FlushError::HelperSpawn {
-                diagnostic: diagnostic(),
-            },
-            error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED
-        );
-        assert_operation_contract!(
-            FlushError::HelperLost {
-                diagnostic: diagnostic(),
-            },
-            error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST
-        );
-        assert_operation_contract!(
-            FlushError::InProgress,
-            error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
-        );
-        assert_operation_contract!(
-            FlushError::NotRunning {
-                phase: LifecyclePhase::Stopped,
-            },
-            error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING
-        );
-
-        assert_operation_contract!(
-            ShutdownError::TimedOut {
-                timeout: Duration::from_millis(1),
-            },
+        let shutdown = shutdown_timeout(operation_context(
+            error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT,
+            "shutdown deadline elapsed",
+            Remediation::recoverable("observe the existing shutdown", ["wait again"]),
+        ));
+        assert_eq!(
+            shutdown.diagnostic().code,
             error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT
         );
-        assert_operation_contract!(
-            ShutdownError::FinalFlush {
-                diagnostic: diagnostic(),
-            },
-            ErrorCode::new_static("SC_OBSERVABILITY_LOG_NATIVE_DIAGNOSTIC")
-        );
-        assert_operation_contract!(
-            ShutdownError::HelperSpawn {
-                diagnostic: diagnostic(),
-            },
-            error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED
-        );
-        assert_operation_contract!(
-            ShutdownError::HelperLost {
-                diagnostic: diagnostic(),
-            },
-            error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST
-        );
+    }
 
+    #[test]
+    fn stale_attachment_errors_are_typed_and_round_trip() {
         assert_operation_contract!(
-            EmitError::InvalidField {
-                raw_key: "invalid".to_owned(),
-                reason: FieldKeyError::Collision {
-                    other_raw_key: "other".to_owned(),
-                },
-            },
-            error_codes::SC_OBSERVABILITY_LOG_INVALID_FIELD
+            EmitError::NotInstalled,
+            error_codes::SC_LOG_DETACH_NOT_INSTALLED
         );
-        for error in [
+        let flush = FlushError::Drain {
+            context: operation_context(
+                error_codes::SC_LOG_DETACH_NOT_INSTALLED,
+                "logger attachment is not installed",
+                Remediation::not_recoverable("install or attach a logger before flushing"),
+            ),
+        };
+        assert_eq!(
+            flush.diagnostic().code,
+            error_codes::SC_LOG_DETACH_NOT_INSTALLED
+        );
+    }
+
+    #[test]
+    fn remaining_facade_errors_keep_their_diagnostic_contracts() {
+        let native = || projected("SC_OBSERVABILITY_LOG_NATIVE_DIAGNOSTIC");
+        let errors = [
+            EmitError::InvalidField {
+                raw_key: "bad".to_owned(),
+                reason: FieldKeyError::Empty,
+            },
             EmitError::InvalidEvent {
-                diagnostic: diagnostic(),
+                diagnostic: native(),
             },
             EmitError::QueueFull {
-                diagnostic: diagnostic(),
+                diagnostic: native(),
             },
             EmitError::WriterDegraded {
-                diagnostic: diagnostic(),
+                diagnostic: native(),
             },
             EmitError::ShutdownTimedOut {
-                diagnostic: diagnostic(),
+                diagnostic: native(),
             },
-        ] {
-            assert_eq!(
-                error.code(),
-                ErrorCode::new_static("SC_OBSERVABILITY_LOG_NATIVE_DIAGNOSTIC")
-            );
-            assert_non_empty(&error.remediation());
-            assert_native_error_contract(&error);
-        }
-        assert_operation_contract!(
             EmitError::NotRunning {
                 phase: LifecyclePhase::Stopped,
             },
-            error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING
-        );
-        assert_operation_contract!(
             EmitError::Reentrant,
-            error_codes::SC_OBSERVABILITY_LOG_REENTRANT_EMIT
-        );
-        assert_operation_contract!(
             EmitError::Panicked,
-            error_codes::SC_OBSERVABILITY_LOG_LOGGER_PANICKED
-        );
+        ];
+        for error in errors {
+            assert!(!error.code().as_str().is_empty());
+            assert_non_empty(&error.remediation());
+            assert_native_error_contract(&error);
+        }
 
-        assert_operation_contract!(
+        let control_errors = [
             ControlError::NotRunning {
                 phase: LifecyclePhase::Stopped,
             },
-            error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING
-        );
-        assert_operation_contract!(
             ControlError::Query {
-                diagnostic: diagnostic(),
+                diagnostic: native(),
             },
-            ErrorCode::new_static("SC_OBSERVABILITY_LOG_NATIVE_DIAGNOSTIC")
-        );
-        assert_operation_contract!(
             ControlError::Unavailable {
-                diagnostic: diagnostic(),
+                diagnostic: native(),
             },
-            error_codes::SC_OBSERVABILITY_LOG_STATUS_UNAVAILABLE
-        );
+        ];
+        for error in control_errors {
+            assert!(!error.code().as_str().is_empty());
+            assert_non_empty(&error.remediation());
+            assert_native_error_contract(&error);
+        }
 
-        assert_operation_contract!(
+        let wait_errors = [
             WaitError::NotStarted,
-            error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_NOT_STARTED
-        );
-        assert_operation_contract!(
             WaitError::TimedOut {
                 timeout: Duration::from_millis(1),
             },
-            error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT
-        );
-        assert_operation_contract!(
             WaitError::Unavailable {
-                diagnostic: diagnostic(),
+                diagnostic: native(),
             },
-            error_codes::SC_OBSERVABILITY_LOG_STATUS_UNAVAILABLE
-        );
+        ];
+        for error in wait_errors {
+            assert!(!error.code().as_str().is_empty());
+            assert_non_empty(&error.remediation());
+            assert_native_error_contract(&error);
+        }
     }
 
     #[test]

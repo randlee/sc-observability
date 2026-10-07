@@ -1,55 +1,108 @@
 agents:
   quality-mgr:
-    version: 0.1.0
+    version: 0.3.1
     path: .claude/agents/quality-mgr.md
-  rust-architect:
-    version: 1.0.0
-    path: .claude/agents/rust-architect.md
-  rust-code-reviewer:
-    version: 1.0.0
-    path: .claude/agents/rust-code-reviewer.md
-  rust-code-explorer:
-    version: 1.0.0
-    path: .claude/agents/rust-code-explorer.md
-  rust-developer:
-    version: 1.0.0
-    path: .claude/agents/rust-developer.md
-  rust-qa-agent:
-    version: 0.11.0
-    path: .claude/agents/rust-qa-agent.md
   req-qa:
-    version: 0.2.0
+    version: 0.3.0
     path: .claude/agents/req-qa.md
   arch-qa:
-    version: 0.1.0
+    version: 0.2.0
     path: .claude/agents/arch-qa.md
   flaky-test-qa:
     version: 0.1.0
     path: .claude/agents/flaky-test-qa.md
-  test-stability-auditor:
-    version: 1.0.0
-    path: .claude/agents/test-stability-auditor.md
   ruthless-boundary-qa:
-    version: 0.1.0
+    version: 0.2.0
     path: .claude/agents/ruthless-boundary-qa.md
+  schema-reviewer:
+    version: 1.0.0
+    path: .claude/agents/schema-reviewer.md
+  plan-scope-reviewer:
+    version: 0.4.1
+    path: .claude/agents/plan-scope-reviewer.md
+  critical-plan-reviewer:
+    version: 0.2.1
+    path: .claude/agents/critical-plan-reviewer.md
+  ceremony-qa:
+    version: 0.1.0
+    path: .claude/agents/ceremony-qa.md
+  ceremony-finding-screen:
+    version: 0.1.0
+    path: .claude/agents/ceremony-finding-screen.md
+  rust-architect:
+    version: 0.12.0
+    path: .claude/agents/rust-architect.md
+  rust-code-reviewer:
+    version: 0.12.1
+    path: .claude/agents/rust-code-reviewer.md
+  rust-code-explorer:
+    version: 0.12.0
+    path: .claude/agents/rust-code-explorer.md
+  rust-developer:
+    version: 0.12.0
+    path: .claude/agents/rust-developer.md
+  rust-qa-agent:
+    version: 0.11.0
+    path: .claude/agents/rust-qa-agent.md
   rust-best-practices-agent:
     version: 0.11.0
     path: .claude/agents/rust-best-practices-agent.md
   rust-service-hardening-agent:
-    version: 0.11.0
+    version: 0.12.1
     path: .claude/agents/rust-service-hardening-agent.md
-  plan-scope-reviewer:
-    version: 0.1.0
-    path: .claude/agents/plan-scope-reviewer.md
-  critical-plan-reviewer:
-    version: 0.1.0
-    path: .claude/agents/critical-plan-reviewer.md
+  dev-sanity-llm:
+    version: 0.7.2
+    path: .claude/agents/dev-sanity-llm.md
+  sc-sanity-llm:
+    version: 0.4.0
+    path: .claude/agents/sc-sanity-llm.md
+  dev-sanity-jev:
+    version: 0.4.0
+    path: .claude/agents/dev-sanity-jev.md
+  sc-sanity-jev:
+    version: 0.3.0
+    path: .claude/agents/sc-sanity-jev.md
+
+# Role -> ATM member. Skills name the role; the member's startup prompt in
+# .atm.toml names the directive it runs. Member names are team-unique
+# because Herdr agent names are global on the host.
+roles:
+  lead: team-lead
+  dev-sanity: obs-sanity
+  quality-mgr: quality-mgr
+
+# atm-bd-orchestration install configuration (rendered to .claude/project/atm-bd-orchestration.yaml).
+bead_prefix: obs
+worktree_base: ../sc-observability-worktrees
+test_command: just test
+lint_command: just lint
+integration_branch_pattern: integrate/phase-{phase}
+plans_dir: docs/plans
+requirements_globs: [docs/requirements.md]
+adr_globs: [docs/architecture.md]
+policy_path: .claude/project/quality-policy.md
+reviewers_round1: [req-qa, arch-qa, ruthless-boundary-qa, rust-qa-agent, rust-best-practices-agent, rust-service-hardening-agent]
 
 skills:
-  rust-development:
+  codex-orchestration:
+    version: 0.2.0
     depends_on:
-      rust-architect: "1.x"
-      rust-code-reviewer: "1.x"
-      rust-code-explorer: "1.x"
-      rust-developer: "1.x"
-      rust-qa-agent: "0.x"
+      quality-management-gh: 1.x
+      quality-mgr: 0.x
+      req-qa: 0.x
+      arch-qa: 0.x
+      flaky-test-qa: 0.x
+      ruthless-boundary-qa: 0.x
+      rust-qa-agent: 0.x
+      rust-best-practices-agent: 0.x
+      rust-service-hardening-agent: 0.x
+  quality-management-gh:
+    version: 1.1.0
+  rust-development:
+    version: 0.12.0
+    depends_on:
+      rust-architect: 0.x
+      rust-code-reviewer: 0.x
+      rust-code-explorer: 0.x
+      rust-developer: 0.x
+      rust-qa-agent: 0.x

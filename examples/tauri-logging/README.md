@@ -4,11 +4,11 @@ This is a real IPC consumer for the B.3a package. Rust retains the logger
 owner and installs `sc-observability-tauri`; the TypeScript side receives only
 tagged JSON envelopes and cannot create, close, or mutate the logger.
 
-The frontend uses `@sc-observability/client` with a Tauri `invoke` transport:
+The frontend uses `@synaptic-canvas/sc-observability` with a Tauri `invoke` transport:
 
 ```ts
 import { invoke } from "@tauri-apps/api/core";
-import { createClient, createTauriTransport, encodeEvent } from "@sc-observability/client";
+import { createClient, createTauriTransport, encodeEvent } from "@synaptic-canvas/sc-observability";
 
 const transport = createTauriTransport(invoke);
 const client = transport.kind === "ok" ? createClient(transport.value) : transport;

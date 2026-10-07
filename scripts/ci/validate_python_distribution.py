@@ -17,6 +17,8 @@ from pathlib import Path
 
 from _python_distribution import (DistributionError, actual_cell, confined, digest,
                                   extract_sdist, inspect_wheel, verify_source, runtime_options, fault_paths, release_wheel, tomllib)
+from python_binding_validator import (embedded_environment_updates, installed_origins,
+                                      production_maturin_features, venv_python)
 from _python_sandbox import Sandbox, registered_checkouts
 
 
@@ -25,7 +27,7 @@ def execute(command: list[str], cwd: Path | None = None) -> None:
 
 
 def policy_at(root: Path) -> dict:
-    return json.loads((root / 'qualification/platform-policy.json').read_text())
+    return json.loads((root / 'qualification/platform-policy.json').read_text(encoding='utf-8'))
 
 
 def verify_resolution(metadata: dict, artifact: Path) -> list[dict]:
@@ -39,7 +41,7 @@ def verify_resolution(metadata: dict, artifact: Path) -> list[dict]:
 
 
 def linkage(wheel: Path, policy: dict, sandbox: Sandbox, directory: Path) -> dict:
-    details = inspect_wheel(wheel, policy, '1.4.0')
+    details = inspect_wheel(wheel, policy, policy.get('candidate_version', '1.4.0'), policy['expected_requires_python'])
     with zipfile.ZipFile(wheel) as archive:
         native = directory / Path(details['native_member']).name
         native.write_bytes(archive.read(details['native_member']))
@@ -78,7 +80,7 @@ def verify_embedding_features(metadata: dict) -> None:
 
 
 def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) -> dict:
-    bundle = json.loads((root / 'rust-bundle/manifest.json').read_text())
+    bundle = json.loads((root / 'rust-bundle/manifest.json').read_text(encoding='utf-8'))
     results = {}
     by_id = {package['id']: package for package in metadata['packages']}
     target_ids = {dependency['pkg'] for node in metadata['resolve']['nodes']
@@ -140,7 +142,7 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
     copy = scratch / 'extension-link-flags'
     shutil.copytree(root, copy)
     manifest_path = copy / 'embedding/Cargo.toml'
-    manifest = tomllib.loads(manifest_path.read_text())
+    manifest = tomllib.loads(manifest_path.read_text(encoding='utf-8'))
     dependency = manifest['dependencies']['pyo3']
     dependency.setdefault('features', []).append('extension-module')
     manifest_path.write_text(tomli_w.dumps(manifest))
@@ -156,22 +158,23 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
     return results
 
 
-def run_embedding(root: Path, scratch: Path, sandbox: Sandbox, python: str) -> dict:
-    """Build the real bundled host with this interpreter and an empty Cargo cache."""
+def run_embedding(root: Path, scratch: Path, sandbox: Sandbox, python: str, package: Path) -> dict:
+    """Build the real bundled host against the installed candidate package."""
     interpreter = json.loads(sandbox.run([python, '-I', '-c',
         'import json,sys; print(json.dumps({"python":f"{sys.version_info.major}.{sys.version_info.minor}",'
         '"python_full":sys.version,"base_prefix":sys.base_prefix}))'], scratch))
-    keys = ('CARGO_HOME', 'CARGO_TARGET_DIR', 'PYTHONPATH', 'PYTHONHOME', 'PYO3_PYTHON')
+    keys = ('CARGO_HOME', 'CARGO_TARGET_DIR', 'PYTHONHOME', 'PYO3_PYTHON',
+            'SC_OBSERVABILITY_ATTACHED_PACKAGE')
     previous = {key: sandbox.env.get(key) for key in keys}
     sandbox.env.update(CARGO_HOME=str(scratch / 'embedding-cargo-home'),
                        CARGO_TARGET_DIR=str(scratch / 'embedding-target'),
-                       PYTHONPATH=str(root / 'python'), PYTHONHOME=interpreter['base_prefix'],
-                       PYO3_PYTHON=python)
+                       **embedded_environment_updates(Path(python)))
     try:
         metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
                                           '--format-version', '1'], root / 'embedding'))
         resolution = verify_resolution(metadata, root)
         verify_embedding_features(metadata)
+        sandbox.env['SC_OBSERVABILITY_ATTACHED_PACKAGE'] = str(package.resolve())
         sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
     finally:
         for key, value in previous.items():
@@ -193,9 +196,14 @@ def build(args) -> None:
         source = verify_source(root)
         policy = policy_at(root)
         actual = actual_cell(policy)
-        selected = next(item for item in policy['platforms'] if item['id'] == args.platform)
+        selected = {**next(item for item in policy['platforms'] if item['id'] == args.platform),
+                    'expected_requires_python': source['expected_requires_python'],
+                    'candidate_version': source['version']}
         if actual['platform'] != args.platform:
             raise DistributionError('build runner architecture differs from requested platform')
+        if args.platform == 'windows-arm64':
+            from python_arm64 import require_native_windows_arm64
+            require_native_windows_arm64()
         # Tools were provisioned before entering isolation. Cargo uses a fresh empty home/target.
         with Sandbox(scratch, checkouts) as sandbox:
             if 'deployment_target' in selected:
@@ -212,13 +220,15 @@ def build(args) -> None:
             del sandbox.env['PYTHONHOME']
             command = [sys.executable, '-m', 'maturin', 'build', '--locked', '--offline', '--release',
                        '--out', str(scratch / 'wheels')]
+            if selected.get('rust_target'):
+                command += ['--target', selected['rust_target']]
             if args.platform.startswith('linux'):
                 command += ['--compatibility', 'manylinux_2_28']
             sandbox.run(command, root)
             wheels = list((scratch / 'wheels').glob('*.whl'))
             if len(wheels) != 1:
                 raise DistributionError('expected exactly one ABI wheel for the platform')
-            features = tomllib.loads((root / 'pyproject.toml').read_text())['tool']['maturin']['features']
+            features = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))['tool']['maturin']['features']
             linked = {**linkage(wheels[0], selected, sandbox, scratch), 'role': 'production',
                       'maturin_features': features, 'publication': 'pending_B.7'}
             release_wheel(linked)
@@ -239,11 +249,21 @@ def build(args) -> None:
                     raise DistributionError('instrumented companion is not distinct from production')
                 (output / 'instrumented').mkdir()
                 shutil.copyfile(private_wheels[0], output / instrumented['path'])
-            embedded = run_embedding(root, scratch, sandbox, sys.executable)
+            embedding_venv = scratch / 'embedding-venv'
+            execute([sys.executable, '-m', 'venv', str(embedding_venv)])
+            embedding_python = str(venv_python(embedding_venv))
+            execute([embedding_python, '-m', 'pip', 'install', '--disable-pip-version-check',
+                     '--no-index', str(wheels[0])])
+            embedded_origin = json.loads(sandbox.run([embedding_python, '-I', '-c',
+                'import json,sys,sc_observability,sc_observability._native as n; '
+                'print(json.dumps({"prefix":sys.prefix,"package":sc_observability.__file__,"native":n.__file__}))'], scratch))
+            embedded = run_embedding(root, scratch, sandbox, embedding_python,
+                                     installed_origins(embedded_origin)['package'])
             negatives = negative_cases(root, scratch, sandbox, metadata)
             verify_source(root)
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,
+                      'expected_requires_python': source['expected_requires_python'],
                       'build_interpreter': actual, 'wheel': linked, 'instrumented': instrumented, 'resolution': resolution,
                       'isolation': probes, 'native_runtime_tests': 'passed', 'native_test_count': native_count, 'embedding': 'passed', 'embedding_interpreter': embedded, 'negative_results': negatives,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
@@ -261,11 +281,17 @@ def cell(args) -> None:
         source = verify_source(root)
         if (source.get('development_only') or not source['runtime_suite'].get('runtime_complete')) and not args.allow_incomplete_runtime:
             raise DistributionError('development/incomplete runtime artifact cannot qualify an installed cell')
-        actual = actual_cell(policy_at(root))
-        selected = next(item for item in policy_at(root)['platforms'] if item['id'] == actual['platform'])
-        wheel = inspect_wheel(args.wheel, selected, source['version'])
+        policy = policy_at(root)
+        actual = actual_cell(policy)
+        if actual['platform'] == 'windows-arm64':
+            from python_arm64 import require_native_windows_arm64
+            require_native_windows_arm64()
+        selected = {**next(item for item in policy['platforms'] if item['id'] == actual['platform']),
+                    'expected_requires_python': source['expected_requires_python'],
+                    'candidate_version': source['version']}
+        wheel = inspect_wheel(args.wheel, selected, source['version'], source['expected_requires_python'])
         execute([sys.executable, '-m', 'venv', str(scratch / 'venv')])
-        python = str(scratch / 'venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
+        python = str(venv_python(scratch / 'venv'))
         execute([python, '-m', 'pip', 'install', '--disable-pip-version-check', str(args.wheel)])
         # Check runtime imports before pytest/mypy can accidentally supply an undeclared dependency.
         with Sandbox(scratch, checkouts) as sandbox:
@@ -278,11 +304,11 @@ def cell(args) -> None:
         if private_paths:
             if not args.instrumented_wheel:
                 raise DistributionError('private fault companion is required by the source contract')
-            private_wheel = inspect_wheel(args.instrumented_wheel, selected, source['version'])
+            private_wheel = inspect_wheel(args.instrumented_wheel, selected, source['version'], source['expected_requires_python'])
             if private_wheel['sha256'] == wheel['sha256']:
                 raise DistributionError('instrumented wheel cannot substitute for production')
             execute([sys.executable, '-m', 'venv', str(scratch / 'fault-venv')])
-            private_python = str(scratch / 'fault-venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
+            private_python = str(venv_python(scratch / 'fault-venv'))
             execute([private_python, '-m', 'pip', 'install', '--disable-pip-version-check',
                      str(args.instrumented_wheel), '-r', str(root / 'qualification/python-packaging-requirements.txt')])
         suite = scratch / 'suite'
@@ -296,20 +322,19 @@ def cell(args) -> None:
             raise DistributionError('full runtime/type suite contract is incomplete')
         with Sandbox(scratch, checkouts) as sandbox:
             probes = sandbox.prove_denials(python, args.checkout)
-            imported = sandbox.run([python, '-I', '-c',
-                'import pathlib,sys,sc_observability,sc_observability._native as n; '
-                'root=pathlib.Path(sys.prefix).resolve(); '
-                'assert pathlib.Path(sc_observability.__file__).resolve().is_relative_to(root); '
-                'assert pathlib.Path(n.__file__).resolve().is_relative_to(root); '
+            imported = json.loads(sandbox.run([python, '-I', '-c',
+                'import json,sys,sc_observability,sc_observability._native as n; '
                 'assert not any(name.startswith("_test") for name in dir(n)), "private hooks leaked into production"; '
-                'print(n.__file__)'], suite)
+                'print(json.dumps({"prefix":sys.prefix,"package":sc_observability.__file__,"native":n.__file__}))'], suite))
+            origins = installed_origins(imported)
             flags, environment = runtime_options(contract)
             sandbox.env.update(environment)
             sandbox.env['SC_OBSERVABILITY_RUNTIME_TEST'] = '1'
             junit = scratch / 'runtime.xml'
             paths = [str(confined(suite, path)) for path in contract['pytest_paths']]
             ignored = ['--ignore=' + str(confined(suite, path)) for path in private_paths]
-            sandbox.run([python, *flags, '-m', 'pytest', *paths, *ignored, '-ra', '--junitxml', str(junit)], suite)
+            sandbox.run([python, *flags, '-m', 'pytest', *paths, *ignored, '-ra', '--capture=tee-sys',
+                         '--junitxml', str(junit)], suite, visible=True)
             tree = ET.parse(junit)
             cases = tree.findall('.//testcase')
             if not cases or tree.findall('.//skipped') or tree.findall('.//failure') or tree.findall('.//error'):
@@ -320,10 +345,10 @@ def cell(args) -> None:
             fault_result = None
             if private_python:
                 private_identity = json.loads(sandbox.run([private_python, '-I', '-c',
-                    'import json,pathlib,sys,sc_observability._native as n; '
-                    'assert pathlib.Path(n.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); '
+                    'import json,sys,sc_observability,sc_observability._native as n; '
                     'assert any(name.startswith("_test") for name in dir(n)); '
-                    'print(json.dumps({"python_full":sys.version,"native":n.__file__}))'], suite))
+                    'print(json.dumps({"python_full":sys.version,"prefix":sys.prefix,"package":sc_observability.__file__,"native":n.__file__}))'], suite))
+                installed_origins(private_identity)
                 if private_identity['python_full'] != actual['python_full']:
                     raise DistributionError('fault companion interpreter differs from production cell')
                 fault_junit = scratch / 'fault-runtime.xml'
@@ -341,15 +366,16 @@ def cell(args) -> None:
                 shutil.copyfile(fault_junit, output / 'fault-runtime.xml')
             embedded = None
             if contract.get('embedding_in_each_cell'):
-                embedded = run_embedding(root, scratch, sandbox, python)
+                embedded = run_embedding(root, scratch, sandbox, python, origins['package'])
                 if embedded['python_full'] != actual['python_full']:
                     raise DistributionError('embedding interpreter differs from installed cell')
             record = {'schema_version': 1, 'status': 'passed', **actual,
                       'development_only': args.allow_incomplete_runtime or source.get('development_only', False),
                       'source_commit': source['source_commit'], 'sdist_sha256': digest(args.sdist),
+                      'expected_requires_python': source['expected_requires_python'],
                       'wheel': wheel, 'runtime_suite': contract, 'test_count': len(cases),
                       'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in cases),
-                      'installed_extension': imported.strip(), 'production_hooks_absent': True,
+                      'installed_extension': imported['native'], 'production_hooks_absent': True,
                       'fault_companion': fault_result, 'isolation': probes, 'embedding': embedded,
                       'typecheck': 'passed', 'interpreter_flags': flags, 'runtime_environment': environment,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
@@ -358,18 +384,39 @@ def cell(args) -> None:
 
 
 def aggregate(args) -> None:
-    policy = json.loads(args.policy.read_text())
-    expected = {(p['id'], python) for p in policy['platforms'] for python in policy['interpreters']}
+    policy = json.loads(args.policy.read_text(encoding='utf-8'))
+    expected = {(p['id'], python) for p in policy['platforms']
+                for python in p.get('interpreters', policy['interpreters'])}
     build_paths = list(args.evidence.rglob('build-result.json'))
     cell_paths = list(args.evidence.rglob('cell-result.json'))
-    builds = [json.loads(path.read_text()) for path in build_paths]
-    cells = [json.loads(path.read_text()) for path in cell_paths]
-    if len(builds) != 5 or len(cells) != 25:
-        raise DistributionError('all five builds and all 25 execution cells are required')
+    builds = [json.loads(path.read_text(encoding='utf-8')) for path in build_paths]
+    cells = [json.loads(path.read_text(encoding='utf-8')) for path in cell_paths]
+    platform_count = len(policy['platforms'])
+    platform_ids = {platform['id'] for platform in policy['platforms']}
+    if platform_count == 6:
+        from python_arm64 import apply_windows_arm64_overlay
+        try:
+            apply_windows_arm64_overlay(policy)
+        except RuntimeError as error:
+            raise DistributionError(str(error)) from error
+    if platform_count != 6:
+        raise DistributionError('aggregate requires exactly six platforms, six builds and 29 installed-suite cells')
+    arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
+    if arm64 is None or (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target'),
+                         arm64.get('build_python'), arm64.get('interpreters')) != (
+            'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc', '3.11', ['3.11', '3.12', '3.13', '3.14']):
+        raise DistributionError('Windows ARM64 policy handoff is incomplete')
+    if len(platform_ids) != platform_count:
+        raise DistributionError('platform policy contains duplicate identifiers')
+    if len(builds) != 6 or len(cells) != 29:
+        raise DistributionError('exactly six builds and 29 installed-suite cells are required')
+    build_platforms = [build.get('platform') for build in builds]
+    if set(build_platforms) != platform_ids or len(build_platforms) != len(set(build_platforms)):
+        raise DistributionError('build records contain missing, duplicate or unsupported platforms')
     if {(cell['platform'], cell['python']) for cell in cells} != expected:
         raise DistributionError('matrix contains missing, duplicate or unsupported cells')
     wheel_hashes = {build['platform']: build['wheel']['sha256'] for build in builds}
-    if len(wheel_hashes) != 5:
+    if len(wheel_hashes) != platform_count:
         raise DistributionError('missing or duplicate platform wheels')
     for item in builds + cells:
         if (item.get('status') != 'passed' or item.get('development_only') or item.get('source_commit') != args.source_commit
@@ -384,7 +431,10 @@ def aggregate(args) -> None:
                 or source['source_commit'] != args.source_commit):
             raise DistributionError('source contract is not a completed qualification candidate')
         runtime_options(contract)
-        production_features = sorted(tomllib.loads((root / 'pyproject.toml').read_text())['tool']['maturin']['features'])
+        production_features = sorted(production_maturin_features(root))
+        expected_requires_python = source['expected_requires_python']
+    if any(item.get('expected_requires_python') != expected_requires_python for item in builds + cells):
+        raise DistributionError('source and build/cell Requires-Python metadata disagree')
     for item in cells:
         if item.get('runtime_suite') != contract:
             raise DistributionError('cell contract differs from the immutable source contract')
@@ -438,16 +488,20 @@ def aggregate(args) -> None:
         if sorted(production.get('maturin_features', [])) != production_features:
             raise DistributionError('production feature identity differs from immutable source')
         publication_wheels.append({'platform': build['platform'], **production})
-        selected = next(item for item in policy['platforms'] if item['id'] == build['platform'])
+        selected = next((item for item in policy['platforms'] if item['id'] == build.get('platform')), None)
+        if selected is None:
+            raise DistributionError('build record contains unsupported platform')
         wheel = confined(path.parent, build['wheel']['wheel'])
         production_paths.append(wheel)
-        inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
+        selected = {**selected, 'expected_requires_python': expected_requires_python,
+                    'candidate_version': policy['candidate_version']}
+        inspected = inspect_wheel(wheel, selected, policy['candidate_version'], expected_requires_python)
         if fault_paths(contract):
             private = build.get('instrumented') or {}
             if (private.get('role') != 'instrumented' or private.get('publication') != 'never'
                     or private.get('maturin_features') != sorted(set(production_features) | {'test-hooks'})):
                 raise DistributionError('fault companion lacks exact non-public feature identity')
-            private_inspection = inspect_wheel(confined(path.parent, private['path']), selected, policy['candidate_version'])
+            private_inspection = inspect_wheel(confined(path.parent, private['path']), selected, policy['candidate_version'], expected_requires_python)
             if private_inspection['sha256'] != private.get('sha256') or private['sha256'] == inspected['sha256']:
                 raise DistributionError('retained fault companion identity disagrees with build evidence')
         if inspected['sha256'] != build['wheel']['sha256']:
@@ -464,7 +518,7 @@ def aggregate(args) -> None:
             shutil.copyfile(artifact, dist / artifact.name)
     if getattr(args, 'output', None):
         args.output.write_text(json.dumps(publication, indent=2) + '\n')
-    print('B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding')
+    print(f'B4A_QUALIFIED: {platform_count} ABI wheels, {len(expected)} installed full-suite cells, offline sdist and embedding')
 
 
 def main() -> None:

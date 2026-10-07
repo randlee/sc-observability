@@ -1,0 +1,10 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_server_user": "skillrx",
+  "dolt_database": "sc-obs",
+  "project_id": "2cf9550f-951c-4a27-a336-d3a9ab984b01",
+  "global_dolt_database": "beads_global",
+  "global_project_id": "00000000-0000-0000-0000-000000000000"
+}

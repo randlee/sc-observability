@@ -5,11 +5,10 @@ use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use sc_observability_types::typed::ClassifiedError;
-use sc_observability_types::typed::FlushFailure;
+use sc_observability_types::v2::FlushError;
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport,
-    MaintenanceWorkerState, Remediation, Timestamp, WriterState,
+    DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport, MaintenanceWorkerState,
+    Remediation, Timestamp, WriterState,
 };
 
 use crate::sinks::JsonlFileSink;
@@ -54,7 +53,6 @@ pub(crate) struct WriterRuntime {
     // shared runtime state, so this mutex supplies that synchronization.
     done_rx: Mutex<mpsc::Receiver<()>>,
     join_handle: JoinHandle<()>,
-    join_timeout: Duration,
     writer_tracker: Arc<WriterTracker>,
     maintenance_tracker: Option<Arc<MaintenanceTracker>>,
     #[cfg(test)]
@@ -119,7 +117,6 @@ impl WriterRuntime {
             sender,
             done_rx: Mutex::new(done_rx),
             join_handle,
-            join_timeout: policy.writer_shutdown_timeout.as_duration(),
             writer_tracker,
             maintenance_tracker,
             #[cfg(test)]
@@ -150,47 +147,75 @@ impl WriterRuntime {
         self.writer_tracker.record_queue_full_drop()
     }
 
-    pub(crate) fn flush(&self) -> Result<(), FlushFailure> {
+    pub(crate) fn flush_with_timeout(&self, timeout: Duration) -> Result<(), FlushError> {
         let (tx, rx) = mpsc::channel();
-        self.sender.send(WriterCommand::Flush(tx)).map_err(|_| {
-            FlushFailure::writer_degraded(
-                "writer thread is not available for flush",
-                Remediation::recoverable(
-                    "inspect logger writer-thread health",
-                    [
-                        "inspect logger.health().writer_state",
-                        "inspect logger.health().last_writer_error",
-                    ],
-                ),
-            )
-        })?;
-        match rx.recv() {
+        self.sender
+            .send(WriterCommand::Flush(tx))
+            .map_err(|_| FlushError::Drain {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_WRITER_DEGRADED,
+                    "writer thread is not available for flush",
+                    Remediation::recoverable(
+                        "inspect logger writer-thread health",
+                        [
+                            "inspect logger.health().writer_state",
+                            "inspect logger.health().last_writer_error",
+                        ],
+                    ),
+                )),
+            })?;
+        match rx.recv_timeout(timeout) {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(summary)) => Err(FlushFailure::logger_flush(
-                "writer flush failed",
-                Remediation::recoverable(
-                    "inspect the writer-thread flush failure",
-                    [
-                        "inspect logger.health().last_writer_error",
-                        "retry the flush after the writer recovers",
-                    ],
+            Ok(Err(summary)) => Err(FlushError::Drain {
+                context: Box::new(
+                    ErrorContext::new(
+                        error_codes::LOGGER_FLUSH_FAILED,
+                        "writer flush failed",
+                        Remediation::recoverable(
+                            "inspect the writer-thread flush failure",
+                            [
+                                "inspect logger.health().last_writer_error",
+                                "retry the flush after the writer recovers",
+                            ],
+                        ),
+                    )
+                    .cause(summary.message.clone()),
                 ),
-            )
-            .cause(summary.message.clone())),
-            Err(_) => Err(FlushFailure::writer_degraded(
-                "writer thread disconnected during flush",
-                Remediation::recoverable(
-                    "inspect logger writer-thread health",
-                    [
-                        "inspect logger.health().writer_state",
-                        "inspect logger.health().last_writer_error",
-                    ],
-                ),
-            )),
+            }),
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(FlushError::Drain {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_WRITER_DEGRADED,
+                    format!(
+                        "writer thread did not complete flush within {}ms",
+                        timeout.as_millis()
+                    ),
+                    Remediation::recoverable(
+                        "inspect logger writer-thread health",
+                        [
+                            "inspect logger.health().writer_state",
+                            "inspect logger.health().last_writer_error",
+                            "retry the flush after the writer recovers",
+                        ],
+                    ),
+                )),
+            }),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(FlushError::Drain {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_WRITER_DEGRADED,
+                    "writer thread disconnected during flush",
+                    Remediation::recoverable(
+                        "inspect logger writer-thread health",
+                        [
+                            "inspect logger.health().writer_state",
+                            "inspect logger.health().last_writer_error",
+                        ],
+                    ),
+                )),
+            }),
         }
     }
 
-    pub(crate) fn shutdown(self) -> WriterHealthSnapshot {
+    pub(crate) fn shutdown_with_timeout(self, timeout: Duration) -> (WriterHealthSnapshot, bool) {
         drop(self.sender);
 
         let mut timed_out = false;
@@ -198,13 +223,12 @@ impl WriterRuntime {
             .done_rx
             .lock()
             .expect("writer done receiver poisoned")
-            .recv_timeout(self.join_timeout)
+            .recv_timeout(timeout)
         {
             Ok(()) => {}
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 timed_out = true;
-                self.writer_tracker
-                    .record_shutdown_timeout(self.join_timeout);
+                self.writer_tracker.record_shutdown_timeout(timeout);
                 #[cfg(test)]
                 if let Some(signal) = self.test_pass_signal.as_ref() {
                     signal.record_shutdown_timeout();
@@ -212,10 +236,7 @@ impl WriterRuntime {
                 if let Some(tracker) = self.maintenance_tracker.as_ref() {
                     tracker.record_failure(&ErrorContext::new(
                         error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
-                        format!(
-                            "maintenance did not stop within {}ms",
-                            self.join_timeout.as_millis()
-                        ),
+                        format!("maintenance did not stop within {}ms", timeout.as_millis()),
                         Remediation::recoverable(
                             "inspect maintenance shutdown timing",
                             [
@@ -242,15 +263,11 @@ impl WriterRuntime {
             }
         }
 
-        if self.join_handle.join().is_err() {
+        if !timed_out && self.join_handle.join().is_err() {
             self.writer_tracker
                 .record_writer_failure(&ErrorContext::new(
                     error_codes::LOGGER_WRITER_DEGRADED,
-                    if timed_out {
-                        "writer thread panicked after exceeding the shutdown timeout"
-                    } else {
-                        "writer thread panicked during shutdown"
-                    },
+                    "writer thread panicked during shutdown",
                     Remediation::recoverable(
                         "restart the logger runtime",
                         [
@@ -261,17 +278,26 @@ impl WriterRuntime {
                 ));
         }
 
-        snapshot_from_trackers(&self.writer_tracker, self.maintenance_tracker.as_ref())
+        (
+            snapshot_from_trackers(&self.writer_tracker, self.maintenance_tracker.as_ref()),
+            timed_out,
+        )
     }
 
     pub(crate) fn snapshot(&self) -> WriterHealthSnapshot {
         snapshot_from_trackers(&self.writer_tracker, self.maintenance_tracker.as_ref())
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn maintenance_active(&self) -> bool {
         self.maintenance_tracker
             .as_ref()
             .is_some_and(|tracker| tracker.pass_active())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_pass_signal(&self) -> Option<&Arc<TestPassDelaySignal>> {
+        self.test_pass_signal.as_ref()
     }
 }
 
@@ -320,7 +346,9 @@ pub(crate) struct WriterTracker {
     queue_capacity: u64,
     queue_high_water_mark: AtomicU64,
     queue_full_drops_total: AtomicU64,
+    // MUTEX: The writer changes state on failures and shutdown; read-mostly health snapshots use this RwLock without gaining a global snapshot.
     state: RwLock<WriterState>,
+    // MUTEX: Failures replace the latest diagnostic while health snapshots clone it read-mostly; this RwLock covers only this field.
     last_error: RwLock<Option<DiagnosticSummary>>,
     shutdown_timeout_recorded: AtomicBool,
 }
@@ -441,9 +469,13 @@ impl WriterTracker {
 /// timestamps, counters, and degraded-state transitions because maintenance
 /// updates occur on the writer thread without a single global snapshot lock.
 pub(crate) struct MaintenanceTracker {
+    #[cfg(feature = "v1")]
     pass_active: AtomicBool,
+    // MUTEX: The writer updates this after each pass and health snapshots read it read-mostly; this lock does not make the whole report atomic.
     last_pass_at: RwLock<Option<Timestamp>>,
+    // MUTEX: Failure writes replace the latest diagnostic while health snapshots clone it read-mostly; this lock covers only this field.
     last_error: RwLock<Option<DiagnosticSummary>>,
+    // MUTEX: Maintenance transitions update this state while health reads it frequently; this RwLock does not make the report atomic.
     state: RwLock<MaintenanceWorkerState>,
     rotated_files_total: AtomicU64,
     pruned_files_total: AtomicU64,
@@ -452,6 +484,7 @@ pub(crate) struct MaintenanceTracker {
 impl MaintenanceTracker {
     fn new() -> Self {
         Self {
+            #[cfg(feature = "v1")]
             pass_active: AtomicBool::new(false),
             last_pass_at: RwLock::new(None),
             last_error: RwLock::new(None),
@@ -496,10 +529,12 @@ impl MaintenanceTracker {
         *self.state.write().expect("maintenance state poisoned") = MaintenanceWorkerState::Running;
     }
 
+    #[cfg(feature = "v1")]
     fn mark_pass_active(&self, active: bool) {
         self.pass_active.store(active, Ordering::SeqCst);
     }
 
+    #[cfg(feature = "v1")]
     fn pass_active(&self) -> bool {
         self.pass_active.load(Ordering::SeqCst)
     }
@@ -586,7 +621,6 @@ fn writer_worker(
                                 &writer_tracker,
                                 dropped_events_total.as_ref(),
                                 last_error.as_ref(),
-                                &mut pending_flush,
                             );
                             flush_sinks(
                                 &sinks,
@@ -621,7 +655,6 @@ fn writer_worker(
                         &writer_tracker,
                         dropped_events_total.as_ref(),
                         last_error.as_ref(),
-                        &mut pending_flush,
                     );
                     flush_sinks(
                         &sinks,
@@ -638,7 +671,6 @@ fn writer_worker(
                     &writer_tracker,
                     dropped_events_total.as_ref(),
                     last_error.as_ref(),
-                    &mut pending_flush,
                 );
                 flush_sinks(
                     &sinks,
@@ -664,7 +696,6 @@ fn writer_worker(
                     &writer_tracker,
                     dropped_events_total.as_ref(),
                     last_error.as_ref(),
-                    &mut pending_flush,
                 );
                 flush_sinks(
                     &sinks,
@@ -710,12 +741,8 @@ fn flush_batch(
     writer_tracker: &WriterTracker,
     dropped_events_total: &AtomicU64,
     last_error: &Mutex<Option<DiagnosticSummary>>,
-    pending_flush: &mut Vec<mpsc::Sender<Result<(), DiagnosticSummary>>>,
 ) {
     if batch.is_empty() {
-        if !pending_flush.is_empty() {
-            flush_sinks(sinks, writer_tracker, last_error, pending_flush);
-        }
         return;
     }
 
@@ -748,10 +775,6 @@ fn flush_batch(
             }
         }
         writer_tracker.record_write_completion(1);
-    }
-
-    if !pending_flush.is_empty() {
-        flush_sinks(sinks, writer_tracker, last_error, pending_flush);
     }
 }
 
@@ -809,7 +832,9 @@ fn run_maintenance_if_due(
     }
 
     if let Some(tracker) = maintenance_tracker {
+        #[cfg(feature = "v1")]
         tracker.mark_pass_active(true);
+        #[cfg(test)]
         maybe_run_test_delay(
             #[cfg(test)]
             test_pass_delay,
@@ -820,8 +845,10 @@ fn run_maintenance_if_due(
             Ok(stats) => tracker.record_pass(stats),
             Err(error) => tracker.record_failure(error.context()),
         }
+        #[cfg(feature = "v1")]
         tracker.mark_pass_active(false);
     } else {
+        #[cfg(test)]
         maybe_run_test_delay(
             #[cfg(test)]
             test_pass_delay,
@@ -841,6 +868,7 @@ pub(crate) struct TestPassDelaySignal {
     released: AtomicBool,
     wait_timed_out: AtomicBool,
     shutdown_timeout_recorded: AtomicBool,
+    level_stopping: AtomicBool,
     gate: Mutex<()>,
     changed: Condvar,
 }
@@ -853,6 +881,7 @@ pub(crate) struct TestPassDelayReleaseGuard(Arc<TestPassDelaySignal>);
 pub(crate) enum TestPassDelayWait {
     NotBlocked,
     Released,
+    #[cfg(feature = "v1")]
     TimedOut,
 }
 
@@ -887,9 +916,19 @@ impl TestPassDelaySignal {
     }
 
     pub(crate) fn wait_until_released(&self) -> TestPassDelayWait {
-        self.wait_until_released_for(Duration::from_secs(1))
+        if !self.block_until_released.load(Ordering::SeqCst) {
+            return TestPassDelayWait::NotBlocked;
+        }
+
+        let mut gate = self.gate.lock().expect("test gate poisoned");
+        while !self.released.load(Ordering::SeqCst) {
+            gate = self.changed.wait(gate).expect("test gate poisoned");
+        }
+        self.block_until_released.store(false, Ordering::SeqCst);
+        TestPassDelayWait::Released
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn wait_until_released_for(&self, timeout: Duration) -> TestPassDelayWait {
         if !self.block_until_released.load(Ordering::SeqCst) {
             return TestPassDelayWait::NotBlocked;
@@ -935,6 +974,17 @@ impl TestPassDelaySignal {
         self.shutdown_timeout_recorded.load(Ordering::SeqCst)
     }
 
+    pub(crate) fn record_level_stopping(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
+        self.level_stopping.store(true, Ordering::SeqCst);
+        self.changed.notify_all();
+    }
+
+    #[cfg(feature = "v1")]
+    pub(crate) fn level_stopping(&self) -> bool {
+        self.level_stopping.load(Ordering::SeqCst)
+    }
+
     pub(crate) fn wait_for_state(
         &self,
         timeout: Duration,
@@ -956,13 +1006,11 @@ impl TestPassDelaySignal {
         true
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn wait_timed_out(&self) -> bool {
         self.wait_timed_out.load(Ordering::SeqCst)
     }
 }
-
-#[cfg(not(test))]
-fn maybe_run_test_delay() {}
 
 #[cfg(test)]
 fn maybe_run_test_delay(
@@ -978,6 +1026,7 @@ fn maybe_run_test_delay(
         match signal.wait_until_released() {
             TestPassDelayWait::NotBlocked => thread::sleep(delay),
             TestPassDelayWait::Released => {}
+            #[cfg(feature = "v1")]
             TestPassDelayWait::TimedOut => {
                 panic!("test maintenance delay release gate timed out")
             }

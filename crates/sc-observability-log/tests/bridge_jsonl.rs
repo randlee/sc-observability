@@ -1,6 +1,8 @@
 //! One `init` per test binary: the `log` facade logger can be installed once per
 //! process, so every sub-case for this configuration runs inside the single test fn.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
@@ -117,7 +119,12 @@ fn assert_facade_flush_is_noop() {
 
 fn assert_second_init_rejected(root: &Path) {
     let second = sc_observability_log::init(config(root), options());
-    assert!(matches!(second, Err(InitError::AlreadyInitialized)));
+    let error = second.unwrap_err();
+    assert!(matches!(error, InitError::AlreadyInitialized));
+    assert_eq!(
+        error.code().as_str(),
+        "SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED"
+    );
 }
 
 fn assert_shutdown_stops_writing(guard: LogGuard, root: &Path) {

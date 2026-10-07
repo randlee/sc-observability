@@ -9,6 +9,7 @@ import tarfile
 import zipfile
 from pathlib import Path, PurePosixPath
 from _hashing import digest
+from python_arm64 import pe_machine
 
 try:
     import tomllib
@@ -18,6 +19,51 @@ except ModuleNotFoundError:
 
 class DistributionError(ValueError):
     """A distribution failed an explicit qualification boundary."""
+
+
+PYTHON_FLOOR = '3.10'
+
+
+def validate_requires_python(value: str, minimum: str = PYTHON_FLOOR) -> str:
+    """Parse an open-ended lower-bound requirement, rejecting caps/exclusions."""
+    from packaging.specifiers import InvalidSpecifier, SpecifierSet
+    from packaging.version import Version
+
+    if not isinstance(value, str) or not value.strip():
+        raise DistributionError('Requires-Python must be a non-empty specifier')
+    try:
+        specifiers = list(SpecifierSet(value))
+        minimum_version = Version(minimum)
+    except InvalidSpecifier as error:
+        raise DistributionError('invalid Requires-Python specifier') from error
+    except Exception as error:
+        raise DistributionError('invalid Python minimum version') from error
+    if len(specifiers) != 1 or specifiers[0].operator != '>=':
+        raise DistributionError('Requires-Python must be an open-ended lower bound')
+    if Version(specifiers[0].version) != minimum_version:
+        raise DistributionError(f'Requires-Python must be >= {minimum}')
+    return str(specifiers[0])
+
+
+def source_python_contract(root: Path) -> str:
+    """Parse source metadata and retain the single expected wheel requirement."""
+    try:
+        pyproject = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))
+        cargo = tomllib.loads((root / 'Cargo.toml').read_text(encoding='utf-8'))
+    except (OSError, ValueError, TypeError) as error:
+        raise DistributionError('source Python/Cargo metadata is not valid TOML') from error
+    try:
+        requires_python = pyproject['project']['requires-python']
+        maturin_features = pyproject['tool']['maturin']['features']
+        pyo3 = cargo['dependencies']['pyo3']
+        cargo_features = pyo3.get('features', []) if isinstance(pyo3, dict) else []
+    except (KeyError, TypeError) as error:
+        raise DistributionError('source Python/Cargo metadata is incomplete') from error
+    expected = validate_requires_python(requires_python)
+    if (not isinstance(maturin_features, list) or not isinstance(cargo_features, list)
+            or 'pyo3/abi3-py310' not in maturin_features or 'abi3-py310' not in cargo_features):
+        raise DistributionError('source metadata is missing the abi3-py310 feature')
+    return expected
 
 
 def runtime_options(contract: dict) -> tuple[list[str], dict[str, str]]:
@@ -91,7 +137,7 @@ def extract_sdist(archive: Path, output: Path) -> Path:
 
 def verify_source(root: Path) -> dict:
     """Check the frozen distribution inventory before Cargo or imports execute."""
-    record = json.loads((root / 'distribution-manifest.json').read_text())
+    record = json.loads((root / 'distribution-manifest.json').read_text(encoding='utf-8'))
     if record.get('schema_version') != 1 or record.get('publication') != 'pending_B.7':
         raise DistributionError('invalid distribution manifest')
     if len(record.get('source_commit', '')) != 40:
@@ -112,7 +158,7 @@ def verify_source(root: Path) -> dict:
     for path in root.rglob('*'):
         if path.is_symlink():
             raise DistributionError(f'symlink in unpacked distribution: {path}')
-    return record
+    return {**record, 'expected_requires_python': source_python_contract(root)}
 
 
 def verify_native_architecture(data: bytes, tag: str) -> None:
@@ -125,17 +171,15 @@ def verify_native_architecture(data: bytes, tag: str) -> None:
         expected = 0x100000c if tag.endswith('arm64') else 0x1000007
         valid = (len(data) >= 8 and data[:4] == b'\xcf\xfa\xed\xfe'
                  and int.from_bytes(data[4:8], 'little') == expected)
-    elif tag == 'win_amd64':
-        offset = int.from_bytes(data[60:64], 'little') if len(data) >= 64 else len(data)
-        valid = (data[:2] == b'MZ' and data[offset:offset + 4] == b'PE\0\0'
-                 and int.from_bytes(data[offset + 4:offset + 6], 'little') == 0x8664)
+    elif tag in ('win_amd64', 'win_arm64'):
+        valid = pe_machine(data) == {'win_amd64': 0x8664, 'win_arm64': 0xAA64}[tag]
     else:
         valid = False
     if not valid:
         raise DistributionError('native executable architecture differs from wheel platform')
 
 
-def inspect_wheel(wheel: Path, policy: dict, version: str) -> dict:
+def inspect_wheel(wheel: Path, policy: dict, version: str, expected_requires_python: str) -> dict:
     from packaging.utils import parse_wheel_filename
     name, actual_version, _, tags = parse_wheel_filename(wheel.name)
     if name != 'sc-observability' or str(actual_version) != version:
@@ -168,21 +212,33 @@ def inspect_wheel(wheel: Path, policy: dict, version: str) -> dict:
                     if line.startswith('Tag: ')}
         if declared != {str(tag) for tag in tags}:
             raise DistributionError('wheel filename and embedded tags disagree')
+        metadata = [name for name in names if name.endswith('.dist-info/METADATA')]
+        if len(metadata) != 1:
+            raise DistributionError('ambiguous wheel metadata')
+        from email.parser import Parser
+        headers = Parser().parsestr(archive.read(metadata[0]).decode())
+        values = headers.get_all('Requires-Python', [])
+        if len(values) > 1:
+            raise DistributionError('duplicate Requires-Python metadata')
+        requires_python = values[0].strip() if values else None
+        if requires_python is None or validate_requires_python(requires_python) != validate_requires_python(expected_requires_python):
+            raise DistributionError('source and wheel Requires-Python metadata disagree')
     return {'wheel': wheel.name, 'sha256': digest(wheel), 'tags': sorted(map(str, tags)),
-            'native_member': native[0]}
+            'native_member': native[0], 'wheel_requires_python': requires_python}
 
 
 def actual_cell(policy: dict) -> dict:
     python = f'{sys.version_info.major}.{sys.version_info.minor}'
-    if python not in policy['interpreters'] or platform.python_implementation() != 'CPython':
-        raise DistributionError('unsupported interpreter')
-    if sysconfig.get_config_var('Py_GIL_DISABLED'):
-        raise DistributionError('free-threaded Python is outside qualification')
     system, machine = platform.system(), platform.machine()
     platform_id = ({'Darwin': 'macos', 'Linux': 'linux', 'Windows': 'windows'}[system]
                    + '-' + {'AMD64': 'x86_64', 'ARM64': 'arm64'}.get(machine, machine))
     matches = [p for p in policy['platforms'] if p['id'] == platform_id]
     if len(matches) != 1:
         raise DistributionError(f'unsupported execution platform: {system}/{machine}')
+    interpreters = matches[0].get('interpreters', policy['interpreters'])
+    if python not in interpreters or platform.python_implementation() != 'CPython':
+        raise DistributionError('unsupported interpreter')
+    if sysconfig.get_config_var('Py_GIL_DISABLED'):
+        raise DistributionError('free-threaded Python is outside qualification')
     return {'python': python, 'python_full': sys.version, 'platform': platform_id,
             'platform_full': platform.platform(), 'machine': machine, 'gil_enabled': True}

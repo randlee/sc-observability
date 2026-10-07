@@ -6,7 +6,6 @@ import argparse
 import json
 import shutil
 import subprocess
-import sys
 import tomllib
 from pathlib import Path
 
@@ -49,17 +48,16 @@ def main() -> int:
     if git("status", "--porcelain"):
         raise SystemExit("candidate source must be committed and clean before staging")
     source_sha = git("rev-parse", "HEAD")
-    workspace = tomllib.loads((source / "Cargo.toml").read_text())
+    workspace = tomllib.loads((source / "Cargo.toml").read_text(encoding="utf-8"))
     if workspace["workspace"]["package"]["version"] != args.version:
         raise SystemExit("requested version differs from the committed workspace train")
-    roster = sorted(tomllib.loads((source / "release/publish-artifacts.toml").read_text())["crates"], key=lambda x: x["publish_order"])
+    roster = sorted(tomllib.loads((source / "release/publish-artifacts.toml").read_text(encoding="utf-8"))["crates"], key=lambda x: x["publish_order"])
     if (tuple(item["package"] for item in roster if item["package"] in PACKAGES) != PACKAGES
             or any(item["package"] == PRIVATE_PACKAGE for item in roster)):
         raise SystemExit("release inventory differs from the six-package qualification order")
     metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"], cwd=source))
     build = source / "target" / "b2-package-build"
     command = package_command(metadata, build)
-    subprocess.run([sys.executable, str(source / "scripts/ci/_log_release_adaptations.py"), "--destination", str(source)], check=True)
     output.mkdir(parents=True)
     with (output / "cargo-package.log").open("w") as log:
         result = subprocess.run(command, cwd=source, stdout=log, stderr=subprocess.STDOUT)

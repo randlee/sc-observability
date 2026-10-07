@@ -46,3 +46,22 @@ release/evidence/
 # its build script runs.
 examples/tauri-logging/src-tauri/gen/
 examples/tauri-logging/src-tauri/permissions/
+
+# sc-compose runtime state and render logs (never committed)
+**/.sc-compose/
+
+# QA metrics log: ephemeral, recomputed fresh at every QA close from bd; never
+# hand-carried, never a versioned artifact. Lives locally per checkout only.
+.sc/qa-log/
+.sc/sanity-log/
+.sc/telemetry-state/
+
+# atm-bd-orchestration: per-checkout current phase (formula overrides in .atm-bd/formula/ stay tracked)
+.atm-bd/current-phase.toml
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*

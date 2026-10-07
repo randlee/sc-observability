@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "logs": [
+    {
+      "body": {
+        "kind": "string_index",
+        "data": 0
+      }
+    }
+  ]
+}

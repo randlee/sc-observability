@@ -15,6 +15,7 @@ EXPECTED_WHEELS = {
     ("macos-15-intel", "x86_64-apple-darwin", "macosx_10_13_x86_64"),
     ("macos-latest", "aarch64-apple-darwin", "macosx_11_0_arm64"),
     ("windows-2022", "x86_64-pc-windows-msvc", "win_amd64"),
+    ("windows-11-arm", "aarch64-pc-windows-msvc", "win_arm64"),
 }
 TARGET_RE = re.compile(r"^[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+){2,}$")
 
@@ -31,8 +32,8 @@ def main() -> int:
     wheels = distributions[0]["wheels"]
     actual = {(wheel["os"], wheel["target"], wheel["platform"]) for wheel in wheels}
     if actual != EXPECTED_WHEELS:
-        raise SystemExit(f"five-wheel matrix mismatch: {sorted(actual)}")
-    if contract["npm_packages"] != [{"name": "@sc-observability/client", "source": "bindings/typescript"}]:
+        raise SystemExit(f"six-wheel matrix mismatch: {sorted(actual)}")
+    if contract["npm_packages"] != [{"name": "@synaptic-canvas/sc-observability", "source": "bindings/typescript"}]:
         raise SystemExit("npm package inventory mismatch")
     if contract["release_binaries"] != []:
         raise SystemExit("release_binaries must remain empty: no standalone binary is shipped")
@@ -40,7 +41,7 @@ def main() -> int:
         raise SystemExit("python wheel artifact id must differ from Rust crate artifact id")
     if "npm" not in contract["channels"]:
         raise SystemExit("npm channel must accompany npm package inventory")
-    print("C1_INSTALL_CONTRACT_SEMANTICS_PASS: targets, ten crates, five wheels, npm package")
+    print("C1_INSTALL_CONTRACT_SEMANTICS_PASS: targets, ten crates, six wheels, npm package")
     return 0
 
 

@@ -12,7 +12,7 @@ upstream prerequisites that `../sc-publish` must satisfy at a reviewed pin —
 not a repository-local publisher fork and not an accepted regression.
 The reviewed caller contract is `install.json`. Phase C migration is installed
 and qualified from the immutable `sc-publish` revision recorded in
-`release/sc-publish-pin.toml` (`7b899fea2325b6bda55a5d061f2c507366246974`).
+`release/sc-publish-pin.toml` (`22137c2da13bf4638b4267b69c6c2f021617da73`).
 No publication, tag, or release dispatch is authorized. See
 `docs/plans/phase-c/sprint-c-1-shared-pipeline-migration.md` for the exact
 asset replacement/removal/retention table and
@@ -49,7 +49,7 @@ cutover, new releases of these crate names must come from this repo instead.
 - All published crates in this repo must share that version.
 - The initial standalone release must be strictly higher than the last version
   published from the ATM workspace for these crate names.
-- Verification uses the workspace candidate version (currently `1.4.1`),
+- Verification uses the workspace candidate version (currently `1.5.0`),
   rather than a hard-coded historical `1.0.0` example.
 - Release workflows verify that the requested release version matches:
   - workspace version
@@ -66,18 +66,23 @@ cutover, new releases of these crate names must come from this repo instead.
   each real publication with 12 bounded attempts and fails the sequence visibly
   if the exact non-yanked version does not appear. B.2 tests this gate with
   mocked responses and never invokes live publication.
-- `.github/workflows/b2-staged-consumer.yml` distributes a single immutable
+- `.github/workflows/b2-staged-consumer.yml` (dispatch-only preflight) distributes a single immutable
   stage to macOS, Linux and Windows; all three must attest the same candidate
   source SHA and archive checksums. Third-party dependencies can use crates.io;
   all first-party dependencies resolve only from freshly verified extractions.
 - B.P2's historical four-package stage uses `release/bp2-publish-artifacts.toml`.
   Its existing artifacts and evidence are not regenerated as B.2 evidence.
 
+The [CI release-preflight policy](ci-policy.md#release-preflight) defines the
+applicable candidate versions and the publisher's dispatch/verification
+procedure for these workflows. These release preflight workflows run only via
+`workflow_dispatch`, never on PRs or pushes.
+
 ### B.2 candidate workflow (no publication)
 
 ```sh
-python3 scripts/ci/prepare_log_staged_packages.py --version 1.4.1 --output target/b2-stage/<source-sha>
-python3 scripts/ci/validate_log_staged_consumer.py --version 1.4.1 --stage target/b2-stage/<source-sha> --source-commit <source-sha> --result-file target/b2-evidence/macos.json
+python3 scripts/ci/prepare_log_staged_packages.py --version 1.5.0 --output target/b2-stage/<source-sha>
+python3 scripts/ci/validate_log_staged_consumer.py --version 1.5.0 --stage target/b2-stage/<source-sha> --source-commit <source-sha> --result-file target/b2-evidence/macos.json
 ```
 
 The source must be clean and committed. Existing stage directories are immutable

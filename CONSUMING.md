@@ -19,8 +19,8 @@ from `sc_observability`. That re-export set includes:
 - event and value contracts such as `LogEvent`, `Level`, `ErrorCode`,
   `ServiceName`, `TargetCategory`, `ActionName`, `Timestamp`, and
   `ProcessIdentity`
-- runtime error and health types such as `EventError`, `LoggingHealthReport`,
-  `LoggingHealthState`, `SinkHealth`, and `SinkHealthState`
+- runtime health types such as `LoggingHealthReport`, `LoggingHealthState`,
+  `SinkHealth`, and `SinkHealthState`
 - historical access helpers such as `LogQuery`, `LogSnapshot`,
   `LogFollowSession`, and `JsonlLogReader`
 
@@ -34,7 +34,8 @@ Create a logger with the documented defaults:
 ```rust
 use std::path::PathBuf;
 
-use sc_observability::{Logger, LoggerConfig, Running, ServiceName};
+use sc_observability::{LoggerConfig, Running, ServiceName};
+use sc_observability::v2::Logger;
 
 let service = ServiceName::new("my-service")?;
 let logger: Logger<Running> = Logger::new(LoggerConfig::default_for(
@@ -72,30 +73,35 @@ config.retained_log_policy.maintenance_max_work_per_pass = None; // default: unb
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-## Candidate qualification boundary
+`EventError` is not part of the root re-exports; use
+`sc_observability::v2::EventError` when naming the canonical logging error.
 
-The `1.4.0` Phase-B runtime and binding APIs are currently an unpublished
-qualification candidate. Consumers must not depend on them from crates.io or
-the language registries. Release engineering qualifies exact `=1.4.0`
-archives and wheel/npm artifacts locally. Phase B does not publish them; after
-the phase merges, Phase C migrates the shared `sc-publish` pipeline and a
-separate owner authorization is required before publication. BTIT adopts the
-published artifacts afterward.
+## Current release
 
-## 2. `log()`, `try_log()`, `flush()`, And Deprecated `emit()`
+The published Rust crates are at version `1.5.0`. Depend on the published
+`sc-observability` crate and use `sc_observability::v2` for new logging code.
+The released 1.x API remains behind the default-on `v1` feature and is
+deprecated; it is not a separate unpublished candidate. To check that an
+application uses only the canonical API, build with
+`sc-observability = { version = "1.5.0", default-features = false }`.
+See [the Phase F migration guide](docs/migration/phase-f.md) for the no-`v1`
+build and the remaining migration path.
 
-Use the queue-backed APIs directly in new code:
+## 2. `v2::Logger::{log, try_log, flush}` And Deprecated Root `emit()`
+
+Use `sc_observability::v2::Logger` for new code. Its queue-backed APIs return
+the canonical v2 errors directly:
 
 - `Logger::log(event)` validates and redacts the event, then blocks until the
   writer runtime admits it into the bounded queue.
-- `Logger::try_log(event)` performs the same validation path but returns
-  `TryLogError::QueueFull` immediately instead of waiting for queue space.
+- `Logger::try_log(event)` performs the same validation path but returns a
+  canonical routing error immediately instead of waiting for queue space.
 - successful `log()` or `try_log()` means queue admission, not durability on
   disk or console
 - `Logger::flush()` is the durability barrier; call it when the caller must
   wait until queued events have been written and sinks flushed
-- `Logger::emit()` remains available only as a deprecated compatibility path;
-  prefer `log()` or `try_log()` in new code and examples
+- Root `sc_observability::Logger::emit()` remains available only as a
+  deprecated compatibility path; prefer the v2 logger in new code and examples.
 
 ### Queue Admission And Durability
 
@@ -113,8 +119,9 @@ Use the queue-backed APIs directly in new code:
 Blocking queue admission:
 
 ```rust
+# use sc_observability::v2::Logger;
 # use sc_observability::{
-#     ActionName, Level, LogEvent, Logger, LoggerConfig, OutcomeLabel, ProcessIdentity,
+#     ActionName, Level, LogEvent, LoggerConfig, OutcomeLabel, ProcessIdentity,
 #     SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION,
 # };
 # use std::path::PathBuf;
@@ -144,9 +151,11 @@ logger.flush()?;
 Non-blocking queue admission:
 
 ```rust
+# use sc_observability::v2::{EventError, Logger};
 # use sc_observability::{
-#     ActionName, Level, LogEvent, Logger, LoggerConfig, OutcomeLabel, ProcessIdentity,
-#     SchemaVersion, ServiceName, TargetCategory, Timestamp, TryLogError, OBSERVATION_ENVELOPE_VERSION,
+#     ActionName, Level, LogEvent, LoggerConfig, OutcomeLabel, ProcessIdentity,
+#     SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION,
+#     error_codes,
 # };
 # use std::path::PathBuf;
 # let service = ServiceName::new("my-service")?;
@@ -171,10 +180,12 @@ let event = LogEvent {
 
 match logger.try_log(event) {
     Ok(()) => {}
-    Err(TryLogError::QueueFull(_)) => {
+    Err(EventError::Routing { context })
+        if context.diagnostic().code == error_codes::LOGGER_QUEUE_FULL =>
+    {
         eprintln!("writer queue is full; inspect logger.health()");
     }
-    Err(err) => return Err(Box::new(err)),
+    Err(err) => return Err(Box::<dyn std::error::Error>::from(err)),
 }
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -225,7 +236,8 @@ logger.emit(event)?;
 After:
 
 ```rust
-# use sc_observability::{ActionName, Level, LogEvent, Logger, LoggerConfig, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION};
+# use sc_observability::v2::Logger;
+# use sc_observability::{ActionName, Level, LogEvent, LoggerConfig, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION};
 # use std::path::PathBuf;
 # let service = ServiceName::new("my-service")?;
 # let logger = Logger::new(LoggerConfig::default_for(service.clone(), PathBuf::from("./observability")))?;
@@ -283,22 +295,27 @@ the stopped logger value.
 
 ## 6. Registering A Custom Sink
 
-Consumers register custom sinks through `LoggerBuilder` and
-`SinkRegistration`:
+Implement `sc_observability::v2::LogSink` and register it through
+`v2::LoggerBuilder` and `SinkRegistration::typed`. The runtime stores the exact
+`Arc` you register, and `LogSink` methods return the canonical
+`v2::LogSinkError`, which preserves a structured diagnostic and source when a
+sink operation fails. The built-in `ConsoleSink` and `JsonlFileSink` implement
+the same trait:
 
 ```rust
 use std::sync::Arc;
 
-use sc_observability::{LogSink, LoggerBuilder, LoggerConfig, ServiceName, SinkRegistration};
+use sc_observability::v2::{LogSink, LoggerBuilder};
+use sc_observability::{ConsoleSink, LoggerConfig, ServiceName, SinkRegistration};
 
 fn register_sink(builder: &mut LoggerBuilder, sink: Arc<dyn LogSink>) {
-    builder.register_sink(SinkRegistration::new(sink));
+    builder.register_sink(SinkRegistration::typed(sink));
 }
 # let service = ServiceName::new("consumer-app")?;
 # let config = LoggerConfig::default_for(service, std::env::temp_dir());
 # let mut builder = LoggerBuilder::new(config)?;
-# register_sink(&mut builder, Arc::new(sc_observability::ConsoleSink::stderr()));
-# let _logger = builder.build();
+# register_sink(&mut builder, Arc::new(ConsoleSink::stderr()));
+# let _logger = builder.build()?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
@@ -307,14 +324,15 @@ Optional sink-local filtering stays on the registration:
 ```rust
 use std::sync::Arc;
 
-use sc_observability::{LogFilter, LoggerBuilder, LoggerConfig, ServiceName, SinkRegistration};
+use sc_observability::v2::{LogSink, LoggerBuilder};
+use sc_observability::{ConsoleSink, LogFilter, LoggerConfig, ServiceName, SinkRegistration};
 
 fn register_filtered(
     builder: &mut LoggerBuilder,
-    sink: Arc<dyn sc_observability::LogSink>,
+    sink: Arc<dyn LogSink>,
     filter: Arc<dyn LogFilter>,
 ) {
-    builder.register_sink(SinkRegistration::new(sink).with_filter(filter));
+    builder.register_sink(SinkRegistration::typed(sink).with_filter(filter));
 }
 # let service = ServiceName::new("consumer-app")?;
 # let config = LoggerConfig::default_for(service, std::env::temp_dir());
@@ -323,15 +341,63 @@ fn register_filtered(
 # impl LogFilter for AcceptAll { fn accepts(&self, _event: &sc_observability::LogEvent) -> bool { true } }
 # register_filtered(
 #     &mut builder,
-#     Arc::new(sc_observability::ConsoleSink::stderr()),
+#     Arc::new(ConsoleSink::stderr()),
 #     Arc::new(AcceptAll),
 # );
-# let _logger = builder.build();
+# let _logger = builder.build()?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 See [`examples/custom-sink-example/`](./examples/custom-sink-example/) for a
 runnable public-only example.
+
+### Validated Custom Sink Registration
+
+`v2::LoggerBuilder::register_typed_sink` is the canonical owner of validated
+sink registration. It accepts an `Arc<dyn v2::LogSink>`, validates it, and then
+registers it exactly as `SinkRegistration::typed` would:
+
+```rust,no_run
+use std::sync::Arc;
+
+use sc_observability::v2::{LogSink, LoggerBuilder};
+use sc_observability::SinkHealth;
+use sc_observability_types::{LogEvent, SinkHealthState, SinkName};
+use sc_observability_types::v2::LogSinkError;
+
+struct CustomSink;
+
+impl LogSink for CustomSink {
+    fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+        Ok(())
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("custom").expect("static sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+fn register_typed_sink(builder: &mut LoggerBuilder) -> Result<(), Box<dyn std::error::Error>> {
+    builder.register_typed_sink(Arc::new(CustomSink))?;
+    Ok(())
+}
+```
+
+`v2::LoggerBuilder::register_typed_sink` is a current canonical API, not part
+of the v1.4.1 released surface. It accepts only healthy, unique sinks, checked
+against every sink already registered. `register_sink` is the infallible path
+and stores its registration without that validation. Re-registering the same
+`Arc` returns a canonical `v2::InitError::Configuration` with code
+`SC_LOG_SINK_REGISTRATION_DUPLICATE`; a degraded sink uses
+`SC_LOG_SINK_REGISTRATION_INVALID`, and an unavailable sink uses
+`SC_LOG_SINK_REGISTRATION_CLOSED`. Registration does not add a writer, flush
+path, or level-owner authority. See the
+[typed sink registration guide](./docs/logging/d-3-typed-sink-registration.md)
+for the full contract.
 
 ## 7. Using `Logger::health()`
 

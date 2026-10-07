@@ -133,7 +133,7 @@ def main():
                 # The independent parent then recovers its persistent policy.
                 crash=subprocess.run([sys.executable,__file__,'--crash-worker',str(scratch),str(denied),ip],timeout=40)
                 if crash.returncode != 91: raise RuntimeError('forced worker failure was not observed')
-                leaf=int((scratch/'leaf-ready').read_text())
+                leaf=int((scratch/'leaf-ready').read_text(encoding='utf-8'))
                 control_root=Path(os.environ['SC_WINDOWS_IDENTITY_CONTROL_ROOT'])
                 journals=list(control_root.glob('windows-identity-control-*/identity-recovery.json'))
                 if len(journals)!=1: raise RuntimeError('crashed worker recovery journal missing')
@@ -148,7 +148,7 @@ def main():
                 if gap.returncode != 93: raise RuntimeError('creation-gap crash was not observed')
                 journals=list(control_root.glob('windows-identity-control-*/identity-recovery.json'))
                 if len(journals)!=1: raise RuntimeError('creation-gap recovery journal missing')
-                record=json.loads(journals[0].read_text())
+                record=json.loads(journals[0].read_text(encoding='utf-8'))
                 owned_script="@(Get-CimInstance Win32_Process | Where-Object {(Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid -ErrorAction SilentlyContinue).Sid -eq "+literal(record['sid'])+"}).Count"
                 if int(powershell(owned_script)) != 1: raise RuntimeError('suspended root missing from creation-gap proof')
                 recover(journals[0]); shutil.rmtree(journals[0].parent)

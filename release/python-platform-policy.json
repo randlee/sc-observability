@@ -1,8 +1,10 @@
 {
   "schema_version": 1,
-  "candidate_version": "1.4.1",
+  "candidate_version": "1.5.0",
   "abi": "abi3",
+  "wheel_abi": "cp310-abi3",
   "minimum_python": "3.10",
+  "expected_requires_python": ">=3.10",
   "interpreters": [
     "3.10",
     "3.11",
@@ -45,7 +47,23 @@
       "runner": "windows-2022",
       "machine": "AMD64",
       "wheel_platform": "win_amd64"
+    },
+    {
+      "id": "windows-arm64",
+      "runner": "windows-11-arm",
+      "machine": "ARM64",
+      "wheel_platform": "win_arm64",
+      "rust_target": "aarch64-pc-windows-msvc",
+      "build_python": "3.11",
+      "interpreters": [
+        "3.11",
+        "3.12",
+        "3.13",
+        "3.14"
+      ],
+      "native_cells": 4
     }
   ],
+  "native_installed_suite_cells": 29,
   "publication": "pending_release_owner_authorization"
 }

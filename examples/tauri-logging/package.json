@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@sc-observability/client": "file:../../bindings/typescript",
+    "@synaptic-canvas/sc-observability": "file:../../bindings/typescript",
     "@tauri-apps/api": "^2.0.0"
   }
 }

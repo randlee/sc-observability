@@ -10,7 +10,7 @@ manifest instead.
 
 ## Distribution Channels
 
-- **crates.io**: all ten intended publishable Rust crates in
+- **crates.io**: every publishable Rust crate in
   `release/publish-artifacts.toml`, in dependency order
   - [`sc-observability-types`](https://crates.io/crates/sc-observability-types)
   - [`sc-observability`](https://crates.io/crates/sc-observability)
@@ -134,13 +134,13 @@ candidate evidence, and isolated consumer-matrix results.
 The intended channels are crates.io for the DTO, native-runtime, and (after
 its independent Tauri workspace qualification) host crate; PyPI for the
 `sc-observability` wheel and sdist across the checked platform/interpreter
-matrix; and npm for `@sc-observability/client`. Tauri/native binaries are
+matrix; and npm for `@synaptic-canvas/sc-observability`. Tauri/native binaries are
 qualification artifacts consumed by the host and are not a second registry
 channel. Phase B records readiness only; publication is separately authorized
 after the Phase C `sc-publish` migration, and BTIT adoption follows publication.
 
 Deliberate exclusions are `sc-observability-log-consumer-check` (CI-only
 consumer proof), `bindings/schema-generator` (build tooling), and example
-applications, including `examples/atm-adapter-example` (excluded from the
+applications and other excluded examples (excluded from the
 root workspace) and the Tauri/Python examples. They remain test or tooling
 inputs and must not be published as library artifacts.

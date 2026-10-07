@@ -1,0 +1,12 @@
+{
+  "task_id": "obs-d-4",
+  "sprint": "d-4",
+  "stack": "phase-d",
+  "pr_target": "integrate/phase-d",
+  "worktree_path": "../sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
+  "branch": "sprint/d-4-otlp-sync-exporter",
+  "primary_checkout": "/path/to/sc-observability",
+  "phase_root": "obs-phase-d",
+  "test_command": "make test",
+  "policy_path": ".claude/project/quality-policy.md"
+}

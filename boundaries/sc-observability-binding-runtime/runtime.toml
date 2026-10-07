@@ -12,14 +12,21 @@ constructor = "none"
 [composition]
 roots = []
 [dependencies]
-allowed_dependents = ["rust-python-logging", "sc-observability-py"]
+allowed_dependents = ["rust-python-logging", "sc-observability-py", "sc-observability-tauri"]
 allowed_dependencies = ["sc-observability", "sc-observability-dto", "sc-observability-log", "sc-observability-types"]
 forbidden_edges = []
 [references]
 scope = "outside_owner_crate"
 forbidden = []
 [testing]
-allowed_test_double_paths = []
+allowed_test_double_paths = [
+  "src/lib.rs::TestWriterGate",
+  "src/lib.rs::TestBlockingSink",
+  "src/lib.rs::create_test_blocking_core_backend",
+  "src/lib.rs::CoreLoggerOwner::force_revision_exhaustion_for_test",
+  "src/coordinator.rs::Coordinator::force_revision_exhaustion_for_test",
+  "src/coordinator.rs::core_from_test_factory",
+]
 forbidden_test_bypasses = []
 [enforcement]
 lint_rules = ["LINT-SC-OBSERVABILITY-BINDING-RUNTIME-BOUNDARY"]

@@ -1,15 +1,7 @@
 name: Python packaging boundaries
 
 on:
-  push:
-    branches: [feature/phase-b-4a-python-packaging]
   pull_request:
-    paths:
-      - 'scripts/ci/*python*'
-      - 'scripts/ci/tests/test_python_distribution.py'
-      - 'release/python-platform-policy.json'
-      - '.github/workflows/b4a-python-distributions.yml'
-      - '.github/workflows/python-packaging-boundaries.yml'
   workflow_dispatch:
 
 permissions:

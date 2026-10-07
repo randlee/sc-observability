@@ -14,6 +14,10 @@ required_variables:
   - worktree_path
   - branch
   - manifest_path
+optional_variables:
+  - already_published_channels
+defaults:
+  already_published_channels: ""
 ---
 <atm-task id="{{ task_id }}" assignee="publisher">
   <recipient>{{ recipient }}</recipient>

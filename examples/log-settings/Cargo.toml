@@ -1,0 +1,14 @@
+[package]
+name = "log-settings-example"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+sc-observability.workspace = true
+sc-observability-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

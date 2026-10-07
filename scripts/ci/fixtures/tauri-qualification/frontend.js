@@ -1,5 +1,5 @@
 import { requestLevelChange } from './host-client.ts';
-import { createClient, createTauriTransport, encodeEvent, encodeValue } from '@sc-observability/client';
+import { createClient, createTauriTransport, encodeEvent, encodeValue } from '@synaptic-canvas/sc-observability';
 
 // This fixture runs inside the real OS webview. No mockIPC/test runtime is used.
 const invoke = window.__TAURI__.core.invoke;

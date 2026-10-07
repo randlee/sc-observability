@@ -235,9 +235,12 @@ exist; run `Release Preflight` and report its sanitized result.
    absent, failed, stale, or mismatched. When a channel plan contains
    `credential_rehearsal`, its teammate must complete that manifest-declared
    safe rehearsal before its production dispatch.
-6. Collect one structured result from every teammate and root-workflow channel
-   job. Do not mark release
-   completion until every manifest-declared channel has a successful result or
+6. Collect one complete fenced-JSON result from every teammate and root-workflow channel
+   job. Validate every result against the complete channel-worker result contract,
+   including success results. Missing, malformed, incomplete, or mismatched
+   results are `REPORTING.CONTRACT_FAILURE`, not publication success. Preserve
+   the worker's exact sanitized error details and evidence through aggregation.
+   Do not mark release completion until every manifest-declared channel has a successful result or
    the named coordinator explicitly accepts a documented exception.
 
 ```json

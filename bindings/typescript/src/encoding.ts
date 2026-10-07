@@ -1,4 +1,10 @@
-import { type LogEventDto, type ValueDto, validate } from "./generated/index";
+import {
+  MAX_CONTAINER_DEPTH,
+  MAX_WIRE_PAYLOAD_BYTES,
+  type LogEventDto,
+  type ValueDto,
+  validate,
+} from "./generated/index";
 import { err, isRecord, ok, type Result, validation } from "./result";
 
 export type EventValueInput =
@@ -17,8 +23,6 @@ export type LogEventInput = Pick<LogEventDto, "level" | "target" | "action"> & P
   fields?: Readonly<Record<string, EventValueInput>>;
 };
 
-const MAX_DEPTH = 32;
-const MAX_REQUEST_BYTES = 65536;
 const MIN_I64 = -(1n << 63n);
 const MAX_U64 = (1n << 64n) - 1n;
 const RESERVED = "sc_observability.binding.";
@@ -60,7 +64,9 @@ function encode(value: EventValueInput, depth: number, field: string): Result<Va
     }
     return ok({ kind: "float", value });
   }
-  if (depth >= MAX_DEPTH) return err(validation(field, "maximum container depth is 32"));
+  if (depth >= MAX_CONTAINER_DEPTH) {
+    return err(validation(field, `maximum container depth is ${MAX_CONTAINER_DEPTH}`));
+  }
 
   let prototype: object | null;
   try {
@@ -116,8 +122,8 @@ function encode(value: EventValueInput, depth: number, field: string): Result<Va
 function checkSize<T>(result: Result<T>, field: string): Result<T> {
   if (result.kind === "error") return result;
   try {
-    if (utf8Bytes(JSON.stringify(result.value)) > MAX_REQUEST_BYTES) {
-      return err(validation(field, "request exceeds 65536 UTF-8 bytes"));
+    if (utf8Bytes(JSON.stringify(result.value)) > MAX_WIRE_PAYLOAD_BYTES) {
+      return err(validation(field, `request exceeds ${MAX_WIRE_PAYLOAD_BYTES} UTF-8 bytes`));
     }
   } catch {
     return err(validation(field, "value could not be serialized"));

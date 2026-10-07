@@ -1,0 +1,50 @@
+name: Durable telemetry platforms
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact source commit to check and build
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  durable:
+    name: durable (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: aarch64-apple-darwin
+            runner: macos-14
+          - target: x86_64-apple-darwin
+            runner: macos-14
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2022
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_commit }}
+      - name: Verify exact source commit
+        shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+          components: clippy, rustfmt
+          targets: ${{ matrix.target }}
+      - name: Check durable dependency graph
+        run: cargo check -p sc-observability-otlp --features durable-store --locked --target ${{ matrix.target }}
+      - name: Build CLI
+        run: cargo build -p sc-otel-cli --locked --target ${{ matrix.target }}

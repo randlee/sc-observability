@@ -1,0 +1,1 @@
+Captured from cargo-semver-checks 0.48.0 against published 1.4.1 and candidate 22e7bd018e86156d4ca07cbc38b598c98cf2d1df, with --release-type minor --default-features. Both commands exited 1. Only absolute workspace and Cargo home paths were normalized. stdout and stderr are separate, as subprocess.run captures them.

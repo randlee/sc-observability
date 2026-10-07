@@ -12,11 +12,14 @@ from pathlib import Path
 
 import tomli_w
 from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source, runtime_options, fault_paths
+from python_arm64 import apply_windows_arm64_overlay
+from stage_python_conformance import stage_conformance
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
 QUALIFICATION_HELPERS = (
     '_python_distribution.py', '_python_sandbox.py', '_windows_identity.py',
+    'python_arm64.py', 'python_binding_validator.py',
     'supervise_windows_proof.py', 'validate_python_distribution.py',
     'build_binding_source_bundle.py', '_hashing.py', '_log_staging.py',
     'python-packaging-requirements.txt',
@@ -63,7 +66,7 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
             raise DistributionError(f'full B.4 runtime package is not ready: {relative}')
     suite_path = project / 'qualification-suite.json'
     if suite_path.is_file():
-        suite = json.loads(suite_path.read_text())
+        suite = json.loads(suite_path.read_text(encoding='utf-8'))
     elif allow_incomplete_runtime:
         suite = {'schema_version': 1, 'runtime_complete': False, 'pytest_paths': ['tests'],
                  'typing_paths': ['tests/typing/test_result_narrowing.py'],
@@ -87,7 +90,7 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     log = output / 'prepare.log'
     run([sys.executable, str(helper), '--root-manifest', str(project / 'Cargo.toml'),
          '--output', str(bundle)], source, log)
-    evidence = json.loads((bundle / 'manifest.json').read_text())
+    evidence = json.loads((bundle / 'manifest.json').read_text(encoding='utf-8'))
     roots = [entry for entry in evidence['packages'] if entry['name'] == 'sc-observability-py']
     if len(roots) != 1:
         raise DistributionError('bundle lacks the Python extension/embedding root')
@@ -104,14 +107,15 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     for relative in ('python', 'tests', 'examples'):
         if (project / relative).is_dir():
             copy_tracked_tree(source, PROJECT / relative, staging / relative)
+    stage_conformance(source, staging / 'tests')
     shutil.copyfile(source / 'LICENSE', staging / 'LICENSE')
     (staging / 'qualification-suite.json').write_text(json.dumps(suite, indent=2) + '\n')
     embedding = confined(source, suite['embedding_manifest'])
     if not embedding.is_file():
         raise DistributionError('missing real Rust embedding fixture')
     copy_tracked_tree(source, embedding.parent.relative_to(source), staging / 'embedding')
-    workspace = tomllib.loads((source / 'Cargo.toml').read_text())['workspace']
-    embedded = tomllib.loads((staging / 'embedding/Cargo.toml').read_text())
+    workspace = tomllib.loads((source / 'Cargo.toml').read_text(encoding='utf-8'))['workspace']
+    embedded = tomllib.loads((staging / 'embedding/Cargo.toml').read_text(encoding='utf-8'))
     for key, value in list(embedded['package'].items()):
         if isinstance(value, dict) and value.get('workspace'):
             embedded['package'][key] = workspace['package'][key]
@@ -135,7 +139,7 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     embedded['patch'] = {'crates-io': {entry['name']: {'path': '../rust-bundle/' + entry['root']}
                                      for entry in evidence['packages']}}
     (staging / 'embedding/Cargo.toml').write_text(tomli_w.dumps(embedded))
-    manifest = tomllib.loads((staging / 'Cargo.toml').read_text())
+    manifest = tomllib.loads((staging / 'Cargo.toml').read_text(encoding='utf-8'))
     manifest['workspace'] = {}
     # Cargo's own source listing must not recursively package bundled .crate metadata.
     # Maturin's explicit sdist includes below retain the complete bundle unchanged.
@@ -147,14 +151,14 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     }
     (staging / 'Cargo.toml').write_text(tomli_w.dumps(manifest))
     # Source replacement contains only published dependencies; first-party crates use root patches.
-    config = tomllib.loads((bundle / '.cargo/config.toml').read_text())
+    config = tomllib.loads((bundle / '.cargo/config.toml').read_text(encoding='utf-8'))
     for value in config.get('source', {}).values():
         if 'directory' in value:
             value['directory'] = 'rust-bundle/' + value['directory']
     config['net'] = {'offline': True}
     (staging / '.cargo').mkdir(exist_ok=True)
     (staging / '.cargo/config.toml').write_text(tomli_w.dumps(config))
-    pyproject = tomllib.loads((project / 'pyproject.toml').read_text())
+    pyproject = tomllib.loads((project / 'pyproject.toml').read_text(encoding='utf-8'))
     maturin = pyproject.setdefault('tool', {}).setdefault('maturin', {})
     if 'test-hooks' in maturin.get('features', []):
         raise DistributionError('production pyproject must not enable private test hooks')
@@ -168,7 +172,12 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     qualification.mkdir(exist_ok=True)
     for filename in QUALIFICATION_HELPERS:
         shutil.copyfile(source / 'scripts/ci' / filename, qualification / filename)
-    shutil.copyfile(source / 'release/python-platform-policy.json', qualification / 'platform-policy.json')
+    policy = json.loads((source / 'release/python-platform-policy.json').read_text())
+    try:
+        apply_windows_arm64_overlay(policy)
+    except RuntimeError as error:
+        raise DistributionError(str(error)) from error
+    (qualification / 'platform-policy.json').write_text(json.dumps(policy, indent=2) + '\n')
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'Cargo.lock')
     run(['cargo', 'metadata', '--offline', '--format-version', '1'], staging, log)
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'embedding/Cargo.lock')
@@ -179,11 +188,11 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     # Preserve every selected registry identity exactly; the full reviewed closure
     # remains independently verified and vendored by the unchanged B.3 bundle.
     from build_binding_source_bundle import registry_identities
-    reviewed = registry_identities(tomllib.loads((bundle / 'reviewed-source.lock').read_text()))
+    reviewed = registry_identities(tomllib.loads((bundle / 'reviewed-source.lock').read_text(encoding='utf-8')))
     registry_selection = {}
     for name, lock_path in [('extension', staging / 'Cargo.lock'),
                             ('embedding', staging / 'embedding/Cargo.lock')]:
-        selected = registry_identities(tomllib.loads(lock_path.read_text()))
+        selected = registry_identities(tomllib.loads(lock_path.read_text(encoding='utf-8')))
         if any(identity not in reviewed for identity in selected):
             raise DistributionError(f'{name} registry version/source/checksum drift from reviewed lock')
         registry_selection[name] = selected

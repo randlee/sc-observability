@@ -126,7 +126,7 @@ Minimum CI gates per sprint:
 - `cargo clippy --workspace -- -D warnings`
 - `cargo test --workspace`
 - `bash scripts/ci/validate_repo_boundaries.sh`
-- docs consistency checks
+- rustdoc missing-doc checks
 - dependency-ban enforcement
 
 The following can be added once behavior exists:
@@ -135,12 +135,8 @@ The following can be added once behavior exists:
 
 Phase-A validation additions once the phase starts landing:
 
-- `bash scripts/ci/validate_writer_thread_lock.sh` for the A.1 normative-doc
-  lock
-- `bash scripts/ci/validate_public_api_diff.sh` for additive public API diffs
-- `python3 scripts/ci/validate_public_api_semver.py` for semver-breaking API diffs
-- `bash scripts/ci/validate_public_api_docs.sh` for machine-checkable API
-  approval/documentation coverage
+- `python3 scripts/ci/stock_public_api.py check --target-dir <target>` for
+  accepted Rust public API baselines
 
 ## 6. Exit Criteria
 

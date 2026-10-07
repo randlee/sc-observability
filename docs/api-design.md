@@ -175,14 +175,14 @@ Must not own:
 - ATM-specific metadata rules
 - ATM path conventions
 
-### 6.3 `sc-observe`
+### 6.3 `sc_observe::v2`
 
 Owns typed observation routing and projection.
 
 Owns:
 
-- `Observability`
-- observation emitter interfaces
+- `v2::Observability`
+- typed observation admission via `v2::Observability::emit`
 - subscriber registry
 - projector registry
 - routing from typed observations into logging outputs and generic downstream
@@ -195,10 +195,8 @@ Design intent:
 - applications use this when one emitted observation should fan out to logs,
   generic projectors, and typed subscribers
 - this crate depends on `sc-observability` and `sc-observability-types`
-- v1 scope is intentionally limited to registration, filtering, projection, and
-  fan-out
-- v1 does not need a large general-purpose workflow engine beyond those routing
-  responsibilities
+- the canonical surface is the explicit `v2` namespace; applications do not
+  need a general-purpose workflow engine beyond these routing responsibilities
 
 Must not own:
 
@@ -211,8 +209,8 @@ Owns remote telemetry infrastructure.
 
 Owns:
 
-- `Telemetry`
-- `TelemetryConfig`
+- `v2::Telemetry`
+- `v2::TelemetryConfig`
 - OTLP exporters
 - OTLP transport concerns
 - batching, retry, timeout, flush, shutdown
@@ -221,7 +219,7 @@ Owns:
 Design intent:
 
 - this crate sits at the top of the stack
-- the application constructs `TelemetryConfig` independently and passes it
+- the application constructs `v2::TelemetryConfig` independently and passes it
   directly to `sc-observability-otlp`
 - this crate attaches to `sc-observe` by registering `LogProjector`,
   `SpanProjector`, and `MetricProjector` implementations with
@@ -374,8 +372,8 @@ Composition rules inside `sc-observe`:
 - `LoggerConfig.level`, `redaction`, and `process_identity` use
   documented `sc-observe` defaults unless those knobs are exposed separately in
   a future expansion of `ObservabilityConfig`
-- `sc-observe` does not derive or own `TelemetryConfig`
-- `TelemetryConfig` is constructed independently by the application layer and
+- `sc-observe` does not derive or own `v2::TelemetryConfig`
+- `v2::TelemetryConfig` is constructed independently by the application layer and
   passed directly to `sc-observability-otlp`
 
 Registrations are config-time only:
@@ -425,57 +423,19 @@ Rules:
   health
 - it does not replace `LoggingHealthReport` or `TelemetryHealthReport`
 
-### 7.4 Producer Injection Traits
+### 7.4 Producer Entry Points
 
-Producer crates should depend on narrow injected interfaces rather than always
-depending on the concrete service types directly.
+Producer code uses the concrete facades that own its admission behavior:
 
-One implementation-readiness correction is important here:
+- typed observations call `Observability::emit`
+- logging-only code calls `Logger::emit`
+- telemetry-specific code uses its telemetry-local signal entry points when it
+  intentionally produces projected signals
 
-- open cross-crate traits remain in `sc-observability-types`
-- sealed emitter traits must be crate-local to the crate that implements them
-
-That split is necessary because a trait cannot be both sealed in the base crate
-and implemented by public facade types in downstream crates without weakening
-the seal.
-
-`sc-observe` therefore owns the producer-facing sealed observation emitter:
-
-```rust
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-pub trait ObservationEmitter<T>: sealed_emitters::Sealed + Send + Sync
-where
-    T: Observable,
-{
-    fn emit(&self, observation: Observation<T>) -> Result<(), ObservationError>;
-}
-```
-
-Implementation expectation:
-
-- `Observability` implements `ObservationEmitter<T>`
-
-Related crate-local sealed traits:
-
-- `sc-observability` owns `LogEmitter`
-- `sc-observability-otlp` owns `SpanEmitter` and `MetricEmitter`
-
-Recommended usage:
-
-- most application code should inject `ObservationEmitter<T>` for its typed
-  observations
-- logging-only code may inject `LogEmitter`
-- telemetry-specific code may inject telemetry-local signal emitter traits when
-  it is intentionally producing projected signals
-- `ObservationEmitter<T>` is intentionally per-type. Callers hold one handle
-  per observation type; a single type-erased emitter for heterogeneous events
-  is not supported by design.
-
-`ObservationEmitter<T>` is sealed inside `sc-observe`; it is not intended for
-external implementation. Adding methods is non-breaking.
+The former crate-local sealed emitter traits had no supported consumers and are
+not retained as injection contracts. Open cross-crate extension points remain
+in `sc-observability-types` where their consumer-owned implementations are part
+of the supported API.
 
 ### 7.5 `Observable`
 
@@ -605,6 +565,8 @@ pub struct ServiceName(String);
 pub struct TargetCategory(String);
 pub struct ActionName(String);
 pub struct MetricName(String);
+pub struct StateName(String);
+pub struct EntityId(String);
 ```
 
 Ownership and usage:
@@ -622,7 +584,7 @@ Ownership and usage:
 - `ServiceName`
   - owner: `sc-observability-types`
   - underlying type: validated `String`
-  - used by: `LoggerConfig`, `TelemetryConfig`, `LogEvent`, `MetricRecord`,
+  - used by: `LoggerConfig`, `v2::TelemetryConfig`, `LogEvent`, `MetricRecord`,
     `SpanRecord`
   - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
 - `TargetCategory`
@@ -642,6 +604,17 @@ Ownership and usage:
   - underlying type: validated `String`
   - used by: `MetricRecord.name`
   - invariant: non-empty metric identifier using `[A-Za-z0-9._\\-/]+`
+- `StateName`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `StateTransition.from_state` and `StateTransition.to_state`
+  - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
+- `EntityId`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: canonical admission validation of `StateTransition.entity_id`; the
+    field itself stays `Option<String>` exactly as released in 1.4.1
+  - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
 
 These newtypes should expose:
 
@@ -652,7 +625,7 @@ impl ToolName {
 }
 ```
 
-Equivalent constructors and accessors apply to the other four newtypes.
+Equivalent constructors and accessors apply to the other listed newtypes.
 
 ### 8.2 `Remediation`
 
@@ -792,7 +765,6 @@ pub trait ProcessIdentityResolver: Send + Sync {
 ```
 
 `ProcessIdentityResolver` is intentionally open for consumer implementation.
-Changes to its signature are breaking.
 
 Rationale:
 
@@ -855,23 +827,30 @@ Design direction:
 ```rust
 pub struct StateTransition {
     /// Stable category describing what changed, such as `task` or `subagent`.
-    pub entity_kind: String,
+    pub entity_kind: TargetCategory,
+    /// Optional caller-owned identifier for the entity that changed.
     pub entity_id: Option<String>,
     /// Previous stable state label.
-    pub from_state: String,
+    pub from_state: StateName,
     /// New stable state label.
-    pub to_state: String,
+    pub to_state: StateName,
     /// Optional human-readable explanation for why the transition occurred.
     pub reason: Option<String>,
     /// Optional action or event name that triggered the transition.
-    pub trigger: Option<String>,
+    pub trigger: Option<ActionName>,
 }
 ```
 
 Meaning:
 
 - `entity_kind`: what changed, such as `task`, `subagent`, `test_run`
-- `entity_id`: which specific entity changed
+- `entity_id`: which specific entity changed. The field type is the released
+  `Option<String>`, so one `LogEvent`/query graph serves every facade.
+  Canonical (v2) entry points validate it as an `EntityId` at admission, after
+  the version, service and level checks, and reject an invalid value as
+  `EventError::Validation` (`v2::TelemetryError::Event` for OTLP `emit_log`).
+  Released root facades keep exact 1.4.1 acceptance with no entity check, and
+  stored or queried events always decode leniently.
 - `from_state` and `to_state`: the edge itself
 - `reason`: why the change happened
 - `trigger`: what action or event caused it
@@ -1095,8 +1074,7 @@ pub struct DiagnosticSummary {
 ### 9.11 Public Error Type Pattern
 
 The published baseline uses diagnostic wrappers as described below. Phase B
-proposes additive improved errors and warning-only migration in §21; these
-baseline definitions are preserved, not replaced in place.
+records improved errors and migration guidance in §21.
 
 Design direction:
 
@@ -1524,17 +1502,8 @@ pub enum TryLogError {
 }
 ```
 
-Crate-local producer injection trait:
-
-```rust
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-pub trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
-}
-```
+`Logger::emit` is the retained logger admission entry point and preserves the
+released `EventError` contract.
 
 ### 11.7 `LogSink`
 
@@ -1698,29 +1667,20 @@ Health rules:
 
 ## 12. Telemetry Surface (`sc-observability-otlp`)
 
-In v1, the telemetry surface is OTLP-backed and lives in
-`sc-observability-otlp`.
+The canonical OTLP surface is opt-in and lives in `sc-observability-otlp`.
 
-### 12.1 `TelemetryConfig`
+### 12.1 `v2::TelemetryConfig`
 
 Design direction:
 
-```rust
-pub struct TelemetryConfig {
-    pub service_name: ServiceName,
-    pub resource: ResourceAttributes,
-    pub transport: OtelConfig,
-    pub logs: Option<LogsConfig>,
-    pub traces: Option<TracesConfig>,
-    pub metrics: Option<MetricsConfig>,
-}
-```
+`v2::TelemetryConfig` carries `service_name`, `resource`, `transport`, and
+optional logs, traces, and metrics settings.
 
 Composition rule:
 
-- `TelemetryConfig` is constructed independently by the application layer
-- `TelemetryConfig` is passed directly to `sc-observability-otlp`
-- `TelemetryConfig.service_name`, `resource`, `transport`, and signal-specific
+- `v2::TelemetryConfig` is constructed independently by the application layer
+- `v2::TelemetryConfig` is passed directly to `sc-observability-otlp`
+- `v2::TelemetryConfig.service_name`, `resource`, `transport`, and signal-specific
   settings are owned by the OTLP setup path, not by `ObservabilityConfig`
 
 Recommended construction shape:
@@ -1731,15 +1691,15 @@ pub struct TelemetryConfigBuilder { /* opaque */ }
 impl TelemetryConfigBuilder {
     pub fn new(service_name: ServiceName) -> Self;
     pub fn with_resource(self, resource: ResourceAttributes) -> Self;
-    pub fn with_transport(self, transport: OtelConfig) -> Self;
+    pub fn with_transport(self, transport: v2::OtelConfig) -> Self;
     pub fn enable_logs(self, config: LogsConfig) -> Self;
     pub fn enable_traces(self, config: TracesConfig) -> Self;
     pub fn enable_metrics(self, config: MetricsConfig) -> Self;
-    pub fn build(self) -> TelemetryConfig;
+    pub fn build(self) -> v2::TelemetryConfig;
 }
 ```
 
-### 12.1.1 `OtelConfig`
+### 12.1.1 `v2::OtelConfig`
 
 The initial OTEL transport configuration should carry forward the proven core
 shape from the existing `agent-team-mail` implementation, but without any
@@ -1747,33 +1707,16 @@ ATM-specific env naming baked into the shared API.
 
 Design direction:
 
-```rust
-pub enum OtlpProtocol {
-    HttpBinary,
-    HttpJson,
-    Grpc,
-}
-
-pub struct OtelConfig {
-    pub enabled: bool,
-    pub endpoint: Option<String>,
-    pub protocol: OtlpProtocol,
-    pub auth_header: Option<String>,
-    pub ca_file: Option<std::path::PathBuf>,
-    pub insecure_skip_verify: bool,
-    pub timeout_ms: DurationMs,
-    pub debug_local_export: bool,
-    pub max_retries: u32,
-    pub initial_backoff_ms: DurationMs,
-    pub max_backoff_ms: DurationMs,
-}
-```
+`v2::OtelConfig` carries the enabled switch, endpoint, protocol, optional
+authentication and CA inputs, TLS override, timeout, debug-export option, and
+bounded retry configuration. `v2::OtlpProtocol` selects HTTP binary, HTTP JSON,
+or gRPC transport.
 
 Defaults:
 
 - `enabled = false`
 - `endpoint = None`
-- `protocol = OtlpProtocol::HttpBinary`
+- `protocol = v2::OtlpProtocol::HttpBinary`
 - `auth_header = None`
 - `ca_file = None`
 - `insecure_skip_verify = false`
@@ -1797,13 +1740,13 @@ Initial intent of each field:
 - `initial_backoff_ms`: initial retry backoff
 - `max_backoff_ms`: maximum retry backoff
 
-This shape is the v1 transport contract. It preserves the proven transport
-knobs while neutralizing the old ATM-specific surface.
+This canonical shape keeps transport configuration independent of
+ATM-specific environment naming.
 
 Rule:
 
 - invalid OTLP transport configuration, including unsupported protocol values,
-  is detected at `Telemetry::new(...)` and returns `InitError`
+  is rejected during canonical telemetry initialization with `InitError`
 
 ### 12.1.2 Signal Configs
 
@@ -1837,23 +1780,13 @@ pub struct ResourceAttributes {
 }
 ```
 
-### 12.3 `Telemetry`
+### 12.3 `v2::Telemetry`
 
 Design direction:
 
-```rust
-pub struct Telemetry { /* opaque */ }
-
-impl Telemetry {
-    pub fn new(config: TelemetryConfig) -> Result<Self, InitError>;
-    pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError>;
-    pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>;
-    pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>;
-    pub fn flush(&self) -> Result<(), FlushError>;
-    pub fn shutdown(&self) -> Result<(), ShutdownError>;
-    pub fn health(&self) -> TelemetryHealthReport;
-}
-```
+`v2::Telemetry` is an opaque handle initialized from `v2::TelemetryConfig`.
+It emits logs, spans, and metrics; supports flush and shutdown; and reports
+telemetry health.
 
 Telemetry receives `SpanSignal` values but exports completed spans only after
 assembly.
@@ -1861,32 +1794,16 @@ assembly.
 Rule:
 
 - calling `emit_log()`, `emit_span()`, or `emit_metric()` after `shutdown()`
-  returns `Err(TelemetryError::Shutdown)`
+  returns `Err(v2::TelemetryError::Shutdown { context })`
 - this lifecycle rule is semantic only in this design doc; no telemetry handle
   typestate is required here
 - `flush()` attempts export of all ready batches
 - `shutdown()` performs a final flush, drops incomplete spans, and is idempotent
 
-Crate-local direct-signal injection traits:
-
-```rust
-mod sealed_emitters {
-    pub trait Sealed {}
-}
-
-pub trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_span(&self, span: SpanSignal) -> Result<(), TelemetryError>;
-}
-
-pub trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_metric(&self, metric: MetricRecord) -> Result<(), TelemetryError>;
-}
-```
-
 ### 12.4 Exporter Traits
 
 ```rust
-pub struct CompleteSpan {
+pub struct OtlpSpanEnvelope {
     pub record: SpanRecord<SpanEnded>,
     pub events: Vec<SpanEvent>,
 }
@@ -1894,7 +1811,7 @@ pub struct CompleteSpan {
 pub struct SpanAssembler { /* opaque */ }
 
 impl SpanAssembler {
-    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError>;
+    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<OtlpSpanEnvelope>, EventError>;
     pub fn flush_incomplete(&mut self) -> usize;
 }
 
@@ -1903,7 +1820,7 @@ pub(crate) trait LogExporter: Send + Sync {
 }
 
 pub(crate) trait TraceExporter: Send + Sync {
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
+    fn export_spans(&self, batch: &[OtlpSpanEnvelope]) -> Result<(), ExportError>;
 }
 
 pub(crate) trait MetricExporter: Send + Sync {
@@ -1916,7 +1833,7 @@ Rules:
 - `SpanAssembler` buffers `SpanSignal::Started`
 - `SpanAssembler` attaches subsequent `SpanSignal::Event` items to the active
   span by `span_id`
-- `SpanAssembler` emits `CompleteSpan` only on `SpanSignal::Ended`
+- `SpanAssembler` emits `OtlpSpanEnvelope` only on `SpanSignal::Ended`
 - in-flight started spans without a matching end are dropped at flush/shutdown
   and counted in telemetry dropped-export accounting
 - `LogExporter`, `TraceExporter`, and `MetricExporter` are crate-local runtime
@@ -1925,7 +1842,8 @@ Rules:
 
 ### 12.5 Constants And Error Registry Modules
 
-`sc-observability-otlp` should ship:
+`sc-observability-otlp` keeps its canonical configuration defaults and error
+codes in the registry modules shown here.
 
 - `src/constants.rs`
   - `DEFAULT_OTLP_TIMEOUT_MS`
@@ -2322,35 +2240,12 @@ B.P1 runtime-level core acceptance is owner-deferred to Phase B completion
 unless its own contract says otherwise. This does not approve registry
 publication, an owner signature, or an independent QA PASS.
 
-### 21.1 Published API Preservation And Issue #92
+### 21.1 Migration Inventory
 
-The nine diagnostic wrappers (Identity, Init, Event, Flush, Shutdown, Projection,
-Subscriber, LogSink and Export) remain available with their existing construction,
-trait implementations, metadata and Serde representation. New typed failure
-implementations and distinctly named operation/extension entry points coexist.
-Classification of custom/unknown legacy diagnostics is total and preserves the
-original error. DiagnosticInfo stays sealed; no new required method or bound is
-added to an existing consumer-implemented trait. New trait implementations must
-not make existing unqualified method calls ambiguous, including glob-import
-consumers; compatibility fixtures exercise unchanged source.
-
-Improved methods use typed errors from the failure site and share the runtime
-with legacy adapters. Working replacements precede actionable compiler
-`#[deprecated]` warnings; removal has no scheduled release. Rust warning-denial
-policies may require migration, which the adoption guide explains explicitly.
-No in-place struct-to-enum conversion, existing-enum non-exhaustive annotation,
-required public-struct field, changed return type or wire-shape change is planned.
-Review the [error sprint contract](plans/phase-b/sprint-b-1a-error-api.md) and its
-successors for the exact replacement inventory before implementation approval.
-
-B.1e migration implementation records that inventory in
-[`plans/phase-b/warning-inventory-b-1e.md`](plans/phase-b/warning-inventory-b-1e.md)
-and routes adopters through
-`.claude/skills/sc-observability-adopting/references/migrate-error-api.md`.
-The record activates the authorized warning attributes at the exact next-minor
-version after the B.P2 staged prerequisite; B.2 qualifies that
-result. The two B.P1 owner constructors remain method-level
-exemptions, while explicit `InitError` wrapper use is documented separately.
+The current consumer migration inventory, replacement APIs, and the rule for
+removing compatibility surfaces live in the [Phase F migration guide](migration/phase-f.md).
+The guide is the authoritative handoff for application teams and downstream
+consumer repositories.
 
 ### 21.2 Bridge And Runtime Level Contracts
 
@@ -2363,14 +2258,13 @@ scoped TYP-030 exception in proposed ADR-011; core shared types remain neutral.
 The [runtime-level contract](plans/phase-b/runtime-level-contract.md) specifies
 additive core owner construction, read-only level snapshots and typed elevate/
 reset outcomes. Existing LoggerConfig and LoggingHealthReport remain unchanged.
-Its owner deferral is recorded in
-[`api-approvals/phase-b-runtime-level.md`](api-approvals/phase-b-runtime-level.md).
+Its owner deferral is recorded in the phase-B runtime-level contract.
 The new OperationDiagnostic provides required code, message, remediation and
 timestamp for operation outcomes; existing DiagnosticSummary remains an optional
 code plus message/time summary. Conversions preserve available original data
 and use explicitly documented fallback remediation only when an operation has
-already discarded it. B.P2-qualified staged core support is consumed before BTIT
-bridge integration; B.7 owns later publication. Existing standalone
+already discarded it. The accepted 1.4.x release supplied the staged core support
+consumed by BTIT bridge integration; B.7 owned later publication. Existing standalone
 constructors preserve baseline filtering without acquiring an external owner.
 The core and every adapter use the same effective admission level. Mutation is
 serialized against shutdown; diagnostic admission is reported separately and
@@ -2402,3 +2296,430 @@ bridge-native timeout ends its adapter call only; the native slot may still
 reject a new explicit flush until completion. Wire variants, diagnostic projections, integer/path
 conversion, unknown-result handling and package versions follow the sprint
 schema contract without changing native published serialization.
+
+
+## Phase D canonical types and wire handoff
+
+D.12 stages canonical contracts in `sc_observability_types::v2`; D.21
+coordinates the workspace version transition and D.18 owns the migration
+inventory, release gates, and consumer evidence. Applications opt into
+canonical signal models through the explicit `v2` path.
+
+### Canonical errors
+
+Every canonical enum is non-exhaustive and every named variant carries
+`context: Box<ErrorContext>`. `context()`, `diagnostic()` and `into_context()`
+borrow or move that exact object, preserving its source and construction
+backtrace. `DiagnosticInfo` retains its existing seal. No conversion parses
+Display output, invents context fields, or replaces an unknown code with a
+success. Diagnostic details carry bounded, redacted metadata; credentials,
+header values, response bodies and file contents must not enter diagnostics.
+
+| Cause | Canonical variant |
+| --- | --- |
+| process identity validation | IdentityError::Process |
+| invalid configuration before construction | InitError::Configuration |
+| thread/client/provider startup failure | InitError::Runtime |
+| invalid event payload | EventError::Validation |
+| event routing failure | EventError::Routing |
+| flush drain/export failure, including timeout at flush | FlushError::Drain |
+| shutdown deadline exceeded | ShutdownError::Timeout |
+| other shutdown drain/provider failure | ShutdownError::Drain |
+| projection/subscriber callback failure | ProjectionError::Projection / SubscriberError::Subscriber respectively |
+| sink write / flush failure | LogSinkError::Write / LogSinkError::Flush respectively |
+| OTLP runtime cause | the identically named ExportError variant in the stable failure inventory |
+
+`MetricModelError::{InvalidHistogram, InvalidTemporality, InvalidInterval}`
+uses `SC_METRIC_INVALID_HISTOGRAM`, `SC_METRIC_INVALID_TEMPORALITY` and
+`SC_METRIC_INVALID_INTERVAL`. `FiniteF64::new` rejects NaN/infinities using
+`SC_METRIC_NON_FINITE` in `ValueValidationError`. These constants live in the
+shared `error_codes.rs`. Operational/context error serde uses a snake-case
+`kind` and a `context` object containing `diagnostic`; source objects and
+backtraces are deliberately not serialized. Native chaining preserves them.
+
+`v2::TelemetryError::Shutdown { context }` is the canonical context- and
+diagnostic-carrying runtime admission guard; the retained root
+`TelemetryError::Shutdown` remains the unit variant described above.
+`From<v2::ExportError>` wraps the exact error in `v2::TelemetryError::ExportFailure`.
+The `#[from]` on `v2::TelemetryError::Event(v2::EventError)` also generates the
+public `From<v2::EventError> for v2::TelemetryError` implementation; this
+additive compatible-1.x conversion is part of the governed interface.
+Governed-interface note: `v2::TelemetryError::Event(v2::EventError)` is an
+additive variant on the `#[non_exhaustive]` v2 enum, returned only by canonical
+`emit_log` when `StateTransition.entity_id` is not a valid `EntityId`. Its
+`context()`, `into_context()`, `diagnostic()`, `code()` and
+`failure_classification()` delegate to the inner `EventError`
+(`Validation { field: "event" }`), preserving context, source and backtrace. It
+adds no diagnostic code and no counter, and the released root `TelemetryError`
+shape is unchanged; released root emit paths never produce it.
+Admission order is facade-specific. The logger checks event version and service,
+filters by effective level, validates the entity identifier, then applies
+redaction and the event-size limit. `RuntimeTelemetry::emit_log` checks for
+shutdown first, returns successfully when logs or transport are disabled,
+validates the entity identifier, then buffers the event; it does not perform
+the logger's version or service checks.
+For `v2::TelemetryError::ExportFailure`, `.code()` returns the fixed stable
+classification for the variant, while `.diagnostic().code` returns the preserved
+original cause code.
+`ExportError::Transport` is the explicit pass-through exception: its `.code()`
+also returns the preserved underlying `.diagnostic().code`. Existing root
+`ObservationError` guards remain unchanged. Flush/shutdown/config adapters
+retain canonical failures as typed sources, carrying their preserved
+diagnostic codes and remediation to the outer context.
+
+All ConfigFailure and ExportError variants below are types-owned. The single
+OTLP registry is `sc_observability_types::error_codes::otlp`; the OTLP crate
+re-exports it. `ExportError::Transport` remains the generic transport cause
+and preserves the underlying transport's registered code. It does not replace
+a more precise row below.
+
+| Variant | Stable code | Owning error type | Cause | Recovery | Redaction | Retryability |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ZeroDuration` | `OTLP_CONFIG_ZERO_DURATION` | `ConfigFailure` | required duration is zero | provide a positive value | field/value only | after config correction |
+| `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | `ConfigFailure` | milliseconds cannot convert safely | reduce the field | field/value only | after config correction |
+| `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | `ConfigFailure` | resolved ordering rule fails | correct the named explicit/defaulted fields | field/value/origin only | after config correction |
+| `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | `ConfigFailure` | jitter exceeds 100 | use `0..=100` | field/value only | after config correction |
+| `InvalidQueueCapacity` | `OTLP_CONFIG_QUEUE_CAPACITY` | `ConfigFailure` | queue capacity is outside `1..=65_536` | choose a bounded capacity | field/value only | after config correction |
+| `InvalidQueueByteCapacity` | `OTLP_CONFIG_QUEUE_BYTE_CAPACITY` | `ConfigFailure` | zero, overflow or aggregate byte bound above 64 MiB | choose 1..=64 MiB (default 16 MiB) | field/value only | after config correction |
+| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | field is inapplicable to disabled transport or the selected backend | omit it, enable transport, or select its applicable backend | field/closed target only | after config correction |
+| `InsecureTransportRejected` | `OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED` | `ConfigFailure` | selected backend does not implement the requested insecure verification override | disable the override or choose an explicitly supporting backend | backend only | after config correction |
+| `InvalidEndpoint` | `OTLP_CONFIG_INVALID_ENDPOINT` | `ConfigFailure` | endpoint URL syntax is invalid | provide a valid endpoint URL | field only | after config correction |
+| `InvalidHeader` | `OTLP_CONFIG_INVALID_HEADER` | `ConfigFailure` | header/auth syntax or credential placement is invalid | correct the header/auth configuration | field only | after config correction |
+| `InvalidConfig` | `OTLP_CONFIG_INVALID` | legacy `InitFailure` compatibility | generic configuration construction failed | inspect the typed configuration diagnostic | no additional data | after config correction |
+| `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/sync-http worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
+| `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
+| `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
+| `TokioRuntimeRequired` | `OTLP_TOKIO_RUNTIME_REQUIRED` | `ConfigFailure` | SDK construction lacks an entered Tokio runtime | construct inside the host runtime | no dynamic data | after entering a runtime |
+| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportError` | synchronous HTTP lifecycle entered Tokio; construction preserves this condition as the redacted source of `TransportConstructionFailed` | use a plain thread or async lifecycle | no dynamic data | in a supported context |
+| `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `ExportError` | SDK synchronous completion requested | await the typed async operation | no dynamic data | through async lifecycle |
+| `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ExportError` | host runtime ended before completion | keep the runtime alive through awaited shutdown | bounded state/counts | with a live replacement runtime/instance |
+| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `ExportError` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider | duration/state only | operation-specific |
+| `QueueFull` | `OTLP_QUEUE_FULL` | `ExportError` | bounded admission queue saturated | preserve fail-open behavior and inspect health | capacity/depth only | yes, later admission |
+| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportError` | SDK dispatcher or synchronous HTTP worker terminated unexpectedly | correct the terminal cause and construct a new instance | bounded typed source; no credentials | only with a new instance |
+| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ExportError` | shutdown cancelled a retryable pre-barrier synchronous HTTP sequence | inspect terminal health; resend only if duplicates are acceptable | attempt/count only | caller decision; duplicates possible |
+| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportError` | no synchronous HTTP sequence budget remains | increase the validated sequence bound or restore collector health | budget/attempt only | new operation after recovery |
+| `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportError` | collector returned a non-retryable HTTP status | correct request/auth/config before retrying | status/category only; no body/headers | after cause correction |
+| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportError` | synchronous HTTP maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
+| `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportError` | SDK or synchronous HTTP provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
+| `SpanAssemblyFailed` | `OTLP_SPAN_ASSEMBLY_FAILED` | legacy `EventFailure` / `ProjectionFailure` compatibility | lifecycle signals cannot form a complete span | emit matching signals in order | identifiers only | after correcting signal order |
+| `FlushFailed` | `OTLP_FLUSH_FAILED` | legacy `FlushFailure` / `ShutdownFailure` compatibility | telemetry flush cannot complete | inspect exporter health and retry after recovery | bounded source/state | after recovery |
+| `IncompleteSpanDropped` | `OTLP_INCOMPLETE_SPAN_DROPPED` | legacy `ShutdownFailure` compatibility | shutdown drops unmatched span state | emit matching ended signals before shutdown | count only | on a new complete sequence |
+| `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
+
+The `SC_LOG_` family is used by three separately owned public registries; it
+does not define one universal prefix owner. Core `error_codes.rs` owns
+`SC_LOG_SINK_REGISTRATION_DUPLICATE`, `SC_LOG_SINK_REGISTRATION_INVALID`,
+`SC_LOG_SINK_REGISTRATION_CLOSED`, and the D.1-owned settings constants
+`SC_LOG_SETTINGS_PREFIX_COLLISION`, `SC_LOG_SETTINGS_INVALID_ENVIRONMENT`,
+`SC_LOG_SETTINGS_UNKNOWN_KEY`, `SC_LOG_SETTINGS_INVALID_VALUE`, and
+`SC_LOG_SETTINGS_RESOLUTION`. The `sc-observability-log` registry owns
+`SC_LOG_DETACH_TIMEOUT`, `SC_LOG_DETACH_NOT_INSTALLED`, and
+`SC_LOG_FOREIGN_LOGGER_INSTALLED`; the `sc-observability-types` registry owns
+the `SC_LOG_QUERY_*` codes. `LOG-001` through `LOG-005` are requirement IDs,
+not diagnostic codes. The existing log-registry uniqueness test checks exact
+string disjointness among the core, log, and types `error_codes::ALL` lists;
+it does not claim workspace-wide uniqueness or cover codes outside those
+enumerated registries. DTO and routing registry values retain their existing
+meanings.
+
+### Neutral signals
+
+All names in this subsection are staged in `v2`. `TraceFlags::new(u8)` keeps
+all input bits; `sampled()` reads bit 0. Serde encodes flags as a byte number.
+`TraceContext::new(trace_id, span_id, flags)` has no parent until
+`with_parent` is called. Trace/span identifiers validate on serde input as
+well as construction. `SpanLink::new(trace_id, span_id, flags, attributes)`
+contains no nested trace context. `SpanKind` uses `internal`, `server`,
+`client`, `producer`, `consumer` serde tokens.
+
+`Attributes` is an ordered string-keyed map of neutral `AttributeValue`
+boolean, signed/unsigned integer, finite float, string, array, object or null
+values. Its public API has no serde_json, runtime or transport type dependency.
+The existing crate dependency on serde_json remains for 1.x diagnostics.
+
+Native attribute serde uses `{"kind":"int","data":5}` for `Int(5)` and
+`{"kind":"uint","data":5}` for `UInt(5)`. The tags are `bool`, `int`,
+`uint`, `float`, `string`, `array`, `object`, and `null`; null has no `data`
+field. Arrays contain tagged values and objects map names to tagged values
+recursively. Native equality distinguishes variants, even for equal
+non-negative numbers, and serde preserves that distinction over the full
+i64/u64 ranges. Bare untagged values are rejected rather than inferred.
+This is the staged v2 native representation; existing 1.x JSON attributes
+are unchanged. The DTO conversion below retains the tags but encodes integer
+payloads as canonical decimal strings.
+
+`SpanRecord<SpanStarted>::new(timestamp, service, name, trace, attributes)`
+creates an internal span with no links. `with_kind` and `with_links` populate
+those fields; `end(status, duration)` is the only route to
+`SpanRecord<SpanEnded>`. Fields remain private; only ended records expose
+`duration_ms`. No deserializer can synthesize an ended producer record.
+`SpanSignal::{Started, Event, Ended}` supplies the export state discriminant;
+serialization preserves kind, links and flags. Consumers constructing native
+records from a wire DTO must replay checked construction and `end`.
+
+`MetricRecord::try_new(timestamp, service, name, value)` checks the interval;
+`with_unit` and `with_attributes` set validated metadata. Its fields are
+private and serde goes through the same checked constructor. Gauge has no
+start time. Sum and histogram require explicit Delta/Cumulative temporality
+and start time. Start after timestamp is `InvalidInterval`; an empty Delta
+interval and negative monotonic sum are `InvalidTemporality`. Cumulative may
+have an initial zero-length interval. Sequence continuity across points is a
+producer concern, not a single-record invariant.
+
+`HistogramPoint::try_new(bounds, buckets, count, sum)` requires finite,
+strictly increasing bounds; exactly one more bucket than bounds; checked
+bucket addition equal to count; and zero sum when count is zero. Empty bounds
+with one bucket are valid. Negative samples/sums are valid. Sum is FiniteF64.
+`explicit_bounds`, `bucket_counts`, `count`, `sum` are read-only accessors.
+Serde uses that constructor and cannot bypass these checks.
+
+Native metric serde is frozen as `{"kind":"gauge","data":1.5}`,
+`{"kind":"sum","data":{"value":1.5,"monotonic":true,
+"temporality":"delta","start_time":"1970-01-01T00:00:00Z"}}`, or
+`{"kind":"histogram","data":{"point":{"explicit_bounds":[1.0],
+"bucket_counts":[1,0],"count":1,"sum":0.5},"temporality":"cumulative",
+"start_time":"1970-01-01T00:00:00Z"}}`. The record adds `timestamp`,
+`service`, `name`, `value`, `unit`, and `attributes`. Timestamps use the shared
+UTC-normalizing RFC3339 codec.
+
+### DTO and language conversion contract
+
+D.19 owns checked DTO/schema conversions and generated models. D.20 consumes
+this compatible operational envelope independently using local fixtures.
+Both retain schema version 1 and exact outer field names/discriminants:
+`{"kind":"ok","schema_version":1,"value":...}` or
+`{"kind":"error","schema_version":1,"error":...}`. Internal ResultDto
+has the same `kind`/`value`/`error` fields without `schema_version`.
+Admission is `{"kind":"accepted"}` or `{"kind":"filtered"}`;
+completion is `{"kind":"completed"}`. Admission never claims persistence.
+
+Failure keeps its existing `kind` plus flattened Diagnostic fields (`at`,
+`code`, `message`, `remediation`). D.19 may add optional `cause`, `docs` and
+`details` fields to retain redacted metadata; their absence remains valid and
+existing adapters continue using the required four-field envelope. Native causes map to
+existing wire categories: payload/config/model validation to `validation`,
+admission saturation to `queue_full`, shutdown guards to `closed`, deadlines
+to `timeout`, cancellation to `cancelled`, I/O to `io`, and unavailable worker
+or runtime to `unavailable`. Preserve the original registered diagnostic code,
+message, remediation, docs and bounded details; a category is not a replacement
+code. Unknown remote discriminants use `unknown_remote` with `remote_kind` and
+the received diagnostic. Never convert an unknown or malformed failure to ok.
+Unexpected local failures use the existing `internal` diagnostic boundary.
+
+Native source objects/backtraces stay native. Only deliberately redacted
+cause/details are projected. Existing DTO size and field validation stays in
+force, with its existing binding error registry. Unknown schema versions
+return `unsupported_version`; malformed fields return `validation`. Tauri
+commands resolve tagged operational errors; Python returns them as data.
+Neither expected failures nor observer cancellation throw or cancel native work.
+
+New neutral signals are staged/additive until D.18 activation. Signal DTO
+field names and discriminants match the native specification above, except
+all i64/u64 values (including histogram count/buckets and integer attributes)
+use the existing canonical decimal-string DTO codec. Never round through
+JavaScript Number. Floats remain finite numbers, flags remain a byte, and
+bounds/counts/sum/temporality/start_time must all survive conversion. Invalid
+histograms or intervals are rejected through checked native constructors;
+no synthetic scalar histogram or inferred interval is permitted.
+
+### Reviewed OTLP reference specification (D.21 handoff)
+
+D.21 owns implementation of the following reviewed contract; this section is
+read-only input for that sprint. Its configuration validation produces the
+types-owned ConfigFailure enum above, with field/value/origin/target metadata
+in bounded Diagnostic.details, not extra enum fields. Lifecycle and exporter
+traits remain crate-private, Send + Sync, with Send lifecycle futures.
+
+The factory validates this closed matrix before allocating providers/workers:
+
+| Backend | Valid protocol | Required feature/runtime | Invalid result |
+| --- | --- | --- | --- |
+| disabled (transport disabled) | none | none | the sole no-network disabled implementation |
+| `OpenTelemetrySdk` | SDK-supported gRPC or HTTP/protobuf | `otlp-sdk`; entered caller Tokio runtime | stable unsupported-protocol/runtime error |
+| `SyncHttp` | `HttpJson` only | `sync-http`; plain-thread construction | reserved typed error until D.8 |
+
+Delete public/production `Noop*Exporter` fallbacks; disabled construction is an
+explicit private disabled set and an enabled selection can never reach it.
+Every existing `v2::OtelConfig` field receives one disposition: endpoint,
+headers/auth, CA/TLS and `timeout_ms` map to the SDK/synchronous HTTP builders;
+`debug_local_export` is a separate diagnostic mirror outside exporter
+selection; `insecure_skip_verify` is either implemented by the backend with an
+explicit security warning or rejected at construction—never ignored.
+`timeout_ms` covers the entire synchronous HTTP request, including connect, TLS,
+request write, response headers, and response read. Endpoint and header/auth
+values are validated before provider/worker construction; malformed endpoints,
+invalid header syntax, and forbidden credential placement return named
+construction failures without retaining secret values.
+
+### Validated transport contract
+
+D.21 owns transport field/default/validation implementation; D.12 owns the
+canonical error definitions and registry. The 2.0 wire surface uses direct shared transport
+fields plus a grouped `sync_http_retry` object:
+
+| Field | Applicability | Default when absent |
+| --- | --- | --- |
+| `timeout_ms` | both backends; maps to request/export timeout | `3_000` |
+| `lifecycle_flush_timeout_ms` | both backends | `30_000` |
+| `lifecycle_shutdown_timeout_ms` | both backends | `30_000` |
+| `queue_capacity` | both backends; bounded admission queue | `1_024` |
+| `sync_http_retry.max_retries` | sync-http only, optional on wire | `3` |
+| `sync_http_retry.initial_backoff_ms` | sync-http only, optional on wire | `250` |
+| `sync_http_retry.max_backoff_ms` | sync-http only, optional on wire | `5_000` |
+| `sync_http_retry.retry_sequence_timeout_ms` | sync-http only, optional on wire | `30_000` |
+| `sync_http_retry.retry_after_cap_ms` | sync-http only, optional on wire | `5_000` |
+| `sync_http_retry.retry_jitter_percent` | sync-http only, optional on wire | `20` |
+
+`queue_capacity` counts admitted records, not batches, and is validated as `1..=65_536`. A separate checked `queue_byte_capacity` defaults to 16 MiB, has a hard 64 MiB maximum, and bounds the serialized payload bytes held by all queued/in-flight batches. Admission reserves both record and byte credits atomically; either exhausted budget returns QueueFull. Records larger than 1 MiB are rejected before enqueue; batches split at 512 records or 1 MiB. The queue cannot retain 65,536 one-MiB batches. A 413 is terminal for that split batch,
+which is counted once as failed/dropped rather than retried as a larger batch.
+`shutdown_async_typed` has one drain budget: it starts at shutdown entry and
+covers cancellation, the in-flight request, barrier, and worker join. On
+expiry it returns `LifecycleTimeout` with remaining admitted work accounted.
+
+```rust
+#[non_exhaustive]
+pub struct TelemetryHealth {
+    pub queue_depth: usize,
+    pub queue_capacity: usize,
+    pub worker_state: WorkerState,
+    pub last_terminal_failure: Option<Diagnostic>,
+    pub last_success: Option<Timestamp>,
+}
+```
+
+For `OpenTelemetrySdk`, the three shared timeout fields map to SDK lifecycle /
+export construction. Any explicit sync-http-only field—including the pre-existing
+`max_retries`, `initial_backoff_ms`, and `max_backoff_ms`—returns
+`ConfigFieldNotApplicable`. Nothing is ignored. This 2.0 optional-field change
+and its migration from the former unconditional retry defaults are documented.
+
+Defaults are resolved **before** validation. Each resolved value retains
+`ValueOrigin::{Default, Explicit}` so an error identifies both the offending
+field and whether a conflicting peer was defaulted. Partial overrides are
+therefore deterministic and reviewable.
+
+All raw serialized millisecond/percent fields are converted exactly once:
+
+```rust
+#[non_exhaustive]
+pub enum OtlpConfigField {
+    Endpoint,
+    Header,
+    Timeout,
+    LifecycleFlushTimeout,
+    LifecycleShutdownTimeout,
+    QueueCapacity,
+    QueueByteCapacity,
+    MaxRetries,
+    InitialBackoff,
+    MaxBackoff,
+    RetrySequenceTimeout,
+    RetryAfterCap,
+    RetryJitterPercent,
+}
+
+#[non_exhaustive]
+pub enum ValueOrigin { Default, Explicit }
+
+#[non_exhaustive]
+pub struct ResolvedField<T> {
+    pub field: OtlpConfigField,
+    pub value: T,
+    pub origin: ValueOrigin,
+}
+
+#[non_exhaustive]
+pub enum OtlpConfigTarget { Disabled, Backend(ExporterBackend) }
+
+pub(crate) struct PositiveDuration(Duration);
+
+impl PositiveDuration {
+    fn try_from_millis(field: OtlpConfigField, value: u64)
+        -> Result<Self, ConfigFailure>;
+}
+
+pub(crate) struct LifecycleBounds {
+    flush: PositiveDuration,
+    shutdown: PositiveDuration,
+}
+
+pub(crate) struct BoundedPercent(u8); // checked 0..=100
+
+pub(crate) struct RetryPolicy {
+    max_retries: u32,
+    initial_backoff: PositiveDuration,
+    max_backoff: PositiveDuration,
+    sequence_timeout: PositiveDuration,
+    retry_after_cap: PositiveDuration,
+    jitter: BoundedPercent,
+}
+
+pub(crate) struct ValidatedTransportBounds {
+    queue_capacity: QueueCapacity,
+    queue_byte_capacity: QueueByteCapacity,
+    request_timeout: PositiveDuration,
+    lifecycle: LifecycleBounds,
+    backend: BackendTransportBounds,
+}
+
+pub(crate) enum BackendTransportBounds {
+    Disabled,
+    Sdk,
+    SyncHttp(RetryPolicy),
+}
+
+impl ValidatedTransportBounds {
+    fn try_from_config(config: &v2::OtelConfig) -> Result<Self, ConfigFailure>;
+}
+```
+
+`TelemetryHealth`, `OtlpConfigField`, `ValueOrigin`, `ResolvedField`, and
+`OtlpConfigTarget` are `#[non_exhaustive]` public types so their 2.0 contracts
+can add fields or variants without a further breaking release.
+
+The constructor derives `Disabled` from `config.enabled == false`; otherwise
+it derives the backend only from `config.backend`.
+`LifecycleBounds` holds checked positive flush/shutdown durations;
+`RetryPolicy` holds `max_retries`, checked initial/max/sequence/Retry-After
+durations, and `BoundedPercent(0..=100)`. `BackendTransportBounds` makes sync-http
+retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
+
+- every millisecond duration is positive and convertible to `Duration`;
+- `lifecycle_shutdown_timeout_ms >= timeout_ms`;
+- `lifecycle_flush_timeout_ms >= timeout_ms`;
+- `queue_capacity` is in `1..=65_536`, otherwise `InvalidQueueCapacity`;
+- for sync-http, `max_backoff_ms >= initial_backoff_ms`;
+- for sync-http, `retry_sequence_timeout_ms >= timeout_ms`;
+- for sync-http, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;
+- for sync-http, `retry_jitter_percent <= 100`;
+- reject every explicit field inapplicable to disabled transport or the
+  selected backend with `ConfigFieldNotApplicable`;
+- reject a requested insecure verification override when the selected backend
+  does not explicitly support it with `InsecureTransportRejected`.
+- validate endpoint URL syntax, header/auth syntax, and credential placement;
+  otherwise return `InvalidEndpoint` or `InvalidHeader` with a redacted,
+  field-only payload.
+
+Checks execute in exactly this listed order and return the first failure; they
+are not aggregated. Within the first bullet, fields are checked in the wire
+table's top-to-bottom order. This makes every multi-violation diagnostic
+deterministic.
+
+Both factories receive only `ValidatedTransportBounds` and cannot inspect or
+reparse raw fields. Deadlines use a monotonic injectable clock and start when
+the public operation is admitted.
+
+Construction order is fixed: resolve defaults and create `ResolvedField`
+values; run the ordered validation list above; build
+`ValidatedTransportBounds`; then check feature/backend/protocol availability.
+Thus a malformed sync-http config fails deterministically before D.6's reserved
+`UnsupportedBackend`. Disabled transport still validates explicitly supplied
+shared fields, rejects every explicit sync-http-only retry field with
+`ConfigFieldNotApplicable { target: OtlpConfigTarget::Disabled, .. }`, yields
+`BackendTransportBounds::Disabled`, and never constructs a network
+provider/worker. SDK inapplicability instead records
+`OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk)`.
+
+
+The complete private signatures and module handoff are recorded in
+[sprint D.21](plans/phase-d/sprint-d-21-otlp-contract.md).

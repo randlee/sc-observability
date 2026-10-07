@@ -33,6 +33,9 @@ Use this skill for new Rust projects or repos that want to start with
   - warnings and errors always emitted
   - long-running apps log startup and shutdown
   - CLIs log one success event per successful command
+- Treat `LoggerConfig::queue_capacity` as the logger's bounded buffering
+  configuration. Its default is `DEFAULT_LOG_QUEUE_CAPACITY`; do not duplicate
+  that capacity in application, routing, or exporter configuration.
 
 ## References
 

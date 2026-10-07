@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createClient, createTauriTransport, parseWireEnvelope, encodeEvent, encodeValue, validate } from '@sc-observability/client';
+import { createClient, createTauriTransport, parseWireEnvelope, encodeEvent, encodeValue, validate } from '@synaptic-canvas/sc-observability';
 const results = [];
 const escaped = [];
 process.on('unhandledRejection', (error) => escaped.push(String(error)));

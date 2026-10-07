@@ -12,14 +12,20 @@ constructor = "none"
 [composition]
 roots = []
 [dependencies]
-allowed_dependents = ["rust-python-logging", "sc-observability-binding-runtime", "sc-observability-log", "sc-observability-otlp", "sc-observability-py", "sc-observe"]
+allowed_dependents = ["log-settings-example", "rust-python-logging", "sc-observability-binding-runtime", "sc-observability-log", "sc-observability-otlp", "sc-observability-py", "sc-observe"]
 allowed_dependencies = ["sc-observability-types"]
 forbidden_edges = []
 [references]
 scope = "outside_owner_crate"
 forbidden = []
 [testing]
-allowed_test_double_paths = []
+allowed_test_double_paths = [
+    "crates/sc-observability/src/error_codes.rs",
+    "crates/sc-observability/src/lib.rs",
+    "crates/sc-observability/src/maintenance.rs",
+    "crates/sc-observability/src/runtime.rs",
+    "crates/sc-observability/src/sinks.rs",
+]
 forbidden_test_bypasses = []
 [enforcement]
 lint_rules = ["LINT-SC-OBSERVABILITY-BOUNDARY"]

@@ -21,9 +21,7 @@ use crate::__private::{
     target_label,
 };
 use crate::DropCause;
-
-/// Reserved field holding serialization errors, keyed by field name.
-const SERIALIZE_ERRORS_KEY: &str = "sc_observability_log.serialize_errors";
+use crate::constants::SERIALIZE_ERRORS_KEY;
 
 /// One per expansion site; `new` is const so it can initialize a `static`.
 #[derive(Debug)]
@@ -194,9 +192,21 @@ pub fn display_value<T: ?Sized + core::fmt::Display>(v: &T) -> FieldRecord {
     FieldRecord::Value(Value::String(v.to_string()))
 }
 
-/// Probe wrapper for the autoref kind selection of a bare field.
+/// Probe wrapper for the kind selection of a bare field.
 #[derive(Debug)]
 pub struct FieldValue<'a, T: ?Sized>(pub &'a T);
+
+/// Level-0 probe; derefs to the level-1 `FieldValue`.
+#[derive(Debug)]
+pub struct SerializeProbe<'a, T: ?Sized>(pub FieldValue<'a, T>);
+
+impl<'a, T: ?Sized> core::ops::Deref for SerializeProbe<'a, T> {
+    type Target = FieldValue<'a, T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Kind selected for values implementing `serde::Serialize`.
 #[derive(Debug, Clone, Copy)]
@@ -206,7 +216,7 @@ pub struct SerializeKind;
 #[derive(Debug, Clone, Copy)]
 pub struct DebugKind;
 
-/// Autoref level 0: selected only when `T: Serialize`.
+/// Level 0 (`SerializeProbe`): selected only when `T: Serialize`.
 pub trait SerializeKindTag {
     /// Returns the kind that records the value as JSON.
     fn __sc_field_kind(&self) -> SerializeKind {
@@ -214,9 +224,10 @@ pub trait SerializeKindTag {
     }
 }
 
-impl<T: ?Sized + serde::Serialize> SerializeKindTag for &FieldValue<'_, T> {}
+impl<T: ?Sized + serde::Serialize> SerializeKindTag for SerializeProbe<'_, T> {}
 
-/// Autoref level 1: selected for every `T`; the bound is checked by `DebugKind::record`.
+/// Level 1 (`FieldValue`, reached through `SerializeProbe::deref`): selected for every `T`;
+/// the bound is checked by `DebugKind::record`.
 pub trait DebugKindTag {
     /// Returns the kind that records the value as its `Debug` string.
     fn __sc_field_kind(&self) -> DebugKind {

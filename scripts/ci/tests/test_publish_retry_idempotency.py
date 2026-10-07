@@ -60,7 +60,7 @@ class NpmOwnedPreflightTests(NoNetworkMixin, unittest.TestCase):
         self.tempdir = tempfile.TemporaryDirectory(prefix="npm-retry-")
         self.archive = Path(self.tempdir.name) / "client-1.4.0.tgz"
         self.archive.write_bytes(b"immutable npm bytes")
-        self.verified = [("@sc-observability/client", self.archive)]
+        self.verified = [("@synaptic-canvas/sc-observability", self.archive)]
         self.verify_patch = patch.object(npm_release, "verify", return_value=self.verified)
         self.verify_patch.start()
 
@@ -79,7 +79,7 @@ class NpmOwnedPreflightTests(NoNetworkMixin, unittest.TestCase):
             self.assertEqual(runner.call_args.args[0][:3], ["npm", "publish", str(self.archive.resolve())])
 
     def test_already_present_version_skips_publish_and_succeeds(self):
-        existing = {"name": "@sc-observability/client", "version": "1.4.0", "dist": {"integrity": self._integrity()}}
+        existing = {"name": "@synaptic-canvas/sc-observability", "version": "1.4.0", "dist": {"integrity": self._integrity()}}
         with patch.object(npm_release, "registry_version", return_value=existing), patch("npm_release.subprocess.run") as runner:
             npm_release.publish({}, "v1.4.0", Path("npm-dist"), dry_run=False)
             runner.assert_not_called()

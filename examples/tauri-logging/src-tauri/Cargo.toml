@@ -1,18 +1,22 @@
 [package]
 name = "tauri-logging-example"
-version = "1.4.1"
+version = "1.5.0"
 edition = "2024"
 publish = false
 
 [workspace]
 
+[features]
+static_level_cap = ["dep:log", "log/release_max_level_info"]
+
 [dependencies]
-sc-observability = { path = "../../../crates/sc-observability" }
-sc-observability-binding-runtime = { path = "../../../crates/sc-observability-binding-runtime" }
+log = { version = "0.4", optional = true }
+sc-observability = { path = "../../../crates/sc-observability", default-features = false }
+sc-observability-binding-runtime = { path = "../../../crates/sc-observability-binding-runtime", default-features = false }
 sc-observability-dto = { path = "../../../crates/sc-observability-dto" }
-sc-observability-log = { path = "../../../crates/sc-observability-log" }
+sc-observability-log = { path = "../../../crates/sc-observability-log", default-features = false }
 sc-observability-tauri = { path = "../../../bindings/tauri", features = ["tauri"] }
-sc-observability-types = { path = "../../../crates/sc-observability-types" }
+sc-observability-types = { path = "../../../crates/sc-observability-types", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["wry"] }

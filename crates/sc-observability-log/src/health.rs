@@ -7,16 +7,14 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use sc_observability_types::{LevelFilter, LoggingHealthReport, Remediation};
 use serde::{Deserialize, Serialize};
 
+use crate::constants::BRIDGE_HEALTH_SCHEMA_VERSION;
 use crate::{ControlError, DroppedEvents, LifecyclePhase, error_codes, handle};
-
-/// Version of the native bridge-health shape.
-pub const BRIDGE_HEALTH_SCHEMA_VERSION: u32 = 1;
 
 /// Point-in-time bridge-owned health evidence.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -37,6 +35,17 @@ pub struct BridgeHealthReport {
     pub effective_level: LevelFilter,
     /// Core's coherent level-state revision.
     pub level_revision: u64,
+    /// Bounded flush and shutdown helper state.
+    pub helpers: HelperHealth,
+}
+
+/// Bounded helper state exposed by the canonical health report.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HelperHealth {
+    /// Whether a flush helper is currently running.
+    pub flush_in_flight: bool,
+    /// Helpers still running after their caller timed out.
+    pub detached: u64,
 }
 
 /// Internal lifecycle encoding used by the retained shutdown coordinator.
@@ -60,13 +69,12 @@ static SNAPSHOT_CONFIG: OnceLock<SinkConfig> = OnceLock::new();
 static LAST_REPORT: Mutex<Option<LoggingHealthReport>> = Mutex::new(None);
 static LAST_LEVEL_STATE: Mutex<Option<sc_observability_types::LevelState>> = Mutex::new(None);
 
-#[cfg(feature = "test_hooks")]
+#[cfg(test)]
 static FAIL_NEXT_SNAPSHOT: AtomicBool = AtomicBool::new(false);
 
 /// Makes the next health snapshot fail, for the isolated shutdown fixture.
-#[cfg(feature = "test_hooks")]
-#[doc(hidden)]
-pub fn fail_next_health_snapshot() {
+#[cfg(test)]
+pub(crate) fn fail_next_health_snapshot() {
     FAIL_NEXT_SNAPSHOT.store(true, Ordering::SeqCst);
 }
 
@@ -97,9 +105,7 @@ pub(crate) fn active_log_path() -> Result<Option<PathBuf>, ControlError> {
 }
 
 /// Reads core health without permitting an upstream mutex panic to unwind the bridge.
-pub(crate) fn read_report<State>(
-    logger: &sc_observability::Logger<State>,
-) -> Option<LoggingHealthReport> {
+pub(crate) fn read_report(logger: &sc_observability::v2::Logger) -> Option<LoggingHealthReport> {
     catch_unwind(AssertUnwindSafe(|| logger.health())).ok()
 }
 
@@ -118,7 +124,7 @@ fn unavailable() -> ControlError {
 
 /// Takes a bridge snapshot, preserving core health rather than re-projecting it.
 pub(crate) fn snapshot() -> Result<BridgeHealthReport, ControlError> {
-    #[cfg(feature = "test_hooks")]
+    #[cfg(test)]
     if FAIL_NEXT_SNAPSHOT.swap(false, Ordering::SeqCst) {
         return Err(unavailable());
     }
@@ -155,6 +161,7 @@ pub(crate) fn snapshot() -> Result<BridgeHealthReport, ControlError> {
         configured_level: level_state.configured_level,
         effective_level: level_state.effective_level,
         level_revision: level_state.revision,
+        helpers: handle::helper_health(),
     })
 }
 
@@ -209,6 +216,10 @@ mod tests {
             configured_level: LevelFilter::Info,
             effective_level: LevelFilter::Warn,
             level_revision: 7,
+            helpers: HelperHealth {
+                flush_in_flight: false,
+                detached: 0,
+            },
         };
         let encoded = serde_json::to_value(&report).unwrap();
         let decoded: BridgeHealthReport = serde_json::from_value(encoded).unwrap();

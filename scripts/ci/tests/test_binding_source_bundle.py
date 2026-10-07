@@ -1,17 +1,211 @@
 """Boundary tests invoking the real helper before Cargo can follow bad paths."""
+import json
+import io
 import subprocess
 import sys
 import tempfile
+import tarfile
+import tomllib
 import unittest
+import shutil
 from pathlib import Path
 import importlib.util
+from unittest import mock
 ROOT=Path(__file__).resolve().parents[3]
 HELPER_DIR=ROOT/'scripts/ci'
 sys.path.insert(0,str(HELPER_DIR))
 HELPER=ROOT/'scripts/ci/build_binding_source_bundle.py'
 SPEC=importlib.util.spec_from_file_location('binding_source_bundle', HELPER)
 BUNDLE=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(BUNDLE)
+from _log_staging import PACKAGES, inspect_archive, read_stage_manifest, sha256
+
 class SourceBoundaryTests(unittest.TestCase):
+    def registry_lock(self, packages):
+        return {'package': packages}
+
+    def write_lock(self, path, packages):
+        lines=['version = 4']
+        for package in packages:
+            lines.extend(['','[[package]]'])
+            for key in ('name','version','source','checksum','dependencies'):
+                if key in package:lines.append(f'{key} = {json.dumps(package[key])}')
+        path.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+
+    def verify_registry_selection(self, source, staged, roots, required_dependencies=None):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory=Path(temporary);source_lock=directory/'reviewed-source.lock';staged_lock=directory/'Cargo.lock'
+            self.write_lock(source_lock,source['package']);self.write_lock(staged_lock,staged['package'])
+            return BUNDLE.verify_registry_selection(source_lock,staged_lock,roots,required_dependencies)
+
+    def package(self, name, version, *, source=None, checksum=None, dependencies=None):
+        package={'name':name,'version':version}
+        if source is not None:package['source']=source
+        if checksum is not None:package['checksum']=checksum
+        if dependencies is not None:package['dependencies']=dependencies
+        return package
+
+    def test_verify_registry_selection_accepts_source_lock_widened_by_feature_only_packages(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='tokio',dependencies=['getrandom 0.2.0 (registry+https://example.invalid/index)']),
+            self.package('getrandom','0.2.0',source=registry,checksum='getrandom'),
+        ])
+        staged=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='tokio'),
+        ])
+        self.assertEqual(self.verify_registry_selection(source,staged,[('binding','1.0.0')]),[{'name':'tokio','version':'1.0.0','source':registry,'checksum':'tokio'}])
+
+    def test_verify_registry_selection_rejects_dependency_missing_from_source_lock(self):
+        registry='registry+https://example.invalid/index'
+        dependency='tokio 1.0.0 (registry+https://example.invalid/index)'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=[dependency]),
+        ])
+        staged=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=[dependency]),
+            self.package('tokio','1.0.0',source=registry,checksum='tokio'),
+        ])
+        with self.assertRaises(BUNDLE.BundleError) as context:
+            self.verify_registry_selection(source,staged,[('binding','1.0.0')])
+        self.assertEqual(context.exception.code,'BUNDLE_STALE_LOCK')
+
+    def test_verify_registry_selection_rejects_extra_unselected_staged_registry_identity(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0'),
+        ])
+        staged=self.registry_lock([
+            self.package('binding','1.0.0'),
+            self.package('unrelated','1.0.0',source=registry,checksum='reviewed'),
+        ])
+        with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+            self.verify_registry_selection(source,staged,[('binding','1.0.0')])
+
+    def test_verify_registry_selection_rejects_changed_selected_identity(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['tokio 1.0.0 (registry+https://example.invalid/index)']),
+            self.package('tokio','1.0.0',source=registry,checksum='reviewed'),
+        ])
+        mutations={
+            'version':('1.0.1',registry,'reviewed'),
+            'source':('1.0.0','registry+https://other.invalid/index','reviewed'),
+            'checksum':('1.0.0',registry,'changed'),
+        }
+        for field,(version,source_registry,checksum) in mutations.items():
+            with self.subTest(field=field):
+                staged=self.registry_lock([
+                    self.package('binding','1.0.0',dependencies=[f'tokio {version} ({source_registry})']),
+                    self.package('tokio',version,source=source_registry,checksum=checksum),
+                ])
+                with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+                    self.verify_registry_selection(source,staged,[('binding','1.0.0')])
+
+    def test_verify_registry_selection_rejects_missing_required_manifest_edge(self):
+        registry='registry+https://example.invalid/index'
+        source=self.registry_lock([
+            self.package('binding','1.0.0',dependencies=['log 0.4.34 (registry+https://example.invalid/index)']),
+            self.package('log','0.4.34',source=registry,checksum='reviewed'),
+        ])
+        staged=self.registry_lock([self.package('binding','1.0.0')])
+        with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+            self.verify_registry_selection(source,staged,[('binding','1.0.0')],{('binding','1.0.0'):{'log'}})
+
+    def test_read_stage_manifest_decodes_utf8_explicitly(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = Path(temporary)
+            manifest = stage / 'stage-manifest.json'
+            manifest.write_bytes(json.dumps({'label': 'café'}, ensure_ascii=False).encode('utf-8'))
+            original_read_text = Path.read_text
+
+            def reject_locale_default(path, *args, **kwargs):
+                if not args and kwargs.get('encoding') is None:
+                    raise UnicodeDecodeError('locale', b'\x80', 0, 1, 'non-UTF-8 locale')
+                return original_read_text(path, *args, **kwargs)
+
+            with mock.patch.object(Path, 'read_text', reject_locale_default):
+                self.assertEqual(read_stage_manifest(stage)['label'], 'café')
+
+    def command(self,root,*args):
+        return subprocess.run(args,cwd=root,check=True,capture_output=True,text=True)
+
+    def staged_archive(self,stage,name,version,source_commit):
+        archive=stage/'archives'/f'{name}-{version}.crate';prefix=f'{name}-{version}'
+        manifest='[package]\nname='+json.dumps(name)+'\nversion='+json.dumps(version)+'\nedition="2024"\nlicense="MIT"\n'
+        if name=='sc-observability-types':manifest+='[dependencies]\nserde_json="1"\n'
+        if name=='sc-observability-log':manifest+='[dependencies]\nsc-observability-log-macros={version='+json.dumps(f'={version}')+'}\n'
+        files={f'{prefix}/Cargo.toml':manifest.encode(),f'{prefix}/LICENSE':b'MIT\n',f'{prefix}/src/lib.rs':b'pub fn fixture() {}\n',f'{prefix}/.cargo_vcs_info.json':json.dumps({'git':{'sha1':source_commit,'dirty':False}}).encode()}
+        with tarfile.open(archive,'w:gz') as contents:
+            for path,body in files.items():
+                member=tarfile.TarInfo(path);member.size=len(body)
+                contents.addfile(member,io.BytesIO(body))
+        return archive
+
+    def project_with_stage(self,root,root_version,stage_version,*,corrupt=False,missing_candidate=False,candidate_present=False,candidate_value=None):
+        package=root/'crates/sc-observability-types';(package/'src').mkdir(parents=True)
+        (root/'Cargo.toml').write_text('[workspace]\nmembers=["crates/sc-observability-types"]\nresolver="2"\n')
+        (package/'Cargo.toml').write_text('[package]\nname="sc-observability-types"\nversion='+json.dumps(root_version)+'\nedition="2024"\nlicense="MIT"\n[dependencies]\nserde_json="1"\n')
+        (package/'src/lib.rs').write_text('pub fn fixture() {}\n')
+        (package/'LICENSE').write_text('MIT\n')
+        self.command(root,'cargo','generate-lockfile');self.command(root,'git','init','-q');self.command(root,'git','add','.')
+        self.command(root,'git','-c','user.name=Bundle Fixture','-c','user.email=bundle-fixture@example.invalid','commit','-qm','reviewed fixture')
+        source_commit=self.command(root,'git','rev-parse','HEAD').stdout.strip()
+        stage=root/'docs/plans/phase-b/evidence/b2-final/stage';(stage/'archives').mkdir(parents=True)
+        packages=[]
+        for name in PACKAGES:
+            archive=self.staged_archive(stage,name,stage_version,source_commit)
+            details=inspect_archive(archive,name,stage_version,source_commit)
+            packages.append({'name':name,'version':stage_version,'archive':archive.relative_to(stage).as_posix(),'archive_sha256':sha256(archive),**details})
+        manifest={'schema_version':1,'candidate_version':stage_version,'publication':'pending_B.7','source_commit':source_commit,'packages':packages}
+        if missing_candidate:manifest.pop('candidate_version')
+        elif candidate_present:manifest['candidate_version']=candidate_value
+        if corrupt:manifest['packages'][0]['archive_sha256']='0'*64
+        (stage/'stage-manifest.json').write_text(json.dumps(manifest))
+        return package/'Cargo.toml'
+
+    def test_build_uses_matching_qualified_stage_archives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);manifest=self.project_with_stage(root,'1.4.0','1.4.0')
+            evidence=BUNDLE.build(manifest,root/'bundle')
+            self.assertEqual(evidence['packages'][0]['provenance'],'qualified-B.2-archive')
+            self.assertEqual(evidence['packages'][0]['qualified_source_commit'],evidence['source_commit'])
+
+    def test_build_uses_source_packages_for_a_verified_version_mismatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0')
+            with mock.patch('builtins.print') as output:
+                evidence=BUNDLE.build(manifest,root/'bundle')
+            self.assertEqual(evidence['packages'][0]['provenance'],'unpublished-cargo-package')
+            self.assertIsNone(evidence['packages'][0]['qualified_source_commit'])
+            output.assert_called_once_with('stage evidence 1.4.0 does not match root 2.0.0; using unpublished cargo packages')
+
+    def test_build_rejects_a_corrupt_stage_before_version_mismatch_fallback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0',corrupt=True)
+            with self.assertRaisesRegex(ValueError,'archive checksum mismatch'):
+                BUNDLE.build(manifest,root/'bundle')
+
+    def test_build_rejects_missing_or_non_string_candidate_version(self):
+        cases=[
+            ('absent', {'missing_candidate':True}),
+            ('integer', {'candidate_present':True, 'candidate_value':5}),
+            ('null', {'candidate_present':True, 'candidate_value':None}),
+        ]
+        for label, options in cases:
+            with self.subTest(candidate_version=label), tempfile.TemporaryDirectory() as temporary:
+                root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0',**options)
+                with self.assertRaisesRegex(BUNDLE.BundleError,'candidate_version must be a string'):
+                    BUNDLE.build(manifest,root/'bundle')
+
+    def test_build_rejects_a_non_object_stage_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0')
+            stage=root/'docs/plans/phase-b/evidence/b2-final/stage/stage-manifest.json';stage.write_text('[]')
+            with self.assertRaisesRegex(BUNDLE.BundleError,'stage manifest must be a JSON object'):
+                BUNDLE.build(manifest,root/'bundle')
+
     def test_stale_qualified_archive_is_not_reused(self):
         evidence={'source_commit':'older','packages':[{'name':'binding-runtime'}]}
         self.assertEqual(BUNDLE.qualified_packages_for(evidence,'current'),{})
@@ -19,9 +213,23 @@ class SourceBoundaryTests(unittest.TestCase):
 
     def invoke(self,root):
         return subprocess.run([sys.executable,str(HELPER),'--root-manifest',str(root/'Cargo.toml'),'--output',str(root/'bundle')],capture_output=True,text=True)
-    def project(self,root,extra=''):
+    def project(self,root,extra='',version='0.1.0'):
         (root/'src').mkdir();(root/'src/lib.rs').write_text('pub fn fixture() {}\n')
-        (root/'Cargo.toml').write_text('[package]\nname="bundle-boundary-fixture"\nversion="0.1.0"\nedition="2024"\n[workspace]\n'+extra)
+        (root/'Cargo.toml').write_text(f'[package]\nname="bundle-boundary-fixture"\nversion="{version}"\nedition="2024"\n[workspace]\n'+extra)
+    def test_newer_workspace_candidate_verifies_qualified_stage_through_bundle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);self.project(root,'[dependencies]\nserde_json="=1.0.149"\n',version='2.0.0')
+            stage=root/'docs/plans/phase-b/evidence/b2-final/stage'
+            shutil.copytree(ROOT/'docs/plans/phase-b/evidence/b2-final/stage',stage)
+            (root/'.gitignore').write_text('bundle/\n')
+            def run(*args):subprocess.run(args,cwd=root,check=True,capture_output=True,text=True)
+            run('cargo','generate-lockfile');run('git','init','-q');run('git','add','.')
+            run('git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','new workspace candidate')
+            result=self.invoke(root)
+            self.assertEqual(result.returncode,0,result.stderr)
+            import json
+            manifest=json.loads((root/'bundle/manifest.json').read_text())
+            self.assertEqual(manifest['packages'][0]['version'],'2.0.0')
     def test_escaping_dependency_rejected_before_cargo(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);self.project(root,'[dependencies]\nescape={path="../outside"}\n')
@@ -34,7 +242,7 @@ class SourceBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);self.project(root)
             lock='version = 4\n[[package]]\nname="bundle-boundary-fixture"\nversion="0.0.1"\n';(root/'Cargo.lock').write_text(lock)
-            result=self.invoke(root);self.assertNotEqual(result.returncode,0);self.assertIn('BUNDLE_STALE_LOCK',result.stderr);self.assertEqual((root/'Cargo.lock').read_text(),lock)
+            result=self.invoke(root);self.assertNotEqual(result.returncode,0);self.assertIn('BUNDLE_STALE_LOCK',result.stderr);self.assertEqual((root/'Cargo.lock').read_text(encoding='utf-8'),lock)
     def test_path_only_dependency_rejected_before_staging(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);self.project(root,'[dependencies]\nlocal={path="local"}\n')
@@ -64,7 +272,7 @@ class SourceBoundaryTests(unittest.TestCase):
             run('git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','reviewed isolated fixture')
             result=self.invoke(adapter)
             self.assertEqual(result.returncode,0,result.stderr)
-            record=json.loads((adapter/'bundle/manifest.json').read_text())
+            record=json.loads((adapter/'bundle/manifest.json').read_text(encoding='utf-8'))
             self.assertEqual({item['name'] for item in record['packages']},{'serde_json','standalone-binding-fixture'})
             self.assertEqual(len(record['package_commands']),2)
             self.assertEqual(record['registry_selection'],[])
@@ -80,9 +288,57 @@ class SourceBoundaryTests(unittest.TestCase):
             run('git','add','.')
             run('git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','reviewed fixture')
             result=self.invoke(root);self.assertEqual(result.returncode,0,result.stderr)
-            record=json.loads((root/'bundle/manifest.json').read_text())
+            record=json.loads((root/'bundle/manifest.json').read_text(encoding='utf-8'))
             selection={(p['name'],p['version']) for p in record['registry_selection']}
             self.assertIn(('serde_json','1.0.149'),selection)
             self.assertIn(('libc','0.2.189'),selection)
             self.assertTrue(all(p['checksum'] for p in record['registry_selection']))
+
+    def test_bundle_accepts_source_lock_widened_by_workspace_feature_unification(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);adapter=root/'adapter';unrelated=root/'unrelated'
+            (root/'Cargo.toml').write_text('[workspace]\nmembers=["adapter","unrelated"]\nresolver="2"\n')
+            for member in (adapter,unrelated):(member/'src').mkdir(parents=True);(member/'src/lib.rs').write_text('pub fn fixture() {}\n')
+            (adapter/'Cargo.toml').write_text('[package]\nname="bundle-feature-adapter"\nversion="0.1.0"\nedition="2024"\nlicense="MIT"\n[dependencies]\ntokio={version="=1.49.0",default-features=false,features=["sync"]}\nserde_json="=1.0.151"\n')
+            (unrelated/'Cargo.toml').write_text('[package]\nname="bundle-feature-unrelated"\nversion="0.1.0"\nedition="2024"\nlicense="MIT"\n[dependencies]\ntokio={version="=1.49.0",default-features=false,features=["net"]}\n')
+            (root/'.gitignore').write_text('adapter/bundle/\n')
+            self.command(root,'cargo','generate-lockfile')
+            source_lock=(root/'Cargo.lock').read_text(encoding='utf-8')
+            self.assertIn('name = "mio"',source_lock)
+            self.command(root,'cargo','fetch','--locked')
+            self.command(root,'cargo','metadata','--locked','--offline','--format-version','1')
+            self.command(root,'git','init','-q');self.command(root,'git','add','.')
+            self.command(root,'git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','feature-unified fixture')
+            result=self.invoke(adapter)
+            self.assertEqual(result.returncode,0,result.stderr)
+            staged_lock=(adapter/'bundle/Cargo.lock').read_text(encoding='utf-8')
+            self.assertNotIn('name = "mio"',staged_lock)
+            record=json.loads((adapter/'bundle/manifest.json').read_text(encoding='utf-8'))
+            self.assertNotIn('mio',{package['name'] for package in record['registry_selection']})
+
+    def test_bundle_rejects_staged_lock_that_drops_nonoptional_root_edge(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);self.project(root,'[dependencies]\nlog="=0.4.34"\nserde_json="=1.0.149"\n')
+            (root/'.gitignore').write_text('bundle/\n')
+            self.command(root,'cargo','generate-lockfile')
+            self.command(root,'cargo','fetch','--locked')
+            self.command(root,'git','init','-q');self.command(root,'git','add','.')
+            self.command(root,'git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','required-edge fixture')
+            result=self.invoke(root);self.assertEqual(result.returncode,0,result.stderr)
+            bundle=root/'bundle';BUNDLE.verify_bundle(bundle)
+
+            staged=tomllib.loads((bundle/'Cargo.lock').read_text(encoding='utf-8'))['package']
+            root_package=next(package for package in staged if package['name']=='bundle-boundary-fixture')
+            root_package['dependencies']=[dependency for dependency in root_package['dependencies'] if dependency.split(' ',1)[0]!='log']
+            staged=[package for package in staged if package['name']!='log']
+            self.assertNotIn('log',{package['name'] for package in staged})
+            SourceBoundaryTests().write_lock(bundle/'Cargo.lock',staged)
+
+            evidence=json.loads((bundle/'manifest.json').read_text(encoding='utf-8'))
+            evidence['registry_selection']=[package for package in evidence['registry_selection'] if package['name']!='log']
+            evidence['lock_sha256']=BUNDLE.digest(bundle/'Cargo.lock')
+            evidence['files']['Cargo.lock']=BUNDLE.digest(bundle/'Cargo.lock')
+            (bundle/'manifest.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
+            with self.assertRaisesRegex(BUNDLE.BundleError,'BUNDLE_REGISTRY_DRIFT'):
+                BUNDLE.verify_bundle(bundle)
 if __name__=='__main__':unittest.main()

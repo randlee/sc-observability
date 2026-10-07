@@ -9,18 +9,36 @@ pub mod constants;
 mod diagnostic;
 pub mod error_codes;
 mod errors;
+mod errors_v2;
 mod events;
 mod health;
 mod level;
-mod metric;
+mod observation_v2;
+pub mod otlp;
 mod primitives;
 mod process;
-mod projection;
 mod query;
+mod signals_v2;
 mod span;
 mod tracing;
-pub mod typed;
+#[cfg(feature = "v1")]
+mod v1;
 mod validation;
+
+#[cfg(feature = "v1")]
+#[doc(inline)]
+pub use v1::typed;
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "released v1 compatibility paths remain feature-gated"
+)]
+#[doc(inline)]
+pub use v1::{
+    LogProjector, MetricKind, MetricProjector, MetricRecord, ObservationSubscriber,
+    ProjectionRegistration, SpanEvent, SpanProjector, SpanRecord, SpanSignal,
+    SubscriberRegistration,
+};
 
 mod sealed {
     pub trait Sealed {}
@@ -50,18 +68,19 @@ pub use constants::DEFAULT_ENV_PREFIX_SEPARATOR;
 #[doc(inline)]
 pub use constants::OBSERVATION_ENVELOPE_VERSION;
 #[doc(inline)]
+pub use constants::OBSERVATION_SCHEMA_VERSION;
+#[doc(inline)]
 pub use diagnostic::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, RecoverableSteps, Remediation,
 };
 #[doc(inline)]
-#[allow(
-    deprecated,
-    reason = "the crate root re-exports the retained legacy wrapper names"
-)]
-pub use errors::{
-    EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
-    ProjectionError, ShutdownError, SubscriberError, TelemetryError,
-};
+pub use errors::ObservationError;
+#[cfg(feature = "v1")]
+#[doc(inline)]
+#[allow(deprecated, reason = "released v1 wrappers remain feature-gated")]
+pub use errors::{EventError, IdentityError, InitError, LogSinkError, TelemetryError};
+#[doc(inline)]
+pub use errors_v2::{ConfigFailure, FailureClassification, MetricModelError};
 #[doc(inline)]
 pub use events::{LogEvent, Observable, Observation};
 #[doc(inline)]
@@ -77,24 +96,46 @@ pub use level::{
     LevelFilter, LevelState, OperationDiagnostic,
 };
 #[doc(inline)]
-pub use metric::{MetricKind, MetricRecord};
-#[doc(inline)]
 pub use primitives::{DurationMs, ErrorCode, Timestamp};
 #[doc(inline)]
 pub use process::{ProcessIdentity, ProcessIdentityPolicy, ProcessIdentityResolver};
 #[doc(inline)]
-pub use projection::{
-    LogProjector, MetricProjector, ObservationFilter, ObservationSubscriber,
-    ProjectionRegistration, SpanProjector, SubscriberRegistration,
-};
-#[doc(inline)]
 pub use query::{LogFieldMatch, LogOrder, LogQuery, LogSnapshot, QueryError};
 #[doc(inline)]
-pub use span::{SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted, SpanStatus};
+pub use span::{SpanEnded, SpanStarted, SpanStatus};
 #[doc(inline)]
 pub use tracing::{SpanId, StateTransition, TraceContext, TraceId};
 #[doc(inline)]
 pub use validation::{
-    ActionName, CorrelationId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel, SchemaVersion,
-    ServiceName, SinkName, StateName, TargetCategory, ToolName, ValueValidationError,
+    ActionName, CorrelationId, EntityId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel,
+    SchemaVersion, ServiceName, SinkName, StateName, TargetCategory, ToolName,
+    ValueValidationError,
 };
+
+/// Canonical error contracts and neutral signal models.
+///
+/// The package remains at the workspace version until the atomic D.21 bump.
+/// ADR-017 authorizes integration's canonical error migration. Canonical
+/// metric, trace, and span models live under `v2`; released 1.x counterparts
+/// are retained only through the default-on `v1` compatibility feature.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::errors_v2::{
+        ConfigFailure, EventError, ExportError, FailureClassification, FlushError, IdentityError,
+        InitError, LogSinkError, MetricModelError, ProjectionError, ShutdownError, SubscriberError,
+        TelemetryError,
+    };
+    #[doc(inline)]
+    pub use crate::observation_v2::{
+        LogProjector, MetricProjector, ObservationFilter, ObservationSubscriber,
+        ProcessIdentityResolver, ProjectionRegistration, SpanProjector, SubscriberRegistration,
+    };
+    #[doc(inline)]
+    pub use crate::signals_v2::{
+        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
+        MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
+        SpanState, TraceContext, TraceFlags,
+    };
+    #[doc(inline)]
+    pub use crate::{SpanEnded, SpanStarted, SpanStatus};
+}

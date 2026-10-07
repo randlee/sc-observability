@@ -21,6 +21,8 @@ with free-form input.
 ```json
 {
   "worktree_path": "/absolute/path/to/worktree",
+  "branch": "feature/branch-name",
+  "commit": "abc1234",
   "scope": {
     "phase": "optional string",
     "sprint": "optional string"
@@ -28,9 +30,18 @@ with free-form input.
   "review_targets": [
     "optional paths"
   ],
+  "round_limit": false,
+  "changed_files": ["optional changed-file hint for limited recheck rounds"],
+  "triage_records": ["optional prior finding records to recheck"],
+  "carry_forward_findings": [],
   "notes": "optional context"
 }
 ```
+
+`worktree_path`, `branch`, and `commit` are required. Verify that the
+worktree's `HEAD` is exactly the assigned commit on the assigned branch before
+analysis. Return an input error instead of reviewing a different or moving
+checkout.
 
 ## Scope
 
@@ -81,11 +92,13 @@ Return fenced JSON only.
   "success": true,
   "data": {
     "status": "pass | findings",
+    "reviewed_branch": "feature/branch-name",
+    "reviewed_commit": "abc1234",
     "findings": [
       {
         "id": "FTQ-001",
         "severity": "critical | important | minor",
-        "file": "crates/atm/tests/send.rs",
+        "file": "crates/example/tests/send.rs",
         "line": 42,
         "test": "test_name",
         "mechanism": "fixed_sleep | timing_assertion | shared_state | parallel_race | spawn_without_readiness | missing_reap | fixed_runtime_path | env_leak | nondeterministic_order | unbounded_wait | masking_fix",

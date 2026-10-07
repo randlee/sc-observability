@@ -1,6 +1,6 @@
 //! One fallible process timer, with physically removable observer entries.
 use crate::{
-    error,
+    conversion, error,
     sync::{Signal, lock},
 };
 use sc_observability_dto::Failure;
@@ -11,6 +11,8 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock, Weak};
 use std::time::Instant;
 
 // Resource-only singleton prescribed by the binding contract; no logger/policy.
+// MUTEX: serializes lazy TimerService creation/publication; `shared` reports
+// poison as an internal failure.
 static TIMER: OnceLock<Mutex<Option<Arc<TimerService>>>> = OnceLock::new();
 
 pub(crate) struct TimerService {
@@ -43,10 +45,12 @@ impl Ord for Entry {
 }
 
 pub(crate) fn shared() -> Result<Arc<TimerService>, Failure> {
-    let mut cell = TIMER
-        .get_or_init(|| Mutex::new(None))
-        .lock()
-        .map_err(|_| error::internal("timer initialization state poisoned"))?;
+    let mut cell = TIMER.get_or_init(|| Mutex::new(None)).lock().map_err(|_| {
+        conversion::canonical(
+            &error::init_runtime_internal("timer initialization state poisoned"),
+            conversion::Kind::Internal,
+        )
+    })?;
     if let Some(timer) = &*cell {
         return Ok(timer.clone());
     }
@@ -56,8 +60,12 @@ pub(crate) fn shared() -> Result<Arc<TimerService>, Failure> {
         next_id: AtomicU64::new(1),
     });
     let worker = timer.clone();
-    crate::spawn::spawn("binding-timer", move || worker.run())
-        .map_err(|e| error::start_failed(e.to_string()))?;
+    crate::spawn::spawn("binding-timer", move || worker.run()).map_err(|e| {
+        conversion::canonical(
+            &error::init_runtime(e.to_string(), Box::new(e)),
+            conversion::Kind::Unavailable,
+        )
+    })?;
     *cell = Some(timer.clone());
     Ok(timer)
 }

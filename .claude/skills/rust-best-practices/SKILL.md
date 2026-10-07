@@ -1,6 +1,6 @@
 ---
 name: rust-best-practices
-version: 0.11.0
+version: 0.12.3
 description: Review Rust architecture plans, crate boundaries, and code for structural design-pattern compliance. Use when the task involves typestate, sealed traits, error contracts, wrapper/newtype design, object safety, interior mutability, or other type-system-driven Rust correctness patterns that go beyond general style guidance.
 depends_on:
   rust-best-practices-agent: 0.x
@@ -11,7 +11,7 @@ depends_on:
 
 # Rust Best Practices
 
-This skill is the canonical source of truth for structural Rust pattern review in Synaptic Canvas. It complements `rust-development` by focusing on type-system-driven correctness, API-boundary design, and the lifecycle stage where each pattern should be enforced.
+This skill is the canonical source of truth for structural Rust pattern review. It complements `rust-development` by focusing on type-system-driven correctness, API-boundary design, and the lifecycle stage where each pattern should be enforced.
 
 ## Scope
 
@@ -91,12 +91,18 @@ This skill delegates pattern review work to existing Rust agents when specialize
 
 Invoke these agents via Agent Runner using `.claude/agents/registry.yaml`. Require them to load `rust-best-practices` and the specific pattern references relevant to the requested review.
 
+Every `rust-code-reviewer` delegation must use that agent's fenced-JSON input
+contract and pass the exact `worktree_path`, `branch`, `commit`, and
+`review_targets`; never dispatch it against implicit unstaged changes.
+
 Dedicated `rust-best-practices-agent` assignment template:
 
 ```json
 {
   "review_mode": "doc_review | sprint_review | phase_end",
   "worktree_path": "/absolute/path/to/worktree",
+  "branch": "feature/branch-name",
+  "commit": "abc1234",
   "review_targets": [
     "src/",
     "Cargo.toml"
@@ -106,6 +112,11 @@ Dedicated `rust-best-practices-agent` assignment template:
     "RBP-001",
     "RBP-004"
   ],
+  "round_limit": false,
+  "changed_files": ["optional changed-file hint for limited recheck rounds"],
+  "triage_records": ["optional prior finding records to recheck"],
+  "carry_forward_findings": [],
+  "findings_scope_locked": false,
   "notes": "optional context"
 }
 ```

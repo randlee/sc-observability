@@ -168,7 +168,7 @@ For every `pub trait` in a crate's public API, the agent asks:
 ### Agent Output
 
 ```markdown
-## Crate Boundary Review: `atm-core`
+## Crate Boundary Review: `message-core`
 
 ### `pub trait MessageRouter`
 - Implementations: InboxRouter, BroadcastRouter, DirectRouter (3, fixed)
@@ -197,11 +197,11 @@ For every `pub trait` in a crate's public API, the agent asks:
 Every sealed trait should carry a doc comment explaining the seal:
 
 ```rust
-/// Routes messages between agents in the ATM system.
+/// Routes messages between components in the application.
 ///
 /// # Sealed
 ///
-/// This trait is sealed and cannot be implemented outside of `atm-core`.
+/// This trait is sealed and cannot be implemented outside of `message-core`.
 /// This allows the trait to evolve (new methods, changed signatures)
 /// without breaking downstream crates.
 ///

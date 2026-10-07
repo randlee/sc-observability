@@ -13,6 +13,8 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
+from shell_helpers import bash_command, bash_environment
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import release_credentials as credentials
 
@@ -89,10 +91,21 @@ def test_liveness_workflow_records_every_channel_outcome(tmp_path, kind, exit_co
     selected = step("credential_liveness")
     assert selected["env"]["CARGO_REGISTRY_TOKEN"] == "${{ secrets.CARGO_REGISTRY_TOKEN }}"
     output = tmp_path / "output"
-    result = subprocess.run(["bash", "-c", selected["run"]], cwd=tmp_path, env={
-        **os.environ, "SECRET_PLAN": json.dumps({"liveness_channel_checks": [{"channel": "crates_io", "name": "CARGO_REGISTRY_TOKEN", "kind": kind}]}),
-        "RELEASE_ARTIFACT_MANIFEST": "unused", "GITHUB_OUTPUT": str(output),
-    }, text=True, capture_output=True, timeout=30)
+    result = subprocess.run(
+        [*bash_command(), "-c", selected["run"]],
+        cwd=tmp_path,
+        env=bash_environment(
+            {
+                **os.environ,
+                "SECRET_PLAN": json.dumps({"liveness_channel_checks": [{"channel": "crates_io", "name": "CARGO_REGISTRY_TOKEN", "kind": kind}]}),
+                "RELEASE_ARTIFACT_MANIFEST": "unused",
+            },
+            github_output=output,
+        ),
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
     assert result.returncode == exit_code, result.stderr
     assert json.loads(output.read_text().split("=", 1)[1]) == {"crates_io": "success" if exit_code == 0 else "failure"}
 
@@ -141,7 +154,14 @@ def test_package_workflow_checks_unpublished_and_standalone_dependencies(tmp_pat
     for source in (ROOT / ".github/scripts").glob("*.py"):
         shutil.copy2(source, scripts / source.name)
     body = step("package_checks")["run"].replace("${{ steps.build_plan.outputs.workspace_toml }}", "Cargo.toml")
-    result = subprocess.run(["bash", "-c", body], cwd=tmp_path, env={**env, "RELEASE_ARTIFACT_MANIFEST": str(manifest)}, text=True, capture_output=True, timeout=30)
+    result = subprocess.run(
+        [*bash_command(), "-c", body],
+        cwd=tmp_path,
+        env=bash_environment({**env, "RELEASE_ARTIFACT_MANIFEST": str(manifest)}),
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
     if broken:
         assert result.returncode != 0, result.stdout
         return

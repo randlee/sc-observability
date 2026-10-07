@@ -6,7 +6,7 @@ on:
       suite:
         description: Comma-separated suite selectors
         type: string
-        default: wheel-cli-viewer,rust-viewer,collector,wheels,tauri,rust-consumers
+        default: wheel-cli-viewer,collector,wheels,tauri,rust-consumers
       os:
         description: Comma-separated OS selectors
         type: string
@@ -14,6 +14,10 @@ on:
       dispatch_id:
         description: Optional command correlation ID
         type: string
+      accepted_base:
+        description: 'Accepted ancestor SHA for immutable API history checks; empty = origin/develop'
+        type: string
+        required: false
 permissions:
   contents: read
 jobs:
@@ -46,6 +50,10 @@ jobs:
       CI: '1'
       SOURCE_SHA: ${{ github.sha }}
       SUITE: ${{ matrix.suite }}
+      # The packaged TypeScript API check reads immutable snapshots from this
+      # trusted prior revision; the step below makes it available to every
+      # suite runner and its npm subprocesses.
+      SC_API_ACCEPTED_BASE: ${{ inputs.accepted_base || 'origin/develop' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -53,6 +61,34 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Fetch trusted accepted API history base
+        env:
+          ACCEPTED_BASE: ${{ inputs.accepted_base }}
+        shell: bash
+        run: |
+          if [[ -n "$ACCEPTED_BASE" ]]; then
+            git fetch origin "$ACCEPTED_BASE" --depth=1
+          else
+            git fetch origin develop:refs/remotes/origin/develop --depth=1
+          fi
+      - name: Reinstall pinned Rust toolchain
+        shell: bash
+        run: |
+          toolchain="$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
+          if rustup toolchain list | awk -v channel="$toolchain" '$1 == channel || index($1, channel "-") == 1 { found = 1 } END { exit !found }'; then
+            rustup toolchain uninstall "$toolchain"
+          fi
+          rustup toolchain install
+          rustup show active-toolchain
+      - name: Install Linux isolation helper for Rust consumers
+        if: ${{ matrix.suite == 'rust-consumers' && runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Run suite
         env:
           OUTPUT_DIR: ${{ runner.temp }}/integration-output

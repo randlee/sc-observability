@@ -15,6 +15,8 @@ from threading import Thread
 
 import pytest
 
+from shell_helpers import bash_command, bash_environment
+
 
 # Local fixture commands should finish quickly; bound hangs on every platform.
 TEST_COMMAND_TIMEOUT_SECONDS = 30
@@ -393,14 +395,14 @@ def run_release_preflight_registry_step(
         encoding="utf-8",
     )
     return subprocess.run(
-        ["bash", "-c", shell.replace("'${{ steps.meta.outputs.release_version }}'", "'1.5.0'")],
+        [*bash_command(), "-c", shell.replace("'${{ steps.meta.outputs.release_version }}'", "'1.5.0'")],
         cwd=tmp_path,
-        env={
+        env=bash_environment({
             **os.environ,
             "ALREADY_PUBLISHED_CHANNELS": already_published_channels,
             "RELEASE_ARTIFACT_MANIFEST": str(tmp_path / "release" / "manifest.toml"),
             "SIMULATE_PUBLISHED": str(published).lower(),
-        },
+        }),
         text=True,
         capture_output=True,
         check=False,
@@ -458,7 +460,9 @@ def run_release_gate_readiness(
         "release_manifest.py",
         "release_registry.py",
         "release_credentials.py",
+        "release_immutability.py",
         "npm_release.py",
+        "worker_result.py",
         "release_python.py",
         "release_gate.sh",
     ):
@@ -565,13 +569,12 @@ def run_release_tag_step(
         .replace("'${{ steps.release_gate.outputs.release_sha }}'", "'main-sha'")
     )
     return subprocess.run(
-        ["bash", "-c", shell],
+        [*bash_command(), "-c", shell],
         cwd=tmp_path,
-        env={
+        env=bash_environment({
             **os.environ,
             "GITHUB_OUTPUT": str(output),
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        },
+        }, github_output=output, prepend_path=bin_dir),
         text=True,
         capture_output=True,
         check=False,
@@ -662,9 +665,12 @@ def run_release_tag_step_in_git_fixture(repository: Path) -> subprocess.Complete
         )
     )
     return subprocess.run(
-        ["bash", "-c", shell],
+        [*bash_command(), "-c", shell],
         cwd=repository,
-        env={**os.environ, "GITHUB_OUTPUT": str(repository / "github-output")},
+        env=bash_environment(
+            {**os.environ, "GITHUB_OUTPUT": str(repository / "github-output")},
+            github_output=repository / "github-output",
+        ),
         text=True,
         capture_output=True,
         check=False,
@@ -690,6 +696,7 @@ def run_release_preflight_channel_results_shell(
     environment = {
         **os.environ,
         "OWNERSHIP": "success",
+        "IMMUTABLE_RELEASES": "success",
         "RELEASE_METADATA": "success",
         "RELEASE_TAG": "v1.5.0",
         "REPOSITORY_SECRETS": "success",
@@ -704,9 +711,13 @@ def run_release_preflight_channel_results_shell(
         "GITHUB_STEP_SUMMARY": str(output.with_name("summary.md")),
     }
     return subprocess.run(
-        ["bash", "-c", shell],
+        [*bash_command(), "-c", shell],
         cwd=repo_root(),
-        env=environment,
+        env=bash_environment(
+            environment,
+            github_output=output,
+            github_step_summary=output.with_name("summary.md"),
+        ),
         text=True,
         capture_output=True,
         check=False,
@@ -1047,7 +1058,9 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "release_manifest.py",
         "release_registry.py",
         "release_credentials.py",
+        "release_immutability.py",
         "npm_release.py",
+        "worker_result.py",
         "release_python.py",
         "release_gate.sh",
     )
@@ -1707,6 +1720,7 @@ def test_channel_preflight_results_execute_contract_outcome_mapping() -> None:
     passing_outcomes = json.dumps(
         {
             "ownership": "success",
+            "immutable_releases": "success",
             "release_metadata": "success",
             "repository_secrets": "success",
             "repository_secret_channels": {
@@ -1758,6 +1772,7 @@ def test_channel_preflight_results_execute_contract_outcome_mapping() -> None:
     failed_outcomes = json.dumps(
         {
             "ownership": "success",
+            "immutable_releases": "success",
             "release_metadata": "success",
             "repository_secrets": "failure",
             "repository_secret_channels": {
@@ -1804,6 +1819,7 @@ def test_channel_preflight_results_execute_contract_outcome_mapping() -> None:
         json.dumps(
             {
                 "ownership": "success",
+            "immutable_releases": "success",
                 "release_metadata": "success",
                 "repository_secrets": "success",
                 "environment_secrets": "success",
@@ -1851,6 +1867,7 @@ def test_channel_preflight_results_execute_contract_outcome_mapping() -> None:
     invalid_tag_outcomes = json.dumps(
         {
             "ownership": "success",
+            "immutable_releases": "success",
             "release_metadata": "failure",
             "repository_secrets": "success",
             "repository_secret_channels": {
@@ -1946,6 +1963,7 @@ def test_background_workers_consume_and_gate_their_own_preflight_contracts() -> 
 
     passed_outcomes = {
         "ownership": "success",
+            "immutable_releases": "success",
         "release_metadata": "success",
         "repository_secrets": "success",
         "repository_secret_channels": {

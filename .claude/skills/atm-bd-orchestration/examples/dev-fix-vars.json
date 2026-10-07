@@ -1,0 +1,12 @@
+{
+  "task_id": "obs-d-4",
+  "sprint": "d-4",
+  "stack": "phase-d",
+  "worktree_path": "../sc-observability-worktrees/fix/d-4-otlp-sync-exporter-sanity",
+  "branch": "fix/d-4-otlp-sync-exporter-sanity",
+  "sanity_bead": "obs-d-4-sanity",
+  "pr_target": "sprint/d-4-otlp-sync-exporter",
+  "primary_checkout": "/path/to/sc-observability",
+  "phase_root": "obs-phase-d",
+  "test_command": "make test"
+}

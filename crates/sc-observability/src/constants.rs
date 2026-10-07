@@ -19,6 +19,8 @@ pub(crate) const SECS_PER_DAY: u64 = 86_400;
 /// Default synchronous queue-capacity placeholder retained for the v1 config
 /// surface.
 pub const DEFAULT_LOG_QUEUE_CAPACITY: usize = 1024;
+/// Maximum serialized JSONL event size, including its trailing newline (1 MiB).
+pub const MAX_LOG_EVENT_BYTES: usize = 1024 * 1024;
 /// Internal maximum number of records one writer-thread batch drains before it
 /// flushes or rechecks maintenance work.
 pub(crate) const DEFAULT_LOG_BATCH_SIZE: usize = 64;

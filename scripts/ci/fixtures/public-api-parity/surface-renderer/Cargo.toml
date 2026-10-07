@@ -1,0 +1,16 @@
+[package]
+name = "public-api-surface-renderer"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Renders one rustdoc JSON document into the sorted public API rows compared by scripts/ci/public_api_parity.py (ADR-022)"
+
+[workspace]
+
+[dependencies]
+# Exact pins: the comparison is only meaningful when every release target is
+# rendered by the same library against the same rustdoc JSON format.
+public-api = { version = "=0.52.2", default-features = false }
+rustdoc-types = "=0.59.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -37,19 +37,21 @@ impl QueryHealthTracker {
     }
 
     pub(crate) fn record_error(&self, error: &QueryError) {
-        let summary = Some(DiagnosticSummary::from(error.diagnostic()));
-        let mut report = self.report.lock().expect("query health poisoned");
         match error {
             QueryError::InvalidQuery(_) => {}
-            QueryError::Decode(_) => {
-                report.state = QueryHealthState::Degraded;
-                report.last_error = summary;
-            }
+            QueryError::Decode(_) => self.record_query_error(QueryHealthState::Degraded, error),
             QueryError::Io(_) | QueryError::Unavailable(_) | QueryError::Shutdown => {
-                report.state = QueryHealthState::Unavailable;
-                report.last_error = summary;
+                self.record_query_error(QueryHealthState::Unavailable, error);
             }
         }
+    }
+
+    /// Records a query error without reconstructing or classifying its context.
+    fn record_query_error(&self, state: QueryHealthState, error: &QueryError) {
+        let summary = DiagnosticSummary::from(error.diagnostic());
+        let mut report = self.report.lock().expect("query health poisoned");
+        report.state = state;
+        report.last_error = Some(summary);
     }
 
     pub(crate) fn record_nonfatal_summary(&self, summary: DiagnosticSummary) {

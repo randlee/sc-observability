@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from threading import Event
 from typing import Callable
@@ -19,6 +22,7 @@ pytestmark = pytest.mark.skipif(
 
 from sc_observability import Err, LogEvent, Logger, LoggerConfig, LogQuery, Ok, create_logger, get_host_logger
 from sc_observability import _native
+from sc_observability.generated import SC_OBSERVABILITY_BINDING_INVALID_INPUT, SC_OBSERVABILITY_BINDING_TIMEOUT
 
 
 
@@ -59,6 +63,87 @@ def _event(action: str) -> LogEvent:
     return LogEvent(level="info", target="python.runtime", action=action, fields={"value": 1})
 
 
+def _assert_retained_diagnostic(
+    error: dict[str, object],
+    *,
+    code: str,
+    message: str,
+    remediation_steps: list[str],
+) -> None:
+    timestamp = error["at"]
+    assert isinstance(timestamp, str)
+    timestamp_match = re.fullmatch(
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})",
+        timestamp,
+    )
+    assert timestamp_match, f"diagnostic timestamp is not RFC3339: {timestamp!r}"
+    whole_seconds, fraction, zone = timestamp_match.groups()
+    normalized_fraction = f".{fraction[:6].ljust(6, '0')}" if fraction else ""
+    parsed_timestamp = datetime.fromisoformat(
+        f"{whole_seconds}{normalized_fraction}{zone.replace('Z', '+00:00')}"
+    )
+    assert parsed_timestamp.utcoffset() is not None, "diagnostic timestamp must include a timezone"
+    assert error["code"] == code
+    assert error["message"] == message
+    remediation = error["remediation"]
+    assert isinstance(remediation, dict)
+    assert remediation["kind"] == "recoverable"
+    assert remediation["steps"] == remediation_steps
+
+
+def test_native_runtime_preserves_released_validation_field(tmp_path: Path) -> None:
+    logger = _owned(tmp_path / "validation", "python-runtime-validation")
+    try:
+        result = json.loads(logger._native.log("{}"))
+        assert result["kind"] == "error"
+        error = result["error"]
+        assert error["kind"] == "validation"
+        assert error["field"] == "event"
+        _assert_retained_diagnostic(
+            error,
+            code=SC_OBSERVABILITY_BINDING_INVALID_INPUT,
+            message="serde_json::error::Error: missing field `schema_version`",
+            remediation_steps=["Correct the named input field and submit a new request"],
+        )
+    finally:
+        assert isinstance(logger.shutdown(), Ok)
+
+
+def test_native_raw_event_size_is_checked_before_parsing() -> None:
+    limit = 65_536
+    payload = {
+        "schema_version": 1,
+        "level": "info",
+        "target": "python.runtime",
+        "action": "raw-size-boundary",
+        "message": "",
+        "trace": None,
+        "request_id": None,
+        "correlation_id": None,
+        "outcome": None,
+        "fields": {},
+    }
+    encoded = json.dumps(payload, separators=(",", ":"))
+    payload["message"] = "x" * (limit - len(encoded))
+    boundary = json.dumps(payload, separators=(",", ":"))
+    assert len(boundary) == limit
+    assert json.loads(_native._validate_event(boundary))["kind"] == "ok"
+
+    oversized_invalid_json = "[" + (" " * limit)
+    rejected = json.loads(_native._validate_event(oversized_invalid_json))
+    assert rejected["kind"] == "error"
+    error = rejected["error"]
+    assert error["kind"] == "validation"
+    assert error["field"] == "event"
+    assert error["message"] == f"request exceeds {limit} UTF-8 bytes"
+    _assert_retained_diagnostic(
+        error,
+        code=SC_OBSERVABILITY_BINDING_INVALID_INPUT,
+        message=f"request exceeds {limit} UTF-8 bytes",
+        remediation_steps=["Correct the named input field and submit a new request"],
+    )
+
+
 def test_real_revision_exhaustion_retains_the_native_state(tmp_path: Path) -> None:
     logger = _owned(tmp_path / "revision-exhaustion", "python-runtime-revision-exhaustion")
     forced = json.loads(logger._native._test_force_revision_exhaustion())
@@ -93,9 +178,17 @@ def test_real_retained_sink_blocks_while_python_operations_progress(tmp_path: Pa
         )
         assert isinstance(logger.health(), Ok)
         assert isinstance(logger.query(LogQuery(action="held-sink")), (Ok, Err))
-        blocked_flush = logger.flush(timeout_ms=10)
-        assert isinstance(blocked_flush, Err)
-        assert blocked_flush.error.kind == "timeout"
+        flush_result = json.loads(native.flush(json.dumps(10)))
+        assert flush_result["kind"] == "error"
+        error = flush_result["error"]
+        assert error["kind"] == "timeout"
+        assert error["operation"] == "native_operation"
+        _assert_retained_diagnostic(
+            error,
+            code=SC_OBSERVABILITY_BINDING_TIMEOUT,
+            message="operation observation deadline elapsed",
+            remediation_steps=["Inspect operation status before deciding whether another operation is needed"],
+        )
         assert json.loads(native._test_release_blocked_writer())["kind"] == "ok"
         assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
     finally:
@@ -140,7 +233,42 @@ def test_private_ci_fault_hook_preserves_tagged_native_results(tmp_path: Path) -
         assert isinstance(logger.shutdown(), Ok)
 
 
+_ATTACHED_PROOF_SENTINEL = "ATTACHED_NATIVE_DETACH_PROOF_PASSED"
+_ATTACHED_PROOF_WATCHDOG_SECONDS = 60
+
+
 def test_private_ci_fault_hook_covers_attached_native_results(tmp_path: Path) -> None:
+    # A missing native detach can hold the GIL while waiting for the Python
+    # thread that must release the injected host gate. Only a separate process
+    # can enforce the watchdog in that state; this is not a timing assertion.
+    command = [
+        sys.executable, "-I", "-X", "dev", "-W", "error", "-c",
+        "import runpy, sys; from pathlib import Path; "
+        "scope = runpy.run_path(sys.argv[1]); "
+        "scope['_attached_native_results'](Path(sys.argv[2])); "
+        "print(scope['_ATTACHED_PROOF_SENTINEL'], flush=True)",
+        str(Path(__file__).resolve()), str(tmp_path),
+    ]
+    try:
+        # subprocess.run kills and reaps a timed-out child and drains both pipes.
+        result = subprocess.run(
+            command, capture_output=True, text=True,
+            timeout=_ATTACHED_PROOF_WATCHDOG_SECONDS, check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        pytest.fail(
+            "attached native detach proof exceeded its process watchdog; "
+            f"stdout={error.stdout!r}, stderr={error.stderr!r}"
+        )
+    assert result.returncode == 0, (
+        f"attached native proof child failed: stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+    assert result.stdout.splitlines().count(_ATTACHED_PROOF_SENTINEL) == 1, (
+        f"attached native proof did not finish: stdout={result.stdout!r}, stderr={result.stderr!r}"
+    )
+
+
+def _attached_native_results(tmp_path: Path) -> None:
     installed = json.loads(_native._test_install_owned_host(json.dumps({"service": "python-runtime-forced-attached", "log_root": str(tmp_path / "attached")}), True))
     assert installed["kind"] == "ok"
     attached = get_host_logger()

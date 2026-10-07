@@ -2,7 +2,9 @@
 //! `tracing::instrument` (compile-only) and against
 //! `sc_observability_log::instrument` (executed and asserted against the JSONL
 //! output). One `init` per test binary.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

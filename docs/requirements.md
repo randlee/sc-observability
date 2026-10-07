@@ -55,7 +55,7 @@ Layering requirements:
 - LAY-002 `sc-observability` shall depend on `sc-observability-types` only.
 - LAY-003 `sc-observe` shall depend on `sc-observability-types` and `sc-observability`.
 - LAY-004 `sc-observe` shall not depend on `sc-observability-otlp`.
-- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types` and `sc-observability`; `sc-observe` is permitted only as a dev-only dependency for integration tests.
+- LAY-005 `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observability` and `sc-observe` are dev-dependencies of its tests.
 - LAY-006 Higher-layer concerns shall not be required to understand or use lower-layer crates.
 - LAY-007 `sc-observability` requirements shall remain fully self-contained and shall not include routing or OTLP concerns.
 
@@ -76,15 +76,14 @@ This crate owns shared neutral contracts only.
 - TYP-011 `TraceId` shall validate 32-character lowercase hex W3C trace IDs.
 - TYP-012 `SpanId` shall validate 16-character lowercase hex W3C span IDs.
 - TYP-013 Request, session, runtime, and application metadata shall not be part of `TraceContext`.
-- TYP-014 Span lifecycle shall be encoded through typestate at the producer-facing API using `SpanRecord<SpanStarted>` and `SpanRecord<SpanEnded>`.
+- TYP-014 Span lifecycle shall use the canonical `sc_observability_types::v2` span record types.
 - TYP-015 `SpanRecord<SpanStarted>` shall have the only public constructor.
 - TYP-016 `SpanRecord<SpanEnded>` shall be reachable only through `SpanRecord<SpanStarted>::end(...)`.
 - TYP-017 Producer-facing `SpanRecord<S>` fields shall be private, with read access through accessors.
 - TYP-018 Final span duration shall be exposed only on `SpanRecord<SpanEnded>`.
-- TYP-019 `SpanState` serialization shall be derived from typestate at export/serialization time and shall not be a producer-facing mutable field. The `SpanStarted` and `SpanEnded` marker structs are the span-state mechanism; no additional producer-facing state type is required.
+- TYP-019 Canonical `sc_observability_types::v2` span-state serialization shall not expose a producer-facing mutable state field.
 - TYP-020 `Observable` shall remain an open trait for consumer-owned payload types.
 - TYP-021 `ObservationSubscriber<T>`, `ObservationFilter<T>`, `LogProjector<T>`, `SpanProjector<T>`, and `MetricProjector<T>` shall remain open extension points.
-- TYP-022 Crate-local emitter traits that are sealed to their implementing facade types shall be owned by the crate that implements them rather than by `sc-observability-types`.
 - TYP-023 Traits used behind `Arc<dyn ...>` shall remain object-safe, with `T` fixed at each usage site.
 - TYP-024 Traits used in concurrent routing or injection contexts shall be `Send + Sync`.
 - TYP-025 `ToolName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the top-level tool or executable identity used for config and path derivation.
@@ -100,7 +99,7 @@ This crate owns shared neutral contracts only.
 - TYP-035 `sc-observability-types` shall own `QueryError` with variants `InvalidQuery`, `Io`, `Decode`, `Unavailable`, and `Shutdown`.
 - TYP-036 `QueryError` shall map to stable error codes `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`, `SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN`.
 - TYP-037 `sc-observability-types` shall own `QueryHealthReport` and `QueryHealthState` as the shared health contract for log query/follow availability.
-- TYP-038 `sc-observability-types` shall own `ObservabilityHealthProvider` as a sealed shared telemetry-health trait reserved for workspace-owned implementations.
+- TYP-038 `sc-observability-types` shall own `ObservabilityHealthProvider` as a shared telemetry-health trait supported for workspace-owned implementations. External implementations are technically possible but unsupported and undertaken at the implementor's own risk; compatibility for external implementations is not guaranteed. The hidden implementation hooks do not enforce compiler-level sealing.
 - TYP-039 `sc-observability-types` shall not expose concrete logging runtime
   behavior such as `Logger`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
   built-in sink implementations, or sink-configuration toggles. Downstream
@@ -165,7 +164,7 @@ This crate is the lightweight logging layer.
     `Logger::shutdown()` returns
   - `Logger<Stopped>` remains usable for health inspection only
   - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
-- LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
+- LOG-024 `Logger::emit` shall remain the retained logger entry point for event admission and preserve its `EventError` behavior.
 - LOG-025 `Logger` shall expose a synchronous historical query API `query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>`.
 - LOG-026 `Logger` shall expose a synchronous follow/tail API `follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>`.
 - LOG-027 `LogFollowSession` shall expose synchronous polling and shall not require an async runtime, background task, or file watcher to deliver new records.
@@ -305,35 +304,35 @@ This crate is the observation routing layer built on top of logging.
 - OBS-024 `Observability` lifecycle behavior shall be explicit:
   - `emit()` after `shutdown()` returns `ObservationError::Shutdown`
   - `flush()` delegates to logging and active routing/projector state
-  - repeated `shutdown()` calls are idempotent and return `Ok(())`
-- OBS-025 `sc-observe` shall own a crate-local sealed `ObservationEmitter<T>` trait implemented by `Observability`.
+  - repeated `shutdown()` calls after a successful shutdown are idempotent and return `Ok(())`
+  - repeated `shutdown()` calls after a failed shutdown replay the retained terminal failure to callers
 
 ## 6. `sc-observability-otlp` Requirements
 
-This crate is the OTel/OTLP layer built on top of `sc-observe`.
+This crate is the OTel/OTLP layer built on `sc-observability-types`.
 
 - OTLP-001 `sc-observability-otlp` shall provide the OTLP-backed telemetry surface.
-- OTLP-002 `sc-observability-otlp` shall expose `Telemetry` and `TelemetryConfig`.
+- OTLP-002 `sc-observability-otlp` shall expose `v2::Telemetry` (`RuntimeTelemetry`) and `v2::TelemetryConfig`.
 - OTLP-003 `sc-observability-otlp` shall own all OpenTelemetry and OTLP transport concerns.
-- OTLP-004 `OtelConfig.protocol` shall be a typed `OtlpProtocol` enum rather than a free-form string.
-- OTLP-005 Invalid OTLP transport configuration shall fail at `Telemetry::new(...)` with `InitError`.
-- OTLP-006 `Telemetry` emit methods shall return `TelemetryError`.
-- OTLP-007 Calling `emit_log()`, `emit_span()`, or `emit_metric()` after `shutdown()` shall return `TelemetryError::Shutdown`.
-- OTLP-008 `SpanAssembler` shall buffer `SpanSignal::Started`, attach `SpanSignal::Event`, and emit `CompleteSpan` only on `SpanSignal::Ended`.
+- OTLP-004 `v2::OtelConfig.protocol` shall be a typed `v2::OtlpProtocol` enum rather than a free-form string.
+- OTLP-005 Invalid OTLP transport configuration shall fail at `RuntimeTelemetry::new(...)` with `sc_observability_types::v2::InitError`.
+- OTLP-006 `RuntimeTelemetry` emit methods shall return `sc_observability_types::v2::TelemetryError`.
+- OTLP-007 Calling an emit method after `shutdown()` shall return `v2::TelemetryError::Shutdown`.
+- OTLP-008 The canonical runtime `V2SpanAssembler` shall buffer a started span, attach events, and emit `sc_observability_types::otlp::OtlpCompleteSpan` only when the span ends.
 - OTLP-009 In-flight started spans without a matching end shall be dropped at flush/shutdown and counted as dropped exports.
-- OTLP-010 the internal trace-export path shall export `CompleteSpan`, not raw `SpanSignal`.
+- OTLP-010 The internal trace-export path shall export `sc_observability_types::otlp::OtlpCompleteSpan`, not a raw span signal.
 - OTLP-011 crate-local `LogExporter`, `TraceExporter`, and `MetricExporter` contracts may remain object-safe for `Arc<dyn ...>`, but they are implementation details rather than public extension points.
 - OTLP-012 Exporter failures after validation shall be fail-open and shall update health and dropped-export counters.
 - OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
   `ExporterHealth`, and typed `ExporterHealthState` (defined in
   `sc-observability-types` and re-exported by `sc-observability-otlp`).
-- OTLP-014 `sc-observability-otlp` shall use `sc-observe` only as a dev-only dependency for integration tests; runtime layering remains governed by [LAY-005](#2-layered-dependency-order).
+- OTLP-014 `sc-observability-otlp`'s only normal sc-* dependency is `sc-observability-types`; `sc-observe` is a dev-dependency of its tests.
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
 - OTLP-017 `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.
-- OTLP-018 `TelemetryConfig` shall be constructed independently of `ObservabilityConfig` and passed directly to `sc-observability-otlp` at setup time.
+- OTLP-018 `v2::TelemetryConfig` shall be constructed independently of `ObservabilityConfig` and passed directly to `sc-observability-otlp` at setup time.
 - OTLP-019 Zero-configuration OTLP behavior shall be disabled by default until the application explicitly enables telemetry or provides a valid endpoint.
-- OTLP-020 `TelemetryConfig` and `OtelConfig` shall define documented defaults for v1:
+- OTLP-020 `v2::TelemetryConfig` and `v2::OtelConfig` shall define documented defaults:
   - `enabled = false`
   - `protocol = HttpBinary`
   - `timeout_ms = 3000`
@@ -341,12 +340,45 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - `initial_backoff_ms = 250`
   - `max_backoff_ms = 5000`
   - logs, traces, and metrics disabled unless explicitly configured
-- OTLP-021 `Telemetry` lifecycle behavior shall be explicit:
-  - emit methods after `shutdown()` return `TelemetryError::Shutdown`
-  - `flush()` attempts to export ready batches and drops incomplete spans only at shutdown/final flush
-  - the first `shutdown()` surfaces any final flush failure as `ShutdownError`
-  - repeated `shutdown()` calls are idempotent and return `Ok(())`
+  This list remains the released 1.x baseline under ADR-020. The accepted
+  D21 canonical backend contract is retained. D22 now owns the exact
+  compatibility/namespace contract and D26 implements its adapter without
+  redefining backend defaults or validation; D18 verifies both public paths.
+- OTLP-021 Retired in Phase F. The former `Telemetry` lifecycle
+  behavior shall be explicit as follows; until that acceptance these bullets
+  are the gated Phase D candidate contract rather than an active requirement:
+  - synchronous emit admission remains available for both backends; emit methods
+    after async shutdown begins return `TelemetryError::Shutdown`
+  - `flush_async_typed().await` completes only after every export admitted
+    before its ordered barrier has a terminal outcome
+  - `shutdown_async_typed().await` closes admission, drains every prior
+    admission, performs provider/exporter shutdown exactly once, and surfaces
+    any final export failure as `ShutdownFailure`
+  - concurrent or repeated async shutdown callers share one completion; calls
+    made after terminal completion are idempotent and return `Ok(())`, so only
+    the first/in-flight caller set observes a terminal failure
+  - the synchronous HTTP backend retains final-result
+    `flush_typed()`/`shutdown_typed()` compatibility on plain threads; it
+    returns `BlockingBackendInAsyncContext` before buffer/state mutation when
+    called from an entered Tokio runtime
+  - the SDK backend returns a typed `AsyncLifecycleRequired` from synchronous
+    lifecycle before buffer/state mutation because it cannot block a Tokio
+    worker for async completion
+  - callers of the SDK backend keep the host runtime alive through awaited
+    shutdown; premature runtime termination yields `RuntimeTerminated`, never
+    false success, and accounts admitted-but-incomplete records as dropped
+  - incomplete spans are dropped only at shutdown/final flush
 - OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
+- OTLP-023 The synchronous HTTP/JSON backend (feature `sync-http`) is a
+  first-class supported backend for callers without an async runtime. Its code,
+  tests, dashboards, and operational recipes shall be maintained in this
+  repository and shall not ship scratch paths, ATM dependencies/labels, or
+  stale source-repository names.
+- OTLP-024 The supported Grafana/LogQL operational recipes shall be translated
+  to the current neutral resource/attribute schema, tested against the same
+  hermetic collector corpus as both exporters, and stored under
+  `docs/observability/otlp/`; legacy phase documents are evidence, not a public
+  labeling contract.
 
 ## 6.1 ATM Out-Of-The-Box Baseline
 
@@ -368,15 +400,17 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - NFR-007 Backend sink/export failures shall be fail-open.
 - NFR-008 Each crate section in this document shall remain readable in isolation without requiring upward-layer concepts to understand lower-layer behavior.
 - NFR-009 The workspace shall enforce layering and repo-boundary rules in CI, including dependency bans against `agent-team-mail-*` and banned crate edges that violate the approved stack.
-- NFR-010 The workspace shall enforce basic docs consistency checks in CI so the approved crate layering does not drift out of sync across requirements, architecture, and API design documents.
+- NFR-010 Changes to approved crate layering shall be reviewed for consistency across requirements, architecture, and API design documents. CI shall enforce missing-doc checks for the public Rust API; literal documentation phrases are not a CI contract.
 - NFR-011 The workspace shall enforce version-literal consistency in CI for the
   maintained files covered by the validation script: Cargo package tables,
   internal workspace dependency version pins that reference local crate paths,
   and `RELEASE-NOTES*.md` documents. Within that tracked scope, every release
   version literal shall match `workspace.package.version`.
-- NFR-012 Public API surface changes to `sc-observability` shall be
-  accompanied by updates to the normative docs and shall pass the CI public-API
-  governance checks introduced in sprint A.2 before merge.
+- NFR-012 A public item is removed only in a release after one that shipped it
+  `#[deprecated]` behind `v1` under PHF-002. The merge gate is the stock check
+  against committed `schema/api/rust-stock/<crate>/1.5.0.txt` baselines:
+  additions pass, while a removed or changed line fails unless that sprint
+  re-captures and commits its affected baseline in the same change.
 
 ## 8. Source Organization Requirements
 
@@ -399,13 +433,14 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - OOS-008 CLI success envelopes and exit-code conventions
 
 
-## 10. Phase B Additions — Proposed for Review
+## 10. Phase B Contracts — Retained 1.x Requirements
 
-The user has requested this scope; its detailed design and sprint execution are
-not yet approved. Existing requirements above remain the released baseline.
+These requirements govern the released 1.x baseline and the current compatible
+Phase D adoption under ADR-020. Architectural acceptance is recorded in the
+ADRs below; acceptance does not itself assert implementation closure.
 The [Phase B index](plans/phase-b/plan-phase-b.md) routes the authoritative sprint
 contracts; [ADR-011 through ADR-015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
-record the proposed architecture. No item below asserts implementation closure.
+record the accepted architecture. No item below asserts implementation closure.
 
 - PHB-001 sc-observability shall own and review the target bridge contract before
   BTIT completes its initial implementation. All foreseeable bridge changes,
@@ -421,12 +456,9 @@ record the proposed architecture. No item below asserts implementation closure.
   to neutral DTOs without a reverse dependency from DTOs to the bridge. A shared
   native binding-runtime crate owns core/bridge backends and conversions for both
   Tauri and Python; language adapters do not repeat those runtime mappings.
-- PHB-003 Phase B shall schedule no breaking change to a published API. Preserve
-  existing signatures, trait implementability/object safety and method resolution,
-  public struct construction, error variants, serialization and lifecycle behavior. New error
-  types/methods/traits coexist with old ones; no existing enum gains
-  `#[non_exhaustive]`. An API approval artifact cannot waive this requirement.
-- PHB-004 Issue #92 shall provide improved typed error implementations and usable
+- PHB-003 Superseded by PHF-002 (Phase F): deprecate before removing.
+- PHB-004 For Phase B and the 1.x release line only, Issue #92 shall provide
+  improved typed error implementations and usable
   improved operation/extension entry points, with total typed classification and
   mandatory diagnostic/remediation preservation. Unknown/custom legacy codes
   remain explicit unclassified failures. Existing source/backtrace data shall
@@ -434,7 +466,8 @@ record the proposed architecture. No item below asserts implementation closure.
   Conversion shall not claim recovery of data already discarded by the original
   operation. DiagnosticSummary remains its existing optional-code/message/time
   shape; new OperationDiagnostic carries required code/message/remediation/time.
-- PHB-005 Legacy interfaces shall remain functional with actionable compiler
+- PHB-005 For Phase B and the 1.x release line only, legacy interfaces shall
+  remain functional with actionable compiler
   deprecation warnings only after working replacements exist. Removal and a
   breaking representation conversion remain unscheduled. Default-lint legacy
   consumer fixtures shall still work; migrated fixtures shall deny deprecated
@@ -443,12 +476,13 @@ record the proposed architecture. No item below asserts implementation closure.
 - PHB-006 Existing adoption guidance shall cover incremental upgrades, exact
   symbol mappings, custom extension adapters, typed matching, diagnostic
   preservation and verification. A downstream fixture shall execute that guide.
+  Qualification follows the [ADR-013 preflight amendment](architecture.md#adr-013-owner-controlled-shared-runtime-level).
 
 The B.1e implementation record supplies the exact migration routing, warning
 inventory, downstream Cargo fixtures and JSON diagnostic validator for
 PHB-005/PHB-006. The typed methods and failures remain additive, and the
-warning rollout is active at the selected `1.4.0` next-minor candidate. B.2
-qualifies the B.1e result; B.7 alone publishes it. No removal schedule or
+warning rollout was qualified for the selected `1.4.0` next-minor candidate. B.2
+qualified the B.1e result for that release; B.7 alone owned publication. No removal schedule or
 major-release claim is introduced.
 - PHB-007 Issue #97 shall add one core-owned effective level shared by every
   producer path, with immutable LoggerConfig baseline and owner-only temporary
@@ -489,21 +523,23 @@ major-release claim is introduced.
   results are observable; timed-out flush has no prior-result retrieval API,
   and bridge-native timeout follows the documented separate adapter/native slots.
 - PHB-014 Release closure shall require downloadable immutable artifacts and
-  registry-only consumer evidence. B.P2 shall qualify immutable staged
-  runtime-level artifacts before B.P3 BTIT integration; B.7 alone publishes
-  those artifacts and runs registry-only consumer proof. Migrated Rust companions
+  registry-only consumer evidence. For the 1.4.x release, B.P2 qualified immutable
+  staged runtime-level artifacts before B.P3 BTIT integration; B.7 alone owned
+  publication and registry-only consumer proof. Migrated Rust companions
   and subsequent language artifacts have their own release gates. Go, Node.js
   and sc-runtime process/interpreter topology remain deferred. #96 configuration
   loading is independent.
+  Qualification follows the [ADR-013 preflight amendment](architecture.md#adr-013-owner-controlled-shared-runtime-level).
 
-## 11. Phase C Additions — Proposed for Review
+## 11. Phase C Contracts — Retained Publishing Constraints
 
-The user has requested this scope; its detailed design and sprint execution are
-not yet approved. Existing requirements above remain the released baseline.
+These requirements retain the shared publishing and preflight constraints.
+Architectural acceptance is recorded in ADR-016; this text grants no new
+publication authority or assertion of implementation closure.
 The [Phase C index](plans/phase-c/plan-phase-c.md) routes the authoritative
 sprint contracts; [ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption)
-records the proposed architecture. No item below asserts implementation
-closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
+records the accepted architecture. Phase C shall not publish, tag, or execute
+BTIT integration tests; current Phase D work also has no publication authority.
 
 - PHC-001 The repository-specific publishing implementation (release
   workflows, the publisher agent, the manifest/gate scripts and the legacy
@@ -549,6 +585,84 @@ closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
   CI runtime/action versions already adopted elsewhere in this repository.
   Phase C shall treat a `../sc-publish` revision with current, compatible
   action-runtime pins as a named execution prerequisite for the sprint that
-  installs the shared package, verified by an added workflow action-runtime
-  validation gate — not recorded as an accepted regression closed out by a
-  follow-up ticket.
+  installs the shared package, verified when adopting the reviewed upstream
+  revision — not recorded as an accepted regression closed out by a follow-up
+  ticket.
+
+## 12. Phase D — Compatible 1.x Adoption
+
+ADR-020 records the Phase F deprecate-before-remove decision. The next release
+keeps version 1.5.0 for every published crate; there is no major version bump.
+
+- PHD-001 Superseded by PHF-002 (Phase F): deprecate before removing.
+- PHD-002 Superseded by PHF-002 (Phase F): deprecate before removing.
+- PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a caller-owned runtime and a bounded plain-thread synchronous HTTP/JSON backend (feature `sync-http`) for callers without an async runtime. They shall share crate-private contracts, ordered admission/lifecycle barriers, deadlines and health/drop accounting. Backend/protocol/runtime combinations shall be validated at construction, and enabled transports shall never silently fall back to no-op.
+- PHD-004 Preserve the accepted Phase D canonical OTLP config/default/validation behavior: queue bounds limit record count and aggregate bytes, explicit validated config is not overridden by ambient OTEL_* values, and both backends satisfy the retired OTLP-021 lifecycle design. D22 specifies compatibility with released config literals/defaults; D26 supplies minimal adapters without changing backend contracts. Incompatible new configuration owners use the canonical namespace while the released root configuration retains its behavior.
+
+## 13. Phase F — Purpose test and migration path
+
+- PHF-001 Every published crate exposes only its 2.0 logging, observation-routing and OTel export primitives and their configuration. Application code and examples live in exactly one designated place: `examples/` or the consumer's own repository.
+- PHF-002 Deprecate before removing. Every public 1.x item in every published crate ships behind its crate's default-on `v1` Cargo feature with `#[deprecated(note = "<2.0 replacement>")]` (an item with no replacement: `"removed; see docs/migration/phase-f.md"`), re-exported from its released path; the next release deletes the `v1` modules and features. A deprecated item need not keep working: it needs no compatibility adapters, tests or baseline comparison. Deleted in Phase F: public items already `#[deprecated]` in published 1.4.1, items never released, and internal plumbing. Test seams follow PHF-003. Every 2.0 item stays (Product Bar, CLAUDE.md). Canonical code never uses a `v1` item.
+- PHF-003 A test seam that the instrumented Python wheel needs (`sc-observability-types` `test-double`, `sc-observability-binding-runtime` `test-hooks`, `sc-observability` `fault-injection` for revision exhaustion) stays behind its off-by-default feature, `#[doc(hidden)]`, and out of the published API snapshot. Every other test seam is `#[cfg(test)]`.
+- PHF-004 `queue_capacity` is standard logger configuration with a recommended default that the logger enforces; no other layer carries a copy.
+
+### Phase D wave 5 — Customer telemetry submission
+
+These additive requirements extend the compatible 1.x baseline. Customer field
+mapping remains outside the transport. These requirements cover logs, traces,
+metrics and profiles, including the pinned development-version profile protocol.
+
+- PHD-005 A shared Rust submission API shall accept logs, completed spans,
+  metrics and profiles independently or together, preserving original UTC timestamps,
+  structured attributes, resource/scope and supplied valid correlation. Paired
+  logs/spans without IDs receive shared IDs; conflicting supplied IDs or timing
+  return typed errors. Historical records without actual start time are not
+  fabricated spans.
+- PHD-006 Metric submission shall preserve gauge, sum, explicit histogram,
+  exponential histogram and imported summary representations; numeric type,
+  temporality, monotonicity, timestamps, distribution data and supported
+  exemplars shall not be flattened or silently dropped. Profile samples, stacks,
+  dictionaries, units, timestamps and links shall be preserved and references
+  validated against the pinned profile schema. Span events/links/status
+  and structured log bodies shall survive export. New contracts remain additive.
+- PHD-007 Successful durable admission shall mean a versioned record is committed
+  locally before the receipt returns. Pending data shall survive process restart.
+  Capacity exhaustion, invalid payloads and persistence failure shall be explicit
+  errors; pending data shall not be silently evicted. The store shall support
+  bounded retention and coordinated access from Python and CLI processes.
+- PHD-008 Delivery shall track each signal independently and support bounded flush,
+  timeout, shutdown and retry after collector recovery. Admission and remote
+  delivery shall be distinguishable. Document at-least-once delivery and its crash
+  duplication window; stable import keys shall prevent duplicate local admission.
+- PHD-009 Installed Python bindings shall expose shared configuration, submission,
+  receipts, status and flush/shutdown with matching type stubs and typed errors.
+  Existing logging APIs shall retain compatibility. `open`, `emit` (durable
+  commit), `flush`, `shutdown` and `status` shall release the GIL; context exit
+  shall not hide delivery errors. Release wheels shall enable the telemetry
+  feature.
+- PHD-010 An installable Rust CLI, the `sc-otel` binary from crate `sc-otel-cli`,
+  shall expose the same submission contract through structured stdin and
+  log/span/metric/profile options, plus validate, flush and status. Python and
+  CLI shall use the same validation/config precedence. Exit status and machine
+  output shall distinguish invalid input, admission failure and delivery failure.
+- PHD-011 The sanity consumer shall map historical and live LLM/JEV records with
+  configurable team/service/phase and a repository-specific PR URL template.
+  Preserve reviewer identity, tested commit and original UTC timing. Persist
+  source progress only after admission and handle partial lines, rotation,
+  truncation and repeated imports without silent loss. Local time is display only.
+- PHD-012 End-to-end tests shall submit through the installed Python package and
+  actual CLI, then read back records from the pinned `otel-desktop-viewer`
+  (v0.5.0) for every signal it supports, asserting values, timestamps and correlation. Collector capture
+  shall verify remaining supported wire forms explicitly; it does not substitute
+  for viewer readback or justify claiming unsupported viewer capabilities.
+  Exercise offline recovery, process restart and partial signal delivery.
+  Proof is automated query assertions; manual UI inspection is not proof.
+- PHD-013 Full telemetry support shall be measured against the pinned upstream
+  opentelemetry-proto v1.10.0 (Rust `opentelemetry-proto =0.33.0`): all four signal families, every payload variant
+  and their fields must be represented through Rust, Python, CLI and the durable
+  format. Serialization/export tests shall exercise the variants and nested
+  non-default fields. Protocol maturity and viewer limitations shall be explicit,
+  not used to silently remove product support. Any exclusion needs a user decision.
+  Payload fields include the profile string-index forms and non-finite doubles
+  (proto-JSON `"NaN"`, `"Infinity"`, `"-Infinity"`). `tracez.proto` (zPages) is
+  not an OTLP payload and is outside this scope.
