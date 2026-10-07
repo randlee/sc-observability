@@ -665,6 +665,7 @@ mod tests {
             })
         }
     }
+    #[cfg(feature = "v1")]
     use crate::runtime::LevelLifecycle;
     use crate::v2::LogSink;
     use sc_observability_types::v2::LogSinkError;
@@ -819,10 +820,12 @@ mod tests {
         )
     }
 
+    #[cfg(feature = "v1")]
     fn file_identity(path: &Path) -> crate::query::FileIdentity {
         crate::query::file_identity_for_path(path)
     }
 
+    #[cfg(feature = "v1")]
     fn recreate_with_distinct_identity(active_path: &Path) {
         let replacement_path = active_path.with_extension("replacement");
         let previous_identity = file_identity(active_path);
@@ -1017,6 +1020,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     fn release_test_pass_delay(signal: &Arc<crate::maintenance::TestPassDelaySignal>) {
         signal.release_delay();
         assert!(
@@ -1029,6 +1033,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn test_pass_delay_timeout_is_explicit_and_bounded() {
         let signal = crate::maintenance::TestPassDelaySignal::default();
@@ -1068,6 +1073,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn test_pass_delay_release_guard_unblocks_waiter_on_drop() {
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
@@ -1108,6 +1114,7 @@ mod tests {
         MaintenanceCadence::new(Duration::from_secs(value))
     }
 
+    #[cfg(feature = "v1")]
     fn join_ms(value: u64) -> WriterShutdownTimeout {
         WriterShutdownTimeout::new(Duration::from_millis(value))
     }
@@ -1379,6 +1386,7 @@ mod tests {
         assert!(health.last_error.is_some());
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn flush_times_out_when_writer_is_blocked() {
         let root = temp_path("flush-writer-timeout");
@@ -2237,6 +2245,7 @@ mod tests {
         let _ = logger.shutdown();
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn saturated_diagnostic_queue_keeps_the_level_change_committed() {
         let root = temp_path("level-diagnostic-saturation");
@@ -2280,6 +2289,7 @@ mod tests {
         let _ = logger.shutdown();
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn level_owner_rejects_changes_during_an_actual_shutdown_stopping_window() {
         let root = temp_path("level-owner-stopping-window");
@@ -2748,6 +2758,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
