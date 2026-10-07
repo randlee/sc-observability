@@ -25,13 +25,22 @@ def query_for(settings=(200, {"enabled": True}), releases=None):
     (200, {"enabled": False}, "disabled:"),
     (200, {}, "indeterminate:"),
     (200, {"enabled": "true"}, "indeterminate:"),
-    (401, None, "indeterminate:"), (403, None, "indeterminate:"),
-    (404, None, "indeterminate:"), (429, None, "indeterminate:"),
-    (500, None, "indeterminate:"),
 ])
-def test_disabled_and_unreadable_settings_fail_closed(status, body, reason):
+def test_disabled_and_malformed_settings_fail_closed(status, body, reason):
     with pytest.raises(ImmutabilityError, match=reason):
         check("owner/repo", "v1.2.3", query=query_for((status, body)))
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 429, 500])
+def test_unreadable_settings_continue_and_still_enforce_release_immutability(status, capsys):
+    result = check("owner/repo", "v1.2.3", query=query_for((status, None)))
+    assert result == {"repository_enabled": None, "release_state": "absent"}
+    assert f"HTTP {status}" in capsys.readouterr().err
+    with pytest.raises(ImmutabilityError, match="unsupported by this pipeline"):
+        check("owner/repo", "v1.2.3", query=query_for((status, None), releases=[
+            {"tag_name": "v1.2.3", "draft": False, "immutable": False}]))
+    with pytest.raises(ImmutabilityError, match="downstream publication denied"):
+        check("owner/repo", "v1.2.3", finalized=True, query=query_for((status, None)))
 
 
 @pytest.mark.parametrize("release,state", [

@@ -45,17 +45,22 @@ def check(repository, tag, *, finalized=False, replace_assets=False, query=api):
     if replace_assets:
         raise ImmutabilityError("immutable releases prohibit replace_release_assets; use a new version")
     status, settings = query(f"repos/{repository}/immutable-releases")
-    if status != 200:
-        # GitHub also documents 404 for disabled, but inaccessible repositories
-        # can be masked as 404. Never infer either enabled or absent from it.
-        raise ImmutabilityError(
-            f"indeterminate: immutable-releases HTTP {status} (disabled or inaccessible); "
-            "an administrator must verify enablement; this read requires Administration:read"
+    if status == 200:
+        if not isinstance(settings, dict) or type(settings.get("enabled")) is not bool:
+            raise ImmutabilityError("indeterminate: repository response lacks boolean enabled")
+        if not settings["enabled"]:
+            raise ImmutabilityError("disabled: repository immutable releases must be enabled by an administrator")
+        enabled = True
+    else:
+        # The setting read requires Administration:read, which the Actions token
+        # lacks. An unreadable setting is not a disabled one: continue, and rely
+        # on the per-release immutable flag checked below and after finalization.
+        print(
+            f"warning: immutable-releases setting unreadable (HTTP {status}); "
+            "repository enablement unverified, release immutability still enforced",
+            file=sys.stderr,
         )
-    if not isinstance(settings, dict) or type(settings.get("enabled")) is not bool:
-        raise ImmutabilityError("indeterminate: repository response lacks boolean enabled")
-    if not settings["enabled"]:
-        raise ImmutabilityError("disabled: repository immutable releases must be enabled by an administrator")
+        enabled = None
 
     # Listing includes drafts visible to the credential, unlike lookup by tag.
     # Bound pagination; exhaustion is an error rather than guessed absence.
@@ -71,14 +76,14 @@ def check(repository, tag, *, finalized=False, replace_assets=False, query=api):
             if release.get("draft") is True:
                 if finalized:
                     raise ImmutabilityError("release is still draft; downstream publication denied")
-                return {"repository_enabled": True, "release_state": "draft"}
+                return {"repository_enabled": enabled, "release_state": "draft"}
             if release.get("draft") is not False or release.get("immutable") is not True:
                 raise ImmutabilityError("existing release is mutable or indeterminate; unsupported by this pipeline; use a new version")
-            return {"repository_enabled": True, "release_state": "immutable"}
+            return {"repository_enabled": enabled, "release_state": "immutable"}
         if len(releases) < 100:
             if finalized:
                 raise ImmutabilityError("published immutable release not found; downstream publication denied")
-            return {"repository_enabled": True, "release_state": "absent"}
+            return {"repository_enabled": enabled, "release_state": "absent"}
     raise ImmutabilityError("indeterminate: release inventory pagination limit reached")
 
 
