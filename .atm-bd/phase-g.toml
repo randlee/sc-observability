@@ -1,0 +1,4 @@
+# Canonical Phase G plan location, shared by local validation and CI.
+root = "obs-phase-g"
+plan = "docs/plans/phase-g.jsonl"
+integration_branch = "integrate/phase-g"
