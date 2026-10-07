@@ -67,15 +67,12 @@ sprints. The consumer-facing migration record is
 
 ## Phase G — sc-otel distribution and release delivery
 
-Phase G carries the existing Clap-reference package as g-1, then qualifies the
-binary-only CLI for the public-API gate, renders its Cargo/archive/channel
-distribution contract, documents that shipped surface, and executes the
-owner-gated 1.5.1 release. Its authoritative execution graph is
-[`plans/phase-g.jsonl`](plans/phase-g.jsonl). The phase is based on PR #1203
-(`docs/sc-otel-clap-reference` at `03ea7f0c`), not the preceding `develop`
-tree. The final release cannot start until the owner confirms the Homebrew and
-Scoop repository secrets and, if required, the first `randlee.sc-otel` winget
-submission; no secret values are recorded in the repository.
+Phase G treats PR #1203 (`docs/sc-otel-clap-reference` at `03ea7f0c`) as the
+external prerequisite g-1: it must merge to `develop` before the phase branch
+is cut. g-2 delivers the CLI distribution contract while g-3 makes
+`sc-otel status` read-only; g-4 releases their completed result as 1.5.1.
+Its authoritative execution graph is
+[`plans/phase-g.jsonl`](plans/phase-g.jsonl).
 
 ## Issue #70 / v1.1.0
 
