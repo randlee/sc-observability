@@ -38,7 +38,7 @@ class Tests(unittest.TestCase):
   self.man['searches']=[{'literal':'absent_symbol','paths':['code.rs']}]
   s=self.packet()['state']['searches'][0];self.assertEqual(s['exit_code'],1);self.assertEqual(s['matches'],'');self.assertIn('does not establish behavioral absence',s['interpretation'])
  def test_oversize_does_not_truncate(self):
-  self.man['finding_text']='x'*25000
+  self.man['finding_text']='x'*(REAL.MAX_REQUEST_BYTES+1)
   with self.assertRaises(REAL.JevError):self.packet()
  def test_obligation_mismatch_rejected(self):
   self.man['coverage']['obligation_ids']=['o2']
