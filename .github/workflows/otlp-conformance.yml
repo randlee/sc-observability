@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        features: [otlp-sdk, sync-http, otlp-sdk,sync-http]
+        features: [otlp-sdk, sync-http, "otlp-sdk,sync-http"]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
