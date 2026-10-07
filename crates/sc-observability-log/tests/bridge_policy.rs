@@ -210,7 +210,7 @@ fn instrumented_completion_is_routed_through_attachment() {
     drop(events);
 
     attachment.detach(Duration::from_secs(2)).expect("detach");
-    Arc::try_unwrap(host)
+    let _ = Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("detach releases attachment logger"))
         .shutdown();
 }
@@ -272,7 +272,7 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
 
     attachment.detach(Duration::from_secs(2)).expect("detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases logger"));
-    host.shutdown();
+    let _ = host.shutdown();
     let output = std::fs::read_to_string(path).expect("read redacted log");
     assert!(output.contains("Bearer [REDACTED]"));
     assert!(!output.contains("message-secret"));
@@ -339,7 +339,7 @@ fn every_policy_reason_has_concrete_steps_and_facade_diagnostics() {
         );
         assert!(events.lock().expect("events").is_empty());
         attachment.detach(Duration::from_secs(2)).expect("detach");
-        Arc::try_unwrap(host)
+        let _ = Arc::try_unwrap(host)
             .unwrap_or_else(|_| panic!("host released"))
             .shutdown();
     }

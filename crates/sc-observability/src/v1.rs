@@ -43,7 +43,7 @@ pub struct LoggerBuilder {
     reason = "the wrapper deliberately hides runtime handles and trait-object sinks"
 )]
 pub struct Logger<State = crate::Running> {
-    pub(crate) inner: crate::CanonicalLogger<State>,
+    pub(crate) inner: crate::CanonicalLogger,
     shutdown: std::marker::PhantomData<State>,
 }
 

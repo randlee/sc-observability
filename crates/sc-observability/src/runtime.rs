@@ -1,13 +1,12 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, Weak};
-#[cfg(test)]
+use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 
 use sc_observability_types::v2::{
     EventError as CanonicalEventError, FlushError as CanonicalFlushError,
-    InitError as CanonicalInitError,
+    InitError as CanonicalInitError, ShutdownError as CanonicalShutdownError,
 };
 use sc_observability_types::{
     AdmissionOutcome, ChangeDiagnostic, DiagnosticSummary, EntityId, EnvPrefix, ErrorContext,
@@ -34,7 +33,7 @@ use crate::sinks::{JsonlFileSink, validate_event_size};
 use crate::{
     CanonicalLogger, EnvSnapshot, LevelOwner, LogEvent, LogRoot, LogSettings, LogSettingsError,
     LogSettingsInputs, LoggerConfig, RedactionPolicy, ResolvedLogSettings, RetainedLogPolicy,
-    Running, ServiceName, Stopped, default_log_path, error_codes, shutdown_timed_out_error_context,
+    ServiceName, default_log_path, error_codes, shutdown_timed_out_error_context,
     writer_degraded_error_context,
 };
 
@@ -260,7 +259,9 @@ pub(crate) struct LoggerRuntime {
     // MUTEX: Writer and logger paths share this error slot; one exclusive lock keeps its latest-value updates and health reads synchronized.
     pub(crate) last_error: Arc<Mutex<Option<DiagnosticSummary>>>,
     pub(crate) query_health: Arc<QueryHealthTracker>,
-    pub(crate) writer: Option<WriterRuntime>,
+    // RWLOCK: canonical admissions and flushes can share the running writer;
+    // shutdown alone takes exclusive ownership exactly once.
+    pub(crate) writer: RwLock<Option<WriterRuntime>>,
     // MUTEX: Shutdown publishes one final snapshot and health calls clone it afterward; this lock protects the slot, not the aggregate report.
     pub(crate) writer_snapshot: Mutex<Option<WriterHealthSnapshot>>,
 }
@@ -497,6 +498,8 @@ fn redact_event_with_policy(mut event: LogEvent, policy: &RedactionPolicy) -> Lo
 impl LoggerRuntime {
     pub(crate) fn diagnostic_admitter(&self) -> DiagnosticAdmitter {
         self.writer
+            .read()
+            .expect("writer runtime poisoned")
             .as_ref()
             .expect("running logger must retain its writer runtime")
             .diagnostic_admitter()
@@ -561,13 +564,13 @@ impl LoggerRuntime {
             flush_errors_total,
             last_error: last_error.clone(),
             query_health,
-            writer: Some(writer),
+            writer: RwLock::new(Some(writer)),
             writer_snapshot: Mutex::new(None),
         })
     }
 }
 
-impl CanonicalLogger<Running> {
+impl CanonicalLogger {
     /// Starts a construction-time builder for sink registration.
     pub fn builder(
         config: crate::LoggerConfig,
@@ -603,17 +606,24 @@ impl CanonicalLogger<Running> {
     }
 
     fn log_in_mode(&self, event: LogEvent, mode: AdmissionMode) -> Result<(), CanonicalEventError> {
+        if self.shutdown.load(Ordering::SeqCst) {
+            return Err(Self::shutdown_event_error());
+        }
         let event = self.prepare_event(event, mode)?;
         let Some(event) = event else {
             return Ok(());
         };
 
-        let writer = self
-            .runtime
-            .writer
+        let writer_guard = self.runtime.writer.read().expect("writer runtime poisoned");
+        if self.shutdown.load(Ordering::SeqCst) {
+            return Err(Self::shutdown_event_error());
+        }
+        let writer = writer_guard
             .as_ref()
-            .expect("running logger must retain its writer runtime");
-        writer.enqueue_blocking(event).map_err(|error| match error {
+            .ok_or_else(Self::shutdown_event_error)?;
+        let admission = writer.enqueue_blocking(event);
+        drop(writer_guard);
+        admission.map_err(|error| match error {
             BlockingEnqueueError::Disconnected => self.log_disconnected_failure(),
         })
     }
@@ -653,20 +663,33 @@ impl CanonicalLogger<Running> {
         event: LogEvent,
         mode: AdmissionMode,
     ) -> Result<AdmissionOutcome, CanonicalEventError> {
+        if self.shutdown.load(Ordering::SeqCst) {
+            return Err(Self::shutdown_event_error());
+        }
         let event = self.prepare_event(event, mode)?;
         let Some(event) = event else {
             return Ok(AdmissionOutcome::Filtered);
         };
 
-        let writer = self
-            .runtime
-            .writer
+        let writer_guard = self.runtime.writer.read().expect("writer runtime poisoned");
+        if self.shutdown.load(Ordering::SeqCst) {
+            return Err(Self::shutdown_event_error());
+        }
+        let writer = writer_guard
             .as_ref()
-            .expect("running logger must retain its writer runtime");
-        match writer.enqueue_nonblocking(event) {
+            .ok_or_else(Self::shutdown_event_error)?;
+        let admission = match writer.enqueue_nonblocking(event) {
             Ok(()) => Ok(AdmissionOutcome::Accepted),
             Err(TryEnqueueError::Full) => {
                 let summary = writer.record_queue_full_drop();
+                Err(Some(summary))
+            }
+            Err(TryEnqueueError::Disconnected) => Err(None),
+        };
+        drop(writer_guard);
+        match admission {
+            Ok(outcome) => Ok(outcome),
+            Err(Some(summary)) => {
                 self.record_last_error(summary);
                 Err(CanonicalEventError::classified_routing(
                     Box::new(ErrorContext::new(
@@ -683,7 +706,7 @@ impl CanonicalLogger<Running> {
                     FailureClassification::QueueFull,
                 ))
             }
-            Err(TryEnqueueError::Disconnected) => Err(self.try_log_disconnected_failure()),
+            Err(None) => Err(self.try_log_disconnected_failure()),
         }
     }
 
@@ -694,6 +717,8 @@ impl CanonicalLogger<Running> {
         if !self
             .runtime
             .writer
+            .read()
+            .expect("writer runtime poisoned")
             .as_ref()
             .is_some_and(WriterRuntime::maintenance_active)
         {
@@ -711,12 +736,29 @@ impl CanonicalLogger<Running> {
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn flush(&self) -> Result<(), CanonicalFlushError> {
-        let writer = self
-            .runtime
-            .writer
-            .as_ref()
-            .expect("running logger must retain its writer runtime");
-        if let Err(error) = writer.flush() {
+        self.flush_with_timeout(
+            self.config
+                .retained_log_policy
+                .writer_shutdown_timeout
+                .as_duration(),
+        )
+    }
+
+    /// Flushes all registered sinks within an explicit caller-provided timeout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the running logger has lost its writer runtime unexpectedly.
+    pub fn flush_with_timeout(&self, timeout: Duration) -> Result<(), CanonicalFlushError> {
+        if self.shutdown.load(Ordering::SeqCst) {
+            return Err(Self::shutdown_flush_error());
+        }
+        let writer = self.runtime.writer.read().expect("writer runtime poisoned");
+        if self.shutdown.load(Ordering::SeqCst) {
+            return Err(Self::shutdown_flush_error());
+        }
+        let writer = writer.as_ref().ok_or_else(Self::shutdown_flush_error)?;
+        if let Err(error) = writer.flush_with_timeout(timeout) {
             self.runtime
                 .flush_errors_total
                 .fetch_add(1, Ordering::SeqCst);
@@ -749,24 +791,33 @@ impl CanonicalLogger<Running> {
         result
     }
 
-    /// Drains queued events, waits for the writer thread to finish, and returns
-    /// a stopped logger typestate.
-    ///
-    /// If shutdown exceeds the configured timeout threshold, the runtime records
-    /// degraded health before continuing to wait for definitive writer-thread
-    /// completion.
+    /// Shuts down the writer with the configured timeout. Repeated calls are
+    /// idempotent and return `Ok(())` after the first caller begins shutdown.
+    pub fn shutdown(&self) -> Result<(), CanonicalShutdownError> {
+        self.shutdown_with_timeout(
+            self.config
+                .retained_log_policy
+                .writer_shutdown_timeout
+                .as_duration(),
+        )
+    }
+
+    /// Shuts down the writer using an explicit timeout.
     ///
     /// # Panics
     ///
-    /// Panics if the internal writer-snapshot mutex has been poisoned while
-    /// recording final runtime state.
-    pub fn shutdown(mut self) -> CanonicalLogger<Stopped> {
-        self.shutdown.store(true, Ordering::SeqCst);
+    /// Panics if the internal lifecycle mutexes have been poisoned.
+    pub fn shutdown_with_timeout(&self, timeout: Duration) -> Result<(), CanonicalShutdownError> {
+        if self.shutdown.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
         self.mark_level_stopping();
         #[cfg(test)]
         if let Some(signal) = self
             .runtime
             .writer
+            .read()
+            .expect("writer runtime poisoned")
             .as_ref()
             .and_then(WriterRuntime::test_pass_signal)
         {
@@ -774,11 +825,29 @@ impl CanonicalLogger<Running> {
         }
         // The owner only has a weak reference to this admission path. Drop the
         // logger's strong reference before joining so it cannot retain sender.
-        self.diagnostic_admitter.take();
-        if let Some(writer) = self.runtime.writer.take() {
-            let snapshot = writer.shutdown();
+        self.diagnostic_admitter
+            .lock()
+            .expect("diagnostic admitter poisoned")
+            .take();
+        let writer = self
+            .runtime
+            .writer
+            .write()
+            .expect("writer runtime poisoned")
+            .take();
+        let mut shutdown_error = None;
+        if let Some(writer) = writer {
+            let (snapshot, timed_out) = writer.shutdown_with_timeout(timeout);
             if let Some(summary) = snapshot.last_writer_error.clone() {
                 self.record_last_error(summary);
+            }
+            if timed_out {
+                shutdown_error = Some(CanonicalShutdownError::Timeout {
+                    context: Box::new(shutdown_timed_out_error_context(&format!(
+                        "writer did not stop within {}ms",
+                        timeout.as_millis()
+                    ))),
+                });
             }
             *self
                 .runtime
@@ -788,15 +857,7 @@ impl CanonicalLogger<Running> {
         }
         self.runtime.query_health.mark_unavailable(None);
         self.mark_level_stopped();
-        CanonicalLogger {
-            config: self.config,
-            sinks: self.sinks,
-            shutdown: self.shutdown,
-            runtime: self.runtime,
-            diagnostic_admitter: None,
-            level_control: self.level_control,
-            state: std::marker::PhantomData,
-        }
+        shutdown_error.map_or(Ok(()), Err)
     }
 
     fn prepare_event(
@@ -875,6 +936,24 @@ impl CanonicalLogger<Running> {
         }
     }
 
+    fn shutdown_event_error() -> CanonicalEventError {
+        CanonicalEventError::classified_routing(
+            Box::new(writer_degraded_error_context(
+                "logger is shut down; construct a new logger before admitting more events",
+            )),
+            FailureClassification::Closed,
+        )
+    }
+
+    fn shutdown_flush_error() -> CanonicalFlushError {
+        CanonicalFlushError::classified_drain(
+            Box::new(writer_degraded_error_context(
+                "logger is shut down; construct a new logger before flushing",
+            )),
+            FailureClassification::Closed,
+        )
+    }
+
     fn try_log_disconnected_failure(&self) -> CanonicalEventError {
         match self.runtime_snapshot().last_writer_error {
             Some(summary)
@@ -914,7 +993,7 @@ impl CanonicalLogger<Running> {
     }
 }
 
-impl<State> CanonicalLogger<State> {
+impl CanonicalLogger {
     /// Returns a coherent snapshot of the logger's runtime level state.
     #[must_use]
     pub fn level_state(&self) -> LevelState {
@@ -978,7 +1057,8 @@ impl<State> CanonicalLogger<State> {
     }
 
     fn runtime_snapshot(&self) -> WriterHealthSnapshot {
-        if let Some(writer) = self.runtime.writer.as_ref() {
+        let writer = self.runtime.writer.read().expect("writer runtime poisoned");
+        if let Some(writer) = writer.as_ref() {
             writer.snapshot()
         } else {
             self.runtime
@@ -1099,7 +1179,7 @@ impl LevelOwner {
 mod disconnected_failure_tests {
     use super::*;
 
-    fn logger_with_synthetic_shutdown_timeout() -> CanonicalLogger<Running> {
+    fn logger_with_synthetic_shutdown_timeout() -> CanonicalLogger {
         let service_name =
             ServiceName::new("disconnected-timeout-test").expect("test service name is valid");
         let mut config = LoggerConfig::default_for(
@@ -1111,9 +1191,15 @@ mod disconnected_failure_tests {
         config.retained_log_policy.writer_shutdown_timeout =
             WriterShutdownTimeout::new(Duration::from_millis(20));
 
-        let mut logger = CanonicalLogger::new(config).expect("test logger starts");
-        let writer = logger.runtime.writer.take().expect("logger has a writer");
-        let _ = writer.shutdown();
+        let logger = CanonicalLogger::new(config).expect("test logger starts");
+        let writer = logger
+            .runtime
+            .writer
+            .write()
+            .expect("writer runtime")
+            .take()
+            .expect("logger has a writer");
+        let _ = writer.shutdown_with_timeout(Duration::from_millis(20));
 
         let timeout_context = shutdown_timed_out_error_context("synthetic shutdown timeout");
         let last_writer_error = Some(DiagnosticSummary::from(timeout_context.diagnostic()));

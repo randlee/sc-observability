@@ -33,6 +33,7 @@ use std::any::{Any, TypeId};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
 
 #[cfg(feature = "v1")]
 #[allow(
@@ -46,8 +47,10 @@ use sc_observability::LogError;
     reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
 )]
 use sc_observability::Logger as ReleasedLogger;
+#[cfg(feature = "v1")]
+use sc_observability::Running;
 use sc_observability::v2::Logger;
-use sc_observability::{LoggerConfig, RetainedLogPolicy, Running, Stopped};
+use sc_observability::{LoggerConfig, RetainedLogPolicy};
 #[cfg(feature = "v1")]
 use sc_observability_types::DiagnosticInfo;
 #[cfg(feature = "v1")]
@@ -60,8 +63,9 @@ use sc_observability_types::v2::{
     SubscriberRegistration as CanonicalSubscriberRegistration,
 };
 use sc_observability_types::{
-    DiagnosticSummary, EnvPrefix, ErrorContext, LogEvent, ObservabilityHealthProvider, Observable,
-    Observation, Remediation, ServiceName, TelemetryHealthState, ToolName,
+    DiagnosticSummary, EnvPrefix, ErrorContext, FailureClassification, LogEvent,
+    ObservabilityHealthProvider, Observable, Observation, Remediation, ServiceName,
+    TelemetryHealthState, ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -83,17 +87,25 @@ pub mod v2 {
     pub use crate::canonical::{Observability, ObservabilityBuilder, ObservabilityConfig};
     #[doc(inline)]
     pub use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
+    #[doc(inline)]
+    pub use sc_observability_types::v2::{ProjectionRegistration, SubscriberRegistration};
+    #[doc(inline)]
+    pub use sc_observability_types::{
+        ObservabilityHealthProvider, ObservabilityHealthReport, Observable, Observation,
+        ObservationError, ServiceName, ToolName,
+    };
 }
 
 mod canonical {
     use super::{
         Any, Arc, AtomicBool, AtomicU64, CanonicalFlushError, CanonicalInitError,
         CanonicalProjectionRegistration, CanonicalShutdownError, CanonicalSubscriberRegistration,
-        Condvar, DiagnosticSummary, EnvPrefix, ErrorContext, LogEvent, Logger, LoggerConfig, Mutex,
-        ObservabilityHealthProvider, ObservabilityHealthReport, Observable, Observation,
-        ObservationError, ObservationFilter, ObservationHealthState, Ordering, PathBuf,
-        Remediation, RetainedLogPolicy, Running, ServiceName, Stopped, SubscriberError,
-        TelemetryHealthState, ToolName, TypeId, constants, error_codes,
+        Condvar, DiagnosticSummary, Duration, EnvPrefix, ErrorContext, FailureClassification,
+        LogEvent, Logger, LoggerConfig, Mutex, ObservabilityHealthProvider,
+        ObservabilityHealthReport, Observable, Observation, ObservationError, ObservationFilter,
+        ObservationHealthState, Ordering, PathBuf, Remediation, RetainedLogPolicy, Running,
+        ServiceName, SubscriberError, TelemetryHealthState, ToolName, TypeId, constants,
+        error_codes,
     };
     #[cfg(feature = "v1")]
     #[allow(
@@ -263,7 +275,7 @@ mod canonical {
     pub(crate) enum LoggerHandle {
         Running(RunningLogger),
         ShuttingDown,
-        Stopped(Logger<Stopped>),
+        Stopped(sc_observability_types::LoggingHealthReport),
     }
 
     type SubscriberDispatchFn =
@@ -284,7 +296,7 @@ mod canonical {
 
     /// Running logger pinned to the admission mode of the facade that built it.
     pub(crate) enum RunningLogger {
-        Canonical(Logger<Running>),
+        Canonical(Logger),
         #[cfg(feature = "v1")]
         #[allow(
             deprecated,
@@ -299,6 +311,17 @@ mod canonical {
         #[cfg(feature = "v1")]
         #[allow(deprecated)]
         Released(FlushFailure),
+    }
+
+    fn shutdown_flush_error() -> RunningFlushError {
+        RunningFlushError::Canonical(CanonicalFlushError::classified_drain(
+            Box::new(ErrorContext::new(
+                sc_observability::error_codes::LOGGER_WRITER_DEGRADED,
+                "observability is shut down; construct a new runtime before flushing",
+                Remediation::not_recoverable("create a new observability runtime"),
+            )),
+            FailureClassification::Closed,
+        ))
     }
 
     #[cfg(feature = "v1")]
@@ -357,6 +380,20 @@ mod canonical {
             }
         }
 
+        fn flush_with_timeout(&self, timeout: Duration) -> Result<(), RunningFlushError> {
+            match self {
+                Self::Canonical(logger) => logger
+                    .flush_with_timeout(timeout)
+                    .map_err(RunningFlushError::Canonical),
+                #[cfg(feature = "v1")]
+                #[allow(
+                    deprecated,
+                    reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
+                )]
+                Self::Released(logger) => logger.flush_typed().map_err(RunningFlushError::Released),
+            }
+        }
+
         fn health(&self) -> sc_observability_types::LoggingHealthReport {
             match self {
                 Self::Canonical(logger) => logger.health(),
@@ -369,15 +406,44 @@ mod canonical {
             }
         }
 
-        fn shutdown(self) -> Logger<Stopped> {
+        fn shutdown(
+            self,
+        ) -> (
+            sc_observability_types::LoggingHealthReport,
+            Result<(), CanonicalShutdownError>,
+        ) {
             match self {
-                Self::Canonical(logger) => logger.shutdown(),
+                Self::Canonical(logger) => {
+                    let result = logger.shutdown();
+                    (logger.health(), result)
+                }
                 #[cfg(feature = "v1")]
                 #[allow(
                     deprecated,
                     reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
                 )]
-                Self::Released(logger) => Logger::from(logger.shutdown()),
+                Self::Released(logger) => (logger.shutdown().health(), Ok(())),
+            }
+        }
+
+        fn shutdown_with_timeout(
+            self,
+            timeout: Duration,
+        ) -> (
+            sc_observability_types::LoggingHealthReport,
+            Result<(), CanonicalShutdownError>,
+        ) {
+            match self {
+                Self::Canonical(logger) => {
+                    let result = logger.shutdown_with_timeout(timeout);
+                    (logger.health(), result)
+                }
+                #[cfg(feature = "v1")]
+                #[allow(
+                    deprecated,
+                    reason = "sc-observe 1.x released admission; isolated behind v1 in obs-f-8"
+                )]
+                Self::Released(logger) => (logger.shutdown().health(), Ok(())),
             }
         }
 
@@ -524,6 +590,12 @@ mod canonical {
                 .map_err(RunningFlushError::into_canonical)
         }
 
+        /// Flushes the shared runtime within an explicit caller-provided timeout.
+        pub fn flush_with_timeout(&self, timeout: Duration) -> Result<(), CanonicalFlushError> {
+            self.flush_running_with_timeout(timeout)
+                .map_err(RunningFlushError::into_canonical)
+        }
+
         #[cfg(test)]
         pub(crate) fn flush_v2(&self) -> Result<(), CanonicalFlushError> {
             self.flush()
@@ -544,7 +616,25 @@ mod canonical {
             }
             match &*logger {
                 LoggerHandle::Running(logger) => logger.flush(),
-                LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => Ok(()),
+                LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => {
+                    Err(shutdown_flush_error())
+                }
+            }
+        }
+
+        fn flush_running_with_timeout(&self, timeout: Duration) -> Result<(), RunningFlushError> {
+            let mut logger = self.logger.lock().expect("observability logger poisoned");
+            while matches!(&*logger, LoggerHandle::ShuttingDown) {
+                logger = self
+                    .logger_changed
+                    .wait(logger)
+                    .expect("observability logger poisoned");
+            }
+            match &*logger {
+                LoggerHandle::Running(logger) => logger.flush_with_timeout(timeout),
+                LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => {
+                    Err(shutdown_flush_error())
+                }
             }
         }
 
@@ -555,6 +645,18 @@ mod canonical {
         /// resumes panics from logger shutdown, including panics from poisoned
         /// writer-snapshot or query-health mutexes.
         pub fn shutdown(&self) -> Result<(), CanonicalShutdownError> {
+            self.shutdown_inner(None)
+        }
+
+        /// Shuts down the shared runtime within an explicit caller-provided timeout.
+        pub fn shutdown_with_timeout(
+            &self,
+            timeout: Duration,
+        ) -> Result<(), CanonicalShutdownError> {
+            self.shutdown_inner(Some(timeout))
+        }
+
+        fn shutdown_inner(&self, timeout: Option<Duration>) -> Result<(), CanonicalShutdownError> {
             if self.shutdown.swap(true, Ordering::SeqCst) {
                 return Ok(());
             }
@@ -562,12 +664,20 @@ mod canonical {
                 let mut logger = self.logger.lock().expect("observability logger poisoned");
                 std::mem::replace(&mut *logger, LoggerHandle::ShuttingDown)
             };
+            let mut shutdown_result = Ok(());
             self.complete_shutdown(|| match handle {
-                LoggerHandle::Running(logger) => LoggerHandle::Stopped(logger.shutdown()),
+                LoggerHandle::Running(logger) => {
+                    let (health, result) = match timeout {
+                        Some(timeout) => logger.shutdown_with_timeout(timeout),
+                        None => logger.shutdown(),
+                    };
+                    shutdown_result = result;
+                    LoggerHandle::Stopped(health)
+                }
                 LoggerHandle::ShuttingDown => unreachable!("shutdown has one owner"),
-                LoggerHandle::Stopped(logger) => LoggerHandle::Stopped(logger),
+                LoggerHandle::Stopped(health) => LoggerHandle::Stopped(health),
             });
-            Ok(())
+            shutdown_result
         }
 
         pub(crate) fn complete_shutdown(&self, shutdown: impl FnOnce() -> LoggerHandle) {
@@ -604,7 +714,7 @@ mod canonical {
                 match &*logger {
                     LoggerHandle::Running(logger) => Some(logger.health()),
                     LoggerHandle::ShuttingDown => unreachable!("waited for shutdown completion"),
-                    LoggerHandle::Stopped(logger) => Some(logger.health()),
+                    LoggerHandle::Stopped(health) => Some(health.clone()),
                 }
             };
             let telemetry = self

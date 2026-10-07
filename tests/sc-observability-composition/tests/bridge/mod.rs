@@ -163,8 +163,8 @@ pub fn deliver<C: Consumer>(message: &str, consumer: Arc<C>, root: &Path, releas
     let Ok(logger) = Arc::try_unwrap(logger) else {
         panic!("attachment leaked core owner");
     };
-    let stopped = logger.shutdown();
-    assert!(stopped.health().last_writer_error.is_none());
+    logger.shutdown().expect("shutdown logger");
+    assert!(logger.health().last_writer_error.is_none());
 }
 
 /// Check the real closed-observe rejection and its public core health propagation.
@@ -213,5 +213,5 @@ pub fn reject_closed<C: Consumer>(consumer: Arc<C>, root: &Path) {
     let last = health.last_error.expect("downstream diagnostic summary");
     assert_eq!(last.code, Some(expected.code));
     assert_eq!(last.message, expected.message);
-    logger.shutdown();
+    logger.shutdown().expect("shutdown logger");
 }

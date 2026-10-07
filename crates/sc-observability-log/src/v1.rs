@@ -831,7 +831,7 @@ mod tests {
 
         assert_detached_flush_maps_to_stopped(&stale);
 
-        std::sync::Arc::try_unwrap(logger)
+        let _ = std::sync::Arc::try_unwrap(logger)
             .unwrap_or_else(|_| panic!("detach releases host logger"))
             .shutdown();
     }

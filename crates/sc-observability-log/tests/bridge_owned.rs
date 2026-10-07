@@ -61,5 +61,5 @@ fn owned_init_excludes_host_attachment() {
         .expect("owned shutdown");
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("rejected attach retains no host Arc"));
-    host.shutdown();
+    let _ = host.shutdown();
 }

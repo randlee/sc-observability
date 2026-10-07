@@ -26,8 +26,6 @@
 pub mod constants;
 pub mod error_codes;
 
-use std::marker::PhantomData;
-
 mod builder;
 mod follow;
 mod health;
@@ -107,10 +105,16 @@ pub mod v2 {
     pub use crate::sink::LogSink;
     #[doc(inline)]
     pub use crate::{
-        ConsoleSink, JsonlFileSink, LoggerConfig, RetainedLogPolicy, SinkRegistration,
+        AdmissionOutcome, ConsoleSink, JsonlFileSink, LevelOwner, LevelState, LogEvent,
+        LogFollowSession, LogQuery, LogSnapshot, LoggerConfig, LoggingHealthReport,
+        RetainedLogPolicy, SinkRegistration, SinkRegistrationError,
     };
     #[doc(inline)]
-    pub use sc_observability_types::v2::{EventError, FlushError, InitError, LogSinkError};
+    pub use sc_observability_types::v2::{
+        EventError, FlushError, InitError, LogSinkError, ShutdownError,
+    };
+    #[doc(inline)]
+    pub use sc_observability_types::{QueryError, ServiceName};
 }
 
 pub(crate) use maintenance::DiagnosticAdmitter;
@@ -536,31 +540,29 @@ mod canonical {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
-    use super::{
-        DiagnosticAdmitter, LevelControl, LoggerConfig, LoggerRuntime, PhantomData, Running,
-        SinkRegistration,
-    };
+    use super::{DiagnosticAdmitter, LevelControl, LoggerConfig, LoggerRuntime, SinkRegistration};
 
     #[expect(
         missing_debug_implementations,
         reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
     )]
-    /// Structured logging runtime with query, follow, and typestate-checked shutdown.
-    pub struct Logger<State = Running> {
+    /// Structured logging runtime with query, follow, and shared-reference shutdown.
+    pub struct Logger {
         pub(crate) config: Arc<LoggerConfig>,
         pub(crate) sinks: Vec<SinkRegistration>,
         pub(crate) shutdown: Arc<AtomicBool>,
         pub(crate) runtime: LoggerRuntime,
-        pub(crate) diagnostic_admitter: Option<DiagnosticAdmitter>,
+        // MUTEX: shutdown releases this final sender before it takes the writer
+        // runtime, while normal canonical calls only need shared access.
+        pub(crate) diagnostic_admitter: Mutex<Option<DiagnosticAdmitter>>,
         // MUTEX: logger admission and LevelOwner changes share serialized state; each use keeps its explicit poison policy.
         pub(crate) level_control: Arc<Mutex<LevelControl>>,
-        pub(crate) state: PhantomData<State>,
     }
 }
 
 pub(crate) use canonical::Logger as CanonicalLogger;
 
-impl<State> CanonicalLogger<State> {
+impl CanonicalLogger {
     /// Returns the configured service identity, independent of sink layout.
     #[must_use]
     pub fn service_name(&self) -> &ServiceName {
@@ -2118,8 +2120,8 @@ mod tests {
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Unavailable { .. })
         ));
-        let stopped = logger.shutdown();
-        assert_eq!(stopped.level_state().revision, 1);
+        logger.shutdown().expect("shutdown succeeds");
+        assert_eq!(logger.level_state().revision, 1);
     }
 
     #[test]
@@ -2303,7 +2305,6 @@ mod tests {
         config.maintenance_test_pass_signal = Some(signal.clone());
         let (logger, mut owner) =
             CanonicalLogger::new_with_level_owner(config).expect("construct logger with owner");
-        let initial_state = logger.level_state();
         let control = logger.level_control.clone();
 
         logger
@@ -2335,8 +2336,10 @@ mod tests {
             Err(LevelChangeError::Stopping)
         ));
         release_test_pass_delay(&signal);
-        let stopped = shutdown.join().expect("shutdown thread");
-        assert_eq!(stopped.level_state(), initial_state);
+        shutdown
+            .join()
+            .expect("shutdown thread")
+            .expect("shutdown succeeds");
         assert!(matches!(
             owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
@@ -3033,10 +3036,32 @@ mod canonical_behavior_tests {
     fn shutdown_blocks_future_emits() {
         let root = temp_path("shutdown");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = CanonicalLogger::new(config).expect("logger");
-        let stopped = logger.shutdown();
+        let logger = Arc::new(CanonicalLogger::new(config).expect("logger"));
+        let shared_logger = logger.clone();
+        std::thread::spawn(move || {
+            shared_logger
+                .shutdown_with_timeout(Duration::from_secs(1))
+                .expect("shutdown succeeds from a shared reference");
+        })
+        .join()
+        .expect("shutdown thread completes");
+        logger.shutdown().expect("second shutdown is idempotent");
 
-        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
+        assert_eq!(logger.health().state, LoggingHealthState::Unavailable);
+        assert_eq!(
+            logger
+                .log(log_event(service_name()))
+                .expect_err("logging after shutdown must be rejected")
+                .failure_classification(),
+            sc_observability_types::FailureClassification::Closed
+        );
+        assert_eq!(
+            logger
+                .flush()
+                .expect_err("flushing after shutdown must be rejected")
+                .failure_classification(),
+            sc_observability_types::FailureClassification::Closed
+        );
     }
 
     #[test]
@@ -3050,10 +3075,10 @@ mod canonical_behavior_tests {
         builder.register_sink(SinkRegistration::typed(sink.clone()));
         let logger = builder.build().expect("logger");
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown succeeds");
 
         assert_eq!(sink.flushes.load(Ordering::SeqCst), 1);
-        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
+        assert_eq!(logger.health().state, LoggingHealthState::Unavailable);
     }
 
     #[test]
@@ -3091,7 +3116,7 @@ mod canonical_behavior_tests {
     }
 
     #[test]
-    fn shutdown_returns_after_join_timeout_without_waiting_for_blocked_writer() {
+    fn shutdown_with_timeout_returns_without_waiting_for_blocked_writer() {
         let root = temp_path("shutdown-maintenance-timeout");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence =
@@ -3111,7 +3136,7 @@ mod canonical_behavior_tests {
         ));
         let (finished_tx, finished_rx) = std::sync::mpsc::channel();
         let shutdown = std::thread::spawn(move || {
-            let stopped = logger.shutdown();
+            let stopped = logger.shutdown_with_timeout(Duration::from_millis(10));
             finished_tx
                 .send(())
                 .expect("test waits for shutdown to return");
@@ -3124,18 +3149,14 @@ mod canonical_behavior_tests {
         finished_rx.recv_timeout(TEST_WATCHDOG).expect(
             "shutdown must return after configured timeout without joining the blocked writer",
         );
-        let stopped = shutdown
+        let shutdown_error = shutdown
             .join()
-            .expect("shutdown thread should complete after timeout");
-        let maintenance = stopped.health().maintenance.expect("maintenance health");
-        assert!(maintenance.last_error.is_some());
-        assert_eq!(stopped.health().writer_state, WriterState::Degraded);
-        let timeout = stopped
-            .health()
-            .last_writer_error
-            .expect("timeout retained in health");
-        assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
-        assert_eq!(timeout.message, "writer thread did not stop within 10ms");
+            .expect("shutdown thread should complete after timeout")
+            .expect_err("blocked writer must report the configured shutdown timeout");
+        assert!(matches!(
+            shutdown_error,
+            sc_observability_types::v2::ShutdownError::Timeout { .. }
+        ));
         assert!(
             signal.is_active(),
             "shutdown returned before blocked writer left pass"

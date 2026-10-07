@@ -234,7 +234,7 @@ fn attachment_routes_direct_and_macro_calls_and_recovers_host_ownership() {
 
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases attachment logger"));
-    host.shutdown();
+    let _ = host.shutdown();
 }
 
 #[test]
@@ -300,7 +300,7 @@ fn timed_out_flush_keeps_attachment_owned_logger_until_helper_drains() {
         .expect("drained flush detaches");
 
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases logger"));
-    host.shutdown();
+    let _ = host.shutdown();
 }
 
 #[test]
@@ -333,7 +333,7 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
     );
     first.detach(Duration::from_secs(2)).expect("first detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("first detach releases logger"));
-    host.shutdown();
+    let _ = host.shutdown();
 
     let (_root, host) = logger();
     let mut second = attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("reattach");
@@ -354,7 +354,7 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         .detach(Duration::from_secs(2))
         .expect("second detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("second detach releases logger"));
-    host.shutdown();
+    let _ = host.shutdown();
 }
 
 #[test]
@@ -402,7 +402,7 @@ fn dropped_attachment_finishes_detaching_when_last_call_drains() {
     let mut next = attach_logger(Arc::clone(&host), options(Arc::new(Admit)))
         .expect("reattach after last call");
     next.detach(Duration::ZERO).expect("detach next");
-    Arc::try_unwrap(host)
+    let _ = Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("next releases host"))
         .shutdown();
 }
@@ -443,7 +443,7 @@ fn detach_max_duration_waits_for_entered_call_without_overflow() {
         .expect("unbounded drain");
     closer.join().expect("closer did not panic");
     worker.join().expect("worker").expect("event");
-    Arc::try_unwrap(host)
+    let _ = Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("detach releases host"))
         .shutdown();
 }
@@ -479,7 +479,7 @@ fn logging_detach_race_releases_all_logger_arcs_before_success() {
         );
         worker.join().expect("worker").expect("event");
     }
-    Arc::try_unwrap(host)
+    let _ = Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("host ownership"))
         .shutdown();
 }
@@ -508,6 +508,6 @@ fn flush_detach_race_releases_all_logger_arcs_before_success() {
             flush.join().expect("flush caller"),
             Ok(()) | Err(FlushError::Drain { .. })
         ));
-        host.shutdown();
+        let _ = host.shutdown();
     }
 }

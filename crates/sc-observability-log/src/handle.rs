@@ -215,9 +215,9 @@ fn shutdown_command(
             let sole = take_sole(installed);
             let logger = take_sole(sole.logger);
             let flushed = logger.flush();
-            let stopped = logger.shutdown();
-            health::store_level_state(stopped.level_state());
-            if let Some(report) = health::read_report(&stopped) {
+            let _ = logger.shutdown();
+            health::store_level_state(logger.level_state());
+            if let Some(report) = health::read_report(&logger) {
                 health::store_report(report);
             }
             let outcome = match &flushed {
