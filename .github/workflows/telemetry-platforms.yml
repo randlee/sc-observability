@@ -48,17 +48,3 @@ jobs:
         run: cargo check -p sc-observability-otlp --features durable-store --locked --target ${{ matrix.target }}
       - name: Build CLI
         run: cargo build -p sc-otel-cli --locked --target ${{ matrix.target }}
-      - name: Verify Linux arm64 archive CLI
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        shell: bash
-        run: |
-          set -euo pipefail
-          archive_root="$(mktemp -d)"
-          archive_dir="${archive_root}/sc-otel_${{ matrix.target }}"
-          mkdir -p "${archive_dir}/bin" "${archive_dir}/share/doc/sc-otel"
-          cp "target/${{ matrix.target }}/debug/sc-otel" "${archive_dir}/bin/sc-otel"
-          cp -R docs/manual/sc-otel/. "${archive_dir}/share/doc/sc-otel/"
-          tar -C "${archive_root}" -czf "${archive_root}/sc-otel-linux-arm64.tar.gz" "$(basename "${archive_dir}")"
-          mkdir "${archive_root}/extracted"
-          tar -C "${archive_root}/extracted" -xzf "${archive_root}/sc-otel-linux-arm64.tar.gz"
-          "${archive_root}/extracted/$(basename "${archive_dir}")/bin/sc-otel" --version

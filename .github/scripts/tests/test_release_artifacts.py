@@ -278,19 +278,25 @@ def run_release_archive_packager(
     target_name: str,
     expected_filename: str,
     bundled_paths: list[dict[str, str]] | None = None,
+    archive_format: str = "zip",
+    runner_os: str | None = None,
+    runner_arch: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     scripts_dir = tmp_path / ".github" / "scripts"
     scripts_dir.mkdir(parents=True)
+    binary_name = expected_filename.removesuffix(".exe")
     (scripts_dir / "release_artifacts.py").write_text(
         "import json\n"
         f"print(json.dumps({{'project': {{'archive_prefix': 'fixture'}}, "
-        f"'target': {{'archive': 'zip'}}, 'binaries': [{{'name': 'fixture', "
+        f"'target': {{'archive': {archive_format!r}}}, 'binaries': [{{'name': {binary_name!r}, "
         f"'bundled_paths': {bundled_paths or []!r}}}]}}))\n",
         encoding="utf-8",
     )
     release_dir = tmp_path / "target" / target_name / "release"
     release_dir.mkdir(parents=True)
-    (release_dir / expected_filename).write_text("fixture", encoding="utf-8")
+    binary = release_dir / expected_filename
+    binary.write_text("#!/bin/sh\nprintf 'fixture 1.5.0\\n'\n", encoding="utf-8")
+    binary.chmod(0o755)
     output = tmp_path / "github-env"
     script = release_archive_packager_python().replace(
         'target_name = "${{ matrix.target }}"', f"target_name = {target_name!r}"
@@ -305,6 +311,8 @@ def run_release_archive_packager(
             **os.environ,
             "RELEASE_ARTIFACT_MANIFEST": str(tmp_path / "release" / "manifest.toml"),
             "GITHUB_ENV": str(output),
+            **({"RUNNER_OS": runner_os} if runner_os else {}),
+            **({"RUNNER_ARCH": runner_arch} if runner_arch else {}),
         },
         text=True,
         capture_output=True,
@@ -1015,6 +1023,32 @@ def test_release_archive_packager_bundles_cli_reference_from_manifest_path(
     with zipfile.ZipFile(archive) as packaged:
         assert manual_path in packaged.namelist()
         assert packaged.read(manual_path) == b"generated clap manual\n"
+
+
+def test_release_archive_packager_validates_native_archive_cli_and_manual(
+    tmp_path: Path,
+) -> None:
+    """A native runner executes sc-otel from the archive it just produced."""
+    manual = tmp_path / "docs" / "manual" / "sc-otel" / "cli-reference.md"
+    manual.parent.mkdir(parents=True)
+    manual.write_text("generated clap manual\n", encoding="utf-8")
+
+    result = run_release_archive_packager(
+        tmp_path,
+        target_name="x86_64-unknown-linux-gnu",
+        expected_filename="sc-otel",
+        bundled_paths=[
+            {
+                "source": "docs/manual/sc-otel",
+                "destination": "share/doc/sc-otel",
+            }
+        ],
+        archive_format="tar.gz",
+        runner_os="Linux",
+        runner_arch="X64",
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_release_cli_docs_wait_for_successful_release_and_use_the_exact_build_ref() -> None:
