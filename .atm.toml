@@ -86,6 +86,7 @@ command = ""
 
 [startup.team-lead]
 all = [
+  "Your role is lead under atm-bd-orchestration: read .claude/skills/atm-bd-orchestration/SKILL.md (Lead Role and Loop) and .claude/skills/atm-beads/SKILL.md now (again after every compaction); on each Loop pass run .claude/skills/atm-bd-orchestration/scripts/bead-queues --phase <x> and act on every row",
   "Use native atm send or atm ack for messages to cobs, lobs, aobs, quality-mgr, or obs-sanity",
   "Use native atm read to read messages from team-members",
 ]
@@ -93,38 +94,44 @@ compact = ["Phase in progress: read .claude/skills/atm-bd-orchestration/SKILL.md
 
 [startup.cobs]
 all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
 [startup.lobs]
 all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
 [startup.cobs2]
 all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
 [startup.lobs2]
 all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
 [startup.aobs]
 all = [
+  "Your role is dev under atm-bd-orchestration: work arrives by atm task assign with the dev template; no user is watching, so execute every step through to the task close and never end a turn on a promise of future work",
+  "You may also be assigned to lead a phase under atm-bd-orchestration: then read .claude/skills/atm-bd-orchestration/SKILL.md (Lead Role and Loop) and .claude/skills/atm-beads/SKILL.md and act as lead (lead=<you> in dispatch vars) until the phase closes",
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
   "Use native atm read to read messages from team-members",
 ]
 
 [startup.quality-mgr]
 all = [
+  "Your role is quality-mgr under atm-bd-orchestration: read .claude/skills/atm-bd-orchestration/roles/quality-mgr.md now (again after every compaction); where it and quality-mgr.md differ, the role file wins",
   "read .claude/agents/quality-mgr.md for directive",
-  "When the phase runs under atm-bd-orchestration, also read .claude/skills/atm-bd-orchestration/roles/quality-mgr.md; where the two differ, the role file wins",
   "Use native atm send or atm ack for messages to team-lead, cobs, lobs, aobs, cobs2, or lobs2",
   "Use native atm read to read messages from team-members",
 ]
@@ -138,7 +145,7 @@ all = [
 
 [startup.obs-sanity]
 all = [
-  "read .claude/agents/dev-sanity.md for directive",
+  "Your role is dev-sanity under atm-bd-orchestration: read .claude/agents/dev-sanity.md now (again after every compaction) and run its Startup section",
   "Use native atm send or atm ack for messages to team-lead",
   "Use native atm read to read messages from team-members",
 ]
