@@ -7,6 +7,26 @@
 - [`public-api-checklist.md`](./public-api-checklist.md)
 - [`atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
 
+## Phase H applicability (planned)
+
+H-001..H-008 and ADR-023 supersede the historical custom OTel model,
+projector, durable-store and lifecycle test requirements below only for the
+explicitly removed OTel code. Retained logging tests remain required.
+
+- h-1 owns native construction (`send_log`, `send_span`, `send_metrics`),
+  sink mapping, timeout/failure results, provider ownership and feature isolation.
+- h-2 owns CLI parsing/result mapping and Clap-generated manual/site freshness.
+- h-3 owns Python argument/result mapping, imports/types and GIL behavior.
+- h-4 owns the single real local Collector readback proof using installed CLI
+  and wheel, native Tokio setup, destination modes and macro/tracing composition;
+  it checks frontend failure equivalence and existing installer documentation
+  consumption. It also verifies protected logging consumers and net handwritten
+  code deletion. It does not duplicate h-1 timeout/provider unit suites.
+
+Existing cross-platform guidelines require bounded waits, teardown and temporary
+output directories. Planning feasibility probes do not qualify release artifacts.
+No workflow or release-gate changes are authorized by this plan.
+
 ## 1. Purpose
 
 This document defines the minimum test coverage required for each

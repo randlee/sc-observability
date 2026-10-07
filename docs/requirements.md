@@ -697,7 +697,10 @@ logging requirements or erase historical release contracts.
   Tokio path. It shall require no caller-owned Tokio runtime. Transport feature
   unification must not accidentally select an async HTTP client. Export methods
   shall return actual native exporter outcomes, not durable admission receipts
-  or promises of remote persistence. No application database or extra queue.
+  or promises of remote persistence. Primitive metric sends return the official
+  SDK force_flush outcome: 0.33.0 reports export failure but coarsens the
+  underlying HTTP cause. Document that upstream limitation; never treat void
+  instrument recording alone as successful export. No application database or extra queue.
 - H-004 Minimal mapping through the existing LogSink extension point shall
   support file-only, OTel-only and both. The existing logger supplies one-event
   fanout, level filtering and redaction before either destination. Mapping uses
@@ -729,7 +732,8 @@ logging requirements or erase historical release contracts.
   shared configuration and resource conventions with Solar before finalizing
   the native-library sprint contract.
 - H-007 Return native network timeout/rejection errors at the synchronous
-  export boundary and document upstream partial-success handling accurately. SDK log admission is not a delivery
+  export boundary, subject to the native metric-flush error coarsening stated in
+  H-003, and document upstream partial-success handling accurately. SDK log admission is not a delivery
   receipt. Use standard exporter timeouts and lifecycle; do not claim cancelling
   a wait kills a blocking task or that every processor honors an overall timeout.
   The host retains its process-exit policy. Optional off-the-shelf Collector
@@ -739,8 +743,11 @@ logging requirements or erase historical release contracts.
   sprint shall list any added wrapper and its necessity; default is none.
   Phase H shall finish with net deletion of source code, report actual
   added/deleted source and test lines separately, and preserve relevant tests.
-  Reuse existing local collectors/capture fixtures to prove native sync and Tokio
-  export, equivalent installed CLI/Python payloads, and file/OTel/both. Update
+  Generated source and test deletions cannot satisfy this requirement; handwritten
+  Rust under crates/ must independently shrink. Reuse local process fixtures to
+  start an official Collector and assert its file-export readback of native sync
+  and Tokio export, installed CLI/Python signals, and file/OTel/both. A mock HTTP
+  acceptor alone is insufficient. Update
   generated Clap manual/web/installer documentation through the existing release
   pipeline. CI remains the publication gate, not a prerequisite for sanity/QA
   dispatch. No unrelated cleanup, new process framework, or release publication
