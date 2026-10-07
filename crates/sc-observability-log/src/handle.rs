@@ -13,6 +13,15 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use crate::__private::EventParts;
+#[cfg(test)]
+use crate::constants::{
+    BOUNDED_HELPER_BLOCK, BOUNDED_HELPER_PANIC, BOUNDED_HELPER_SPAWN_FAILURE,
+    ISOLATED_TEST_CHILD_DEADLINE, ISOLATED_TEST_CHILD_POLL_INTERVAL,
+};
+use crate::constants::{
+    HELPER_DETACHED, HELPER_DONE, HELPER_RUNNING, LIFECYCLE_FAILED, LIFECYCLE_RUNNING,
+    LIFECYCLE_SHUTTING_DOWN, LIFECYCLE_STOPPED, UNWRAP_BACKOFF_MAX, UNWRAP_BACKOFF_START,
+};
 use crate::health::BridgeLifecycle;
 use crate::{
     DropCause, DroppedEvents, ShutdownOutcome, ShutdownReport, UnconfirmedShutdown, health,
@@ -98,13 +107,6 @@ static NEXT_BOUNDED_HELPER_FAULT: AtomicU8 = AtomicU8::new(0);
 static NEXT_BOUNDED_HELPER_BLOCK: OnceLock<Mutex<Option<mpsc::Receiver<()>>>> = OnceLock::new();
 
 #[cfg(test)]
-const BOUNDED_HELPER_SPAWN_FAILURE: u8 = 1;
-#[cfg(test)]
-const BOUNDED_HELPER_PANIC: u8 = 2;
-#[cfg(test)]
-const BOUNDED_HELPER_BLOCK: u8 = 3;
-
-#[cfg(test)]
 fn fail_next_bounded_helper_spawn() {
     NEXT_BOUNDED_HELPER_FAULT.store(BOUNDED_HELPER_SPAWN_FAILURE, Ordering::SeqCst);
 }
@@ -142,10 +144,6 @@ fn record_native_flush_call() {
 
 /// Encoded [`BridgeLifecycle`]; `Stopped` until `init` succeeds (no guard exists before).
 static LIFECYCLE: AtomicU8 = AtomicU8::new(LIFECYCLE_STOPPED);
-const LIFECYCLE_RUNNING: u8 = 0;
-const LIFECYCLE_SHUTTING_DOWN: u8 = 1;
-const LIFECYCLE_STOPPED: u8 = 2;
-const LIFECYCLE_FAILED: u8 = 3;
 
 /// Publishes a lifecycle transition; read lock-free by health snapshots.
 pub(crate) fn set_lifecycle(lifecycle: BridgeLifecycle) {
@@ -260,11 +258,6 @@ static WAIT_STOPPED_HOOK: OnceLock<Mutex<Option<mpsc::SyncSender<()>>>> = OnceLo
 
 #[cfg(test)]
 static SHUTDOWN_WORK_HOOK: OnceLock<Mutex<Option<ShutdownCommand>>> = OnceLock::new();
-
-#[cfg(test)]
-const ISOLATED_TEST_CHILD_DEADLINE: Duration = Duration::from_secs(30);
-#[cfg(test)]
-const ISOLATED_TEST_CHILD_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 #[cfg(test)]
 struct ReapIsolatedTestChildOnDrop {
@@ -872,6 +865,14 @@ static DETACHED_HELPERS: AtomicU32 = AtomicU32::new(0);
 /// Set while a flush helper runs: at most one flush helper per installed bridge.
 static FLUSH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
+/// Snapshot of helper state for the canonical bridge health report.
+pub(crate) fn helper_health() -> crate::HelperHealth {
+    crate::HelperHealth {
+        flush_in_flight: FLUSH_IN_FLIGHT.load(Ordering::SeqCst),
+        detached: u64::from(DETACHED_HELPERS.load(Ordering::SeqCst)),
+    }
+}
+
 // MUTEX: transfers the one-shot observer into the next flush claim; no callback runs under it.
 #[cfg(test)]
 static FLUSH_COMPLETION: OnceLock<Mutex<Option<mpsc::SyncSender<bool>>>> = OnceLock::new();
@@ -887,13 +888,6 @@ fn notify_next_flush_complete(completed: mpsc::SyncSender<bool>) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner) = Some(completed);
 }
-
-/// Per-helper state shared by the caller and the helper of one [`run_bounded`] call.
-const HELPER_RUNNING: u8 = 0;
-/// The caller timed out and counted the helper in its detached counter.
-const HELPER_DETACHED: u8 = 1;
-/// The helper's work returned or unwound.
-const HELPER_DONE: u8 = 2;
 
 /// Marks the helper done when its work returns or unwinds, and uncounts it if detached.
 struct HelperExit {
@@ -1049,9 +1043,6 @@ fn run_bounded_in<T: Send + 'static>(
         }
     }
 }
-
-const UNWRAP_BACKOFF_START: Duration = Duration::from_millis(1);
-const UNWRAP_BACKOFF_MAX: Duration = Duration::from_millis(50);
 
 /// Retries `Arc::try_unwrap` with a sleep backoff until every other clone is released.
 ///

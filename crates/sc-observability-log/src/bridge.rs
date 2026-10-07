@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 use std::cell::Cell;
 
+#[cfg(test)]
+use crate::constants::{ATTACHMENT_HELPER_PANIC, ATTACHMENT_HELPER_SPAWN_FAILURE};
 use crate::control::{BridgeEvent, LogControl};
 use crate::error::EmitError;
 use crate::handle;
@@ -56,11 +58,6 @@ thread_local! {
 // released attachment path has no hook and keeps its normal `Builder::spawn`.
 #[cfg(test)]
 static NEXT_ATTACHMENT_HELPER_FAULT: AtomicU8 = AtomicU8::new(0);
-#[cfg(test)]
-const ATTACHMENT_HELPER_SPAWN_FAILURE: u8 = 1;
-#[cfg(test)]
-const ATTACHMENT_HELPER_PANIC: u8 = 2;
-
 #[cfg(test)]
 fn fail_next_attachment_helper_spawn() {
     NEXT_ATTACHMENT_HELPER_FAULT.store(ATTACHMENT_HELPER_SPAWN_FAILURE, Ordering::SeqCst);

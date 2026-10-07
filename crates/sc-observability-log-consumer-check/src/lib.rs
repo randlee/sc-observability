@@ -5,6 +5,36 @@
 
 use sc_observability_log::{Level, debug, error, event, info, instrument, trace, warn};
 
+#[allow(
+    unused_imports,
+    reason = "compile-only proof for the Phase F canonical macro migration paths"
+)]
+use sc_observability_log::v2::{
+    debug as v2_debug, error as v2_error, event as v2_event, info as v2_info,
+    instrument as v2_instrument, trace as v2_trace, warn as v2_warn,
+};
+
+#[allow(
+    dead_code,
+    reason = "compile-only proof for the Phase F canonical type migration paths"
+)]
+fn phase_f_log_v2_paths_resolve(
+    report: &sc_observability_log::v2::BridgeHealthReport,
+) -> (
+    sc_observability_log::v2::HelperHealth,
+    sc_observability_log::v2::BridgeOptions,
+    sc_observability_log::v2::LogAttachment,
+    sc_observability_log::v2::LogControl,
+    sc_observability_log::v2::Level,
+    sc_observability_log::v2::LevelFilter,
+    sc_observability_log::v2::LoggerConfig,
+    sc_observability_log::v2::ServiceName,
+) {
+    let _ = sc_observability_log::v2::init;
+    let _ = report.helpers;
+    unreachable!()
+}
+
 include!("../../sc-observability-log/tests/compat/events.rs");
 include!("../../sc-observability-log/tests/compat/instrument.rs");
 

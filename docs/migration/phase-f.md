@@ -94,7 +94,7 @@ repositories have stayed still.
 | F7-53 | root `InitError` | `sc_observability_log::v2::InitError` | `crates/btit-app/src/logging.rs:73` |
 | F7-54 | root `LogControl` | `sc_observability_log::v2::LogControl` | `crates/sc-observability-log-consumer-check/src/lib.rs:14,22` |
 | F7-55 | root `BridgeHealthReport` | `sc_observability_log::v2::BridgeHealthReport` | `crates/sc-observability-log-consumer-check/src/lib.rs:22` |
-| F7-56 | root `FailureReport` | `sc_observability_log::v2::FailureReport` | `crates/sc-observability-log-consumer-check/src/lib.rs:22` |
+| F7-56 | root `FailureReport` | `sc_observability_log::v2::BridgeHealthReport.helpers` | `crates/sc-observability-log-consumer-check/src/lib.rs:22` |
 | F7-57 | root `LoggerConfig` | `sc_observability_log::v2::LoggerConfig` | `crates/sc-observability-log/tests/compat_events.rs:15` |
 | F7-58 | root `BridgeOptions` | `sc_observability_log::v2::BridgeOptions` | `crates/sc-observability-log/tests/compat_events.rs:15` |
 | F7-59 | root `LevelFilter` | `sc_observability_log::v2::LevelFilter` | `crates/sc-observability-log/tests/compat_events.rs:15` |

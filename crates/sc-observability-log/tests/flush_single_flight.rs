@@ -7,8 +7,6 @@
 //! thread (`helpers.detached` stays 1). Opening the FIFO releases the writer:
 //! the helper finishes, the counter returns to 0 and the next flush succeeds.
 //!
-//! Unix only: the stuck sink is a named pipe (`mkfifo`).
-#![cfg(unix)]
 #![cfg(feature = "v1")]
 #![allow(
     deprecated,
@@ -19,19 +17,32 @@
     reason = "integration test: helper fns are not covered by clippy.toml allow-*-in-tests"
 )]
 
+#[cfg(unix)]
 use std::fs::OpenOptions;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 use sc_observability_log::{
-    ActionName, BridgeOptions, FlushError, LevelFilter, LoggerConfig, ServiceName, error_codes,
+    ActionName, BridgeOptions, HelperHealth, LogControl, LoggerConfig, ServiceName,
 };
+#[cfg(unix)]
+use sc_observability_log::{FlushError, LevelFilter, error_codes};
 
+#[cfg(unix)]
 const STUCK_FLUSH_TIMEOUT: Duration = Duration::from_millis(100);
 /// Generous: a retried flush must be rejected long before this could elapse.
+#[cfg(unix)]
 const RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(unix)]
 const HELPER_FINISH_DEADLINE: Duration = Duration::from_secs(20);
 
+fn helpers(control: &LogControl) -> HelperHealth {
+    control.health().unwrap().helpers
+}
+
+#[cfg(unix)]
 #[test]
 fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
     let root = tempfile::tempdir().unwrap();
@@ -51,6 +62,9 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
 
     // Nothing queued or in flight; then swap the active file for a reader-less FIFO.
     control.flush(IO_TIMEOUT).unwrap();
+    let idle = helpers(&control);
+    assert!(!idle.flush_in_flight);
+    assert_eq!(idle.detached, 0);
     if path.exists() {
         std::fs::remove_file(&path).unwrap();
     }
@@ -75,6 +89,9 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
         first_error.code(),
         error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT
     );
+    let stuck = helpers(&control);
+    assert!(stuck.flush_in_flight);
+    assert_eq!(stuck.detached, 1);
 
     // A retry is rejected at once and spawns nothing.
     for _ in 0..3 {
@@ -89,7 +106,14 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
             retry.unwrap_err().code(),
             error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
         );
+        let still = helpers(&control);
+        assert!(still.flush_in_flight);
+        assert_eq!(still.detached, 1, "a rejected retry must not add a helper");
     }
+    assert_eq!(
+        serde_json::to_value(control.health().unwrap()).unwrap()["helpers"],
+        serde_json::json!({"flush_in_flight": true, "detached": 1})
+    );
 
     // (b) Open the FIFO read-write (never blocks, and keeps a writer so reads
     // never hit EOF): the writer's open completes and the detached helper finishes.
@@ -100,15 +124,51 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
         .unwrap();
     let deadline = Instant::now() + HELPER_FINISH_DEADLINE;
     loop {
-        if control.flush(IO_TIMEOUT).is_ok() {
+        let state = helpers(&control);
+        if !state.flush_in_flight && state.detached == 0 {
             break;
         }
         assert!(
             Instant::now() < deadline,
-            "the detached helper never finished"
+            "the detached helper never finished: {state:?}"
         );
         std::thread::sleep(Duration::from_millis(10));
     }
 
+    control.flush(IO_TIMEOUT).unwrap();
+    let done = helpers(&control);
+    assert!(!done.flush_in_flight);
+    assert_eq!(done.detached, 0);
+    guard.shutdown(IO_TIMEOUT).unwrap();
+    assert_eq!(helpers(&control).detached, 0);
+}
+
+/// Windows cannot substitute a filesystem FIFO for the configured JSONL path.
+/// This keeps the test binary and the canonical health contract active there;
+/// the Windows named-pipe variant is supplied by native CI where that primitive
+/// is available.
+#[cfg(windows)]
+#[test]
+fn helper_health_is_available_to_the_windows_single_flight_fixture() {
+    let root = tempfile::tempdir().unwrap();
+    let guard = sc_observability_log::init(
+        LoggerConfig::default_for(
+            ServiceName::new("flush-single-flight-windows").unwrap(),
+            root.path().to_path_buf(),
+        ),
+        BridgeOptions {
+            default_action: ActionName::new("log.record").unwrap(),
+            parse_bracket_action: false,
+        },
+    )
+    .unwrap();
+    let control = guard.control();
+    let state = helpers(&control);
+    assert!(!state.flush_in_flight);
+    assert_eq!(state.detached, 0);
+    assert_eq!(
+        serde_json::to_value(control.health().unwrap()).unwrap()["helpers"],
+        serde_json::json!({"flush_in_flight": false, "detached": 0})
+    );
     guard.shutdown(IO_TIMEOUT).unwrap();
 }

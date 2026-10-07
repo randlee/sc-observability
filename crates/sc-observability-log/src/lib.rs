@@ -96,6 +96,7 @@ pub mod error_codes;
 
 mod bridge;
 mod callsite;
+mod constants;
 mod context;
 mod control;
 mod error;
@@ -105,12 +106,10 @@ mod mapping;
 #[cfg(feature = "v1")]
 mod v1;
 
+use crate::health::BridgeLifecycle;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, PoisonError};
-use std::time::Duration;
-
-use crate::health::BridgeLifecycle;
 
 #[doc(inline)]
 pub use bridge::{
@@ -118,13 +117,15 @@ pub use bridge::{
     PolicyRejection, attach_logger,
 };
 #[doc(inline)]
+pub use constants::{BRIDGE_HEALTH_SCHEMA_VERSION, DEFAULT_DROP_SHUTDOWN_TIMEOUT};
+#[doc(inline)]
 pub use control::{BridgeEvent, EmitOutcome};
 #[doc(inline)]
 pub use error::{ControlError, DropCause, FieldKeyError, LifecyclePhase, WaitError};
 #[doc(inline)]
 pub use error::{ShutdownOutcome, ShutdownReport, UnconfirmedShutdown};
 #[doc(inline)]
-pub use health::{BRIDGE_HEALTH_SCHEMA_VERSION, BridgeHealthReport};
+pub use health::{BridgeHealthReport, HelperHealth};
 #[doc(inline)]
 pub use sc_observability::v2::LoggerConfig;
 #[cfg(feature = "v1")]
@@ -182,11 +183,25 @@ pub mod v2 {
     #[doc(inline)]
     pub use crate::BridgeEvent;
     #[doc(inline)]
+    pub use crate::BridgeHealthReport;
+    #[doc(inline)]
     pub use crate::BridgeOptions;
+    #[doc(inline)]
+    pub use crate::HelperHealth;
+    #[doc(inline)]
+    pub use crate::Level;
+    #[doc(inline)]
+    pub use crate::LevelFilter;
+    #[doc(inline)]
+    pub use crate::LoggerConfig;
+    #[doc(inline)]
+    pub use crate::ServiceName;
     #[doc(inline)]
     pub use crate::bridge::LogAttachment;
     #[doc(inline)]
     pub use crate::error::EmitError;
+    #[doc(inline)]
+    pub use crate::{debug, error, event, info, instrument, trace, warn};
     #[doc(inline)]
     pub use sc_observability_types::v2::{EventError, FlushError, InitError, ShutdownError};
 
@@ -394,20 +409,6 @@ impl DroppedEvents {
             .fold(0_u64, |sum, cause| sum.saturating_add(self.get(*cause)))
     }
 }
-
-/// Timeout used by the implicit drop paths for `LogGuard` and `LogAttachment`.
-///
-/// Dropping the owning [`LogGuard`] runs the same bounded flush-and-shutdown
-/// sequence as [`LogGuard::shutdown`], but it has no `Result` to return and
-/// therefore discards the outcome (`let _ = ..`). Dropping the non-owning
-/// [`LogAttachment`] instead performs a bounded best-effort detach; it does not
-/// shut down the logger or own `LevelOwner` authority. The constant is shared
-/// only for its timeout value, not for shutdown or `LevelOwner` authority. It
-/// also bounds the internal shutdown [`init`] attempts when another `log::Log`
-/// implementation is already installed.
-/// Call [`LogGuard::shutdown`] explicitly whenever its `Result` matters, for
-/// example to log or retry on failure.
-pub const DEFAULT_DROP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The lifecycle owner shared by the v2 facade and the released v1 type alias.
 ///

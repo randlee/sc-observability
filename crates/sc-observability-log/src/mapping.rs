@@ -20,17 +20,8 @@ use serde_json::{Map, Value};
 
 use crate::__private::EventParts;
 use crate::BridgeOptions;
-
-/// Field keys starting with this prefix are reserved for the bridge itself.
-pub const RESERVED_FIELD_PREFIX: &str = "sc_observability_log.";
-
-/// Reserved field holding user values displaced by a crate-owned key.
-///
-/// Crate-owned keys (`code.module` / `code.file` / `code.line` on `log`
-/// records; `duration_ms` / `return` / `error` on `#[instrument]` completion
-/// events) are always authoritative: a user field already occupying one is
-/// moved here under its original key instead of being silently overwritten.
-pub(crate) const SHADOWED_FIELDS_KEY: &str = "sc_observability_log.shadowed_fields";
+pub use crate::constants::RESERVED_FIELD_PREFIX;
+use crate::constants::SHADOWED_FIELDS_KEY;
 
 /// Inserts `value` at the crate-owned key `key`, which always wins.
 ///

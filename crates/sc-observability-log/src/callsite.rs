@@ -21,9 +21,7 @@ use crate::__private::{
     target_label,
 };
 use crate::DropCause;
-
-/// Reserved field holding serialization errors, keyed by field name.
-const SERIALIZE_ERRORS_KEY: &str = "sc_observability_log.serialize_errors";
+use crate::constants::SERIALIZE_ERRORS_KEY;
 
 /// One per expansion site; `new` is const so it can initialize a `static`.
 #[derive(Debug)]
