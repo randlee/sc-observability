@@ -80,6 +80,7 @@ impl StuckSink {
 
 #[cfg(windows)]
 struct StuckSink {
+    blocked_record_bytes: usize,
     connected: Receiver<()>,
     release: SyncSender<()>,
     reader: Option<JoinHandle<()>>,
@@ -94,8 +95,8 @@ impl StuckSink {
         };
         use windows_sys::Win32::Storage::FileSystem::{PIPE_ACCESS_INBOUND, ReadFile};
         use windows_sys::Win32::System::Pipes::{
-            ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_MESSAGE,
-            PIPE_TYPE_MESSAGE, PIPE_WAIT,
+            ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeInfo,
+            PIPE_READMODE_MESSAGE, PIPE_TYPE_MESSAGE, PIPE_WAIT,
         };
 
         let name: Vec<u16> = path
@@ -105,6 +106,7 @@ impl StuckSink {
             .chain(Some(0))
             .collect();
         let (connected_tx, connected) = sync_channel(1);
+        let (buffer_size_tx, buffer_size_rx) = sync_channel(1);
         let (release, release_rx) = sync_channel(0);
         let reader = std::thread::spawn(move || {
             let pipe = unsafe {
@@ -120,6 +122,24 @@ impl StuckSink {
                 )
             };
             assert_ne!(pipe, INVALID_HANDLE_VALUE, "create named pipe failed");
+            let mut inbound_buffer_size = 0;
+            assert_ne!(
+                unsafe {
+                    GetNamedPipeInfo(
+                        pipe,
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                        &raw mut inbound_buffer_size,
+                        ptr::null_mut(),
+                    )
+                },
+                0,
+                "get named pipe info failed: {}",
+                unsafe { GetLastError() }
+            );
+            buffer_size_tx
+                .send(usize::try_from(inbound_buffer_size).unwrap())
+                .unwrap();
             let connected_now = unsafe { ConnectNamedPipe(pipe, ptr::null_mut()) };
             assert!(
                 connected_now != 0 || unsafe { GetLastError() } == ERROR_PIPE_CONNECTED,
@@ -129,9 +149,15 @@ impl StuckSink {
             connected_tx.send(()).unwrap();
             release_rx.recv().unwrap();
 
-            // One message is bounded below this buffer size. Reading it only after
-            // the assertions releases the writer without timing-based ordering.
-            let mut bytes = vec![0_u8; 2 * 1024 * 1024];
+            // The test emits a message one byte larger than this quota. Reading it
+            // only after the assertions releases the blocked writer without
+            // timing-based ordering.
+            let read_buffer_size = usize::try_from(inbound_buffer_size)
+                .unwrap()
+                .checked_add(1)
+                .and_then(|size| size.checked_mul(2))
+                .unwrap();
+            let mut bytes = vec![0_u8; read_buffer_size];
             let mut read = 0;
             let byte_count = u32::try_from(bytes.len()).expect("read buffer must fit Win32 length");
             assert_ne!(
@@ -154,6 +180,7 @@ impl StuckSink {
             }
         });
         Self {
+            blocked_record_bytes: buffer_size_rx.recv().unwrap().checked_add(1).unwrap(),
             connected,
             release,
             reader: Some(reader),
@@ -167,6 +194,10 @@ impl StuckSink {
     fn release(&mut self) {
         self.release.send(()).unwrap();
         self.reader.take().unwrap().join().unwrap();
+    }
+
+    fn blocked_record(&self) -> String {
+        "x".repeat(self.blocked_record_bytes)
     }
 }
 
@@ -203,13 +234,13 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
     assert_eq!(idle.detached, 0);
     let mut stuck_sink = StuckSink::prepare(&path);
 
-    // The Windows pipe has a one-byte buffer. Its bounded message blocks writer
-    // I/O until `release` starts the server-side read below; the Unix FIFO blocks
-    // while opening because it has no reader.
+    // The Windows payload is larger than the actual pipe quota. Its message blocks
+    // writer I/O until `release` starts the server-side read below; the Unix FIFO
+    // blocks while opening because it has no reader.
     #[cfg(unix)]
     let blocked_record = "record behind a stuck sink";
     #[cfg(windows)]
-    let blocked_record = "x".repeat(256 * 1024);
+    let blocked_record = stuck_sink.blocked_record();
     sc_observability_log::info!(
         target: "flush_single_flight",
         "{}",
