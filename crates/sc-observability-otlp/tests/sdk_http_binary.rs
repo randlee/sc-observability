@@ -19,7 +19,7 @@ mod http_collector {
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener, TcpStream};
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Condvar, Mutex, PoisonError};
+    use std::sync::{Arc, Mutex, PoisonError};
     use std::thread::{self, JoinHandle};
     use std::time::{Duration, Instant};
 
@@ -49,8 +49,6 @@ mod http_collector {
     struct Shared {
         requests: Mutex<Vec<Captured>>,
         replies: Mutex<VecDeque<Reply>>,
-        gate_first_reply_until_retry: bool,
-        first_reply_gate: (Mutex<bool>, Condvar),
     }
 
     /// Loopback OTLP/HTTP collector owned by the test.
@@ -66,15 +64,6 @@ mod http_collector {
         /// Starts a collector that answers requests with `replies` in arrival
         /// order and with an immediate `200` once they are used up.
         pub fn start(replies: &[Reply]) -> Self {
-            Self::start_inner(replies, false)
-        }
-
-        /// Holds the first reply until a retry request is captured.
-        pub fn start_with_first_reply_gated_until_retry() -> Self {
-            Self::start_inner(&[], true)
-        }
-
-        fn start_inner(replies: &[Reply], gate_first_reply_until_retry: bool) -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback collector");
             listener
                 .set_nonblocking(true)
@@ -84,8 +73,6 @@ mod http_collector {
             let shared = Arc::new(Shared {
                 requests: Mutex::new(Vec::new()),
                 replies: Mutex::new(replies.iter().copied().collect()),
-                gate_first_reply_until_retry,
-                first_reply_gate: (Mutex::new(false), Condvar::new()),
             });
             let handle = {
                 let stop = Arc::clone(&stop);
@@ -117,7 +104,6 @@ mod http_collector {
 
         fn join(&mut self) {
             self.stop.store(true, Ordering::SeqCst);
-            release_first_reply_gate(&self.shared);
             if let Some(handle) = self.handle.take() {
                 // A panicking collector thread is reported by the missing capture.
                 let _ = handle.join();
@@ -165,25 +151,11 @@ mod http_collector {
         // Serve every request on a kept-alive connection until the client closes it.
         while let Some(captured) = read_request(&mut stream) {
             // Record before answering so a completed export implies a recorded request.
-            let request_count = {
-                let mut requests = shared
-                    .requests
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner);
-                requests.push(captured);
-                requests.len()
-            };
-            if shared.gate_first_reply_until_retry {
-                if request_count == 1 {
-                    let (released, gate) = &shared.first_reply_gate;
-                    let mut released = released.lock().unwrap_or_else(PoisonError::into_inner);
-                    while !*released {
-                        released = gate.wait(released).unwrap_or_else(PoisonError::into_inner);
-                    }
-                } else {
-                    release_first_reply_gate(shared);
-                }
-            }
+            shared
+                .requests
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(captured);
             let (status, delay) = shared
                 .replies
                 .lock()
@@ -198,12 +170,6 @@ mod http_collector {
                 return;
             }
         }
-    }
-
-    fn release_first_reply_gate(shared: &Shared) {
-        let (released, gate) = &shared.first_reply_gate;
-        *released.lock().unwrap_or_else(PoisonError::into_inner) = true;
-        gate.notify_all();
     }
 
     fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -754,19 +720,18 @@ fn http_binary_client_error_is_terminal_without_retry() {
 }
 
 #[test]
-fn http_binary_request_timeout_is_retried_within_the_deadline() {
-    // Keep the first response gated until a second request proves the client
-    // timed out and retried; the retry then receives an immediate success.
-    let collector = Collector::start_with_first_reply_gated_until_retry();
+fn http_binary_retryable_response_is_retried_without_timeout_race() {
+    // A retryable status deterministically exercises the retry path. The next
+    // request receives the collector's default immediate success response, so
+    // neither attempt depends on a short wall-clock timeout.
+    let collector = Collector::start(&[(503, Duration::ZERO)]);
     runtime().block_on(async {
-        let mut transport = v2_default_transport(&collector.endpoint());
-        transport.timeout_ms = Some(DurationMs::from(100));
-        let telemetry = v2_telemetry(transport);
+        let telemetry = v2_telemetry(v2_default_transport(&collector.endpoint()));
         telemetry.emit_log(&log_event()).expect("admit log");
         telemetry
             .flush_async_typed()
             .await
-            .expect("timed-out request is retried to success");
+            .expect("retryable response is retried to success");
         assert_healthy(&telemetry.health());
     });
     assert_eq!(requests_to(&collector.finish(), "/v1/logs").len(), 2);

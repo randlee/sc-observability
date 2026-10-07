@@ -16,6 +16,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
+        mpsc,
     },
     thread,
     time::{Duration, Instant},
@@ -24,6 +25,7 @@ use std::{
 struct Collector {
     address: SocketAddr,
     stop: Arc<AtomicBool>,
+    handled: mpsc::Receiver<()>,
     thread: Option<thread::JoinHandle<Vec<String>>>,
 }
 
@@ -40,6 +42,7 @@ impl Collector {
         let address = listener.local_addr().expect("collector address");
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = Arc::clone(&stop);
+        let (handled_signal, handled) = mpsc::channel();
         let thread = thread::spawn(move || {
             let mut paths = Vec::new();
             let deadline = Instant::now() + request_deadline;
@@ -101,6 +104,7 @@ impl Collector {
                 // Write headers separately: oversized-body tests may close early.
                 write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).expect("response headers");
                 let _ = stream.write_all(body.as_bytes());
+                let _ = handled_signal.send(());
                 break;
             }
             while !stopped.load(Ordering::Acquire) {
@@ -111,8 +115,14 @@ impl Collector {
         Self {
             address,
             stop,
+            handled,
             thread: Some(thread),
         }
+    }
+    fn wait_until_handled(&self) {
+        self.handled
+            .recv()
+            .expect("collector finishes handling the request");
     }
     fn finish(&mut self) -> Vec<String> {
         self.stop.store(true, Ordering::Release);
@@ -320,6 +330,6 @@ fn collector_deadline_stops_after_serving_the_expected_request() {
     stream.read_to_string(&mut response).expect("read response");
     assert!(response.starts_with("HTTP/1.1 200 OK"));
 
-    thread::sleep(Duration::from_millis(1100));
+    collector.wait_until_handled();
     assert_eq!(collector.finish(), vec!["/v1/logs"]);
 }
