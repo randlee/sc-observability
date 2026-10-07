@@ -2025,7 +2025,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         config.enable_console_sink = true;
-        let logger = Arc::new(Logger::new(config).expect("typed logger"));
+        let logger = Arc::new(crate::CanonicalLogger::new(config).expect("typed logger"));
         let barrier = Arc::new(Barrier::new(3));
         let (flush_tx, flush_rx) = mpsc::channel();
         let (admission_tx, admission_rx) = mpsc::channel();
@@ -2063,7 +2063,7 @@ mod tests {
         let Ok(logger) = Arc::try_unwrap(logger) else {
             panic!("all concurrent handles dropped");
         };
-        logger.shutdown();
+        logger.shutdown().expect("shutdown");
     }
 
     #[test]
