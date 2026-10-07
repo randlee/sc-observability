@@ -844,6 +844,7 @@ ADR navigation index (status is recorded in each decision below):
 - [ADR-018: Dual OTLP Backends And Shared Lifecycle](#adr-018-dual-otlp-backends-and-shared-lifecycle)
 - [ADR-019: Phase D Implementation Decisions](#adr-019-phase-d-implementation-decisions)
 - [ADR-020: Compatible 1.x Adoption Of Phase D](#adr-020-compatible-1x-adoption-of-phase-d)
+- [ADR-021: Shared Customer Telemetry Submission and Durable Admission](#adr-021-shared-customer-telemetry-submission-and-durable-admission)
 - [ADR-022: Uniform Public API Across Release Targets](#adr-022-uniform-public-api-across-release-targets)
 
 ### ADR-001: Observation-First Producers

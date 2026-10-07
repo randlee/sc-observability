@@ -18,6 +18,16 @@ The supported OTLP implementations are `otlp-sdk` (an async/Tokio host) and
 OTLP users construct `sc_observability_otlp::v2` configuration and select a
 backend directly.
 
+## OTLP span assembly types
+
+The released `sc_observability_otlp::v1::CompleteSpan` and
+`sc_observability_otlp::v1::SpanAssembler` have no public v2 equivalents. The
+canonical producer types are `sc_observability_types::v2::SpanRecord` and
+`SpanSignal`; `sc_observability_otlp::v2::Telemetry` assembles those signals
+internally into `sc_observability_types::otlp::OtlpCompleteSpan`. Its
+`V2SpanAssembler` is internal, so applications that used the released v1
+assembly types have no drop-in public replacement for them.
+
 ## Deferred ledger rows
 
 The 68 entries below are the deferred consumer-migration entries from the
