@@ -1,11 +1,12 @@
 //! One `init` per test binary: a stuck flush leaves one detached helper, never more.
 //!
-//! QA-2 RSH-004. The active JSONL path is replaced by a FIFO with no reader, so
-//! the writer thread blocks opening it and sc-observability's flush never
-//! returns: a stuck sink. The first flush times out and detaches its helper;
-//! a retried flush returns `FlushError::InProgress` at once without starting a
-//! thread (`helpers.detached` stays 1). Opening the FIFO releases the writer:
-//! the helper finishes, the counter returns to 0 and the next flush succeeds.
+//! QA-2 RSH-004. The active JSONL path is replaced by a platform-native pipe
+//! with no reader, so the writer thread blocks and sc-observability's flush
+//! never returns: a stuck sink. The first flush times out and detaches its
+//! helper; a retried flush returns `FlushError::InProgress` at once without
+//! starting a thread (`helpers.detached` stays 1). Reading the pipe releases
+//! the writer: the helper finishes, the counter returns to 0 and the next
+//! flush succeeds.
 //!
 #![cfg(feature = "v1")]
 #![allow(
@@ -18,37 +19,171 @@
 )]
 
 #[cfg(unix)]
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
+use std::path::Path;
+#[cfg(windows)]
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
+#[cfg(windows)]
+use std::thread::JoinHandle;
 use std::time::Duration;
-#[cfg(unix)]
 use std::time::Instant;
 
 use sc_observability_log::{
     ActionName, BridgeOptions, HelperHealth, LogControl, LoggerConfig, ServiceName,
 };
-#[cfg(unix)]
 use sc_observability_log::{FlushError, LevelFilter, error_codes};
 
-#[cfg(unix)]
 const STUCK_FLUSH_TIMEOUT: Duration = Duration::from_millis(100);
 /// Generous: a retried flush must be rejected long before this could elapse.
-#[cfg(unix)]
 const RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(unix)]
 const HELPER_FINISH_DEADLINE: Duration = Duration::from_secs(20);
+
+#[cfg(unix)]
+struct StuckSink {
+    path: std::path::PathBuf,
+    reader: Option<File>,
+}
+
+#[cfg(unix)]
+impl StuckSink {
+    fn prepare(path: &Path) -> Self {
+        if path.exists() {
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let status = std::process::Command::new("mkfifo")
+            .arg(path)
+            .status()
+            .unwrap();
+        assert!(status.success(), "mkfifo failed: {status}");
+        Self {
+            path: path.to_path_buf(),
+            reader: None,
+        }
+    }
+
+    fn wait_until_connected(&self) {
+        assert!(self.path.exists(), "FIFO fixture must exist before logging");
+    }
+
+    fn release(&mut self) {
+        self.reader = Some(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&self.path)
+                .unwrap(),
+        );
+    }
+}
+
+#[cfg(windows)]
+struct StuckSink {
+    connected: Receiver<()>,
+    release: SyncSender<()>,
+    reader: Option<JoinHandle<()>>,
+}
+
+#[cfg(windows)]
+impl StuckSink {
+    fn prepare(path: &Path) -> Self {
+        use std::ptr;
+        use windows_sys::Win32::Foundation::{
+            CloseHandle, ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE,
+        };
+        use windows_sys::Win32::Storage::FileSystem::{PIPE_ACCESS_INBOUND, ReadFile};
+        use windows_sys::Win32::System::Pipes::{
+            ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_MESSAGE,
+            PIPE_TYPE_MESSAGE, PIPE_WAIT,
+        };
+
+        let name: Vec<u16> = path
+            .to_str()
+            .expect("named-pipe path must be Unicode")
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
+        let (connected_tx, connected) = sync_channel(1);
+        let (release, release_rx) = sync_channel(0);
+        let reader = std::thread::spawn(move || {
+            let pipe = unsafe {
+                CreateNamedPipeW(
+                    name.as_ptr(),
+                    PIPE_ACCESS_INBOUND,
+                    PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                    1,
+                    0,
+                    1,
+                    0,
+                    ptr::null(),
+                )
+            };
+            assert_ne!(pipe, INVALID_HANDLE_VALUE, "create named pipe failed");
+            let connected_now = unsafe { ConnectNamedPipe(pipe, ptr::null_mut()) };
+            assert!(
+                connected_now != 0 || unsafe { GetLastError() } == ERROR_PIPE_CONNECTED,
+                "connect named pipe failed: {}",
+                unsafe { GetLastError() }
+            );
+            connected_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+
+            // One message is bounded below this buffer size. Reading it only after
+            // the assertions releases the writer without timing-based ordering.
+            let mut bytes = vec![0_u8; 2 * 1024 * 1024];
+            let mut read = 0;
+            let byte_count = u32::try_from(bytes.len()).expect("read buffer must fit Win32 length");
+            assert_ne!(
+                unsafe {
+                    ReadFile(
+                        pipe,
+                        bytes.as_mut_ptr().cast(),
+                        byte_count,
+                        &raw mut read,
+                        ptr::null_mut(),
+                    )
+                },
+                0,
+                "read named pipe failed: {}",
+                unsafe { GetLastError() }
+            );
+            unsafe {
+                DisconnectNamedPipe(pipe);
+                CloseHandle(pipe);
+            }
+        });
+        Self {
+            connected,
+            release,
+            reader: Some(reader),
+        }
+    }
+
+    fn wait_until_connected(&self) {
+        self.connected.recv_timeout(IO_TIMEOUT).unwrap();
+    }
+
+    fn release(&mut self) {
+        self.release.send(()).unwrap();
+        self.reader.take().unwrap().join().unwrap();
+    }
+}
 
 fn helpers(control: &LogControl) -> HelperHealth {
     control.health().unwrap().helpers
 }
 
-#[cfg(unix)]
 #[test]
 fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
+    #[cfg(unix)]
     let root = tempfile::tempdir().unwrap();
     let mut config = LoggerConfig::default_for(
         ServiceName::new("flush-single-flight").unwrap(),
+        #[cfg(unix)]
         root.path().to_path_buf(),
+        #[cfg(windows)]
+        std::path::PathBuf::from(r"\\.\pipe"),
     );
     config.level = LevelFilter::Info;
     config.enable_console_sink = false;
@@ -60,23 +195,27 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
     let control = guard.control();
     let path = control.active_log_path().unwrap().unwrap();
 
-    // Nothing queued or in flight; then swap the active file for a reader-less FIFO.
+    // Nothing queued or in flight; then replace the active file with a pipe
+    // whose server does not read until the assertions below complete.
     control.flush(IO_TIMEOUT).unwrap();
     let idle = helpers(&control);
     assert!(!idle.flush_in_flight);
     assert_eq!(idle.detached, 0);
-    if path.exists() {
-        std::fs::remove_file(&path).unwrap();
-    }
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let status = std::process::Command::new("mkfifo")
-        .arg(&path)
-        .status()
-        .unwrap();
-    assert!(status.success(), "mkfifo failed: {status}");
+    let mut stuck_sink = StuckSink::prepare(&path);
 
-    // The writer blocks opening the FIFO for this record, so flush cannot return.
-    sc_observability_log::info!(target: "flush_single_flight", "record behind a stuck sink");
+    // The Windows pipe has a one-byte buffer. Its bounded message blocks writer
+    // I/O until `release` starts the server-side read below; the Unix FIFO blocks
+    // while opening because it has no reader.
+    #[cfg(unix)]
+    let blocked_record = "record behind a stuck sink";
+    #[cfg(windows)]
+    let blocked_record = "x".repeat(256 * 1024);
+    sc_observability_log::info!(
+        target: "flush_single_flight",
+        "{}",
+        blocked_record
+    );
+    stuck_sink.wait_until_connected();
 
     // (a) The first flush times out and detaches exactly one helper.
     let first = control.flush(STUCK_FLUSH_TIMEOUT);
@@ -115,13 +254,8 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
         serde_json::json!({"flush_in_flight": true, "detached": 1})
     );
 
-    // (b) Open the FIFO read-write (never blocks, and keeps a writer so reads
-    // never hit EOF): the writer's open completes and the detached helper finishes.
-    let _reader = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&path)
-        .unwrap();
+    // (b) Read the pipe: the writer finishes and the detached helper returns.
+    stuck_sink.release();
     let deadline = Instant::now() + HELPER_FINISH_DEADLINE;
     loop {
         let state = helpers(&control);
@@ -132,7 +266,7 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
             Instant::now() < deadline,
             "the detached helper never finished: {state:?}"
         );
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::yield_now();
     }
 
     control.flush(IO_TIMEOUT).unwrap();
@@ -141,34 +275,4 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
     assert_eq!(done.detached, 0);
     guard.shutdown(IO_TIMEOUT).unwrap();
     assert_eq!(helpers(&control).detached, 0);
-}
-
-/// Windows cannot substitute a filesystem FIFO for the configured JSONL path.
-/// This keeps the test binary and the canonical health contract active there;
-/// the Windows named-pipe variant is supplied by native CI where that primitive
-/// is available.
-#[cfg(windows)]
-#[test]
-fn helper_health_is_available_to_the_windows_single_flight_fixture() {
-    let root = tempfile::tempdir().unwrap();
-    let guard = sc_observability_log::init(
-        LoggerConfig::default_for(
-            ServiceName::new("flush-single-flight-windows").unwrap(),
-            root.path().to_path_buf(),
-        ),
-        BridgeOptions {
-            default_action: ActionName::new("log.record").unwrap(),
-            parse_bracket_action: false,
-        },
-    )
-    .unwrap();
-    let control = guard.control();
-    let state = helpers(&control);
-    assert!(!state.flush_in_flight);
-    assert_eq!(state.detached, 0);
-    assert_eq!(
-        serde_json::to_value(control.health().unwrap()).unwrap()["helpers"],
-        serde_json::json!({"flush_in_flight": false, "detached": 0})
-    );
-    guard.shutdown(IO_TIMEOUT).unwrap();
 }
