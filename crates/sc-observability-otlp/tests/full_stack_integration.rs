@@ -768,7 +768,7 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
         let address = listener.local_addr().expect("collector address");
         let (log_sender, mut logs) = tokio::sync::mpsc::channel(1);
         let (trace_sender, mut traces) = tokio::sync::mpsc::channel(1);
-        let (metric_sender, mut metrics) = tokio::sync::mpsc::channel(1);
+        let (metric_sender, mut metrics) = tokio::sync::mpsc::channel(2);
         let (shutdown_sender, shutdown) = tokio::sync::oneshot::channel();
         let collector = tokio::spawn(async move {
             tonic::transport::Server::builder()
@@ -854,12 +854,17 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
             "canonical linked-trace flags reach gRPC"
         );
 
-        let metric_request =
+        let metric_requests = [
             tokio::time::timeout(std::time::Duration::from_secs(2), metrics.recv())
                 .await
-                .expect("collector receives metrics")
-                .expect("metrics channel open");
-        let resource_metric = &metric_request.resource_metrics[0];
+                .expect("collector receives metric admission export")
+                .expect("metrics channel open"),
+            tokio::time::timeout(std::time::Duration::from_secs(2), metrics.recv())
+                .await
+                .expect("collector receives metric flush export")
+                .expect("metrics channel open"),
+        ];
+        let resource_metric = &metric_requests[0].resource_metrics[0];
         assert_sdk_default_resource_and_scope(
             resource_metric.resource.as_ref().expect("resource"),
             resource_metric.scope_metrics[0]
@@ -869,7 +874,12 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
             &resource_metric.schema_url,
             &resource_metric.scope_metrics[0].schema_url,
         );
-        let exported = &metric_request.resource_metrics[0].scope_metrics[0].metrics;
+        let exported: Vec<_> = metric_requests
+            .iter()
+            .flat_map(|request| &request.resource_metrics)
+            .flat_map(|resource| &resource.scope_metrics)
+            .flat_map(|scope| &scope.metrics)
+            .collect();
         assert_eq!(exported.len(), 5);
         assert_eq!(exported[0].name, "agent.canonical.events_total");
         assert!(matches!(

@@ -6,6 +6,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 use sc_observability_types::v2::{
@@ -39,12 +40,6 @@ use crate::lifecycle::{LifecycleHealth, LifecycleState, Signal};
 #[cfg(test)]
 use crate::testing;
 use crate::{error_codes, export_records};
-
-/// Metric admitted to the shared canonical buffer.
-enum BufferedMetric {
-    /// Canonical record, exported with its full aggregation.
-    Canonical(Box<ExportRecord<CanonicalMetricRecord>>),
-}
 
 /// OTLP-backed telemetry runtime.
 #[expect(
@@ -80,7 +75,8 @@ pub(crate) struct TelemetryRuntime {
     pub(crate) span_assembler: V2SpanAssembler,
     log_buffer: Vec<ExportRecord<LogRecord>>,
     span_buffer: Vec<ExportRecord<contracts::CompleteSpan>>,
-    metric_buffer: Vec<BufferedMetric>,
+    metric_buffer: Vec<ExportRecord<CanonicalMetricRecord>>,
+    last_metric_export: Option<Instant>,
     log_status: ExporterRuntime,
     pub(crate) trace_status: ExporterRuntime,
     pub(crate) metric_status: ExporterRuntime,
@@ -93,7 +89,7 @@ pub(crate) struct ExporterRuntime {
     pub(crate) last_error: Option<DiagnosticSummary>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExporterKind {
     Logs,
     Traces,
@@ -116,6 +112,20 @@ impl Default for ExporterRuntime {
             state: ExporterHealthState::Healthy,
             last_error: None,
         }
+    }
+}
+
+/// Returns whether admission should export a metric batch without a timer.
+fn metric_interval_elapsed(last: Option<Instant>, now: Instant, interval: Duration) -> bool {
+    last.is_none_or(|previous| now.saturating_duration_since(previous) >= interval)
+}
+
+/// Moves an admission buffer out only once it reaches its configured export size.
+fn take_at_batch_size<T>(buffer: &mut Vec<T>, batch_size: usize) -> Vec<T> {
+    if buffer.len() >= batch_size {
+        std::mem::take(buffer)
+    } else {
+        Vec::new()
     }
 }
 
@@ -225,11 +235,18 @@ impl RuntimeTelemetry {
 
     fn buffer_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
         let record = export_records::log_record(event);
-        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        if runtime.stopping {
-            return Err(Self::shutdown_error());
-        }
-        runtime.log_buffer.push(record);
+        let batch = {
+            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+            if runtime.stopping {
+                return Err(Self::shutdown_error());
+            }
+            runtime.log_buffer.push(record);
+            take_at_batch_size(
+                &mut runtime.log_buffer,
+                self.config.logs.expect("enabled logs").batch_size,
+            )
+        };
+        self.export_logs(&batch);
         Ok(())
     }
 
@@ -281,7 +298,7 @@ impl RuntimeTelemetry {
                 },
             ));
         }
-        if let Some(complete) = runtime
+        let batch = if let Some(complete) = runtime
             .span_assembler
             .push(span)
             .map_err(export_failure_from_canonical_event)?
@@ -292,9 +309,17 @@ impl RuntimeTelemetry {
                 scope: contracts::InstrumentationScope::default(),
                 record: complete,
             });
-        }
+            take_at_batch_size(
+                &mut runtime.span_buffer,
+                self.config.traces.expect("enabled traces").batch_size,
+            )
+        } else {
+            Vec::new()
+        };
         let loss = runtime.span_assembler.take_loss();
         self.record_span_assembly_loss(&mut runtime, loss);
+        drop(runtime);
+        self.export_spans(&batch);
         Ok(())
     }
 
@@ -320,13 +345,27 @@ impl RuntimeTelemetry {
             scope: contracts::InstrumentationScope::default(),
             record: metric.clone(),
         };
-        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        if runtime.stopping {
-            return Err(Self::shutdown_error());
-        }
-        runtime
-            .metric_buffer
-            .push(BufferedMetric::Canonical(Box::new(record)));
+        let batch = {
+            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+            if runtime.stopping {
+                return Err(Self::shutdown_error());
+            }
+            runtime.metric_buffer.push(record);
+            let metrics = self.config.metrics.expect("enabled metrics");
+            let now = Instant::now();
+            if runtime.metric_buffer.len() >= metrics.batch_size
+                || metric_interval_elapsed(
+                    runtime.last_metric_export,
+                    now,
+                    Duration::from_millis(metrics.export_interval_ms.as_u64()),
+                )
+            {
+                std::mem::take(&mut runtime.metric_buffer)
+            } else {
+                Vec::new()
+            }
+        };
+        self.export_metrics(&batch);
         Ok(())
     }
 
@@ -388,43 +427,9 @@ impl RuntimeTelemetry {
         };
         let mut export_failure = None;
 
-        if !log_batch.is_empty() {
-            match self.exporters.logs.export_logs(&log_batch) {
-                Ok(()) => self.record_export_success(ExporterKind::Logs),
-                Err(err) => {
-                    self.record_export_failure(ExporterKind::Logs, log_batch.len() as u64, &err);
-                    export_failure = Some(err);
-                }
-            }
-        }
-
-        if !span_batch.is_empty() {
-            match self.exporters.traces.export_spans(&span_batch) {
-                Ok(()) => self.record_export_success(ExporterKind::Traces),
-                Err(err) => {
-                    self.record_export_failure(ExporterKind::Traces, span_batch.len() as u64, &err);
-                    export_failure = Some(err);
-                }
-            }
-        }
-
-        if !metric_batch.is_empty() {
-            let batch_len = metric_batch.len() as u64;
-            let exported = metric_batch
-                .into_iter()
-                .map(|metric| match metric {
-                    BufferedMetric::Canonical(record) => Ok(*record),
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .and_then(|batch| self.exporters.metrics.export_metrics(&batch));
-            match exported {
-                Ok(()) => self.record_export_success(ExporterKind::Metrics),
-                Err(err) => {
-                    self.record_export_failure(ExporterKind::Metrics, batch_len, &err);
-                    export_failure = Some(err);
-                }
-            }
-        }
+        export_failure = self.export_logs(&log_batch).or(export_failure);
+        export_failure = self.export_spans(&span_batch).or(export_failure);
+        export_failure = self.export_metrics(&metric_batch).or(export_failure);
 
         FlushOutcome { export_failure }
     }
@@ -646,6 +651,69 @@ impl RuntimeTelemetry {
         status.last_error = None;
     }
 
+    fn export_logs(&self, batch: &[ExportRecord<LogRecord>]) -> Option<ExportError> {
+        if batch.is_empty() {
+            return None;
+        }
+        self.export_chunks(
+            ExporterKind::Logs,
+            batch,
+            self.config.logs.expect("enabled logs").batch_size,
+            |chunk| self.exporters.logs.export_logs(chunk),
+        )
+    }
+
+    fn export_spans(&self, batch: &[ExportRecord<contracts::CompleteSpan>]) -> Option<ExportError> {
+        if batch.is_empty() {
+            return None;
+        }
+        self.export_chunks(
+            ExporterKind::Traces,
+            batch,
+            self.config.traces.expect("enabled traces").batch_size,
+            |chunk| self.exporters.traces.export_spans(chunk),
+        )
+    }
+
+    fn export_metrics(&self, batch: &[ExportRecord<CanonicalMetricRecord>]) -> Option<ExportError> {
+        if batch.is_empty() {
+            return None;
+        }
+        self.export_chunks(
+            ExporterKind::Metrics,
+            batch,
+            self.config.metrics.expect("enabled metrics").batch_size,
+            |chunk| self.exporters.metrics.export_metrics(chunk),
+        )
+    }
+
+    fn export_chunks<T>(
+        &self,
+        exporter_kind: ExporterKind,
+        batch: &[T],
+        batch_size: usize,
+        export: impl Fn(&[T]) -> Result<(), ExportError>,
+    ) -> Option<ExportError> {
+        let mut last_failure = None;
+        for chunk in batch.chunks(batch_size) {
+            let result = export(chunk);
+            if exporter_kind == ExporterKind::Metrics {
+                self.runtime
+                    .lock()
+                    .expect("telemetry runtime poisoned")
+                    .last_metric_export = Some(Instant::now());
+            }
+            match result {
+                Ok(()) => self.record_export_success(exporter_kind),
+                Err(error) => {
+                    self.record_export_failure(exporter_kind, chunk.len() as u64, &error);
+                    last_failure = Some(error);
+                }
+            }
+        }
+        last_failure
+    }
+
     fn record_export_failure(
         &self,
         exporter_kind: ExporterKind,
@@ -729,4 +797,31 @@ fn validate_entity_id(event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
                 ),
             })
         })
+}
+
+#[cfg(test)]
+mod interval_tests {
+    use super::*;
+
+    #[test]
+    fn metric_interval_checks_constructed_instants_without_sleeping() {
+        let start = Instant::now();
+        let interval = Duration::from_millis(10);
+        assert!(metric_interval_elapsed(None, start, interval));
+        assert!(!metric_interval_elapsed(
+            Some(start),
+            start + Duration::from_millis(9),
+            interval
+        ));
+        assert!(metric_interval_elapsed(
+            Some(start),
+            start + interval,
+            interval
+        ));
+        assert!(metric_interval_elapsed(
+            Some(start),
+            start + Duration::from_millis(11),
+            interval
+        ));
+    }
 }

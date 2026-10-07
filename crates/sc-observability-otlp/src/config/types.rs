@@ -281,7 +281,9 @@ impl Default for TracesConfig {
 pub struct MetricsConfig {
     /// Maximum metrics per export batch.
     pub batch_size: usize,
-    /// Periodic export interval for metric flushes.
+    /// Metric admission checks this interval and exports pending metrics when it
+    /// has elapsed; explicit flushes also export pending metrics. This does not
+    /// start a background timer.
     pub export_interval_ms: DurationMs,
 }
 
