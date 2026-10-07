@@ -18,9 +18,11 @@ class RunnerWorkflowTests(unittest.TestCase):
     def test_integration_provides_a_fetched_trusted_history_base_to_suite_runners(self):
         workflow = (ROOT / '.github/workflows/integration.yml').read_text()
         suite = workflow.split('\n  suite:\n', 1)[1]
-        self.assertIn('SC_API_ACCEPTED_BASE: origin/develop', suite)
+        self.assertIn('      accepted_base:\n', workflow)
+        self.assertIn("SC_API_ACCEPTED_BASE: ${{ inputs.accepted_base || 'origin/develop' }}", suite)
         self.assertIn('Fetch trusted accepted API history base', suite)
         self.assertIn('git fetch origin develop:refs/remotes/origin/develop --depth=1', suite)
+        self.assertIn('git fetch origin "$ACCEPTED_BASE" --depth=1', suite)
 
     def test_windows_runner_discovery_is_complete_and_uses_fail_fast_bash(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()

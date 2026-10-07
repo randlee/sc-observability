@@ -19,6 +19,7 @@ forbidden_edges = [{ from = "sc-otel-cli", to = "sc-observe" }]
 scope = "outside_owner_crate"
 forbidden = []
 [testing]
+allowed_test_double_paths = []
 forbidden_test_bypasses = []
 [enforcement]
 lint_rules = ["LINT-SC-OTEL-CLI-BOUNDARY"]

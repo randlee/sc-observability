@@ -8,7 +8,6 @@ facade = "crate_root"
 type = "crate"
 module = "sc_observe"
 # The released 1.x facade is isolated from the canonical crate root.
-compatibility_module = "sc_observe::v1"
 visibility = "public"
 constructor = "none"
 [composition]
