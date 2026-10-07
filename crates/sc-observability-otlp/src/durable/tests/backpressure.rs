@@ -94,7 +94,6 @@ fn backend_queue_full_pauses_no_eviction() {
             .flush_submission(&receipt.submission_id, Duration::from_millis(20))
             .is_err()
     );
-    let start = Instant::now();
     loop {
         let generation = client.owner.shared.generation();
         if client
@@ -107,14 +106,7 @@ fn backend_queue_full_pauses_no_eviction() {
         {
             break;
         }
-        assert!(
-            start.elapsed() < DEADLINE,
-            "log worker did not reach credit wait"
-        );
-        client
-            .owner
-            .shared
-            .wait_since(generation, DEADLINE.saturating_sub(start.elapsed()));
+        client.owner.shared.wait_for_change_since(generation);
     }
     let status = client.status(StatusQuery::Summary).unwrap();
     // Claiming is an internal race with the worker. The durable contract is

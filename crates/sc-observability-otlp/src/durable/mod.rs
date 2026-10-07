@@ -144,6 +144,16 @@ impl Shared {
             })
             .unwrap_or_else(PoisonError::into_inner);
     }
+    #[cfg(test)]
+    fn wait_for_change_since(&self, before: u64) {
+        let generation = self.wake.lock().unwrap_or_else(PoisonError::into_inner);
+        let _guard = self
+            .changed
+            .wait_while(generation, |g| {
+                *g == before && !self.stop.load(Ordering::Acquire)
+            })
+            .unwrap_or_else(PoisonError::into_inner);
+    }
     fn poll_interval() -> Duration {
         Duration::from_millis(crate::constants::DRAIN_POLL_INTERVAL_MS)
     }

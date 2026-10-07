@@ -255,7 +255,11 @@ impl Drop for FrozenClock {
 }
 
 fn drain_once_bounded(shared: &Shared, exporter: &dyn SubmissionExporter, signal: Signal) -> bool {
-    drain_once_with_watchdog(shared, exporter, signal, DEADLINE)
+    // This helper is used only by `open_manual` tests. The real drain has no
+    // workers and uses the caller's frozen clock, so executing it in-line is
+    // deterministic; a wall-clock watchdog would measure host scheduling and
+    // filesystem latency rather than the durable-drain contract.
+    worker::drain_once_for_test(shared, exporter, signal)
 }
 
 fn drain_once_with_watchdog(
