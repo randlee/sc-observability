@@ -273,17 +273,19 @@ def release_archive_packager_python() -> str:
 
 
 def run_release_archive_packager(
-    tmp_path: Path, *, target_name: str, expected_filename: str
+    tmp_path: Path,
+    *,
+    target_name: str,
+    expected_filename: str,
+    bundled_paths: list[dict[str, str]] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     scripts_dir = tmp_path / ".github" / "scripts"
     scripts_dir.mkdir(parents=True)
     (scripts_dir / "release_artifacts.py").write_text(
         "import json\n"
-        "print(json.dumps({\n"
-        "    'project': {'archive_prefix': 'fixture'},\n"
-        "    'target': {'archive': 'zip'},\n"
-        "    'binaries': [{'name': 'fixture'}],\n"
-        "}))\n",
+        f"print(json.dumps({{'project': {{'archive_prefix': 'fixture'}}, "
+        f"'target': {{'archive': 'zip'}}, 'binaries': [{{'name': 'fixture', "
+        f"'bundled_paths': {bundled_paths or []!r}}}]}}))\n",
         encoding="utf-8",
     )
     release_dir = tmp_path / "target" / target_name / "release"
@@ -984,6 +986,52 @@ def test_release_archive_packager_executes_windows_suffix_logic(
         assert packaged.namelist() == [
             f"fixture_1.5.0_{target_name}/bin/{expected_filename}"
         ]
+
+
+def test_release_archive_packager_bundles_cli_reference_from_manifest_path(
+    tmp_path: Path,
+) -> None:
+    """The exact release workflow packages the offline manual into archives."""
+    manual = tmp_path / "docs" / "manual" / "sc-otel" / "cli-reference.md"
+    manual.parent.mkdir(parents=True)
+    manual.write_text("generated clap manual\n", encoding="utf-8")
+
+    target_name = "x86_64-unknown-linux-gnu"
+    result = run_release_archive_packager(
+        tmp_path,
+        target_name=target_name,
+        expected_filename="fixture",
+        bundled_paths=[
+            {
+                "source": "docs/manual/sc-otel",
+                "destination": "share/doc/sc-otel",
+            }
+        ],
+    )
+
+    assert result.returncode == 0, result.stderr
+    archive = tmp_path / f"fixture_1.5.0_{target_name}.zip"
+    manual_path = f"fixture_1.5.0_{target_name}/share/doc/sc-otel/cli-reference.md"
+    with zipfile.ZipFile(archive) as packaged:
+        assert manual_path in packaged.namelist()
+        assert packaged.read(manual_path) == b"generated clap manual\n"
+
+
+def test_release_cli_docs_wait_for_successful_release_and_use_the_exact_build_ref() -> None:
+    """Pages generation must not outrun a failed release or drift from its source."""
+    release = release_workflow_text()
+    pages = (repo_root() / ".github" / "workflows" / "pages.yml").read_text(
+        encoding="utf-8"
+    )
+
+    publish_docs = release.split("  publish-cli-docs:\n", 1)[1]
+    assert "needs: [gate-and-tag, release]" in publish_docs
+    assert "needs.release.result == 'success'" in publish_docs
+    assert "uses: ./.github/workflows/pages.yml" in publish_docs
+    assert "ref: ${{ needs.gate-and-tag.outputs.build_ref }}" in publish_docs
+    assert "workflow_call:" in pages
+    assert "ref: ${{ inputs.ref || github.sha }}" in pages
+    assert "SC_OTEL_UPDATE_DOCS: \"1\"" in pages
 
 
 def test_github_release_leg_is_detect_and_skip(tmp_path: Path) -> None:

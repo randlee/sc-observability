@@ -658,7 +658,10 @@ jobs:
   publish-cli-docs:
     name: Publish release CLI reference
     needs: [gate-and-tag, release]
-    if: ${{ needs.gate-and-tag.outputs.release_target == 'production' }}
+    if: >-
+      ${{ !failure() && !cancelled() &&
+          needs.gate-and-tag.outputs.release_target == 'production' &&
+          needs.release.result == 'success' }}
     permissions:
       contents: read
       pages: write
