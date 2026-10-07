@@ -373,9 +373,6 @@ fn child_drainer() {
         signal_complete();
         return;
     }
-    if mode == "drain" {
-        signal_ready();
-    }
     client.flush(DEADLINE).unwrap();
     client.shutdown(DEADLINE).unwrap();
 }
@@ -493,8 +490,10 @@ fn crash_mid_drain_resumes() {
     process.ready();
     process.kill();
     process.wait();
-    let mut replacement = child(dir.path(), "drain");
+    let mut replacement = child(dir.path(), "controlled");
     replacement.ready();
+    wait_until_store_is_empty(dir.path(), &mut [&mut replacement]);
+    replacement.complete();
     assert!(replacement.wait().success());
     let counts = delivery_counts(dir.path());
     assert_eq!(counts.len(), receipts.len() * 4);
