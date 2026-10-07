@@ -19,8 +19,8 @@ from `sc_observability`. That re-export set includes:
 - event and value contracts such as `LogEvent`, `Level`, `ErrorCode`,
   `ServiceName`, `TargetCategory`, `ActionName`, `Timestamp`, and
   `ProcessIdentity`
-- runtime error and health types such as `EventError`, `LoggingHealthReport`,
-  `LoggingHealthState`, `SinkHealth`, and `SinkHealthState`
+- runtime health types such as `LoggingHealthReport`, `LoggingHealthState`,
+  `SinkHealth`, and `SinkHealthState`
 - historical access helpers such as `LogQuery`, `LogSnapshot`,
   `LogFollowSession`, and `JsonlLogReader`
 
@@ -73,15 +73,19 @@ config.retained_log_policy.maintenance_max_work_per_pass = None; // default: unb
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-## Candidate qualification boundary
+`EventError` is not part of the root re-exports; use
+`sc_observability::v2::EventError` when naming the canonical logging error.
 
-The `1.4.0` Phase-B runtime and binding APIs are currently an unpublished
-qualification candidate. Consumers must not depend on them from crates.io or
-the language registries. Release engineering qualifies exact `=1.4.0`
-archives and wheel/npm artifacts locally. Phase B does not publish them; after
-the phase merges, Phase C migrates the shared `sc-publish` pipeline and a
-separate owner authorization is required before publication. BTIT adopts the
-published artifacts afterward.
+## Current release
+
+The published Rust crates are at version `1.5.0`. Depend on the published
+`sc-observability` crate and use `sc_observability::v2` for new logging code.
+The released 1.x API remains behind the default-on `v1` feature and is
+deprecated; it is not a separate unpublished candidate. To check that an
+application uses only the canonical API, build with
+`sc-observability = { version = "1.5.0", default-features = false }`.
+See [the Phase F migration guide](docs/migration/phase-f.md) for the no-`v1`
+build and the remaining migration path.
 
 ## 2. `v2::Logger::{log, try_log, flush}` And Deprecated Root `emit()`
 

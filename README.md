@@ -46,9 +46,10 @@ publish channels and deliberate post-Phase-B authorization are recorded in
 use std::path::PathBuf;
 
 use sc_observability::{
-    ActionName, Level, LogEvent, Logger, LoggerConfig, OutcomeLabel, ProcessIdentity,
+    ActionName, Level, LogEvent, LoggerConfig, OutcomeLabel, ProcessIdentity,
     SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION,
 };
+use sc_observability::v2::Logger;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("example-service")?;
