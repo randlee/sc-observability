@@ -881,16 +881,36 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
             .flat_map(|scope| &scope.metrics)
             .collect();
         assert_eq!(exported.len(), 5);
-        assert_eq!(exported[0].name, "agent.canonical.events_total");
+        let mut exported_names: Vec<_> =
+            exported.iter().map(|metric| metric.name.as_str()).collect();
+        exported_names.sort_unstable();
+        let mut expected_names = vec![
+            "agent.canonical.events_total",
+            "agent.canonical.queue_depth",
+            "agent.canonical.histogram.zero",
+            "agent.canonical.histogram.one",
+            "agent.canonical.histogram.many",
+        ];
+        expected_names.sort_unstable();
+        assert_eq!(exported_names, expected_names);
+
+        let events_total = exported
+            .iter()
+            .find(|metric| metric.name == "agent.canonical.events_total")
+            .expect("events_total reaches the gRPC collector");
         assert!(matches!(
-            &exported[0].data,
+            &events_total.data,
             Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(
                 _
             ))
         ));
-        assert_eq!(exported[1].name, "agent.canonical.queue_depth");
+
+        let queue_depth = exported
+            .iter()
+            .find(|metric| metric.name == "agent.canonical.queue_depth")
+            .expect("queue_depth reaches the gRPC collector");
         assert!(matches!(
-            &exported[1].data,
+            &queue_depth.data,
             Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(_))
         ));
         for (name, bounds, counts, count, sum) in [
