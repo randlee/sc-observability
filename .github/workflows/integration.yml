@@ -71,6 +71,15 @@ jobs:
           else
             git fetch origin develop:refs/remotes/origin/develop --depth=1
           fi
+      - name: Reinstall pinned Rust toolchain
+        shell: bash
+        run: |
+          toolchain="$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
+          if rustup toolchain list | awk -v channel="$toolchain" '$1 == channel || index($1, channel "-") == 1 { found = 1 } END { exit !found }'; then
+            rustup toolchain uninstall "$toolchain"
+          fi
+          rustup toolchain install
+          rustup show active-toolchain
       - name: Install Linux isolation helper for Rust consumers
         if: ${{ matrix.suite == 'rust-consumers' && runner.os == 'Linux' }}
         shell: bash

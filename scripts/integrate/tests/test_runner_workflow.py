@@ -24,6 +24,19 @@ class RunnerWorkflowTests(unittest.TestCase):
         self.assertIn('git fetch origin develop:refs/remotes/origin/develop --depth=1', suite)
         self.assertIn('git fetch origin "$ACCEPTED_BASE" --depth=1', suite)
 
+    def test_integration_reinstalls_the_pinned_rust_toolchain_before_running_the_suite(self):
+        workflow = (ROOT / '.github/workflows/integration.yml').read_text()
+        suite = workflow.split('\n  suite:\n', 1)[1]
+        install = suite.split('      - name: Reinstall pinned Rust toolchain\n', 1)[1]
+        install = install.split('\n      - name:', 1)[0]
+
+        self.assertIn('rust-toolchain.toml', install)
+        self.assertIn('rustup toolchain list', install)
+        self.assertIn('rustup toolchain uninstall "$toolchain"', install)
+        self.assertIn('rustup toolchain install', install)
+        self.assertIn('rustup show active-toolchain', install)
+        self.assertLess(suite.index('Reinstall pinned Rust toolchain'), suite.index('Run suite'))
+
     def test_windows_runner_discovery_is_complete_and_uses_fail_fast_bash(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         windows = workflow.split('\n  windows-test:\n', 1)[1]
