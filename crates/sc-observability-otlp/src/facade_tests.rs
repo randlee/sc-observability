@@ -16,7 +16,7 @@ use crate::{ExporterHealthState, RuntimeTelemetry, error_codes};
 use sc_observability_types::v2::{self, MetricRecord as CanonicalMetricRecord};
 use sc_observability_types::{
     ActionName, DurationMs, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion,
-    ServiceName, SpanId, TargetCategory, Timestamp, TraceId,
+    ServiceName, SpanId, StateName, StateTransition, TargetCategory, Timestamp, TraceId,
 };
 
 type Logs = RecordingLogExporter<ExportRecord<LogRecord>>;
@@ -90,6 +90,65 @@ fn log_event_message(message: &str) -> LogEvent {
         state_transition: None,
         fields: serde_json::Map::new(),
     }
+}
+
+fn log_recording() -> (
+    RuntimeTelemetry,
+    Arc<RecordingLogExporter<ExportRecord<LogRecord>>>,
+) {
+    let logs = Arc::new(RecordingLogExporter::<ExportRecord<LogRecord>>::default());
+    let telemetry = telemetry_with_config(telemetry_config(), &logs);
+    (telemetry, logs)
+}
+
+fn telemetry_with_config(
+    config: TelemetryConfig,
+    logs: &Arc<RecordingLogExporter<ExportRecord<LogRecord>>>,
+) -> RuntimeTelemetry {
+    RuntimeTelemetry::new_with_exporters_typed(
+        config,
+        logs.clone(),
+        Arc::new(RecordingTraceExporter::default()),
+        Arc::new(RecordingMetricExporter::default()),
+    )
+    .expect("recording telemetry")
+}
+
+fn log_event_with_entity_id(entity_id: &str) -> LogEvent {
+    LogEvent {
+        version: SchemaVersion::new("v1").expect("valid schema version"),
+        timestamp: Timestamp::UNIX_EPOCH,
+        level: Level::Info,
+        service: service_name(),
+        target: TargetCategory::new("otlp.facade").expect("valid target"),
+        action: ActionName::new("emit").expect("valid action"),
+        message: Some("entity admission".to_owned()),
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: None,
+        diagnostic: None,
+        state_transition: Some(StateTransition {
+            entity_kind: TargetCategory::new("agent").expect("valid entity kind"),
+            entity_id: Some(entity_id.to_owned()),
+            from_state: StateName::new("idle").expect("valid state"),
+            to_state: StateName::new("active").expect("valid state"),
+            reason: None,
+            trigger: None,
+        }),
+        fields: serde_json::Map::new(),
+    }
+}
+
+fn exported_logs(exporter: &RecordingLogExporter<ExportRecord<LogRecord>>) -> usize {
+    exporter
+        .batches
+        .lock()
+        .expect("batches poisoned")
+        .iter()
+        .map(Vec::len)
+        .sum()
 }
 
 fn trace(span_id: &str) -> v2::TraceContext {
@@ -400,6 +459,55 @@ fn canonical_shutdown_counts_incomplete_spans() {
     let health = telemetry.health();
     assert_eq!(health.dropped_exports_total, 1, "{health:?}");
     assert!(exported_spans(&traces).is_empty());
+}
+
+#[test]
+fn canonical_emit_log_checks_shutdown_before_an_invalid_entity_id() {
+    let (telemetry, logs) = log_recording();
+    telemetry.shutdown_typed().expect("shutdown");
+
+    let error = telemetry
+        .emit_log(&log_event_with_entity_id("entity invalid"))
+        .expect_err("shutdown takes precedence over entity validation");
+    assert!(
+        matches!(error, v2::TelemetryError::Shutdown { .. }),
+        "{error:?}"
+    );
+    assert_eq!(exported_logs(&logs), 0);
+}
+
+#[test]
+fn canonical_emit_log_skips_entity_validation_when_logs_or_transport_are_disabled() {
+    let mut logs_disabled = telemetry_config();
+    logs_disabled.logs = None;
+    let telemetry = telemetry_with_config(
+        logs_disabled,
+        &Arc::new(RecordingLogExporter::<ExportRecord<LogRecord>>::default()),
+    );
+    telemetry
+        .emit_log(&log_event_with_entity_id("entity invalid"))
+        .expect("disabled logs return before entity validation");
+
+    let mut transport_disabled = telemetry_config();
+    transport_disabled.transport.enabled = false;
+    let telemetry = telemetry_with_config(
+        transport_disabled,
+        &Arc::new(RecordingLogExporter::<ExportRecord<LogRecord>>::default()),
+    );
+    telemetry
+        .emit_log(&log_event_with_entity_id("entity invalid"))
+        .expect("disabled transport returns before entity validation");
+}
+
+#[test]
+fn canonical_emit_log_rejects_an_invalid_entity_id_before_buffering() {
+    let (telemetry, logs) = log_recording();
+    let error = telemetry
+        .emit_log(&log_event_with_entity_id("entity invalid"))
+        .expect_err("enabled telemetry rejects an invalid entity id");
+    assert!(matches!(error, v2::TelemetryError::Event(_)), "{error:?}");
+    telemetry.flush().expect("nothing was buffered");
+    assert_eq!(exported_logs(&logs), 0);
 }
 
 #[test]
