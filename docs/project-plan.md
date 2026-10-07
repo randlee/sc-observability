@@ -55,6 +55,16 @@ gates the root sprints before dispatch; the lead owns synchronization.
 9. Preserve the completed `v1.2.0` Phase A record and route new migration,
    additive API and binding work through the proposed Phase B plan.
 
+## Phase F — canonical consumer surface
+
+Phase F moves the published workspace to its canonical logging, typed-routing,
+and OTel export surface while preserving a documented `v1` migration path for
+current consumers. Its execution graph is
+[`plans/phase-f.jsonl`](plans/phase-f.jsonl): f-1 establishes the contract;
+f-2, f-3, f-4, f-6, and f-7 follow it; and f-8 closes after those five
+sprints. The consumer-facing migration record is
+[`migration/phase-f.md`](migration/phase-f.md).
+
 ## Issue #70 / v1.1.0
 
 Retained-log rotation, pruning, and maintenance was the additive `v1.1.0`
@@ -500,7 +510,7 @@ The detailed sprint-by-sprint execution record remains in
 
 ## Phase D — Host logging, OTLP restoration, and distribution completion
 
-**Current release decision:** ADR-020 and the [compatible 1.x amendment](plans/phase-d/compatible-1x-amendment.md) supersede the historical 2.0 activation/removal sequence below. Active work is D22 contracts plus independent D27 release tooling, then parallel D23–D26/D28 adapters, then D18 combined integration alongside retained D9 conformance. D9 consumes D22/D26, not D18 test/report output. Released APIs remain functional through deprecated adapters. No implementation merge to develop precedes full phase-ending review and user authorization.
+**Current release decision:** ADR-020 and the [compatible 1.x amendment](plans/phase-d/compatible-1x-amendment.md) supersede the historical 2.0 activation/removal sequence below. Active work is D22 contracts plus independent D27 release tooling, then parallel D23–D26/D28 adapters, then D18 combined integration alongside retained D9 conformance. D9 consumes D22/D26, not D18 test/report output. No implementation merge to develop precedes full phase-ending review and user authorization.
 
 ### Historical execution record (not current dispatch scope)
 
@@ -534,11 +544,19 @@ packaging edit. obs-d-10 supplies the guard and policy specification; obs-d-18
 activates release policy/inventory and checks combined release evidence.
 
 ADR-017/018 were accepted through PR #225 on 2026-09-26 and ADR-019 through
-PR #227. The former 2.0 activation sequence above is historical. ADR-020 and
-the amended PHD-001–004 retain compatible 1.x obligations, including
-PHB-003/004/005. Planning or implementation
+PR #227. The former 2.0 activation sequence above is historical. Planning or implementation
 does not authorize a release, tag, registry publication or downstream atm-core
 change. Issue #88 (Python OTEL/structured logging) remains excluded.
+
+## Phase F — Purpose Test and Migration Path
+
+The Phase F landing ledger is tracked in
+[`plans/phase-f.jsonl`](plans/phase-f.jsonl). Its sprints are f-1 (purpose-test
+contract), f-2 (OTLP 1.x removal), f-3 (CLI test-double removal), f-4 (logging
+and binding-runtime compatibility), f-6 (logging typed duplicates), f-7
+(consumer migration guide and user docs), and f-8 (types and observation
+compatibility, then phase closure). The ledger intentionally has no f-5; its
+work is not executed.
 
 ## Consumer Usability Baseline
 

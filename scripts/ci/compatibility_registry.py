@@ -40,6 +40,27 @@ DEPRECATED_OWNER_BASELINE: dict[str, tuple[str, ...]] = {
     "crates/sc-observability-otlp/src/assembly.rs": ("push",),
 }
 
+# Phase-F lead rulings retain these v1-only compatibility owners as deprecated
+# while their eventual migration remains in flight.
+RESTORED_V1_DEPRECATED_OWNERS: dict[str, tuple[str, ...]] = {
+    "crates/sc-observability-types/src/errors.rs": ("TelemetryError",),
+    "crates/sc-observability/src/error_codes.rs": (
+        "LOGGER_SHUTDOWN",
+        "LOGGER_MAINTENANCE_JOIN_TIMEOUT",
+        "LOGGER_MAINTENANCE_WORKER_FAILED",
+    ),
+    "crates/sc-observability-types/src/error_codes.rs": ("ALL", "ALL"),
+    "crates/sc-observe/src/lib.rs": (
+        "ObservabilityConfig",
+        "ObservabilityBuilder",
+        "Observability",
+        "builder",
+        "emit",
+        "health",
+        "with_observability_health_provider",
+    ),
+}
+
 # Path segments only: `foo_compat::` and `compatibility::` are not references.
 COMPAT_PATH_REFERENCE = re.compile(r"\bcompat::")
 COMPAT_USE_REFERENCE = re.compile(r"\buse\s[^;]*\bcompat\b(?!::)")
@@ -47,6 +68,7 @@ COMPAT_MODULE_DECLARATION = re.compile(r"\bmod\s+compat\b")
 
 _ITEM_NAME = re.compile(r"\b(?:fn|struct|enum|trait|type|const|static|mod|union)\s+([A-Za-z_]\w*)")
 _FIELD_OR_VARIANT_NAME = re.compile(r"(?:pub(?:\([^)]*\))?\s+)?([A-Za-z_]\w*)")
+_REEXPORT_NAME = re.compile(r"\bpub(?:\([^)]*\))?\s+use\s+([^;]+);")
 
 
 def has_placeholder_baseline_signature(signature: str) -> bool:
@@ -112,7 +134,7 @@ def validate_trait_impl_contracts(records: object) -> None:
             ):
                 raise ValueError(f"compatibility trait-impl contract has invalid {field}: {implementation}")
         removable = record["removable_paths"]
-        if not isinstance(removable, list) or removable != ["crates/sc-observability/src/compat.rs"]:
+        if not isinstance(removable, list) or removable != ["crates/sc-observability/src/v1/compat.rs"]:
             raise ValueError(f"compatibility trait-impl contract has invalid removable paths: {implementation}")
     duplicates = [name for name, count in Counter(implementations).items() if count > 1]
     if duplicates:
@@ -130,6 +152,9 @@ def is_compat_source_path(relative_path: str) -> bool:
         normalized == "src/compat.rs"
         or normalized.endswith("/src/compat.rs")
         or "/src/compat/" in f"/{normalized}"
+        or "/src/v1/" in f"/{normalized}"
+        or normalized == "src/v1.rs"
+        or normalized.endswith("/src/v1.rs")
     )
 
 
@@ -194,6 +219,12 @@ def deprecated_owner_names(text: str) -> list[str]:
         consumed = _owner_start(text, _attribute_end(text, start))
         end = text.find("\n", consumed)
         owner = text[consumed : len(text) if end < 0 else end].strip()
+        reexport = _REEXPORT_NAME.search(owner)
+        if reexport:
+            target = reexport.group(1).strip()
+            match = re.search(r"([A-Za-z_]\w*)$", target)
+            names.append(match.group(1) if match else target)
+            continue
         match = _ITEM_NAME.search(owner) or _FIELD_OR_VARIANT_NAME.match(owner)
         names.append(match.group(1) if match else owner)
     return names
@@ -218,7 +249,7 @@ def deprecated_owner_exception_records(
             raise ValueError(f"deprecated owner exception has no file: {record!r}")
         if relative in declared:
             raise ValueError(f"duplicate deprecated owner exception: {relative}")
-        if relative not in baseline:
+        if relative not in baseline and relative not in RESTORED_V1_DEPRECATED_OWNERS:
             raise ValueError(f"deprecated owner exception has no v1.4.1 baseline: {relative}")
         for field in ("reason", "removal_point"):
             if not isinstance(record[field], str) or not record[field].strip():
@@ -230,7 +261,8 @@ def deprecated_owner_exception_records(
             or any(not isinstance(symbol, str) or not symbol.strip() for symbol in symbols)
         ):
             raise ValueError(f"deprecated owner exception must name its deprecated symbols: {relative}")
-        unknown = Counter(symbols) - Counter(baseline[relative])
+        allowed = (*baseline.get(relative, ()), *RESTORED_V1_DEPRECATED_OWNERS.get(relative, ()))
+        unknown = Counter(symbols) - Counter(allowed)
         if unknown:
             raise ValueError(
                 f"deprecated owner exception declares symbols outside the v1.4.1 baseline: {relative}: "
@@ -270,7 +302,8 @@ def validate_compatibility_source_boundary(
         if relative not in deprecated_exceptions:
             raise ValueError(f"deprecated owner is outside compat without registry exception: {relative}")
         names = Counter(deprecated_owner_names(text))
-        excess = names - Counter(baseline[relative])
+        allowed = (*baseline.get(relative, ()), *RESTORED_V1_DEPRECATED_OWNERS.get(relative, ()))
+        excess = names - Counter(allowed)
         if excess:
             raise ValueError(
                 f"deprecated owner exceeds v1.4.1 baseline: {relative}: {', '.join(sorted(excess.elements()))}"

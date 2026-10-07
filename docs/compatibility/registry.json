@@ -222,34 +222,57 @@
   },
   "deprecated_owner_exceptions": [
     {
+      "file": "crates/sc-observability/src/error_codes.rs",
+      "deprecated_symbols": [
+        "LOGGER_SHUTDOWN",
+        "LOGGER_MAINTENANCE_JOIN_TIMEOUT",
+        "LOGGER_MAINTENANCE_WORKER_FAILED"
+      ],
+      "reason": "Lead ruling obs-f-6.group-dev.f6-v1-restore restores the released v1 error-code paths under the v1 feature, marked deprecated while the phase-F migration remains in flight.",
+      "removal_point": "Remove these compatibility constants after the phase-F v1 feature and all released 1.x consumers are retired."
+    },
+    {
       "file": "crates/sc-observability-types/src/errors.rs",
       "deprecated_symbols": [
         "IdentityError",
         "InitError",
         "EventError",
-        "FlushError",
-        "ShutdownError",
-        "ProjectionError",
-        "SubscriberError",
         "LogSinkError",
-        "ExportError"
+        "TelemetryError"
       ],
-      "reason": "errors.rs already holds only the nine released root error wrappers; the canonical errors live in errors_v2.rs. The error_wrapper! macro seals each wrapper and implements DiagnosticInfo in place. lib.rs re-exports them at the crate root, and typed.rs and diagnostic.rs import them through crate::errors. The types crate has no compat module, and its lib.rs is not a compat_root_reexport_exceptions root. Moving the wrappers would add a new compat module and root re-export exception and rewrite those imports, but would separate nothing that errors.rs does not already separate.",
-      "removal_point": "At the next major version, delete the nine released wrapper declarations in errors.rs, their crate-root re-export in lib.rs and the Legacy* conversions in typed.rs that name them. errors_v2.rs is unaffected."
+      "reason": "errors.rs retains only the five v1 root wrappers that remain behind the v1 feature: IdentityError, InitError, EventError, LogSinkError, and TelemetryError. The deleted root FlushError, ShutdownError, ProjectionError, SubscriberError, and ExportError use their v2 canonical equivalents directly.",
+      "removal_point": "Remove the remaining v1 wrappers and their crate-root re-exports when the v1 feature is retired."
     },
     {
-      "file": "crates/sc-observability/src/lib.rs",
+      "file": "crates/sc-observability-types/src/error_codes.rs",
       "deprecated_symbols": [
-        "max_age_days"
+        "ALL",
+        "ALL"
       ],
-      "reason": "max_age_days is a deprecated public field of RetentionPolicy, and RetentionPolicy is not deprecated: JsonlFileSink::new in sinks.rs still takes it. Rust declares a field only inside its struct, so the field cannot move to src/compat without moving the whole struct.",
-      "removal_point": "At the next major version, delete the RetentionPolicy::max_age_days field, its Default initializer and its read in the JsonlFileSink legacy retention path. RetentionPolicy itself is kept."
+      "reason": "The v1-only aggregate and its deprecated root re-export preserve the released enumeration path while canonical error-code users route through v2 contracts.",
+      "removal_point": "Remove both v1 aggregate paths when the v1 feature is retired."
+    },
+    {
+      "file": "crates/sc-observe/src/lib.rs",
+      "deprecated_symbols": [
+        "ObservabilityConfig",
+        "ObservabilityBuilder",
+        "Observability",
+        "builder",
+        "emit",
+        "health",
+        "with_observability_health_provider"
+      ],
+      "reason": "The released root observation facade remains behind the v1 feature as deprecated forwarding wrappers; canonical configuration, construction, routing, and health APIs remain only on sc_observe::v2.",
+      "removal_point": "Remove these root v1 forwarding facades when the v1 feature and released 1.x consumers are retired."
     }
   ],
   "compat_root_reexport_exceptions": [
+    "crates/sc-observability-types/src/lib.rs",
     "crates/sc-observability/src/lib.rs",
     "crates/sc-observability-log/src/lib.rs",
-    "crates/sc-observability-otlp/src/lib.rs"
+    "crates/sc-observability-otlp/src/lib.rs",
+    "crates/sc-observability-types/src/lib.rs"
   ],
   "dispositions": {
     "restored_root": "Released root identity is present in the current source.",
@@ -973,7 +996,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "symbol": "root subscriber owner"
       },
       "removable_paths": [],
@@ -1001,7 +1024,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "symbol": "root projector owner"
       },
       "removable_paths": [],
@@ -1034,7 +1057,7 @@
         "symbol": "v2::EventError"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/v1/compat.rs",
         "crates/sc-observability/src/lib.rs"
       ],
       "removal_rationale": "compat.rs owns the retained LogError declaration and compat::legacy_log; lib.rs re-exports it with pub use compat::{LogError, TryLogError}. Both are removable when the root compatibility surface is retired."
@@ -1066,7 +1089,7 @@
         "symbol": "v2::EventError"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/v1/compat.rs",
         "crates/sc-observability/src/lib.rs"
       ],
       "removal_rationale": "compat.rs owns the retained TryLogError declaration and compat::legacy_try_log; lib.rs re-exports it with pub use compat::{LogError, TryLogError}. Both are removable when the root compatibility surface is retired."
@@ -1123,7 +1146,7 @@
         "symbol": "sc_observability::v2::Logger"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "compat.rs owns the retained root Logger facade and is removable when the root compatibility surface is retired."
     },
@@ -1153,7 +1176,7 @@
         "symbol": "sc_observability::v2::LoggerBuilder"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "compat.rs owns the retained root LoggerBuilder facade and is removable when the root compatibility surface is retired."
     },
@@ -1183,7 +1206,7 @@
         "symbol": "v2::LogSink"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "compat.rs owns the released root LogSink declaration, its built-in impls, and the root-to-canonical registration adapter; remove them when the release policy retires the root sink trait."
     },
@@ -1213,7 +1236,7 @@
         "symbol": "v2::LogSink"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/v1/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ],
       "removal_rationale": "compat.rs owns the released TypedLogSink declaration and legacy_sink/typed_sink adapters, and typed.rs only re-exports them at the released path; remove both when the release policy retires the typed sink adapters."
@@ -1243,7 +1266,7 @@
         "symbol": "root registration storing canonical v2::LogSink"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "compat.rs owns the released SinkRegistration::new adapter; the canonical SinkRegistration::typed constructor and registration storage stay outside compat."
     },
@@ -1354,7 +1377,7 @@
         "symbol": "root injector over canonical LogSink"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "compat.rs owns the released wrap method and the root LogSink impl of the canonical fault sink; the injector state and canonical fault sink stay in sinks.rs."
     },
@@ -1365,8 +1388,8 @@
       "status": "canonical_routed",
       "canonical": "root sink implementing canonical LogSink",
       "treatment": "existing_pair",
-      "baseline_signature": "pub struct JsonlFileSink { path: PathBuf, health: RwLock<SinkHealth>, legacy_policy: Option<LegacyRetentionPolicy>, }",
-      "canonical_signature": "pub struct JsonlFileSink { path: PathBuf, health: RwLock<SinkHealth>, legacy_policy: Option<LegacyRetentionPolicy>, }",
+      "baseline_signature": "pub struct JsonlFileSink { path: PathBuf, health: RwLock<SinkHealth>, #[cfg(feature = \"v1\")] legacy_policy: Option<RetainedLogPolicy>, }",
+      "canonical_signature": "pub struct JsonlFileSink { path: PathBuf, health: RwLock<SinkHealth>, #[cfg(feature = \"v1\")] legacy_policy: Option<RetainedLogPolicy>, }",
       "obligations": [
         "signature identity: preserve JsonlFileSink declaration form, generic parameters, and every public field or enum variant recorded in baseline_signature",
         "boundary: conversion occurs only at the retained root facade; the canonical implementation does not import compatibility code"
@@ -1383,7 +1406,7 @@
         "symbol": "root sink implementing canonical LogSink"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "compat.rs owns the thin released root LogSink impl that forwards to the canonical v2::LogSink impl in sinks.rs; remove it when the release policy retires the root sink trait."
     },
@@ -1412,7 +1435,7 @@
         "symbol": "root sink implementing canonical LogSink"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "compat.rs owns the thin released root LogSink impl that forwards to the canonical v2::LogSink impl in sinks.rs; remove it when the release policy retires the root sink trait."
     },
@@ -1987,7 +2010,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "new"
       },
@@ -2012,7 +2035,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "with_diagnostic"
       },
@@ -2037,7 +2060,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "end"
       },
@@ -2062,7 +2085,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "timestamp"
       },
@@ -2087,7 +2110,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "service"
       },
@@ -2112,7 +2135,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "name"
       },
@@ -2137,7 +2160,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "trace"
       },
@@ -2162,7 +2185,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "status"
       },
@@ -2187,7 +2210,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "diagnostic"
       },
@@ -2212,7 +2235,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "attributes"
       },
@@ -2237,7 +2260,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "duration_ms"
       },
@@ -2262,7 +2285,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "SubscriberRegistration",
         "member": "new"
       },
@@ -2287,7 +2310,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "SubscriberRegistration",
         "member": "with_filter"
       },
@@ -2312,7 +2335,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "SubscriberRegistration",
         "member": "into_parts"
       },
@@ -2337,7 +2360,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "new"
       },
@@ -2362,7 +2385,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "with_log_projector"
       },
@@ -2387,7 +2410,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "with_span_projector"
       },
@@ -2412,7 +2435,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "with_metric_projector"
       },
@@ -2437,7 +2460,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "with_filter"
       },
@@ -2462,7 +2485,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/projection.rs",
+        "path": "crates/sc-observability-types/src/v1/projection.rs",
         "owner": "ProjectionRegistration",
         "member": "into_parts"
       },
@@ -2492,7 +2515,7 @@
         "member": "builder"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2519,7 +2542,7 @@
         "member": "builder_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2546,7 +2569,7 @@
         "member": "new"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2573,7 +2596,7 @@
         "member": "new_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2600,7 +2623,7 @@
         "member": "new_with_level_owner"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2627,7 +2650,7 @@
         "member": "new_with_level_owner_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2638,7 +2661,7 @@
       "obligations": [
         "signature: preserve sc_observability::Logger::log exactly as recorded in this row baseline_signature: pub fn log(&self, event: LogEvent) -> Result<(), LogError>",
         "error: preserve released LogError failure type at sc_observability::Logger::log boundary",
-        "error: released LogError is produced one way from canonical sc_observability_types::v2::EventError: crates/sc-observability/src/compat.rs Logger::log calls v2::Logger::log_released (crates/sc-observability/src/runtime.rs) and legacy_log maps Validation to LogError::InvalidEvent (context through EventFailure::from_context into EventError), Routing with LOGGER_SHUTDOWN_TIMED_OUT to ShutdownTimedOut, other Routing and remaining variants to WriterDegraded, each moving the ErrorContext box with its diagnostic and source; no LogError to v2::EventError conversion exists"
+        "error: released LogError is produced one way from canonical sc_observability_types::v2::EventError: crates/sc-observability/src/v1/compat.rs Logger::log calls v2::Logger::log_released (crates/sc-observability/src/runtime.rs) and legacy_log maps Validation to LogError::InvalidEvent (context through EventFailure::from_context into EventError), Routing with LOGGER_SHUTDOWN_TIMED_OUT to ShutdownTimedOut, other Routing and remaining variants to WriterDegraded, each moving the ErrorContext box with its diagnostic and source; no LogError to v2::EventError conversion exists"
       ],
       "treatment": "new_adapter",
       "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
@@ -2655,7 +2678,7 @@
         "member": "log"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2666,7 +2689,7 @@
       "obligations": [
         "signature: preserve sc_observability::Logger::log_typed exactly as recorded in this row baseline_signature: pub fn log_typed(&self, event: LogEvent) -> Result<(), LogFailure>",
         "error: preserve released LogFailure failure type at sc_observability::Logger::log_typed boundary",
-        "error: released LogFailure is produced from the released LogError, not from canonical sc_observability_types::typed::EventFailure: crates/sc-observability/src/compat.rs Logger::log_typed maps Logger::log through From<LogError> for LogFailure variant for variant (InvalidEvent wraps EventFailure, WriterDegraded and ShutdownTimedOut move the ErrorContext box); canonical v2::Logger::log_typed (crates/sc-observability/src/runtime.rs) builds EventFailure from the v2::EventError context and is not called by the root facade; no LogFailure to EventFailure conversion exists"
+        "error: released LogFailure is produced from the released LogError, not from canonical sc_observability_types::typed::EventFailure: crates/sc-observability/src/v1/compat.rs Logger::log_typed maps Logger::log through From<LogError> for LogFailure variant for variant (InvalidEvent wraps EventFailure, WriterDegraded and ShutdownTimedOut move the ErrorContext box); canonical v2::Logger::log_typed (crates/sc-observability/src/runtime.rs) builds EventFailure from the v2::EventError context and is not called by the root facade; no LogFailure to EventFailure conversion exists"
       ],
       "treatment": "new_adapter",
       "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
@@ -2683,7 +2706,7 @@
         "member": "log_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2694,7 +2717,7 @@
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log exactly as recorded in this row baseline_signature: pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError>",
         "error: preserve released TryLogError failure type at sc_observability::Logger::try_log boundary",
-        "error: released TryLogError is produced one way from canonical sc_observability_types::v2::EventError: crates/sc-observability/src/compat.rs Logger::try_log delegates to Logger::try_log_with_outcome, whose legacy_try_log maps Validation to InvalidEvent, Routing with LOGGER_QUEUE_FULL to QueueFull, Routing with LOGGER_SHUTDOWN_TIMED_OUT to ShutdownTimedOut, other Routing and remaining variants to WriterDegraded, moving the ErrorContext box with diagnostic and source; no TryLogError to v2::EventError conversion exists"
+        "error: released TryLogError is produced one way from canonical sc_observability_types::v2::EventError: crates/sc-observability/src/v1/compat.rs Logger::try_log delegates to Logger::try_log_with_outcome, whose legacy_try_log maps Validation to InvalidEvent, Routing with LOGGER_QUEUE_FULL to QueueFull, Routing with LOGGER_SHUTDOWN_TIMED_OUT to ShutdownTimedOut, other Routing and remaining variants to WriterDegraded, moving the ErrorContext box with diagnostic and source; no TryLogError to v2::EventError conversion exists"
       ],
       "treatment": "new_adapter",
       "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
@@ -2711,7 +2734,7 @@
         "member": "try_log"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2722,7 +2745,7 @@
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log_typed exactly as recorded in this row baseline_signature: pub fn try_log_typed(&self, event: LogEvent) -> Result<(), TryLogFailure>",
         "error: preserve released TryLogFailure failure type at sc_observability::Logger::try_log_typed boundary",
-        "error: released TryLogFailure is produced from the released TryLogError, not from canonical sc_observability_types::typed::EventFailure: crates/sc-observability/src/compat.rs Logger::try_log_typed maps Logger::try_log through From<TryLogError> for TryLogFailure variant for variant, moving each ErrorContext box; canonical v2::Logger::try_log_typed (crates/sc-observability/src/runtime.rs) is not called by the root facade; no TryLogFailure to EventFailure conversion exists"
+        "error: released TryLogFailure is produced from the released TryLogError, not from canonical sc_observability_types::typed::EventFailure: crates/sc-observability/src/v1/compat.rs Logger::try_log_typed maps Logger::try_log through From<TryLogError> for TryLogFailure variant for variant, moving each ErrorContext box; canonical v2::Logger::try_log_typed (crates/sc-observability/src/runtime.rs) is not called by the root facade; no TryLogFailure to EventFailure conversion exists"
       ],
       "treatment": "new_adapter",
       "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
@@ -2739,7 +2762,7 @@
         "member": "try_log_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2750,7 +2773,7 @@
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log_with_outcome exactly as recorded in this row baseline_signature: pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, TryLogError>",
         "error: preserve released TryLogError failure type at sc_observability::Logger::try_log_with_outcome boundary",
-        "error: released TryLogError is produced one way from canonical sc_observability_types::v2::EventError: crates/sc-observability/src/compat.rs Logger::try_log_with_outcome calls v2::Logger::try_log_with_outcome_released (crates/sc-observability/src/runtime.rs) and legacy_try_log maps Validation to InvalidEvent, Routing with LOGGER_QUEUE_FULL to QueueFull, Routing with LOGGER_SHUTDOWN_TIMED_OUT to ShutdownTimedOut, other Routing and remaining variants to WriterDegraded, moving the ErrorContext box with diagnostic and source; Ok(AdmissionOutcome) passes through unchanged; no TryLogError to v2::EventError conversion exists"
+        "error: released TryLogError is produced one way from canonical sc_observability_types::v2::EventError: crates/sc-observability/src/v1/compat.rs Logger::try_log_with_outcome calls v2::Logger::try_log_with_outcome_released (crates/sc-observability/src/runtime.rs) and legacy_try_log maps Validation to InvalidEvent, Routing with LOGGER_QUEUE_FULL to QueueFull, Routing with LOGGER_SHUTDOWN_TIMED_OUT to ShutdownTimedOut, other Routing and remaining variants to WriterDegraded, moving the ErrorContext box with diagnostic and source; Ok(AdmissionOutcome) passes through unchanged; no TryLogError to v2::EventError conversion exists"
       ],
       "treatment": "new_adapter",
       "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
@@ -2767,7 +2790,7 @@
         "member": "try_log_with_outcome"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2778,7 +2801,7 @@
       "obligations": [
         "signature: preserve sc_observability::Logger::try_log_with_outcome_typed exactly as recorded in this row baseline_signature: pub fn try_log_with_outcome_typed( &self, event: LogEvent, ) -> Result<AdmissionOutcome, TryLogFailure>",
         "error: preserve released TryLogFailure failure type at sc_observability::Logger::try_log_with_outcome_typed boundary",
-        "error: released TryLogFailure is produced from the released TryLogError, not from canonical sc_observability_types::typed::EventFailure: crates/sc-observability/src/compat.rs Logger::try_log_with_outcome_typed maps Logger::try_log_with_outcome through From<TryLogError> for TryLogFailure variant for variant, moving each ErrorContext box; canonical v2::Logger::try_log_with_outcome_typed (crates/sc-observability/src/runtime.rs) is not called by the root facade; no TryLogFailure to EventFailure conversion exists"
+        "error: released TryLogFailure is produced from the released TryLogError, not from canonical sc_observability_types::typed::EventFailure: crates/sc-observability/src/v1/compat.rs Logger::try_log_with_outcome_typed maps Logger::try_log_with_outcome through From<TryLogError> for TryLogFailure variant for variant, moving each ErrorContext box; canonical v2::Logger::try_log_with_outcome_typed (crates/sc-observability/src/runtime.rs) is not called by the root facade; no TryLogFailure to EventFailure conversion exists"
       ],
       "treatment": "new_adapter",
       "conversion": "the retained root facade delegates losslessly to the distinct v2 owner; canonical implementation never imports compat",
@@ -2795,7 +2818,7 @@
         "member": "try_log_with_outcome_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2822,7 +2845,7 @@
         "member": "emit_legacy"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2849,7 +2872,7 @@
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2876,7 +2899,7 @@
         "member": "flush_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2903,7 +2926,7 @@
         "member": "query"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2930,7 +2953,7 @@
         "member": "follow"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2957,7 +2980,7 @@
         "member": "shutdown"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -2984,7 +3007,7 @@
         "member": "level_state"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3011,7 +3034,7 @@
         "member": "health"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3038,7 +3061,7 @@
         "member": "new"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3065,7 +3088,7 @@
         "member": "new_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3092,7 +3115,7 @@
         "member": "register_sink"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3119,7 +3142,7 @@
         "member": "build"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3146,7 +3169,7 @@
         "member": "build_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3173,7 +3196,7 @@
         "member": "build_with_level_owner"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3200,7 +3223,7 @@
         "member": "build_with_level_owner_typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3253,7 +3276,7 @@
         "member": "typed"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -3461,7 +3484,7 @@
         "member": "fault_sink"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -4275,14 +4298,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "ObservabilityConfig",
         "member": "default_for"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::default_for wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::default_for wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::default_for_typed",
@@ -4303,10 +4326,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::service_name",
@@ -4327,14 +4350,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "ObservabilityConfig",
         "member": "service_name"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::service_name wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityConfig::service_name wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityConfig::service_name_typed",
@@ -4355,10 +4378,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::new",
@@ -4379,14 +4402,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "Observability",
         "member": "new"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::new wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::new wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::new_typed",
@@ -4407,10 +4430,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::builder",
@@ -4481,14 +4504,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "Observability",
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::flush wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::flush wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::flush_typed",
@@ -4509,10 +4532,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::shutdown",
@@ -4533,14 +4556,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "Observability",
         "member": "shutdown"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::shutdown wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::Observability::shutdown wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::Observability::shutdown_typed",
@@ -4561,10 +4584,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observe::Observability::health",
@@ -4627,7 +4650,7 @@
         "conversion: released callbacks keep their Arc identity and every error they return reaches routing with its original context and source"
       ],
       "treatment": "new_adapter",
-      "conversion": "the root method converts its released SubscriberRegistration with From into v2::SubscriberRegistration and registers it through the same private path as sc_observe::v2::ObservabilityBuilder::register_subscriber; the supplied objects and filter are kept",
+      "conversion": "the root method directly routes its released SubscriberRegistration contract while sc_observe::v2::ObservabilityBuilder accepts only v2::SubscriberRegistration; the supplied objects and filter are kept",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observe/src/lib.rs",
@@ -4640,7 +4663,9 @@
         "owner": "v2::ObservabilityBuilder",
         "member": "register_subscriber"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/lib.rs"
+      ]
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::register_projection",
@@ -4653,7 +4678,7 @@
         "conversion: released callbacks keep their Arc identity and every error they return reaches routing with its original context and source"
       ],
       "treatment": "new_adapter",
-      "conversion": "the root method converts its released ProjectionRegistration with From into v2::ProjectionRegistration and registers it through the same private path as sc_observe::v2::ObservabilityBuilder::register_projection; the supplied objects and filter are kept",
+      "conversion": "the root method directly routes its released ProjectionRegistration contract while sc_observe::v2::ObservabilityBuilder accepts only v2::ProjectionRegistration; the supplied objects and filter are kept",
       "baseline_source": {
         "revision": "c578912653233c7dc678fefe5af575118dbbaaa1",
         "path": "crates/sc-observe/src/lib.rs",
@@ -4666,7 +4691,9 @@
         "owner": "v2::ObservabilityBuilder",
         "member": "register_projection"
       },
-      "removable_paths": []
+      "removable_paths": [
+        "crates/sc-observe/src/lib.rs"
+      ]
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::build",
@@ -4687,14 +4714,14 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observe/src/compat.rs",
+        "path": "crates/sc-observe/src/v1/compat.rs",
         "owner": "ObservabilityBuilder",
         "member": "build"
       },
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs"
+        "crates/sc-observe/src/v1/compat.rs"
       ],
-      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityBuilder::build wrapper method declared in crates/sc-observe/src/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
+      "removal_rationale": "Remove only the released deprecated sc_observe::ObservabilityBuilder::build wrapper method declared in crates/sc-observe/src/v1/compat.rs when the major release retires the released facade; retain its typed counterpart and canonical implementation. This entry does not authorize deleting the whole file."
     },
     {
       "symbol": "sc_observe::ObservabilityBuilder::build_typed",
@@ -4715,10 +4742,10 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observe/src/compat.rs",
+        "crates/sc-observe/src/v1/compat.rs",
         "crates/sc-observe/src/lib.rs"
       ],
-      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/compat.rs; remove the root mod compat declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
+      "removal_rationale": "The released typed helper is implemented in crates/sc-observe/src/v1/compat.rs; remove the root v1 module declaration in crates/sc-observe/src/lib.rs when the compatibility facade retires."
     },
     {
       "symbol": "sc_observability_otlp::Telemetry::new",
@@ -5680,7 +5707,7 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/v1/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ]
     },
@@ -5705,7 +5732,7 @@
       },
       "canonical_source": null,
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/v1/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ]
     },
@@ -5778,12 +5805,12 @@
       },
       "current_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/compat.rs",
+        "path": "crates/sc-observability/src/v1/compat.rs",
         "owner": "JsonlFileSink"
       },
       "conversion": "compat.rs delegates write, flush, and health to the canonical crate::sink::LogSink implementation; write and flush move the canonical error context into the released LogSinkFailure without rewrapping diagnostics or sources.",
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "remove this released TypedLogSink implementation with compat.rs when the 1.x surface retires."
     },
@@ -5798,12 +5825,12 @@
       },
       "current_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability/src/compat.rs",
+        "path": "crates/sc-observability/src/v1/compat.rs",
         "owner": "ConsoleSink"
       },
       "conversion": "compat.rs delegates write, flush, and health to the canonical crate::sink::LogSink implementation; write and flush move the canonical error context into the released LogSinkFailure without rewrapping diagnostics or sources.",
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "remove this released TypedLogSink implementation with compat.rs when the 1.x surface retires."
     }
@@ -5842,7 +5869,7 @@
       "canonical_signature": "fn observe(&self, observation: &Observation<T>) -> Result<(), crate::v2::SubscriberError>",
       "obligations": [
         "signature: preserve sc_observability_types::ObservationSubscriber::observe exactly as recorded in this row baseline_signature: fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError>",
-        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root ObservationSubscriber at crates/sc-observability-types/src/projection.rs",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root ObservationSubscriber at crates/sc-observability-types/src/v1/projection.rs",
         "canonical: v2::ObservationSubscriber::observe keeps the same receiver and bounds and returns crate::v2::SubscriberError",
         "identity: conversion moves the Box<ErrorContext> between crate::SubscriberError and crate::v2::SubscriberError, keeping its code, message and source; it never wraps one error in the other"
       ],
@@ -5869,7 +5896,7 @@
       "canonical_signature": "fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::v2::ProjectionError>",
       "obligations": [
         "signature: preserve sc_observability_types::LogProjector::project_logs exactly as recorded in this row baseline_signature: fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, crate::ProjectionError>",
-        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root LogProjector at crates/sc-observability-types/src/projection.rs",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root LogProjector at crates/sc-observability-types/src/v1/projection.rs",
         "canonical: v2::LogProjector::project_logs keeps the same receiver and bounds and returns crate::v2::ProjectionError",
         "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
@@ -5896,7 +5923,7 @@
       "canonical_signature": "fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<crate::v2::SpanSignal>, crate::v2::ProjectionError>",
       "obligations": [
         "signature: preserve sc_observability_types::SpanProjector::project_spans exactly as recorded in this row baseline_signature: fn project_spans( &self, observation: &Observation<T>, ) -> Result<Vec<SpanSignal>, crate::ProjectionError>",
-        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root SpanProjector at crates/sc-observability-types/src/projection.rs",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root SpanProjector at crates/sc-observability-types/src/v1/projection.rs",
         "canonical: v2::SpanProjector::project_spans keeps the same receiver and bounds and returns canonical crate::v2::SpanSignal values or crate::v2::ProjectionError",
         "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
@@ -5923,7 +5950,7 @@
       "canonical_signature": "fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<crate::v2::MetricRecord>, crate::v2::ProjectionError>",
       "obligations": [
         "signature: preserve sc_observability_types::MetricProjector::project_metrics exactly as recorded in this row baseline_signature: fn project_metrics( &self, observation: &Observation<T>, ) -> Result<Vec<MetricRecord>, crate::ProjectionError>",
-        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root MetricProjector at crates/sc-observability-types/src/projection.rs",
+        "trait contract: keep the released &self receiver, public implementability, object safety and Send + Sync where T: Observable bounds of the root MetricProjector at crates/sc-observability-types/src/v1/projection.rs",
         "canonical: v2::MetricProjector::project_metrics keeps the same receiver and bounds and returns canonical crate::v2::MetricRecord values or crate::v2::ProjectionError",
         "identity: conversion moves the Box<ErrorContext> between crate::ProjectionError and crate::v2::ProjectionError, keeping its code, message and source; it never wraps one error in the other"
       ],
@@ -5970,7 +5997,7 @@
         "member": "write"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -5999,7 +6026,7 @@
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ]
     },
     {
@@ -6027,7 +6054,7 @@
         "member": "health"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs"
+        "crates/sc-observability/src/v1/compat.rs"
       ],
       "removal_rationale": "the released health slot is declared in compat.rs; remove it with the released trait."
     },
@@ -6057,7 +6084,7 @@
         "member": "write"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/v1/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ]
     },
@@ -6087,7 +6114,7 @@
         "member": "flush"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/v1/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ]
     },
@@ -6116,7 +6143,7 @@
         "member": "health"
       },
       "removable_paths": [
-        "crates/sc-observability/src/compat.rs",
+        "crates/sc-observability/src/v1/compat.rs",
         "crates/sc-observability/src/typed.rs"
       ],
       "removal_rationale": "the released health slot is declared in compat.rs; remove it with the released trait."

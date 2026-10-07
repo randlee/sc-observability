@@ -1,5 +1,7 @@
 //! Compile-time lock for the accepted B.P3 native bridge surface.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::items_after_statements,
     reason = "signature probes are adjacent to the contract they pin"
 )]
@@ -9,9 +11,9 @@ use std::time::Duration;
 
 use sc_observability_log::{
     AdmissionOutcome, BridgeEvent, BridgeHealthReport, BridgeOptions, ControlError, DropCause,
-    DroppedEvents, EmitError, ErrorCode, EventLevel, FieldKeyError, FlushError, InitError,
-    LifecyclePhase, LogControl, LogGuard, LogQuery, LogSnapshot, LoggerConfig, LoggingHealthReport,
-    ShutdownError, WaitError,
+    DroppedEvents, EmitError, ErrorCode, EventLevel, FieldKeyError, FlushError, HelperHealth,
+    InitError, LifecyclePhase, LogControl, LogGuard, LogQuery, LogSnapshot, LoggerConfig,
+    LoggingHealthReport, ShutdownError, WaitError,
 };
 
 #[allow(
@@ -82,6 +84,11 @@ fn bp3_public_api_is_frozen() {
     let _: fn(EmitError) = released_emit_error;
     let _: fn(LoggerConfig, BridgeOptions) -> Result<LogGuard, InitError> =
         sc_observability_log::init;
+    let _: sc_observability_log::v2::BridgeHealthReport;
+    let _: sc_observability_log::v2::HelperHealth;
+    let _: sc_observability_log::v2::LoggerConfig;
+    let _: sc_observability_log::v2::LevelFilter;
+    let _: sc_observability_log::v2::ServiceName;
     let _: fn(&LogGuard) -> LogControl = LogGuard::control;
     let _: fn(&LogGuard) -> Result<BridgeHealthReport, ControlError> = LogGuard::health;
     let _: fn(&LogGuard, Duration) -> Result<(), FlushError> = LogGuard::flush;
@@ -109,6 +116,7 @@ fn bp3_public_api_is_frozen() {
     fn guard<T: std::fmt::Debug + Send + Sync + 'static>() {}
     data_eq::<BridgeEvent>();
     data_eq::<BridgeHealthReport>();
+    data_eq::<HelperHealth>();
     data::<FieldKeyError>();
     data::<LifecyclePhase>();
     for_error_bounds();
@@ -151,7 +159,9 @@ fn bp3_public_api_is_frozen() {
             health.effective_level,
             health.level_revision,
         );
+        let _: HelperHealth = health.helpers;
     };
+    let _ = |helpers: HelperHealth| -> (bool, u64) { (helpers.flush_in_flight, helpers.detached) };
     let _: fn(&DroppedEvents, DropCause) -> u64 = DroppedEvents::get;
     let _: fn(&DroppedEvents) -> u64 = DroppedEvents::total;
     let _: [DropCause; 7] = DropCause::ALL;

@@ -15,7 +15,7 @@ pub mod sc_observe::v2
 pub use sc_observe::v2::FlushError
 pub use sc_observe::v2::InitError
 pub use sc_observe::v2::ShutdownError
-#[repr(transparent)] pub struct sc_observe::v2::Observability(_)
+pub struct sc_observe::v2::Observability
 impl sc_observe::v2::Observability
 pub fn sc_observe::v2::Observability::builder(sc_observe::v2::ObservabilityConfig) -> sc_observe::v2::ObservabilityBuilder
 pub fn sc_observe::v2::Observability::emit<T>(&self, sc_observability_types::events::Observation<T>) -> core::result::Result<(), sc_observability_types::errors::ObservationError> where T: sc_observability_types::events::Observable
@@ -23,45 +23,47 @@ pub fn sc_observe::v2::Observability::flush(&self) -> core::result::Result<(), s
 pub fn sc_observe::v2::Observability::health(&self) -> sc_observability_types::health::ObservabilityHealthReport
 pub fn sc_observe::v2::Observability::new(sc_observe::v2::ObservabilityConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
 pub fn sc_observe::v2::Observability::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
-impl core::fmt::Debug for sc_observe::v2::Observability
-pub fn sc_observe::v2::Observability::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-#[repr(transparent)] pub struct sc_observe::v2::ObservabilityBuilder(_)
+pub struct sc_observe::v2::ObservabilityBuilder
 impl sc_observe::v2::ObservabilityBuilder
 pub fn sc_observe::v2::ObservabilityBuilder::build(self) -> core::result::Result<sc_observe::v2::Observability, sc_observability_types::errors_v2::InitError>
 pub fn sc_observe::v2::ObservabilityBuilder::register_projection<T>(self, sc_observability_types::observation_v2::ProjectionRegistration<T>) -> Self where T: sc_observability_types::events::Observable
 pub fn sc_observe::v2::ObservabilityBuilder::register_subscriber<T>(self, sc_observability_types::observation_v2::SubscriberRegistration<T>) -> Self where T: sc_observability_types::events::Observable
-pub fn sc_observe::v2::ObservabilityBuilder::with_observability_health_provider(self, impl sc_observability_types::health::ObservabilityHealthProvider + 'static) -> Self
-impl core::fmt::Debug for sc_observe::v2::ObservabilityBuilder
-pub fn sc_observe::v2::ObservabilityBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-#[repr(transparent)] pub struct sc_observe::v2::ObservabilityConfig(_)
+pub fn sc_observe::v2::ObservabilityBuilder::with_observability_health_provider(self, impl sc_observability_types::health::ObservabilityHealthProvider + core::marker::Send + core::marker::Sync + 'static) -> Self
+pub struct sc_observe::v2::ObservabilityConfig
+pub sc_observe::v2::ObservabilityConfig::env_prefix: sc_observability_types::validation::EnvPrefix
+pub sc_observe::v2::ObservabilityConfig::log_root: std::path::PathBuf
+pub sc_observe::v2::ObservabilityConfig::queue_capacity: usize
+pub sc_observe::v2::ObservabilityConfig::retained_log_policy: sc_observability::RetainedLogPolicy
+pub sc_observe::v2::ObservabilityConfig::tool_name: sc_observability_types::validation::ToolName
 impl sc_observe::v2::ObservabilityConfig
 pub fn sc_observe::v2::ObservabilityConfig::default_for(sc_observability_types::validation::ToolName, std::path::PathBuf) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
 pub fn sc_observe::v2::ObservabilityConfig::service_name(&self) -> core::result::Result<sc_observability_types::validation::ServiceName, sc_observability_types::errors_v2::InitError>
-impl core::ops::deref::Deref for sc_observe::v2::ObservabilityConfig
-pub type sc_observe::v2::ObservabilityConfig::Target = sc_observe::ObservabilityConfig
-pub fn sc_observe::v2::ObservabilityConfig::deref(&self) -> &Self::Target
-impl core::ops::deref::DerefMut for sc_observe::v2::ObservabilityConfig
-pub fn sc_observe::v2::ObservabilityConfig::deref_mut(&mut self) -> &mut Self::Target
-pub struct sc_observe::Observability
+impl core::convert::From<sc_observe::ObservabilityConfig> for sc_observe::v2::ObservabilityConfig
+pub fn sc_observe::v2::ObservabilityConfig::from(sc_observe::ObservabilityConfig) -> Self
+#[repr(transparent)] pub struct sc_observe::Observability(_)
 impl sc_observe::Observability
 pub fn sc_observe::Observability::builder(sc_observe::ObservabilityConfig) -> sc_observe::ObservabilityBuilder
 pub fn sc_observe::Observability::emit<T>(&self, sc_observability_types::events::Observation<T>) -> core::result::Result<(), sc_observability_types::errors::ObservationError> where T: sc_observability_types::events::Observable
 pub fn sc_observe::Observability::health(&self) -> sc_observability_types::health::ObservabilityHealthReport
 impl sc_observe::Observability
-pub fn sc_observe::Observability::flush(&self) -> core::result::Result<(), sc_observability_types::errors::FlushError>
-pub fn sc_observe::Observability::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
+pub fn sc_observe::Observability::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observe::Observability::flush_typed(&self) -> core::result::Result<(), sc_observability_types::v1::typed::FlushFailure>
 pub fn sc_observe::Observability::new(sc_observe::ObservabilityConfig) -> core::result::Result<Self, sc_observability_types::errors::InitError>
-pub fn sc_observe::Observability::new_typed(sc_observe::ObservabilityConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
-pub fn sc_observe::Observability::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors::ShutdownError>
-pub fn sc_observe::Observability::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
-pub struct sc_observe::ObservabilityBuilder
+pub fn sc_observe::Observability::new_typed(sc_observe::ObservabilityConfig) -> core::result::Result<Self, sc_observability_types::v1::typed::InitFailure>
+pub fn sc_observe::Observability::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observe::Observability::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::v1::typed::ShutdownFailure>
+impl core::fmt::Debug for sc_observe::Observability
+pub fn sc_observe::Observability::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[repr(transparent)] pub struct sc_observe::ObservabilityBuilder(_)
 impl sc_observe::ObservabilityBuilder
 pub fn sc_observe::ObservabilityBuilder::build(self) -> core::result::Result<sc_observe::Observability, sc_observability_types::errors::InitError>
-pub fn sc_observe::ObservabilityBuilder::build_typed(self) -> core::result::Result<sc_observe::Observability, sc_observability_types::typed::InitFailure>
+pub fn sc_observe::ObservabilityBuilder::build_typed(self) -> core::result::Result<sc_observe::Observability, sc_observability_types::v1::typed::InitFailure>
+pub fn sc_observe::ObservabilityBuilder::register_projection<T>(self, sc_observability_types::v1::projection::ProjectionRegistration<T>) -> Self where T: sc_observability_types::events::Observable
+pub fn sc_observe::ObservabilityBuilder::register_subscriber<T>(self, sc_observability_types::v1::projection::SubscriberRegistration<T>) -> Self where T: sc_observability_types::events::Observable
 impl sc_observe::ObservabilityBuilder
-pub fn sc_observe::ObservabilityBuilder::register_projection<T>(self, sc_observability_types::projection::ProjectionRegistration<T>) -> Self where T: sc_observability_types::events::Observable
-pub fn sc_observe::ObservabilityBuilder::register_subscriber<T>(self, sc_observability_types::projection::SubscriberRegistration<T>) -> Self where T: sc_observability_types::events::Observable
-pub fn sc_observe::ObservabilityBuilder::with_observability_health_provider(self, impl sc_observability_types::health::ObservabilityHealthProvider + core::marker::Send + core::marker::Sync + 'static) -> Self
+pub fn sc_observe::ObservabilityBuilder::with_observability_health_provider(self, impl sc_observability_types::health::ObservabilityHealthProvider + 'static) -> Self
+impl core::fmt::Debug for sc_observe::ObservabilityBuilder
+pub fn sc_observe::ObservabilityBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct sc_observe::ObservabilityConfig
 pub sc_observe::ObservabilityConfig::env_prefix: sc_observability_types::validation::EnvPrefix
 pub sc_observe::ObservabilityConfig::log_root: std::path::PathBuf
@@ -70,6 +72,8 @@ pub sc_observe::ObservabilityConfig::retained_log_policy: sc_observability::Reta
 pub sc_observe::ObservabilityConfig::tool_name: sc_observability_types::validation::ToolName
 impl sc_observe::ObservabilityConfig
 pub fn sc_observe::ObservabilityConfig::default_for(sc_observability_types::validation::ToolName, std::path::PathBuf) -> core::result::Result<Self, sc_observability_types::errors::InitError>
-pub fn sc_observe::ObservabilityConfig::default_for_typed(sc_observability_types::validation::ToolName, std::path::PathBuf) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+pub fn sc_observe::ObservabilityConfig::default_for_typed(sc_observability_types::validation::ToolName, std::path::PathBuf) -> core::result::Result<Self, sc_observability_types::v1::typed::InitFailure>
 pub fn sc_observe::ObservabilityConfig::service_name(&self) -> core::result::Result<sc_observability_types::validation::ServiceName, sc_observability_types::errors::InitError>
-pub fn sc_observe::ObservabilityConfig::service_name_typed(&self) -> core::result::Result<sc_observability_types::validation::ServiceName, sc_observability_types::typed::InitFailure>
+pub fn sc_observe::ObservabilityConfig::service_name_typed(&self) -> core::result::Result<sc_observability_types::validation::ServiceName, sc_observability_types::v1::typed::InitFailure>
+impl core::convert::From<sc_observe::ObservabilityConfig> for sc_observe::v2::ObservabilityConfig
+pub fn sc_observe::v2::ObservabilityConfig::from(sc_observe::ObservabilityConfig) -> Self

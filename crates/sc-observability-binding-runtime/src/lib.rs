@@ -13,6 +13,8 @@ mod sync;
 #[cfg(test)]
 mod tests;
 mod timer;
+#[cfg(feature = "v1")]
+mod v1;
 pub use constants::{
     CALLBACK_REGISTRATION_CAPACITY, OPERATION_OBSERVER_CAPACITY, TAURI_DEFAULT_QUERY_TIMEOUT_MS,
     TAURI_MAX_QUERY_TARGETS, TAURI_REDACTED_VALUE,
@@ -174,6 +176,7 @@ pub fn create_core_backend(
 
 /// Feature-only gate for proving that a real logger sink can retain its writer.
 #[cfg(feature = "test-hooks")]
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct TestWriterGate {
     // MUTEX: keeps the entered/released Condvar predicates together; reads
@@ -224,15 +227,11 @@ struct TestBlockingSink {
 }
 
 #[cfg(feature = "test-hooks")]
-#[expect(
-    deprecated,
-    reason = "fixture implements the retained LogSink boundary"
-)]
-impl sc_observability::LogSink for TestBlockingSink {
+impl sc_observability::v2::LogSink for TestBlockingSink {
     fn write(
         &self,
         _: &sc_observability::LogEvent,
-    ) -> Result<(), sc_observability_types::LogSinkError> {
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
         let mut state = self
             .gate
             .state
@@ -265,6 +264,7 @@ impl sc_observability::LogSink for TestBlockingSink {
 /// # Errors
 /// Returns the same tagged construction failure as a production core backend.
 #[cfg(feature = "test-hooks")]
+#[doc(hidden)]
 pub fn create_test_blocking_core_backend(
     config: sc_observability::LoggerConfig,
 ) -> Result<(CoreLoggerOwner, CoreLoggerBackend, Arc<TestWriterGate>), Failure> {
@@ -278,7 +278,7 @@ pub fn create_test_blocking_core_backend(
         };
         let mut builder = sc_observability::v2::Logger::builder(config)
             .map_err(|error| conversion::canonical(&error, conversion::Kind::Internal))?;
-        builder.register_sink(sc_observability::SinkRegistration::new(Arc::new(
+        builder.register_sink(sc_observability::v2::SinkRegistration::typed(Arc::new(
             TestBlockingSink {
                 gate: gate_for_sink,
             },
@@ -296,15 +296,12 @@ pub fn create_test_blocking_core_backend(
         gate,
     ))
 }
-/// Attaches bounded operations to an existing host-owned bridge control.
-///
-/// # Errors
-/// Returns initialization or unavailable native snapshot diagnostics.
-pub fn bridge_backend(
-    control: sc_observability_log::LogControl,
-) -> Result<BridgeControlBackend, Failure> {
-    bridge_backend_v2(control.into_v2())
-}
+#[cfg(feature = "v1")]
+#[allow(
+    deprecated,
+    reason = "the released root path re-exports the deprecated v1 migration facade"
+)]
+pub use v1::bridge_backend;
 
 /// Attaches bounded operations to an existing canonical bridge control.
 ///
@@ -319,6 +316,7 @@ pub fn bridge_backend_v2(
 }
 impl CoreLoggerOwner {
     #[cfg(feature = "test-hooks")]
+    #[doc(hidden)]
     /// Forces the owned core's real level revision to exhaustion for binding tests.
     ///
     /// # Errors

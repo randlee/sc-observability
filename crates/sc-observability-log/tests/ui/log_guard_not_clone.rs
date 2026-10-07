@@ -1,3 +1,5 @@
+#![allow(deprecated)] // The compile-fail assertion pins the retained v1 path.
+
 // R-A4-005: `LogGuard` is the sole lifecycle owner and cannot be cloned.
 fn requires_clone<T: Clone>() {}
 

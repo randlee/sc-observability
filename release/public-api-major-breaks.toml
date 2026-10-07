@@ -1,7 +1,0 @@
-# Compatible 1.x releases accept no public API breaks.
-# Keep the frozen published comparison and candidate explicit so stale 2.0.0
-# approval evidence cannot be reused by the 1.5.0 gate.
-schema_version = 1
-baseline_version = "1.4.1"
-candidate_version = "1.5.0"
-breaks = []

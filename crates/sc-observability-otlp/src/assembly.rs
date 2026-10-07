@@ -4,23 +4,37 @@
 //! `CompleteSpan`, reports orphaned or inconsistent lifecycle transitions as
 //! explicit errors, and maintains incomplete-span accounting for runtime
 //! shutdown handling.
-#![expect(
-    clippy::missing_errors_doc,
-    reason = "span-assembly failure behavior is documented at the telemetry facade level, and repeating it here would add low-signal boilerplate"
+#![cfg_attr(
+    feature = "v1",
+    expect(
+        clippy::missing_errors_doc,
+        reason = "span-assembly failure behavior is documented at the telemetry facade level, and repeating it here would add low-signal boilerplate"
+    )
 )]
-#![expect(
-    clippy::must_use_candidate,
-    reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
+#![cfg_attr(
+    feature = "v1",
+    expect(
+        clippy::must_use_candidate,
+        reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
+    )
+)]
+#![cfg_attr(
+    feature = "v1",
+    allow(
+        deprecated,
+        reason = "the feature-gated released assembler preserves its v1 span types"
+    )
 )]
 use std::collections::{HashMap, VecDeque};
 
 use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::error_codes;
+#[cfg(feature = "v1")]
+#[allow(deprecated)]
 use sc_observability_types::typed::EventFailure;
-use sc_observability_types::{
-    ErrorContext, Remediation, SpanEnded, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
-    TraceId,
-};
+use sc_observability_types::{ErrorContext, Remediation, SpanId, TraceId};
+#[cfg(feature = "v1")]
+use sc_observability_types::{SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted};
 
 use sc_observability_types::otlp::OtlpCompleteSpan;
 use sc_observability_types::v2::{
@@ -29,6 +43,7 @@ use sc_observability_types::v2::{
 };
 
 /// Completed span assembled from a start/event/end stream.
+#[cfg(feature = "v1")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompleteSpan {
     /// Final completed span record.
@@ -58,9 +73,13 @@ impl SpanAssemblyLoss {
 }
 
 /// Stateful span assembler used by telemetry export.
-#[expect(
-    missing_debug_implementations,
-    reason = "the assembler is an internal state machine with no stable public debug contract beyond its functional behavior"
+#[cfg(feature = "v1")]
+#[cfg_attr(
+    feature = "v1",
+    expect(
+        missing_debug_implementations,
+        reason = "the assembler is an internal state machine with no stable public debug contract beyond its functional behavior"
+    )
 )]
 pub struct SpanAssembler {
     started: HashMap<String, SpanRecord<SpanStarted>>,
@@ -73,7 +92,7 @@ pub struct SpanAssembler {
 
 /// Bounded assembler for the canonical 2.0 span contract.
 ///
-/// It applies the retained [`SpanAssembler`] bounds, eviction order and loss
+/// It applies the retained legacy assembler bounds, eviction order and loss
 /// accounting to validated canonical signals, so completed spans keep their
 /// kind, links, parent, trace flags, status, timing and events. Released root
 /// signals enter it after an infallible field-by-field conversion.
@@ -86,6 +105,7 @@ pub(crate) struct V2SpanAssembler {
     loss: SpanAssemblyLoss,
 }
 
+#[cfg(feature = "v1")]
 impl SpanAssembler {
     /// Creates an empty assembler.
     pub fn new() -> Self {
@@ -108,17 +128,13 @@ impl SpanAssembler {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn has_started(&self, trace_id: &TraceId, span_id: &SpanId) -> bool {
-        self.started.contains_key(&span_key(trace_id, span_id))
-    }
-
     /// Pushes one lifecycle signal through the assembler with a neutral failure.
     ///
     /// # Panics
     ///
     /// Panics if internal lifecycle bookkeeping loses the event buffer paired
     /// with a started span; that condition indicates corrupted assembler state.
+    #[allow(deprecated)]
     pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure> {
         match signal {
             SpanSignal::Started(record) => {
@@ -136,6 +152,7 @@ impl SpanAssembler {
             SpanSignal::Event(event) => {
                 let key = span_key(&event.trace.trace_id, &event.trace.span_id);
                 if !self.started.contains_key(&key) {
+                    #[allow(deprecated)]
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received span event without a matching started span",
@@ -145,6 +162,7 @@ impl SpanAssembler {
                     ))));
                 }
                 if self.started[&key].trace() != &event.trace {
+                    #[allow(deprecated)]
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received span event with mismatched trace context",
@@ -164,6 +182,7 @@ impl SpanAssembler {
             SpanSignal::Ended(record) => {
                 let key = span_key(&record.trace().trace_id, &record.trace().span_id);
                 let Some(started) = self.started.get(&key) else {
+                    #[allow(deprecated)]
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received ended span without a matching started span",
@@ -173,6 +192,7 @@ impl SpanAssembler {
                     ))));
                 };
                 if started.trace() != record.trace() {
+                    #[allow(deprecated)]
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received ended span with mismatched trace context",
@@ -218,11 +238,6 @@ impl SpanAssembler {
         self.started.remove(key);
         self.started_order.retain(|candidate| candidate != key);
     }
-
-    #[cfg(test)]
-    pub(crate) fn remove_event_buffer(&mut self, key: &str) -> Option<Vec<SpanEvent>> {
-        self.events.remove(key)
-    }
 }
 
 impl V2SpanAssembler {
@@ -243,7 +258,7 @@ impl V2SpanAssembler {
         }
     }
 
-    /// Live-span and per-span event bounds in effect.
+    /// Returns the live-span and per-span event bounds in effect.
     #[cfg(test)]
     pub(crate) fn limits(&self) -> (usize, usize) {
         (self.max_live_spans, self.max_events_per_span)
@@ -374,6 +389,7 @@ fn v2_lifecycle_error(message: &str, recovery: &str) -> V2EventError {
     }
 }
 
+#[cfg(feature = "v1")]
 impl Default for SpanAssembler {
     fn default() -> Self {
         Self::new()

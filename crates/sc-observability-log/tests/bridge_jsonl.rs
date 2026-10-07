@@ -1,6 +1,8 @@
 //! One `init` per test binary: the `log` facade logger can be installed once per
 //! process, so every sub-case for this configuration runs inside the single test fn.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

@@ -6,10 +6,9 @@ gate, observed defect or existing regression case, and retirement condition.
 Without that record it does not run on a sprint PR. New checks require an
 identified need; historical evidence alone is not a permanent product gate.
 
-Public API governance is strict on every pull-request base, push event and
-manual run. There is no head-branch condition. API diff exit 1 means a change
-to assess; any other non-zero exit blocks. Local `just public-api` remains an
-explicit strict check.
+Rust API changes are checked against committed stock public-API baselines.
+The stock check permits additions and rejects removed or changed accepted
+lines; a removal or change refreshes only that sprint's affected baseline.
 
 Platform qualification has a separate rule: PRs into `develop` or `main`,
 explicit dispatch and reusable/non-PR qualification run all
@@ -40,7 +39,7 @@ on PRs 233–235 are the observed reason for retiring those checks.
 | CI: `fmt`, `clippy` | Rust maintainers; formatting and compiler lint errors | Compiler/lint failures before tests; existing workspace gate | Compiler/build tooling replaces the gate with equivalent coverage |
 | CI: `docs-consistency` | API consumers; public Rust API documentation | Rustdoc missing-doc checks; this is the sole PR docs-consistency execution | Equivalent public API documentation validation replaces the check |
 | CI: `version-literals` | Package consumers; one coherent release train | Existing version and exact macro-pin mismatch rejection | Packages stop using a coordinated release train |
-| CI: `public-api-governance` | Integration reviewer; strict API diff, semver and approval checks on every PR base, push and manual run | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs public API governance |
+| CI: `stock-public-api` | Integration reviewer; committed native public-API stock check | A changed or removed accepted line without the sprint's baseline update | The published Rust API is retired |
 | CI: `manifest-validation` | Release maintainer; publish inventory, install contract, retry correctness | `test_release_artifacts`, `test_prepare_release_staged_packages`, `test_publish_retry_idempotency` | Publish/install tooling is replaced and its coverage moves with it |
 | CI: `test` (Ubuntu) | Rust crate consumers; workspace tests, doctests and log feature fixtures | Existing runtime/bridge regression tests | Consumer contract or supported platform is retired |
 | Binding runtime: `native-contract` (dispatch) | Core/bridge hosts; debug and release native contract | Existing native runtime conversion, ownership and lifecycle fixtures | Native binding runtime is retired or superseded |

@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from prepare_log_staged_packages import package_command
 from _log_staging import PRIVATE_PACKAGE, PACKAGES, extract_verified, inspect_archive, sha256, verify_stage
 from validate_log_staged_consumer import validate_resolution
-from validate_public_api import approval_for
 from wait_for_registry_version import wait
 from prepare_runtime_level_staged_packages import candidate_workspace_manifest, normalized_lock
 
@@ -247,20 +246,6 @@ class StageTests(unittest.TestCase):
             normalized = tomllib.loads(normalized_lock(lock, '1.3.0').decode())['package']
             self.assertEqual(normalized[0]['version'], '1.3.0')
             self.assertEqual(normalized[1]['version'], baseline)
-
-    def test_unrelated_or_pending_approval_is_not_a_waiver(self):
-        directory = self.root / 'approvals'
-        directory.mkdir()
-        record = {'schema_version': 1, 'candidate_version': VERSION, 'crates': {PACKAGES[0]: {'status': 'approved', 'reviewer': 'reviewer', 'evidence': 'review-report', 'scope': ['public-api'], 'api_sha256': 'a' * 64}}}
-        (directory / 'scoped.json').write_text(json.dumps(record))
-        self.assertTrue(approval_for(PACKAGES[0], VERSION, directory, 'a' * 64))
-        self.assertFalse(approval_for(PACKAGES[1], VERSION, directory, 'a' * 64))
-        self.assertFalse(approval_for(PACKAGES[0], '1.3.0', directory, 'a' * 64))
-        self.assertFalse(approval_for(PACKAGES[0], VERSION, directory, 'b' * 64))
-        record['crates'][PACKAGES[0]]['status'] = 'pending'
-        (directory / 'scoped.json').write_text(json.dumps(record))
-        self.assertFalse(approval_for(PACKAGES[0], VERSION, directory, 'a' * 64))
-
 
 if __name__ == '__main__':
     unittest.main()

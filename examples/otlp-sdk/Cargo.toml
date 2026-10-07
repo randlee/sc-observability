@@ -14,9 +14,6 @@ sc-observability-otlp = { workspace = true, features = ["otlp-sdk"] }
 sc-observability-types.workspace = true
 tokio.workspace = true
 
-[features]
-sdk-fixture = ["sc-observability-otlp/sdk-test-support"]
-
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 serde_json.workspace = true

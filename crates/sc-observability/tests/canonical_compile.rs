@@ -1,12 +1,11 @@
 //! Compile-only proof that the v2 facade owns the clean canonical signatures.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use sc_observability::v2::{
-    EventError, FlushError, InitError, Logger, LoggerBuilder, LoggerConfig,
-};
-use sc_observability::{
-    AdmissionOutcome, LevelOwner, LogEvent, LogQuery, LogSnapshot, Running, ServiceName, Stopped,
+    AdmissionOutcome, EventError, FlushError, InitError, LevelOwner, LogEvent, LogQuery,
+    LogSnapshot, Logger, LoggerBuilder, LoggerConfig, QueryError, ServiceName, ShutdownError,
 };
 
 fn requires_send_sync<T: Send + Sync>() {}
@@ -22,14 +21,14 @@ fn v2_logger_exposes_clean_canonical_signatures() {
     let _: for<'a> fn(&'a Logger, LogEvent) -> Result<AdmissionOutcome, EventError> =
         Logger::try_log_with_outcome;
     let _: for<'a> fn(&'a Logger) -> Result<(), FlushError> = Logger::flush;
-    let _: for<'a> fn(
-        &'a Logger,
-        &'a LogQuery,
-    ) -> Result<LogSnapshot, sc_observability_types::QueryError> = Logger::query;
-    let _: fn(Logger) -> Logger<Stopped> = Logger::shutdown;
+    let _: for<'a> fn(&'a Logger, Duration) -> Result<(), FlushError> = Logger::flush_with_timeout;
+    let _: for<'a> fn(&'a Logger, &'a LogQuery) -> Result<LogSnapshot, QueryError> = Logger::query;
+    let _: for<'a> fn(&'a Logger) -> Result<(), ShutdownError> = Logger::shutdown;
+    let _: for<'a> fn(&'a Logger, Duration) -> Result<(), ShutdownError> =
+        Logger::shutdown_with_timeout;
     let _: for<'a> fn(&'a Logger) -> &'a ServiceName = Logger::service_name;
     let _: fn(LoggerConfig) -> Result<LoggerBuilder, InitError> = LoggerBuilder::new;
-    let _: fn(LoggerBuilder) -> Result<Logger<Running>, InitError> = LoggerBuilder::build;
+    let _: fn(LoggerBuilder) -> Result<Logger, InitError> = LoggerBuilder::build;
     let _: fn(ServiceName, PathBuf) -> LoggerConfig = LoggerConfig::default_for;
 
     requires_send_sync::<Logger>();

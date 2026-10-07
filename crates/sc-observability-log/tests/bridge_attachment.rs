@@ -1,5 +1,7 @@
 //! Public integration coverage for the non-owning host attachment lifecycle.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::expect_used,
     clippy::unwrap_used,
     clippy::panic,
@@ -9,8 +11,8 @@
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
-#[allow(deprecated)]
-use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegistration};
+use sc_observability::v2::LogSink;
+use sc_observability::{SinkHealth, SinkHealthState, SinkName, SinkRegistration};
 use sc_observability_log::v2::{EmitError, FlushError};
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
@@ -33,12 +35,11 @@ struct RecordingSink {
     events: Arc<Mutex<Vec<LogEvent>>>,
 }
 
-#[allow(deprecated)]
 impl LogSink for RecordingSink {
     fn write(
         &self,
         event: &sc_observability_types::LogEvent,
-    ) -> Result<(), sc_observability_types::LogSinkError> {
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
         self.events
             .lock()
             .expect("recording lock")
@@ -116,7 +117,7 @@ fn recording_logger() -> (
     config.enable_console_sink = false;
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut builder = sc_observability::v2::LoggerBuilder::new(config).expect("builder");
-    builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
+    builder.register_sink(SinkRegistration::typed(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
     let logger = builder.build().expect("host logger");
@@ -137,16 +138,15 @@ impl BlockingFlushSink {
     }
 }
 
-#[allow(deprecated)]
 impl LogSink for BlockingFlushSink {
     fn write(
         &self,
         _event: &sc_observability_types::LogEvent,
-    ) -> Result<(), sc_observability_types::LogSinkError> {
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
         if let Some(entered) = self.entered.lock().expect("entered lock").take() {
             entered.send(()).expect("flush entered receiver");
         }
@@ -177,7 +177,7 @@ fn blocking_logger(
     config.enable_file_sink = false;
     config.enable_console_sink = false;
     let mut builder = sc_observability::v2::LoggerBuilder::new(config).expect("builder");
-    builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink::new(
+    builder.register_sink(SinkRegistration::typed(Arc::new(BlockingFlushSink::new(
         entered, release,
     ))));
     (root, Arc::new(builder.build().expect("host logger")))
@@ -207,7 +207,9 @@ fn attachment_routes_direct_and_macro_calls_and_recovers_host_ownership() {
 
     control.try_log(event()).expect("direct event");
     log::info!(target: "attachment::macro", "macro event");
-    control.flush(Duration::from_secs(2)).expect("flush");
+    control
+        .flush_with_timeout(Duration::from_secs(2))
+        .expect("flush");
     let events = events.lock().expect("recording lock");
     assert_eq!(events.len(), 2, "direct and macro events share one sink");
     for event in events.iter() {
@@ -232,7 +234,7 @@ fn attachment_routes_direct_and_macro_calls_and_recovers_host_ownership() {
 
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases attachment logger"));
-    host.shutdown();
+    let _ = host.shutdown();
 }
 
 #[test]
@@ -278,7 +280,7 @@ fn timed_out_flush_keeps_attachment_owned_logger_until_helper_drains() {
     let mut attachment =
         attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach");
     let control = attachment.control();
-    let flush = std::thread::spawn(move || control.flush(Duration::ZERO));
+    let flush = std::thread::spawn(move || control.flush_with_timeout(Duration::ZERO));
 
     entered_rx.recv().expect("flush entered sink");
     assert!(matches!(
@@ -298,7 +300,7 @@ fn timed_out_flush_keeps_attachment_owned_logger_until_helper_drains() {
         .expect("drained flush detaches");
 
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases logger"));
-    host.shutdown();
+    let _ = host.shutdown();
 }
 
 #[test]
@@ -331,7 +333,7 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
     );
     first.detach(Duration::from_secs(2)).expect("first detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("first detach releases logger"));
-    host.shutdown();
+    let _ = host.shutdown();
 
     let (_root, host) = logger();
     let mut second = attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("reattach");
@@ -339,7 +341,7 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         stale.try_log(event()),
         Err(EmitError::NotInstalled)
     ));
-    let flush_error = stale.flush(Duration::ZERO).unwrap_err();
+    let flush_error = stale.flush_with_timeout(Duration::ZERO).unwrap_err();
     assert_eq!(
         flush_error.diagnostic().code.as_str(),
         "SC_LOG_DETACH_NOT_INSTALLED"
@@ -352,7 +354,7 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         .detach(Duration::from_secs(2))
         .expect("second detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("second detach releases logger"));
-    host.shutdown();
+    let _ = host.shutdown();
 }
 
 #[test]
@@ -380,7 +382,7 @@ fn dropped_attachment_finishes_detaching_when_last_call_drains() {
         stale.try_log(event()),
         Err(EmitError::NotInstalled)
     ));
-    let flush_error = stale.flush(Duration::ZERO).unwrap_err();
+    let flush_error = stale.flush_with_timeout(Duration::ZERO).unwrap_err();
     assert_eq!(
         flush_error.diagnostic().code.as_str(),
         "SC_LOG_DETACH_NOT_INSTALLED"
@@ -400,7 +402,7 @@ fn dropped_attachment_finishes_detaching_when_last_call_drains() {
     let mut next = attach_logger(Arc::clone(&host), options(Arc::new(Admit)))
         .expect("reattach after last call");
     next.detach(Duration::ZERO).expect("detach next");
-    Arc::try_unwrap(host)
+    let _ = Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("next releases host"))
         .shutdown();
 }
@@ -441,7 +443,7 @@ fn detach_max_duration_waits_for_entered_call_without_overflow() {
         .expect("unbounded drain");
     closer.join().expect("closer did not panic");
     worker.join().expect("worker").expect("event");
-    Arc::try_unwrap(host)
+    let _ = Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("detach releases host"))
         .shutdown();
 }
@@ -477,7 +479,7 @@ fn logging_detach_race_releases_all_logger_arcs_before_success() {
         );
         worker.join().expect("worker").expect("event");
     }
-    Arc::try_unwrap(host)
+    let _ = Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("host ownership"))
         .shutdown();
 }
@@ -492,7 +494,7 @@ fn flush_detach_race_releases_all_logger_arcs_before_success() {
         let mut attachment =
             attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach");
         let control = attachment.control();
-        let flush = std::thread::spawn(move || control.flush(Duration::ZERO));
+        let flush = std::thread::spawn(move || control.flush_with_timeout(Duration::ZERO));
         entered_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("flush entered sink");
@@ -506,6 +508,6 @@ fn flush_detach_race_releases_all_logger_arcs_before_success() {
             flush.join().expect("flush caller"),
             Ok(()) | Err(FlushError::Drain { .. })
         ));
-        host.shutdown();
+        let _ = host.shutdown();
     }
 }

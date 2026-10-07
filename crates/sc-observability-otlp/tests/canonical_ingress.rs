@@ -414,6 +414,19 @@ fn single_body<'a>(captured: &'a [Captured], path: &str, content_type: &str) -> 
     &matching[0].body
 }
 
+fn request_bodies<'a>(captured: &'a [Captured], path: &str, content_type: &str) -> Vec<&'a [u8]> {
+    captured
+        .iter()
+        .filter(|request| request.path == path)
+        .map(|request| {
+            assert_eq!(request.method, "POST");
+            assert_eq!(request.content_type.as_deref(), Some(content_type));
+            assert_eq!(request.authorization, None);
+            request.body.as_slice()
+        })
+        .collect()
+}
+
 fn hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     bytes.iter().fold(String::new(), |mut text, byte| {
@@ -437,13 +450,10 @@ fn canonical_ingress_exports_every_field_over_the_sdk_backend() {
             )))
             .expect("SDK telemetry");
             emit_canonical(&telemetry);
-            telemetry
-                .flush_async_typed()
-                .await
-                .expect("SDK export completes");
+            telemetry.flush_async().await.expect("SDK export completes");
             assert_healthy(&telemetry);
             telemetry
-                .shutdown_async_typed()
+                .shutdown_async()
                 .await
                 .expect("shutdown completes");
         });
@@ -488,12 +498,18 @@ fn canonical_ingress_exports_every_field_over_the_sdk_backend() {
         Some(AnyValue::StringValue("follows".to_owned()))
     );
 
-    let metrics =
-        ExportMetricsServiceRequest::decode(single_body(&captured, "/v1/metrics", PROTOBUF))
-            .expect("metrics body decodes");
-    let decoded: Vec<_> = metrics
-        .resource_metrics
+    let metric_requests: Vec<_> = request_bodies(&captured, "/v1/metrics", PROTOBUF)
+        .into_iter()
+        .map(|body| ExportMetricsServiceRequest::decode(body).expect("metrics body decodes"))
+        .collect();
+    assert_eq!(
+        metric_requests.len(),
+        2,
+        "metric admission then flush exports"
+    );
+    let decoded: Vec<_> = metric_requests
         .iter()
+        .flat_map(|request| &request.resource_metrics)
         .flat_map(|resource| &resource.scope_metrics)
         .flat_map(|scope| &scope.metrics)
         .collect();
@@ -528,9 +544,9 @@ fn canonical_ingress_exports_every_field_over_the_sync_http_backend() {
     )))
     .expect("sync-http telemetry");
     emit_canonical(&telemetry);
-    telemetry.flush_typed().expect("sync-http export completes");
+    telemetry.flush().expect("sync-http export completes");
     assert_healthy(&telemetry);
-    telemetry.shutdown_typed().expect("shutdown completes");
+    telemetry.shutdown().expect("shutdown completes");
     let captured = collector.finish();
 
     let traces: Value =
@@ -560,17 +576,33 @@ fn canonical_ingress_exports_every_field_over_the_sync_http_backend() {
     assert_eq!(link["attributes"][0]["key"], "link.reason");
     assert_eq!(link["attributes"][0]["value"]["stringValue"], "follows");
 
-    let metrics: Value =
-        serde_json::from_slice(single_body(&captured, "/v1/metrics", JSON)).expect("metrics JSON");
-    let decoded = metrics["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]
-        .as_array()
-        .expect("metrics array");
-    assert_eq!(decoded.len(), expected_histograms().len(), "{metrics}");
+    let metric_requests: Vec<Value> = request_bodies(&captured, "/v1/metrics", JSON)
+        .into_iter()
+        .map(|body| serde_json::from_slice(body).expect("metrics JSON"))
+        .collect();
+    assert_eq!(
+        metric_requests.len(),
+        2,
+        "metric admission then flush exports"
+    );
+    let decoded: Vec<_> = metric_requests
+        .iter()
+        .flat_map(|request| {
+            request["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]
+                .as_array()
+                .expect("metrics array")
+        })
+        .collect();
+    assert_eq!(
+        decoded.len(),
+        expected_histograms().len(),
+        "{metric_requests:?}"
+    );
     for (name, bounds, counts, count, sum) in expected_histograms() {
         let metric = decoded
             .iter()
             .find(|metric| metric["name"] == name)
-            .unwrap_or_else(|| panic!("{name} exported: {metrics}"));
+            .unwrap_or_else(|| panic!("{name} exported: {metric_requests:?}"));
         let histogram = &metric["histogram"];
         assert_eq!(histogram["aggregationTemporality"], 1, "DELTA");
         let point = &histogram["dataPoints"][0];

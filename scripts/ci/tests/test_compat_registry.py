@@ -161,9 +161,9 @@ class TraitImplContractTests(unittest.TestCase):
             "baseline_declaration": f"impl crate::typed::TypedLogSink for {owner}",
             "current_declaration": f"impl TypedLogSink for {owner}",
             "baseline_source": {"revision": BASELINE_COMMIT, "path": "crates/sc-observability/src/sinks.rs", "owner": owner},
-            "current_source": {"revision": "selected_head", "path": "crates/sc-observability/src/compat.rs", "owner": owner},
+            "current_source": {"revision": "selected_head", "path": "crates/sc-observability/src/v1/compat.rs", "owner": owner},
             "conversion": "delegates to the canonical sink and converts its context into LogSinkFailure",
-            "removable_paths": ["crates/sc-observability/src/compat.rs"],
+            "removable_paths": ["crates/sc-observability/src/v1/compat.rs"],
             "removal_rationale": "remove this released trait implementation with compat.rs after the 1.x surface retires",
         }
         record.update(overrides)
@@ -201,6 +201,12 @@ class CompatibilitySourcePathTests(unittest.TestCase):
     def test_compat_module_descendant_is_accepted(self):
         self.assertTrue(is_compat_source_path(
             "crates/sc-observability-otlp/src/compat/mod.rs"))
+
+    def test_v1_migration_module_is_accepted(self):
+        self.assertTrue(is_compat_source_path(
+            "crates/sc-observability-otlp/src/v1.rs"))
+        self.assertTrue(is_compat_source_path(
+            "crates/sc-observability/src/v1/compat.rs"))
 
     def test_compatibility_file_is_rejected(self):
         self.assertFalse(is_compat_source_path(
@@ -398,8 +404,10 @@ class DeprecatedOwnerExceptionRecordTests(unittest.TestCase):
         registry = json.loads((REPO_ROOT / "docs/compatibility/registry.json").read_text(encoding="utf-8"))
         records = deprecated_owner_exception_records(registry)
         self.assertEqual(sorted(records), [
+            "crates/sc-observability-types/src/error_codes.rs",
             "crates/sc-observability-types/src/errors.rs",
-            "crates/sc-observability/src/lib.rs",
+            "crates/sc-observability/src/error_codes.rs",
+            "crates/sc-observe/src/lib.rs",
         ])
         for relative, symbols in records.items():
             with self.subTest(relative=relative):
@@ -421,6 +429,10 @@ class DeprecatedOwnerNameTests(unittest.TestCase):
 
     def test_same_line_owner_at_end_of_file_is_taken_from_the_attribute_line(self):
         contents = "pub fn current() {}\n#[deprecated(note = \"use v2\")] pub struct Legacy;"
+        self.assertEqual(deprecated_owner_names(contents), ["Legacy"])
+
+    def test_deprecated_reexport_uses_the_exported_symbol_name(self):
+        contents = "#[deprecated(note = \"use v2\")]\npub use v1::Legacy;\n"
         self.assertEqual(deprecated_owner_names(contents), ["Legacy"])
 
     def test_recorded_baseline_matches_pinned_release_source(self):

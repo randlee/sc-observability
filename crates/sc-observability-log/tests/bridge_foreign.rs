@@ -60,5 +60,5 @@ fn attachment_rejects_a_foreign_process_global_logger() {
     assert_eq!(error.code().as_str(), "SC_LOG_FOREIGN_LOGGER_INSTALLED");
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("failed attach retains no host Arc"));
-    host.shutdown();
+    let _ = host.shutdown();
 }

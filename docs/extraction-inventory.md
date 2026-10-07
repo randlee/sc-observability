@@ -14,7 +14,7 @@ surface to its destination and expected proof artifact.
 | Shared neutral contracts | generic diagnostics, trace ids, shared health/value types | `sc-observability-types` | move/stay | shared workspace docs | must remain ATM-free |
 | Lightweight logging | logger, file/console sinks, redaction, rotation | `sc-observability` | move/stay | shared workspace docs | no routing, no OTLP |
 | Observation routing | subscriber/projector registration, fan-out, routing health | `sc-observe` | move/new | shared workspace docs | layered on logging only |
-| OTLP transport | exporters, batching, retry, TelemetryConfig, OTLP protocol | `sc-observability-otlp` | move/stay | shared workspace docs | top-of-stack only |
+| OTLP transport | exporters, batching, retry, `v2::TelemetryConfig`, OTLP protocol | `sc-observability-otlp` | move/stay | shared workspace docs | top-of-stack only |
 | `LogEventV1` | ATM-specific event shape | ATM adapter | stay outside | `atm-adapter-requirements.md` | map through adapter, not shared repo |
 | `LifecycleTraceRecord` | ATM lifecycle record shape | ATM adapter | stay outside | `atm-adapter-requirements.md` | neutral payload mapping documented separately |
 | ATM-specific projector implementations | projector behavior that promotes ATM semantics into generic projections | ATM adapter | stay outside | `atm-adapter-architecture.md` | shared repo exposes hooks only |
@@ -29,4 +29,4 @@ surface to its destination and expected proof artifact.
 | ATM health JSON / snapshots | ATM-specific health presentation | ATM adapter | stay outside | `atm-adapter-requirements.md` | may consume shared diagnostics, not own them here |
 | status / doctor / daemon health projection | ATM parity across shipped JSON health surfaces | ATM adapter | stay outside | `atm-adapter-requirements.md` | compatibility obligation |
 | GH observability ledger integration boundary | ATM-owned integration with any GitHub/ledger-specific observability surface | ATM adapter or delete | decision pending | follow-up ATM adapter review | intentionally left open pending a separate ATM adapter decision; do not silently absorb into shared crates |
-| ATM proving artifact | ATM-shaped example wiring | unpublished example crate in this repo | new | `docs/atm-adapter-example.md` | boundary proof only, not migration sufficiency proof |
+| ATM boundary evidence | adapter-boundary documentation | ATM-owned implementation | stay outside | `docs/migration/phase-f.md` | boundary documentation is not migration sufficiency proof |

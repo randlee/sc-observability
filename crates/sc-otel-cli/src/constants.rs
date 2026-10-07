@@ -9,8 +9,6 @@ pub(crate) const EXIT_ADMISSION: u8 = 5;
 pub(crate) const EXIT_DELIVERY_PENDING: u8 = 6;
 pub(crate) const EXIT_DELIVERY_FAILED: u8 = 7;
 pub(crate) const RESULT_SCHEMA: &str = "sc-otel.result/v1";
-pub(crate) const ERROR_INVALID_JSON: &str = "SC_OBSERVABILITY_SUBMIT_INVALID_JSON";
-pub(crate) const ERROR_INTERNAL: &str = "SC_OBSERVABILITY_CLI_INTERNAL";
 
 #[cfg(test)]
 pub(crate) const COMMAND_CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -38,11 +36,6 @@ pub(crate) const EXIT_CODE_MEANINGS: &[(u8, &str)] = &[
     (EXIT_DELIVERY_PENDING, "admitted_delivery_pending"),
     (EXIT_DELIVERY_FAILED, "admitted_delivery_failed"),
 ];
-#[cfg(feature = "test-double")]
-pub(crate) const TEST_DOUBLE_ENV: &str = "SC_OTEL_TEST_DOUBLE";
-#[cfg(feature = "test-double")]
-pub(crate) const TEST_DOUBLE_RECORD_ENV: &str = "SC_OTEL_TEST_DOUBLE_RECORD";
-
 // Keep the enum, its string mapping, and test-only contract list in one
 // declaration. A new variant therefore cannot be added without updating the
 // values exposed by the versioned result contract.

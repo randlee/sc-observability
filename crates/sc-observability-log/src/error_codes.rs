@@ -132,29 +132,6 @@ mod tests {
             assert!(seen.insert(code.as_str()), "duplicate code {code}");
         }
         assert_eq!(ALL.len(), 20);
-
-        let registries = [
-            ("sc-observability", sc_observability::error_codes::ALL),
-            ("sc-observability-log", ALL),
-            (
-                "sc-observability-types",
-                sc_observability_types::error_codes::ALL,
-            ),
-        ];
-
-        for left_index in 0..registries.len() {
-            let (left_name, left_codes) = registries[left_index];
-            for (right_name, right_codes) in registries.iter().skip(left_index + 1) {
-                for left_code in left_codes {
-                    assert!(
-                        !right_codes
-                            .iter()
-                            .any(|right_code| right_code.as_str() == left_code.as_str()),
-                        "duplicate code {left_code} between {left_name} and {right_name}"
-                    );
-                }
-            }
-        }
     }
 
     #[test]

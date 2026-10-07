@@ -6,7 +6,7 @@ on:
       suite:
         description: Comma-separated suite selectors
         type: string
-        default: wheel-cli-viewer,rust-viewer,collector,wheels,tauri,rust-consumers
+        default: wheel-cli-viewer,collector,wheels,tauri,rust-consumers
       os:
         description: Comma-separated OS selectors
         type: string

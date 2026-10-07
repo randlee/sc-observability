@@ -485,9 +485,10 @@ mod support {
     use std::path::{Path, PathBuf};
     use std::time::SystemTime;
 
+    use sc_observability_types::v2::{LogProjector, ProjectionError};
     use sc_observability_types::{
-        ActionName, Level, LogEvent, LogProjector, Observation, OutcomeLabel, ProcessIdentity,
-        ProjectionError, SchemaVersion, ServiceName, TargetCategory, Timestamp,
+        ActionName, Level, LogEvent, Observation, OutcomeLabel, ProcessIdentity, SchemaVersion,
+        ServiceName, TargetCategory, Timestamp,
     };
     use serde_json::Map;
 
@@ -568,15 +569,6 @@ mod support {
         }
     }
 
-    impl sc_observability_types::v2::LogProjector<LogEvent> for MessageProjector {
-        fn project_logs(
-            &self,
-            observation: &Observation<LogEvent>,
-        ) -> Result<Vec<LogEvent>, sc_observability_types::v2::ProjectionError> {
-            Ok(vec![observation.payload.clone()])
-        }
-    }
-
     /// A downstream projector returning a caller-owned diagnostic and source.
     pub struct FailingProjector(
         std::sync::Mutex<Option<Box<sc_observability_types::ErrorContext>>>,
@@ -587,21 +579,7 @@ mod support {
             &self,
             _: &Observation<LogEvent>,
         ) -> Result<Vec<LogEvent>, ProjectionError> {
-            Err(ProjectionError(
-                self.0
-                    .lock()
-                    .expect("failure fixture")
-                    .take()
-                    .expect("one invocation"),
-            ))
-        }
-    }
-    impl sc_observability_types::v2::LogProjector<LogEvent> for FailingProjector {
-        fn project_logs(
-            &self,
-            _: &Observation<LogEvent>,
-        ) -> Result<Vec<LogEvent>, sc_observability_types::v2::ProjectionError> {
-            Err(sc_observability_types::v2::ProjectionError::Projection {
+            Err(ProjectionError::Projection {
                 context: self
                     .0
                     .lock()
@@ -693,7 +671,7 @@ mod sdk_backend {
         TelemetryProjectors,
     };
     use sc_observability_types::{TelemetryError, ToolName};
-    use sc_observe::{Observability, ObservabilityConfig};
+    use sc_observe::v2::{Observability, ObservabilityConfig};
 
     use super::grpc_collector::{GrpcCollector, Received};
     use super::support::{SERVICE, TempRoot, assert_healthy, log_event};
@@ -792,7 +770,7 @@ mod sdk_backend {
                 .expect("released config");
             let telemetry = Arc::new(Telemetry::new_typed(config).expect("released SDK telemetry"));
             super::support::assert_failure_identity(|projector| {
-                let registration = TelemetryProjectors::new(telemetry.clone())
+                let registration = TelemetryProjectors::new(&telemetry)
                     .with_log_projector(projector)
                     .into_registration();
                 let (projector, _, _, _) = registration.into_parts();
@@ -803,7 +781,11 @@ mod sdk_backend {
                         log_event("rejected-projector"),
                     ))
                     .expect_err("projector cause must propagate");
-                error.0
+                let sc_observability_types::v2::ProjectionError::Projection { context } = error
+                else {
+                    panic!("expected a projection failure");
+                };
+                context
             });
 
             let observe_config = ObservabilityConfig::default_for(
@@ -815,10 +797,10 @@ mod sdk_backend {
                 Observability::builder(observe_config)
                     .with_observability_health_provider(telemetry.clone())
                     .register_projection(
-                        TelemetryProjectors::new(telemetry.clone())
+                        TelemetryProjectors::new(&telemetry)
                             .with_log_projector(Arc::new(super::support::MessageProjector))
-                            .with_span_projector(Arc::new(super::signals::Projector))
-                            .with_metric_projector(Arc::new(super::signals::Projector))
+                            .with_span_projector(Arc::new(super::signals::ReleasedProjector))
+                            .with_metric_projector(Arc::new(super::signals::ReleasedProjector))
                             .into_registration(),
                     )
                     .build()
@@ -922,9 +904,9 @@ mod sdk_backend {
 
             super::bridge::deliver(MESSAGE, observability.clone(), root.path(), false);
             // The shared lifecycle barrier is async-only inside the entered runtime.
-            assert!(telemetry.flush_typed().is_err());
+            assert!(telemetry.flush().is_err());
             telemetry
-                .flush_async_typed()
+                .flush_async()
                 .await
                 .expect("SDK lifecycle flush delivers to the collector");
             assert_healthy(&telemetry.health());
@@ -937,7 +919,7 @@ mod sdk_backend {
             observability.flush().expect("observe flush");
 
             telemetry
-                .shutdown_async_typed()
+                .shutdown_async()
                 .await
                 .expect("SDK lifecycle shutdown");
             assert!(matches!(
@@ -972,7 +954,7 @@ mod sync_http_backend {
         TelemetryProjectors,
     };
     use sc_observability_types::{TelemetryError, ToolName};
-    use sc_observe::{Observability, ObservabilityConfig};
+    use sc_observe::v2::{Observability, ObservabilityConfig};
 
     use super::http_collector::{Captured, Collector};
     use super::support::{SERVICE, TempRoot, assert_healthy, log_event};
@@ -1045,7 +1027,7 @@ mod sync_http_backend {
         let telemetry =
             Arc::new(Telemetry::new_typed(config).expect("released sync-http telemetry"));
         super::support::assert_failure_identity(|projector| {
-            let registration = TelemetryProjectors::new(telemetry.clone())
+            let registration = TelemetryProjectors::new(&telemetry)
                 .with_log_projector(projector)
                 .into_registration();
             let (projector, _, _, _) = registration.into_parts();
@@ -1056,7 +1038,10 @@ mod sync_http_backend {
                     log_event("rejected-projector"),
                 ))
                 .expect_err("projector cause must propagate");
-            error.0
+            let sc_observability_types::v2::ProjectionError::Projection { context } = error else {
+                panic!("expected a projection failure");
+            };
+            context
         });
 
         let observe_config = ObservabilityConfig::default_for(
@@ -1068,10 +1053,10 @@ mod sync_http_backend {
             Observability::builder(observe_config)
                 .with_observability_health_provider(telemetry.clone())
                 .register_projection(
-                    TelemetryProjectors::new(telemetry.clone())
+                    TelemetryProjectors::new(&telemetry)
                         .with_log_projector(Arc::new(super::support::MessageProjector))
-                        .with_span_projector(Arc::new(super::signals::Projector))
-                        .with_metric_projector(Arc::new(super::signals::Projector))
+                        .with_span_projector(Arc::new(super::signals::ReleasedProjector))
+                        .with_metric_projector(Arc::new(super::signals::ReleasedProjector))
                         .into_registration(),
                 )
                 .build()
@@ -1080,7 +1065,7 @@ mod sync_http_backend {
 
         super::bridge::deliver(MESSAGE, observability.clone(), root.path(), true);
         telemetry
-            .flush_typed()
+            .flush()
             .expect("sync-http flush delivers to the collector");
         assert_healthy(&telemetry.health());
         assert_healthy(
@@ -1091,12 +1076,12 @@ mod sync_http_backend {
         );
         observability.flush().expect("observe flush");
 
-        telemetry.shutdown_typed().expect("sync-http shutdown");
+        telemetry.shutdown().expect("sync-http shutdown");
         assert!(matches!(
             telemetry.emit_log(&log_event("after-shutdown")),
             Err(TelemetryError::Shutdown)
         ));
-        assert!(telemetry.flush_typed().is_err());
+        assert!(telemetry.flush().is_err());
         observability.shutdown().expect("observe shutdown");
         super::bridge::reject_closed(observability.clone(), root.path());
 
@@ -1172,7 +1157,7 @@ mod sync_http_backend {
 
         super::bridge::deliver(MESSAGE, observability.clone(), root.path(), false);
         telemetry
-            .flush_typed()
+            .flush()
             .expect("sync-http flush delivers to the collector");
         assert_healthy(&telemetry.health());
         assert_healthy(
@@ -1183,12 +1168,12 @@ mod sync_http_backend {
         );
         observability.flush().expect("observe flush");
 
-        telemetry.shutdown_typed().expect("sync-http shutdown");
+        telemetry.shutdown().expect("sync-http shutdown");
         assert!(matches!(
             telemetry.emit_log(&log_event("after-shutdown")),
             Err(V2TelemetryError::Shutdown { .. })
         ));
-        assert!(telemetry.flush_typed().is_err());
+        assert!(telemetry.flush().is_err());
         observability.shutdown().expect("observe shutdown");
         super::bridge::reject_closed(observability.clone(), root.path());
 

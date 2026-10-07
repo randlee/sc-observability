@@ -10,6 +10,8 @@ homepage.workspace = true
 description = "Standalone facade crate for observability operations."
 
 [features]
+default = ["v1"]
+v1 = ["sc-observability-types/v1"]
 fault-injection = []
 
 [dependencies]

@@ -1,17 +1,14 @@
 # Compatible 1.x migration reference
 
-The frozen compatibility baseline is 1.4.1, and the current release is the
-next compatible 1.x version under
-[ADR-020](architecture.md#adr-020-compatible-1x-adoption-of-phase-d). It
-retains the released public API and accepts no public API breaks:
-[`release/public-api-major-breaks.toml`](../release/public-api-major-breaks.toml)
-has an empty `breaks` list. Start with
+The Phase F migration rule is
+[ADR-020](architecture.md#adr-020-compatible-1x-adoption-of-phase-d): ship a
+deprecated `v1` item before removing it. The stock public-API check records
+accepted 1.5.0 surfaces. Start with
 [Adopting the compatible 1.x release](migration/compatible-1x.md).
 
 The later sections describe the canonical error, configuration and signal
-contract. Where they say "2.0" or describe removals, they refer to a future,
-separately authorized major release; nothing in them is removed in 1.x. No
-publication or final baseline approval is implied.
+contract. Phase F may remove only the items allowed by PHF-002; no major
+version bump is implied.
 
 ## from_core_health keeps its released signature
 
@@ -48,27 +45,21 @@ migration. Import canonical same-name enums after activation, not permanent
 parallel typed wrappers. Keep open trait implementations and host-owned logger
 lifecycle semantics intact.
 
-## Removals reserved for a later major release
+## Phase F deprecate-before-remove path
 
-None of the removals below happens in 1.x; the compatible 1.x break manifest
-enumerates none, and the released items stay public and deprecated. A future,
-separately authorized major release would enumerate each one rather than
-grant a crate-wide waiver. In that release, `sc-observability-types` retires
-wrapper structs, `ClassifiedError`, `*Failure` conversions, and kind aliases
-in favor of the ADR-017 named enums; `TelemetryError` remains but becomes a
-non-exhaustive canonical 2.0 enum. `sc-observability` and `sc-observe` retire legacy
-logging/routing errors and the duplicate `*_typed` surface; unsuffixed 2.0
-methods use canonical errors where a same-method replacement exists.
+PHF-002 governs the 1.x migration path. The next release remains 1.5.0: every
+released 1.x public item that continues to be exposed ships behind its
+default-on `v1` feature with a deprecation note naming its v2 replacement (or
+the Phase F migration guide when it has none). This transition does not require
+a major-version bump.
 
-`sc-observability-log` retires its local lifecycle error enums and their
-variants in favor of the shared `InitError`, `FlushError`, and `ShutdownError`
-families. `sc-observability-otlp` retires the old constants/error-code modules
-and changes construction, export, lifecycle, and span assembly signatures to
-the canonical configuration/error contracts. `sc-observability-dto` retires
-the legacy `Failure` and generic `WireEnvelope` forms in favor of the canonical
-DTO/schema projection. A removed item with no exact added public line has an
-empty `new` field in the manifest; that is intentional and must not be
-represented as a compatibility promise.
+The release after that deprecation release may remove the `v1` modules and
+features. Deprecated items need not retain compatibility adapters, behavioral
+tests, or baseline comparison. Phase F may delete items already deprecated in
+published 1.4.1, never-released items, and internal plumbing now; canonical
+code must not use a `v1` item. Consumers should use the named canonical
+replacement in the deprecation note rather than treating the retained legacy
+path as a compatibility promise.
 
 ### EmitError pattern matching
 
@@ -114,21 +105,19 @@ change is not proof of wire compatibility.
 
 ## Qualification and rollout
 
-Run the existing public-API semver gate against 1.4.1. For a compatible 1.x
-candidate it requires the break manifest to name the 1.4.1 baseline and the
-workspace candidate version and to list no `breaks`; then it runs
-`cargo semver-checks` for each published crate, and for the proc-macro crate a
-`cargo public-api` diff that allows additions but rejects every removal or
-changed signature. A tool failure is an error, and no approval waives a failed
-check.
+Run the stock public-API check against the committed 1.5.0 baselines. Candidate
+setup writes only under a caller-owned target directory; the check renders the
+already-created rustdoc JSON with the stock tool and rejects every removed or
+changed accepted line. Additions pass. A tool failure is an error.
 
 ```sh
-python3 scripts/ci/validate_public_api_semver.py --crate sc-observability-dto
-python3 scripts/ci/validate_public_api_semver.py
+python3 scripts/ci/stock_public_api.py setup --target-dir /tmp/sc-observability-api
+python3 scripts/ci/stock_public_api.py check --target-dir /tmp/sc-observability-api
 ```
 
-The first command is scoped evidence only. The second is required for the
-whole release. Never generate or approve a final baseline from a scoped pass.
+The first command prepares the candidate data; the second checks every
+published crate. Only the explicit `release-cut` action may update a committed
+baseline.
 
 Finish with canonical migration fixture execution, real Python/TypeScript/
 Tauri composition, schema checks and all-features workspace tests. Keep the

@@ -12,10 +12,10 @@ use sc_observability_types::{
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::fs;
-use std::io::{BufRead, ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -551,32 +551,73 @@ fn custom_ca_file(contents: &str) -> PathBuf {
     path
 }
 
-fn start_tls_test_server(
-    cert: &PathBuf,
-    key: &PathBuf,
+struct TlsTestServer {
     address: std::net::SocketAddr,
-) -> process::Child {
-    let server = Command::new("python3")
-        .args([
-            "-u",
-            "-c",
-            "import http.server, ssl, sys\nclass H(http.server.BaseHTTPRequestHandler):\n def do_POST(self):\n  n=int(self.headers.get('Content-Length','0')); self.rfile.read(n); self.send_response(200); self.send_header('Content-Length','0'); self.end_headers()\n def log_message(self,*args): pass\ns=http.server.HTTPServer(('127.0.0.1',int(sys.argv[1])),H); c=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); c.load_cert_chain(sys.argv[2],sys.argv[3]); s.socket=c.wrap_socket(s.socket,server_side=True); print('READY',flush=True); s.serve_forever()",
-        ])
-        .arg(address.port().to_string())
-        .arg(cert)
-        .arg(key)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("start standard-library local TLS server");
-    let mut server = server;
-    let mut ready = String::new();
-    std::io::BufReader::new(server.stdout.take().expect("TLS server ready output"))
-        .read_line(&mut ready)
-        .expect("read TLS server readiness");
-    assert_eq!(ready.trim(), "READY", "local TLS server became ready");
-    server
+    shutdown: Arc<AtomicBool>,
+    thread: thread::JoinHandle<()>,
+}
+
+impl TlsTestServer {
+    fn shutdown(self) {
+        self.shutdown.store(true, Ordering::Release);
+        std::net::TcpStream::connect(self.address).expect("wake test TLS server for shutdown");
+        self.thread.join().expect("join test TLS server");
+    }
+}
+
+fn start_tls_test_server(cert: &PathBuf, key: &PathBuf) -> TlsTestServer {
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+
+    let certificate_chain =
+        CertificateDer::pem_reader_iter(fs::File::open(cert).expect("open test TLS certificate"))
+            .collect::<Result<Vec<_>, _>>()
+            .expect("parse test TLS certificate");
+    let private_key =
+        PrivateKeyDer::from_pem_reader(fs::File::open(key).expect("open test TLS private key"))
+            .expect("parse test TLS private key");
+    let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("configure test TLS protocol versions")
+    .with_no_client_auth()
+    .with_single_cert(certificate_chain, private_key)
+    .expect("configure test TLS certificate");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test TLS listener");
+    let address = listener
+        .local_addr()
+        .expect("read test TLS listener address");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let server_shutdown = Arc::clone(&shutdown);
+    let server = thread::spawn(move || {
+        loop {
+            let (tcp_stream, _) = listener.accept().expect("accept test TLS connection");
+            if server_shutdown.load(Ordering::Acquire) {
+                break;
+            }
+            let mut stream = rustls::StreamOwned::new(
+                rustls::ServerConnection::new(Arc::new(config.clone()))
+                    .expect("construct test TLS server connection"),
+                tcp_stream,
+            );
+            let mut request = [0_u8; 4096];
+            if let Ok(request_len) = stream.read(&mut request) {
+                assert!(
+                    request[..request_len].starts_with(b"POST "),
+                    "test TLS server only accepts HTTP POST requests"
+                );
+                stream
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    .expect("write test TLS response");
+                stream.flush().expect("flush test TLS response");
+            }
+        }
+    });
+    TlsTestServer {
+        address,
+        shutdown,
+        thread: server,
+    }
 }
 
 fn retry_policy(
@@ -852,31 +893,27 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
     assert!(generated.status.success(), "generate local TLS certificate");
     let unrelated = custom_ca_file(CUSTOM_CA_PEM);
     let ca = custom_ca_file(&fs::read_to_string(&cert).expect("read server CA"));
-    let listener = TcpListener::bind("127.0.0.1:0").expect("reserve TLS port");
-    let address = listener.local_addr().expect("TLS address");
-    drop(listener);
-    let mut server = start_tls_test_server(&cert, &key, address);
-    let exporter =
-        OtlpHttpExporter::for_test_config(format!("https://{address}"), None, Some(ca.clone()))
-            .expect("construct exporter with trusted CA");
+    let server = start_tls_test_server(&cert, &key);
+    let exporter = OtlpHttpExporter::for_test_config(
+        format!("https://{}", server.address),
+        None,
+        Some(ca.clone()),
+    )
+    .expect("construct exporter with trusted CA");
     let trusted =
         exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload());
     exporter
         .shutdown_blocking()
         .expect("shut down successful TLS exporter");
-    let _ = server.kill();
-    let _ = server.wait();
+    server.shutdown();
     assert!(
         trusted.is_ok(),
         "trusted CA completes TLS export: {trusted:?}"
     );
 
-    let listener = TcpListener::bind("127.0.0.1:0").expect("reserve TLS port");
-    let address = listener.local_addr().expect("TLS address");
-    drop(listener);
-    let mut server = start_tls_test_server(&cert, &key, address);
+    let server = start_tls_test_server(&cert, &key);
     let exporter = OtlpHttpExporter::for_test_config(
-        format!("https://{address}"),
+        format!("https://{}", server.address),
         None,
         Some(unrelated.clone()),
     )
@@ -886,8 +923,7 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
     exporter
         .shutdown_blocking()
         .expect("shut down certificate-rejected TLS exporter");
-    let _ = server.kill();
-    let _ = server.wait();
+    server.shutdown();
     let error = rejected.expect_err("unrelated CA fails certificate verification");
     assert!(
         format!("{error:?}").contains("InvalidCertificate"),
@@ -1801,7 +1837,7 @@ fn prepared_immediate_retry_preserves_zero_and_attempt_limit() {
         traces: None,
         metrics: None,
     };
-    let bounds = crate::config::validated_released_telemetry_bounds(&config).unwrap();
+    let bounds = crate::config::validated_test_telemetry_bounds(&config).unwrap();
     let connection =
         crate::config::prepared_backend_connection(&config.transport, &bounds).unwrap();
     let (delay_tx, delay_rx) = mpsc::channel();

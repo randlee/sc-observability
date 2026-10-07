@@ -1,0 +1,11 @@
+[package]
+name = "sc-observability-static-level-cap-fixture"
+version = "1.5.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+log = { version = "0.4", features = ["release_max_level_info"] }
+sc-observability-log = { path = "../../../../crates/sc-observability-log", default-features = false }

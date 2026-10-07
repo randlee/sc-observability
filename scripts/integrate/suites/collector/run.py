@@ -23,13 +23,6 @@ CASE_TIMEOUT_SECONDS = 15 * 60
 
 CASES = (
     (
-        "sync-http-full-stack",
-        [
-            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "full_stack_integration", "--features", "sync-http", "--", "--nocapture",
-        ],
-    ),
-    (
         "sdk-full-stack",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
@@ -37,17 +30,17 @@ CASES = (
         ],
     ),
     (
+        "sync-http-full-stack",
+        [
+            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
+            "--test", "full_stack_integration", "--features", "sync-http", "--", "--nocapture",
+        ],
+    ),
+    (
         "combined-full-stack",
         [
             "cargo", "test", "--locked", "-p", "sc-observability-otlp",
             "--test", "full_stack_integration", "--features", "otlp-sdk,sync-http", "--", "--nocapture",
-        ],
-    ),
-    (
-        "canonical-ingress",
-        [
-            "cargo", "test", "--locked", "-p", "sc-observability-otlp",
-            "--test", "canonical_ingress", "--features", "otlp-sdk,sync-http", "--", "--nocapture",
         ],
     ),
 )

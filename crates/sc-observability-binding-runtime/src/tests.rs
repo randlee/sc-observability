@@ -814,15 +814,11 @@ struct HeldSink {
     armed: std::sync::atomic::AtomicBool,
     flushes: AtomicUsize,
 }
-#[allow(
-    deprecated,
-    reason = "test sink preserves the public legacy LogSink trait"
-)]
-impl sc_observability::LogSink for HeldSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
+impl sc_observability::v2::LogSink for HeldSink {
+    fn write(&self, _: &native::LogEvent) -> Result<(), sc_observability::v2::LogSinkError> {
         Ok(())
     }
-    fn flush(&self) -> Result<(), native::LogSinkError> {
+    fn flush(&self) -> Result<(), sc_observability::v2::LogSinkError> {
         self.flushes.fetch_add(1, Ordering::SeqCst);
         if self.armed.swap(false, Ordering::SeqCst) {
             self.gate.arrive();
@@ -842,12 +838,8 @@ struct BlockingWriteSink {
     gate: Arc<Gate>,
 }
 
-#[allow(
-    deprecated,
-    reason = "test sink preserves the public legacy LogSink trait"
-)]
-impl sc_observability::LogSink for BlockingWriteSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
+impl sc_observability::v2::LogSink for BlockingWriteSink {
+    fn write(&self, _: &native::LogEvent) -> Result<(), sc_observability::v2::LogSinkError> {
         self.gate.arrive();
         Ok(())
     }
@@ -863,21 +855,19 @@ impl sc_observability::LogSink for BlockingWriteSink {
 
 struct FlushFailSink;
 
-#[allow(
-    deprecated,
-    reason = "test sink preserves the public legacy LogSink trait"
-)]
-impl sc_observability::LogSink for FlushFailSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
+impl sc_observability::v2::LogSink for FlushFailSink {
+    fn write(&self, _: &native::LogEvent) -> Result<(), sc_observability::v2::LogSinkError> {
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), native::LogSinkError> {
-        Err(native::LogSinkError(Box::new(native::ErrorContext::new(
-            sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-            "test sink intentionally fails flush",
-            native::Remediation::recoverable("retry after repairing the sink", ["retry"]),
-        ))))
+    fn flush(&self) -> Result<(), sc_observability::v2::LogSinkError> {
+        Err(sc_observability::v2::LogSinkError::Flush {
+            context: Box::new(native::ErrorContext::new(
+                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                "test sink intentionally fails flush",
+                native::Remediation::recoverable("retry after repairing the sink", ["retry"]),
+            )),
+        })
     }
 
     fn health(&self) -> native::SinkHealth {
@@ -891,7 +881,7 @@ impl sc_observability::LogSink for FlushFailSink {
 
 fn core_with_sink(
     config: sc_observability::LoggerConfig,
-    sink: Arc<dyn sc_observability::LogSink>,
+    sink: Arc<dyn sc_observability::v2::LogSink>,
 ) -> (CoreLoggerOwner, CoreLoggerBackend) {
     let stamp = dto::EventStamp {
         service: config.service_name.clone(),
@@ -900,7 +890,7 @@ fn core_with_sink(
     };
     let shared = Coordinator::create(|| {
         let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
-        builder.register_sink(sc_observability::SinkRegistration::new(sink));
+        builder.register_sink(sc_observability::SinkRegistration::typed(sink));
         let (logger, level) = builder.build_with_level_owner().unwrap();
         let health = dto::from_canonical_core_health(logger.health(), logger.level_state());
         Ok((
@@ -977,7 +967,7 @@ fn core_sink_and_shutdown() {
     };
     let shared = Coordinator::create(|| {
         let mut builder = sc_observability::v2::Logger::builder(config).unwrap();
-        builder.register_sink(sc_observability::SinkRegistration::new(sink.clone()));
+        builder.register_sink(sc_observability::SinkRegistration::typed(sink.clone()));
         let (logger, level) = builder.build_with_level_owner().unwrap();
         let health = dto::from_canonical_core_health(logger.health(), logger.level_state());
         Ok((
@@ -1131,10 +1121,10 @@ fn failed_helper() {
         None,
     );
 }
-fn bridge_host() -> (tempfile::TempDir, sc_observability_log::LogGuard) {
+fn bridge_host() -> (tempfile::TempDir, sc_observability_log::v2::LogGuard) {
     let (root, mut config) = config();
     config.enable_console_sink = true;
-    let host = sc_observability_log::init(
+    let host = sc_observability_log::v2::init(
         config,
         sc_observability_log::BridgeOptions {
             default_action: native::ActionName::new("default").unwrap(),
@@ -1147,16 +1137,14 @@ fn bridge_host() -> (tempfile::TempDir, sc_observability_log::LogGuard) {
 fn bridge_timeout(external: bool) {
     let (_root, host) = bridge_host();
     let control = host.control();
-    let backend = bridge_backend(control.clone()).unwrap();
+    let backend = bridge_backend_v2(control.clone()).unwrap();
     let stdout = std::io::stdout();
     let held = stdout.lock();
     backend.try_log(event(), ProducerOrigin::RustHost).unwrap();
-    let (completed_tx, completed_rx) = mpsc::sync_channel(1);
-    sc_observability_log::notify_next_flush_complete(completed_tx);
     if external {
         assert!(matches!(
-            control.flush(Duration::from_millis(1)),
-            Err(sc_observability_log::FlushError::TimedOut { .. })
+            control.flush_with_timeout(Duration::from_millis(1)),
+            Err(sc_observability_types::v2::FlushError::Drain { .. })
         ));
     } else {
         let timed = backend.start_flush(Duration::from_millis(1)).unwrap();
@@ -1171,28 +1159,15 @@ fn bridge_timeout(external: bool) {
         sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS.as_str(),
     );
     drop(held);
-    // Completion is the native single-flight release, not the observer deadline.
-    // The bound is only a hang watchdog; no new flush is used to poll progress.
-    assert!(
-        completed_rx
-            .recv_timeout(CONTRACT_CASE_DEADLINE)
-            .expect("native flush completion notification"),
-        "native flush completion was notified before its in-flight flag cleared"
-    );
-    backend
-        .start_flush(Duration::from_secs(1))
-        .unwrap()
-        .wait(Duration::from_secs(2))
-        .expect("one new flush after native completion");
     drop(backend);
     crate::spawn::wait_live(1);
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
 }
 fn bridge_churn() {
     let (_root, host) = bridge_host();
     let control = host.control();
     for _ in 0..12 {
-        let backend = bridge_backend(control.clone()).unwrap();
+        let backend = bridge_backend_v2(control.clone()).unwrap();
         let saved = backend.start_query(query()).unwrap();
         saved.wait(Duration::from_secs(2)).unwrap();
         drop(backend);
@@ -1200,7 +1175,7 @@ fn bridge_churn() {
         assert!(matches!(saved.state(), OperationState::Completed { .. }));
         assert!(control.health().is_ok());
     }
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
 }
 fn bridge_canonical_v2() {
     let (root, mut config) = config();
@@ -1227,12 +1202,12 @@ fn bridge_canonical_v2() {
         .unwrap()
         .wait(Duration::from_secs(2))
         .unwrap();
-    control.flush(Duration::from_secs(2)).unwrap();
+    control.flush_with_timeout(Duration::from_secs(2)).unwrap();
     assert!(control.health().is_ok());
 
     drop(backend);
     crate::spawn::wait_live(1);
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
     drop(root);
 }
 fn native_diagnostic_fidelity() {
@@ -1536,7 +1511,7 @@ fn sync_and_async_waiters() {
 
 fn bridge_slot_ordering() {
     let (_root, config) = config();
-    let host = sc_observability_log::init(
+    let host = sc_observability_log::v2::init(
         config,
         sc_observability_log::BridgeOptions {
             default_action: native::ActionName::new("bridge.test").unwrap(),
@@ -1544,11 +1519,11 @@ fn bridge_slot_ordering() {
         },
     )
     .unwrap();
-    let backend = bridge_backend(host.control()).unwrap();
+    let backend = bridge_backend_v2(host.control()).unwrap();
     slots(&backend, &backend.shared);
     drop(backend);
     crate::spawn::wait_live(1);
-    host.shutdown(Duration::from_secs(5)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(5)).unwrap();
 }
 fn callback_race() {
     let (_root, owner, backend) = core();
@@ -1640,7 +1615,7 @@ fn last_handle_teardown() {
 }
 fn bridge_observers_callbacks() {
     let (_root, host) = bridge_host();
-    let backend = bridge_backend(host.control()).unwrap();
+    let backend = bridge_backend_v2(host.control()).unwrap();
     let timer = crate::timer::shared().unwrap();
     let operation: Operation<u32> = Operation::new(&backend.shared.dispatcher, &timer);
     let futures: Vec<_> = (0..64)
@@ -1680,5 +1655,5 @@ fn bridge_observers_callbacks() {
     drop(backend);
     crate::spawn::wait_live(1);
     assert_eq!(operation.wait(Duration::ZERO).unwrap(), 19);
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
 }

@@ -1,5 +1,7 @@
 //! Owner timeout retains one shutdown operation for controls to observe later.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

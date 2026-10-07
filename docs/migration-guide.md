@@ -42,8 +42,7 @@ Use these repo artifacts as the implementation baseline:
 - [`docs/atm-adapter-requirements.md`](./atm-adapter-requirements.md)
 - [`docs/atm-adapter-architecture.md`](./atm-adapter-architecture.md)
 - [`docs/atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
-- [`docs/atm-adapter-example.md`](./atm-adapter-example.md)
-- `examples/atm-adapter-example/`
+- [`docs/migration/phase-f.md`](./migration/phase-f.md)
 
 ## Logging-Only Consumers
 
@@ -87,10 +86,11 @@ For consumers that emit typed observations:
 
 For consumers that export to OTLP:
 
-1. Construct `TelemetryConfig` directly in the adapter/application layer.
+1. Construct `sc_observability_otlp::v2::TelemetryConfig` directly in the
+   adapter/application layer.
 2. Keep OTLP env/config parsing outside the shared crates.
 3. Attach OTLP by wrapping projector implementations locally, following the
-   pattern used by `examples/atm-adapter-example`.
+   canonical `v2` configuration pattern in `docs/migration/phase-f.md`.
 
 ## Phase D compatible 1.x migration
 
@@ -107,9 +107,10 @@ defaults and signal serde.
 `sc_observability_dto::from_canonical_core_health` is the explicit infallible
 projection that returns `LogHealthDto` directly. Both produce the same DTO.
 
-Removing deprecated API belongs only to a future, separately authorized major
-release. Until then the released items, their `*_typed` counterparts and the
-opt-in `v2` modules coexist.
+The 1.5.0 compatible release deprecates the released API while retaining those
+items alongside their `*_typed` counterparts and the opt-in `v2` modules.
+Migrate to the canonical `v2` APIs before a future major release removes the
+compatibility paths.
 
 Before rollout, run the public-API semver gate against 1.4.1, which accepts
 no enumerated breaks for a compatible 1.x release, plus real bindings/schema
@@ -133,8 +134,9 @@ The production-readiness review approved these source-breaking API updates:
 
 1. Move shared crate usage in ATM to the published standalone crates.
 2. Keep ATM-specific adapter code in ATM-owned code.
-3. Copy the example adapter pattern and replace the sample ATM-shaped structs
-   with ATM-owned structs.
+3. Treat the retired `docs/atm-adapter-example.md` as historical context only
+   ([architecture §10](architecture.md#10-atm-proving-artifact-retired-in-phase-f));
+   do not copy its pattern or cite it as evidence.
 4. Verify health projection and fail-open behavior against ATM requirements.
 5. Remove obsolete ATM-local copies of the shared crate implementations after
    parity is confirmed.

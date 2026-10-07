@@ -15,12 +15,18 @@
     clippy::return_self_not_must_use,
     reason = "builder-style chaining methods in this facade predate pedantic lint adoption and remain intentionally lightweight"
 )]
+#![cfg_attr(
+    feature = "v1",
+    expect(
+        deprecated,
+        reason = "the crate implements its retained 1.x compatibility facade internally"
+    )
+)]
 
 pub mod constants;
 pub mod error_codes;
 
 mod builder;
-mod compat;
 mod follow;
 mod health;
 mod jsonl_reader;
@@ -31,9 +37,9 @@ mod runtime;
 mod settings;
 mod sink;
 mod sinks;
-pub mod typed;
+#[cfg(feature = "v1")]
+pub mod v1;
 
-use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
@@ -42,13 +48,9 @@ use std::time::Duration;
 #[doc(inline)]
 pub use builder::SinkRegistrationError;
 #[doc(inline)]
-pub use compat::{LogError, LogSink, TryLogError};
-#[doc(inline)]
 pub use follow::LogFollowSession;
 #[doc(inline)]
 pub use jsonl_reader::JsonlLogReader;
-#[doc(inline)]
-pub use sc_observability_types::typed::{LogFailure, TryLogFailure};
 #[doc(inline)]
 pub use sc_observability_types::{
     ActionName, AdmissionOutcome, ChangeDiagnostic, Diagnostic, DiagnosticSummary, ErrorCode,
@@ -58,12 +60,13 @@ pub use sc_observability_types::{
     OperationDiagnostic, OutcomeLabel, ProcessIdentity, Remediation, SchemaVersion, ServiceName,
     SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp, WriterState,
 };
+#[cfg(feature = "v1")]
+pub use v1::typed;
+#[cfg(feature = "v1")]
 #[doc(inline)]
-#[expect(
-    deprecated,
-    reason = "retained 1.x boundary intentionally exposes the released error wrapper"
-)]
-pub use sc_observability_types::{EventError, FlushError, InitError, LogSinkError};
+pub use v1::{LogError, LogSink, TryLogError};
+#[cfg(feature = "v1")]
+pub use v1::{LogFailure, TryLogFailure};
 
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -73,37 +76,21 @@ pub use settings::{
     EnvSnapshot, LogRoot, LogSettings, LogSettingsError, LogSettingsInputs, ResolvedLogSettings,
 };
 #[cfg(feature = "fault-injection")]
+#[doc(hidden)]
 #[doc(inline)]
 pub use sinks::RetainedSinkFaultInjector;
 #[doc(inline)]
 pub use sinks::{ConsoleSink, JsonlFileSink};
 
-/// Re-export site for the released typed sink items owned by the removable
-/// compatibility module, so `typed` can publish them at their released paths.
-mod released_sink_adapters {
-    pub use crate::compat::{TypedLogSink, legacy_sink, typed_sink};
-}
-
-/// Retained 1.x construction facade over the canonical builder.
-#[expect(
-    missing_debug_implementations,
-    reason = "the wrapper deliberately hides the canonical builder's sink trait objects"
-)]
-pub struct LoggerBuilder {
-    pub(crate) inner: builder::CanonicalLoggerBuilder,
-}
-
-/// Retained 1.x logger facade over the canonical logger.
-#[expect(
-    missing_debug_implementations,
-    reason = "the wrapper deliberately hides runtime handles and trait-object sinks"
-)]
-pub struct Logger<State = Running> {
-    pub(crate) inner: CanonicalLogger<State>,
-    // Keeps the released stopped-state diagnostic shape while the real state
-    // remains owned exclusively by the canonical inner logger.
-    shutdown: PhantomData<State>,
-}
+#[cfg(feature = "v1")]
+#[doc(inline)]
+pub use v1::Logger;
+#[cfg(feature = "v1")]
+#[doc(inline)]
+pub use v1::LoggerBuilder;
+#[cfg(feature = "v1")]
+#[doc(inline)]
+pub use v1::{RetentionPolicy, RotationPolicy};
 
 /// Opt-in canonical logging facade for the compatible transition.
 ///
@@ -117,62 +104,21 @@ pub mod v2 {
     #[doc(inline)]
     pub use crate::sink::LogSink;
     #[doc(inline)]
-    pub use crate::{ConsoleSink, JsonlFileSink, LoggerConfig, RetainedLogPolicy};
+    pub use crate::{
+        AdmissionOutcome, ConsoleSink, JsonlFileSink, LevelOwner, LevelState, LogEvent,
+        LogFollowSession, LogQuery, LogSnapshot, LoggerConfig, LoggingHealthReport,
+        RetainedLogPolicy, SinkRegistration, SinkRegistrationError,
+    };
     #[doc(inline)]
-    pub use sc_observability_types::v2::{EventError, FlushError, InitError, LogSinkError};
+    pub use sc_observability_types::v2::{
+        EventError, FlushError, InitError, LogSinkError, ShutdownError,
+    };
+    #[doc(inline)]
+    pub use sc_observability_types::{QueryError, ServiceName};
 }
 
 pub(crate) use maintenance::DiagnosticAdmitter;
 pub(crate) use runtime::{LevelControl, LoggerRuntime};
-
-/// Rotation limits for the built-in JSONL file sink.
-///
-/// This legacy low-level policy is used only by direct `JsonlFileSink::new()`
-/// construction. It does not configure the logger-owned background retained-log
-/// maintenance worker.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RotationPolicy {
-    /// Maximum size of the active JSONL file before rotation.
-    pub max_bytes: ByteCount,
-    /// Maximum number of rotated files to retain.
-    pub max_files: FileCount,
-}
-
-impl Default for RotationPolicy {
-    fn default() -> Self {
-        Self {
-            max_bytes: ByteCount::from_bytes(constants::DEFAULT_ROTATION_MAX_BYTES),
-            max_files: FileCount::from_usize(constants::DEFAULT_ROTATION_MAX_FILES_USIZE),
-        }
-    }
-}
-
-/// Retention limits for rotated JSONL files owned by the built-in file sink.
-///
-/// This legacy low-level policy is used only by direct `JsonlFileSink::new()`
-/// construction. It does not configure the logger-owned background retained-log
-/// maintenance worker.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RetentionPolicy {
-    /// Maximum age in days for rotated JSONL files.
-    #[deprecated(
-        since = "1.1.0",
-        note = "Use RetainedLogPolicy::retention_max_age for logger-managed retained-log maintenance."
-    )]
-    pub max_age_days: u32,
-}
-
-impl Default for RetentionPolicy {
-    #[expect(
-        deprecated,
-        reason = "legacy RetentionPolicy remains supported for direct JsonlFileSink construction"
-    )]
-    fn default() -> Self {
-        Self {
-            max_age_days: constants::DEFAULT_RETENTION_MAX_AGE_DAYS,
-        }
-    }
-}
 
 /// Strongly typed byte count used by retained-log policy fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -591,34 +537,32 @@ pub struct Running;
 pub struct Stopped;
 
 mod canonical {
-    use std::marker::PhantomData;
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
-    use super::{
-        DiagnosticAdmitter, LevelControl, LoggerConfig, LoggerRuntime, Running, SinkRegistration,
-    };
+    use super::{DiagnosticAdmitter, LevelControl, LoggerConfig, LoggerRuntime, SinkRegistration};
 
     #[expect(
         missing_debug_implementations,
         reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
     )]
-    /// Structured logging runtime with query, follow, and typestate-checked shutdown.
-    pub struct Logger<State = Running> {
+    /// Structured logging runtime with query, follow, and shared-reference shutdown.
+    pub struct Logger {
         pub(crate) config: Arc<LoggerConfig>,
         pub(crate) sinks: Vec<SinkRegistration>,
         pub(crate) shutdown: Arc<AtomicBool>,
         pub(crate) runtime: LoggerRuntime,
-        pub(crate) diagnostic_admitter: Option<DiagnosticAdmitter>,
+        // MUTEX: shutdown releases this final sender before it takes the writer
+        // runtime, while normal canonical calls only need shared access.
+        pub(crate) diagnostic_admitter: Mutex<Option<DiagnosticAdmitter>>,
         // MUTEX: logger admission and LevelOwner changes share serialized state; each use keeps its explicit poison policy.
         pub(crate) level_control: Arc<Mutex<LevelControl>>,
-        pub(crate) state: PhantomData<State>,
     }
 }
 
 pub(crate) use canonical::Logger as CanonicalLogger;
 
-impl<State> CanonicalLogger<State> {
+impl CanonicalLogger {
     /// Returns the configured service identity, independent of sink layout.
     #[must_use]
     pub fn service_name(&self) -> &ServiceName {
@@ -660,6 +604,18 @@ fn writer_degraded_error_context(message: &str) -> ErrorContext {
     )
 }
 
+#[allow(
+    deprecated,
+    reason = "the retained shutdown code is the canonical closed-lifecycle diagnostic"
+)]
+fn shutdown_error_context(message: &str) -> ErrorContext {
+    ErrorContext::new(
+        error_codes::LOGGER_SHUTDOWN,
+        message,
+        Remediation::not_recoverable("construct a new logger before retrying"),
+    )
+}
+
 fn shutdown_timed_out_error_context(message: &str) -> ErrorContext {
     ErrorContext::new(
         error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
@@ -697,24 +653,46 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
 }
 
 #[cfg(test)]
-#[expect(
-    deprecated,
-    reason = "compatibility coverage intentionally exercises Logger::emit() during the deprecation window"
+#[cfg_attr(
+    feature = "v1",
+    expect(
+        deprecated,
+        reason = "compatibility coverage intentionally exercises Logger::emit() during the deprecation window"
+    )
 )]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "v1"))]
+    use crate::CanonicalLogger as Logger;
+
+    #[cfg(not(feature = "v1"))]
+    trait CanonicalEmit {
+        fn emit(&self, event: LogEvent) -> Result<(), CanonicalEventError>;
+    }
+
+    #[cfg(not(feature = "v1"))]
+    impl CanonicalEmit for Logger {
+        fn emit(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+            self.log(event)?;
+            self.flush().map_err(|error| CanonicalEventError::Routing {
+                context: error.into_context(),
+            })
+        }
+    }
+    #[cfg(feature = "v1")]
     use crate::runtime::LevelLifecycle;
-    use crate::sinks::ConsoleWriter;
-    use crate::typed::{legacy_sink, typed_sink};
-    use sc_observability_types::typed::LogSinkFailure;
+    use crate::v2::LogSink;
+    use sc_observability_types::v2::LogSinkError;
     use sc_observability_types::v2::{
         EventError as CanonicalEventError, InitError as CanonicalInitError,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, LogOrder,
-        LogQuery, LogSnapshot, ProcessIdentity, ProcessIdentityPolicy, QueryError,
-        QueryHealthState, Remediation, SinkName, TargetCategory, Timestamp,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogOrder, LogQuery, LogSnapshot,
+        ProcessIdentity, ProcessIdentityPolicy, QueryError, QueryHealthState, Remediation,
+        SinkName, TargetCategory, Timestamp,
     };
+    #[cfg(feature = "v1")]
+    use sc_observability_types::{DiagnosticInfo, ErrorContext};
     use serde_json::{Map, json};
     use std::fs::{self, OpenOptions};
     use std::ops::Deref;
@@ -723,43 +701,9 @@ mod tests {
     use std::time::{Duration, Instant};
     use temp_env::{with_var, with_var_unset};
 
+    #[cfg(feature = "v1")]
     fn legacy_sink_error(context: Box<ErrorContext>) -> LogSinkError {
-        LogSinkFailure::from_context(context).into()
-    }
-
-    struct SharedBuffer {
-        lines: Arc<Mutex<Vec<String>>>,
-    }
-
-    impl ConsoleWriter for SharedBuffer {
-        fn write_line(&self, line: &str) -> std::io::Result<()> {
-            self.lines
-                .lock()
-                .expect("buffer poisoned")
-                .push(line.to_string());
-            Ok(())
-        }
-    }
-
-    struct FailingConsoleWriter {
-        writes: Arc<AtomicU64>,
-    }
-
-    impl ConsoleWriter for FailingConsoleWriter {
-        fn write_line(&self, _line: &str) -> std::io::Result<()> {
-            self.writes.fetch_add(1, Ordering::SeqCst);
-            Err(std::io::Error::other("injected console write failure"))
-        }
-    }
-
-    struct PrefixRedactor;
-
-    impl Redactor for PrefixRedactor {
-        fn redact(&self, key: &str, value: &mut Value) {
-            if key == "secret" {
-                *value = Value::String("custom-redacted".to_string());
-            }
-        }
+        LogSinkError::Write { context }
     }
 
     struct SourceRedactor {
@@ -792,26 +736,6 @@ mod tests {
     impl Redactor for Arc<SourceRedactor> {
         fn redact(&self, key: &str, value: &mut Value) {
             (**self).redact(key, value);
-        }
-    }
-
-    struct FailSink;
-
-    impl LogSink for FailSink {
-        fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
-            Err(legacy_sink_error(Box::new(ErrorContext::new(
-                error_codes::LOGGER_SINK_WRITE_FAILED,
-                "fail sink write failed",
-                Remediation::not_recoverable("test sink intentionally fails"),
-            ))))
-        }
-
-        fn health(&self) -> SinkHealth {
-            SinkHealth {
-                name: sink_name("fail"),
-                state: SinkHealthState::DegradedDropping,
-                last_error: None,
-            }
         }
     }
 
@@ -910,10 +834,12 @@ mod tests {
         )
     }
 
+    #[cfg(feature = "v1")]
     fn file_identity(path: &Path) -> crate::query::FileIdentity {
         crate::query::file_identity_for_path(path)
     }
 
+    #[cfg(feature = "v1")]
     fn recreate_with_distinct_identity(active_path: &Path) {
         let replacement_path = active_path.with_extension("replacement");
         let previous_identity = file_identity(active_path);
@@ -1108,6 +1034,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     fn release_test_pass_delay(signal: &Arc<crate::maintenance::TestPassDelaySignal>) {
         signal.release_delay();
         assert!(
@@ -1120,6 +1047,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn test_pass_delay_timeout_is_explicit_and_bounded() {
         let signal = crate::maintenance::TestPassDelaySignal::default();
@@ -1159,6 +1087,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn test_pass_delay_release_guard_unblocks_waiter_on_drop() {
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
@@ -1199,6 +1128,7 @@ mod tests {
         MaintenanceCadence::new(Duration::from_secs(value))
     }
 
+    #[cfg(feature = "v1")]
     fn join_ms(value: u64) -> WriterShutdownTimeout {
         WriterShutdownTimeout::new(Duration::from_millis(value))
     }
@@ -1379,109 +1309,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn file_only_logging_writes_jsonl_to_default_path() {
-        let root = temp_path("file-only");
-        let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
-        logger.emit(log_event(service_name())).expect("emit");
-        logger.flush().expect("flush");
-
-        let path = default_log_path(&root, &service_name());
-        let contents = fs::read_to_string(&path).expect("read log file");
-        assert!(contents.contains("\"level\":\"Info\""));
-        assert!(contents.contains("[REDACTED]"));
-    }
-
-    #[test]
-    fn file_and_console_fan_out_both_receive_event() {
-        let root = temp_path("fanout");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_console_sink = false;
-        let mut builder = Logger::builder(config).expect("logger builder");
-
-        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
-            Box::new(SharedBuffer {
-                lines: lines.clone(),
-            }),
-        ))));
-        let logger = builder.build();
-
-        logger.emit(log_event(service_name())).expect("emit");
-        logger.flush().expect("flush");
-
-        let path = default_log_path(&root, &service_name());
-        assert!(path.exists());
-        let lines = lines.lock().expect("lines poisoned");
-        assert_eq!(lines.len(), 1);
-        assert!(lines[0].contains("logger.core"));
-    }
-
-    #[test]
-    fn console_writer_failures_preserve_legacy_and_typed_write_parity() {
-        let writes = Arc::new(AtomicU64::new(0));
-        let sink = ConsoleSink::from_writer(Box::new(FailingConsoleWriter {
-            writes: writes.clone(),
-        }));
-        let event = log_event(service_name());
-
-        let legacy = LogSink::write(&sink, &event).expect_err("legacy console write fails");
-        assert_eq!(
-            legacy.diagnostic().code,
-            error_codes::LOGGER_SINK_WRITE_FAILED
-        );
-        let context = std::error::Error::source(&legacy).expect("legacy context source");
-        assert!(
-            context
-                .to_string()
-                .contains("injected console write failure")
-        );
-        assert!(
-            context
-                .source()
-                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
-        );
-        let health = LogSink::health(&sink);
-        assert_eq!(health.state, SinkHealthState::DegradedDropping);
-        assert_eq!(
-            health.last_error.expect("legacy failure health").code,
-            Some(error_codes::LOGGER_SINK_WRITE_FAILED)
-        );
-        assert_eq!(writes.load(Ordering::SeqCst), 1);
-    }
-
-    #[test]
-    fn redaction_runs_before_sink_fan_out() {
-        let root = temp_path("redaction");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_console_sink = false;
-        config.redaction.denylist_keys.push("token".to_string());
-        config
-            .redaction
-            .custom_redactors
-            .push(Box::new(PrefixRedactor));
-        let mut builder = Logger::builder(config).expect("logger builder");
-
-        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
-            Box::new(SharedBuffer {
-                lines: lines.clone(),
-            }),
-        ))));
-        let logger = builder.build();
-
-        logger.emit(log_event(service_name())).expect("emit");
-        logger.flush().expect("flush");
-
-        let file_path = default_log_path(&root, &service_name());
-        let file_contents = fs::read_to_string(file_path).expect("read file");
-        let console_line = lines.lock().expect("lines poisoned")[0].clone();
-        assert!(file_contents.contains("[REDACTED]"));
-        assert!(file_contents.contains("custom-redacted"));
-        assert!(console_line.contains("[REDACTED]"));
-    }
-
+    #[cfg(feature = "v1")]
     #[test]
     fn invalid_event_returns_event_error() {
         let root = temp_path("invalid");
@@ -1492,6 +1320,7 @@ mod tests {
         assert!(logger.emit(event).is_err());
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn logger_emit_admits_events_and_preserves_event_errors() {
         let root = temp_path("injected-log-emitter");
@@ -1520,25 +1349,7 @@ mod tests {
         assert_eq!(error.0.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
     }
 
-    #[test]
-    fn sink_failures_are_fail_open_and_counted_in_health() {
-        let root = temp_path("fail-open");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_file_sink = false;
-        let mut builder = Logger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::new(Arc::new(FailSink)));
-        let logger = builder.build();
-
-        logger
-            .emit(log_event(service_name()))
-            .expect("emit still succeeds");
-
-        let health = logger.health();
-        assert_eq!(health.state, LoggingHealthState::DegradedDropping);
-        assert_eq!(health.dropped_events_total, 1);
-        assert!(health.last_error.is_some());
-    }
-
+    #[cfg(feature = "v1")]
     #[test]
     fn flush_failures_propagate_and_are_counted_in_health() {
         struct FlushFailSink;
@@ -1569,7 +1380,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
+        builder.register_sink(SinkRegistration::typed(Arc::new(FlushFailSink)));
         let logger = builder.build();
 
         let error = logger.flush().expect_err("flush error should propagate");
@@ -1589,6 +1400,7 @@ mod tests {
         assert!(health.last_error.is_some());
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn flush_times_out_when_writer_is_blocked() {
         let root = temp_path("flush-writer-timeout");
@@ -1634,6 +1446,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn rotated_log_paths_keep_the_active_filename_prefix() {
         let sink = JsonlFileSink::new(
@@ -1670,9 +1483,9 @@ mod tests {
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
-        builder.register_sink(SinkRegistration::new(
-            injector.wrap(Arc::new(RecordingFlushSink::default())),
-        ));
+        builder.register_sink(SinkRegistration::typed(Arc::new(
+            injector.fault_sink(Arc::new(RecordingFlushSink::default())),
+        )));
         let logger = builder.build();
 
         injector.force_degraded();
@@ -1698,9 +1511,9 @@ mod tests {
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
-        builder.register_sink(SinkRegistration::new(
-            injector.wrap(Arc::new(RecordingFlushSink::default())),
-        ));
+        builder.register_sink(SinkRegistration::typed(Arc::new(
+            injector.fault_sink(Arc::new(RecordingFlushSink::default())),
+        )));
         let logger = builder.build();
 
         injector.force_unavailable();
@@ -1716,54 +1529,18 @@ mod tests {
     }
 
     #[test]
-    fn sink_filter_blocks_event_delivery() {
-        struct DenyAll;
-
-        impl LogFilter for DenyAll {
-            fn accepts(&self, _event: &LogEvent) -> bool {
-                false
-            }
-        }
-
-        let root = temp_path("filter");
+    fn explicit_flush_command_flushes_each_registered_sink_once_after_admission() {
+        let root = temp_path("explicit-flush-once");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
-        let mut builder = Logger::builder(config).expect("logger builder");
-
-        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        builder.register_sink(
-            SinkRegistration::new(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
-                lines: lines.clone(),
-            }))))
-            .with_filter(Arc::new(DenyAll)),
-        );
-        let logger = builder.build();
-
-        logger.emit(log_event(service_name())).expect("emit");
-
-        assert!(lines.lock().expect("lines poisoned").is_empty());
-    }
-
-    #[test]
-    fn shutdown_blocks_future_emits() {
-        let root = temp_path("shutdown");
-        let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
-        let stopped = logger.shutdown();
-        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
-    }
-
-    #[test]
-    fn shutdown_flushes_registered_sinks_before_marking_shutdown() {
-        let root = temp_path("shutdown-flush");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_file_sink = false;
-        let mut builder = Logger::builder(config).expect("logger builder");
+        config.enable_console_sink = false;
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
         let sink = Arc::new(RecordingFlushSink::default());
-        builder.register_sink(SinkRegistration::new(sink.clone()));
-        let logger = builder.build();
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
+        let logger = builder.build().expect("logger build");
 
-        let _stopped = logger.shutdown();
+        logger.log(log_event(service_name())).expect("admit event");
+        logger.flush().expect("flush barrier");
 
         assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
     }
@@ -1917,9 +1694,9 @@ mod tests {
         config.maintenance_test_pass_delay = Some(Duration::from_millis(100));
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
         config.maintenance_test_pass_signal = Some(signal.clone());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
-        logger.emit(log_event(service_name())).expect("emit");
+        logger.log(log_event(service_name())).expect("log");
         assert!(
             signal.wait_for_state(
                 TEST_WATCHDOG,
@@ -1928,113 +1705,16 @@ mod tests {
             "expected maintenance worker to enter the delayed test pass"
         );
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
 
         assert_eq!(
-            stopped
+            logger
                 .health()
                 .maintenance
                 .expect("maintenance health")
                 .state,
             MaintenanceWorkerState::Stopped
         );
-    }
-
-    #[test]
-    fn shutdown_returns_after_join_timeout_without_waiting_for_blocked_writer() {
-        let root = temp_path("shutdown-maintenance-timeout");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.retained_log_policy.writer_shutdown_timeout = join_ms(10);
-        config.maintenance_test_pass_delay = Some(Duration::ZERO);
-        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
-        signal.block_delay_until_released();
-        let _release_delay = signal.release_on_drop();
-        config.maintenance_test_pass_signal = Some(signal.clone());
-        let logger = Logger::new(config).expect("logger");
-
-        logger.emit(log_event(service_name())).expect("emit");
-        assert!(
-            signal.wait_for_state(
-                TEST_WATCHDOG,
-                crate::maintenance::TestPassDelaySignal::is_active
-            ),
-            "expected maintenance worker to enter the delayed test pass"
-        );
-
-        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
-        let shutdown = std::thread::spawn(move || {
-            let stopped = logger.shutdown();
-            finished_tx
-                .send(())
-                .expect("test waits for shutdown to return");
-            stopped
-        });
-
-        assert!(
-            signal.wait_for_state(
-                TEST_WATCHDOG,
-                crate::maintenance::TestPassDelaySignal::shutdown_timeout_recorded
-            ),
-            "expected shutdown to record the configured timeout while maintenance is gated"
-        );
-        finished_rx.recv_timeout(TEST_WATCHDOG).expect(
-            "shutdown must return after the configured timeout without joining the blocked writer",
-        );
-        let stopped = shutdown
-            .join()
-            .expect("shutdown thread should complete after the configured timeout");
-        let maintenance = stopped.health().maintenance.expect("maintenance health");
-        assert!(maintenance.last_error.is_some());
-        assert_eq!(stopped.health().writer_state, WriterState::Degraded);
-        let timeout = stopped
-            .health()
-            .last_writer_error
-            .expect("actual writer shutdown timeout is retained in stopped health");
-        assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
-        assert_eq!(timeout.message, "writer thread did not stop within 10ms");
-        // Shutdown consumes Logger<Running>. The returned Logger<Stopped>
-        // exposes this diagnostic through health, not through Logger::emit.
-        assert!(
-            signal.is_active(),
-            "shutdown returned before the blocked writer left its maintenance pass"
-        );
-        release_test_pass_delay(&signal);
-    }
-
-    #[test]
-    fn try_log_reports_queue_full_on_saturated_queue() {
-        let root = temp_path("try-log-queue-full");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.queue_capacity = 1;
-        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.maintenance_test_pass_delay = Some(Duration::ZERO);
-        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
-        signal.block_delay_until_released();
-        let _release_delay = signal.release_on_drop();
-        config.maintenance_test_pass_signal = Some(signal.clone());
-        let logger = CanonicalLogger::new(config).expect("logger");
-
-        logger.log(log_event(service_name())).expect("initial log");
-        assert!(
-            signal.wait_for_state(
-                TEST_WATCHDOG,
-                crate::maintenance::TestPassDelaySignal::is_active
-            ),
-            "expected maintenance worker to enter the delayed test pass"
-        );
-
-        logger
-            .try_log(log_event_with_request(service_name(), "queued", 10))
-            .expect("first queued event should fit");
-        let result = logger.try_log(log_event_with_request(service_name(), "full", 10));
-
-        assert!(matches!(
-            result,
-            Err(CanonicalEventError::Routing { ref context })
-                if context.diagnostic().code == error_codes::LOGGER_QUEUE_FULL
-        ));
-        release_test_pass_delay(&signal);
     }
 
     #[test]
@@ -2064,7 +1744,7 @@ mod tests {
         config.enable_console_sink = false;
         let (entered_tx, entered_rx) = std::sync::mpsc::channel();
         let mut builder = CanonicalLogger::builder(config).expect("logger builder");
-        builder.register_sink(SinkRegistration::new(Arc::new(PanicSink {
+        builder.register_sink(SinkRegistration::typed(Arc::new(PanicSink {
             entered: entered_tx,
         })));
         let logger = builder.build().expect("logger");
@@ -2124,12 +1804,6 @@ mod tests {
     }
 
     #[test]
-    fn queue_capacity_rejects_zero_at_construction() {
-        assert!(QueueCapacity::new(0).is_none());
-        assert_eq!(QueueCapacity::new(1).expect("positive").get(), 1);
-    }
-
-    #[test]
     fn canonical_logger_admission_preserves_filtering_and_invalid_event_failure() {
         let root = temp_path("typed-admission");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -2171,187 +1845,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn typed_sink_adapters_preserve_default_flush_health_and_single_write() {
-        #[derive(Default)]
-        struct TypedRecordingSink {
-            writes: AtomicU64,
-        }
-
-        impl crate::typed::TypedLogSink for TypedRecordingSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkFailure> {
-                self.writes.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-
-            fn health(&self) -> SinkHealth {
-                SinkHealth {
-                    name: sink_name("typed-recording"),
-                    state: SinkHealthState::Healthy,
-                    last_error: None,
-                }
-            }
-        }
-
-        let typed = Arc::new(TypedRecordingSink::default());
-        let legacy = legacy_sink(typed.clone());
-        legacy
-            .write(&log_event(service_name()))
-            .expect("legacy write");
-        legacy.flush().expect("default typed flush");
-        assert_eq!(typed.writes.load(Ordering::SeqCst), 1);
-        assert_eq!(legacy.health().state, SinkHealthState::Healthy);
-
-        let legacy = Arc::new(RecordingEventSink::default());
-        let typed = typed_sink(legacy.clone());
-        crate::typed::TypedLogSink::write(typed.as_ref(), &log_event(service_name()))
-            .expect("typed write");
-        crate::typed::TypedLogSink::flush(typed.as_ref()).expect("default legacy flush");
-        assert_eq!(
-            legacy.events.lock().expect("events mutex poisoned").len(),
-            1
-        );
-        assert_eq!(
-            crate::typed::TypedLogSink::health(typed.as_ref()).state,
-            SinkHealthState::Healthy
-        );
-    }
-
-    #[test]
-    #[expect(
-        clippy::too_many_lines,
-        reason = "the adapter parity fixture keeps both directions, their explicit failures, and exact preservation assertions together"
-    )]
-    fn typed_sink_adapters_preserve_explicit_failure_source_health_and_call_counts() {
-        struct TypedFailingSink {
-            writes: AtomicU64,
-            flushes: AtomicU64,
-        }
-
-        impl crate::typed::TypedLogSink for TypedFailingSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkFailure> {
-                self.writes.fetch_add(1, Ordering::SeqCst);
-                Err(LogSinkFailure::from_context(Box::new(
-                    ErrorContext::new(
-                        ErrorCode::new_static("CUSTOM_TYPED_WRITE"),
-                        "typed write failed",
-                        Remediation::recoverable("retry", ["retry"]),
-                    )
-                    .source(Box::new(std::io::Error::other("typed write source"))),
-                )))
-            }
-
-            fn flush(&self) -> Result<(), LogSinkFailure> {
-                self.flushes.fetch_add(1, Ordering::SeqCst);
-                Err(LogSinkFailure::from_context(Box::new(
-                    ErrorContext::new(
-                        ErrorCode::new_static("CUSTOM_TYPED_FLUSH"),
-                        "typed flush failed",
-                        Remediation::recoverable("retry", ["retry"]),
-                    )
-                    .source(Box::new(std::io::Error::other("typed flush source"))),
-                )))
-            }
-
-            fn health(&self) -> SinkHealth {
-                SinkHealth {
-                    name: sink_name("typed-failing"),
-                    state: SinkHealthState::DegradedDropping,
-                    last_error: None,
-                }
-            }
-        }
-
-        struct LegacyFailingSink {
-            writes: AtomicU64,
-            flushes: AtomicU64,
-        }
-
-        impl LogSink for LegacyFailingSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
-                self.writes.fetch_add(1, Ordering::SeqCst);
-                Err(legacy_sink_error(Box::new(
-                    ErrorContext::new(
-                        ErrorCode::new_static("CUSTOM_LEGACY_WRITE"),
-                        "legacy write failed",
-                        Remediation::recoverable("retry", ["retry"]),
-                    )
-                    .source(Box::new(std::io::Error::other("legacy write source"))),
-                )))
-            }
-
-            fn flush(&self) -> Result<(), LogSinkError> {
-                self.flushes.fetch_add(1, Ordering::SeqCst);
-                Err(legacy_sink_error(Box::new(
-                    ErrorContext::new(
-                        ErrorCode::new_static("CUSTOM_LEGACY_FLUSH"),
-                        "legacy flush failed",
-                        Remediation::recoverable("retry", ["retry"]),
-                    )
-                    .source(Box::new(std::io::Error::other("legacy flush source"))),
-                )))
-            }
-
-            fn health(&self) -> SinkHealth {
-                SinkHealth {
-                    name: sink_name("legacy-failing"),
-                    state: SinkHealthState::Unavailable,
-                    last_error: None,
-                }
-            }
-        }
-
-        let typed = Arc::new(TypedFailingSink {
-            writes: AtomicU64::new(0),
-            flushes: AtomicU64::new(0),
-        });
-        let legacy = legacy_sink(typed.clone());
-        let write = legacy
-            .write(&log_event(service_name()))
-            .expect_err("write fails");
-        assert_eq!(write.diagnostic().code.as_str(), "CUSTOM_TYPED_WRITE");
-        let context = std::error::Error::source(&write).expect("legacy context source");
-        assert!(context.to_string().contains("typed write source"));
-        assert!(
-            context
-                .source()
-                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
-        );
-        let flush = legacy.flush().expect_err("flush fails");
-        assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_TYPED_FLUSH");
-        assert_eq!(typed.writes.load(Ordering::SeqCst), 1);
-        assert_eq!(typed.flushes.load(Ordering::SeqCst), 1);
-        assert_eq!(legacy.health().state, SinkHealthState::DegradedDropping);
-
-        let legacy = Arc::new(LegacyFailingSink {
-            writes: AtomicU64::new(0),
-            flushes: AtomicU64::new(0),
-        });
-        let typed = typed_sink(legacy.clone());
-        let write = crate::typed::TypedLogSink::write(typed.as_ref(), &log_event(service_name()))
-            .expect_err("write fails");
-        assert_eq!(write.diagnostic().code.as_str(), "CUSTOM_LEGACY_WRITE");
-        // The released typed failure wraps the preserved context, whose own
-        // source is the original sink error.
-        let context = std::error::Error::source(&write).expect("typed failure context source");
-        assert_eq!(
-            context.to_string(),
-            "legacy write failed; caused by: legacy write source"
-        );
-        assert_eq!(
-            context.source().expect("original sink source").to_string(),
-            "legacy write source"
-        );
-        let flush = crate::typed::TypedLogSink::flush(typed.as_ref()).expect_err("flush fails");
-        assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_LEGACY_FLUSH");
-        assert_eq!(legacy.writes.load(Ordering::SeqCst), 1);
-        assert_eq!(legacy.flushes.load(Ordering::SeqCst), 1);
-        assert_eq!(
-            crate::typed::TypedLogSink::health(typed.as_ref()).state,
-            SinkHealthState::Unavailable
-        );
-    }
-
+    #[cfg(feature = "v1")]
     #[test]
     fn owner_construction_returns_the_injected_writer_start_source() {
         let root = temp_path("writer-start-failure");
@@ -2410,7 +1904,7 @@ mod tests {
         config.enable_console_sink = true;
         config.level = LevelFilter::Info;
         let (logger, mut owner) =
-            Logger::new_with_level_owner(config).expect("construct logger with owner");
+            crate::v2::Logger::new_with_level_owner(config).expect("construct logger with owner");
 
         assert_eq!(logger.level_state().revision, 0);
         let changed = owner
@@ -2452,12 +1946,12 @@ mod tests {
                 .expect("typed filtered admission"),
             AdmissionOutcome::Filtered
         );
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
         assert!(matches!(
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
         ));
-        assert_eq!(stopped.level_state().effective_level, LevelFilter::Info);
+        assert_eq!(logger.level_state().effective_level, LevelFilter::Info);
     }
 
     #[test]
@@ -2543,7 +2037,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         config.enable_console_sink = true;
-        let logger = Arc::new(Logger::new(config).expect("typed logger"));
+        let logger = Arc::new(crate::CanonicalLogger::new(config).expect("typed logger"));
         let barrier = Arc::new(Barrier::new(3));
         let (flush_tx, flush_rx) = mpsc::channel();
         let (admission_tx, admission_rx) = mpsc::channel();
@@ -2581,7 +2075,7 @@ mod tests {
         let Ok(logger) = Arc::try_unwrap(logger) else {
             panic!("all concurrent handles dropped");
         };
-        logger.shutdown();
+        logger.shutdown().expect("shutdown");
     }
 
     #[test]
@@ -2638,8 +2132,8 @@ mod tests {
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Unavailable { .. })
         ));
-        let stopped = logger.shutdown();
-        assert_eq!(stopped.level_state().revision, 1);
+        logger.shutdown().expect("shutdown succeeds");
+        assert_eq!(logger.level_state().revision, 1);
     }
 
     #[test]
@@ -2683,7 +2177,7 @@ mod tests {
         config.level = LevelFilter::Off;
         let sink = Arc::new(RecordingEventSink::default());
         let mut builder = Logger::builder(config).expect("builder");
-        builder.register_sink(SinkRegistration::new(sink.clone()));
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
         let (logger, mut owner) = builder.build_with_level_owner().expect("owner logger");
 
         owner
@@ -2734,7 +2228,7 @@ mod tests {
             .push(Box::new(redactor.clone()));
         let sink = Arc::new(RecordingEventSink::default());
         let mut builder = CanonicalLogger::builder(config).expect("builder");
-        builder.register_sink(SinkRegistration::new(sink.clone()));
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
         let (logger, mut owner) = builder.build_with_level_owner().expect("owner logger");
         redactor.attach(&logger.level_control);
 
@@ -2765,6 +2259,7 @@ mod tests {
         let _ = logger.shutdown();
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn saturated_diagnostic_queue_keeps_the_level_change_committed() {
         let root = temp_path("level-diagnostic-saturation");
@@ -2808,6 +2303,7 @@ mod tests {
         let _ = logger.shutdown();
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn level_owner_rejects_changes_during_an_actual_shutdown_stopping_window() {
         let root = temp_path("level-owner-stopping-window");
@@ -2821,7 +2317,6 @@ mod tests {
         config.maintenance_test_pass_signal = Some(signal.clone());
         let (logger, mut owner) =
             CanonicalLogger::new_with_level_owner(config).expect("construct logger with owner");
-        let initial_state = logger.level_state();
         let control = logger.level_control.clone();
 
         logger
@@ -2853,14 +2348,17 @@ mod tests {
             Err(LevelChangeError::Stopping)
         ));
         release_test_pass_delay(&signal);
-        let stopped = shutdown.join().expect("shutdown thread");
-        assert_eq!(stopped.level_state(), initial_state);
+        shutdown
+            .join()
+            .expect("shutdown thread")
+            .expect("shutdown succeeds");
         assert!(matches!(
             owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
         ));
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn emit_path_remains_available_during_maintenance_pass() {
         let root = temp_path("maintenance-nonblocking");
@@ -3160,11 +2658,12 @@ mod tests {
 
         let root = temp_path("query-health");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
         logger
-            .emit(log_event_with_request(service_name(), "healthy", 20))
-            .expect("emit");
+            .log(log_event_with_request(service_name(), "healthy", 20))
+            .expect("log");
+        logger.flush().expect("flush healthy event");
 
         let active_path = default_log_path(&root, &service_name());
         let mut file = OpenOptions::new()
@@ -3181,9 +2680,9 @@ mod tests {
         assert_eq!(degraded_health.state, QueryHealthState::Degraded);
         assert!(degraded_health.last_error.is_some());
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
         assert_eq!(
-            stopped.health().query.expect("query health").state,
+            logger.health().query.expect("query health").state,
             QueryHealthState::Unavailable
         );
     }
@@ -3192,12 +2691,12 @@ mod tests {
     fn logger_health_reports_unavailable_after_shutdown() {
         let root = temp_path("query-shutdown-variant");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
 
         assert_eq!(
-            stopped.health().query.expect("query health").state,
+            logger.health().query.expect("query health").state,
             QueryHealthState::Unavailable
         );
     }
@@ -3275,6 +2774,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
@@ -3343,8 +2843,381 @@ mod tests {
                 .contains("identity changed")
         );
     }
+}
 
-    /// Canonical sink that counts every call and optionally fails.
+#[cfg(test)]
+mod canonical_behavior_tests {
+    use super::*;
+    use crate::sinks::ConsoleWriter;
+    use sc_observability_types::v2::EventError as CanonicalEventError;
+    use sc_observability_types::{ActionName, ProcessIdentity, TargetCategory};
+    use serde_json::{Map, json};
+    use std::ops::Deref;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    };
+    use std::time::Duration;
+
+    const TEST_WATCHDOG: Duration = Duration::from_secs(30);
+
+    struct TestRoot(tempfile::TempDir);
+
+    impl TestRoot {
+        fn path_buf(&self) -> PathBuf {
+            self.0.path().to_path_buf()
+        }
+    }
+
+    impl Deref for TestRoot {
+        type Target = Path;
+        fn deref(&self) -> &Self::Target {
+            self.0.path()
+        }
+    }
+
+    fn temp_path(name: &str) -> TestRoot {
+        TestRoot(
+            tempfile::Builder::new()
+                .prefix(&format!("sc-observability-{name}-"))
+                .tempdir()
+                .expect("create temporary test root"),
+        )
+    }
+
+    fn service_name() -> ServiceName {
+        ServiceName::new("sc-observability").expect("valid service name")
+    }
+
+    fn log_event(service: ServiceName) -> LogEvent {
+        LogEvent {
+            version: sc_observability_types::SchemaVersion::new(
+                sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+            )
+            .expect("valid schema version"),
+            timestamp: Timestamp::UNIX_EPOCH,
+            level: Level::Info,
+            service,
+            target: TargetCategory::new("logger.core").expect("valid target"),
+            action: ActionName::new("emit").expect("valid action"),
+            message: Some("Authorization: Bearer abc123".to_string()),
+            identity: ProcessIdentity::default(),
+            trace: None,
+            request_id: None,
+            correlation_id: None,
+            outcome: None,
+            diagnostic: None,
+            state_transition: None,
+            fields: Map::from_iter([
+                ("token".to_string(), json!("Bearer secret")),
+                ("secret".to_string(), json!("raw")),
+            ]),
+        }
+    }
+
+    struct SharedBuffer {
+        lines: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl ConsoleWriter for SharedBuffer {
+        fn write_line(&self, line: &str) -> std::io::Result<()> {
+            self.lines
+                .lock()
+                .expect("buffer poisoned")
+                .push(line.to_string());
+            Ok(())
+        }
+    }
+
+    struct CanonicalFailSink;
+
+    impl crate::sink::LogSink for CanonicalFailSink {
+        fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            Err(sc_observability_types::v2::LogSinkError::Write {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_SINK_WRITE_FAILED,
+                    "fail sink write failed",
+                    Remediation::not_recoverable("test sink intentionally fails"),
+                )),
+            })
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: SinkName::new("canonical-fail").expect("valid sink name"),
+                state: SinkHealthState::DegradedDropping,
+                last_error: None,
+            }
+        }
+    }
+
+    struct PrefixRedactor;
+
+    impl Redactor for PrefixRedactor {
+        fn redact(&self, key: &str, value: &mut Value) {
+            if key == "secret" {
+                *value = Value::String("custom-redacted".to_string());
+            }
+        }
+    }
+
+    #[test]
+    fn file_only_logging_writes_jsonl_to_default_path() {
+        let root = temp_path("file-only");
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
+        let logger = CanonicalLogger::new(config).expect("logger");
+        logger.log(log_event(service_name())).expect("log");
+        logger.flush().expect("flush");
+        let path = default_log_path(&root, &service_name());
+        let contents = std::fs::read_to_string(path).expect("read log file");
+        assert!(contents.contains("\"level\":\"Info\""));
+        assert!(contents.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn file_and_console_fan_out_both_receive_event() {
+        let root = temp_path("fanout");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_console_sink = false;
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        builder.register_sink(SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(
+            Box::new(SharedBuffer {
+                lines: lines.clone(),
+            }),
+        ))));
+        let logger = builder.build().expect("logger");
+        logger.log(log_event(service_name())).expect("log");
+        logger.flush().expect("flush");
+        assert!(default_log_path(&root, &service_name()).exists());
+        let lines = lines.lock().expect("lines poisoned");
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("logger.core"));
+    }
+
+    #[test]
+    fn sink_failures_are_fail_open_and_counted_in_health() {
+        let root = temp_path("fail-open");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::typed(Arc::new(CanonicalFailSink)));
+        let logger = builder.build().expect("logger");
+
+        logger
+            .log(log_event(service_name()))
+            .expect("emit remains fail-open");
+        logger.flush().expect("wait for sink delivery");
+
+        let health = logger.health();
+        assert_eq!(health.state, LoggingHealthState::DegradedDropping);
+        assert_eq!(health.dropped_events_total, 1);
+        assert!(health.last_error.is_some());
+    }
+
+    #[test]
+    fn sink_filter_blocks_event_delivery() {
+        struct DenyAll;
+
+        impl LogFilter for DenyAll {
+            fn accepts(&self, _event: &LogEvent) -> bool {
+                false
+            }
+        }
+
+        let root = temp_path("filter");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        builder.register_sink(
+            SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
+                lines: lines.clone(),
+            }))))
+            .with_filter(Arc::new(DenyAll)),
+        );
+        let logger = builder.build().expect("logger");
+
+        logger.log(log_event(service_name())).expect("log");
+
+        assert!(lines.lock().expect("lines poisoned").is_empty());
+    }
+
+    #[test]
+    #[allow(
+        deprecated,
+        reason = "the retained shutdown code remains the lifecycle diagnostic"
+    )]
+    fn shutdown_blocks_future_emits() {
+        let root = temp_path("shutdown");
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
+        let logger = Arc::new(CanonicalLogger::new(config).expect("logger"));
+        let shared_logger = logger.clone();
+        std::thread::spawn(move || {
+            shared_logger
+                .shutdown_with_timeout(Duration::from_secs(1))
+                .expect("shutdown succeeds from a shared reference");
+        })
+        .join()
+        .expect("shutdown thread completes");
+        logger.shutdown().expect("second shutdown is idempotent");
+
+        assert_eq!(logger.health().state, LoggingHealthState::Unavailable);
+        let error = logger
+            .log(log_event(service_name()))
+            .expect_err("logging after shutdown must be rejected");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_SHUTDOWN);
+        assert_eq!(
+            error.failure_classification(),
+            sc_observability_types::FailureClassification::Closed
+        );
+        let error = logger
+            .flush()
+            .expect_err("flushing after shutdown must be rejected");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_SHUTDOWN);
+        assert_eq!(
+            error.failure_classification(),
+            sc_observability_types::FailureClassification::Closed
+        );
+    }
+
+    #[test]
+    fn shutdown_flushes_registered_sinks_before_marking_shutdown() {
+        let root = temp_path("shutdown-flush");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let sink = Arc::new(CanonicalCountingSink::default());
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::typed(sink.clone()));
+        let logger = builder.build().expect("logger");
+
+        logger.shutdown().expect("shutdown succeeds");
+
+        assert_eq!(sink.flushes.load(Ordering::SeqCst), 1);
+        assert_eq!(logger.health().state, LoggingHealthState::Unavailable);
+    }
+
+    #[test]
+    fn queue_capacity_rejects_zero_at_construction() {
+        assert!(QueueCapacity::new(0).is_none());
+        assert_eq!(QueueCapacity::new(1).expect("positive").get(), 1);
+    }
+
+    #[test]
+    fn redaction_runs_before_sink_fan_out() {
+        let root = temp_path("redaction");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_console_sink = false;
+        config.redaction.denylist_keys.push("token".to_string());
+        config
+            .redaction
+            .custom_redactors
+            .push(Box::new(PrefixRedactor));
+        let mut builder = CanonicalLogger::builder(config).expect("logger builder");
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        builder.register_sink(SinkRegistration::typed(Arc::new(ConsoleSink::from_writer(
+            Box::new(SharedBuffer {
+                lines: lines.clone(),
+            }),
+        ))));
+        let logger = builder.build().expect("logger");
+        logger.log(log_event(service_name())).expect("log");
+        logger.flush().expect("flush");
+        let file_contents =
+            std::fs::read_to_string(default_log_path(&root, &service_name())).expect("read file");
+        let console_line = lines.lock().expect("lines poisoned")[0].clone();
+        assert!(file_contents.contains("[REDACTED]"));
+        assert!(file_contents.contains("custom-redacted"));
+        assert!(console_line.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn shutdown_with_timeout_returns_without_waiting_for_blocked_writer() {
+        let root = temp_path("shutdown-maintenance-timeout");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.retained_log_policy.maintenance_cadence =
+            MaintenanceCadence::new(Duration::from_millis(5));
+        config.retained_log_policy.writer_shutdown_timeout =
+            WriterShutdownTimeout::new(Duration::from_millis(10));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let logger = CanonicalLogger::new(config).expect("logger");
+        logger.log(log_event(service_name())).expect("log");
+        assert!(signal.wait_for_state(
+            TEST_WATCHDOG,
+            crate::maintenance::TestPassDelaySignal::is_active
+        ));
+        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+        let shutdown = std::thread::spawn(move || {
+            let stopped = logger.shutdown_with_timeout(Duration::from_millis(10));
+            finished_tx
+                .send(())
+                .expect("test waits for shutdown to return");
+            stopped
+        });
+        assert!(signal.wait_for_state(
+            TEST_WATCHDOG,
+            crate::maintenance::TestPassDelaySignal::shutdown_timeout_recorded
+        ));
+        finished_rx.recv_timeout(TEST_WATCHDOG).expect(
+            "shutdown must return after configured timeout without joining the blocked writer",
+        );
+        let shutdown_error = shutdown
+            .join()
+            .expect("shutdown thread should complete after timeout")
+            .expect_err("blocked writer must report the configured shutdown timeout");
+        assert!(matches!(
+            shutdown_error,
+            sc_observability_types::v2::ShutdownError::Timeout { .. }
+        ));
+        assert!(
+            signal.is_active(),
+            "shutdown returned before blocked writer left pass"
+        );
+        signal.release_delay();
+    }
+
+    #[test]
+    fn try_log_reports_queue_full_on_saturated_queue() {
+        let root = temp_path("try-log-queue-full");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.queue_capacity = 1;
+        config.retained_log_policy.maintenance_cadence =
+            MaintenanceCadence::new(Duration::from_millis(5));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let logger = CanonicalLogger::new(config).expect("logger");
+        logger.log(log_event(service_name())).expect("initial log");
+        assert!(signal.wait_for_state(
+            TEST_WATCHDOG,
+            crate::maintenance::TestPassDelaySignal::is_active
+        ));
+        let mut queued = log_event(service_name());
+        queued.request_id =
+            Some(sc_observability_types::CorrelationId::new("queued").expect("valid request id"));
+        logger
+            .try_log(queued)
+            .expect("first queued event should fit");
+        let mut full = log_event(service_name());
+        full.request_id =
+            Some(sc_observability_types::CorrelationId::new("full").expect("valid request id"));
+        let result = logger.try_log(full);
+        assert!(
+            matches!(result, Err(CanonicalEventError::Routing { ref context })
+            if context.diagnostic().code == error_codes::LOGGER_QUEUE_FULL)
+        );
+        signal.release_delay();
+    }
+
     #[derive(Default)]
     struct CanonicalCountingSink {
         writes: AtomicU64,
@@ -3356,15 +3229,13 @@ mod tests {
             self.writes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
-
         fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
             self.flushes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
-
         fn health(&self) -> SinkHealth {
             SinkHealth {
-                name: sink_name("canonical-counting"),
+                name: SinkName::new("canonical-counting").expect("sink name"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }
@@ -3372,7 +3243,6 @@ mod tests {
     }
 
     struct AcceptAll;
-
     impl LogFilter for AcceptAll {
         fn accepts(&self, _event: &LogEvent) -> bool {
             true
@@ -3388,231 +3258,15 @@ mod tests {
         let sink = Arc::new(CanonicalCountingSink::default());
         let canonical: Arc<dyn crate::sink::LogSink> = sink.clone();
         let filter: Arc<dyn LogFilter> = Arc::new(AcceptAll);
-
         let registration = SinkRegistration::typed(canonical.clone()).with_filter(filter.clone());
-
-        // The private storage type is the canonical trait object, so this
-        // binding compiles only while the registration stores it directly.
         let stored: &Arc<dyn crate::sink::LogSink> = &registration.sink;
         assert!(Arc::ptr_eq(stored, &canonical));
         assert_eq!(thin_ptr(stored), thin_ptr(&sink));
-        // `sink`, `canonical`, and the registration own the same allocation;
-        // an adapter would have left only two strong owners of the input.
         assert_eq!(Arc::strong_count(&sink), 3);
         assert!(Arc::ptr_eq(
             registration.filter.as_ref().expect("filter stored"),
             &filter
         ));
-
-        let cloned = registration.clone();
-        assert!(Arc::ptr_eq(&cloned.sink, &canonical));
-    }
-
-    #[test]
-    fn released_registration_adapts_once_and_does_not_store_the_input_arc() {
-        let released = Arc::new(RecordingEventSink::default());
-        let registration = SinkRegistration::new(released.clone());
-
-        assert_ne!(thin_ptr(&registration.sink), thin_ptr(&released));
-        assert!(registration.filter.is_none());
-        registration
-            .sink
-            .write(&log_event(service_name()))
-            .expect("adapted write");
-        registration.sink.flush().expect("adapted default flush");
-        assert_eq!(
-            released.events.lock().expect("events mutex poisoned").len(),
-            1,
-            "one dispatch reaches the released sink exactly once"
-        );
-        assert_eq!(registration.sink.health().state, SinkHealthState::Healthy);
-    }
-
-    #[test]
-    fn console_sink_direct_canonical_and_released_wrapper_preserve_write_behavior() {
-        let event = log_event(service_name());
-        let direct_writes = Arc::new(AtomicU64::new(0));
-        let direct = ConsoleSink::from_writer(Box::new(FailingConsoleWriter {
-            writes: direct_writes.clone(),
-        }));
-        let error = crate::sink::LogSink::write(&direct, &event).expect_err("canonical failure");
-        assert!(matches!(
-            error,
-            sc_observability_types::v2::LogSinkError::Write { .. }
-        ));
-        assert_eq!(
-            error.diagnostic().code,
-            error_codes::LOGGER_SINK_WRITE_FAILED
-        );
-        // The canonical error forwards straight to the underlying io source.
-        assert!(
-            std::error::Error::source(&error)
-                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
-        );
-        assert_eq!(direct_writes.load(Ordering::SeqCst), 1);
-        crate::sink::LogSink::flush(&direct).expect("canonical default flush");
-        let direct_health = crate::sink::LogSink::health(&direct);
-        assert_eq!(direct_health.state, SinkHealthState::DegradedDropping);
-
-        let wrapper_writes = Arc::new(AtomicU64::new(0));
-        let wrapper = ConsoleSink::from_writer(Box::new(FailingConsoleWriter {
-            writes: wrapper_writes.clone(),
-        }));
-        let released = LogSink::write(&wrapper, &event).expect_err("released failure");
-        assert_eq!(
-            released.diagnostic().code,
-            error.diagnostic().code,
-            "both paths report the same diagnostic"
-        );
-        assert_eq!(released.diagnostic().message, error.diagnostic().message);
-        assert_eq!(
-            released.diagnostic().remediation,
-            error.diagnostic().remediation,
-            "remediation is preserved across the released wrapper"
-        );
-        // The released wrapper keeps the nested legacy source shape.
-        let context = std::error::Error::source(&released).expect("legacy context source");
-        assert!(
-            context
-                .source()
-                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
-        );
-        assert_eq!(wrapper_writes.load(Ordering::SeqCst), 1);
-        LogSink::flush(&wrapper).expect("released default flush");
-        let direct_summary = direct_health.last_error.expect("canonical failure health");
-        let wrapper_summary = LogSink::health(&wrapper)
-            .last_error
-            .expect("released failure health");
-        assert_eq!(direct_summary.code, wrapper_summary.code);
-        assert_eq!(direct_summary.message, wrapper_summary.message);
-
-        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        let healthy = ConsoleSink::from_writer(Box::new(SharedBuffer {
-            lines: lines.clone(),
-        }));
-        crate::sink::LogSink::write(&healthy, &event).expect("canonical success");
-        LogSink::write(&healthy, &event).expect("released success");
-        let lines = lines.lock().expect("lines poisoned");
-        assert_eq!(lines.len(), 2, "each dispatch writes exactly one line");
-        assert_eq!(lines[0], lines[1], "both paths render identical bytes");
-    }
-
-    #[test]
-    fn file_sink_direct_canonical_and_released_wrapper_preserve_bytes_and_io_source() {
-        let event = log_event(service_name());
-        let root = temp_path("file-direct-vs-wrapper");
-        let direct_path = root.join("direct.jsonl");
-        let wrapper_path = root.join("wrapper.jsonl");
-        let direct = JsonlFileSink::for_logger(direct_path.clone());
-        let wrapper = JsonlFileSink::for_logger(wrapper_path.clone());
-
-        crate::sink::LogSink::write(&direct, &event).expect("canonical write");
-        crate::sink::LogSink::flush(&direct).expect("canonical default flush");
-        LogSink::write(&wrapper, &event).expect("released write");
-        LogSink::flush(&wrapper).expect("released default flush");
-
-        let direct_bytes = fs::read(&direct_path).expect("direct bytes");
-        assert_eq!(
-            direct_bytes,
-            fs::read(&wrapper_path).expect("wrapper bytes")
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&direct_bytes).lines().count(),
-            1,
-            "exactly one record is written per dispatch"
-        );
-        assert_eq!(
-            crate::sink::LogSink::health(&direct).state,
-            SinkHealthState::Healthy
-        );
-        assert_eq!(LogSink::health(&wrapper).state, SinkHealthState::Healthy);
-
-        // A regular file where the parent directory is expected forces an io
-        // failure that must keep its source through both paths.
-        let blocker = root.join("blocker");
-        fs::write(&blocker, "not a directory").expect("create blocker");
-        let failing = JsonlFileSink::for_logger(blocker.join("active.jsonl"));
-        let canonical = crate::sink::LogSink::write(&failing, &event).expect_err("canonical io");
-        assert_eq!(
-            canonical.diagnostic().code,
-            error_codes::LOGGER_SINK_WRITE_FAILED
-        );
-        assert!(
-            std::error::Error::source(&canonical)
-                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
-        );
-        let released = LogSink::write(&failing, &event).expect_err("released io");
-        assert_eq!(released.diagnostic().code, canonical.diagnostic().code);
-        let context = std::error::Error::source(&released).expect("legacy context source");
-        assert!(
-            context
-                .source()
-                .is_some_and(<dyn std::error::Error>::is::<std::io::Error>)
-        );
-        assert_eq!(
-            LogSink::health(&failing).state,
-            SinkHealthState::DegradedDropping
-        );
-    }
-
-    #[cfg(feature = "fault-injection")]
-    #[test]
-    fn fault_sink_direct_canonical_and_released_wrapper_preserve_faults_and_single_dispatch() {
-        let event = log_event(service_name());
-        let injector = RetainedSinkFaultInjector::new();
-
-        let inner = Arc::new(CanonicalCountingSink::default());
-        let direct = injector.fault_sink(inner.clone());
-        crate::sink::LogSink::write(&direct, &event).expect("healthy canonical write");
-        crate::sink::LogSink::flush(&direct).expect("healthy canonical flush");
-        assert_eq!(inner.writes.load(Ordering::SeqCst), 1);
-        assert_eq!(inner.flushes.load(Ordering::SeqCst), 1);
-
-        let released_inner = Arc::new(RecordingFlushSink::default());
-        let released = injector.wrap(released_inner.clone());
-        LogSink::write(released.as_ref(), &event).expect("healthy released write");
-        LogSink::flush(released.as_ref()).expect("healthy released flush");
-        assert_eq!(
-            released_inner.flush_calls.load(Ordering::SeqCst),
-            1,
-            "the released wrapper flushes the wrapped sink exactly once"
-        );
-
-        injector.force_unavailable();
-        let write = crate::sink::LogSink::write(&direct, &event).expect_err("forced write fault");
-        let flush = crate::sink::LogSink::flush(&direct).expect_err("forced flush fault");
-        assert!(matches!(
-            write,
-            sc_observability_types::v2::LogSinkError::Write { .. }
-        ));
-        assert!(matches!(
-            flush,
-            sc_observability_types::v2::LogSinkError::Flush { .. }
-        ));
-        assert_eq!(
-            inner.writes.load(Ordering::SeqCst),
-            1,
-            "a forced fault never reaches the wrapped sink"
-        );
-        assert_eq!(inner.flushes.load(Ordering::SeqCst), 1);
-        let health = crate::sink::LogSink::health(&direct);
-        assert_eq!(health.state, SinkHealthState::Unavailable);
-
-        let released_write =
-            LogSink::write(released.as_ref(), &event).expect_err("released forced write fault");
-        assert_eq!(released_write.diagnostic().code, write.diagnostic().code);
-        assert_eq!(
-            released_write.diagnostic().message,
-            write.diagnostic().message
-        );
-        assert_eq!(
-            LogSink::health(released.as_ref()).state,
-            SinkHealthState::Unavailable
-        );
-        injector.clear();
-        assert_eq!(
-            crate::sink::LogSink::health(&direct).state,
-            SinkHealthState::Healthy
-        );
+        assert!(Arc::ptr_eq(&registration.clone().sink, &canonical));
     }
 }

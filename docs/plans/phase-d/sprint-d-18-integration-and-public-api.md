@@ -140,6 +140,8 @@ release/public-api-major-breaks.toml is consumed by the existing validate_public
 
 validate_error_migration.py already consumes the error-migration fixtures; adapt that existing consumer from warning-only 1.x migration to the ADR-017 2.0 contract. It prevents the observed obsolete wrappers/diagnostic loss from surviving integration. Retain the canonical migrated fixture and explicit intentional-old-source rejection case as long as the migration guide is supported, rather than creating an unconsumed ledger. The Python policy consumer remains the existing B.4a distribution validator; obs-d-10 closes its final runtime artifact proof.
 
+Retirement note: Phase F f-6 retired this validator per Rand ruling 2026-10-06 (omega-prime 01M48RS9PKAH1KW2RHH471RY47), because it enforced Phase B deprecation-note text on deprecated 1.x items that Phase F rewrote. CLAUDE.md says deprecated items need no keep-alive tests or baselines.
+
 ## Feature closure
 
 This bead owns logging settings + host attachment + typed registration end-to-end and public 2.0 error/model integration. OTLP composition and enabled-no-fallback construction close here; collector semantics close only in D.9. Python release policy activation closes here; obs-d-10 independently closes its native artifact proof before this sprint consumes it. These named feature criteria are not duplicated as boundary-sprint release gates. Normative documentation is D.12's contract; release/migration/API approval documents here must match it.
@@ -269,9 +271,11 @@ obs-d-6 produces lifecycle.rs barrier, shutdown ordering and admission control. 
 
 ## Integration scope
 
-Every 2.0 breaking change is authorized solely by ADR-017’s
-`release/public-api-major-breaks.toml` manifest. ADR-012 remains historical
-1.x guidance and is partly superseded only for those enumerated 2.0 breaks.
+At the time of this Phase D plan, every 2.0 breaking change was authorized
+solely by ADR-017’s `release/public-api-major-breaks.toml` manifest. Phase F
+later retired that manifest; this sentence records the Phase D authorization
+policy. ADR-012 remains historical 1.x guidance and is partly superseded only
+for those enumerated 2.0 breaks.
 
 Final wrapper/classifier/adapter deletion is owned here only, following PHD-002. Verify no routing implementation is moved out of sc-observe (LAY-003/NFR-003), no ATM adapter behavior enters shared crates (ADR-006), and layer docs remain self-contained (NFR-008). Validate the imported provenance set under OTLP-023 during composition; no new provenance ledger is created. Release inventory includes npm under the existing shared publishing channel (PHC-002), never a repository-local substitute.
 

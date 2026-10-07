@@ -8,10 +8,10 @@ use crate::{
     ServiceName, StateTransition, TargetCategory, Timestamp, TraceContext, constants,
 };
 
-static OBSERVATION_SCHEMA_VERSION: LazyLock<SchemaVersion> = LazyLock::new(|| {
-    SchemaVersion::new(constants::OBSERVATION_ENVELOPE_VERSION)
-        .expect("shared schema version constant is valid")
-});
+// Keep the historical event-local initialization point while delegating the
+// validated value to the canonical shared constant.
+static OBSERVATION_SCHEMA_VERSION: LazyLock<SchemaVersion> =
+    LazyLock::new(|| constants::OBSERVATION_SCHEMA_VERSION.clone());
 
 /// Marker trait for consumer-owned observation payloads.
 pub trait Observable: Send + Sync + 'static {}
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn log_event_round_trips_through_serde() {
         let event = LogEvent {
-            version: OBSERVATION_SCHEMA_VERSION.clone(),
+            version: constants::OBSERVATION_SCHEMA_VERSION.clone(),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: service_name(),

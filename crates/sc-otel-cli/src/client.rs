@@ -1,51 +1,56 @@
-//! Opens the production durable client or the feature-gated test double.
+//! Opens the production durable client or the unit-test-only double.
 #![expect(
     clippy::result_large_err,
     reason = "the shared telemetry error preserves typed delivery diagnostics"
 )]
 
-#[cfg(not(feature = "test-double"))]
+#[cfg(not(test))]
 use sc_observability_otlp::durable::DurableTelemetryClient;
-#[cfg(feature = "test-double")]
+#[cfg(test)]
 use sc_observability_types::otlp::submission::TelemetryConfigError;
 use sc_observability_types::otlp::submission::{
     TelemetryClient, TelemetryClientConfig, TelemetryClientError,
 };
-#[cfg(feature = "test-double")]
+#[cfg(test)]
 use sc_observability_types::{
     ErrorContext, Remediation,
     otlp::submission::error_codes::SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE,
 };
 
-#[cfg(feature = "test-double")]
-use crate::constants;
+#[cfg(test)]
+#[derive(Clone, Debug, Default)]
+pub(crate) struct UnitClientPaths {
+    pub(crate) script: Option<std::path::PathBuf>,
+    pub(crate) record: Option<std::path::PathBuf>,
+}
 
 pub(crate) fn open_client(
     config: TelemetryClientConfig,
+    #[cfg(test)] paths: Option<&UnitClientPaths>,
 ) -> Result<Box<dyn TelemetryClient>, TelemetryClientError> {
-    #[cfg(feature = "test-double")]
+    #[cfg(test)]
     {
-        open_test_double(config)
+        open_test_client(config, paths.cloned().unwrap_or_default())
     }
 
-    #[cfg(not(feature = "test-double"))]
+    #[cfg(not(test))]
     {
         DurableTelemetryClient::open(config)
             .map(|client| Box::new(client) as Box<dyn TelemetryClient>)
     }
 }
 
-#[cfg(feature = "test-double")]
-fn open_test_double(
+#[cfg(test)]
+fn open_test_client(
     config: TelemetryClientConfig,
+    paths: UnitClientPaths,
 ) -> Result<Box<dyn TelemetryClient>, TelemetryClientError> {
     use sc_observability_types::otlp::submission::testing::{
         DoubleScript, InMemoryTelemetryClient,
     };
 
-    let script = match std::env::var_os(constants::TEST_DOUBLE_ENV) {
+    let script = match paths.script {
         Some(path) => {
-            let path = std::path::PathBuf::from(path);
             let text = std::fs::read_to_string(&path).map_err(|source| {
                 TelemetryConfigError::ConfigFile {
                     path,
@@ -53,7 +58,7 @@ fn open_test_double(
                         SC_OBSERVABILITY_TELEMETRY_CONFIG_FILE,
                         format!("unable to read test double script: {source}"),
                         Remediation::not_recoverable(
-                            "provide a readable SC_OTEL_TEST_DOUBLE JSON file",
+                            "provide a readable unit-client script JSON file",
                         ),
                     )),
                 }
@@ -63,23 +68,23 @@ fn open_test_double(
         None => DoubleScript::default(),
     };
     record_call(
+        paths.record.as_deref(),
         &serde_json::json!({"method":"open", "endpoint":config.endpoint, "store_path":config.store_path}),
     );
     Ok(Box::new(RecordingTestClient {
         inner: InMemoryTelemetryClient::with_script(config, script),
-        record_path: std::env::var_os(constants::TEST_DOUBLE_RECORD_ENV)
-            .map(std::path::PathBuf::from),
+        record_path: paths.record,
     }))
 }
 
-/// Feature-gated process-test witness for the exact envelope accepted by the double.
-#[cfg(feature = "test-double")]
+/// Unit-test witness for the exact envelope accepted by the double.
+#[cfg(test)]
 struct RecordingTestClient {
     inner: sc_observability_types::otlp::submission::testing::InMemoryTelemetryClient,
     record_path: Option<std::path::PathBuf>,
 }
 
-#[cfg(feature = "test-double")]
+#[cfg(test)]
 impl TelemetryClient for RecordingTestClient {
     fn open(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError>
     where
@@ -89,8 +94,7 @@ impl TelemetryClient for RecordingTestClient {
 
         Ok(Self {
             inner: InMemoryTelemetryClient::open(config)?,
-            record_path: std::env::var_os(constants::TEST_DOUBLE_RECORD_ENV)
-                .map(std::path::PathBuf::from),
+            record_path: None,
         })
     }
 
@@ -102,7 +106,7 @@ impl TelemetryClient for RecordingTestClient {
         if let Some(path) = &self.record_path {
             let encoded = serde_json::to_vec(&envelope)
                 .expect("the canonical submission envelope is serializable");
-            std::fs::write(path, encoded).expect("test-double envelope record writes");
+            std::fs::write(path, encoded).expect("unit-client envelope record writes");
         }
         self.inner.emit(envelope)
     }
@@ -111,7 +115,10 @@ impl TelemetryClient for RecordingTestClient {
         &self,
         deadline: std::time::Duration,
     ) -> Result<sc_observability_types::otlp::submission::FlushReport, TelemetryClientError> {
-        record_call(&serde_json::json!({"method":"flush", "deadline_ms":deadline.as_millis()}));
+        record_call(
+            self.record_path.as_deref(),
+            &serde_json::json!({"method":"flush", "deadline_ms":deadline.as_millis()}),
+        );
         self.inner.flush(deadline)
     }
 
@@ -145,17 +152,20 @@ impl TelemetryClient for RecordingTestClient {
             }
             _ => serde_json::json!({"kind":"unknown"}),
         };
-        record_call(&serde_json::json!({"method":"status", "query":value}));
+        record_call(
+            self.record_path.as_deref(),
+            &serde_json::json!({"method":"status", "query":value}),
+        );
         self.inner.status(query)
     }
 }
 
-/// Separate process-test witness preserves the existing envelope-only record.
-#[cfg(feature = "test-double")]
-fn record_call(call: &serde_json::Value) {
+/// Separate unit-test witness preserves the existing envelope-only record.
+#[cfg(test)]
+fn record_call(record_path: Option<&std::path::Path>, call: &serde_json::Value) {
     use std::io::Write;
-    if let Some(path) = std::env::var_os(constants::TEST_DOUBLE_RECORD_ENV) {
-        let path = std::path::PathBuf::from(path).with_extension("calls.jsonl");
+    if let Some(path) = record_path {
+        let path = path.with_extension("calls.jsonl");
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .append(true)

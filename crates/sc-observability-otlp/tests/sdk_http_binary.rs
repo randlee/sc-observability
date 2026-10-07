@@ -117,6 +117,68 @@ mod http_collector {
         }
     }
 
+    /// A collector with a causally ordered timeout followed by a successful retry.
+    ///
+    /// It intentionally serves its two connections on one thread: after reading
+    /// the first request it withholds a response until the retry connection is
+    /// accepted. This prevents a worker-thread scheduling race from turning the
+    /// first response into an immediate connection failure or response.
+    #[derive(Debug)]
+    pub struct TimeoutRetryCollector {
+        address: SocketAddr,
+        stop: Arc<AtomicBool>,
+        handle: Option<JoinHandle<Vec<Captured>>>,
+    }
+
+    impl TimeoutRetryCollector {
+        pub fn start() -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind timeout retry collector");
+            let address = listener
+                .local_addr()
+                .expect("timeout retry collector address");
+            let stop = Arc::new(AtomicBool::new(false));
+            let handle = {
+                let stop = Arc::clone(&stop);
+                thread::spawn(move || serve_timeout_then_retry(&listener, &stop))
+            };
+            Self {
+                address,
+                stop,
+                handle: Some(handle),
+            }
+        }
+
+        pub fn endpoint(&self) -> String {
+            format!("http://{}", self.address)
+        }
+
+        pub fn finish(mut self) -> Vec<Captured> {
+            self.handle
+                .take()
+                .expect("timeout retry collector is running")
+                .join()
+                .expect("timeout retry collector completes")
+        }
+
+        fn stop(&mut self) {
+            if self.handle.is_none() {
+                return;
+            }
+            self.stop.store(true, Ordering::Release);
+            // Wake the blocking retry accept if a test exits before a retry.
+            let _ = TcpStream::connect(self.address);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    impl Drop for TimeoutRetryCollector {
+        fn drop(&mut self) {
+            self.stop();
+        }
+    }
+
     fn accept_loop(listener: &TcpListener, stop: &AtomicBool, shared: &Arc<Shared>) {
         let deadline = Instant::now() + COLLECTOR_WATCHDOG;
         let mut connections: Vec<JoinHandle<()>> = Vec::new();
@@ -170,6 +232,42 @@ mod http_collector {
                 return;
             }
         }
+    }
+
+    fn serve_timeout_then_retry(listener: &TcpListener, stop: &AtomicBool) -> Vec<Captured> {
+        let (mut first, _) = listener.accept().expect("accept first timeout request");
+        configure_stream(&first);
+        let first_request = read_request(&mut first).expect("read first timeout request");
+
+        // The first request remains unanswered. Accepting this second connection
+        // proves the client classified the first attempt as a timeout and retried.
+        let (mut retry, _) = listener.accept().expect("accept retry request");
+        if stop.load(Ordering::Acquire) {
+            return Vec::new();
+        }
+        configure_stream(&retry);
+        let retry_request = read_request(&mut retry).expect("read retry request");
+        write_success(&mut retry);
+        drop(first);
+        vec![first_request, retry_request]
+    }
+
+    fn configure_stream(stream: &TcpStream) {
+        stream
+            .set_read_timeout(Some(CONNECTION_IO_TIMEOUT))
+            .expect("set collector read timeout");
+        stream
+            .set_write_timeout(Some(CONNECTION_IO_TIMEOUT))
+            .expect("set collector write timeout");
+    }
+
+    fn write_success(stream: &mut TcpStream) {
+        stream
+            .write_all(
+                b"HTTP/1.1 200 Scripted\r\nContent-Type: application/x-protobuf\r\nContent-Length: 0\r\n\r\n",
+            )
+            .expect("write retry success");
+        stream.flush().expect("flush retry success");
     }
 
     fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -379,7 +477,7 @@ mod grpc_collector {
 
 use std::time::Duration;
 
-use http_collector::{Captured, Collector};
+use http_collector::{Captured, Collector, TimeoutRetryCollector};
 use opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest;
@@ -393,10 +491,11 @@ use sc_observability_otlp::{
     LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
     TelemetryConfigBuilder, TracesConfig,
 };
+use sc_observability_types::v2::{AggregationTemporality, FiniteF64, MetricRecord, MetricValue};
 use sc_observability_types::{
-    ActionName, DurationMs, Level, LogEvent, MetricKind, MetricName, MetricRecord, ProcessIdentity,
-    SchemaVersion, ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus,
-    TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+    ActionName, DurationMs, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion,
+    ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, TargetCategory,
+    TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
 };
 
 const SERVICE: &str = "sdk-http-binary";
@@ -457,15 +556,18 @@ fn span_signals() -> [SpanSignal; 2] {
 }
 
 fn metric() -> MetricRecord {
-    MetricRecord {
-        timestamp: Timestamp::UNIX_EPOCH,
-        service: service_name(),
-        name: MetricName::new(METRIC_NAME).expect("valid metric"),
-        kind: MetricKind::Counter,
-        value: 1.0,
-        unit: None,
-        attributes: serde_json::Map::new(),
-    }
+    MetricRecord::try_new(
+        Timestamp::UNIX_EPOCH,
+        service_name(),
+        MetricName::new(METRIC_NAME).expect("valid metric"),
+        MetricValue::Sum {
+            value: FiniteF64::new(1.0).expect("finite counter"),
+            monotonic: true,
+            temporality: AggregationTemporality::Cumulative,
+            start_time: Timestamp::UNIX_EPOCH,
+        },
+    )
+    .expect("valid counter")
 }
 
 fn canonical_span_signals() -> [sc_observability_types::v2::SpanSignal; 2] {
@@ -489,17 +591,6 @@ fn canonical_span_signals() -> [sc_observability_types::v2::SpanSignal; 2] {
         v2::SpanSignal::Started(started),
         v2::SpanSignal::Ended(ended),
     ]
-}
-
-fn canonical_metric() -> sc_observability_types::v2::MetricRecord {
-    use sc_observability_types::v2;
-    v2::MetricRecord::try_new(
-        Timestamp::UNIX_EPOCH,
-        service_name(),
-        MetricName::new(METRIC_NAME).expect("valid metric"),
-        v2::MetricValue::Gauge(v2::FiniteF64::new(1.0).expect("finite gauge")),
-    )
-    .expect("valid canonical gauge")
 }
 
 fn released_config(transport: OtelConfig) -> sc_observability_otlp::TelemetryConfig {
@@ -636,17 +727,15 @@ fn v2_default_http_binary_exports_lossless_protobuf_for_every_signal() {
         for signal in canonical_span_signals() {
             telemetry.emit_span(&signal).expect("admit span");
         }
-        telemetry
-            .emit_metric(&canonical_metric())
-            .expect("admit metric");
+        telemetry.emit_metric(&metric()).expect("admit metric");
 
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("HttpBinary export completes");
         assert_healthy(&telemetry.health());
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("shutdown completes");
     });
@@ -661,10 +750,7 @@ fn http_binary_sends_the_configured_authorization_header() {
         transport.auth_header = Some(V2AuthHeader::new_typed("Bearer sdk-token").expect("header"));
         let telemetry = v2_telemetry(transport);
         telemetry.emit_log(&log_event()).expect("admit log");
-        telemetry
-            .flush_async_typed()
-            .await
-            .expect("export completes");
+        telemetry.flush_async().await.expect("export completes");
         assert_healthy(&telemetry.health());
     });
     let captured = collector.finish();
@@ -683,10 +769,7 @@ fn http_binary_endpoint_with_signal_path_is_not_doubled() {
         let endpoint = format!("{}/v1/logs/", collector.endpoint());
         let telemetry = v2_telemetry(v2_default_transport(&endpoint));
         telemetry.emit_log(&log_event()).expect("admit log");
-        telemetry
-            .flush_async_typed()
-            .await
-            .expect("export completes");
+        telemetry.flush_async().await.expect("export completes");
     });
     single_request(&collector.finish(), "/v1/logs");
 }
@@ -698,7 +781,7 @@ fn http_binary_retries_throttling_then_succeeds() {
         let telemetry = v2_telemetry(v2_default_transport(&collector.endpoint()));
         telemetry.emit_log(&log_event()).expect("admit log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("retryable statuses are retried to success");
         assert_healthy(&telemetry.health());
@@ -712,7 +795,7 @@ fn http_binary_client_error_is_terminal_without_retry() {
     runtime().block_on(async {
         let telemetry = v2_telemetry(v2_default_transport(&collector.endpoint()));
         telemetry.emit_log(&log_event()).expect("admit log");
-        assert!(telemetry.flush_async_typed().await.is_err());
+        assert!(telemetry.flush_async().await.is_err());
         let health = telemetry.health();
         assert_eq!(health.state, TelemetryHealthState::Degraded);
         assert_eq!(health.dropped_exports_total, 1);
@@ -729,22 +812,40 @@ fn http_binary_client_error_is_terminal_without_retry() {
 }
 
 #[test]
+fn http_binary_retryable_response_is_retried_without_timeout_race() {
+    // A retryable status deterministically exercises the retry path. The next
+    // request receives the collector's default immediate success response, so
+    // neither attempt depends on a short wall-clock timeout.
+    let collector = Collector::start(&[(503, Duration::ZERO)]);
+    runtime().block_on(async {
+        let telemetry = v2_telemetry(v2_default_transport(&collector.endpoint()));
+        telemetry.emit_log(&log_event()).expect("admit log");
+        telemetry
+            .flush_async()
+            .await
+            .expect("retryable response is retried to success");
+        assert_healthy(&telemetry.health());
+    });
+    assert_eq!(requests_to(&collector.finish(), "/v1/logs").len(), 2);
+}
+
+#[test]
 fn http_binary_request_timeout_is_retried_within_the_deadline() {
-    // The first answer arrives well after the 100 ms request timeout; the
-    // retry is answered immediately.
-    let collector = Collector::start(&[(200, Duration::from_secs(1))]);
+    let collector = TimeoutRetryCollector::start();
     runtime().block_on(async {
         let mut transport = v2_default_transport(&collector.endpoint());
         transport.timeout_ms = Some(DurationMs::from(100));
         let telemetry = v2_telemetry(transport);
         telemetry.emit_log(&log_event()).expect("admit log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("timed-out request is retried to success");
         assert_healthy(&telemetry.health());
     });
-    assert_eq!(requests_to(&collector.finish(), "/v1/logs").len(), 2);
+
+    let requests = collector.finish();
+    assert_eq!(requests_to(&requests, "/v1/logs").len(), 2);
 }
 
 #[test]
@@ -756,7 +857,7 @@ fn grpc_protocol_still_exports_over_grpc() {
         let telemetry = v2_telemetry(transport);
         telemetry.emit_log(&log_event()).expect("admit log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("gRPC export completes");
         assert_healthy(&telemetry.health());

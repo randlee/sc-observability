@@ -1,0 +1,111 @@
+//! Deprecated released 1.x facade retained for the compatible transition.
+#![expect(
+    deprecated,
+    reason = "v1 module defines and re-exports the deprecated 1.x surface"
+)]
+
+mod compat;
+
+pub use compat::{LogError, TryLogError};
+#[expect(
+    deprecated,
+    reason = "this v1 re-export preserves the published 1.x types"
+)]
+pub use compat::{LogSink, TypedLogSink, legacy_sink, typed_sink};
+#[deprecated(
+    note = "use sc_observability_types::v2::EventError; see docs/migration/phase-f.md"
+)]
+pub use sc_observability_types::typed::{LogFailure, TryLogFailure};
+
+/// Released 1.x typed-sink compatibility items.
+#[deprecated(
+    note = "use crate::v2::LogSink and SinkRegistration::typed; see docs/migration/phase-f.md"
+)]
+pub mod typed {
+    #[doc(inline)]
+    pub use super::{TypedLogSink, legacy_sink, typed_sink};
+}
+
+#[deprecated(note = "use crate::v2::LoggerBuilder; see docs/migration/phase-f.md")]
+/// Released 1.x logger builder facade.
+#[expect(
+    missing_debug_implementations,
+    reason = "the wrapper deliberately hides the canonical builder's sink trait objects"
+)]
+pub struct LoggerBuilder {
+    pub(crate) inner: crate::builder::CanonicalLoggerBuilder,
+}
+
+#[deprecated(note = "use crate::v2::Logger; see docs/migration/phase-f.md")]
+/// Released 1.x logger facade over the canonical runtime.
+#[expect(
+    missing_debug_implementations,
+    reason = "the wrapper deliberately hides runtime handles and trait-object sinks"
+)]
+pub struct Logger<State = crate::Running> {
+    pub(crate) inner: crate::CanonicalLogger,
+    shutdown: std::marker::PhantomData<State>,
+}
+
+/// Rotation limits for the built-in JSONL file sink.
+#[deprecated(note = "use crate::RetainedLogPolicy; see docs/migration/phase-f.md")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RotationPolicy {
+    /// Maximum size of the active JSONL file before rotation.
+    pub max_bytes: crate::ByteCount,
+    /// Maximum number of rotated files to retain.
+    pub max_files: sc_observability_types::FileCount,
+}
+
+impl Default for RotationPolicy {
+    fn default() -> Self {
+        Self {
+            max_bytes: crate::ByteCount::from_bytes(crate::constants::DEFAULT_ROTATION_MAX_BYTES),
+            max_files: sc_observability_types::FileCount::from_usize(
+                crate::constants::DEFAULT_ROTATION_MAX_FILES_USIZE,
+            ),
+        }
+    }
+}
+
+/// Retention limits for rotated JSONL files owned by the built-in file sink.
+#[deprecated(note = "use crate::RetainedLogPolicy; see docs/migration/phase-f.md")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RetentionPolicy {
+    /// Maximum age in days for rotated JSONL files.
+    #[deprecated(note = "use RetainedLogPolicy::retention_max_age; see docs/migration/phase-f.md")]
+    pub max_age_days: u32,
+}
+
+impl Default for RetentionPolicy {
+    fn default() -> Self {
+        Self {
+            max_age_days: crate::constants::DEFAULT_RETENTION_MAX_AGE_DAYS,
+        }
+    }
+}
+
+impl crate::JsonlFileSink {
+    /// Creates a JSONL sink using the released rotation and retention policies.
+    ///
+    /// New code should use [`crate::JsonlFileSink::open`] with
+    /// [`crate::RetainedLogPolicy`].
+    #[deprecated(
+        note = "use crate::JsonlFileSink::open with RetainedLogPolicy; see docs/migration/phase-f.md"
+    )]
+    pub fn new(
+        path: std::path::PathBuf,
+        rotation: RotationPolicy,
+        retention: RetentionPolicy,
+    ) -> Self {
+        let policy = crate::RetainedLogPolicy {
+            rotation_max_bytes: rotation.max_bytes,
+            rotation_max_files: rotation.max_files,
+            retention_max_age: crate::RetentionMaxAge::from_days(u64::from(retention.max_age_days)),
+            ..crate::RetainedLogPolicy::default()
+        };
+        let mut sink = Self::for_logger(path);
+        sink.legacy_policy = Some(policy);
+        sink
+    }
+}

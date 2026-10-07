@@ -427,16 +427,24 @@ impl Worker {
     }
 
     fn flush_blocking(&self) -> Result<(), ExportError> {
+        self.flush_blocking_with_timeout(self.inner.lifecycle_flush_timeout)
+    }
+
+    fn flush_blocking_with_timeout(&self, timeout: Duration) -> Result<(), ExportError> {
         let (tx, rx) = mpsc::channel();
         self.submit_control(ControlCommand::Flush { result: tx })?;
-        wait_for_control_result(&rx, self.inner.lifecycle_flush_timeout)
+        wait_for_control_result(&rx, timeout)
     }
 
     fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        self.shutdown_blocking_with_timeout(self.inner.lifecycle_shutdown_timeout)
+    }
+
+    fn shutdown_blocking_with_timeout(&self, timeout: Duration) -> Result<(), ExportError> {
         self.inner.cancel.store(true, Ordering::Release);
         let (tx, rx) = mpsc::channel();
         self.submit_control(ControlCommand::Shutdown { result: Some(tx) })?;
-        wait_for_control_result(&rx, self.inner.lifecycle_shutdown_timeout)
+        wait_for_control_result(&rx, timeout)
     }
 }
 
@@ -494,8 +502,16 @@ impl ExporterLifecycle for Worker {
         Worker::flush_blocking(self)
     }
 
+    fn flush_blocking_with_timeout(&self, timeout: Duration) -> Result<(), ExportError> {
+        Worker::flush_blocking_with_timeout(self, timeout)
+    }
+
     fn shutdown_blocking(&self) -> Result<(), ExportError> {
         Worker::shutdown_blocking(self)
+    }
+
+    fn shutdown_blocking_with_timeout(&self, timeout: Duration) -> Result<(), ExportError> {
+        Worker::shutdown_blocking_with_timeout(self, timeout)
     }
 }
 
@@ -1225,12 +1241,27 @@ impl ExporterLifecycle for OtlpHttpExporter {
         block_on_lifecycle(self.backend.lifecycle.flush_async())
     }
 
+    fn flush_blocking_with_timeout(&self, timeout: Duration) -> Result<(), ExportError> {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err(blocking_in_async_error());
+        }
+        block_on_lifecycle(self.backend.lifecycle.flush_async_with_timeout(timeout))
+    }
+
     fn shutdown_blocking(&self) -> Result<(), ExportError> {
         if tokio::runtime::Handle::try_current().is_ok() {
             return Err(blocking_in_async_error());
         }
         self.backend.worker.cancel();
         block_on_lifecycle(self.backend.lifecycle.shutdown_async())
+    }
+
+    fn shutdown_blocking_with_timeout(&self, timeout: Duration) -> Result<(), ExportError> {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err(blocking_in_async_error());
+        }
+        self.backend.worker.cancel();
+        block_on_lifecycle(self.backend.lifecycle.shutdown_async_with_timeout(timeout))
     }
 }
 

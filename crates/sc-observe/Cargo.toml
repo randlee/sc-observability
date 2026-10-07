@@ -9,6 +9,10 @@ repository.workspace = true
 homepage.workspace = true
 description = "Observation routing runtime layered on sc-observability."
 
+[features]
+default = ["v1"]
+v1 = ["sc-observability-types/v1", "sc-observability/v1"]
+
 [dependencies]
 sc-observability-types.workspace = true
 sc-observability.workspace = true

@@ -8,8 +8,9 @@ remain separately authorized.
 
 - All public APIs available in 1.4.1 remain available with their released
   signatures, behavior, error variants, and serialization formats.
-- Deprecated APIs remain supported for this release. Removal requires a
-  separately authorized major release.
+- Deprecated APIs ship in this 1.5.0 release behind default-on `v1` with a
+  deprecation note. PHF-002 permits removal only after this deprecation
+  release; no major-version bump is required.
 - Additive APIs may be used alongside the retained 1.4.1 APIs.
 
 ## Deprecated APIs

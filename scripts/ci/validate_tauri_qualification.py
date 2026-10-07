@@ -254,7 +254,7 @@ def main():
                             report['resolved_dependencies'] = report['resolved_dependencies_by_profile'][profile]
                         command = [sandbox.cargo, 'build', '--locked', '--offline']
                         if profile == 'release':
-                            command += ['--release', '--features', 'sc-observability-log/static_level_cap_test']
+                            command += ['--release', '--features', 'static_level_cap']
                         sandbox.run(command, profile_host)
                         executable = Path(sandbox.env['CARGO_TARGET_DIR']) / profile / ('tauri-logging-example.exe' if os.name == 'nt' else 'tauri-logging-example')
                         report['executable_sha256' if profile == 'debug' else 'capped_executable_sha256'] = digest(executable)

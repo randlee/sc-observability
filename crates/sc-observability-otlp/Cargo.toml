@@ -11,11 +11,9 @@ description = "Standalone OTLP export adapter for sc-observability."
 
 [features]
 durable-store = ["sync-http", "dep:rusqlite", "dep:serde-saphyr", "dep:uuid"]
-default = []
+default = ["v1"]
+v1 = ["sc-observability-types/v1"]
 otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest"]
-# Unstable, non-default support for the D.7 external consumer fixture. This
-# deliberately does not activate the production Telemetry factory (D.18).
-sdk-test-support = ["otlp-sdk"]
 sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio"]
 
 [dependencies]
@@ -47,6 +45,7 @@ tokio = { workspace = true, features = ["test-util"] }
 # The hermetic conformance collector routes the three generated OTLP services
 # in integration tests only; production SDK transport keeps its pinned features.
 tonic = { workspace = true, features = ["router"] }
+rustls = { version = "=0.23.45", features = ["ring"] }
 
 [lints]
 workspace = true

@@ -8,7 +8,7 @@
 - [`api-design.md`](./api-design.md)
 - [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
 - [`atm-adapter-architecture.md`](./atm-adapter-architecture.md)
-- [`atm-adapter-example.md`](./atm-adapter-example.md)
+- [`migration/phase-f.md`](./migration/phase-f.md)
 
 ## 1. Purpose
 
@@ -95,6 +95,12 @@ Shared assumptions here:
 ### 3.2 Minimal OTLP Attachment
 
 ```rust
+use sc_observability_otlp::v2::{
+    LogsConfig, MetricsConfig, OtelConfig, OtlpProtocol, Telemetry, TelemetryConfigBuilder,
+    TracesConfig,
+};
+use sc_observability_types::{DurationMs, ServiceName};
+
 let telemetry_config = TelemetryConfigBuilder::new(ServiceName::new("atm")?)
     .with_transport(OtelConfig {
         enabled: true,
@@ -165,6 +171,7 @@ The intended path is:
 4. ATM-owned adapter code projects shared health and durability behavior back
    into ATM-specific operational surfaces
 
-See [`atm-adapter-example.md`](./atm-adapter-example.md) for the boundary-proof
+See [`migration/phase-f.md`](./migration/phase-f.md) for the boundary and
+migration
 example and [`atm-adapter-requirements.md`](./atm-adapter-requirements.md) for
 the normative ATM-owned obligations.

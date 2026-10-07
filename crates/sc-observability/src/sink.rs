@@ -3,9 +3,8 @@
 //! [`LogSink`] is the trait the logger runtime and [`crate::SinkRegistration`]
 //! store directly. It reports the canonical [`LogSinkError`], and the built-in
 //! sinks implement it without traversing the retained 1.x compatibility
-//! facade. The released root [`crate::LogSink`] and
-//! [`crate::typed::TypedLogSink`] traits adapt to it exactly once, at their
-//! registration boundaries.
+//! facade. The released root [`crate::LogSink`] path re-exports this canonical trait
+//! during the v1 migration window.
 
 use sc_observability_types::v2::LogSinkError;
 use sc_observability_types::{LogEvent, SinkHealth};

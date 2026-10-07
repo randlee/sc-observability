@@ -6,7 +6,9 @@
 //! One `init` per test binary: every sub-case runs inside the single test fn
 //! (the tokio runtime is built inside it), so the `DropCause::InvalidEvent`
 //! delta asserted here cannot race.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

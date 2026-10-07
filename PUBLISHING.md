@@ -10,7 +10,7 @@ manifest instead.
 
 ## Distribution Channels
 
-- **crates.io**: all ten intended publishable Rust crates in
+- **crates.io**: every publishable Rust crate in
   `release/publish-artifacts.toml`, in dependency order
   - [`sc-observability-types`](https://crates.io/crates/sc-observability-types)
   - [`sc-observability`](https://crates.io/crates/sc-observability)
@@ -141,6 +141,6 @@ after the Phase C `sc-publish` migration, and BTIT adoption follows publication.
 
 Deliberate exclusions are `sc-observability-log-consumer-check` (CI-only
 consumer proof), `bindings/schema-generator` (build tooling), and example
-applications, including `examples/atm-adapter-example` (excluded from the
+applications and other excluded examples (excluded from the
 root workspace) and the Tauri/Python examples. They remain test or tooling
 inputs and must not be published as library artifacts.

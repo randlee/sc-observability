@@ -1,5 +1,7 @@
 //! Policy admission and panic containment fixtures for an attached host logger.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::expect_used,
     clippy::unwrap_used,
     clippy::panic,
@@ -9,8 +11,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-#[allow(deprecated)]
-use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegistration};
+use sc_observability::v2::LogSink;
+use sc_observability::{SinkHealth, SinkHealthState, SinkName, SinkRegistration};
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
     BridgeOptions, EventLevel, LoggerConfig, PolicyRejection, ServiceName, TargetCategory,
@@ -49,9 +51,8 @@ struct RecordingSink {
     events: Arc<Mutex<Vec<LogEvent>>>,
 }
 
-#[allow(deprecated)]
 impl LogSink for RecordingSink {
-    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
         self.events
             .lock()
             .expect("recording lock")
@@ -133,7 +134,7 @@ fn attach_with_config(
     configure(&mut config);
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut builder = sc_observability::v2::LoggerBuilder::new(config).expect("builder");
-    builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
+    builder.register_sink(SinkRegistration::typed(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
     let logger = Arc::new(builder.build().expect("host logger"));
@@ -200,7 +201,7 @@ fn instrumented_completion_is_routed_through_attachment() {
 
     instrumented_attachment_fixture();
     control
-        .flush(Duration::from_secs(2))
+        .flush_with_timeout(Duration::from_secs(2))
         .expect("flush instrumented event");
 
     let events = events.lock().expect("recording lock");
@@ -209,7 +210,7 @@ fn instrumented_completion_is_routed_through_attachment() {
     drop(events);
 
     attachment.detach(Duration::from_secs(2)).expect("detach");
-    Arc::try_unwrap(host)
+    let _ = Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("detach releases attachment logger"))
         .shutdown();
 }
@@ -256,7 +257,9 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
         .fields
         .insert("token".to_owned(), json!("Bearer field-secret"));
     control.try_log(admitted).expect("allowlisted event");
-    control.flush(Duration::from_secs(2)).expect("flush");
+    control
+        .flush_with_timeout(Duration::from_secs(2))
+        .expect("flush");
     let events = events.lock().expect("recording lock");
     assert_eq!(events.len(), 1, "only the admitted event reaches the sink");
     assert_eq!(events[0].message.as_deref(), Some("Bearer [REDACTED]"));
@@ -269,7 +272,7 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
 
     attachment.detach(Duration::from_secs(2)).expect("detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases logger"));
-    host.shutdown();
+    let _ = host.shutdown();
     let output = std::fs::read_to_string(path).expect("read redacted log");
     assert!(output.contains("Bearer [REDACTED]"));
     assert!(!output.contains("message-secret"));
@@ -336,7 +339,7 @@ fn every_policy_reason_has_concrete_steps_and_facade_diagnostics() {
         );
         assert!(events.lock().expect("events").is_empty());
         attachment.detach(Duration::from_secs(2)).expect("detach");
-        Arc::try_unwrap(host)
+        let _ = Arc::try_unwrap(host)
             .unwrap_or_else(|_| panic!("host released"))
             .shutdown();
     }

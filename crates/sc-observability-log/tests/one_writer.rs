@@ -1,5 +1,7 @@
 //! Cross-producer direct-admission evidence for the single guarded writer.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

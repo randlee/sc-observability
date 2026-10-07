@@ -124,12 +124,12 @@ it already had in 1.4.1. By the rule above, they are existing pairs:
 
 | Row | Declaration |
 | --- | --- |
-| `sc_observe::ObservabilityConfig::default_for` | `crates/sc-observe/src/compat.rs:85` |
-| `sc_observe::ObservabilityConfig::service_name` | `crates/sc-observe/src/compat.rs:94` |
-| `sc_observe::Observability::new` | `crates/sc-observe/src/compat.rs:115` |
-| `sc_observe::Observability::flush` | `crates/sc-observe/src/compat.rs:129` |
-| `sc_observe::Observability::shutdown` | `crates/sc-observe/src/compat.rs:144` |
-| `sc_observe::ObservabilityBuilder::build` | `crates/sc-observe/src/compat.rs:171` |
+| `sc_observe::ObservabilityConfig::default_for` | `crates/sc-observe/src/v1/compat.rs:85` |
+| `sc_observe::ObservabilityConfig::service_name` | `crates/sc-observe/src/v1/compat.rs:94` |
+| `sc_observe::Observability::new` | `crates/sc-observe/src/v1/compat.rs:115` |
+| `sc_observe::Observability::flush` | `crates/sc-observe/src/v1/compat.rs:129` |
+| `sc_observe::Observability::shutdown` | `crates/sc-observe/src/v1/compat.rs:144` |
+| `sc_observe::ObservabilityBuilder::build` | `crates/sc-observe/src/v1/compat.rs:171` |
 | `sc_observability_otlp::SpanAssembler::push` | `crates/sc-observability-otlp/src/compat.rs:701` |
 
 These rows now list their containing `compat` file in `removable_paths`,
@@ -271,12 +271,12 @@ its declaration at the measured revision:
 | added wrapper | type | `sc_observe::v2::Observability` | `crates/sc-observe/src/lib.rs:107` | unregistered |
 | added wrapper | type | `sc_observe::v2::ObservabilityBuilder` | `crates/sc-observe/src/lib.rs:154` | unregistered |
 | added wrapper | type | `sc_observe::v2::ObservabilityConfig` | `crates/sc-observe/src/lib.rs:77` | unregistered |
-| restoration | callable | `sc_observe::Observability::flush_typed` | `crates/sc-observe/src/compat.rs:154` | registry |
-| restoration | callable | `sc_observe::Observability::new_typed` | `crates/sc-observe/src/compat.rs:149` | registry |
-| restoration | callable | `sc_observe::Observability::shutdown_typed` | `crates/sc-observe/src/compat.rs:160` | registry |
-| restoration | callable | `sc_observe::ObservabilityBuilder::build_typed` | `crates/sc-observe/src/compat.rs:176` | registry |
-| restoration | callable | `sc_observe::ObservabilityConfig::default_for_typed` | `crates/sc-observe/src/compat.rs:99` | registry |
-| restoration | callable | `sc_observe::ObservabilityConfig::service_name_typed` | `crates/sc-observe/src/compat.rs:104` | registry |
+| restoration | callable | `sc_observe::Observability::flush_typed` | `crates/sc-observe/src/v1/compat.rs:154` | registry |
+| restoration | callable | `sc_observe::Observability::new_typed` | `crates/sc-observe/src/v1/compat.rs:149` | registry |
+| restoration | callable | `sc_observe::Observability::shutdown_typed` | `crates/sc-observe/src/v1/compat.rs:160` | registry |
+| restoration | callable | `sc_observe::ObservabilityBuilder::build_typed` | `crates/sc-observe/src/v1/compat.rs:176` | registry |
+| restoration | callable | `sc_observe::ObservabilityConfig::default_for_typed` | `crates/sc-observe/src/v1/compat.rs:99` | registry |
+| restoration | callable | `sc_observe::ObservabilityConfig::service_name_typed` | `crates/sc-observe/src/v1/compat.rs:104` | registry |
 
 ### `sc-observability-log`
 

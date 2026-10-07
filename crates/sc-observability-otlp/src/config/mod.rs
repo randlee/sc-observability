@@ -27,18 +27,19 @@ pub use types::{
 pub(crate) use validation::prepared_backend_connection;
 #[cfg(test)]
 pub(crate) use validation::validate_config_typed;
+#[cfg(test)]
+pub(crate) use validation::validated_test_telemetry_bounds;
 #[cfg(any(test, feature = "durable-store"))]
 pub(crate) use validation::validated_transport_bounds;
 pub(crate) use validation::{
-    BackendTransportBounds, ValidatedTransportBounds, validated_released_telemetry_bounds,
-    validated_telemetry_bounds,
+    BackendTransportBounds, ValidatedTransportBounds, validated_telemetry_bounds,
 };
 #[cfg(any(feature = "sync-http", feature = "otlp-sdk"))]
 pub(crate) use validation::{ValidatedBackendConnection, prepared_backend_connection};
 
 #[cfg(feature = "sync-http")]
 pub(crate) use validation::RetryPolicy;
-#[cfg(any(feature = "sdk-test-support", all(test, feature = "otlp-sdk")))]
+#[cfg(all(test, feature = "otlp-sdk"))]
 pub(crate) use validation::validated_backend_connection;
 
 #[cfg(test)]
@@ -49,8 +50,8 @@ use serde_json::{Map, Value};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_types::ServiceName;
     use sc_observability_types::v2::ConfigFailure;
-    use sc_observability_types::{DiagnosticInfo, ServiceName};
 
     #[test]
     fn otlp_endpoint_accepts_valid_http_and_https_values() {

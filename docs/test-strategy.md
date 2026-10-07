@@ -135,10 +135,8 @@ The following can be added once behavior exists:
 
 Phase-A validation additions once the phase starts landing:
 
-- `bash scripts/ci/validate_public_api_diff.sh` for additive public API diffs
-- `python3 scripts/ci/validate_public_api_semver.py` for semver-breaking API diffs
-- `bash scripts/ci/validate_public_api_docs.sh` for machine-checkable API
-  approval/documentation coverage
+- `python3 scripts/ci/stock_public_api.py check --target-dir <target>` for
+  accepted Rust public API baselines
 
 ## 6. Exit Criteria
 

@@ -7,7 +7,9 @@
 //! the `src/main.rs` of an isolated consumer crate and judged from rustc's
 //! structured diagnostics (error code and primary consumer span), never from
 //! rendered text that names crate-private definitions.
+#![cfg(feature = "v1")]
 #![allow(
+    deprecated,
     clippy::expect_used,
     clippy::panic,
     reason = "integration test: helper fns are not covered by clippy.toml allow-*-in-tests"

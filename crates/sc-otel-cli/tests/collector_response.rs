@@ -1,5 +1,3 @@
-#![cfg(not(feature = "test-double"))]
-
 //! Real HTTP acknowledgements must drive durable state, not merely HTTP status.
 #[path = "common/assert_result_v1.rs"]
 mod assert_result_v1;
@@ -18,6 +16,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
+        mpsc,
     },
     thread,
     time::{Duration, Instant},
@@ -26,6 +25,7 @@ use std::{
 struct Collector {
     address: SocketAddr,
     stop: Arc<AtomicBool>,
+    handled: mpsc::Receiver<()>,
     thread: Option<thread::JoinHandle<Vec<String>>>,
 }
 
@@ -42,6 +42,7 @@ impl Collector {
         let address = listener.local_addr().expect("collector address");
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = Arc::clone(&stop);
+        let (handled_signal, handled) = mpsc::channel();
         let thread = thread::spawn(move || {
             let mut paths = Vec::new();
             let deadline = Instant::now() + request_deadline;
@@ -103,6 +104,7 @@ impl Collector {
                 // Write headers separately: oversized-body tests may close early.
                 write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).expect("response headers");
                 let _ = stream.write_all(body.as_bytes());
+                let _ = handled_signal.send(());
                 break;
             }
             while !stopped.load(Ordering::Acquire) {
@@ -113,8 +115,14 @@ impl Collector {
         Self {
             address,
             stop,
+            handled,
             thread: Some(thread),
         }
+    }
+    fn wait_until_handled(&self) {
+        self.handled
+            .recv()
+            .expect("collector finishes handling the request");
     }
     fn finish(&mut self) -> Vec<String> {
         self.stop.store(true, Ordering::Release);
@@ -143,7 +151,21 @@ fn scrub_telemetry_environment(command: &mut Command) -> &mut Command {
     command
 }
 
-fn emit(body: String, flag: &str, payload: &str, signal: &str, path: &str, rejected: bool) {
+#[derive(Clone, Copy)]
+struct SignalCase<'a> {
+    flag: &'a str,
+    payload: &'a str,
+    signal: &'a str,
+    path: &'a str,
+}
+
+fn emit(body: String, case: SignalCase<'_>, rejected: bool) {
+    let SignalCase {
+        flag,
+        payload,
+        signal,
+        path,
+    } = case;
     let mut collector = Collector::start(body);
     let store = tempfile::tempdir().expect("fresh durable store");
     let mut emit = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
@@ -260,7 +282,16 @@ fn every_signal_honors_collector_partial_success_through_durable_cli() {
             ),
             ("{}".to_owned(), false),
         ] {
-            emit(body, flag, &payload, signal, path, rejected);
+            emit(
+                body,
+                SignalCase {
+                    flag,
+                    payload: &payload,
+                    signal,
+                    path,
+                },
+                rejected,
+            );
         }
     }
 }
@@ -271,7 +302,16 @@ fn unreadable_or_oversized_acknowledgements_never_become_delivered_or_retried() 
         "not JSON".to_owned(),
         json!({"message": "x".repeat(64 * 1024)}).to_string(),
     ] {
-        emit(body, "--log", "{}", "logs", "/v1/logs", true);
+        emit(
+            body,
+            SignalCase {
+                flag: "--log",
+                payload: "{}",
+                signal: "logs",
+                path: "/v1/logs",
+            },
+            true,
+        );
     }
 }
 
@@ -281,12 +321,15 @@ fn collector_deadline_stops_after_serving_the_expected_request() {
         Collector::start_with_request_deadline("{}".to_owned(), Duration::from_secs(1));
     let mut stream = TcpStream::connect(collector.address).expect("connect collector");
     stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("set client response read timeout");
+    stream
         .write_all(b"POST /v1/logs HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\n\r\n{}")
         .expect("write request");
     let mut response = String::new();
     stream.read_to_string(&mut response).expect("read response");
     assert!(response.starts_with("HTTP/1.1 200 OK"));
 
-    thread::sleep(Duration::from_millis(1100));
+    collector.wait_until_handled();
     assert_eq!(collector.finish(), vec!["/v1/logs"]);
 }
