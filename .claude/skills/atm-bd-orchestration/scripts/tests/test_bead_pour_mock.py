@@ -118,6 +118,27 @@ class Workspace:
 
 SERVER_DIR = ".dolt-server"   # data directory and log of the workspace's own dolt sql-server
 
+# Runs dolt as its child and stops it when the test process that started it is gone (killed, so class
+# cleanup never ran): the server must not outlive the run.
+SUPERVISOR = """\
+import os, signal, subprocess, sys, time
+parent = int(sys.argv[1])
+server = subprocess.Popen(sys.argv[2:])
+def stop(*_):
+    server.terminate()
+    try:
+        server.wait(10)
+    except subprocess.TimeoutExpired:
+        server.kill()
+    sys.exit(0)
+signal.signal(signal.SIGTERM, stop)
+while server.poll() is None:
+    if os.getppid() != parent:
+        stop()
+    time.sleep(0.5)
+sys.exit(server.returncode)
+"""
+
 
 def start_server(root: Path) -> int:
     """Start a dolt sql-server for the workspace on a free loopback port; return the port once it accepts connections."""
@@ -126,9 +147,12 @@ def start_server(root: Path) -> int:
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
+    supervisor = data / "supervise.py"
+    supervisor.write_text(SUPERVISOR)
     with (data / "server.log").open("w") as log:
-        server = subprocess.Popen(["dolt", "sql-server", "-H", "127.0.0.1", "-P", str(port), f"--data-dir={data}"],
-                                  cwd=data, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        server = subprocess.Popen([sys.executable, str(supervisor), str(os.getpid()),
+                                   "dolt", "sql-server", "-H", "127.0.0.1", "-P", str(port), f"--data-dir={data}"],
+                                  cwd=data, stdout=log, stderr=subprocess.STDOUT)
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         if server.poll() is not None:
@@ -145,7 +169,7 @@ def start_server(root: Path) -> int:
 
 def stop_server(root: Path) -> None:
     marker = str(root / SERVER_DIR)
-    for line in subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True).stdout.splitlines():
+    for line in subprocess.run(["ps", "-axwwo", "pid=,command="], capture_output=True, text=True).stdout.splitlines():
         pid, _, command = line.strip().partition(" ")
         if marker in command:
             try:
@@ -187,6 +211,33 @@ def findings_file(ws: Workspace, sprint: str, filed_by: str, round_: int, *findi
 
 def fix_group(sprint: str, ref: str, round_: int = 1) -> tuple[str, str, str]:
     return tuple(f"{sprint}.{ref}-r{round_}-{step}" for step in ("fix", "sanity", "qa"))
+
+
+@unittest.skipIf(shutil.which("dolt") is None, "dolt not on PATH: server lifetime test not run")
+class ServerLifetimeTests(unittest.TestCase):
+    def test_server_stops_when_the_test_process_is_killed(self):
+        """A killed run never reaches class cleanup; its dolt server must stop anyway."""
+        root = Path(tempfile.mkdtemp(prefix="server-life-")).resolve()
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self.addCleanup(stop_server, root)
+        code = ("import sys, time; from pathlib import Path; sys.path.insert(0, sys.argv[1]);"
+                "from test_bead_pour_mock import start_server; print(start_server(Path(sys.argv[2])), flush=True); time.sleep(600)")
+        owner = subprocess.Popen([sys.executable, "-c", code, str(Path(__file__).parent), str(root)],
+                                 stdout=subprocess.PIPE, text=True)
+        port = int(owner.stdout.readline())
+        owner.kill()
+        owner.wait()
+        marker = str(root / SERVER_DIR)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            alive = [line for line in subprocess.run(["ps", "-axwwo", "command="], capture_output=True, text=True).stdout.splitlines()
+                     if marker in line]
+            if not alive:
+                break
+            time.sleep(0.5)
+        self.assertEqual(alive, [], "dolt server outlived the killed test process")
+        with self.assertRaises(OSError):
+            socket.create_connection(("127.0.0.1", port), timeout=1).close()
 
 
 @unittest.skipUnless(not MISSING, SKIP_REASON)

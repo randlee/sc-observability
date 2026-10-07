@@ -65,6 +65,15 @@ f-2, f-3, f-4, f-6, and f-7 follow it; and f-8 closes after those five
 sprints. The consumer-facing migration record is
 [`migration/phase-f.md`](migration/phase-f.md).
 
+## Phase G — sc-otel distribution and release delivery
+
+Phase G treats PR #1203 (`docs/sc-otel-clap-reference` at `03ea7f0c`) as the
+external prerequisite g-1: it must merge to `develop` before the phase branch
+is cut. g-2 delivers the CLI distribution contract while g-3 makes
+`sc-otel status` read-only; g-4 releases their completed result as 1.5.1.
+Its authoritative execution graph is
+[`plans/phase-g.jsonl`](plans/phase-g.jsonl).
+
 ## Issue #70 / v1.1.0
 
 Retained-log rotation, pruning, and maintenance was the additive `v1.1.0`
