@@ -304,16 +304,23 @@ def run_release_archive_packager(
         'version = "${{ needs.gate-and-tag.outputs.release_version }}"',
         'version = "1.5.0"',
     )
+    environment = {
+        **os.environ,
+        "RELEASE_ARTIFACT_MANIFEST": str(tmp_path / "release" / "manifest.toml"),
+        "GITHUB_ENV": str(output),
+    }
+    # CI exposes these runner variables to the test process.  Keep ordinary
+    # packaging fixtures host-neutral; the dedicated smoke test opts in.
+    environment.pop("RUNNER_OS", None)
+    environment.pop("RUNNER_ARCH", None)
+    if runner_os:
+        environment["RUNNER_OS"] = runner_os
+    if runner_arch:
+        environment["RUNNER_ARCH"] = runner_arch
     result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=tmp_path,
-        env={
-            **os.environ,
-            "RELEASE_ARTIFACT_MANIFEST": str(tmp_path / "release" / "manifest.toml"),
-            "GITHUB_ENV": str(output),
-            **({"RUNNER_OS": runner_os} if runner_os else {}),
-            **({"RUNNER_ARCH": runner_arch} if runner_arch else {}),
-        },
+        env=environment,
         text=True,
         capture_output=True,
         check=False,
