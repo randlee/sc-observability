@@ -232,6 +232,11 @@ impl ChildProcess {
         self.stdin.write_all(b"COMPLETE\n").unwrap();
         self.stdin.flush().unwrap();
     }
+    fn assert_running(&mut self, phase: &str) {
+        if let Some(status) = self.child.as_mut().unwrap().try_wait().unwrap() {
+            panic!("child {} exited before {phase}: {status}", self.mode);
+        }
+    }
     fn kill(&mut self) {
         self.child.as_mut().unwrap().kill().unwrap();
     }
@@ -286,8 +291,11 @@ fn signal_parent(signal: &str) {
     writeln!(stdout, "{signal}").unwrap();
     stdout.flush().unwrap();
 }
-fn wait_until_store_is_empty(path: &Path) {
+fn wait_until_store_is_empty(path: &Path, children: &mut [&mut ChildProcess]) {
     loop {
+        for child in &mut *children {
+            child.assert_running("the store drained");
+        }
         let db = store::reader(&config(path).store_path).unwrap();
         if query::snapshot(&db, None).unwrap().is_empty() {
             return;
@@ -319,6 +327,10 @@ fn child_drainer() {
     let path = PathBuf::from(std::env::var_os("SC_D33_TEST_STORE").expect("parent supplies store"));
     let mode = std::env::var("SC_D33_TEST_MODE").unwrap();
     if mode == "exit" {
+        return;
+    }
+    if mode == "exit-after-ready" {
+        signal_ready();
         return;
     }
     let exporter: Arc<dyn SubmissionExporter> = if mode == "crash" {
@@ -400,6 +412,24 @@ fn child_exit_before_readiness_reports_status() {
     assert!(message.contains("child exit exited before readiness"));
     assert!(message.contains("exit status"));
 }
+#[test]
+fn child_exit_before_store_drains_reports_status() {
+    let dir = tempfile::tempdir().unwrap();
+    seed(dir.path(), 1);
+    let mut process = child(dir.path(), "exit-after-ready");
+    process.ready();
+    let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        wait_until_store_is_empty(dir.path(), &mut [&mut process]);
+    }))
+    .expect_err("an exited child cannot drain the store");
+    let message = error
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| error.downcast_ref::<&str>().copied())
+        .unwrap();
+    assert!(message.contains("child exit-after-ready exited before the store drained"));
+    assert!(message.contains("exit status"));
+}
 fn seed(path: &Path, amount: usize) -> Vec<AdmissionReceipt> {
     let config = config(path);
     let mut db = store::open(&config.store_path).unwrap();
@@ -438,7 +468,7 @@ fn two_process_drainers_no_loss() {
     let mut second = child(dir.path(), "controlled");
     first.ready();
     second.ready();
-    wait_until_store_is_empty(dir.path());
+    wait_until_store_is_empty(dir.path(), &mut [&mut first, &mut second]);
     first.complete();
     second.complete();
     assert!(first.wait().success());
