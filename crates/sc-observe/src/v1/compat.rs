@@ -23,6 +23,16 @@ fn legacy_init_error(error: InitError) -> LegacyInitError {
     LegacyInitError(error.into_context())
 }
 
+fn released_config(config: crate::v2::ObservabilityConfig) -> ObservabilityConfig {
+    ObservabilityConfig {
+        tool_name: config.tool_name,
+        log_root: config.log_root,
+        env_prefix: config.env_prefix,
+        queue_capacity: config.queue_capacity,
+        retained_log_policy: config.retained_log_policy,
+    }
+}
+
 impl ObservabilityConfig {
     /// Builds the documented v1 defaults from a tool name and log root.
     ///
@@ -47,7 +57,7 @@ impl ObservabilityConfig {
     )]
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, LegacyInitError> {
         crate::v2::ObservabilityConfig::default_for(tool_name, log_root)
-            .map(Self)
+            .map(released_config)
             .map_err(legacy_init_error)
     }
 
@@ -57,7 +67,8 @@ impl ObservabilityConfig {
         note = "Use sc_observe::v2::ObservabilityConfig::service_name(); see migrate-error-api.md."
     )]
     pub fn service_name(&self) -> Result<ServiceName, LegacyInitError> {
-        self.0.service_name().map_err(legacy_init_error)
+        let config: crate::v2::ObservabilityConfig = self.clone().into();
+        config.service_name().map_err(legacy_init_error)
     }
 
     /// Builds v1 defaults while retaining the released typed failure contract.
@@ -67,7 +78,7 @@ impl ObservabilityConfig {
     )]
     pub fn default_for_typed(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitFailure> {
         crate::v2::ObservabilityConfig::default_for(tool_name, log_root)
-            .map(Self)
+            .map(released_config)
             .map_err(InitFailure::from)
     }
 
@@ -77,7 +88,8 @@ impl ObservabilityConfig {
         note = "Use sc_observe::v2::ObservabilityConfig::service_name(); see migrate-error-api.md."
     )]
     pub fn service_name_typed(&self) -> Result<ServiceName, InitFailure> {
-        self.0.service_name().map_err(InitFailure::from)
+        let config: crate::v2::ObservabilityConfig = self.clone().into();
+        config.service_name().map_err(InitFailure::from)
     }
 }
 
@@ -88,7 +100,7 @@ impl Observability {
         note = "Use sc_observe::v2::Observability::new(); see migrate-error-api.md."
     )]
     pub fn new(config: ObservabilityConfig) -> Result<Self, LegacyInitError> {
-        crate::v2::Observability::builder(config.0)
+        crate::v2::Observability::builder(config.into())
             .build_released()
             .map(Self)
             .map_err(legacy_init_error)
@@ -131,7 +143,7 @@ impl Observability {
         note = "Use sc_observe::v2::Observability::new(); see migrate-error-api.md."
     )]
     pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure> {
-        crate::v2::Observability::builder(config.0)
+        crate::v2::Observability::builder(config.into())
             .build_released()
             .map(Self)
             .map_err(InitFailure::from)

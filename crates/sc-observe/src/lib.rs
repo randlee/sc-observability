@@ -962,35 +962,38 @@ mod canonical {
 
 /// Released 1.x root configuration facade.
 #[cfg(feature = "v1")]
-#[repr(transparent)]
 #[derive(Debug, Clone)]
 #[deprecated(
     since = "1.4.0",
     note = "use sc_observe::v2::ObservabilityConfig; see docs/migration/phase-f.md"
 )]
-pub struct ObservabilityConfig(v2::ObservabilityConfig);
-
-#[cfg(feature = "v1")]
-#[allow(
-    deprecated,
-    reason = "this implementation forwards the released root configuration facade"
-)]
-impl std::ops::Deref for ObservabilityConfig {
-    type Target = v2::ObservabilityConfig;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+pub struct ObservabilityConfig {
+    /// Stable tool name used to derive service and log layout defaults.
+    pub tool_name: ToolName,
+    /// Root directory that owns the routing runtime log tree.
+    pub log_root: PathBuf,
+    /// Environment-variable prefix used by the owning application.
+    pub env_prefix: EnvPrefix,
+    /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
+    pub queue_capacity: usize,
+    /// Retained-log policy forwarded to the built-in logging layer.
+    pub retained_log_policy: RetainedLogPolicy,
 }
 
 #[cfg(feature = "v1")]
 #[allow(
     deprecated,
-    reason = "this implementation forwards the released root configuration facade"
+    reason = "converts the retained released 1.x configuration"
 )]
-impl std::ops::DerefMut for ObservabilityConfig {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+impl From<ObservabilityConfig> for v2::ObservabilityConfig {
+    fn from(config: ObservabilityConfig) -> Self {
+        Self {
+            tool_name: config.tool_name,
+            log_root: config.log_root,
+            env_prefix: config.env_prefix,
+            queue_capacity: config.queue_capacity,
+            retained_log_policy: config.retained_log_policy,
+        }
     }
 }
 
@@ -1050,7 +1053,7 @@ impl Observability {
         note = "use sc_observe::v2::Observability::builder; see docs/migration/phase-f.md"
     )]
     pub fn builder(config: ObservabilityConfig) -> ObservabilityBuilder {
-        ObservabilityBuilder(v2::Observability::builder(config.0))
+        ObservabilityBuilder(v2::Observability::builder(config.into()))
     }
 
     /// Routes one typed observation through the released facade.
