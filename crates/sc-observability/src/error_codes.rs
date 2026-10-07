@@ -8,7 +8,6 @@ pub const LOGGER_INVALID_EVENT: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_INVALID_EVENT");
 /// The logger was used after shutdown began or completed.
 /// Recovery: stop emitting to the closed owner and construct a new logger.
-#[cfg(feature = "v1")]
 #[deprecated(note = "removed; see docs/migration/phase-f.md")]
 pub const LOGGER_SHUTDOWN: ErrorCode = ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SHUTDOWN");
 /// A configured sink rejected or failed to write an admitted event.
@@ -76,7 +75,7 @@ pub const ALL: &[ErrorCode] = &[
     SC_LOG_SINK_REGISTRATION_INVALID,
     SC_LOG_SINK_REGISTRATION_CLOSED,
     LOGGER_INVALID_EVENT,
-    #[cfg(feature = "v1")]
+    #[allow(deprecated)]
     LOGGER_SHUTDOWN,
     LOGGER_SINK_WRITE_FAILED,
     LOGGER_QUEUE_FULL,

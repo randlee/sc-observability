@@ -314,10 +314,14 @@ mod canonical {
         Released(FlushFailure),
     }
 
+    #[allow(
+        deprecated,
+        reason = "the retained shutdown code is the canonical closed-lifecycle diagnostic"
+    )]
     fn shutdown_flush_error() -> RunningFlushError {
         RunningFlushError::Canonical(CanonicalFlushError::classified_drain(
             Box::new(ErrorContext::new(
-                sc_observability::error_codes::LOGGER_WRITER_DEGRADED,
+                sc_observability::error_codes::LOGGER_SHUTDOWN,
                 "observability is shut down; construct a new runtime before flushing",
                 Remediation::not_recoverable("create a new observability runtime"),
             )),
@@ -1898,6 +1902,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        deprecated,
+        reason = "the retained shutdown code is the canonical closed-lifecycle diagnostic"
+    )]
     fn in_flight_shutdown_preserves_flush_health_and_repeated_shutdown() {
         let ShutdownFixture {
             runtime,
@@ -1960,10 +1968,18 @@ mod tests {
             .recv_timeout(Duration::from_secs(2))
             .expect("bounded original shutdown")
             .expect("shutdown success");
-        flush_rx
+        let error = flush_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("bounded flush completion")
-            .expect("stopped flush succeeds");
+            .expect_err("stopped flush returns the canonical shutdown error");
+        assert_eq!(
+            error.diagnostic().code,
+            sc_observability::error_codes::LOGGER_SHUTDOWN
+        );
+        assert_eq!(
+            error.failure_classification(),
+            FailureClassification::Closed
+        );
         let report = health_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("bounded health completion");

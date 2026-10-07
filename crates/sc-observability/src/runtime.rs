@@ -33,8 +33,8 @@ use crate::sinks::{JsonlFileSink, validate_event_size};
 use crate::{
     CanonicalLogger, EnvSnapshot, LevelOwner, LogEvent, LogRoot, LogSettings, LogSettingsError,
     LogSettingsInputs, LoggerConfig, RedactionPolicy, ResolvedLogSettings, RetainedLogPolicy,
-    ServiceName, default_log_path, error_codes, shutdown_timed_out_error_context,
-    writer_degraded_error_context,
+    ServiceName, default_log_path, error_codes, shutdown_error_context,
+    shutdown_timed_out_error_context, writer_degraded_error_context,
 };
 
 impl LogSettings {
@@ -947,7 +947,7 @@ impl CanonicalLogger {
 
     fn shutdown_flush_error() -> CanonicalFlushError {
         CanonicalFlushError::classified_drain(
-            Box::new(writer_degraded_error_context(
+            Box::new(shutdown_error_context(
                 "logger is shut down; construct a new logger before flushing",
             )),
             FailureClassification::Closed,

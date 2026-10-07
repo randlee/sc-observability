@@ -604,6 +604,18 @@ fn writer_degraded_error_context(message: &str) -> ErrorContext {
     )
 }
 
+#[allow(
+    deprecated,
+    reason = "the retained shutdown code is the canonical closed-lifecycle diagnostic"
+)]
+fn shutdown_error_context(message: &str) -> ErrorContext {
+    ErrorContext::new(
+        error_codes::LOGGER_SHUTDOWN,
+        message,
+        Remediation::not_recoverable("construct a new logger before retrying"),
+    )
+}
+
 fn shutdown_timed_out_error_context(message: &str) -> ErrorContext {
     ErrorContext::new(
         error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
@@ -3034,6 +3046,10 @@ mod canonical_behavior_tests {
     }
 
     #[test]
+    #[allow(
+        deprecated,
+        reason = "the retained shutdown code remains the lifecycle diagnostic"
+    )]
     fn shutdown_blocks_future_emits() {
         let root = temp_path("shutdown");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -3056,11 +3072,12 @@ mod canonical_behavior_tests {
                 .failure_classification(),
             sc_observability_types::FailureClassification::Closed
         );
+        let error = logger
+            .flush()
+            .expect_err("flushing after shutdown must be rejected");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_SHUTDOWN);
         assert_eq!(
-            logger
-                .flush()
-                .expect_err("flushing after shutdown must be rejected")
-                .failure_classification(),
+            error.failure_classification(),
             sc_observability_types::FailureClassification::Closed
         );
     }
