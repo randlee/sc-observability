@@ -2,20 +2,20 @@
 
 `sc-observability-log` bridges the Rust `log` facade and tracing-compatible
 macros to one process-global `sc_observability::Logger` with structured JSONL
-output. Its reviewed B.P3 public control contract is direct and typed: producers
-submit `BridgeEvent`, never an adapter record or binding-only failure report.
+output. Its canonical 1.5.0 API is under `v2`; the released root-level `v1`
+facade remains default-on for compatibility and is deprecated. Producers submit
+the direct, typed `BridgeEvent`, never an adapter record or binding-only failure
+report. See the [Phase F migration guide](../../docs/migration/phase-f.md).
 
 ## Quick start
 
 ```rust,no_run
-use std::time::Duration;
-use sc_observability_log::{
-    ActionName, BridgeEvent, BridgeOptions, EventLevel, LoggerConfig, ServiceName, TargetCategory,
-};
+use sc_observability_log::{ActionName, EventLevel, TargetCategory};
+use sc_observability_log::v2::{BridgeEvent, BridgeOptions, LoggerConfig, ServiceName};
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 let config = LoggerConfig::default_for(ServiceName::new("my-app")?, "/var/log/my-app".into());
-let guard = sc_observability_log::init(config, BridgeOptions {
+let guard = sc_observability_log::v2::init(config, BridgeOptions {
     default_action: ActionName::new("log.record")?,
     parse_bracket_action: true,
 })?;
@@ -31,8 +31,8 @@ control.try_log(BridgeEvent {
     correlation_id: None,
     trace: None,
 })?;
-control.flush_with_timeout(Duration::from_secs(1))?;
-guard.shutdown_with_timeout(Duration::from_secs(5))?;
+control.flush()?;
+guard.shutdown()?;
 # Ok(())
 # }
 ```

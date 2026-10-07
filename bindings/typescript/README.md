@@ -7,6 +7,10 @@ function to `createTauriTransport`, and pass the returned transport to
 the admission result is required. Query, health, and flush resolve tagged
 `Result` values and do not reject for operational failures.
 
+In 1.5.0, host failures use the canonical v2 error projection shared with the
+Rust, Python, and Tauri bindings. See the [Phase F migration
+guide](../../docs/migration/phase-f.md) for the API transition.
+
 The host application must authorize the four plugin commands through its Tauri
 capability and must retain any application-owned command, such as a level
 change, in the app ACL. The example under `examples/tauri-logging` routes the
