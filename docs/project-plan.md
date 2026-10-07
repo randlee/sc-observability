@@ -74,6 +74,23 @@ is cut. g-2 delivers the CLI distribution contract while g-3 makes
 Its authoritative execution graph is
 [`plans/phase-g.jsonl`](plans/phase-g.jsonl).
 
+## Phase H — native OpenTelemetry simplification
+
+Phase H replaces rejected custom OTel transport, storage and signal models with
+native OpenTelemetry 0.33.0 APIs, one thin synchronous CLI/Python client and the
+minimal existing LogSink mapping for file, OTel or both. Accepted v2 local
+logging remains intact. H-001 through H-008 in [requirements](requirements.md)
+and ADR-023 in [architecture](architecture.md) govern the work.
+
+The authoritative plan is `obs-phase-h` with sprint beads `obs-h-1` through
+`obs-h-4`; [the sprint index](plans/phase-h.jsonl) records dependencies. The
+library contract and implementation precede parallel CLI/Python work, followed
+by atomic removal and integration (critical path 3, width 2). Every deliverable
+must be production-ready for its declared boundary or integration closure;
+installed cross-language proof and final net source deletion belong to h-4.
+Plan hardening and QA precede implementation authorization. This plan does not
+authorize a release or a compatibility layer for rejected OTel code.
+
 ## Issue #70 / v1.1.0
 
 Retained-log rotation, pruning, and maintenance was the additive `v1.1.0`
