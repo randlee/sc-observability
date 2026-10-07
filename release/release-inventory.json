@@ -169,7 +169,7 @@
       {
         "package": "sc-observability-tauri",
         "baselineVersion": "1.4.1",
-        "reason": "The Tauri adapter is a separate workspace and remains pending its standalone API/publication qualification in release/bindings-artifacts.toml; it is not one of this candidate's nine workspace API packages."
+        "reason": "The Tauri adapter is a separate workspace and remains pending its standalone API/publication qualification in release/bindings-artifacts.toml; it is not one of this candidate's ten workspace API packages."
       }
     ],
     "bindingInventory": "release/bindings-artifacts.toml",
