@@ -652,7 +652,7 @@ pub mod __private {
     /// Call-site label caches and field-value dispatch for the event macros.
     pub use crate::callsite::{
         Callsite, DebugKind, DebugKindTag, DynamicKey, FieldDebug, FieldRecord, FieldValue,
-        SerializeKind, SerializeKindTag, debug_value, display_value, emit_callsite,
+        SerializeKind, SerializeKindTag, SerializeProbe, debug_value, display_value, emit_callsite,
         record_dynamic_field, record_field,
     };
 

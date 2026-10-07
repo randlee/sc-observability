@@ -755,6 +755,58 @@ mod tests {
     }
 
     #[test]
+    fn owned_init_guard_flush_rejects_a_second_in_flight_flush() {
+        if !crate::handle::is_isolated_test_child(
+            "v1::tests::owned_init_guard_flush_rejects_a_second_in_flight_flush",
+        ) {
+            return;
+        }
+
+        let root = tempfile::tempdir().expect("temporary log root");
+        let guard = init(
+            crate::LoggerConfig::default_for(
+                crate::ServiceName::new("owned-guard-single-flight").expect("service name"),
+                root.path().to_path_buf(),
+            ),
+            crate::BridgeOptions {
+                default_action: crate::ActionName::new("log.record").expect("action name"),
+                parse_bracket_action: false,
+            },
+        )
+        .expect("owned bridge initialization");
+
+        let release = crate::handle::block_next_bounded_helper();
+        let timed_out = guard
+            .flush(Duration::from_millis(10))
+            .expect_err("the channel-gated helper must time out");
+        assert!(matches!(timed_out, FlushError::TimedOut { .. }));
+
+        let retry = guard
+            .flush(Duration::from_secs(1))
+            .expect_err("a second owned flush must be rejected");
+        assert!(matches!(retry, FlushError::InProgress));
+        assert_eq!(
+            retry.code(),
+            error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
+        );
+
+        release.send(()).expect("release the channel-gated helper");
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            match guard.flush(Duration::from_secs(1)) {
+                Ok(()) => break,
+                Err(FlushError::InProgress) if std::time::Instant::now() < deadline => {
+                    std::thread::yield_now();
+                }
+                Err(error) => panic!("released owned flush must succeed: {error:?}"),
+            }
+        }
+        guard
+            .shutdown(Duration::from_secs(10))
+            .expect("owned bridge shutdown");
+    }
+
+    #[test]
     fn detached_attachment_maps_not_installed_to_released_stopped_while_global_is_running() {
         struct Admit;
 

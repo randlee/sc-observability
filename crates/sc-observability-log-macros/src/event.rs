@@ -150,7 +150,9 @@ fn expand_value(value: &FieldValue, private: &TokenStream) -> TokenStream {
         FieldValue::Bare(_) => quote_spanned! {expr.span()=>
             {
                 let __sc_value = &(#expr);
-                (&&#private::FieldValue(__sc_value)).__sc_field_kind().record(__sc_value)
+                (&#private::SerializeProbe(#private::FieldValue(__sc_value)))
+                    .__sc_field_kind()
+                    .record(__sc_value)
             }
         },
     }

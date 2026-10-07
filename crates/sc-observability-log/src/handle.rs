@@ -117,7 +117,7 @@ fn panic_next_bounded_helper() {
 }
 
 #[cfg(test)]
-fn block_next_bounded_helper() -> mpsc::SyncSender<()> {
+pub(crate) fn block_next_bounded_helper() -> mpsc::SyncSender<()> {
     let (release, blocked) = mpsc::sync_channel(0);
     *NEXT_BOUNDED_HELPER_BLOCK
         .get_or_init(|| Mutex::new(None))

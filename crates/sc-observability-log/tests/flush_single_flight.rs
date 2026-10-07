@@ -29,7 +29,7 @@ use sc_observability::{SinkHealth, SinkHealthState, SinkName, SinkRegistration};
 use sc_observability_log::v2::FlushError;
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEventDecision, BridgeEventPolicy, BridgeOptions,
-    LoggerConfig, ServiceName, attach_logger,
+    HelperHealth, LoggerConfig, ServiceName, attach_logger,
 };
 use sc_observability_log::{LevelFilter, error_codes};
 use sc_observability_types::LogEvent;
@@ -144,12 +144,24 @@ fn blocking_logger(sink: Arc<dyn LogSink>) -> Arc<sc_observability::v2::Logger> 
     Arc::new(builder.build().unwrap())
 }
 
+fn assert_helpers(control: &sc_observability_log::v2::LogControl, expected: HelperHealth) {
+    assert_eq!(control.health().unwrap().helpers, expected);
+}
+
 #[test]
 fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
     let (stuck_sink, sink) = StuckSink::prepare();
     let host = blocking_logger(sink);
     let mut attachment = attach_logger(Arc::clone(&host), attachment_options()).unwrap();
     let control = attachment.control();
+
+    assert_helpers(
+        &control,
+        HelperHealth {
+            flush_in_flight: false,
+            detached: 0,
+        },
+    );
 
     // (a) The first flush times out and detaches exactly one helper.
     let first = control.flush_with_timeout(STUCK_FLUSH_TIMEOUT);
@@ -164,6 +176,13 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
     );
     stuck_sink.wait_until_blocked();
     assert_eq!(stuck_sink.flush_calls(), 1);
+    assert_helpers(
+        &control,
+        HelperHealth {
+            flush_in_flight: true,
+            detached: 1,
+        },
+    );
 
     // A retry is rejected at once and spawns nothing.
     for _ in 0..3 {
@@ -183,7 +202,18 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
             1,
             "a rejected retry must not call the sink"
         );
+        assert_helpers(
+            &control,
+            HelperHealth {
+                flush_in_flight: true,
+                detached: 1,
+            },
+        );
     }
+    assert_eq!(
+        serde_json::to_value(control.health().unwrap()).unwrap()["helpers"],
+        serde_json::json!({"flush_in_flight": true, "detached": 1})
+    );
 
     // (b) Release the sink: the detached helper returns and a later flush works.
     stuck_sink.release();
@@ -202,9 +232,18 @@ fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
         }
     }
     assert_eq!(stuck_sink.flush_calls(), 2);
+    assert_helpers(
+        &control,
+        HelperHealth {
+            flush_in_flight: false,
+            detached: 0,
+        },
+    );
     attachment.detach(IO_TIMEOUT).unwrap();
+    assert_eq!(control.health().unwrap().helpers.detached, 0);
     Arc::try_unwrap(host)
         .unwrap_or_else(|_| panic!("detach releases the attachment logger"))
         .shutdown()
         .unwrap();
+    assert_eq!(control.health().unwrap().helpers.detached, 0);
 }
