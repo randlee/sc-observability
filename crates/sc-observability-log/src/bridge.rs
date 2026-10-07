@@ -926,7 +926,7 @@ mod tests {
             "a below-level installed record is skipped without a drop"
         );
         guard
-            .shutdown(Duration::from_secs(5))
+            .shutdown_with_timeout(Duration::from_secs(5))
             .expect("installed logger shuts down");
     }
 

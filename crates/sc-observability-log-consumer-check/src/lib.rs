@@ -65,7 +65,7 @@ pub mod status {
     #[must_use]
     pub fn read_status(control: &LogControl, timeout: Duration) -> StatusReading {
         StatusReading {
-            flush: control.flush(timeout),
+            flush: control.flush_with_timeout(timeout),
             health: control.health(),
         }
     }

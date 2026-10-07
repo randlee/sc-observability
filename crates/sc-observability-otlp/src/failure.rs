@@ -3,7 +3,8 @@
 
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
 use sc_observability_types::v2::{
-    EventError as CanonicalEventError, ExportError, FlushError, ShutdownError,
+    EventError as CanonicalEventError, ExportError, FailureClassification, FlushError,
+    ShutdownError,
 };
 use sc_observability_types::{DiagnosticSummary, ErrorContext, Remediation};
 use serde_json::Value;
@@ -35,6 +36,18 @@ pub(crate) fn flush_lifecycle_failure(error: ExportError) -> FlushError {
             .source(Box::new(error)),
         ),
     }
+}
+
+/// Reports a flush requested after the runtime's terminal shutdown barrier.
+pub(crate) fn flush_after_shutdown() -> FlushError {
+    FlushError::classified_drain(
+        Box::new(ErrorContext::new(
+            error_codes::OTLP_TELEMETRY_SHUTDOWN,
+            "telemetry runtime is shut down",
+            Remediation::not_recoverable("do not flush telemetry after shutdown"),
+        )),
+        FailureClassification::Closed,
+    )
 }
 
 pub(crate) fn shutdown_export_failure_typed(

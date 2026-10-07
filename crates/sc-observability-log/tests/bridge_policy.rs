@@ -201,7 +201,7 @@ fn instrumented_completion_is_routed_through_attachment() {
 
     instrumented_attachment_fixture();
     control
-        .flush(Duration::from_secs(2))
+        .flush_with_timeout(Duration::from_secs(2))
         .expect("flush instrumented event");
 
     let events = events.lock().expect("recording lock");
@@ -257,7 +257,9 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
         .fields
         .insert("token".to_owned(), json!("Bearer field-secret"));
     control.try_log(admitted).expect("allowlisted event");
-    control.flush(Duration::from_secs(2)).expect("flush");
+    control
+        .flush_with_timeout(Duration::from_secs(2))
+        .expect("flush");
     let events = events.lock().expect("recording lock");
     assert_eq!(events.len(), 1, "only the admitted event reaches the sink");
     assert_eq!(events[0].message.as_deref(), Some("Bearer [REDACTED]"));

@@ -362,9 +362,12 @@ impl LogControl {
     /// # Errors
     ///
     /// Returns the legacy timeout, writer, helper, in-progress, or stopped variant.
+    #[deprecated(
+        note = "use sc_observability_log::v2::LogControl::flush or flush_with_timeout; see docs/migration/phase-f.md"
+    )]
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
         ROOT_CONTROL
-            .flush(timeout)
+            .flush_with_timeout(timeout)
             .map_err(|error| legacy_flush(&error, timeout))
     }
 
@@ -492,13 +495,21 @@ impl LogGuard {
     }
 
     /// Requests a bounded flush through the released error surface.
+    #[deprecated(
+        note = "use sc_observability_log::v2::LogGuard::flush or flush_with_timeout; see docs/migration/phase-f.md"
+    )]
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
         crate::handle::flush_installed(timeout).map_err(|error| legacy_flush(&error, timeout))
     }
 
     /// Performs final flush and shutdown through the released error surface.
-    pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError> {
-        self.inner.shut_down = true;
+    #[deprecated(
+        note = "use sc_observability_log::v2::LogGuard::shutdown or shutdown_with_timeout; see docs/migration/phase-f.md"
+    )]
+    pub fn shutdown(self, timeout: Duration) -> Result<(), ShutdownError> {
+        self.inner
+            .shut_down
+            .store(true, std::sync::atomic::Ordering::Release);
         crate::handle::shutdown_sequence(timeout).map_err(|error| legacy_shutdown(error, timeout))
     }
 
@@ -707,7 +718,7 @@ mod tests {
 
     fn assert_detached_flush_maps_to_stopped(stale: &crate::control::LogControl) {
         let core_flush_error = stale
-            .flush(Duration::ZERO)
+            .flush_with_timeout(Duration::ZERO)
             .expect_err("detached saved attachment must reject flush");
         assert_eq!(
             core_flush_error.diagnostic().code,

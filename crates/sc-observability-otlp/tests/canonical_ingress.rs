@@ -450,13 +450,10 @@ fn canonical_ingress_exports_every_field_over_the_sdk_backend() {
             )))
             .expect("SDK telemetry");
             emit_canonical(&telemetry);
-            telemetry
-                .flush_async_typed()
-                .await
-                .expect("SDK export completes");
+            telemetry.flush_async().await.expect("SDK export completes");
             assert_healthy(&telemetry);
             telemetry
-                .shutdown_async_typed()
+                .shutdown_async()
                 .await
                 .expect("shutdown completes");
         });
@@ -547,9 +544,9 @@ fn canonical_ingress_exports_every_field_over_the_sync_http_backend() {
     )))
     .expect("sync-http telemetry");
     emit_canonical(&telemetry);
-    telemetry.flush_typed().expect("sync-http export completes");
+    telemetry.flush().expect("sync-http export completes");
     assert_healthy(&telemetry);
-    telemetry.shutdown_typed().expect("shutdown completes");
+    telemetry.shutdown().expect("shutdown completes");
     let captured = collector.finish();
 
     let traces: Value =

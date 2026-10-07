@@ -1364,7 +1364,7 @@ mod tests {
         retry.enable_console_sink = false;
         crate::v2::init(retry, options)
             .expect("retry starts")
-            .shutdown(Duration::from_secs(5))
+            .shutdown_with_timeout(Duration::from_secs(5))
             .expect("retry shuts down");
     }
 
@@ -1399,7 +1399,7 @@ mod tests {
         health::fail_next_health_snapshot();
         let (shutdown_tx, shutdown_rx) = sync_channel(1);
         let _shutdown = std::thread::spawn(move || {
-            let _ = shutdown_tx.send(guard.shutdown(Duration::from_secs(5)));
+            let _ = shutdown_tx.send(guard.shutdown_with_timeout(Duration::from_secs(5)));
         });
         save_entered_rx
             .recv_timeout(Duration::from_secs(5))
@@ -1807,7 +1807,7 @@ mod tests {
         ));
         assert_eq!(lifecycle(), BridgeLifecycle::Failed);
         let error = crate::v2::LogControl::new()
-            .flush(Duration::ZERO)
+            .flush_with_timeout(Duration::ZERO)
             .expect_err("failed lifecycle rejects flush");
         assert_eq!(
             error.diagnostic().code.as_str(),

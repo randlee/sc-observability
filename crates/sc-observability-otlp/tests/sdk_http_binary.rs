@@ -632,12 +632,12 @@ fn v2_default_http_binary_exports_lossless_protobuf_for_every_signal() {
         telemetry.emit_metric(&metric()).expect("admit metric");
 
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("HttpBinary export completes");
         assert_healthy(&telemetry.health());
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("shutdown completes");
     });
@@ -652,10 +652,7 @@ fn http_binary_sends_the_configured_authorization_header() {
         transport.auth_header = Some(V2AuthHeader::new_typed("Bearer sdk-token").expect("header"));
         let telemetry = v2_telemetry(transport);
         telemetry.emit_log(&log_event()).expect("admit log");
-        telemetry
-            .flush_async_typed()
-            .await
-            .expect("export completes");
+        telemetry.flush_async().await.expect("export completes");
         assert_healthy(&telemetry.health());
     });
     let captured = collector.finish();
@@ -674,10 +671,7 @@ fn http_binary_endpoint_with_signal_path_is_not_doubled() {
         let endpoint = format!("{}/v1/logs/", collector.endpoint());
         let telemetry = v2_telemetry(v2_default_transport(&endpoint));
         telemetry.emit_log(&log_event()).expect("admit log");
-        telemetry
-            .flush_async_typed()
-            .await
-            .expect("export completes");
+        telemetry.flush_async().await.expect("export completes");
     });
     single_request(&collector.finish(), "/v1/logs");
 }
@@ -689,7 +683,7 @@ fn http_binary_retries_throttling_then_succeeds() {
         let telemetry = v2_telemetry(v2_default_transport(&collector.endpoint()));
         telemetry.emit_log(&log_event()).expect("admit log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("retryable statuses are retried to success");
         assert_healthy(&telemetry.health());
@@ -703,7 +697,7 @@ fn http_binary_client_error_is_terminal_without_retry() {
     runtime().block_on(async {
         let telemetry = v2_telemetry(v2_default_transport(&collector.endpoint()));
         telemetry.emit_log(&log_event()).expect("admit log");
-        assert!(telemetry.flush_async_typed().await.is_err());
+        assert!(telemetry.flush_async().await.is_err());
         let health = telemetry.health();
         assert_eq!(health.state, TelemetryHealthState::Degraded);
         assert_eq!(health.dropped_exports_total, 1);
@@ -729,7 +723,7 @@ fn http_binary_retryable_response_is_retried_without_timeout_race() {
         let telemetry = v2_telemetry(v2_default_transport(&collector.endpoint()));
         telemetry.emit_log(&log_event()).expect("admit log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("retryable response is retried to success");
         assert_healthy(&telemetry.health());
@@ -746,7 +740,7 @@ fn grpc_protocol_still_exports_over_grpc() {
         let telemetry = v2_telemetry(transport);
         telemetry.emit_log(&log_event()).expect("admit log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("gRPC export completes");
         assert_healthy(&telemetry.health());

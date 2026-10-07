@@ -140,6 +140,6 @@ fn bridge_roundtrip_preserves_host_ownership() {
     assert_eq!(snapshot.logging, bridge.logging);
     assert_eq!(snapshot.level_state.level_revision, bridge.level_revision);
     drop(backend);
-    control.flush(Duration::from_secs(2)).unwrap();
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    control.flush_with_timeout(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
 }

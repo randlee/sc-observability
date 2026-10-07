@@ -360,7 +360,7 @@ impl Coordinator {
                                 })?,
                             Backend::Bridge(control) => {
                                 control
-                                    .flush(timeout)
+                                    .flush_with_timeout(timeout)
                                     .map_err(|error| conversion::bridge_flush(&error))?;
                             }
                         }

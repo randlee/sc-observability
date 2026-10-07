@@ -158,7 +158,7 @@ fn released_control_moves_into_canonical_error_surface() {
         .expect("released shutdown");
 
     let error = canonical_control
-        .flush(Duration::from_secs(1))
+        .flush_with_timeout(Duration::from_secs(1))
         .expect_err("stopped control must report the canonical drain error");
     assert!(matches!(error, FlushError::Drain { .. }));
     assert_eq!(

@@ -29,12 +29,15 @@ use crate::config::validate_config_typed;
 use crate::config::{
     TelemetryConfig as RuntimeTelemetryConfig, ValidatedTransportBounds, validated_telemetry_bounds,
 };
+#[cfg(test)]
+use crate::contracts::ExporterLifecycle;
 use crate::contracts::{self, ExportRecord, ExporterSet, LogRecord};
 #[cfg(test)]
 use crate::contracts::{LogExporter, MetricExporter, TraceExporter};
 use crate::exporter_factory::exporter_factory_prepared;
 use crate::failure::{
-    export_failure_from_canonical_event, flush_lifecycle_failure, shutdown_export_failure_typed,
+    export_failure_from_canonical_event, flush_after_shutdown, flush_lifecycle_failure,
+    shutdown_export_failure_typed,
 };
 use crate::lifecycle::{LifecycleHealth, LifecycleState, Signal};
 #[cfg(test)]
@@ -187,13 +190,31 @@ impl RuntimeTelemetry {
         metric_exporter: Arc<dyn MetricExporter>,
     ) -> Result<Self, CanonicalInitError> {
         validate_config_typed(&config)?;
+        Self::new_with_exporters_and_lifecycle_typed(
+            config,
+            log_exporter,
+            trace_exporter,
+            metric_exporter,
+            Arc::new(testing::RecordingLifecycle::default()),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_exporters_and_lifecycle_typed(
+        config: RuntimeTelemetryConfig,
+        log_exporter: Arc<dyn LogExporter>,
+        trace_exporter: Arc<dyn TraceExporter>,
+        metric_exporter: Arc<dyn MetricExporter>,
+        lifecycle: Arc<dyn ExporterLifecycle>,
+    ) -> Result<Self, CanonicalInitError> {
+        validate_config_typed(&config)?;
         Ok(Self::new_with_validated_exporter_set(
             config,
             ExporterSet {
                 logs: log_exporter,
                 traces: trace_exporter,
                 metrics: metric_exporter,
-                lifecycle: Arc::new(testing::RecordingLifecycle::default()),
+                lifecycle,
             },
         ))
     }
@@ -375,12 +396,9 @@ impl RuntimeTelemetry {
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn flush(&self) -> Result<(), CanonicalFlushError> {
-        self.flush_typed()
-    }
-
-    /// Flushes telemetry with a neutral flush failure while retaining fail-open
-    /// exporter semantics.
-    pub fn flush_typed(&self) -> Result<(), CanonicalFlushError> {
+        if self.exporters.lifecycle.is_shutdown() {
+            return Err(flush_after_shutdown());
+        }
         self.exporters
             .lifecycle
             .blocking_lifecycle_preflight()
@@ -392,11 +410,30 @@ impl RuntimeTelemetry {
             .map_err(flush_lifecycle_failure)
     }
 
+    /// Flushes buffered telemetry through the configured exporters with an explicit deadline.
+    pub fn flush_with_timeout(&self, timeout: Duration) -> Result<(), CanonicalFlushError> {
+        if self.exporters.lifecycle.is_shutdown() {
+            return Err(flush_after_shutdown());
+        }
+        self.exporters
+            .lifecycle
+            .blocking_lifecycle_preflight()
+            .map_err(flush_lifecycle_failure)?;
+        let _ = self.flush_outcome();
+        self.exporters
+            .lifecycle
+            .flush_blocking_with_timeout(timeout)
+            .map_err(flush_lifecycle_failure)
+    }
+
     /// Flushes telemetry and awaits the shared backend lifecycle barrier.
     ///
     /// SDK callers must use this method from their entered runtime; it never
     /// blocks that runtime thread to emulate synchronous HTTP behavior.
-    pub async fn flush_async_typed(&self) -> Result<(), CanonicalFlushError> {
+    pub async fn flush_async(&self) -> Result<(), CanonicalFlushError> {
+        if self.exporters.lifecycle.is_shutdown() {
+            return Err(flush_after_shutdown());
+        }
         let _ = self.flush_outcome();
         self.exporters
             .lifecycle
@@ -442,17 +479,6 @@ impl RuntimeTelemetry {
     /// flushing, dropping incomplete spans, or constructing the final shutdown
     /// error state.
     pub fn shutdown(&self) -> Result<(), CanonicalShutdownError> {
-        self.shutdown_typed()
-    }
-
-    /// Flushes buffers and transitions telemetry to shutdown with a neutral
-    /// shutdown failure.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal telemetry runtime mutex has been poisoned while
-    /// flushing, dropping incomplete spans, or constructing final state.
-    pub fn shutdown_typed(&self) -> Result<(), CanonicalShutdownError> {
         if self.exporters.lifecycle.is_shutdown() {
             return Ok(());
         }
@@ -480,17 +506,46 @@ impl RuntimeTelemetry {
         self.finish_shutdown(flush_outcome, lifecycle_result)
     }
 
+    /// Flushes buffers and transitions telemetry to shutdown with an explicit deadline.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned while
+    /// flushing, dropping incomplete spans, or constructing final state.
+    pub fn shutdown_with_timeout(&self, timeout: Duration) -> Result<(), CanonicalShutdownError> {
+        if self.exporters.lifecycle.is_shutdown() {
+            return Ok(());
+        }
+
+        if let Err(error) = self.exporters.lifecycle.blocking_lifecycle_preflight() {
+            let last_error = self
+                .runtime
+                .lock()
+                .expect("telemetry runtime poisoned")
+                .last_error
+                .clone();
+            return Err(shutdown_export_failure_typed(error, last_error));
+        }
+
+        let flush_outcome = self.flush_outcome();
+        let lifecycle_result = self
+            .exporters
+            .lifecycle
+            .shutdown_blocking_with_timeout(timeout);
+        self.finish_shutdown(flush_outcome, lifecycle_result)
+    }
+
     /// Shuts telemetry down and awaits the shared backend lifecycle barrier.
     ///
     /// SDK callers use this method to await admitted RPC completion. Synchronous HTTP
-    /// callers keep using [`RuntimeTelemetry::shutdown_typed`], whose backend owns a
+    /// callers keep using [`RuntimeTelemetry::shutdown`], whose backend owns a
     /// bounded blocking worker shutdown.
     ///
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// claiming shutdown or constructing final state.
-    pub async fn shutdown_async_typed(&self) -> Result<(), CanonicalShutdownError> {
+    pub async fn shutdown_async(&self) -> Result<(), CanonicalShutdownError> {
         if self.exporters.lifecycle.is_shutdown() {
             return Ok(());
         }

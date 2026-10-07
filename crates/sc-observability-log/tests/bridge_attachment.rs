@@ -207,7 +207,9 @@ fn attachment_routes_direct_and_macro_calls_and_recovers_host_ownership() {
 
     control.try_log(event()).expect("direct event");
     log::info!(target: "attachment::macro", "macro event");
-    control.flush(Duration::from_secs(2)).expect("flush");
+    control
+        .flush_with_timeout(Duration::from_secs(2))
+        .expect("flush");
     let events = events.lock().expect("recording lock");
     assert_eq!(events.len(), 2, "direct and macro events share one sink");
     for event in events.iter() {
@@ -278,7 +280,7 @@ fn timed_out_flush_keeps_attachment_owned_logger_until_helper_drains() {
     let mut attachment =
         attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach");
     let control = attachment.control();
-    let flush = std::thread::spawn(move || control.flush(Duration::ZERO));
+    let flush = std::thread::spawn(move || control.flush_with_timeout(Duration::ZERO));
 
     entered_rx.recv().expect("flush entered sink");
     assert!(matches!(
@@ -339,7 +341,7 @@ fn reattachment_rejects_old_control_and_init_while_attached() {
         stale.try_log(event()),
         Err(EmitError::NotInstalled)
     ));
-    let flush_error = stale.flush(Duration::ZERO).unwrap_err();
+    let flush_error = stale.flush_with_timeout(Duration::ZERO).unwrap_err();
     assert_eq!(
         flush_error.diagnostic().code.as_str(),
         "SC_LOG_DETACH_NOT_INSTALLED"
@@ -380,7 +382,7 @@ fn dropped_attachment_finishes_detaching_when_last_call_drains() {
         stale.try_log(event()),
         Err(EmitError::NotInstalled)
     ));
-    let flush_error = stale.flush(Duration::ZERO).unwrap_err();
+    let flush_error = stale.flush_with_timeout(Duration::ZERO).unwrap_err();
     assert_eq!(
         flush_error.diagnostic().code.as_str(),
         "SC_LOG_DETACH_NOT_INSTALLED"
@@ -492,7 +494,7 @@ fn flush_detach_race_releases_all_logger_arcs_before_success() {
         let mut attachment =
             attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach");
         let control = attachment.control();
-        let flush = std::thread::spawn(move || control.flush(Duration::ZERO));
+        let flush = std::thread::spawn(move || control.flush_with_timeout(Duration::ZERO));
         entered_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("flush entered sink");

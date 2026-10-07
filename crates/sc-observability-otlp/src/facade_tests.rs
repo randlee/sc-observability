@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use crate::assembly::V2SpanAssembler;
 use crate::config::{
@@ -11,7 +12,10 @@ use crate::config::{
 };
 use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
 use crate::contracts::{self, ExportRecord, LogRecord};
-use crate::testing::{RecordingLogExporter, RecordingMetricExporter, RecordingTraceExporter};
+use crate::testing::{
+    LifecycleCall, RecordingLifecycle, RecordingLogExporter, RecordingMetricExporter,
+    RecordingTraceExporter,
+};
 use crate::{ExporterHealthState, RuntimeTelemetry, error_codes};
 use sc_observability_types::v2::{self, MetricRecord as CanonicalMetricRecord};
 use sc_observability_types::{
@@ -66,6 +70,17 @@ fn recording_with_config(
     )
     .expect("recording telemetry");
     (telemetry, logs, traces, metrics)
+}
+
+fn recording_with_lifecycle(lifecycle: Arc<RecordingLifecycle>) -> RuntimeTelemetry {
+    RuntimeTelemetry::new_with_exporters_and_lifecycle_typed(
+        telemetry_config(),
+        Arc::new(RecordingLogExporter::<ExportRecord<LogRecord>>::default()),
+        Arc::new(Traces::default()),
+        Arc::new(Metrics::default()),
+        lifecycle,
+    )
+    .expect("recording telemetry")
 }
 
 fn recording_with_logs() -> (RuntimeTelemetry, Arc<Logs>, Arc<Traces>, Arc<Metrics>) {
@@ -254,7 +269,7 @@ fn race_until_shutdown(
     }
 
     barrier.wait();
-    telemetry.shutdown_typed().expect("shutdown completes");
+    telemetry.shutdown().expect("shutdown completes");
     for emitter in emitters {
         emitter.join().expect("emitter finishes");
     }
@@ -454,7 +469,7 @@ fn canonical_shutdown_counts_incomplete_spans() {
     telemetry
         .emit_span(&v2::SpanSignal::Started(started(trace("0123456789abcdef"))))
         .expect("started");
-    telemetry.shutdown_typed().expect("shutdown");
+    telemetry.shutdown().expect("shutdown");
 
     let health = telemetry.health();
     assert_eq!(health.dropped_exports_total, 1, "{health:?}");
@@ -464,7 +479,7 @@ fn canonical_shutdown_counts_incomplete_spans() {
 #[test]
 fn canonical_emit_log_checks_shutdown_before_an_invalid_entity_id() {
     let (telemetry, logs) = log_recording();
-    telemetry.shutdown_typed().expect("shutdown");
+    telemetry.shutdown().expect("shutdown");
 
     let error = telemetry
         .emit_log(&log_event_with_entity_id("entity invalid"))
@@ -508,6 +523,34 @@ fn canonical_emit_log_rejects_an_invalid_entity_id_before_buffering() {
     assert!(matches!(error, v2::TelemetryError::Event(_)), "{error:?}");
     telemetry.flush().expect("nothing was buffered");
     assert_eq!(exported_logs(&logs), 0);
+}
+
+#[test]
+fn canonical_shutdown_is_shared_idempotent_and_uses_the_explicit_timeout() {
+    let lifecycle = Arc::new(RecordingLifecycle::default());
+    let telemetry = Arc::new(recording_with_lifecycle(Arc::clone(&lifecycle)));
+    let shutdown = Arc::clone(&telemetry);
+    std::thread::spawn(move || shutdown.shutdown_with_timeout(Duration::ZERO))
+        .join()
+        .expect("shutdown thread must not panic")
+        .expect("shutdown completes");
+
+    telemetry.shutdown().expect("second shutdown is idempotent");
+    assert!(matches!(
+        telemetry.emit_span(&v2::SpanSignal::Started(started(trace("0123456789abcdef")))),
+        Err(v2::TelemetryError::Shutdown { .. })
+    ));
+    assert!(matches!(
+        telemetry.flush(),
+        Err(v2::FlushError::Drain { .. })
+    ));
+    assert_eq!(
+        *lifecycle.calls.lock().expect("calls poisoned"),
+        vec![
+            LifecycleCall::BlockingPreflight,
+            LifecycleCall::ShutdownBlockingWithTimeout(Duration::ZERO),
+        ]
+    );
 }
 
 #[test]

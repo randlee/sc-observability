@@ -150,14 +150,14 @@ pub fn deliver<C: Consumer>(message: &str, consumer: Arc<C>, root: &Path, releas
     );
     control.try_log(event).expect("bridge admission");
     control
-        .flush(Duration::from_secs(5))
+        .flush_with_timeout(Duration::from_secs(5))
         .expect("core writer forwarding barrier");
     assert!(logger.health().last_writer_error.is_none());
     attachment
         .detach(Duration::from_secs(5))
         .expect("detach bridge");
     assert!(
-        control.flush(Duration::from_secs(1)).is_err(),
+        control.flush_with_timeout(Duration::from_secs(1)).is_err(),
         "stale control must reject"
     );
     let Ok(logger) = Arc::try_unwrap(logger) else {

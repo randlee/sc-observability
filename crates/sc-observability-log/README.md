@@ -31,8 +31,8 @@ control.try_log(BridgeEvent {
     correlation_id: None,
     trace: None,
 })?;
-control.flush(Duration::from_secs(1))?;
-guard.shutdown(Duration::from_secs(5))?;
+control.flush_with_timeout(Duration::from_secs(1))?;
+guard.shutdown_with_timeout(Duration::from_secs(5))?;
 # Ok(())
 # }
 ```
