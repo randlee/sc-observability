@@ -51,6 +51,12 @@ retained v1 items below are deprecated compatibility aliases.
 | v2 `RuntimeTelemetry::shutdown_typed()` | `RuntimeTelemetry::shutdown()` or `shutdown_with_timeout(Duration)` |
 | v2 `RuntimeTelemetry::flush_async_typed()` | `RuntimeTelemetry::flush_async()` |
 | v2 `RuntimeTelemetry::shutdown_async_typed()` | `RuntimeTelemetry::shutdown_async()` |
+| v1 `Logger::shutdown(self) -> Logger<Stopped>` | `sc_observability::v2::Logger::shutdown()` or `shutdown_with_timeout(Duration)` |
+| v2 `Logger<State>` (`Running`/`Stopped` typestate) | `Logger` (no type parameter) |
+| v2 `Logger::shutdown(self) -> Logger<Stopped>` | `Logger::shutdown()` or `Logger::shutdown_with_timeout(Duration)` |
+| v2 `Logger::flush()` (configured deadline only) | `Logger::flush()` or `Logger::flush_with_timeout(Duration)` |
+| v2 `sc_observe::v2::Observability::flush()` (configured deadline only) | `Observability::flush()` or `Observability::flush_with_timeout(Duration)` |
+| v2 `sc_observe::v2::Observability::shutdown()` (configured deadline only) | `Observability::shutdown()` or `Observability::shutdown_with_timeout(Duration)` |
 
 ## Deferred ledger rows
 
