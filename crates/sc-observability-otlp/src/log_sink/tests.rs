@@ -94,7 +94,10 @@ impl LogExporter for CapturingExporter {
             gate.0.enter_and_wait();
         }
         let exported = batch.iter().map(|(record, _)| record.clone());
-        self.records.lock().expect("captured records").extend(exported);
+        self.records
+            .lock()
+            .expect("captured records")
+            .extend(exported);
         std::future::ready(Ok(()))
     }
 }
@@ -169,8 +172,8 @@ fn attribute(record: &SdkLogRecord, key: &str) -> Option<AnyValue> {
         .map(|(_, value)| value.clone())
 }
 
-fn text(value: &str) -> Option<AnyValue> {
-    Some(AnyValue::from(value.to_owned()))
+fn text(value: &str) -> AnyValue {
+    AnyValue::from(value.to_owned())
 }
 
 #[test]
@@ -210,29 +213,43 @@ fn core_logger_events_are_redacted_then_mapped_to_native_records() {
     let Some(AnyValue::String(body)) = record.body() else {
         panic!("message maps to a string body");
     };
-    assert!(!body.as_str().contains("abc123"), "bearer token redacted: {body}");
+    assert!(
+        !body.as_str().contains("abc123"),
+        "bearer token redacted: {body}"
+    );
     assert_eq!(record.target().map(AsRef::as_ref), Some("upload.client"));
-    assert_eq!(attribute(record, "event.name"), text("upload.retry"));
+    assert_eq!(attribute(record, "event.name"), Some(text("upload.retry")));
     assert_eq!(
         attribute(record, "sc.observability.log.service"),
-        text("core-event-service"),
+        Some(text("core-event-service")),
         "the event service is an attribute distinct from the resource service"
     );
     assert_eq!(
         attribute(record, "sc.observability.log.request_id"),
-        text("\"req-7\"")
+        Some(text("\"req-7\""))
     );
     assert_eq!(
         attribute(record, "sc.observability.log.parent_span_id"),
-        text(PARENT_SPAN_ID)
+        Some(text(PARENT_SPAN_ID))
     );
-    assert_ne!(attribute(record, "token"), text("raw-secret"), "denylisted field redacted");
-    assert!(attribute(record, "token").is_some(), "redacted field still present");
+    assert_ne!(
+        attribute(record, "token"),
+        Some(text("raw-secret")),
+        "denylisted field redacted"
+    );
+    assert!(
+        attribute(record, "token").is_some(),
+        "redacted field still present"
+    );
     assert_eq!(attribute(record, "attempt"), Some(AnyValue::Int(2)));
     assert_eq!(attribute(record, "ratio"), Some(AnyValue::Double(0.5)));
     assert_eq!(attribute(record, "cached"), Some(AnyValue::Boolean(true)));
-    assert_eq!(attribute(record, "missing"), None, "null fields are skipped");
-    assert_eq!(attribute(record, "shape"), text(r#"{"kind":"box"}"#));
+    assert_eq!(
+        attribute(record, "missing"),
+        None,
+        "null fields are skipped"
+    );
+    assert_eq!(attribute(record, "shape"), Some(text(r#"{"kind":"box"}"#)));
     let context = record.trace_context().expect("valid trace context mapped");
     assert_eq!(context.trace_id.to_string(), TRACE_ID);
     assert_eq!(context.span_id.to_string(), SPAN_ID);
@@ -265,9 +282,12 @@ fn sdk_diagnostic_targets_are_dropped() {
     let exporter = CapturingExporter::default();
     let provider = provider(exporter.clone());
     let sink = OtelLogSink::new(&provider, scope());
-    sink.write(&event("opentelemetry_sdk")).expect("diagnostic write");
-    sink.write(&event("opentelemetry.otlp")).expect("diagnostic write");
-    sink.write(&event("application")).expect("application write");
+    sink.write(&event("opentelemetry_sdk"))
+        .expect("diagnostic write");
+    sink.write(&event("opentelemetry.otlp"))
+        .expect("diagnostic write");
+    sink.write(&event("application"))
+        .expect("application write");
     provider.force_flush().expect("provider flush");
     let records = exporter.records();
     assert_eq!(records.len(), 1, "only the application event is emitted");
@@ -291,17 +311,23 @@ fn write_and_flush_return_while_the_export_is_stalled() {
     // release below, so returning here proves write and flush never wait on
     // the network.
     for _ in 0..3 {
-        sink.write(&event("application")).expect("write while stalled");
+        sink.write(&event("application"))
+            .expect("write while stalled");
     }
     sink.flush().expect("flush while stalled");
     assert_eq!(
         sink.health().state,
         sc_observability_types::SinkHealthState::Healthy
     );
-    assert!(exporter.records().is_empty(), "nothing completed while stalled");
+    assert!(
+        exporter.records().is_empty(),
+        "nothing completed while stalled"
+    );
 
     gate.release();
-    provider.force_flush().expect("provider flush after release");
+    provider
+        .force_flush()
+        .expect("provider flush after release");
     assert_eq!(exporter.records().len(), 4);
     provider.shutdown().expect("provider shutdown");
 }

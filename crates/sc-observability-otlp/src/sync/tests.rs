@@ -19,8 +19,8 @@ use opentelemetry::{InstrumentationScope, KeyValue};
 use opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest;
-use opentelemetry_proto::tonic::common::v1::any_value::Value as ProtoValue;
 use opentelemetry_proto::tonic::common::v1::KeyValue as ProtoKeyValue;
+use opentelemetry_proto::tonic::common::v1::any_value::Value as ProtoValue;
 use opentelemetry_proto::tonic::metrics::v1::metric::Data;
 use opentelemetry_proto::tonic::metrics::v1::number_data_point::Value as NumberValue;
 use opentelemetry_sdk::Resource;
@@ -120,7 +120,7 @@ fn serve(
     reply: Reply,
     requests: &Mutex<Vec<Captured>>,
     stop: &AtomicBool,
-    tls: Option<TlsConfig>,
+    tls: Option<&TlsConfig>,
 ) {
     let deadline = Instant::now() + FIXTURE_WATCHDOG * 3;
     while !stop.load(Ordering::SeqCst) && Instant::now() < deadline {
@@ -132,7 +132,7 @@ fn serve(
                 stream
                     .set_read_timeout(Some(FIXTURE_WATCHDOG))
                     .expect("stream read timeout");
-                match &tls {
+                match tls {
                     None => handle(stream, reply, requests, stop),
                     Some(config) => {
                         let connection = rustls::ServerConnection::new(Arc::clone(config))
@@ -341,19 +341,28 @@ fn send_log_exports_native_record_fields_and_headers() {
     assert_eq!(requests.len(), 1, "one export request");
     let request = &requests[0];
     assert_eq!(request.path, "/v1/logs");
-    assert_eq!(request.header("content-type"), Some("application/x-protobuf"));
+    assert_eq!(
+        request.header("content-type"),
+        Some("application/x-protobuf")
+    );
     assert_eq!(request.header("x-tenant"), Some("acme"));
     let decoded = ExportLogsServiceRequest::decode(request.body.as_slice()).expect("logs proto");
     let resource_logs = &decoded.resource_logs[0];
     let resource = resource_logs.resource.as_ref().expect("resource");
-    assert_eq!(string_attribute(&resource.attributes, "service.name"), Some(SERVICE));
+    assert_eq!(
+        string_attribute(&resource.attributes, "service.name"),
+        Some(SERVICE)
+    );
     assert_eq!(
         string_attribute(&resource.attributes, "deployment.environment"),
         Some("test")
     );
     let scope_logs = &resource_logs.scope_logs[0];
     let scope = scope_logs.scope.as_ref().expect("scope");
-    assert_eq!((scope.name.as_str(), scope.version.as_str()), ("sync-client", "1.2.3"));
+    assert_eq!(
+        (scope.name.as_str(), scope.version.as_str()),
+        ("sync-client", "1.2.3")
+    );
     let record = &scope_logs.log_records[0];
     assert_eq!(record.time_unix_nano, unix_nanos(timestamp));
     assert_eq!(record.observed_time_unix_nano, unix_nanos(observed));
@@ -383,7 +392,10 @@ fn send_log_defaults_observed_timestamp_when_closure_leaves_it_unset() {
     let decoded =
         ExportLogsServiceRequest::decode(requests[0].body.as_slice()).expect("logs proto");
     let record = &decoded.resource_logs[0].scope_logs[0].log_records[0];
-    assert!(record.observed_time_unix_nano >= before, "observed timestamp defaulted to now");
+    assert!(
+        record.observed_time_unix_nano >= before,
+        "observed timestamp defaulted to now"
+    );
     assert_eq!(record.time_unix_nano, 0, "event timestamp stays unset");
 }
 
@@ -392,7 +404,9 @@ fn send_span_exports_completed_native_span_data() {
     let collector = Collector::start(Reply::Ok);
     let mut client = Client::new(&collector.endpoint()).expect("client");
     let span = completed_span();
-    client.send_span(&resource(), span.clone()).expect("span exported");
+    client
+        .send_span(&resource(), span.clone())
+        .expect("span exported");
 
     let requests = collector.requests();
     assert_eq!(requests.len(), 1);
@@ -402,18 +416,28 @@ fn send_span_exports_completed_native_span_data() {
     let resource_spans = &decoded.resource_spans[0];
     assert_eq!(
         string_attribute(
-            &resource_spans.resource.as_ref().expect("resource").attributes,
+            &resource_spans
+                .resource
+                .as_ref()
+                .expect("resource")
+                .attributes,
             "service.name"
         ),
         Some(SERVICE)
     );
     let scope_spans = &resource_spans.scope_spans[0];
-    assert_eq!(scope_spans.scope.as_ref().expect("scope").name, "sync-client");
+    assert_eq!(
+        scope_spans.scope.as_ref().expect("scope").name,
+        "sync-client"
+    );
     let exported = &scope_spans.spans[0];
     assert_eq!(exported.name, "upload");
     assert_eq!(exported.trace_id, trace_id().to_bytes().to_vec());
     assert_eq!(exported.span_id, span_id().to_bytes().to_vec());
-    assert_eq!(exported.parent_span_id, span.parent_span_id.to_bytes().to_vec());
+    assert_eq!(
+        exported.parent_span_id,
+        span.parent_span_id.to_bytes().to_vec()
+    );
     assert_eq!(exported.kind, 3, "client span kind");
     assert_eq!(exported.start_time_unix_nano, unix_nanos(span.start_time));
     assert_eq!(exported.end_time_unix_nano, unix_nanos(span.end_time));
@@ -450,20 +474,31 @@ fn send_metrics_exports_typed_observations_in_one_request() {
         .expect("metrics exported");
 
     let requests = collector.requests();
-    assert_eq!(requests.len(), 1, "flush exports once; shutdown never resends");
+    assert_eq!(
+        requests.len(),
+        1,
+        "flush exports once; shutdown never resends"
+    );
     assert_eq!(requests[0].path, "/v1/metrics");
     let decoded =
         ExportMetricsServiceRequest::decode(requests[0].body.as_slice()).expect("metrics proto");
     let resource_metrics = &decoded.resource_metrics[0];
     assert_eq!(
         string_attribute(
-            &resource_metrics.resource.as_ref().expect("resource").attributes,
+            &resource_metrics
+                .resource
+                .as_ref()
+                .expect("resource")
+                .attributes,
             "service.name"
         ),
         Some(SERVICE)
     );
     let scope_metrics = &resource_metrics.scope_metrics[0];
-    assert_eq!(scope_metrics.scope.as_ref().expect("scope").version, "1.2.3");
+    assert_eq!(
+        scope_metrics.scope.as_ref().expect("scope").version,
+        "1.2.3"
+    );
     let metric = |name: &str| {
         scope_metrics
             .metrics
@@ -472,7 +507,10 @@ fn send_metrics_exports_typed_observations_in_one_request() {
             .unwrap_or_else(|| panic!("metric {name} exported"))
     };
     let counter = metric("jobs.completed");
-    assert_eq!((counter.description.as_str(), counter.unit.as_str()), ("Completed jobs", "{job}"));
+    assert_eq!(
+        (counter.description.as_str(), counter.unit.as_str()),
+        ("Completed jobs", "{job}")
+    );
     let Some(Data::Sum(sum)) = &counter.data else {
         panic!("counter exports a sum");
     };
@@ -501,11 +539,17 @@ fn invalid_input_is_validation_and_sends_nothing() {
 
     let mut zero_ids = completed_span();
     zero_ids.span_context = SpanContext::empty_context();
-    assert_eq!(validation_code(client.send_span(&resource(), zero_ids)), codes::INVALID_RECORD);
+    assert_eq!(
+        validation_code(client.send_span(&resource(), zero_ids)),
+        codes::INVALID_RECORD
+    );
 
     let mut inverted = completed_span();
     inverted.end_time = inverted.start_time - Duration::from_secs(1);
-    assert_eq!(validation_code(client.send_span(&resource(), inverted)), codes::INVALID_RECORD);
+    assert_eq!(
+        validation_code(client.send_span(&resource(), inverted)),
+        codes::INVALID_RECORD
+    );
 
     let invalid_context = client.send_log(&resource(), scope(), |record| {
         record.set_trace_context(TraceId::INVALID, span_id(), None);
@@ -514,20 +558,32 @@ fn invalid_input_is_validation_and_sends_nothing() {
     assert_eq!(validation_code(invalid_context), codes::INVALID_RECORD);
 
     let rejected = client.send_log(&resource(), scope(), |_| {
-        Err(SyncError::validation(codes::INVALID_RECORD, "unsupported severity"))
+        Err(SyncError::validation(
+            codes::INVALID_RECORD,
+            "unsupported severity",
+        ))
     });
     assert_eq!(validation_code(rejected), codes::INVALID_RECORD);
 
     let closure_export_error = client.send_log(&resource(), scope(), |_| {
-        Err(SyncError::Export(crate::sdk::error::OTelSdkError::InternalFailure(
-            "frontend failure".to_owned(),
-        )))
+        Err(SyncError::Export(
+            crate::sdk::error::OTelSdkError::InternalFailure("frontend failure".to_owned()),
+        ))
     });
-    assert_eq!(validation_code(closure_export_error), codes::CALLER_REJECTED);
+    assert_eq!(
+        validation_code(closure_export_error),
+        codes::CALLER_REJECTED
+    );
 
     let metric_closure = client.send_metrics(&resource(), scope(), |meter| {
-        meter.u64_counter("recorded.before.failure").build().add(1, &[]);
-        Err(SyncError::validation(codes::INVALID_RECORD, "metric timestamps are unsupported"))
+        meter
+            .u64_counter("recorded.before.failure")
+            .build()
+            .add(1, &[]);
+        Err(SyncError::validation(
+            codes::INVALID_RECORD,
+            "metric timestamps are unsupported",
+        ))
     });
     assert_eq!(validation_code(metric_closure), codes::INVALID_RECORD);
 
@@ -538,7 +594,10 @@ fn invalid_input_is_validation_and_sends_nothing() {
     });
     assert_eq!(validation_code(nothing_recorded), codes::INVALID_RECORD);
 
-    assert!(collector.requests().is_empty(), "no validation failure reaches the collector");
+    assert!(
+        collector.requests().is_empty(),
+        "no validation failure reaches the collector"
+    );
 }
 
 #[test]
@@ -578,12 +637,18 @@ fn assert_stalled_send_returns(send: impl FnOnce(&mut Client) -> Result<(), Sync
     let started = Instant::now();
     let result = send(&mut client);
     let elapsed = started.elapsed();
-    assert!(matches!(result, Err(SyncError::Export(_))), "stall is an export failure: {result:?}");
+    assert!(
+        matches!(result, Err(SyncError::Export(_))),
+        "stall is an export failure: {result:?}"
+    );
     assert!(
         elapsed < STALL_BUDGET,
         "stalled send returned after {elapsed:?}, budget {STALL_BUDGET:?}"
     );
-    assert!(!collector.requests().is_empty(), "the stalled collector received the request");
+    assert!(
+        !collector.requests().is_empty(),
+        "the stalled collector received the request"
+    );
 }
 
 #[test]
@@ -650,8 +715,15 @@ fn input_limits_accept_at_limit_and_reject_above() {
 
 #[test]
 fn invalid_configuration_is_rejected() {
-    for endpoint in ["not a url", "ftp://collector:4318", "http://collector:4318/?q=1"] {
-        assert_eq!(validation_code(Client::new(endpoint).map(drop)), codes::INVALID_CONFIG);
+    for endpoint in [
+        "not a url",
+        "ftp://collector:4318",
+        "http://collector:4318/?q=1",
+    ] {
+        assert_eq!(
+            validation_code(Client::new(endpoint).map(drop)),
+            codes::INVALID_CONFIG
+        );
     }
     let client = || Client::new("http://127.0.0.1:4318").expect("client");
     assert_eq!(
@@ -667,7 +739,11 @@ fn invalid_configuration_is_rejected() {
         codes::INVALID_CONFIG
     );
     assert_eq!(
-        validation_code(client().with_root_certificate_pem(b"not a certificate").map(drop)),
+        validation_code(
+            client()
+                .with_root_certificate_pem(b"not a certificate")
+                .map(drop)
+        ),
         codes::INVALID_CONFIG
     );
 }
@@ -685,7 +761,11 @@ fn credentials_never_appear_in_failure_text() {
     let error = client
         .send_span(&resource(), completed_span())
         .expect_err("collector rejects the export");
-    let mut rendered = vec![error.to_string(), format!("{error:?}"), format!("{client:?}")];
+    let mut rendered = vec![
+        error.to_string(),
+        format!("{error:?}"),
+        format!("{client:?}"),
+    ];
     let mut source = std::error::Error::source(&error);
     while let Some(cause) = source {
         rendered.push(cause.to_string());
@@ -726,10 +806,17 @@ fn explicit_configuration_child() {
 fn explicit_endpoint_and_timeout_win_over_environment() {
     let collector = Collector::start(Reply::Ok);
     let output = Command::new(std::env::current_exe().expect("test binary"))
-        .args(["--exact", "sync::tests::explicit_configuration_child", "--nocapture"])
+        .args([
+            "--exact",
+            "sync::tests::explicit_configuration_child",
+            "--nocapture",
+        ])
         .env("SC_OTLP_SYNC_PRECEDENCE_ENDPOINT", collector.endpoint())
         .env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:9")
-        .env("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://127.0.0.1:9/v1/traces")
+        .env(
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "http://127.0.0.1:9/v1/traces",
+        )
         .env("OTEL_EXPORTER_OTLP_TIMEOUT", "60000")
         .env("OTEL_EXPORTER_OTLP_TRACES_TIMEOUT", "60000")
         .output()
@@ -743,7 +830,11 @@ fn explicit_endpoint_and_timeout_win_over_environment() {
         String::from_utf8_lossy(&output.stdout).contains("1 passed"),
         "child test ran"
     );
-    assert_eq!(collector.requests().len(), 1, "the explicit endpoint received the span");
+    assert_eq!(
+        collector.requests().len(),
+        1,
+        "the explicit endpoint received the span"
+    );
 }
 
 /// Self-signed loopback certificate and key generated with the `openssl` CLI.
@@ -758,10 +849,8 @@ impl TestCertificate {
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("clock after epoch")
             .as_nanos();
-        let base = std::env::temp_dir().join(format!(
-            "sc-otlp-sync-{}-{nonce}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("sc-otlp-sync-{}-{nonce}", std::process::id()));
         let cert = base.with_extension("crt");
         let key = base.with_extension("key");
         let generated = Command::new("openssl")
@@ -783,7 +872,10 @@ impl TestCertificate {
             ])
             .output()
             .expect("openssl is available for the TLS test");
-        assert!(generated.status.success(), "generate loopback TLS certificate");
+        assert!(
+            generated.status.success(),
+            "generate loopback TLS certificate"
+        );
         Self { cert, key }
     }
 
@@ -826,7 +918,7 @@ fn start_tls_collector(config: TlsConfig) -> Collector {
     let thread = {
         let requests = Arc::clone(&requests);
         let stop = Arc::clone(&stop);
-        thread::spawn(move || serve(&listener, Reply::Ok, &requests, &stop, Some(config)))
+        thread::spawn(move || serve(&listener, Reply::Ok, &requests, &stop, Some(&config)))
     };
     Collector {
         address,
@@ -860,5 +952,9 @@ fn tls_verifies_trusted_and_rejects_untrusted_certificates() {
         untrusted.send_span(&resource(), completed_span()),
         Err(SyncError::Export(_))
     ));
-    assert_eq!(collector.requests().len(), 1, "only the verified export was delivered");
+    assert_eq!(
+        collector.requests().len(),
+        1,
+        "only the verified export was delivered"
+    );
 }

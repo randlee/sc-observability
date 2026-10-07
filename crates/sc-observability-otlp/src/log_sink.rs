@@ -5,6 +5,38 @@
 //! a caller-owned [`SdkLoggerProvider`](sdk::logs::SdkLoggerProvider). The core
 //! logger keeps level filtering, redaction and file fan-out; registering this
 //! sink beside the built-in file sink sends the same events to both.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use std::sync::Arc;
+//!
+//! use opentelemetry_sdk::logs::{BatchLogProcessor, LogExporter};
+//! use sc_observability::v2::{LoggerBuilder, LoggerConfig, ServiceName, SinkRegistration};
+//! use sc_observability_otlp::OtelLogSink;
+//! use sc_observability_otlp::api::InstrumentationScope;
+//! use sc_observability_otlp::sdk::Resource;
+//! use sc_observability_otlp::sdk::logs::SdkLoggerProvider;
+//!
+//! // `exporter` is any official log exporter, such as the OTLP gRPC exporter.
+//! fn run(exporter: impl LogExporter + 'static) -> Result<(), Box<dyn std::error::Error>> {
+//!     let provider = SdkLoggerProvider::builder()
+//!         .with_resource(Resource::builder_empty().with_service_name("my-app").build())
+//!         .with_log_processor(BatchLogProcessor::builder(exporter).build())
+//!         .build();
+//!     let config = LoggerConfig::default_for(ServiceName::new("my-app")?, "logs".into());
+//!     let mut builder = LoggerBuilder::new(config)?;
+//!     builder.register_sink(SinkRegistration::typed(Arc::new(OtelLogSink::new(
+//!         &provider,
+//!         InstrumentationScope::builder("my-app").build(),
+//!     ))));
+//!     let logger = builder.build()?;
+//!     // Log through `logger`: its file sink and the OTel sink both receive events.
+//!     logger.shutdown()?;
+//!     provider.shutdown()?;
+//!     Ok(())
+//! }
+//! ```
 
 use std::time::SystemTime;
 
@@ -54,10 +86,7 @@ pub struct OtelLogSink {
 impl OtelLogSink {
     /// Creates a sink that emits through `provider`'s logger for `scope`.
     #[must_use]
-    pub fn new(
-        provider: &sdk::logs::SdkLoggerProvider,
-        scope: api::InstrumentationScope,
-    ) -> Self {
+    pub fn new(provider: &sdk::logs::SdkLoggerProvider, scope: api::InstrumentationScope) -> Self {
         Self {
             logger: provider.logger_with_scope(scope),
         }
@@ -66,7 +95,11 @@ impl OtelLogSink {
 
 impl LogSink for OtelLogSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        if event.target.as_str().starts_with(SDK_DIAGNOSTIC_TARGET_PREFIX) {
+        if event
+            .target
+            .as_str()
+            .starts_with(SDK_DIAGNOSTIC_TARGET_PREFIX)
+        {
             return Ok(());
         }
         let mut record = self.logger.create_log_record();
@@ -108,17 +141,35 @@ fn map_event(event: &LogEvent, record: &mut sdk::logs::SdkLogRecord) {
     }
     record.set_target(event.target.as_str().to_owned());
     record.add_attribute("event.name", event.action.as_str().to_owned());
-    record.add_attribute("sc.observability.log.service", event.service.as_str().to_owned());
+    record.add_attribute(
+        "sc.observability.log.service",
+        event.service.as_str().to_owned(),
+    );
     record.add_attribute("sc.observability.log.version", json_text!(&event.version));
     record.add_attribute("sc.observability.log.identity", json_text!(&event.identity));
     let optional = [
-        ("sc.observability.log.request_id", event.request_id.as_ref().map(|value| json_text!(value))),
-        ("sc.observability.log.correlation_id", event.correlation_id.as_ref().map(|value| json_text!(value))),
-        ("sc.observability.log.outcome", event.outcome.as_ref().map(|value| json_text!(value))),
-        ("sc.observability.log.diagnostic", event.diagnostic.as_ref().map(|value| json_text!(value))),
+        (
+            "sc.observability.log.request_id",
+            event.request_id.as_ref().map(|value| json_text!(value)),
+        ),
+        (
+            "sc.observability.log.correlation_id",
+            event.correlation_id.as_ref().map(|value| json_text!(value)),
+        ),
+        (
+            "sc.observability.log.outcome",
+            event.outcome.as_ref().map(|value| json_text!(value)),
+        ),
+        (
+            "sc.observability.log.diagnostic",
+            event.diagnostic.as_ref().map(|value| json_text!(value)),
+        ),
         (
             "sc.observability.log.state_transition",
-            event.state_transition.as_ref().map(|value| json_text!(value)),
+            event
+                .state_transition
+                .as_ref()
+                .map(|value| json_text!(value)),
         ),
     ];
     for (key, value) in optional {
@@ -162,7 +213,6 @@ const fn severity(level: Level) -> (Severity, &'static str) {
     };
     (severity, text)
 }
-
 
 fn any_value(value: &Value) -> Option<AnyValue> {
     match value {

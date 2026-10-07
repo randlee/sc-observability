@@ -276,6 +276,22 @@ with tempfile.TemporaryDirectory(prefix="core-boundary-fixtures-") as directory:
                 raise SystemExit(
                     f"negative core-boundary fixture was accepted: {forbidden} for {crate}"
                 )
+# ADR-023: a native Tokio host selecting only `log-sink` must not acquire the
+# synchronous client's blocking HTTP transport. Check the resolved graph, not
+# the manifest, so feature unification through a dependency is caught too.
+import subprocess
+log_sink_graph = subprocess.run(
+    [
+        "cargo", "tree", "--locked", "-p", "sc-observability-otlp",
+        "--no-default-features", "--features", "log-sink",
+        "-e", "normal", "--prefix", "none", "--format", "{p}",
+    ],
+    cwd=root, check=True, capture_output=True, text=True,
+).stdout
+log_sink_packages = {line.split()[0] for line in log_sink_graph.splitlines() if line.strip()}
+leaked = sorted(log_sink_packages & {"opentelemetry-http", "opentelemetry-otlp", "reqwest"})
+if leaked:
+    raise SystemExit(f"log-sink feature graph acquired synchronous transport: {leaked}")
 print("dependency ban validation passed")
 PY
 

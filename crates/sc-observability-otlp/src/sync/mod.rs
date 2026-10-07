@@ -32,6 +32,33 @@
 //! per-signal variants) afterwards, so an environment header with the same
 //! name replaces the explicit one. Compression follows the official exporter's
 //! environment handling.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
+//! use sc_observability_otlp::api::{InstrumentationScope, KeyValue};
+//! use sc_observability_otlp::sdk::Resource;
+//! use sc_observability_otlp::sync::{Client, SyncError};
+//!
+//! fn main() -> Result<(), SyncError> {
+//!     let resource = Resource::builder_empty().with_service_name("my-cli").build();
+//!     let scope = InstrumentationScope::builder("my-cli").with_version("1.0.0").build();
+//!     let mut client = Client::new("http://127.0.0.1:4318")?
+//!         .with_header("authorization", "Bearer token-from-env")?;
+//!     client.send_log(&resource, scope.clone(), |record| {
+//!         record.set_severity_number(Severity::Info);
+//!         record.set_severity_text("INFO");
+//!         record.set_body(AnyValue::from("job finished"));
+//!         Ok(())
+//!     })?;
+//!     client.send_metrics(&resource, scope, |meter| {
+//!         let jobs = meter.u64_counter("jobs.completed").build();
+//!         jobs.add(1, &[KeyValue::new("queue", "default")]);
+//!         Ok(())
+//!     })
+//! }
+//! ```
 
 use std::collections::HashMap;
 use std::fmt;
@@ -243,7 +270,10 @@ impl Client {
     /// for an invalid header name or value.
     pub fn with_header(mut self, name: &str, value: &str) -> Result<Self, SyncError> {
         let name = otel_reqwest::header::HeaderName::from_bytes(name.as_bytes()).map_err(|_| {
-            SyncError::validation(codes::INVALID_CONFIG, format!("invalid header name {name:?}"))
+            SyncError::validation(
+                codes::INVALID_CONFIG,
+                format!("invalid header name {name:?}"),
+            )
         })?;
         otel_reqwest::header::HeaderValue::from_str(value).map_err(|_| {
             SyncError::validation(
@@ -254,7 +284,8 @@ impl Client {
         if !value.is_empty() {
             self.secrets.push(value.to_owned());
         }
-        self.headers.insert(name.as_str().to_owned(), value.to_owned());
+        self.headers
+            .insert(name.as_str().to_owned(), value.to_owned());
         Ok(self)
     }
 
@@ -556,7 +587,9 @@ fn redact_url_userinfo(text: &str) -> String {
         let (head, tail) = rest.split_at(index + 3);
         output.push_str(head);
         let authority_end = tail
-            .find(|c: char| matches!(c, '/' | '?' | '#') || c.is_whitespace() || "\"'()<>".contains(c))
+            .find(|c: char| {
+                matches!(c, '/' | '?' | '#') || c.is_whitespace() || "\"'()<>".contains(c)
+            })
             .unwrap_or(tail.len());
         let authority = &tail[..authority_end];
         if let Some(at) = authority.rfind('@') {
