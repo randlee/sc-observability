@@ -806,7 +806,7 @@ mod tests {
             .expect("all entered calls drain before releasing the host logger");
         ATTACHMENT.lock().expect("attachment registry").mode = AttachmentMode::Empty;
         drop(state);
-        Arc::try_unwrap(logger)
+        let _ = Arc::try_unwrap(logger)
             .unwrap_or_else(|_| panic!("attachment call releases the host logger"))
             .shutdown();
     }

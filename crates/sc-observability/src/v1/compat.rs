@@ -401,8 +401,8 @@ impl LoggerBuilder {
     }
 }
 
-impl<State> From<CanonicalLogger<State>> for Logger<State> {
-    fn from(inner: CanonicalLogger<State>) -> Self {
+impl<State> From<CanonicalLogger> for Logger<State> {
+    fn from(inner: CanonicalLogger) -> Self {
         Self {
             inner,
             shutdown: std::marker::PhantomData,
@@ -410,7 +410,7 @@ impl<State> From<CanonicalLogger<State>> for Logger<State> {
     }
 }
 
-impl<State> From<Logger<State>> for CanonicalLogger<State> {
+impl<State> From<Logger<State>> for CanonicalLogger {
     fn from(value: Logger<State>) -> Self {
         value.inner
     }
@@ -424,9 +424,12 @@ impl Logger<Running> {
     }
 
     /// Shuts down the shared canonical runtime and returns a stopped facade.
-    #[deprecated(note = "use crate::v2::Logger::shutdown; see docs/migration/phase-f.md")]
+    #[deprecated(
+        note = "use sc_observability::v2::Logger::shutdown(&self); see docs/migration/phase-f.md"
+    )]
     pub fn shutdown(self) -> Logger<Stopped> {
-        Logger::from(self.inner.shutdown())
+        let _ = self.inner.shutdown();
+        Logger::from(self.inner)
     }
 
     /// Starts a 1.x builder with the released initialization error wrapper.

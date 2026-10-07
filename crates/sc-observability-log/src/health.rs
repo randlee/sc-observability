@@ -105,9 +105,7 @@ pub(crate) fn active_log_path() -> Result<Option<PathBuf>, ControlError> {
 }
 
 /// Reads core health without permitting an upstream mutex panic to unwind the bridge.
-pub(crate) fn read_report<State>(
-    logger: &sc_observability::v2::Logger<State>,
-) -> Option<LoggingHealthReport> {
+pub(crate) fn read_report(logger: &sc_observability::v2::Logger) -> Option<LoggingHealthReport> {
     catch_unwind(AssertUnwindSafe(|| logger.health())).ok()
 }
 
