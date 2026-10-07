@@ -140,3 +140,7 @@ Never enable `fault-injection` in production builds.
 ## Release / Publishing
 
 - Publish procedure: [PUBLISHING.md](./PUBLISHING.md)
+
+### CLI reference
+
+The [sc-otel manual](docs/manual/sc-otel/cli-reference.md) is generated from Clap and ships with CLI release archives under `share/doc/sc-otel/`. The same reference is [published on the website](https://randlee.github.io/sc-observability/manual/sc-otel/). Run `sc-otel --help` or `sc-otel <command> --help` for the built-in reference.

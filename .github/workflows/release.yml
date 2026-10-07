@@ -185,6 +185,12 @@ jobs:
             target
           key: ${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Generate CLI reference for this release
+        shell: bash
+        env:
+          SC_OTEL_UPDATE_DOCS: "1"
+        run: cargo test --locked -p sc-otel-cli --bin sc-otel cli_docs::generated_manual_is_current
+
       - name: Build release binaries
         shell: bash
         run: |
@@ -648,3 +654,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.gate-and-tag.outputs.release_tag }}
         run: python3 .github/scripts/release_immutability.py --tag "$RELEASE_TAG" --finalized
+
+  publish-cli-docs:
+    name: Publish release CLI reference
+    needs: [gate-and-tag, release]
+    if: ${{ needs.gate-and-tag.outputs.release_target == 'production' }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+    with:
+      ref: ${{ needs.gate-and-tag.outputs.build_ref }}

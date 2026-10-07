@@ -1,6 +1,8 @@
 //! `sc-otel` submits and inspects durable telemetry envelopes.
 
 mod cli;
+#[cfg(test)]
+mod cli_docs;
 mod client;
 mod config;
 mod constants;

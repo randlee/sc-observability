@@ -13,15 +13,21 @@ use std::{path::PathBuf, time::Duration};
 #[command(
     name = "sc-otel",
     version,
-    about = "Submit and inspect durable telemetry"
+    about = "Submit and inspect durable telemetry",
+    long_about = "Submit logs, spans, metrics, and profiles through a durable local queue to an OTLP collector. Delivery is at least once: retained records can be resent after interrupted or uncertain delivery.",
+    after_long_help = include_str!("manual.txt")
 )]
 pub(crate) struct Cli {
+    /// Read telemetry YAML from this explicit path. No configuration file is auto-discovered. Relative store.path values in YAML are resolved against this file's directory. validate does not load configuration.
     #[arg(long, global = true)]
     pub(crate) config: Option<PathBuf>,
+    /// Use this `SQLite` queue path instead of store.path in YAML. Required for emit, flush, and status unless supplied in the file; no environment fallback. Relative CLI paths use the current directory.
     #[arg(long, global = true)]
     pub(crate) store: Option<PathBuf>,
+    /// Override the OTLP HTTP base URL. Precedence: this flag, otlp.endpoint in YAML, `OTEL_EXPORTER_OTLP_ENDPOINT`, then <http://localhost:4318>.
     #[arg(long, global = true)]
     pub(crate) endpoint: Option<String>,
+    /// Choose machine-readable JSON (default) or one compact text result line. Parser errors and help use Clap's normal diagnostics regardless of this setting.
     #[arg(long, global = true, value_enum, default_value_t = OutputFormat::Json)]
     pub(crate) output: OutputFormat,
     #[command(subcommand)]
@@ -42,23 +48,46 @@ pub(crate) enum OutputFormat {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Validate and durably admit telemetry, then attempt delivery.
+    #[command(
+        long_about = "Parse and validate the input, open the configured durable store, and admit the submission before delivery. Normally flushes this submission and shuts down the client; --no-flush returns after admission. A receipt identifies admitted records even if delivery later fails.",
+        after_long_help = "Examples:\n  sc-otel --store queue.sqlite emit --log '{\"body\":\"started\"}' --no-flush\n  sc-otel --config telemetry.yaml emit --stdin < event.json\n  sc-otel --store queue.sqlite emit --log @log.json --record-key job-42\n\nUse --stdin OR fragment flags; at least one input source is required. With stdin, a record_key belongs inside the input JSON. Keep the store after exit 6 so flush can retry delivery."
+    )]
     Emit(EmitArgs),
+    /// Validate input locally without opening a store or contacting a collector.
+    #[command(
+        long_about = "Parse SubmissionInput and construct a normalized SubmissionEnvelope, including generated identifiers and timestamps. The JSON result includes the normalized envelope. This checks input shape and values, not collector availability or successful delivery; global configuration flags are not loaded.",
+        after_long_help = "Examples:\n  sc-otel validate --log '{\"body\":\"started\"}'\n  sc-otel validate --stdin < event.json\n  sc-otel validate --log @log.json --span @span.json\n\nFragment files are UTF-8 JSON, one signal value per file. Repeating --log, --span, or --metric appends values; --profile accepts one profiles object. Do not supply generated envelope fields such as submission_id in SubmissionInput."
+    )]
     Validate(InputArgs),
+    /// Attempt delivery of pending records in the configured durable store.
+    #[command(
+        after_long_help = "Examples:\n  sc-otel --config telemetry.yaml flush --timeout 10\n  sc-otel --store queue.sqlite --endpoint http://localhost:4318 flush\n\nThis command flushes the store, not one selected submission. Exit 6 means records remain pending; retain the queue and retry when the collector is available. Exit 7 means a terminal delivery failure. A flush deadline is not a wall-clock bound for opening and shutting down the process."
+    )]
     Flush(FlushArgs),
+    /// Inspect the queue summary or selected submissions/record keys.
+    #[command(
+        after_long_help = "Examples:\n  sc-otel --store queue.sqlite status\n  sc-otel --store queue.sqlite status --record-key job-42\n  sc-otel --store queue.sqlite status --submission 018f8f5e-5c4c-7abc-8def-0123456789ab\n\nRepeat one selector kind to query multiple records; do not mix --submission with --record-key. This opens the durable client and runs its normal shutdown; it is not an offline, read-only SQLite inspection."
+    )]
     Status(StatusArgs),
 }
 
 #[derive(Debug, Args)]
 #[group(id = "source", required = true, multiple = true)]
 pub(crate) struct InputArgs {
+    /// Read one complete `SubmissionInput` JSON document from stdin. Cannot combine with fragment flags. Requires version: 1; use `record_key` inside the document for deduplication.
     #[arg(long, group = "source", conflicts_with_all = ["log", "span", "metric", "profile"])]
     pub(crate) stdin: bool,
+    /// Append one log point as inline JSON or @FILE. Repeat to submit multiple logs; can combine with other fragment types.
     #[arg(long, group = "source", value_name = "JSON|@FILE")]
     pub(crate) log: Vec<String>,
+    /// Append one span point as inline JSON or @FILE. Repeat to submit multiple spans; can combine with other fragment types.
     #[arg(long, group = "source", value_name = "JSON|@FILE")]
     pub(crate) span: Vec<String>,
+    /// Append one metric stream as inline JSON or @FILE. Repeat for multiple streams; can combine with other fragment types.
     #[arg(long, group = "source", value_name = "JSON|@FILE")]
     pub(crate) metric: Vec<String>,
+    /// Supply the profiles object as inline JSON or @FILE. May be combined with log, span, and metric fragments.
     #[arg(long, group = "source", value_name = "JSON|@FILE")]
     pub(crate) profile: Option<String>,
     #[cfg(test)]
@@ -70,22 +99,27 @@ pub(crate) struct InputArgs {
 pub(crate) struct EmitArgs {
     #[command(flatten)]
     pub(crate) input: InputArgs,
+    /// Deduplicate a fragment-mode submission with this caller-owned key. With --stdin, put `record_key` in the JSON document instead.
     #[arg(long, conflicts_with = "stdin")]
     pub(crate) record_key: Option<String>,
+    /// Return after durable admission without initiating a flush. Exit 0 confirms admission only, not delivery; retain the store and later run flush.
     #[arg(long)]
     pub(crate) no_flush: bool,
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct FlushArgs {
+    /// Bound this flush in whole, unsigned seconds (including 0). Defaults to the resolved flush deadline, currently 30 seconds. Shutdown uses its own configured deadline.
     #[arg(long, value_name = "SECONDS", value_parser = parse_seconds)]
     pub(crate) timeout: Option<Duration>,
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct StatusArgs {
+    /// Select a submission by UUID; repeat for multiple submissions. Mutually exclusive with --record-key. With neither selector, show a queue summary.
     #[arg(long, conflicts_with = "record_key")]
     pub(crate) submission: Vec<String>,
+    /// Select records by caller-owned key; repeat for multiple keys. Cannot combine with --submission.
     #[arg(long)]
     pub(crate) record_key: Vec<String>,
 }

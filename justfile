@@ -39,3 +39,11 @@ validate: lint test deny
 [positional-arguments]
 integrate branch *args:
     python3 scripts/integrate/dispatch.py "$@"
+
+# Regenerate the release manual and website from the live sc-otel Clap tree.
+cli-docs:
+    SC_OTEL_UPDATE_DOCS=1 cargo test --locked -p sc-otel-cli --bin sc-otel cli_docs::generated_manual_is_current
+
+# Verify checked-in documentation matches this CLI version and all public options.
+cli-docs-check:
+    cargo test --locked -p sc-otel-cli --bin sc-otel cli_docs::

@@ -5,8 +5,17 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "crates/sc-otel-cli/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Exact release source commit"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +34,18 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.1"
+
+      - name: Generate CLI reference from this source
+        env:
+          SC_OTEL_UPDATE_DOCS: "1"
+        run: cargo test --locked -p sc-otel-cli --bin sc-otel cli_docs::generated_manual_is_current
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

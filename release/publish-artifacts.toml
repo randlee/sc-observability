@@ -24,6 +24,10 @@ target = "x86_64-pc-windows-msvc"
 os = "windows-latest"
 archive = "zip"
 
+[[release_binaries]]
+name = "sc-otel"
+bundled_paths = [{ source = "docs/manual/sc-otel", destination = "share/doc/sc-otel", homebrew_destination_components = ["doc", "sc-otel"] }]
+
 [[crates]]
 artifact = "sc-observability-types"
 package = "sc-observability-types"

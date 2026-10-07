@@ -1,0 +1,77 @@
+QUICK START
+  sc-otel validate --log '{"body":"started"}'
+  sc-otel --store queue.sqlite emit --log '{"body":"started"}' --no-flush
+  sc-otel --store queue.sqlite status
+  sc-otel --store queue.sqlite --endpoint http://localhost:4318 flush --timeout 10
+
+  validate is local and needs no store or collector. emit, flush, and status
+  require a store path. Use the same store across invocations to retain queued
+  records. --no-flush reports durable admission, not confirmed delivery.
+
+INPUT
+  Pass --stdin with one complete JSON document, for example event.json:
+    {"version":1,"logs":[{"body":"started"}]}
+  Then run:
+    sc-otel validate --stdin < event.json
+
+  Alternatively use --log, --span, --metric, or --profile with inline JSON or
+  @FILE. Fragment mode supplies version 1. Logs, spans, and metrics accept
+  repeated flags; each argument is one point/stream, not an array. Profiles
+  use one object. --stdin and fragment flags are mutually exclusive.
+  Input follows SubmissionInput, not raw OTLP protobuf JSON. The normalized
+  envelope contains system-generated identifiers and timestamps.
+
+CONFIGURATION
+  Supply --config telemetry.yaml explicitly; no file is auto-discovered.
+  Minimal example:
+    service: example-service
+    otlp:
+      endpoint: http://localhost:4318
+      timeout_ms: 10000
+    store:
+      path: ./queue.sqlite
+
+  CLI --store and --endpoint override YAML. YAML service and otlp.endpoint
+  override OTEL_SERVICE_NAME and OTEL_EXPORTER_OTLP_ENDPOINT respectively.
+  Without either, service is unknown_service and endpoint is
+  http://localhost:4318. SC_OTEL_AUTH_HEADER supplies the authentication header;
+  keep secrets out of command arguments and shell history. No store-path
+  environment fallback exists. YAML store.path is relative to the YAML file;
+  --store and @FILE paths are relative to the current working directory.
+
+  Additional store YAML keys: max_bytes, disk_bound_policy, and
+  delivered_retention_hours. validate never loads this configuration.
+
+OUTPUT AND AUTOMATION
+  --output json (default) prints one sc-otel.result/v1 object for an executed
+  command. Fields: schema, command, exit_code, state, receipt, flush, status,
+  envelope, error. Non-applicable fields are null. A validation success includes
+  envelope; an admitted emit includes receipt; flush/status include their report.
+  Errors include code, message, cause, and remediation. Use exit_code and error.code
+  for automation rather than parsing human-readable text.
+
+  --output text prints: <state> exit=<n> [submission=<id>] [error=<code>].
+  States: validated, status, rejected, admitted_pending, admitted_delivered,
+  admitted_failed. Clap usage errors and --help/--version are exceptions to the
+  JSON result format. Unexpected internal errors may write diagnostics to stderr.
+
+EXIT CODES
+  0  Success (with emit --no-flush: admitted, not necessarily delivered).
+  1  Unexpected internal failure.
+  2  Command-line usage error; inspect stderr and --help.
+  3  Invalid submission input; inspect error.code and remediation.
+  4  Invalid/missing configuration or an unsupported combination.
+  5  Admission/client failure; inspect receipt to determine whether admission occurred.
+  6  Admitted delivery remains pending; preserve the store and retry flush.
+  7  Terminal delivery failure; inspect the report and retained record.
+
+DELIVERY AND RECOVERY
+  Delivery is at least once, not exactly once. Use a stable record_key when
+  deduplication is needed. Preserve the durable store after uncertain delivery;
+  deleting it discards pending telemetry. Fix configuration/collector errors
+  before retrying. Do not treat admission or local validation as collector receipt.
+
+DOCUMENTATION
+  Run sc-otel <command> --help for detailed options and examples.
+  The Markdown manual and website reference are generated from this same Clap
+  help at every release; their version is the CLI package version.

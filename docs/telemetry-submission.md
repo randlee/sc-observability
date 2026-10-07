@@ -28,6 +28,8 @@ else:
 
 ## CLI
 
+See the complete [Clap-generated CLI manual](manual/sc-otel/cli-reference.md) for commands, options, examples, configuration, and recovery.
+
 `sc-otel` accepts the same `SubmissionInput` document as the Python facade.
 
 ```sh

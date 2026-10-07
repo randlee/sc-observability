@@ -35,13 +35,20 @@ def main() -> int:
         raise SystemExit(f"six-wheel matrix mismatch: {sorted(actual)}")
     if contract["npm_packages"] != [{"name": "@synaptic-canvas/sc-observability", "source": "bindings/typescript"}]:
         raise SystemExit("npm package inventory mismatch")
-    if contract["release_binaries"] != []:
-        raise SystemExit("release_binaries must remain empty: no standalone binary is shipped")
+    if contract["release_binaries"] != [{
+        "name": "sc-otel",
+        "bundled_paths": [{
+            "source": "docs/manual/sc-otel",
+            "destination": "share/doc/sc-otel",
+            "homebrew_destination_components": ["doc", "sc-otel"],
+        }],
+    }]:
+        raise SystemExit("sc-otel release archives must include the generated offline manual")
     if contract["python_packages"][0]["artifact"] == contract["crates"][-1]["artifact"]:
         raise SystemExit("python wheel artifact id must differ from Rust crate artifact id")
     if "npm" not in contract["channels"]:
         raise SystemExit("npm channel must accompany npm package inventory")
-    print("C1_INSTALL_CONTRACT_SEMANTICS_PASS: targets, ten crates, six wheels, npm package")
+    print("C1_INSTALL_CONTRACT_SEMANTICS_PASS: targets, ten crates, six wheels, npm package, sc-otel with manual")
     return 0
 
 
