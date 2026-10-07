@@ -73,7 +73,7 @@ impl Drop for Owner {
 struct Shared {
     db: database::Database,
     config: TelemetryClientConfig,
-    holder: row::LeaseHolder,
+    holder: Option<row::LeaseHolder>,
     // Acquire reads reject operations; the AcqRel swap linearizes concurrent shutdown.
     closed: AtomicBool,
     // Shutdown/drop stores Release; worker wait predicates observe it with Acquire.
@@ -102,6 +102,12 @@ struct Shared {
         Mutex<std::collections::HashSet<sc_observability_types::otlp::submission::Signal>>,
 }
 impl Shared {
+    fn holder(&self) -> &row::LeaseHolder {
+        self.holder
+            .as_ref()
+            .expect("delivery workers require a lease holder")
+    }
+
     fn record_error(&self, error: &TelemetryClientError) {
         use std::io::Write;
         let code = error.code().clone();
@@ -244,6 +250,18 @@ fn closed() -> TelemetryClientError {
     .into()
 }
 impl DurableTelemetryClient {
+    /// Opens the durable store for status inspection without starting delivery.
+    ///
+    /// The returned client has no exporter, workers, or lease holder, and rejects
+    /// admission. It can therefore safely inspect pending records while another
+    /// client retains delivery ownership.
+    pub fn open_read_only(config: TelemetryClientConfig) -> Result<Self, TelemetryClientError> {
+        let otel = adapter::otel_config_from(&config)?;
+        let (_, bounds) = crate::sync_http::submission::SyncHttpConfig::from_otel(&otel)
+            .map_err(|error| adapter::invalid_reason("otlp", error.code().as_str()))?;
+        Self::prepare_read_only(config, &bounds)
+    }
+
     #[cfg(test)]
     pub(crate) fn open_with_exporter(
         config: TelemetryClientConfig,
@@ -276,11 +294,29 @@ impl DurableTelemetryClient {
         config: TelemetryClientConfig,
         bounds: &crate::config::ValidatedTransportBounds,
     ) -> Result<Self, TelemetryClientError> {
+        let db = store::open(&config.store_path)?;
+        Self::prepare(config, bounds, db, true)
+    }
+    fn prepare_read_only(
+        config: TelemetryClientConfig,
+        bounds: &crate::config::ValidatedTransportBounds,
+    ) -> Result<Self, TelemetryClientError> {
+        let db = store::reader(&config.store_path)?;
+        Self::prepare(config, bounds, db, false)
+    }
+    fn prepare(
+        config: TelemetryClientConfig,
+        bounds: &crate::config::ValidatedTransportBounds,
+        db: rusqlite::Connection,
+        delivery_enabled: bool,
+    ) -> Result<Self, TelemetryClientError> {
         let shared = Arc::new(Shared {
-            db: database::Database::new(store::open(&config.store_path)?)?,
+            db: database::Database::new(db)?,
             config,
-            holder: row::LeaseHolder(format!("{}:{}", std::process::id(), uuid::Uuid::now_v7())),
-            closed: AtomicBool::new(false),
+            holder: delivery_enabled.then(|| {
+                row::LeaseHolder(format!("{}:{}", std::process::id(), uuid::Uuid::now_v7()))
+            }),
+            closed: AtomicBool::new(!delivery_enabled),
             stop: AtomicBool::new(false),
             credits: AdmissionCredits::new(bounds),
             wake: Mutex::new(0),

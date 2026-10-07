@@ -174,14 +174,14 @@ pub(super) fn release(shared: &Shared) {
         let _ = db.busy_timeout(Duration::ZERO);
         let _ = db.execute(
             "DELETE FROM drain_lease WHERE id=1 AND holder=?1",
-            [&shared.holder],
+            [shared.holder()],
         );
     }
 }
 fn lease(shared: &Shared, renew: bool) -> Result<bool, TelemetryClientError> {
     let mut db = shared.db.lock()?;
     if !renew {
-        let owned: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM drain_lease WHERE holder=?1 AND expires_at_unix_nano>=?2)", params![shared.holder,store::now()], |r| r.get(0)).map_err(persistence)?;
+        let owned: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM drain_lease WHERE holder=?1 AND expires_at_unix_nano>=?2)", params![shared.holder(),store::now()], |r| r.get(0)).map_err(persistence)?;
         if owned {
             return Ok(true);
         }
@@ -200,7 +200,7 @@ fn lease(shared: &Shared, renew: bool) -> Result<bool, TelemetryClientError> {
         .map_err(persistence)?;
     if old
         .as_ref()
-        .is_some_and(|(holder, expiry)| holder != &shared.holder && *expiry >= now)
+        .is_some_and(|(holder, expiry)| holder != shared.holder() && *expiry >= now)
     {
         return Ok(false);
     }
@@ -210,15 +210,15 @@ fn lease(shared: &Shared, renew: bool) -> Result<bool, TelemetryClientError> {
     let expiry = now.saturating_add(store::nanos(shared.config.lease_duration));
     if old
         .as_ref()
-        .is_none_or(|(holder, expiry)| holder != &shared.holder || *expiry < now)
+        .is_none_or(|(holder, expiry)| holder != shared.holder() || *expiry < now)
     {
         #[cfg(test)]
         tx.execute("INSERT INTO store_counters(name,value) VALUES('test_lease_acquisitions',1) ON CONFLICT(name) DO UPDATE SET value=value+1", []).map_err(persistence)?;
         // An absent lease can still have claims from a cleanly stopped worker.
         tx.execute(&super::row::sql("UPDATE signal_deliveries SET state='{pending}',claimed_by=NULL,claim_expires_at_unix_nano=NULL WHERE state='{claimed}'"), []).map_err(persistence)?;
     }
-    tx.execute("INSERT INTO drain_lease VALUES(1,?1,?2,?3) ON CONFLICT(id) DO UPDATE SET acquired_at_unix_nano=CASE WHEN drain_lease.holder!=excluded.holder OR drain_lease.expires_at_unix_nano<excluded.acquired_at_unix_nano THEN excluded.acquired_at_unix_nano ELSE drain_lease.acquired_at_unix_nano END,holder=excluded.holder,expires_at_unix_nano=excluded.expires_at_unix_nano", params![shared.holder,now,expiry]).map_err(persistence)?;
-    tx.execute(&super::row::sql("UPDATE signal_deliveries SET claim_expires_at_unix_nano=?2 WHERE state='{claimed}' AND claimed_by=?1"), params![shared.holder,expiry]).map_err(persistence)?;
+    tx.execute("INSERT INTO drain_lease VALUES(1,?1,?2,?3) ON CONFLICT(id) DO UPDATE SET acquired_at_unix_nano=CASE WHEN drain_lease.holder!=excluded.holder OR drain_lease.expires_at_unix_nano<excluded.acquired_at_unix_nano THEN excluded.acquired_at_unix_nano ELSE drain_lease.acquired_at_unix_nano END,holder=excluded.holder,expires_at_unix_nano=excluded.expires_at_unix_nano", params![shared.holder(),now,expiry]).map_err(persistence)?;
+    tx.execute(&super::row::sql("UPDATE signal_deliveries SET claim_expires_at_unix_nano=?2 WHERE state='{claimed}' AND claimed_by=?1"), params![shared.holder(),expiry]).map_err(persistence)?;
     if renew {
         store::maintain(&tx, &shared.config, now).map_err(persistence)?;
     }
@@ -247,7 +247,7 @@ fn claim(shared: &Shared, signal: Signal) -> Result<Vec<Claimed>, TelemetryClien
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(persistence)?;
     let now = store::now();
-    let expiry: Option<UnixNanos> = tx.query_row("SELECT expires_at_unix_nano FROM drain_lease WHERE holder=?1 AND expires_at_unix_nano>=?2", params![shared.holder,now], |r| r.get(0)).optional().map_err(persistence)?;
+    let expiry: Option<UnixNanos> = tx.query_row("SELECT expires_at_unix_nano FROM drain_lease WHERE holder=?1 AND expires_at_unix_nano>=?2", params![shared.holder(),now], |r| r.get(0)).optional().map_err(persistence)?;
     let Some(expiry) = expiry else {
         return Ok(vec![]);
     };
@@ -318,7 +318,7 @@ fn claim(shared: &Shared, signal: Signal) -> Result<Vec<Claimed>, TelemetryClien
         tx.execute(&super::row::sql("UPDATE signal_deliveries SET state='{failed}',last_error_code=?3 WHERE submission_id=?1 AND signal=?2"), params![id.to_string(),store::signal_name(signal)?,code.as_str()]).map_err(persistence)?;
     }
     for row in &batch {
-        tx.execute(&super::row::sql("UPDATE signal_deliveries SET state='{claimed}',claimed_by=?3,claim_expires_at_unix_nano=?4,attempts=?5 WHERE submission_id=?1 AND signal=?2"), params![row.id.to_string(),store::signal_name(signal)?,shared.holder,expiry,row.attempts]).map_err(persistence)?;
+        tx.execute(&super::row::sql("UPDATE signal_deliveries SET state='{claimed}',claimed_by=?3,claim_expires_at_unix_nano=?4,attempts=?5 WHERE submission_id=?1 AND signal=?2"), params![row.id.to_string(),store::signal_name(signal)?,shared.holder(),expiry,row.attempts]).map_err(persistence)?;
     }
     tx.commit().map_err(persistence)?;
     Ok(batch)
@@ -404,9 +404,9 @@ fn drain_ready(
     {
         let db = shared.db.lock()?;
         for row in deferred {
-            db.execute(&super::row::sql("UPDATE signal_deliveries SET state='{pending}',claimed_by=NULL,claim_expires_at_unix_nano=NULL,attempts=attempts-1 WHERE submission_id=?1 AND signal=?2 AND state='{claimed}' AND claimed_by=?3 AND attempts=?4"), params![row.id.to_string(),store::signal_name(signal)?,shared.holder,row.attempts]).map_err(persistence)?;
+            db.execute(&super::row::sql("UPDATE signal_deliveries SET state='{pending}',claimed_by=NULL,claim_expires_at_unix_nano=NULL,attempts=attempts-1 WHERE submission_id=?1 AND signal=?2 AND state='{claimed}' AND claimed_by=?3 AND attempts=?4"), params![row.id.to_string(),store::signal_name(signal)?,shared.holder(),row.attempts]).map_err(persistence)?;
         }
-        let owns: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM drain_lease WHERE holder=?1 AND expires_at_unix_nano>=?2)", params![shared.holder,store::now()], |r|r.get(0)).map_err(persistence)?;
+        let owns: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM drain_lease WHERE holder=?1 AND expires_at_unix_nano>=?2)", params![shared.holder(),store::now()], |r|r.get(0)).map_err(persistence)?;
         if !owns || shared.stop.load(Ordering::Acquire) {
             return Ok(DrainProgress::Idle);
         }
@@ -421,7 +421,7 @@ fn drain_ready(
     let owns: bool = tx
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM drain_lease WHERE holder=?1 AND expires_at_unix_nano>=?2)",
-            params![shared.holder, now],
+            params![shared.holder(), now],
             |r| r.get(0),
         )
         .map_err(persistence)?;
@@ -451,7 +451,7 @@ fn drain_ready(
                 retry_outcome(shared, row.attempts, error.diagnostic().code.as_str(), now)
             }
         };
-        tx.execute(&super::row::sql("UPDATE signal_deliveries SET state=?3,last_error_code=?4,next_attempt_at_unix_nano=?5,delivered_at_unix_nano=?6,claimed_by=NULL,claim_expires_at_unix_nano=NULL WHERE submission_id=?1 AND signal=?2 AND state='{claimed}' AND claimed_by=?7 AND attempts=?8"), params![row.id.to_string(),store::signal_name(signal)?,outcome.state().as_str(),outcome.code(),outcome.next(),if matches!(outcome, Outcome::Delivered) { Some(now) } else { None },shared.holder,row.attempts]).map_err(persistence)?;
+        tx.execute(&super::row::sql("UPDATE signal_deliveries SET state=?3,last_error_code=?4,next_attempt_at_unix_nano=?5,delivered_at_unix_nano=?6,claimed_by=NULL,claim_expires_at_unix_nano=NULL WHERE submission_id=?1 AND signal=?2 AND state='{claimed}' AND claimed_by=?7 AND attempts=?8"), params![row.id.to_string(),store::signal_name(signal)?,outcome.state().as_str(),outcome.code(),outcome.next(),if matches!(outcome, Outcome::Delivered) { Some(now) } else { None },shared.holder(),row.attempts]).map_err(persistence)?;
     }
     tx.commit().map_err(persistence)?;
     drop(credits);
@@ -481,7 +481,7 @@ fn release_interrupted(
     batch: &[Claimed],
 ) -> Result<(), TelemetryClientError> {
     for row in batch {
-        tx.execute(&super::row::sql("UPDATE signal_deliveries SET state='{pending}',attempts=attempts-1,next_attempt_at_unix_nano=NULL,claimed_by=NULL,claim_expires_at_unix_nano=NULL WHERE submission_id=?1 AND signal=?2 AND state='{claimed}' AND claimed_by=?3 AND attempts=?4"), params![row.id.to_string(),store::signal_name(signal)?,shared.holder,row.attempts]).map_err(persistence)?;
+        tx.execute(&super::row::sql("UPDATE signal_deliveries SET state='{pending}',attempts=attempts-1,next_attempt_at_unix_nano=NULL,claimed_by=NULL,claim_expires_at_unix_nano=NULL WHERE submission_id=?1 AND signal=?2 AND state='{claimed}' AND claimed_by=?3 AND attempts=?4"), params![row.id.to_string(),store::signal_name(signal)?,shared.holder(),row.attempts]).map_err(persistence)?;
     }
     tx.commit().map_err(persistence)?;
     Ok(())

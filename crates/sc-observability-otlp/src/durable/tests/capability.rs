@@ -133,3 +133,45 @@ fn production_open_starts_the_sync_http_exporter() {
     );
     client.shutdown(DEADLINE).unwrap();
 }
+
+#[test]
+fn read_only_open_has_no_worker_or_lease_and_preserves_pending_records() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = config(dir.path());
+    let mut db = store::open(&config.store_path).unwrap();
+    store::admit(&mut db, &config, &log("read-only-status")).unwrap();
+    drop(db);
+
+    let client = DurableTelemetryClient::open_read_only(config.clone()).unwrap();
+    assert!(client.owner.shared.holder.is_none());
+    assert_eq!(
+        client
+            .owner
+            .shared
+            .live_workers
+            .load(std::sync::atomic::Ordering::Acquire),
+        0,
+        "read-only open must not start delivery workers"
+    );
+    assert_eq!(client.status(StatusQuery::Summary).unwrap().pending.logs, 1);
+    assert!(matches!(
+        client.emit(log("read-only-rejected")),
+        Err(TelemetryClientError::Admission(
+            AdmissionError::Closed { .. }
+        ))
+    ));
+    drop(client);
+
+    assert_eq!(
+        query::status(
+            &store::reader(&config.store_path).unwrap(),
+            &config,
+            StatusQuery::Summary
+        )
+        .unwrap()
+        .pending
+        .logs,
+        1,
+        "dropping a read-only client must not deliver the pending record"
+    );
+}
