@@ -28,3 +28,48 @@ fn no_flush_preserves_admission_when_the_collector_is_unavailable() {
     assert!(result["flush"].is_null());
     assert!(result["error"].is_null());
 }
+
+#[test]
+fn status_is_read_only_for_a_pending_record_without_a_listener() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let unavailable_collector = TcpListener::bind("127.0.0.1:0").expect("reserve collector port");
+    let endpoint = format!(
+        "http://{}",
+        unavailable_collector
+            .local_addr()
+            .expect("reserved collector address")
+    );
+    drop(unavailable_collector);
+    let store = directory.path().join("store.sqlite");
+
+    let emit = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+        .args(["--store"])
+        .arg(&store)
+        .args(["--endpoint", &endpoint, "emit", "--no-flush", "--log", "{}"])
+        .output()
+        .expect("binary runs");
+    assert!(emit.status.success(), "{emit:?}");
+    assert_eq!(
+        assert_result_v1(&emit.stdout, "emit")["state"],
+        "admitted_pending"
+    );
+
+    for attempt in 1..=3 {
+        let status = Command::new(env!("CARGO_BIN_EXE_sc-otel"))
+            .args(["--store"])
+            .arg(&store)
+            .args(["--endpoint", &endpoint, "status"])
+            .output()
+            .expect("binary runs");
+        assert!(status.status.success(), "attempt {attempt}: {status:?}");
+        let result = assert_result_v1(&status.stdout, "status");
+        assert_eq!(result["exit_code"], 0, "attempt {attempt}");
+        assert_eq!(
+            result["flush"],
+            serde_json::Value::Null,
+            "attempt {attempt}"
+        );
+        assert_eq!(result["status"]["pending"]["logs"], 1, "attempt {attempt}");
+        assert!(result["error"].is_null(), "attempt {attempt}");
+    }
+}

@@ -67,7 +67,7 @@ pub(crate) enum Command {
     Flush(FlushArgs),
     /// Inspect the queue summary or selected submissions/record keys.
     #[command(
-        after_long_help = "Examples:\n  sc-otel --store queue.sqlite status\n  sc-otel --store queue.sqlite status --record-key job-42\n  sc-otel --store queue.sqlite status --submission 018f8f5e-5c4c-7abc-8def-0123456789ab\n\nRepeat one selector kind to query multiple records; do not mix --submission with --record-key. This opens the durable client and runs its normal shutdown; it is not an offline, read-only SQLite inspection."
+        after_long_help = "Examples:\n  sc-otel --store queue.sqlite status\n  sc-otel --store queue.sqlite status --record-key job-42\n  sc-otel --store queue.sqlite status --submission 018f8f5e-5c4c-7abc-8def-0123456789ab\n\nRepeat one selector kind to query multiple records; do not mix --submission with --record-key. Status opens the durable client only to inspect queued state; it does not attempt delivery during shutdown."
     )]
     Status(StatusArgs),
 }

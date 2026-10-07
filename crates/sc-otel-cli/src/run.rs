@@ -131,7 +131,7 @@ fn status(cli: &Cli, args: &StatusArgs) -> Outcome {
     with_session(
         cli,
         constants::CommandName::Status,
-        SessionTeardown::Delivery,
+        SessionTeardown::AdmissionOnly,
         |_, client| match client.status(query) {
             Ok(status) => Outcome::success(constants::CommandName::Status, SuccessState::Status)
                 .with_status(status),
