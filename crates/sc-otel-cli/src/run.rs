@@ -128,16 +128,35 @@ fn status(cli: &Cli, args: &StatusArgs) -> Outcome {
         Ok(query) => query,
         Err(error) => return failure(constants::CommandName::Status, error),
     };
-    with_session(
+    with_read_only_session(
         cli,
         constants::CommandName::Status,
-        SessionTeardown::Delivery,
         |_, client| match client.status(query) {
             Ok(status) => Outcome::success(constants::CommandName::Status, SuccessState::Status)
                 .with_status(status),
             Err(error) => failure(constants::CommandName::Status, error),
         },
     )
+}
+
+fn with_read_only_session(
+    cli: &Cli,
+    command: constants::CommandName,
+    action: impl FnOnce(&TelemetryClientConfig, &dyn TelemetryClient) -> Outcome,
+) -> Outcome {
+    let config = match config::resolve(cli) {
+        Ok(config) => config,
+        Err(error) => return failure(command, error),
+    };
+    let client = match client::open_read_only_client(
+        config.clone(),
+        #[cfg(test)]
+        cli.unit_client_paths.as_ref(),
+    ) {
+        Ok(client) => client,
+        Err(error) => return failure(command, error),
+    };
+    action(&config, client.as_ref())
 }
 
 fn status_query(args: &StatusArgs) -> Result<StatusQuery, TelemetryClientError> {

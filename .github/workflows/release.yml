@@ -209,6 +209,7 @@ jobs:
           import shutil
           import subprocess
           import tarfile
+          import tempfile
           import zipfile
 
           target_name = "${{ matrix.target }}"
@@ -252,6 +253,45 @@ jobs:
                           output.write(item, item.relative_to(stage.parent))
           else:
               raise SystemExit(f"unsupported archive type: {target['archive']}")
+          expected_os = (
+              "Windows" if "windows" in target_name else
+              "macOS" if "apple" in target_name else
+              "Linux" if "linux" in target_name else
+              None
+          )
+          expected_arch = {
+              "x86_64": "X64",
+              "aarch64": "ARM64",
+          }.get(target_name.split("-", 1)[0])
+          if (
+              expected_os == os.environ.get("RUNNER_OS")
+              and expected_arch == os.environ.get("RUNNER_ARCH")
+          ):
+              with tempfile.TemporaryDirectory() as extracted_root:
+                  extracted_root_path = Path(extracted_root)
+                  if target["archive"] == "tar.gz":
+                      with tarfile.open(archive, "r:gz") as input_archive:
+                          input_archive.extractall(extracted_root_path, filter="data")
+                  else:
+                      with zipfile.ZipFile(archive) as input_archive:
+                          input_archive.extractall(extracted_root_path)
+                  extracted_stage = extracted_root_path / stage.name
+                  manual = extracted_stage / "share" / "doc" / "sc-otel" / "cli-reference.md"
+                  if not manual.is_file():
+                      raise SystemExit(f"release archive is missing {manual.relative_to(extracted_root_path)}")
+                  for binary in config["binaries"]:
+                      filename = binary["name"] + (".exe" if "windows" in target_name else "")
+                      completed = subprocess.run(
+                          [str(extracted_stage / "bin" / filename), "--version"],
+                          text=True,
+                          capture_output=True,
+                          check=False,
+                      )
+                      if completed.returncode != 0 or version not in completed.stdout:
+                          raise SystemExit(
+                              f"release archive CLI validation failed for {filename}: "
+                              f"{completed.stdout}{completed.stderr}"
+                          )
           with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env:
               env.write(f"ARCHIVE={archive}\n")
           PY

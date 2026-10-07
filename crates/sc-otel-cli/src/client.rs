@@ -40,6 +40,22 @@ pub(crate) fn open_client(
     }
 }
 
+pub(crate) fn open_read_only_client(
+    config: TelemetryClientConfig,
+    #[cfg(test)] paths: Option<&UnitClientPaths>,
+) -> Result<Box<dyn TelemetryClient>, TelemetryClientError> {
+    #[cfg(test)]
+    {
+        open_test_client(config, paths.cloned().unwrap_or_default())
+    }
+
+    #[cfg(not(test))]
+    {
+        DurableTelemetryClient::open_read_only(config)
+            .map(|client| Box::new(client) as Box<dyn TelemetryClient>)
+    }
+}
+
 #[cfg(test)]
 fn open_test_client(
     config: TelemetryClientConfig,

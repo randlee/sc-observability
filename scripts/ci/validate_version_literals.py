@@ -19,7 +19,7 @@ APPROVED_DEFERRED_STANDALONE_PACKAGES = [
             "The Tauri adapter is a separate workspace and remains pending its "
             "standalone API/publication qualification in "
             "release/bindings-artifacts.toml; it is not one of this candidate's "
-            "nine workspace API packages."
+            "ten workspace API packages."
         ),
     },
 ]

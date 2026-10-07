@@ -278,19 +278,36 @@ def run_release_archive_packager(
     target_name: str,
     expected_filename: str,
     bundled_paths: list[dict[str, str]] | None = None,
+    archive_format: str = "zip",
+    runner_os: str | None = None,
+    runner_arch: str | None = None,
+    execution_marker: Path | None = None,
+    fixture_exit: int = 0,
+    fixture_version: str = "1.5.0",
 ) -> subprocess.CompletedProcess[str]:
     scripts_dir = tmp_path / ".github" / "scripts"
     scripts_dir.mkdir(parents=True)
+    binary_name = expected_filename.removesuffix(".exe")
     (scripts_dir / "release_artifacts.py").write_text(
         "import json\n"
         f"print(json.dumps({{'project': {{'archive_prefix': 'fixture'}}, "
-        f"'target': {{'archive': 'zip'}}, 'binaries': [{{'name': 'fixture', "
+        f"'target': {{'archive': {archive_format!r}}}, 'binaries': [{{'name': {binary_name!r}, "
         f"'bundled_paths': {bundled_paths or []!r}}}]}}))\n",
         encoding="utf-8",
     )
     release_dir = tmp_path / "target" / target_name / "release"
     release_dir.mkdir(parents=True)
-    (release_dir / expected_filename).write_text("fixture", encoding="utf-8")
+    binary = release_dir / expected_filename
+    binary.write_text(
+        "#!/bin/sh\n"
+        'if [ -n "${FIXTURE_EXECUTION_MARKER:-}" ]; then\n'
+        '  : > "$FIXTURE_EXECUTION_MARKER"\n'
+        "fi\n"
+        f"printf 'fixture {fixture_version}\\n'\n"
+        f"exit {fixture_exit}\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
     output = tmp_path / "github-env"
     script = release_archive_packager_python().replace(
         'target_name = "${{ matrix.target }}"', f"target_name = {target_name!r}"
@@ -298,20 +315,32 @@ def run_release_archive_packager(
         'version = "${{ needs.gate-and-tag.outputs.release_version }}"',
         'version = "1.5.0"',
     )
+    environment = {
+        **os.environ,
+        "RELEASE_ARTIFACT_MANIFEST": str(tmp_path / "release" / "manifest.toml"),
+        "GITHUB_ENV": str(output),
+    }
+    # CI exposes these runner variables to the test process.  Keep ordinary
+    # packaging fixtures host-neutral; the dedicated smoke test opts in.
+    environment.pop("RUNNER_OS", None)
+    environment.pop("RUNNER_ARCH", None)
+    if runner_os:
+        environment["RUNNER_OS"] = runner_os
+    if runner_arch:
+        environment["RUNNER_ARCH"] = runner_arch
+    if execution_marker:
+        environment["FIXTURE_EXECUTION_MARKER"] = str(execution_marker)
     result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=tmp_path,
-        env={
-            **os.environ,
-            "RELEASE_ARTIFACT_MANIFEST": str(tmp_path / "release" / "manifest.toml"),
-            "GITHUB_ENV": str(output),
-        },
+        env=environment,
         text=True,
         capture_output=True,
         check=False,
         timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
-    assert output.read_text(encoding="utf-8").startswith("ARCHIVE=fixture_1.5.0_")
+    if result.returncode == 0:
+        assert output.read_text(encoding="utf-8").startswith("ARCHIVE=fixture_1.5.0_")
     return result
 
 
@@ -1015,6 +1044,120 @@ def test_release_archive_packager_bundles_cli_reference_from_manifest_path(
     with zipfile.ZipFile(archive) as packaged:
         assert manual_path in packaged.namelist()
         assert packaged.read(manual_path) == b"generated clap manual\n"
+
+
+def test_release_archive_packager_validates_native_archive_cli_and_manual(
+    tmp_path: Path,
+) -> None:
+    """A native runner executes sc-otel from the archive it just produced."""
+    manual = tmp_path / "docs" / "manual" / "sc-otel" / "cli-reference.md"
+    manual.parent.mkdir(parents=True)
+    manual.write_text("generated clap manual\n", encoding="utf-8")
+
+    marker = tmp_path / "sc-otel-was-executed"
+    result = run_release_archive_packager(
+        tmp_path,
+        target_name="x86_64-unknown-linux-gnu",
+        expected_filename="sc-otel",
+        bundled_paths=[
+            {
+                "source": "docs/manual/sc-otel",
+                "destination": "share/doc/sc-otel",
+            }
+        ],
+        archive_format="tar.gz",
+        runner_os="Linux",
+        runner_arch="X64",
+        execution_marker=marker,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert marker.is_file()
+    archive = tmp_path / "fixture_1.5.0_x86_64-unknown-linux-gnu.tar.gz"
+    extracted = tmp_path / "extracted"
+    with tarfile.open(archive, "r:gz") as packaged:
+        packaged.extractall(extracted, filter="data")
+    assert (
+        extracted
+        / "fixture_1.5.0_x86_64-unknown-linux-gnu"
+        / "share"
+        / "doc"
+        / "sc-otel"
+        / "cli-reference.md"
+    ).is_file()
+
+
+def test_release_archive_packager_rejects_native_archive_without_manual(
+    tmp_path: Path,
+) -> None:
+    """Native archive validation rejects a release archive missing the CLI manual."""
+    result = run_release_archive_packager(
+        tmp_path,
+        target_name="x86_64-unknown-linux-gnu",
+        expected_filename="sc-otel",
+        archive_format="tar.gz",
+        runner_os="Linux",
+        runner_arch="X64",
+    )
+
+    assert result.returncode != 0
+    assert "release archive is missing" in f"{result.stdout}{result.stderr}"
+
+
+def test_release_archive_packager_rejects_native_archive_cli_failure(
+    tmp_path: Path,
+) -> None:
+    """Native archive validation rejects a CLI that cannot run successfully."""
+    manual = tmp_path / "docs" / "manual" / "sc-otel" / "cli-reference.md"
+    manual.parent.mkdir(parents=True)
+    manual.write_text("generated clap manual\n", encoding="utf-8")
+
+    result = run_release_archive_packager(
+        tmp_path,
+        target_name="x86_64-unknown-linux-gnu",
+        expected_filename="sc-otel",
+        bundled_paths=[
+            {
+                "source": "docs/manual/sc-otel",
+                "destination": "share/doc/sc-otel",
+            }
+        ],
+        archive_format="tar.gz",
+        runner_os="Linux",
+        runner_arch="X64",
+        fixture_exit=1,
+    )
+
+    assert result.returncode != 0
+    assert "release archive CLI validation failed" in f"{result.stdout}{result.stderr}"
+
+
+def test_release_archive_packager_rejects_native_archive_cli_version_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Native archive validation rejects a CLI that reports another release version."""
+    manual = tmp_path / "docs" / "manual" / "sc-otel" / "cli-reference.md"
+    manual.parent.mkdir(parents=True)
+    manual.write_text("generated clap manual\n", encoding="utf-8")
+
+    result = run_release_archive_packager(
+        tmp_path,
+        target_name="x86_64-unknown-linux-gnu",
+        expected_filename="sc-otel",
+        bundled_paths=[
+            {
+                "source": "docs/manual/sc-otel",
+                "destination": "share/doc/sc-otel",
+            }
+        ],
+        archive_format="tar.gz",
+        runner_os="Linux",
+        runner_arch="X64",
+        fixture_version="0.0.0",
+    )
+
+    assert result.returncode != 0
+    assert "release archive CLI validation failed" in f"{result.stdout}{result.stderr}"
 
 
 def test_release_cli_docs_wait_for_successful_release_and_use_the_exact_build_ref() -> None:

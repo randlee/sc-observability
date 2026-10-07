@@ -10,13 +10,38 @@ from scripts.ci import stock_public_api as snapshots
 
 
 class StockPublicApiTests(unittest.TestCase):
+    def test_published_packages_skips_publishable_bin_only_crate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "release").mkdir()
+            (root / "Cargo.toml").write_text('[workspace.package]\nversion = "1.5.1"\n')
+            (root / "release/publish-artifacts.toml").write_text(
+                '[[crates]]\npackage = "library"\ncargo_toml = "library/Cargo.toml"\npublish = true\n'
+                '[[crates]]\npackage = "cli"\ncargo_toml = "cli/Cargo.toml"\npublish = true\n'
+            )
+            (root / "library/src").mkdir(parents=True)
+            (root / "library/Cargo.toml").write_text('[package]\nname = "library"\nversion = "1.5.1"\n')
+            (root / "library/src/lib.rs").write_text('pub fn library() {}\n')
+            (root / "cli/src").mkdir(parents=True)
+            (root / "cli/Cargo.toml").write_text('[package]\nname = "cli"\nversion = "1.5.1"\n')
+            (root / "cli/src/main.rs").write_text('fn main() {}\n')
+
+            packages = snapshots.published_packages(root)
+
+        self.assertEqual([(package.name, package.lib_name) for package in packages], [("library", "library")])
+
     def test_release_roster_matches_publish_artifacts(self):
         packages = snapshots.published_packages()
         manifest = tomllib.loads(
             (snapshots.ROOT / "release/publish-artifacts.toml").read_text(encoding="utf-8")
         )
         expected = {
-            item["package"] for item in manifest["crates"] if item.get("publish") is True
+            item["package"] for item in manifest["crates"]
+            if item.get("publish") is True
+            and snapshots.package_library_name(
+                tomllib.loads((snapshots.ROOT / item["cargo_toml"]).read_text(encoding="utf-8")),
+                snapshots.ROOT / item["cargo_toml"],
+            ) is not None
         }
         self.assertEqual({package.name for package in packages}, expected)
         self.assertEqual(len(packages), len(expected))

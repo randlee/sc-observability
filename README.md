@@ -144,3 +144,19 @@ Never enable `fault-injection` in production builds.
 ### CLI reference
 
 The [sc-otel manual](docs/manual/sc-otel/cli-reference.md) is generated from Clap and ships with CLI release archives under `share/doc/sc-otel/`. The same reference is [published on the website](https://randlee.github.io/sc-observability/manual/sc-otel/). Run `sc-otel --help` or `sc-otel <command> --help` for the built-in reference.
+
+### Install `sc-otel`
+
+Install the published CLI with `cargo install sc-otel-cli`, download a GitHub
+release archive for macOS (Apple silicon or Intel), Linux (x86_64 or arm64),
+or Windows x86_64, or use a supported channel:
+
+```sh
+brew tap randlee/homebrew-tap && brew install sc-otel
+scoop bucket add randlee https://github.com/randlee/scoop-bucket
+scoop install sc-otel
+winget install randlee.sc-otel
+```
+
+Every archive and the Homebrew formula install the offline manual under
+`share/doc/sc-otel`; Cargo installs the same embedded manual with the CLI.

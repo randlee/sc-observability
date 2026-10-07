@@ -307,7 +307,7 @@ Examples:
   sc-otel --store queue.sqlite status --record-key job-42
   sc-otel --store queue.sqlite status --submission 018f8f5e-5c4c-7abc-8def-0123456789ab
 
-Repeat one selector kind to query multiple records; do not mix --submission with --record-key. This opens the durable client and runs its normal shutdown; it is not an offline, read-only SQLite inspection.
+Repeat one selector kind to query multiple records; do not mix --submission with --record-key. Status opens the durable client only to inspect queued state; it does not attempt delivery during shutdown.
 ```
 
 ## sc-otel help
