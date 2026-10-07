@@ -117,6 +117,68 @@ mod http_collector {
         }
     }
 
+    /// A collector with a causally ordered timeout followed by a successful retry.
+    ///
+    /// It intentionally serves its two connections on one thread: after reading
+    /// the first request it withholds a response until the retry connection is
+    /// accepted. This prevents a worker-thread scheduling race from turning the
+    /// first response into an immediate connection failure or response.
+    #[derive(Debug)]
+    pub struct TimeoutRetryCollector {
+        address: SocketAddr,
+        stop: Arc<AtomicBool>,
+        handle: Option<JoinHandle<Vec<Captured>>>,
+    }
+
+    impl TimeoutRetryCollector {
+        pub fn start() -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind timeout retry collector");
+            let address = listener
+                .local_addr()
+                .expect("timeout retry collector address");
+            let stop = Arc::new(AtomicBool::new(false));
+            let handle = {
+                let stop = Arc::clone(&stop);
+                thread::spawn(move || serve_timeout_then_retry(&listener, &stop))
+            };
+            Self {
+                address,
+                stop,
+                handle: Some(handle),
+            }
+        }
+
+        pub fn endpoint(&self) -> String {
+            format!("http://{}", self.address)
+        }
+
+        pub fn finish(mut self) -> Vec<Captured> {
+            self.handle
+                .take()
+                .expect("timeout retry collector is running")
+                .join()
+                .expect("timeout retry collector completes")
+        }
+
+        fn stop(&mut self) {
+            if self.handle.is_none() {
+                return;
+            }
+            self.stop.store(true, Ordering::Release);
+            // Wake the blocking retry accept if a test exits before a retry.
+            let _ = TcpStream::connect(self.address);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    impl Drop for TimeoutRetryCollector {
+        fn drop(&mut self) {
+            self.stop();
+        }
+    }
+
     fn accept_loop(listener: &TcpListener, stop: &AtomicBool, shared: &Arc<Shared>) {
         let deadline = Instant::now() + COLLECTOR_WATCHDOG;
         let mut connections: Vec<JoinHandle<()>> = Vec::new();
@@ -170,6 +232,42 @@ mod http_collector {
                 return;
             }
         }
+    }
+
+    fn serve_timeout_then_retry(listener: &TcpListener, stop: &AtomicBool) -> Vec<Captured> {
+        let (mut first, _) = listener.accept().expect("accept first timeout request");
+        configure_stream(&first);
+        let first_request = read_request(&mut first).expect("read first timeout request");
+
+        // The first request remains unanswered. Accepting this second connection
+        // proves the client classified the first attempt as a timeout and retried.
+        let (mut retry, _) = listener.accept().expect("accept retry request");
+        if stop.load(Ordering::Acquire) {
+            return Vec::new();
+        }
+        configure_stream(&retry);
+        let retry_request = read_request(&mut retry).expect("read retry request");
+        write_success(&mut retry);
+        drop(first);
+        vec![first_request, retry_request]
+    }
+
+    fn configure_stream(stream: &TcpStream) {
+        stream
+            .set_read_timeout(Some(CONNECTION_IO_TIMEOUT))
+            .expect("set collector read timeout");
+        stream
+            .set_write_timeout(Some(CONNECTION_IO_TIMEOUT))
+            .expect("set collector write timeout");
+    }
+
+    fn write_success(stream: &mut TcpStream) {
+        stream
+            .write_all(
+                b"HTTP/1.1 200 Scripted\r\nContent-Type: application/x-protobuf\r\nContent-Length: 0\r\n\r\n",
+            )
+            .expect("write retry success");
+        stream.flush().expect("flush retry success");
     }
 
     fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -379,7 +477,7 @@ mod grpc_collector {
 
 use std::time::Duration;
 
-use http_collector::{Captured, Collector};
+use http_collector::{Captured, Collector, TimeoutRetryCollector};
 use opentelemetry_proto::tonic::collector::logs::v1::ExportLogsServiceRequest;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::collector::trace::v1::ExportTraceServiceRequest;
@@ -729,6 +827,25 @@ fn http_binary_retryable_response_is_retried_without_timeout_race() {
         assert_healthy(&telemetry.health());
     });
     assert_eq!(requests_to(&collector.finish(), "/v1/logs").len(), 2);
+}
+
+#[test]
+fn http_binary_request_timeout_is_retried_within_the_deadline() {
+    let collector = TimeoutRetryCollector::start();
+    runtime().block_on(async {
+        let mut transport = v2_default_transport(&collector.endpoint());
+        transport.timeout_ms = Some(DurationMs::from(100));
+        let telemetry = v2_telemetry(transport);
+        telemetry.emit_log(&log_event()).expect("admit log");
+        telemetry
+            .flush_async()
+            .await
+            .expect("timed-out request is retried to success");
+        assert_healthy(&telemetry.health());
+    });
+
+    let requests = collector.finish();
+    assert_eq!(requests_to(&requests, "/v1/logs").len(), 2);
 }
 
 #[test]
