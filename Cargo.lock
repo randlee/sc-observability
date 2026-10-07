@@ -1832,6 +1832,7 @@ dependencies = [
  "prost",
  "reqwest 0.12.28",
  "rusqlite",
+ "rustls",
  "sc-lint-attributes",
  "sc-observability",
  "sc-observability-types",
