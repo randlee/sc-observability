@@ -938,7 +938,7 @@ impl CanonicalLogger {
 
     fn shutdown_event_error() -> CanonicalEventError {
         CanonicalEventError::classified_routing(
-            Box::new(writer_degraded_error_context(
+            Box::new(shutdown_error_context(
                 "logger is shut down; construct a new logger before admitting more events",
             )),
             FailureClassification::Closed,

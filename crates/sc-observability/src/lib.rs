@@ -3065,11 +3065,12 @@ mod canonical_behavior_tests {
         logger.shutdown().expect("second shutdown is idempotent");
 
         assert_eq!(logger.health().state, LoggingHealthState::Unavailable);
+        let error = logger
+            .log(log_event(service_name()))
+            .expect_err("logging after shutdown must be rejected");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_SHUTDOWN);
         assert_eq!(
-            logger
-                .log(log_event(service_name()))
-                .expect_err("logging after shutdown must be rejected")
-                .failure_classification(),
+            error.failure_classification(),
             sc_observability_types::FailureClassification::Closed
         );
         let error = logger
