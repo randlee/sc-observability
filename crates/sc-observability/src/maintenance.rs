@@ -864,7 +864,6 @@ fn run_maintenance_if_due(
 }
 
 #[cfg(test)]
-#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 #[derive(Debug, Default)]
 pub(crate) struct TestPassDelaySignal {
     active: AtomicBool,
@@ -878,15 +877,14 @@ pub(crate) struct TestPassDelaySignal {
 }
 
 #[cfg(test)]
-#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 pub(crate) struct TestPassDelayReleaseGuard(Arc<TestPassDelaySignal>);
 
 #[cfg(test)]
-#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TestPassDelayWait {
     NotBlocked,
     Released,
+    #[cfg(feature = "v1")]
     TimedOut,
 }
 
@@ -898,7 +896,6 @@ impl Drop for TestPassDelayReleaseGuard {
 }
 
 #[cfg(test)]
-#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 impl TestPassDelaySignal {
     fn set_active(&self, active: bool) {
         let _gate = self.gate.lock().expect("test gate poisoned");
@@ -934,6 +931,7 @@ impl TestPassDelaySignal {
         TestPassDelayWait::Released
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn wait_until_released_for(&self, timeout: Duration) -> TestPassDelayWait {
         if !self.block_until_released.load(Ordering::SeqCst) {
             return TestPassDelayWait::NotBlocked;
@@ -985,6 +983,7 @@ impl TestPassDelaySignal {
         self.changed.notify_all();
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn level_stopping(&self) -> bool {
         self.level_stopping.load(Ordering::SeqCst)
     }
@@ -1010,6 +1009,7 @@ impl TestPassDelaySignal {
         true
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn wait_timed_out(&self) -> bool {
         self.wait_timed_out.load(Ordering::SeqCst)
     }
@@ -1029,6 +1029,7 @@ fn maybe_run_test_delay(
         match signal.wait_until_released() {
             TestPassDelayWait::NotBlocked => thread::sleep(delay),
             TestPassDelayWait::Released => {}
+            #[cfg(feature = "v1")]
             TestPassDelayWait::TimedOut => {
                 panic!("test maintenance delay release gate timed out")
             }

@@ -1,10 +1,16 @@
 //! Deprecated released 1.x facade retained for the compatible transition.
-#![allow(deprecated)]
+#![expect(
+    deprecated,
+    reason = "v1 module defines and re-exports the deprecated 1.x surface"
+)]
 
 mod compat;
 
 pub use compat::{LogError, TryLogError};
-#[allow(deprecated)]
+#[expect(
+    deprecated,
+    reason = "this v1 re-export preserves the published 1.x types"
+)]
 pub use compat::{LogSink, TypedLogSink, legacy_sink, typed_sink};
 #[deprecated(
     note = "use sc_observability_types::v2::EventError; see docs/migration/phase-f.md"
