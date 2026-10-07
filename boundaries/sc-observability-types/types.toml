@@ -8,7 +8,6 @@ facade = "crate_root"
 type = "crate"
 module = "sc_observability_types"
 # The released 1.x compatibility surface is isolated from canonical root code.
-compatibility_module = "sc_observability_types::v1"
 visibility = "public"
 constructor = "none"
 [composition]

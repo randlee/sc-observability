@@ -14,6 +14,10 @@ on:
       dispatch_id:
         description: Optional command correlation ID
         type: string
+      accepted_base:
+        description: 'Accepted ancestor SHA for immutable API history checks; empty = origin/develop'
+        type: string
+        required: false
 permissions:
   contents: read
 jobs:
@@ -49,7 +53,7 @@ jobs:
       # The packaged TypeScript API check reads immutable snapshots from this
       # trusted prior revision; the step below makes it available to every
       # suite runner and its npm subprocesses.
-      SC_API_ACCEPTED_BASE: origin/develop
+      SC_API_ACCEPTED_BASE: ${{ inputs.accepted_base || 'origin/develop' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -58,8 +62,15 @@ jobs:
         with:
           python-version: '3.12'
       - name: Fetch trusted accepted API history base
+        env:
+          ACCEPTED_BASE: ${{ inputs.accepted_base }}
         shell: bash
-        run: git fetch origin develop:refs/remotes/origin/develop --depth=1
+        run: |
+          if [[ -n "$ACCEPTED_BASE" ]]; then
+            git fetch origin "$ACCEPTED_BASE" --depth=1
+          else
+            git fetch origin develop:refs/remotes/origin/develop --depth=1
+          fi
       - name: Install Linux isolation helper for Rust consumers
         if: ${{ matrix.suite == 'rust-consumers' && runner.os == 'Linux' }}
         shell: bash

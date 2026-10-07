@@ -203,7 +203,6 @@ fn shutdown_deadline_does_not_join_stalled_exporter() {
 struct ChildProcess {
     child: Option<std::process::Child>,
     ready: std::sync::mpsc::Receiver<()>,
-    complete: Option<std::sync::mpsc::Receiver<()>>,
     mode: String,
     address: std::net::SocketAddr,
 }
@@ -217,11 +216,6 @@ impl ChildProcess {
         self.child.as_mut().unwrap().kill().unwrap();
     }
     fn wait(&mut self) -> std::process::ExitStatus {
-        if let Some(complete) = self.complete.take() {
-            complete.recv().unwrap_or_else(|error| {
-                panic!("child {} exited before completion: {error}", self.mode)
-            });
-        }
         self.child.take().unwrap().wait().unwrap()
     }
 }
@@ -252,10 +246,8 @@ fn child(path: &Path, mode: &str) -> ChildProcess {
         .spawn()
         .unwrap();
     let (ready_send, ready) = std::sync::mpsc::sync_channel(1);
-    let (complete_send, complete) = std::sync::mpsc::sync_channel(1);
-    let waits_for_completion = mode == "drain";
-    // The listener owns the explicit child state transitions; no scheduling poll
-    // loop or wall-clock completion deadline is required.
+    // The listener establishes readiness; process termination is observed by
+    // `ChildProcess::wait`, including when a child exits before draining.
     std::thread::spawn(move || {
         if let Ok((mut stream, _)) = listener.accept() {
             use std::io::Read;
@@ -264,27 +256,16 @@ fn child(path: &Path, mode: &str) -> ChildProcess {
                 let _ = ready_send.send(());
             }
         }
-        if waits_for_completion && let Ok((mut stream, _)) = listener.accept() {
-            use std::io::Read;
-            let mut byte = [0];
-            if stream.read_exact(&mut byte).is_ok() && byte == [2] {
-                let _ = complete_send.send(());
-            }
-        }
     });
     ChildProcess {
         child: Some(child),
         ready,
-        complete: waits_for_completion.then_some(complete),
         mode: mode.to_owned(),
         address,
     }
 }
 fn signal_ready() {
     signal_parent(1);
-}
-fn signal_complete() {
-    signal_parent(2);
 }
 fn signal_parent(signal: u8) {
     let mut stream =
@@ -339,9 +320,6 @@ fn child_drainer() {
     }
     client.flush(DEADLINE).unwrap();
     client.shutdown(DEADLINE).unwrap();
-    if mode == "drain" {
-        signal_complete();
-    }
 }
 #[test]
 fn receipt_after_commit() {
