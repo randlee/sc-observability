@@ -1892,3 +1892,7 @@ No transport implementation or runtime dependency enters the types layer.
   OTel-only models are removed; unconfirmed mixed-use symbols remain protected.
   h-1 prepares shared Cargo manifests and lockfile; frontend sprints do not
   mutate those registries, and h-4 removes obsolete dependencies at integration.
+
+  The integration sprint is rooted in `BOUNDARY-ScObservabilityOtlp`; its
+  accepted cross-boundary removal reason is recorded in the sprint bead
+  `metadata.vertical_rationale`. No new package boundary is introduced.
