@@ -97,15 +97,16 @@ pub mod v2 {
 }
 
 mod canonical {
+    #[cfg(feature = "v1")]
+    use super::Running;
     use super::{
         Any, Arc, AtomicBool, AtomicU64, CanonicalFlushError, CanonicalInitError,
         CanonicalProjectionRegistration, CanonicalShutdownError, CanonicalSubscriberRegistration,
         Condvar, DiagnosticSummary, Duration, EnvPrefix, ErrorContext, FailureClassification,
         LogEvent, Logger, LoggerConfig, Mutex, ObservabilityHealthProvider,
         ObservabilityHealthReport, Observable, Observation, ObservationError, ObservationFilter,
-        ObservationHealthState, Ordering, PathBuf, Remediation, RetainedLogPolicy, Running,
-        ServiceName, SubscriberError, TelemetryHealthState, ToolName, TypeId, constants,
-        error_codes,
+        ObservationHealthState, Ordering, PathBuf, Remediation, RetainedLogPolicy, ServiceName,
+        SubscriberError, TelemetryHealthState, ToolName, TypeId, constants, error_codes,
     };
     #[cfg(feature = "v1")]
     #[allow(

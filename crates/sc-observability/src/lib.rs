@@ -1682,9 +1682,9 @@ mod tests {
         config.maintenance_test_pass_delay = Some(Duration::from_millis(100));
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
         config.maintenance_test_pass_signal = Some(signal.clone());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
-        logger.emit(log_event(service_name())).expect("emit");
+        logger.log(log_event(service_name())).expect("log");
         assert!(
             signal.wait_for_state(
                 TEST_WATCHDOG,
@@ -1693,10 +1693,10 @@ mod tests {
             "expected maintenance worker to enter the delayed test pass"
         );
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
 
         assert_eq!(
-            stopped
+            logger
                 .health()
                 .maintenance
                 .expect("maintenance health")
@@ -1892,7 +1892,7 @@ mod tests {
         config.enable_console_sink = true;
         config.level = LevelFilter::Info;
         let (logger, mut owner) =
-            Logger::new_with_level_owner(config).expect("construct logger with owner");
+            crate::v2::Logger::new_with_level_owner(config).expect("construct logger with owner");
 
         assert_eq!(logger.level_state().revision, 0);
         let changed = owner
@@ -1934,12 +1934,12 @@ mod tests {
                 .expect("typed filtered admission"),
             AdmissionOutcome::Filtered
         );
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
         assert!(matches!(
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
         ));
-        assert_eq!(stopped.level_state().effective_level, LevelFilter::Info);
+        assert_eq!(logger.level_state().effective_level, LevelFilter::Info);
     }
 
     #[test]
@@ -2646,11 +2646,12 @@ mod tests {
 
         let root = temp_path("query-health");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
         logger
-            .emit(log_event_with_request(service_name(), "healthy", 20))
-            .expect("emit");
+            .log(log_event_with_request(service_name(), "healthy", 20))
+            .expect("log");
+        logger.flush().expect("flush healthy event");
 
         let active_path = default_log_path(&root, &service_name());
         let mut file = OpenOptions::new()
@@ -2667,9 +2668,9 @@ mod tests {
         assert_eq!(degraded_health.state, QueryHealthState::Degraded);
         assert!(degraded_health.last_error.is_some());
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
         assert_eq!(
-            stopped.health().query.expect("query health").state,
+            logger.health().query.expect("query health").state,
             QueryHealthState::Unavailable
         );
     }
@@ -2678,12 +2679,12 @@ mod tests {
     fn logger_health_reports_unavailable_after_shutdown() {
         let root = temp_path("query-shutdown-variant");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
 
         assert_eq!(
-            stopped.health().query.expect("query health").state,
+            logger.health().query.expect("query health").state,
             QueryHealthState::Unavailable
         );
     }

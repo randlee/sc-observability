@@ -219,14 +219,14 @@ pub fn sc_observability_otlp::RuntimeTelemetry::emit_log(&self, &sc_observabilit
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_span(&self, &sc_observability_types::signals_v2::SpanSignal) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::RuntimeTelemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
-pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
-pub fn sc_observability_otlp::RuntimeTelemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush_with_timeout(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::RuntimeTelemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
 pub fn sc_observability_otlp::RuntimeTelemetry::new(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
 pub fn sc_observability_otlp::RuntimeTelemetry::new_typed(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
 pub fn sc_observability_otlp::RuntimeTelemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
-pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
-pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_with_timeout(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::RuntimeTelemetry
 pub fn sc_observability_otlp::RuntimeTelemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
 impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::RuntimeTelemetry
@@ -328,14 +328,14 @@ pub fn sc_observability_otlp::RuntimeTelemetry::emit_log(&self, &sc_observabilit
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_metric(&self, &sc_observability_types::signals_v2::MetricRecord) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::RuntimeTelemetry::emit_span(&self, &sc_observability_types::signals_v2::SpanSignal) -> core::result::Result<(), sc_observability_types::errors_v2::TelemetryError>
 pub fn sc_observability_otlp::RuntimeTelemetry::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
-pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
-pub fn sc_observability_otlp::RuntimeTelemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub async fn sc_observability_otlp::RuntimeTelemetry::flush_async(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_otlp::RuntimeTelemetry::flush_with_timeout(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_otlp::RuntimeTelemetry::health(&self) -> sc_observability_types::health::TelemetryHealthReport
 pub fn sc_observability_otlp::RuntimeTelemetry::new(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
 pub fn sc_observability_otlp::RuntimeTelemetry::new_typed(sc_observability_otlp::v2::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::errors_v2::InitError>
 pub fn sc_observability_otlp::RuntimeTelemetry::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
-pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
-pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub async fn sc_observability_otlp::RuntimeTelemetry::shutdown_async(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observability_otlp::RuntimeTelemetry::shutdown_with_timeout(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 impl sc_observability_types::health::ObservabilityHealthProvider for sc_observability_otlp::RuntimeTelemetry
 pub fn sc_observability_otlp::RuntimeTelemetry::telemetry_health(&self) -> sc_observability_types::health::TelemetryHealthReport
 impl sc_observability_types::telemetry_health_provider_sealed::Sealed for sc_observability_otlp::RuntimeTelemetry
