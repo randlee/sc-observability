@@ -45,6 +45,7 @@ tokio = { workspace = true, features = ["test-util"] }
 # The hermetic conformance collector routes the three generated OTLP services
 # in integration tests only; production SDK transport keeps its pinned features.
 tonic = { workspace = true, features = ["router"] }
+rustls = { version = "=0.23.45", features = ["ring"] }
 
 [lints]
 workspace = true
