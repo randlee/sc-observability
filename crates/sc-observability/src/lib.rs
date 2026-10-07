@@ -638,7 +638,7 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
     parent.join(format!("{file_name}.{index}"))
 }
 
-#[cfg(all(test, feature = "v1"))]
+#[cfg(test)]
 #[cfg_attr(
     feature = "v1",
     expect(
@@ -648,6 +648,23 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
 )]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "v1"))]
+    use crate::CanonicalLogger as Logger;
+
+    #[cfg(not(feature = "v1"))]
+    trait CanonicalEmit {
+        fn emit(&self, event: LogEvent) -> Result<(), CanonicalEventError>;
+    }
+
+    #[cfg(not(feature = "v1"))]
+    impl CanonicalEmit for Logger {
+        fn emit(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+            self.log(event)?;
+            self.flush().map_err(|error| CanonicalEventError::Routing {
+                context: error.into_context(),
+            })
+        }
+    }
     use crate::runtime::LevelLifecycle;
     use crate::v2::LogSink;
     use sc_observability_types::v2::LogSinkError;
@@ -655,10 +672,12 @@ mod tests {
         EventError as CanonicalEventError, InitError as CanonicalInitError,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, LogOrder,
-        LogQuery, LogSnapshot, ProcessIdentity, ProcessIdentityPolicy, QueryError,
-        QueryHealthState, Remediation, SinkName, TargetCategory, Timestamp,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogOrder, LogQuery, LogSnapshot,
+        ProcessIdentity, ProcessIdentityPolicy, QueryError, QueryHealthState, Remediation,
+        SinkName, TargetCategory, Timestamp,
     };
+    #[cfg(feature = "v1")]
+    use sc_observability_types::{DiagnosticInfo, ErrorContext};
     use serde_json::{Map, json};
     use std::fs::{self, OpenOptions};
     use std::ops::Deref;
@@ -667,6 +686,7 @@ mod tests {
     use std::time::{Duration, Instant};
     use temp_env::{with_var, with_var_unset};
 
+    #[cfg(feature = "v1")]
     fn legacy_sink_error(context: Box<ErrorContext>) -> LogSinkError {
         LogSinkError::Write { context }
     }
@@ -1268,6 +1288,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn invalid_event_returns_event_error() {
         let root = temp_path("invalid");
@@ -1278,6 +1299,7 @@ mod tests {
         assert!(logger.emit(event).is_err());
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn logger_emit_admits_events_and_preserves_event_errors() {
         let root = temp_path("injected-log-emitter");
@@ -1306,6 +1328,7 @@ mod tests {
         assert_eq!(error.0.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn flush_failures_propagate_and_are_counted_in_health() {
         struct FlushFailSink;
@@ -1401,6 +1424,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn rotated_log_paths_keep_the_active_filename_prefix() {
         let sink = JsonlFileSink::new(
@@ -1799,6 +1823,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn owner_construction_returns_the_injected_writer_start_source() {
         let root = temp_path("writer-start-failure");
@@ -2308,6 +2333,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn emit_path_remains_available_during_maintenance_pass() {
         let root = temp_path("maintenance-nonblocking");
