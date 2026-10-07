@@ -45,6 +45,33 @@ pub const DEFAULT_OTLP_RETRY_AFTER_CAP_MS: u64 = 5_000;
 pub const DEFAULT_OTLP_RETRY_JITTER_PERCENT: u8 = 20;
 /// Maximum synchronous HTTP retry jitter percentage.
 pub const MAX_OTLP_RETRY_JITTER_PERCENT: u8 = 100;
+/// Largest frontend input, in bytes, accepted by one synchronous-client call
+/// (1 MiB). CLI and Python entry points reject larger input before parsing or
+/// exporting it. This is a per-call safety limit, not a queue.
+pub const MAX_INPUT_BYTES: usize = 1024 * 1024;
+/// Largest number of records one synchronous-client frontend call accepts.
+pub const MAX_BATCH_RECORDS: usize = 10_000;
+/// Interval of the synchronous client's per-call `PeriodicReader`. It only
+/// has to exceed one call so that the explicit flush performs the export.
+#[cfg(feature = "synchronous-client")]
+pub(crate) const SYNC_METRIC_READER_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(24 * 60 * 60);
+/// OTLP/HTTP logs path appended to the synchronous client's base endpoint.
+#[cfg(feature = "synchronous-client")]
+pub(crate) const OTLP_HTTP_LOGS_PATH: &str = "v1/logs";
+/// OTLP/HTTP traces path appended to the synchronous client's base endpoint.
+#[cfg(feature = "synchronous-client")]
+pub(crate) const OTLP_HTTP_TRACES_PATH: &str = "v1/traces";
+/// OTLP/HTTP metrics path appended to the synchronous client's base endpoint.
+#[cfg(feature = "synchronous-client")]
+pub(crate) const OTLP_HTTP_METRICS_PATH: &str = "v1/metrics";
+/// Health name reported by `OtelLogSink`.
+#[cfg(feature = "log-sink")]
+pub(crate) const OTEL_LOG_SINK_NAME: &str = "opentelemetry";
+/// Target prefix of OpenTelemetry SDK diagnostics, which `OtelLogSink` drops
+/// so they never recurse into the SDK.
+#[cfg(feature = "log-sink")]
+pub(crate) const SDK_DIAGNOSTIC_TARGET_PREFIX: &str = "opentelemetry";
 /// Default log batch size for exporter flushes.
 pub const DEFAULT_LOG_BATCH_SIZE: usize = 256;
 /// Default trace batch size for exporter flushes.

@@ -1,4 +1,4 @@
-use crate::sdk::implementation::project_logs;
+use crate::sdk_backend::implementation::project_logs;
 use crate::severity::fields;
 use crate::sync_http::payload::{build_logs_payload, log_record};
 use sc_observability_types::otlp::signals::LogPoint;

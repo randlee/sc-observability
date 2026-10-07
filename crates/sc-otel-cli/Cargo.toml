@@ -16,7 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 sc-observability-types.workspace = true
-sc-observability-otlp = { workspace = true, features = ["durable-store"] }
+sc-observability-otlp = { workspace = true, features = ["durable-store", "synchronous-client"] }
 clap.workspace = true
 serde_json.workspace = true
 

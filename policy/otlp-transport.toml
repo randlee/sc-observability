@@ -15,7 +15,7 @@ default_features = true
 [transport.opentelemetry-otlp]
 version = "=0.33.0"
 backends = ["otlp-sdk"]
-features = ["trace", "metrics", "logs", "grpc-tonic", "tls-ring", "tls-webpki-roots", "http-proto", "reqwest-client", "reqwest-rustls"]
+features = ["trace", "metrics", "logs"]
 default_features = false
 
 [transport.opentelemetry-proto]
@@ -59,6 +59,18 @@ version = "=1.12.1"
 backends = ["sync-http"]
 features = []
 default_features = true
+
+[transport.futures-executor]
+version = "=0.3.34"
+backends = ["synchronous-client"]
+features = []
+default_features = true
+
+[transport.otel-reqwest]
+version = "=0.13.5"
+backends = ["synchronous-client"]
+features = ["blocking", "rustls"]
+default_features = false
 
 [transport.tokio]
 version = "=1.53.1"

@@ -29,7 +29,7 @@ mod lifecycle;
 mod lifecycle_tests;
 mod projectors;
 mod runtime;
-#[cfg(any(feature = "otlp-sdk", feature = "sync-http"))]
+#[cfg(any(feature = "otlp-sdk", feature = "sync-http", feature = "log-sink"))]
 mod severity;
 #[cfg(all(test, feature = "otlp-sdk", feature = "sync-http"))]
 mod severity_tests;
@@ -39,12 +39,27 @@ mod testing;
 pub mod v1;
 
 #[cfg(feature = "otlp-sdk")]
-mod sdk;
+#[path = "sdk/mod.rs"]
+mod sdk_backend;
 #[cfg(feature = "sync-http")]
 mod sync_http;
 
 pub mod constants;
 pub mod error_codes;
+
+#[cfg(feature = "log-sink")]
+mod log_sink;
+#[cfg(feature = "log-sink")]
+mod native;
+#[cfg(feature = "synchronous-client")]
+pub mod sync;
+
+#[cfg(feature = "log-sink")]
+#[doc(inline)]
+pub use log_sink::OtelLogSink;
+#[cfg(feature = "log-sink")]
+#[doc(inline)]
+pub use native::{api, sdk};
 
 #[doc(inline)]
 pub use assembly::SpanAssemblyLoss;

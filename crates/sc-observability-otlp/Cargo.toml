@@ -13,7 +13,11 @@ description = "Standalone OTLP export adapter for sc-observability."
 durable-store = ["sync-http", "dep:rusqlite", "dep:serde-saphyr", "dep:uuid"]
 default = ["v1"]
 v1 = ["sc-observability-types/v1"]
-otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest"]
+otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "opentelemetry-otlp/grpc-tonic", "opentelemetry-otlp/tls-ring", "opentelemetry-otlp/tls-webpki-roots", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-client", "opentelemetry-otlp/reqwest-rustls", "dep:opentelemetry-proto", "dep:tokio", "dep:tonic", "dep:prost", "dep:reqwest"]
+# Native OpenTelemetry log sink for the core logger (ADR-023); no OTLP transport.
+log-sink = ["dep:sc-observability", "dep:opentelemetry", "dep:opentelemetry_sdk"]
+# Blocking OTLP/HTTP protobuf client for CLI and Python frontends (ADR-023).
+synchronous-client = ["log-sink", "dep:opentelemetry-otlp", "opentelemetry-otlp/http-proto", "opentelemetry-otlp/reqwest-blocking-client", "dep:otel-reqwest", "dep:futures-executor", "dep:tokio"]
 sync-http = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:bytes", "dep:tokio"]
 
 [dependencies]
@@ -24,6 +28,7 @@ uuid = { workspace = true, optional = true }
 serde_json.workspace = true
 thiserror.workspace = true
 sc-observability-types.workspace = true
+sc-observability = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
@@ -34,6 +39,8 @@ reqwest = { workspace = true, optional = true }
 httpdate = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
+futures-executor = { workspace = true, optional = true }
+otel-reqwest = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [dev-dependencies]

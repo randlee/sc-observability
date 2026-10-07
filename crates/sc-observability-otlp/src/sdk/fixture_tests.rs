@@ -1,6 +1,6 @@
 //! Crate-local SDK fixture tests for canonical adapter projection and lifecycle.
 
-use crate::sdk::fixture::SdkFixture;
+use crate::sdk_backend::fixture::SdkFixture;
 use crate::v2::{
     ExporterBackend, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
     TelemetryConfig, TelemetryConfigBuilder, TracesConfig,

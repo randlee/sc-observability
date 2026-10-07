@@ -21,7 +21,7 @@ use crate::contracts::{
     MetricExporter, TraceExporter,
 };
 #[cfg(feature = "otlp-sdk")]
-use crate::sdk;
+use crate::sdk_backend as sdk;
 #[cfg(feature = "sync-http")]
 use crate::sync_http;
 

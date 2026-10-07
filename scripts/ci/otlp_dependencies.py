@@ -94,7 +94,8 @@ def validate_transport_dependencies(root: Path) -> set[str]:
         version = rule["version"]
         if not re.fullmatch(r"=\d+\.\d+\.\d+", version):
             raise SystemExit(prefix + "policy version must be an exact pin")
-        if inherited.get("version") != version or (name, version[1:]) not in locked:
+        package = resolved_package(name, inherited)
+        if inherited.get("version") != version or (package, version[1:]) not in locked:
             raise SystemExit(prefix + "workspace/lock pin differs from transport policy")
         enabled, defaults = effective_features(inherited, declaration)
         if enabled != set(rule["features"]) or defaults != rule["default_features"]:
