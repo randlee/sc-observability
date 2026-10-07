@@ -905,10 +905,18 @@ impl Drop for HelperExit {
 }
 
 /// Exclusive claim on a single-flight flag; released on drop, including during unwinding.
-struct Flight {
+pub(crate) struct Flight {
     flag: &'static AtomicBool,
     #[cfg(test)]
     completion: Option<mpsc::SyncSender<bool>>,
+}
+
+/// Claims the process-wide flush single-flight slot for an attached logger.
+///
+/// Attachments share the same bounded-helper accounting as an owned bridge, so
+/// a timed-out attachment flush cannot accumulate helpers through retries.
+pub(crate) fn claim_flush_flight() -> Option<Flight> {
+    Flight::claim(&FLUSH_IN_FLIGHT)
 }
 
 impl Flight {
