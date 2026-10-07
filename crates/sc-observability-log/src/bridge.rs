@@ -14,7 +14,7 @@ use crate::constants::{ATTACHMENT_HELPER_PANIC, ATTACHMENT_HELPER_SPAWN_FAILURE}
 use crate::control::{BridgeEvent, LogControl};
 use crate::error::EmitError;
 use crate::handle;
-use crate::{DropCause, mapping};
+use crate::{DropCause, health, mapping};
 use sc_observability_types::v2::FlushError as CoreFlushError;
 use sc_observability_types::{
     AdmissionOutcome, ErrorCode, ErrorContext, FailureClassification, LogEvent,
@@ -400,6 +400,16 @@ pub fn attach_logger(
         policy: options.policy,
         last_policy_rejection: Mutex::new(None),
     });
+    // An attached control has no owned `Installed` slot, but its health
+    // remains readable. Retain the host's initial core report/config exactly
+    // as owned initialization does so `LogControl::health` can expose the
+    // process-wide helper counters during and after attachment teardown.
+    let initial_report = state.logger.health();
+    health::set_snapshot_config(health::SinkConfig {
+        active_log_path: None,
+        level_state: state.logger.level_state(),
+    });
+    health::store_report(initial_report);
     registry.state = Some(Arc::clone(&state));
     registry.mode = AttachmentMode::Attached;
     registry.abandoned = false;
