@@ -48,22 +48,48 @@ fn telemetry_config() -> TelemetryConfig {
 }
 
 fn recording() -> (RuntimeTelemetry, Arc<Traces>, Arc<Metrics>) {
-    let (telemetry, _, traces, metrics) = recording_with_logs();
+    let (telemetry, _, traces, metrics) = recording_with_config(telemetry_config());
     (telemetry, traces, metrics)
 }
 
-fn recording_with_logs() -> (RuntimeTelemetry, Arc<Logs>, Arc<Traces>, Arc<Metrics>) {
+fn recording_with_config(
+    config: TelemetryConfig,
+) -> (RuntimeTelemetry, Arc<Logs>, Arc<Traces>, Arc<Metrics>) {
     let logs = Arc::new(Logs::default());
     let traces = Arc::new(Traces::default());
     let metrics = Arc::new(Metrics::default());
     let telemetry = RuntimeTelemetry::new_with_exporters_typed(
-        telemetry_config(),
+        config,
         logs.clone(),
         traces.clone(),
         metrics.clone(),
     )
     .expect("recording telemetry");
     (telemetry, logs, traces, metrics)
+}
+
+fn recording_with_logs() -> (RuntimeTelemetry, Arc<Logs>, Arc<Traces>, Arc<Metrics>) {
+    recording_with_config(telemetry_config())
+}
+
+fn log_event_message(message: &str) -> LogEvent {
+    LogEvent {
+        version: SchemaVersion::new("v1").expect("schema"),
+        timestamp: Timestamp::UNIX_EPOCH,
+        level: Level::Info,
+        service: service_name(),
+        target: TargetCategory::new("otlp.runtime").expect("target"),
+        action: ActionName::new("emit").expect("action"),
+        message: Some(message.to_owned()),
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: None,
+        diagnostic: None,
+        state_transition: None,
+        fields: serde_json::Map::new(),
+    }
 }
 
 fn trace(span_id: &str) -> v2::TraceContext {
@@ -277,6 +303,31 @@ fn shutdown_drains_every_admitted_metric_in_a_concurrent_race() {
     assert_eq!(exported, expected);
 }
 
+fn histogram_metric() -> CanonicalMetricRecord {
+    let one_second: Timestamp =
+        serde_json::from_str("\"1970-01-01T00:00:01Z\"").expect("valid timestamp");
+    v2::MetricRecord::try_new(
+        one_second,
+        service_name(),
+        MetricName::new("tool.duration").expect("valid metric"),
+        v2::MetricValue::Histogram {
+            point: v2::HistogramPoint::try_new(
+                vec![
+                    v2::FiniteF64::new(1.0).expect("finite"),
+                    v2::FiniteF64::new(10.0).expect("finite"),
+                ],
+                vec![1, 2, 3],
+                6,
+                v2::FiniteF64::new(80.5).expect("finite"),
+            )
+            .expect("valid histogram"),
+            temporality: v2::AggregationTemporality::Delta,
+            start_time: Timestamp::UNIX_EPOCH,
+        },
+    )
+    .expect("valid histogram metric")
+}
+
 #[test]
 fn canonical_assembler_uses_the_production_bounds() {
     let production = (MAX_OTLP_LIVE_SPANS, MAX_OTLP_EVENTS_PER_SPAN);
@@ -377,28 +428,7 @@ fn canonical_emit_preserves_every_span_field_and_histogram_bucket() {
         .emit_span(&v2::SpanSignal::Ended(ended.clone()))
         .expect("ended");
 
-    let one_second: Timestamp =
-        serde_json::from_str("\"1970-01-01T00:00:01Z\"").expect("valid timestamp");
-    let histogram = v2::MetricRecord::try_new(
-        one_second,
-        service_name(),
-        MetricName::new("tool.duration").expect("valid metric"),
-        v2::MetricValue::Histogram {
-            point: v2::HistogramPoint::try_new(
-                vec![
-                    v2::FiniteF64::new(1.0).expect("finite"),
-                    v2::FiniteF64::new(10.0).expect("finite"),
-                ],
-                vec![1, 2, 3],
-                6,
-                v2::FiniteF64::new(80.5).expect("finite"),
-            )
-            .expect("valid histogram"),
-            temporality: v2::AggregationTemporality::Delta,
-            start_time: Timestamp::UNIX_EPOCH,
-        },
-    )
-    .expect("valid histogram metric");
+    let histogram = histogram_metric();
     telemetry.emit_metric(&histogram).expect("histogram");
     telemetry.flush().expect("flush");
 
@@ -413,4 +443,68 @@ fn canonical_emit_preserves_every_span_field_and_histogram_bucket() {
     assert_eq!(exported_metrics.len(), 1);
     assert_eq!(exported_metrics[0].record, histogram);
     assert_eq!(telemetry.health().dropped_exports_total, 0);
+}
+
+#[test]
+fn log_admission_exports_each_record_when_batch_size_is_one() {
+    let mut config = telemetry_config();
+    config.logs = Some(LogsConfig { batch_size: 1 });
+    let (telemetry, logs, _, _) = recording_with_config(config);
+    for message in ["one", "two", "three"] {
+        telemetry
+            .emit_log(&log_event_message(message))
+            .expect("log");
+    }
+    assert_eq!(*logs.calls.lock().expect("calls"), vec![1, 1, 1]);
+}
+
+#[test]
+fn sustained_log_admission_and_flush_never_export_above_batch_size() {
+    let batch_size = 3;
+    let mut config = telemetry_config();
+    config.logs = Some(LogsConfig { batch_size });
+    let (telemetry, logs, _, _) = recording_with_config(config);
+    for index in 0..(10 * batch_size + 3) {
+        telemetry
+            .emit_log(&log_event_message(&index.to_string()))
+            .expect("log");
+    }
+    telemetry.flush().expect("flush");
+    let calls = logs.calls.lock().expect("calls").clone();
+    assert!(calls.iter().all(|&len| len <= batch_size));
+    assert_eq!(calls.into_iter().sum::<usize>(), 10 * batch_size + 3);
+}
+
+#[test]
+fn completed_spans_and_metrics_export_in_configured_chunks() {
+    let batch_size = 2;
+    let mut config = telemetry_config();
+    config.traces = Some(TracesConfig { batch_size });
+    config.metrics = Some(MetricsConfig {
+        batch_size,
+        export_interval_ms: 60_000_u64.into(),
+    });
+    let (telemetry, _, traces, metrics) = recording_with_config(config);
+    for index in 1..=5 {
+        let context = trace(&format!("{index:016x}"));
+        let span = started(context.clone());
+        telemetry
+            .emit_span(&v2::SpanSignal::Started(span.clone()))
+            .expect("started");
+        telemetry
+            .emit_span(&v2::SpanSignal::Ended(
+                span.end(v2::SpanStatus::Ok, DurationMs::from(1)),
+            ))
+            .expect("ended");
+        telemetry.emit_metric(&histogram_metric()).expect("metric");
+    }
+    telemetry.flush().expect("flush");
+    let span_calls = traces.calls.lock().expect("span calls").clone();
+    let metric_calls = metrics.calls.lock().expect("metric calls").clone();
+    assert!(span_calls.iter().all(|&len| len <= batch_size));
+    assert!(metric_calls.iter().all(|&len| len <= batch_size));
+    assert_eq!(span_calls, vec![2, 2, 1]);
+    assert_eq!(metric_calls, vec![1, 2, 2]);
+    assert_eq!(span_calls.into_iter().sum::<usize>(), 5);
+    assert_eq!(metric_calls.into_iter().sum::<usize>(), 5);
 }
