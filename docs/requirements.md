@@ -676,7 +676,7 @@ HTTP exporter for a thin shared sync client, and authorize minimal existing
 LogSink integration for file/OTel/both. Implementation awaits plan approval.
 For Phase H these requirements supersede custom OTel facade, dual custom
 transport, durable admission, and full mirror-model requirements in OTLP-002,
-OTLP-005..013, OTLP-017, OTLP-020..024 and PHD-005..013. They do not retire
+OTLP-005..014, OTLP-017, OTLP-020..024 and PHD-005..013. They do not retire
 logging requirements or erase historical release contracts.
 
 - H-001 Existing synchronous file logging and accepted canonical v2 logging,
@@ -711,7 +711,8 @@ logging requirements or erase historical release contracts.
   export, or shut down a caller-owned SDK provider. Macro and tracing input
   composition must be tested without replacing the existing file logger.
 - H-005 sc-otel and Python PyO3 shall expose equivalent log/span/metric send
-  operations over that one sync client and configuration. CLI is a thin Clap
+  operations over that one sync client and configuration. Python operational
+  failures use existing ADR-014 tagged results. CLI is a thin Clap
   frontend and Python a thin language binding; neither owns a transport,
   durable store, retry worker or alternate payload model. Python blocking I/O
   releases the GIL. Native Rust APIs retain the full supported SDK surface;
@@ -743,8 +744,9 @@ logging requirements or erase historical release contracts.
   sprint shall list any added wrapper and its necessity; default is none.
   Phase H shall finish with net deletion of source code, report actual
   added/deleted source and test lines separately, and preserve relevant tests.
-  Generated source and test deletions cannot satisfy this requirement; handwritten
-  Rust under crates/ must independently shrink. Reuse local process fixtures to
+  Use one git diff --numstat excluding generated paths and require a negative
+  handwritten total; no separate classification framework or inline-test recount.
+  Reuse local process fixtures to
   start an official Collector and assert its file-export readback of native sync
   and Tokio export, installed CLI/Python signals, and file/OTel/both. A mock HTTP
   acceptor alone is insufficient. Update

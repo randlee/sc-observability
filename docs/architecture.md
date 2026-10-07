@@ -1837,20 +1837,23 @@ No transport implementation or runtime dependency enters the types layer.
   emits through the native logger. Provider lifecycle remains caller-owned.
   Existing tracing/log bridge paths must compose without a second global owner
   or duplicate emissions. Sink admission is not a delivery guarantee.
-- **Synchronous client**: Construct native exporters with an explicitly selected
-  blocking HTTP client, use native SpanData/ResourceMetrics/LogBatch inputs and
-  native errors. Complete the upstream export future synchronously with a
-  standard executor; no bespoke runtime, worker, retry or queue. Expose native
-  exporter access rather than hiding SDK capabilities. One shared set of primitive construction methods inside sync::Client serves
-  CLI/Python; language boundaries only parse and forward. Public SpanData fields
-  construct completed spans. Native Logger::create_log_record supplies log
-  records; direct export sets observed_timestamp explicitly before LogBatch.
-  ResourceMetrics is opaque: frontend metric observations use native instruments
-  and the official PeriodicReader, returning the SDK force_flush result (which
-  reports export failure but coarsens its HTTP cause in 0.33.0). Raw metric export
-  still accepts &ResourceMetrics. No custom reader adapter or mirror request
-  struct. The official reader thread is SDK-owned, not a new application worker.
-  No additional Tokio setup helper is planned; callers use the native SDK.
+- **Synchronous client**: One `sync::Client` exposes the reviewed `send_log`,
+  `send_span` and `send_metrics` native-type contracts in h-1; raw exporter
+  methods remain available directly from the official crates. The OTLP crate
+  re-exports unmodified native API/SDK types; CLI/Python declare no direct
+  OpenTelemetry dependencies (ADR-004/009 unchanged). A single workspace pin
+  selects 0.33.0. `synchronous-client` selects official HTTP/protobuf,
+  reqwest-blocking-client and rustls; a standard executor drives blocking
+  export. No bespoke worker, reader adapter, retry queue or request DTO.
+  Metric sends take a closure over the native Meter; the SDK owns provider,
+  resource, reader and flush. Flush reports failure but coarsens its cause in
+  0.33.0. One small SyncError distinguishes Validation from Export and preserves
+  native sources. Python uses existing ADR-014 tagged operational results.
+  Each frontend call owns its client, releases the GIL where applicable, checks
+  for an entered Tokio runtime before creating blocking transport, and applies
+  native timeouts, certificate verification and credential-safe errors. Native
+  Tokio callers use the SDK directly. Rustdoc documents partial-success and
+  lifecycle limitations; there is no promise of forcible cancellation.
 - **Removal**: Delete old durable-store, custom SDK/sync_http transport, mirror
   signal models and their unused dependencies after consumers move. No database
   converter, v1 shell or silent preservation. Preserve logging contracts and
@@ -1862,7 +1865,10 @@ No transport implementation or runtime dependency enters the types layer.
   contract, and obtain item-by-item confirmation before any core/-log/-types
   deletion. ATM team-lead receives the same proposed changes. No answer means
   preserve, not permission to delete.
-- **Supersedes for Phase H**: ADR-018's shared custom backend/lifecycle,
+- **Supersedes for Phase H**: ADR-002's restriction of the OTLP-to-core edge
+  to dev-dependencies, and OTLP-014's types-only production edge: h-1 activates
+  the production core LogSink dependency alongside its implementation. No
+  reverse core-to-OTel dependency is permitted. Also supersedes ADR-018's shared custom backend/lifecycle,
   ADR-019's custom OTel transport/retry/mirror-model decisions, ADR-020's
   compatibility requirement only for rejected OTel additions, and ADR-021's
   durable submission architecture. Other logging/binding provisions remain.
@@ -1918,13 +1924,15 @@ No transport implementation or runtime dependency enters the types layer.
   its file-export readback supplies the end-to-end oracle. h-2 owns manual.txt
   and all Clap-generated manual/site files; h-4 verifies the existing installer
   consumes that output. Generated source and tests cannot satisfy net handwritten
-  source deletion; handwritten Rust under crates/ must independently shrink.
+  source deletion; one numstat check excluding generated paths proves a negative
+  handwritten total, without a classification framework or inline-test recount.
 
 - **Frontend method boundary**: h-1 fixes `sync::Client::send_log`, `send_span`
   and `send_metrics` signatures in its design before either parallel frontend
-  starts. Parameters are native resource/scope, native log/span values and
-  primitive metric observations; there are no mirror request structs. Both
-  frontends parse and forward to these methods. The shared implementation owns
+  starts. Parameters are native resource/scope, native log values, completed SDK
+  SpanData (not SpanBuilder, which lacks completion metadata in 0.33.0), and
+  a closure over the native Meter; there are no mirror request structs. Both
+  frontends use the upstream types through OTLP re-exports. The shared implementation owns
   validation and construction; invalid data cannot become a successful empty
   export. h-4 checks frontend failure equivalence only, leaving exporter timeout
   and provider-lifetime unit tests with h-1.

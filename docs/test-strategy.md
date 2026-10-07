@@ -25,7 +25,8 @@ explicitly removed OTel code. Retained logging tests remain required.
 
 Existing cross-platform guidelines require bounded waits, teardown and temporary
 output directories. Planning feasibility probes do not qualify release artifacts.
-No workflow or release-gate changes are authorized by this plan.
+Only h-4's named removal of obsolete workflow feature references is authorized;
+no new workflow or release gate is added.
 
 ## 1. Purpose
 
