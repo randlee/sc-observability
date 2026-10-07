@@ -162,7 +162,8 @@
       "sc-observability-log",
       "sc-observability-dto",
       "sc-observability-binding-runtime",
-      "sc-observability-py"
+      "sc-observability-py",
+      "sc-otel-cli"
     ],
     "deferredStandalonePackages": [
       {

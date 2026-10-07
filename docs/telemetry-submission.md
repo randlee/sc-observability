@@ -30,6 +30,20 @@ else:
 
 See the complete [Clap-generated CLI manual](manual/sc-otel/cli-reference.md) for commands, options, examples, configuration, and recovery.
 
+Install `sc-otel` with `cargo install sc-otel-cli`, a matching GitHub release
+archive, or a supported package channel:
+
+```sh
+brew tap randlee/homebrew-tap && brew install sc-otel
+scoop bucket add randlee https://github.com/randlee/scoop-bucket
+scoop install sc-otel
+winget install randlee.sc-otel
+```
+
+Release archives cover macOS Apple silicon and Intel, Linux x86_64 and arm64,
+and Windows x86_64. They and Homebrew place the offline manual in
+`share/doc/sc-otel`; the Cargo package embeds the same manual.
+
 `sc-otel` accepts the same `SubmissionInput` document as the Python facade.
 
 ```sh

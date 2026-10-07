@@ -1,6 +1,5 @@
 [package]
 name = "sc-otel-cli"
-publish = false
 authors.workspace = true
 version.workspace = true
 edition.workspace = true

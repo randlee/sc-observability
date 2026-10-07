@@ -48,6 +48,29 @@ class Package:
         return BASELINES / self.name / f"{self.version}.txt"
 
 
+def package_library_name(cargo: dict[str, object], manifest: Path) -> str | None:
+    """Return the library target name, or ``None`` for a bin-only package.
+
+    Cargo creates an implicit library target for ``src/lib.rs`` when ``[lib]``
+    is absent.  A released executable with only ``src/main.rs`` has no public
+    Rust library surface, so it must not acquire a stock public-API baseline.
+    """
+    package = cargo["package"]
+    if not isinstance(package, dict) or not isinstance(package.get("name"), str):
+        raise SnapshotError(f"{manifest}: [package].name must be a string")
+    library = cargo.get("lib")
+    if library is not None:
+        if not isinstance(library, dict):
+            raise SnapshotError(f"{manifest}: [lib] must be a table")
+        name = library.get("name", package["name"].replace("-", "_"))
+        if not isinstance(name, str) or not name:
+            raise SnapshotError(f"{manifest}: [lib].name must be a non-empty string")
+        return name
+    if (manifest.parent / "src/lib.rs").is_file():
+        return package["name"].replace("-", "_")
+    return None
+
+
 def command(*args: str) -> list[str]:
     return ["cargo", f"+{TOOLCHAIN}", "public-api", *args, "-sss", "--color", "never"]
 
@@ -68,10 +91,13 @@ def published_packages(root: Path = ROOT) -> list[Package]:
         package = cargo["package"]
         if package["name"] != item["package"]:
             raise SnapshotError(f"publish manifest package mismatch for {path}")
+        library_name = package_library_name(cargo, path)
+        if library_name is None:
+            continue
         version = package["version"]
         if isinstance(version, dict):
             version = workspace["version"]
-        packages.append(Package(package["name"], path, cargo.get("lib", {}).get("name", package["name"].replace("-", "_")), str(version)))
+        packages.append(Package(package["name"], path, library_name, str(version)))
     if len({package.name for package in packages}) != len(packages):
         raise SnapshotError("publish-artifacts must not name duplicate released Rust crates")
     return packages

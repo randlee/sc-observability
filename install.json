@@ -9,11 +9,14 @@
     "readme_dependency_crate": "sc-observability",
     "workspace_toml": "Cargo.toml",
     "rust_toolchain": "1.94.1",
-    "sc_lint_source_revision": "ba2d9bf622c1604e3f017c728040906b90e71bce"
+    "sc_lint_source_revision": "ba2d9bf622c1604e3f017c728040906b90e71bce",
+    "renderer_archive_path": "bin/sc-otel"
   },
   "release_targets": [
     {"target": "x86_64-unknown-linux-gnu", "os": "ubuntu-latest", "archive": "tar.gz"},
-    {"target": "x86_64-apple-darwin", "os": "macos-latest", "archive": "tar.gz"},
+    {"target": "aarch64-unknown-linux-gnu", "os": "ubuntu-24.04-arm", "archive": "tar.gz"},
+    {"target": "aarch64-apple-darwin", "os": "macos-latest", "archive": "tar.gz"},
+    {"target": "x86_64-apple-darwin", "os": "macos-15-intel", "archive": "tar.gz"},
     {"target": "x86_64-pc-windows-msvc", "os": "windows-latest", "archive": "zip"}
   ],
   "crates": [
@@ -26,7 +29,8 @@
     {"artifact": "sc-observability-dto", "package": "sc-observability-dto", "cargo_toml": "crates/sc-observability-dto/Cargo.toml", "publish": true, "publish_order": 7, "wait_after_publish_seconds": 30},
     {"artifact": "sc-observability-binding-runtime", "package": "sc-observability-binding-runtime", "cargo_toml": "crates/sc-observability-binding-runtime/Cargo.toml", "publish": true, "publish_order": 8, "wait_after_publish_seconds": 30},
     {"artifact": "sc-observability-tauri", "package": "sc-observability-tauri", "cargo_toml": "bindings/tauri/Cargo.toml", "publish": true, "publish_order": 9, "wait_after_publish_seconds": 30},
-    {"artifact": "sc-observability-py", "package": "sc-observability-py", "cargo_toml": "bindings/python/sc-observability-py/Cargo.toml", "publish": true, "publish_order": 10, "wait_after_publish_seconds": 0}
+    {"artifact": "sc-observability-py", "package": "sc-observability-py", "cargo_toml": "bindings/python/sc-observability-py/Cargo.toml", "publish": true, "publish_order": 10, "wait_after_publish_seconds": 0},
+    {"artifact": "sc-otel-cli", "package": "sc-otel-cli", "cargo_toml": "crates/sc-otel-cli/Cargo.toml", "publish": true, "publish_order": 11, "wait_after_publish_seconds": 0}
   ],
   "release_binaries": [{"name": "sc-otel", "bundled_paths": [{"source": "docs/manual/sc-otel", "destination": "share/doc/sc-otel", "homebrew_destination_components": ["doc", "sc-otel"]}]}],
   "python_packages": [
@@ -45,7 +49,44 @@
   "npm_packages": [{"name": "@synaptic-canvas/sc-observability", "source": "bindings/typescript"}],
   "channels": {
     "pypi": {"workflow": "pypi-publish.yml", "dispatch_inputs": {}, "credential_rehearsal_inputs": {}, "test_repository": "testpypi", "production_repository": "pypi"},
-    "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {}}
+    "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {}},
+    "homebrew": {
+      "workflow": "homebrew-publish.yml",
+      "dispatch_inputs": {},
+      "tap_repository": "randlee/homebrew-tap",
+      "renderer_target": "x86_64-unknown-linux-gnu",
+      "formulas": [{
+        "path": "Formula/sc-otel.rb",
+        "template": "release/homebrew/formula.rb.j2",
+        "class": "ScOtel",
+        "binaries": ["sc-otel"],
+        "test_binary": "sc-otel",
+        "test_command": "--version",
+        "test_output": "sc-otel",
+        "release_track": "stable"
+      }],
+      "assets": [
+        {"key": "macos_arm", "target": "aarch64-apple-darwin"},
+        {"key": "macos_intel", "target": "x86_64-apple-darwin"},
+        {"key": "linux", "target": "x86_64-unknown-linux-gnu"}
+      ]
+    },
+    "scoop": {
+      "workflow": "scoop-publish.yml",
+      "dispatch_inputs": {},
+      "bucket_repository": "randlee/scoop-bucket",
+      "manifest_path": "sc-otel.json",
+      "manifest_template": "release/scoop/manifest.json.j2",
+      "installer_target": "x86_64-pc-windows-msvc",
+      "binary": "bin/sc-otel.exe",
+      "renderer_target": "x86_64-unknown-linux-gnu"
+    },
+    "winget": {
+      "workflow": "winget-publish.yml",
+      "dispatch_inputs": {},
+      "identifier": "randlee.sc-otel",
+      "installer_target": "x86_64-pc-windows-msvc"
+    }
   },
   "review_notes": {
     "npm": "Adopted from reviewed sc-publish revision 22137c2da13bf4638b4267b69c6c2f021617da73; publication remains separately authorized and credential-gated.",

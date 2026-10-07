@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -124,13 +125,30 @@ class ReleaseInventoryTests(unittest.TestCase):
             'x86_64-apple-darwin', 'x86_64-pc-windows-msvc', 'x86_64-unknown-linux-gnu',
         ])
 
-    def test_published_packages_are_the_ten_release_crates(self):
+    def test_published_packages_include_all_release_crates_before_library_filtering(self):
         names = [item['package'] for item in parity.published_packages(self.manifest)]
-        self.assertEqual(len(names), 10)
+        self.assertEqual(len(names), 11)
+        self.assertIn('sc-otel-cli', names)
         self.assertIn('sc-observability-tauri', names)
         self.assertIn('sc-observability-py', names)
         self.assertEqual(next(item for item in parity.published_packages(self.manifest)
                               if item['package'] == 'sc-observability-tauri')['cargo_toml'], 'bindings/tauri/Cargo.toml')
+
+    def test_expected_inventory_skips_bin_only_published_package(self):
+        manifest = {
+            'release_targets': [{'target': 'x86_64-unknown-linux-gnu'}],
+            'crates': [
+                {'package': 'library', 'cargo_toml': 'library/Cargo.toml', 'publish': True},
+                {'package': 'cli', 'cargo_toml': 'cli/Cargo.toml', 'publish': True},
+            ],
+        }
+        library = {
+            'name': 'library', 'version': '1.5.1', 'lib_name': 'library',
+            'crate_types': ['lib'], 'features': {},
+        }
+        with patch.object(parity, 'package_library', side_effect=[library, None]):
+            inventory = parity.expected_inventory(Path('/fixture'), manifest)
+        self.assertEqual(list(inventory['packages']), ['library'])
 
     def test_unpublished_crates_are_excluded(self):
         manifest = {'crates': [{'package': 'a', 'cargo_toml': 'a/Cargo.toml', 'publish': True},
