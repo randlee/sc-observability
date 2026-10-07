@@ -1,62 +1,158 @@
 {
-  "releaseVersion": "1.1.0",
-  "releaseTag": "v1.1.0",
-  "releaseCommit": "621f0d1456b7b9a4057390e34c4f9c1443d382d1",
-  "generatedAt": "2026-04-06T00:00:00.000000+00:00",
-  "publishedAt": "2026-05-25T19:57:46Z",
-  "items": [
+  "releaseVersion": "1.4.1",
+  "releaseTag": "v1.4.1",
+  "releaseCommit": "c578912653233c7dc678fefe5af575118dbbaaa1",
+  "generatedAt": "2026-10-07T04:12:47.251970+00:00",
+  "publishedAt": "2026-09-21T00:01:03Z",
+  "items":   [
     {
       "artifact": "sc-observability-types",
-      "version": "1.1.0",
-      "sourceRef": "refs/tags/v1.1.0",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
       "publishTarget": "crates.io",
       "publish": true,
       "required": true,
-      "publishedAt": "2026-05-25T19:57:46Z",
+      "publishedAt": "2026-09-21T00:01:03Z",
       "verifyCommands": [
-        "cargo search sc-observability-types --limit 1 | grep -F 'sc-observability-types = \"1.1.0\"'"
+        "cargo search sc-observability-types --limit 1 | grep -F 'sc-observability-types = \"1.4.1\"'"
       ]
     },
     {
       "artifact": "sc-observability",
-      "version": "1.1.0",
-      "sourceRef": "refs/tags/v1.1.0",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
       "publishTarget": "crates.io",
       "publish": true,
       "required": true,
-      "publishedAt": "2026-05-25T19:57:46Z",
+      "publishedAt": "2026-09-21T00:01:03Z",
       "verifyCommands": [
-        "cargo search sc-observability --limit 1 | grep -F 'sc-observability = \"1.1.0\"'"
+        "cargo search sc-observability --limit 1 | grep -F 'sc-observability = \"1.4.1\"'"
       ]
     },
     {
       "artifact": "sc-observe",
-      "version": "1.1.0",
-      "sourceRef": "refs/tags/v1.1.0",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
       "publishTarget": "crates.io",
       "publish": true,
       "required": true,
-      "publishedAt": "2026-05-25T19:57:46Z",
+      "publishedAt": "2026-09-21T00:01:03Z",
       "verifyCommands": [
-        "cargo search sc-observe --limit 1 | grep -F 'sc-observe = \"1.1.0\"'"
+        "cargo search sc-observe --limit 1 | grep -F 'sc-observe = \"1.4.1\"'"
       ]
     },
     {
       "artifact": "sc-observability-otlp",
-      "version": "1.1.0",
-      "sourceRef": "refs/tags/v1.1.0",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
       "publishTarget": "crates.io",
       "publish": true,
       "required": true,
-      "publishedAt": "2026-05-25T19:57:46Z",
+      "publishedAt": "2026-09-21T00:01:03Z",
       "verifyCommands": [
-        "cargo search sc-observability-otlp --limit 1 | grep -F 'sc-observability-otlp = \"1.1.0\"'"
+        "cargo search sc-observability-otlp --limit 1 | grep -F 'sc-observability-otlp = \"1.4.1\"'"
+      ]
+    },
+    {
+      "artifact": "sc-observability-log-macros",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
+      "publishTarget": "crates.io",
+      "publish": true,
+      "required": true,
+      "publishedAt": "2026-09-21T00:01:03Z",
+      "verifyCommands": [
+        "cargo search sc-observability-log-macros --limit 1 | grep -F 'sc-observability-log-macros = \"1.4.1\"'"
+      ]
+    },
+    {
+      "artifact": "sc-observability-log",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
+      "publishTarget": "crates.io",
+      "publish": true,
+      "required": true,
+      "publishedAt": "2026-09-21T00:01:03Z",
+      "verifyCommands": [
+        "cargo search sc-observability-log --limit 1 | grep -F 'sc-observability-log = \"1.4.1\"'"
+      ]
+    },
+    {
+      "artifact": "sc-observability-dto",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
+      "publishTarget": "crates.io",
+      "publish": true,
+      "required": true,
+      "publishedAt": "2026-09-21T00:01:03Z",
+      "verifyCommands": [
+        "cargo search sc-observability-dto --limit 1 | grep -F 'sc-observability-dto = \"1.4.1\"'"
+      ]
+    },
+    {
+      "artifact": "sc-observability-binding-runtime",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
+      "publishTarget": "crates.io",
+      "publish": true,
+      "required": true,
+      "publishedAt": "2026-09-21T00:01:03Z",
+      "verifyCommands": [
+        "cargo search sc-observability-binding-runtime --limit 1 | grep -F 'sc-observability-binding-runtime = \"1.4.1\"'"
+      ]
+    },
+    {
+      "artifact": "sc-observability-tauri",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
+      "publishTarget": "crates.io",
+      "publish": true,
+      "required": true,
+      "publishedAt": "2026-09-21T00:01:03Z",
+      "verifyCommands": [
+        "cargo search sc-observability-tauri --limit 1 | grep -F 'sc-observability-tauri = \"1.4.1\"'"
+      ]
+    },
+    {
+      "artifact": "sc-observability-py",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
+      "publishTarget": "crates.io",
+      "publish": true,
+      "required": true,
+      "publishedAt": "2026-09-21T00:01:03Z",
+      "verifyCommands": [
+        "cargo search sc-observability-py --limit 1 | grep -F 'sc-observability-py = \"1.4.1\"'"
+      ]
+    },
+    {
+      "artifact": "sc-observability",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
+      "publishTarget": "pypi",
+      "publish": true,
+      "required": true,
+      "publishedAt": "2026-09-21T00:01:03Z",
+      "verifyCommands": [
+        "python3 -m pip index versions sc-observability | grep -F '1.4.1'"
+      ]
+    },
+    {
+      "artifact": "@synaptic-canvas/sc-observability",
+      "version": "1.4.1",
+      "sourceRef": "refs/tags/v1.4.1",
+      "publishTarget": "npm",
+      "publish": true,
+      "required": true,
+      "publishedAt": "2026-09-21T00:01:03Z",
+      "verifyCommands": [
+        "npm view @synaptic-canvas/sc-observability@1.4.1 version"
       ]
     }
   ],
   "qualificationCandidate": {
     "version": "1.5.0",
-    "publication": "pending_phase_c_sc_publish_and_owner_authorization",
+    "publication": "pending_release_owner_authorization",
     "packages": [
       "sc-observability-types",
       "sc-observability",
@@ -80,7 +176,7 @@
     "pythonPolicy": "release/python-platform-policy.json",
     "pythonPlatforms": 6,
     "pythonNativeInstalledSuiteCells": 29,
-    "bindingPublication": "pending_phase_c_sc_publish_and_owner_authorization",
+    "bindingPublication": "pending_release_owner_authorization",
     "handoff": "docs/plans/phase-b/handoff-b-2.md",
     "stageManifest": "stage-manifest.json",
     "qualificationSource": "recorded immutably in each stage manifest; not an authorized publication source"
