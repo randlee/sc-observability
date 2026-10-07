@@ -1918,3 +1918,12 @@ No transport implementation or runtime dependency enters the types layer.
   and all Clap-generated manual/site files; h-4 verifies the existing installer
   consumes that output. Generated source and tests cannot satisfy net handwritten
   source deletion; handwritten Rust under crates/ must independently shrink.
+
+- **Frontend method boundary**: h-1 fixes `sync::Client::send_log`, `send_span`
+  and `send_metrics` signatures in its design before either parallel frontend
+  starts. Parameters are native resource/scope, native log/span values and
+  primitive metric observations; there are no mirror request structs. Both
+  frontends parse and forward to these methods. The shared implementation owns
+  validation and construction; invalid data cannot become a successful empty
+  export. h-4 checks frontend failure equivalence only, leaving exporter timeout
+  and provider-lifetime unit tests with h-1.
