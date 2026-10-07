@@ -51,7 +51,7 @@ impl OwnerState {
             return Err(closed_level_change());
         };
         drop(owner);
-        let result = guard.shutdown(timeout).map_err(shutdown_failure);
+        let result = guard.shutdown_with_timeout(timeout).map_err(shutdown_failure);
         if let Err(error) = self.control.wait_stopped(Duration::ZERO) {
             eprintln!("could not observe observability host shutdown completion: {error}");
         }
