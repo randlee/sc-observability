@@ -1,6 +1,8 @@
 //! Canonical facade ingress coverage kept independent of the retired 1.x facade.
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -11,24 +13,208 @@ use crate::config::{
     TracesConfig,
 };
 use crate::constants::{MAX_OTLP_EVENTS_PER_SPAN, MAX_OTLP_LIVE_SPANS};
-use crate::contracts::{self, ExportRecord, LogRecord};
+use crate::contracts::{
+    self, ExportRecord, ExporterLifecycle, LifecycleFuture, LogExporter, LogRecord, MetricExporter,
+    TraceExporter,
+};
 use crate::testing::{
     LifecycleCall, RecordingLifecycle, RecordingLogExporter, RecordingMetricExporter,
     RecordingTraceExporter,
 };
 use crate::{ExporterHealthState, RuntimeTelemetry, error_codes};
-use sc_observability_types::v2::{self, MetricRecord as CanonicalMetricRecord};
+use sc_observability_types::v2::{self, ExportError, MetricRecord as CanonicalMetricRecord};
 use sc_observability_types::{
-    ActionName, DurationMs, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion,
-    ServiceName, SpanId, StateName, StateTransition, TargetCategory, Timestamp, TraceId,
+    ActionName, DurationMs, ErrorContext, Level, LogEvent, MetricName, ProcessIdentity,
+    Remediation, SchemaVersion, ServiceName, SpanId, StateName, StateTransition, TargetCategory,
+    TelemetryHealthState, Timestamp, TraceId,
 };
 
 type Logs = RecordingLogExporter<ExportRecord<LogRecord>>;
 type Traces = RecordingTraceExporter<ExportRecord<contracts::CompleteSpan>>;
 type Metrics = RecordingMetricExporter<ExportRecord<CanonicalMetricRecord>>;
+type ShutdownAwareFixture = (
+    RuntimeTelemetry,
+    Receiver<()>,
+    Sender<()>,
+    Arc<Mutex<Vec<&'static str>>>,
+);
 
 const RACE_EMITTERS: usize = 4;
 const PREFILLED_RECORD_ID: usize = 1_000_000;
+
+struct ShutdownAwareExport {
+    entered: Mutex<Option<Sender<()>>>,
+    release: Mutex<Receiver<()>>,
+    backend_shutdown: Arc<AtomicBool>,
+    events: Arc<Mutex<Vec<&'static str>>>,
+}
+
+impl ShutdownAwareExport {
+    fn export(&self) -> Result<(), ExportError> {
+        self.entered
+            .lock()
+            .expect("entered poisoned")
+            .take()
+            .expect("export only runs once")
+            .send(())
+            .expect("test waits for export entry");
+        self.release
+            .lock()
+            .expect("release poisoned")
+            .recv()
+            .expect("test releases export");
+        if self.backend_shutdown.load(Ordering::SeqCst) {
+            return Err(ExportError::TerminalExportFailure {
+                context: Box::new(ErrorContext::new(
+                    error_codes::OTLP_TELEMETRY_SHUTDOWN,
+                    "test exporter rejected an export after backend shutdown",
+                    Remediation::not_recoverable("export before shutting down the backend"),
+                )),
+            });
+        }
+        self.events.lock().expect("events poisoned").push("export");
+        Ok(())
+    }
+}
+
+struct ShutdownAwareLogExporter(Arc<ShutdownAwareExport>);
+
+impl LogExporter for ShutdownAwareLogExporter {
+    fn export_logs(&self, _batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
+        self.0.export()
+    }
+}
+
+struct ShutdownAwareTraceExporter(Arc<ShutdownAwareExport>);
+
+impl TraceExporter for ShutdownAwareTraceExporter {
+    fn export_spans(
+        &self,
+        _batch: &[ExportRecord<contracts::CompleteSpan>],
+    ) -> Result<(), ExportError> {
+        self.0.export()
+    }
+}
+
+struct ShutdownAwareMetricExporter(Arc<ShutdownAwareExport>);
+
+impl MetricExporter for ShutdownAwareMetricExporter {
+    fn export_metrics(
+        &self,
+        _batch: &[ExportRecord<CanonicalMetricRecord>],
+    ) -> Result<(), ExportError> {
+        self.0.export()
+    }
+}
+
+struct ShutdownAwareLifecycle {
+    backend_shutdown: Arc<AtomicBool>,
+    events: Arc<Mutex<Vec<&'static str>>>,
+}
+
+impl ShutdownAwareLifecycle {
+    fn shutdown(&self) {
+        self.backend_shutdown.store(true, Ordering::SeqCst);
+        self.events
+            .lock()
+            .expect("events poisoned")
+            .push("shutdown");
+    }
+}
+
+impl ExporterLifecycle for ShutdownAwareLifecycle {
+    fn is_shutdown(&self) -> bool {
+        self.backend_shutdown.load(Ordering::SeqCst)
+    }
+
+    fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn flush_async(&self) -> LifecycleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn shutdown_async(&self) -> LifecycleFuture {
+        self.shutdown();
+        Box::pin(async { Ok(()) })
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        self.shutdown();
+        Ok(())
+    }
+
+    fn shutdown_blocking_with_timeout(&self, _timeout: Duration) -> Result<(), ExportError> {
+        self.shutdown();
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ShutdownAwareSignal {
+    Logs,
+    Traces,
+    Metrics,
+}
+
+fn shutdown_aware_fixture(signal: ShutdownAwareSignal) -> ShutdownAwareFixture {
+    let mut config = telemetry_config();
+    config.logs = Some(LogsConfig { batch_size: 1 });
+    config.traces = Some(TracesConfig { batch_size: 1 });
+    config.metrics = Some(MetricsConfig {
+        batch_size: 1,
+        export_interval_ms: 60_000_u64.into(),
+    });
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let backend_shutdown = Arc::new(AtomicBool::new(false));
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let blocking = Arc::new(ShutdownAwareExport {
+        entered: Mutex::new(Some(entered_tx)),
+        release: Mutex::new(release_rx),
+        backend_shutdown: Arc::clone(&backend_shutdown),
+        events: Arc::clone(&events),
+    });
+    let lifecycle = Arc::new(ShutdownAwareLifecycle {
+        backend_shutdown,
+        events: Arc::clone(&events),
+    });
+    let logs: Arc<dyn LogExporter> = match signal {
+        ShutdownAwareSignal::Logs => Arc::new(ShutdownAwareLogExporter(Arc::clone(&blocking))),
+        _ => Arc::new(RecordingLogExporter::default()),
+    };
+    let traces: Arc<dyn TraceExporter> = match signal {
+        ShutdownAwareSignal::Traces => Arc::new(ShutdownAwareTraceExporter(Arc::clone(&blocking))),
+        _ => Arc::new(RecordingTraceExporter::default()),
+    };
+    let metrics: Arc<dyn MetricExporter> = match signal {
+        ShutdownAwareSignal::Metrics => {
+            Arc::new(ShutdownAwareMetricExporter(Arc::clone(&blocking)))
+        }
+        _ => Arc::new(RecordingMetricExporter::default()),
+    };
+    let telemetry = RuntimeTelemetry::new_with_exporters_and_lifecycle_typed(
+        config, logs, traces, metrics, lifecycle,
+    )
+    .expect("valid shutdown-aware telemetry");
+    (telemetry, entered_rx, release_tx, events)
+}
+
+fn wait_until_stopping(telemetry: &RuntimeTelemetry) {
+    while !telemetry
+        .runtime
+        .lock()
+        .expect("telemetry runtime poisoned")
+        .stopping
+    {
+        thread::yield_now();
+    }
+}
 
 fn service_name() -> ServiceName {
     ServiceName::new("test-service").expect("valid service")
@@ -607,6 +793,110 @@ fn log_admission_exports_each_record_when_batch_size_is_one() {
             .expect("log");
     }
     assert_eq!(*logs.calls.lock().expect("calls"), vec![1, 1, 1]);
+}
+
+#[test]
+fn shutdown_waits_for_detached_log_batch_before_backend_shutdown() {
+    let (telemetry, entered, release, events) = shutdown_aware_fixture(ShutdownAwareSignal::Logs);
+    let telemetry = Arc::new(telemetry);
+    let emitter = Arc::clone(&telemetry);
+    let export = thread::spawn(move || emitter.emit_log(&log_event_message("detached log batch")));
+    entered.recv().expect("log export entered");
+
+    let shutdown = Arc::clone(&telemetry);
+    let shutdown = thread::spawn(move || shutdown.shutdown());
+    wait_until_stopping(&telemetry);
+    release.send(()).expect("release log export");
+
+    export
+        .join()
+        .expect("log emitter thread")
+        .expect("log export accepted before shutdown");
+    shutdown
+        .join()
+        .expect("shutdown thread")
+        .expect("shutdown succeeds");
+    assert_eq!(*events.lock().expect("events"), ["export", "shutdown"]);
+}
+
+#[test]
+fn shutdown_waits_for_detached_completed_span_before_backend_shutdown() {
+    let (telemetry, entered, release, events) = shutdown_aware_fixture(ShutdownAwareSignal::Traces);
+    let telemetry = Arc::new(telemetry);
+    let context = trace("0123456789abcdef");
+    let span = started(context);
+    let emitter = Arc::clone(&telemetry);
+    let export = thread::spawn(move || {
+        emitter.emit_span(&v2::SpanSignal::Started(span.clone()))?;
+        emitter.emit_span(&v2::SpanSignal::Ended(
+            span.end(v2::SpanStatus::Ok, DurationMs::from(1)),
+        ))
+    });
+    entered.recv().expect("span export entered");
+
+    let shutdown = Arc::clone(&telemetry);
+    let shutdown = thread::spawn(move || shutdown.shutdown());
+    wait_until_stopping(&telemetry);
+    release.send(()).expect("release span export");
+
+    export
+        .join()
+        .expect("span emitter thread")
+        .expect("span export accepted before shutdown");
+    shutdown
+        .join()
+        .expect("shutdown thread")
+        .expect("shutdown succeeds");
+    assert_eq!(*events.lock().expect("events"), ["export", "shutdown"]);
+}
+
+#[test]
+fn shutdown_waits_for_detached_metric_batch_before_backend_shutdown() {
+    let (telemetry, entered, release, events) =
+        shutdown_aware_fixture(ShutdownAwareSignal::Metrics);
+    let telemetry = Arc::new(telemetry);
+    let metric = histogram_metric();
+    let emitter = Arc::clone(&telemetry);
+    let export = thread::spawn(move || emitter.emit_metric(&metric));
+    entered.recv().expect("metric export entered");
+
+    let shutdown = Arc::clone(&telemetry);
+    let shutdown = thread::spawn(move || shutdown.shutdown());
+    wait_until_stopping(&telemetry);
+    release.send(()).expect("release metric export");
+
+    export
+        .join()
+        .expect("metric emitter thread")
+        .expect("metric export accepted before shutdown");
+    shutdown
+        .join()
+        .expect("shutdown thread")
+        .expect("shutdown succeeds");
+    assert_eq!(*events.lock().expect("events"), ["export", "shutdown"]);
+}
+
+#[test]
+fn shutdown_timeout_counts_detached_batch_and_degrades_health() {
+    let (telemetry, entered, release, events) = shutdown_aware_fixture(ShutdownAwareSignal::Logs);
+    let telemetry = Arc::new(telemetry);
+    let emitter = Arc::clone(&telemetry);
+    let export = thread::spawn(move || emitter.emit_log(&log_event_message("timed out batch")));
+    entered.recv().expect("log export entered");
+
+    telemetry
+        .shutdown_with_timeout(Duration::ZERO)
+        .expect("timeout still completes shutdown");
+    let health = telemetry.health();
+    assert_eq!(health.dropped_exports_total, 1);
+    assert_eq!(health.state, TelemetryHealthState::Degraded);
+    assert_eq!(*events.lock().expect("events"), ["shutdown"]);
+
+    release.send(()).expect("release timed out export");
+    export
+        .join()
+        .expect("log emitter thread")
+        .expect("admission completed before shutdown");
 }
 
 #[test]

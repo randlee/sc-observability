@@ -5,7 +5,8 @@
 #[cfg(test)]
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Condvar, LazyLock, Mutex};
+use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 use sc_observability_types::v2::TelemetryError as CanonicalTelemetryError;
@@ -56,7 +57,12 @@ pub struct RuntimeTelemetry {
     // Mutex keeps the buffered state and last_error snapshot consistent, and RwLock would not help
     // because these operations are write-heavy critical sections.
     pub(crate) runtime: Mutex<TelemetryRuntime>,
+    /// Coordinates shutdown with batches detached from the admission buffers.
+    in_flight_drained: Condvar,
+    /// Async shutdown callers register here instead of blocking an executor thread.
+    in_flight_waiters: Mutex<Vec<Waker>>,
     dropped_exports_total: AtomicU64,
+    in_flight_timeout_drops_total: AtomicU64,
     bounded_assembly_drops_total: AtomicU64,
     malformed_spans_total: AtomicU64,
 }
@@ -74,7 +80,13 @@ pub(crate) struct TelemetryRuntime {
     /// Once shutdown has claimed the final buffers, no further record may be
     /// admitted. This lives with the buffers so the check and each push are a
     /// single critical section.
-    stopping: bool,
+    pub(crate) stopping: bool,
+    /// Detached admission batches that have not returned from their exporter.
+    in_flight: usize,
+    /// Number of records in detached batches, retained for timeout accounting.
+    in_flight_records: u64,
+    /// Keeps health degraded after shutdown had to abandon detached admission work.
+    in_flight_timed_out: bool,
     pub(crate) span_assembler: V2SpanAssembler,
     log_buffer: Vec<ExportRecord<LogRecord>>,
     span_buffer: Vec<ExportRecord<contracts::CompleteSpan>>,
@@ -84,6 +96,85 @@ pub(crate) struct TelemetryRuntime {
     pub(crate) trace_status: ExporterRuntime,
     pub(crate) metric_status: ExporterRuntime,
     last_error: Option<DiagnosticSummary>,
+}
+
+/// Decrements the detached-batch accounting even when an exporter panics.
+struct InFlightBatch<'a> {
+    telemetry: &'a RuntimeTelemetry,
+    records: u64,
+}
+
+impl Drop for InFlightBatch<'_> {
+    fn drop(&mut self) {
+        let mut runtime = self
+            .telemetry
+            .runtime
+            .lock()
+            .expect("telemetry runtime poisoned");
+        runtime.in_flight = runtime
+            .in_flight
+            .checked_sub(1)
+            .expect("in-flight batch accounting underflow");
+        runtime.in_flight_records = runtime
+            .in_flight_records
+            .checked_sub(self.records)
+            .expect("in-flight record accounting underflow");
+        self.telemetry.in_flight_drained.notify_all();
+        drop(runtime);
+        self.telemetry.notify_in_flight_waiters();
+    }
+}
+
+/// Future used by async shutdown to wait for detached batches without blocking
+/// the caller's executor thread.
+struct InFlightWait<'a> {
+    telemetry: &'a RuntimeTelemetry,
+    deadline: Instant,
+    deadline_wake_scheduled: bool,
+}
+
+impl<'a> InFlightWait<'a> {
+    const fn new(telemetry: &'a RuntimeTelemetry, deadline: Instant) -> Self {
+        Self {
+            telemetry,
+            deadline,
+            deadline_wake_scheduled: false,
+        }
+    }
+}
+
+impl std::future::Future for InFlightWait<'_> {
+    type Output = u64;
+
+    fn poll(mut self: std::pin::Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        let now = Instant::now();
+        let runtime = self
+            .telemetry
+            .runtime
+            .lock()
+            .expect("telemetry runtime poisoned");
+        if runtime.in_flight == 0 {
+            return Poll::Ready(0);
+        }
+        if now >= self.deadline {
+            return Poll::Ready(runtime.in_flight_records);
+        }
+        self.telemetry
+            .in_flight_waiters
+            .lock()
+            .expect("in-flight waiters poisoned")
+            .push(context.waker().clone());
+        let remaining = self.deadline.saturating_duration_since(now);
+        if !self.deadline_wake_scheduled {
+            let waker = context.waker().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(remaining);
+                waker.wake();
+            });
+            self.deadline_wake_scheduled = true;
+        }
+        Poll::Pending
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -227,7 +318,10 @@ impl RuntimeTelemetry {
             config,
             exporters,
             runtime: Mutex::new(TelemetryRuntime::default()),
+            in_flight_drained: Condvar::new(),
+            in_flight_waiters: Mutex::new(Vec::new()),
             dropped_exports_total: AtomicU64::new(0),
+            in_flight_timeout_drops_total: AtomicU64::new(0),
             bounded_assembly_drops_total: AtomicU64::new(0),
             malformed_spans_total: AtomicU64::new(0),
         }
@@ -256,17 +350,23 @@ impl RuntimeTelemetry {
 
     fn buffer_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
         let record = export_records::log_record(event);
-        let batch = {
+        let (batch, in_flight) = {
             let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
             if runtime.stopping {
                 return Err(Self::shutdown_error());
             }
             runtime.log_buffer.push(record);
-            take_at_batch_size(
+            let batch = take_at_batch_size(
                 &mut runtime.log_buffer,
                 self.config.logs.expect("enabled logs").batch_size,
-            )
+            );
+            let in_flight = Self::track_detached_batch(&mut runtime, &batch);
+            (batch, in_flight)
         };
+        let _in_flight = in_flight.then(|| InFlightBatch {
+            telemetry: self,
+            records: batch.len() as u64,
+        });
         self.export_logs(&batch);
         Ok(())
     }
@@ -291,55 +391,62 @@ impl RuntimeTelemetry {
     }
 
     fn admit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError> {
-        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        if runtime.stopping {
-            return Err(Self::shutdown_error());
-        }
-        if let CanonicalSpanSignal::Ended(record) = &span
-            && !runtime
+        let (batch, in_flight) = {
+            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+            if runtime.stopping {
+                return Err(Self::shutdown_error());
+            }
+            if let CanonicalSpanSignal::Ended(record) = &span
+                && !runtime
+                    .span_assembler
+                    .has_started(&record.trace().trace_id, &record.trace().span_id)
+            {
+                self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
+                let context = ErrorContext::new(
+                    error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
+                    "received ended span without a matching started span",
+                    Remediation::not_recoverable(
+                        "emit the started span before the matching ended span",
+                    ),
+                )
+                .detail("trace_id", record.trace().trace_id.as_str().into())
+                .detail("span_id", record.trace().span_id.as_str().into());
+                let summary = DiagnosticSummary::from(context.diagnostic());
+                runtime.last_error = Some(summary.clone());
+                runtime.trace_status.last_error = Some(summary);
+                return Err(CanonicalTelemetryError::ExportFailure(
+                    ExportError::Transport {
+                        context: Box::new(context),
+                    },
+                ));
+            }
+            let batch = if let Some(complete) = runtime
                 .span_assembler
-                .has_started(&record.trace().trace_id, &record.trace().span_id)
-        {
-            self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
-            let context = ErrorContext::new(
-                error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
-                "received ended span without a matching started span",
-                Remediation::not_recoverable(
-                    "emit the started span before the matching ended span",
-                ),
-            )
-            .detail("trace_id", record.trace().trace_id.as_str().into())
-            .detail("span_id", record.trace().span_id.as_str().into());
-            let summary = DiagnosticSummary::from(context.diagnostic());
-            runtime.last_error = Some(summary.clone());
-            runtime.trace_status.last_error = Some(summary);
-            return Err(CanonicalTelemetryError::ExportFailure(
-                ExportError::Transport {
-                    context: Box::new(context),
-                },
-            ));
-        }
-        let batch = if let Some(complete) = runtime
-            .span_assembler
-            .push(span)
-            .map_err(export_failure_from_canonical_event)?
-        {
-            let resource = export_records::resource(complete.record.service());
-            runtime.span_buffer.push(ExportRecord {
-                resource,
-                scope: contracts::InstrumentationScope::default(),
-                record: complete,
-            });
-            take_at_batch_size(
-                &mut runtime.span_buffer,
-                self.config.traces.expect("enabled traces").batch_size,
-            )
-        } else {
-            Vec::new()
+                .push(span)
+                .map_err(export_failure_from_canonical_event)?
+            {
+                let resource = export_records::resource(complete.record.service());
+                runtime.span_buffer.push(ExportRecord {
+                    resource,
+                    scope: contracts::InstrumentationScope::default(),
+                    record: complete,
+                });
+                take_at_batch_size(
+                    &mut runtime.span_buffer,
+                    self.config.traces.expect("enabled traces").batch_size,
+                )
+            } else {
+                Vec::new()
+            };
+            let loss = runtime.span_assembler.take_loss();
+            self.record_span_assembly_loss(&mut runtime, loss);
+            let in_flight = Self::track_detached_batch(&mut runtime, &batch);
+            (batch, in_flight)
         };
-        let loss = runtime.span_assembler.take_loss();
-        self.record_span_assembly_loss(&mut runtime, loss);
-        drop(runtime);
+        let _in_flight = in_flight.then(|| InFlightBatch {
+            telemetry: self,
+            records: batch.len() as u64,
+        });
         self.export_spans(&batch);
         Ok(())
     }
@@ -366,7 +473,7 @@ impl RuntimeTelemetry {
             scope: contracts::InstrumentationScope::default(),
             record: metric.clone(),
         };
-        let batch = {
+        let (batch, in_flight) = {
             let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
             if runtime.stopping {
                 return Err(Self::shutdown_error());
@@ -374,18 +481,23 @@ impl RuntimeTelemetry {
             runtime.metric_buffer.push(record);
             let metrics = self.config.metrics.expect("enabled metrics");
             let now = Instant::now();
-            if runtime.metric_buffer.len() >= metrics.batch_size
+            let batch = if runtime.metric_buffer.len() >= metrics.batch_size
                 || metric_interval_elapsed(
                     runtime.last_metric_export,
                     now,
                     Duration::from_millis(metrics.export_interval_ms.as_u64()),
-                )
-            {
+                ) {
                 std::mem::take(&mut runtime.metric_buffer)
             } else {
                 Vec::new()
-            }
+            };
+            let in_flight = Self::track_detached_batch(&mut runtime, &batch);
+            (batch, in_flight)
         };
+        let _in_flight = in_flight.then(|| InFlightBatch {
+            telemetry: self,
+            records: batch.len() as u64,
+        });
         self.export_metrics(&batch);
         Ok(())
     }
@@ -471,6 +583,100 @@ impl RuntimeTelemetry {
         FlushOutcome { export_failure }
     }
 
+    fn track_detached_batch<T>(runtime: &mut TelemetryRuntime, batch: &[T]) -> bool {
+        if batch.is_empty() {
+            return false;
+        }
+        runtime.in_flight += 1;
+        runtime.in_flight_records += batch.len() as u64;
+        true
+    }
+
+    fn shutdown_timeout(&self) -> Duration {
+        self.config.transport.lifecycle_shutdown_timeout_ms.map_or(
+            Duration::from_millis(crate::constants::DEFAULT_OTLP_LIFECYCLE_SHUTDOWN_TIMEOUT_MS),
+            |timeout| Duration::from_millis(timeout.as_u64()),
+        )
+    }
+
+    fn begin_shutdown(&self) -> bool {
+        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        if runtime.stopping {
+            return false;
+        }
+        runtime.stopping = true;
+        true
+    }
+
+    fn wait_for_in_flight(&self, timeout: Duration) -> u64 {
+        let deadline = Instant::now() + timeout;
+        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        while runtime.in_flight != 0 {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            let (next_runtime, result) = self
+                .in_flight_drained
+                .wait_timeout(runtime, remaining)
+                .expect("telemetry runtime poisoned");
+            runtime = next_runtime;
+            if result.timed_out() {
+                break;
+            }
+        }
+        if runtime.in_flight == 0 {
+            0
+        } else {
+            runtime.in_flight_records
+        }
+    }
+
+    async fn wait_for_in_flight_async(&self, timeout: Duration) -> u64 {
+        InFlightWait::new(self, Instant::now() + timeout).await
+    }
+
+    fn notify_in_flight_waiters(&self) {
+        let waiters = std::mem::take(
+            &mut *self
+                .in_flight_waiters
+                .lock()
+                .expect("in-flight waiters poisoned"),
+        );
+        for waiter in waiters {
+            waiter.wake();
+        }
+    }
+
+    fn record_in_flight_timeout(&self, dropped: u64) {
+        if dropped == 0 {
+            return;
+        }
+        self.dropped_exports_total
+            .fetch_add(dropped, Ordering::SeqCst);
+        self.in_flight_timeout_drops_total
+            .fetch_add(dropped, Ordering::SeqCst);
+        let context = ErrorContext::new(
+            error_codes::OTLP_TELEMETRY_SHUTDOWN,
+            "shutdown deadline elapsed while detached telemetry batches were exporting",
+            Remediation::recoverable(
+                "allow admitted telemetry exports to finish before shutdown",
+                ["increase the lifecycle shutdown timeout"],
+            ),
+        )
+        .detail("dropped_records", Value::from(dropped));
+        let summary = DiagnosticSummary::from(context.diagnostic());
+        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        runtime.in_flight_timed_out = true;
+        runtime.last_error = Some(summary.clone());
+        runtime.log_status.state = ExporterHealthState::Degraded;
+        runtime.log_status.last_error = Some(summary.clone());
+        runtime.trace_status.state = ExporterHealthState::Degraded;
+        runtime.trace_status.last_error = Some(summary.clone());
+        runtime.metric_status.state = ExporterHealthState::Degraded;
+        runtime.metric_status.last_error = Some(summary);
+    }
+
     /// Flushes buffers, drops incomplete spans, and transitions the runtime to shutdown.
     ///
     /// # Panics
@@ -493,13 +699,11 @@ impl RuntimeTelemetry {
             return Err(shutdown_export_failure_typed(error, last_error));
         }
 
-        {
-            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-            if runtime.stopping {
-                return Ok(());
-            }
-            runtime.stopping = true;
+        if !self.begin_shutdown() {
+            return Ok(());
         }
+
+        self.record_in_flight_timeout(self.wait_for_in_flight(self.shutdown_timeout()));
 
         let flush_outcome = self.flush_outcome();
         let lifecycle_result = self.exporters.lifecycle.shutdown_blocking();
@@ -527,6 +731,10 @@ impl RuntimeTelemetry {
             return Err(shutdown_export_failure_typed(error, last_error));
         }
 
+        if !self.begin_shutdown() {
+            return Ok(());
+        }
+        self.record_in_flight_timeout(self.wait_for_in_flight(timeout));
         let flush_outcome = self.flush_outcome();
         let lifecycle_result = self
             .exporters
@@ -550,13 +758,13 @@ impl RuntimeTelemetry {
             return Ok(());
         }
 
-        {
-            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-            if runtime.stopping {
-                return Ok(());
-            }
-            runtime.stopping = true;
+        if !self.begin_shutdown() {
+            return Ok(());
         }
+
+        let timeout = self.shutdown_timeout();
+        let timed_out = self.wait_for_in_flight_async(timeout).await;
+        self.record_in_flight_timeout(timed_out);
 
         let flush_outcome = self.flush_outcome();
         let lifecycle_result = self.exporters.lifecycle.shutdown_async().await;
@@ -648,7 +856,9 @@ impl RuntimeTelemetry {
         let lifecycle_is_terminal = lifecycle_health
             .as_ref()
             .is_some_and(|health| health.phase != LifecycleState::Open);
-        let state = if lifecycle_is_terminal || self.exporters.lifecycle.is_shutdown() {
+        let state = if runtime.in_flight_timed_out {
+            TelemetryHealthState::Degraded
+        } else if lifecycle_is_terminal || self.exporters.lifecycle.is_shutdown() {
             TelemetryHealthState::Unavailable
         } else if !self.config.transport.enabled {
             TelemetryHealthState::Disabled
@@ -671,6 +881,7 @@ impl RuntimeTelemetry {
                 |health| {
                     health.dropped_total()
                         + self.bounded_assembly_drops_total.load(Ordering::SeqCst)
+                        + self.in_flight_timeout_drops_total.load(Ordering::SeqCst)
                 },
             ),
             malformed_spans_total: self.malformed_spans_total.load(Ordering::SeqCst),
@@ -701,6 +912,9 @@ impl RuntimeTelemetry {
 
     fn record_export_success(&self, exporter_kind: ExporterKind) {
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        if runtime.in_flight_timed_out {
+            return;
+        }
         let status = exporter_kind.status_mut(&mut runtime);
         status.state = ExporterHealthState::Healthy;
         status.last_error = None;
