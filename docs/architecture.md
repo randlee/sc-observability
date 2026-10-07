@@ -1840,8 +1840,16 @@ No transport implementation or runtime dependency enters the types layer.
   blocking HTTP client, use native SpanData/ResourceMetrics/LogBatch inputs and
   native errors. Complete the upstream export future synchronously with a
   standard executor; no bespoke runtime, worker, retry or queue. Expose native
-  exporter access rather than hiding SDK capabilities. CLI/Python may convert
-  their primitive arguments into these native inputs at their language boundary.
+  exporter access rather than hiding SDK capabilities. One shared set of primitive construction methods inside sync::Client serves
+  CLI/Python; language boundaries only parse and forward. Public SpanData fields
+  construct completed spans. Native Logger::create_log_record supplies log
+  records; direct export sets observed_timestamp explicitly before LogBatch.
+  ResourceMetrics is opaque: frontend metric observations use native instruments
+  and the official PeriodicReader, returning the SDK force_flush result (which
+  reports export failure but coarsens its HTTP cause in 0.33.0). Raw metric export
+  still accepts &ResourceMetrics. No custom reader adapter or mirror request
+  struct. The official reader thread is SDK-owned, not a new application worker.
+  No additional Tokio setup helper is planned; callers use the native SDK.
 - **Removal**: Delete old durable-store, custom SDK/sync_http transport, mirror
   signal models and their unused dependencies after consumers move. No database
   converter, v1 shell or silent preservation. Preserve logging contracts and
@@ -1900,3 +1908,13 @@ No transport implementation or runtime dependency enters the types layer.
   Existing validation recipes that select removed durable-store features are
   updated in the integration sprint to audit the native dependency graphs;
   license/advisory checks and surviving dependency bans remain enforced.
+
+- **Phase H proof/ownership refinement**: h-1 owns public native construction,
+  sink mapping, provider lifetime and dependency isolation tests. h-4 alone owns
+  file/OTel/both and macro/tracing composition: existing enable_file_sink plus
+  register_sink selects destinations. A locally started official Collector
+  receives installed CLI/wheel logs, spans and metrics and one file+OTel run;
+  its file-export readback supplies the end-to-end oracle. h-2 owns manual.txt
+  and all Clap-generated manual/site files; h-4 verifies the existing installer
+  consumes that output. Generated source and tests cannot satisfy net handwritten
+  source deletion; handwritten Rust under crates/ must independently shrink.
