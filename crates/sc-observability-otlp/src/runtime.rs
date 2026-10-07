@@ -73,6 +73,10 @@ struct FlushOutcome {
 
 #[derive(Default)]
 pub(crate) struct TelemetryRuntime {
+    /// Once shutdown has claimed the final buffers, no further record may be
+    /// admitted. This lives with the buffers so the check and each push are a
+    /// single critical section.
+    stopping: bool,
     pub(crate) span_assembler: V2SpanAssembler,
     log_buffer: Vec<ExportRecord<LogRecord>>,
     span_buffer: Vec<ExportRecord<contracts::CompleteSpan>>,
@@ -216,17 +220,17 @@ impl RuntimeTelemetry {
             return Ok(());
         }
         validate_entity_id(event)?;
-        self.buffer_log(event);
-        Ok(())
+        self.buffer_log(event)
     }
 
-    fn buffer_log(&self, event: &LogEvent) {
+    fn buffer_log(&self, event: &LogEvent) -> Result<(), CanonicalTelemetryError> {
         let record = export_records::log_record(event);
-        self.runtime
-            .lock()
-            .expect("telemetry runtime poisoned")
-            .log_buffer
-            .push(record);
+        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        if runtime.stopping {
+            return Err(Self::shutdown_error());
+        }
+        runtime.log_buffer.push(record);
+        Ok(())
     }
 
     /// Buffers one canonical span signal for later export.
@@ -250,6 +254,9 @@ impl RuntimeTelemetry {
 
     fn admit_span(&self, span: CanonicalSpanSignal) -> Result<(), CanonicalTelemetryError> {
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        if runtime.stopping {
+            return Err(Self::shutdown_error());
+        }
         if let CanonicalSpanSignal::Ended(record) = &span
             && !runtime
                 .span_assembler
@@ -313,9 +320,11 @@ impl RuntimeTelemetry {
             scope: contracts::InstrumentationScope::default(),
             record: metric.clone(),
         };
-        self.runtime
-            .lock()
-            .expect("telemetry runtime poisoned")
+        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        if runtime.stopping {
+            return Err(Self::shutdown_error());
+        }
+        runtime
             .metric_buffer
             .push(BufferedMetric::Canonical(Box::new(record)));
         Ok(())
@@ -453,6 +462,14 @@ impl RuntimeTelemetry {
             return Err(shutdown_export_failure_typed(error, last_error));
         }
 
+        {
+            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+            if runtime.stopping {
+                return Ok(());
+            }
+            runtime.stopping = true;
+        }
+
         let flush_outcome = self.flush_outcome();
         let lifecycle_result = self.exporters.lifecycle.shutdown_blocking();
         self.finish_shutdown(flush_outcome, lifecycle_result)
@@ -463,9 +480,22 @@ impl RuntimeTelemetry {
     /// SDK callers use this method to await admitted RPC completion. Synchronous HTTP
     /// callers keep using [`RuntimeTelemetry::shutdown_typed`], whose backend owns a
     /// bounded blocking worker shutdown.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned while
+    /// claiming shutdown or constructing final state.
     pub async fn shutdown_async_typed(&self) -> Result<(), CanonicalShutdownError> {
         if self.exporters.lifecycle.is_shutdown() {
             return Ok(());
+        }
+
+        {
+            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+            if runtime.stopping {
+                return Ok(());
+            }
+            runtime.stopping = true;
         }
 
         let flush_outcome = self.flush_outcome();
@@ -594,15 +624,19 @@ impl RuntimeTelemetry {
 
     fn ensure_active(&self) -> Result<(), CanonicalTelemetryError> {
         if self.exporters.lifecycle.is_shutdown() {
-            return Err(CanonicalTelemetryError::Shutdown {
-                context: Box::new(ErrorContext::new(
-                    error_codes::OTLP_TELEMETRY_SHUTDOWN,
-                    "telemetry runtime is shut down",
-                    Remediation::not_recoverable("do not emit telemetry after shutdown"),
-                )),
-            });
+            return Err(Self::shutdown_error());
         }
         Ok(())
+    }
+
+    fn shutdown_error() -> CanonicalTelemetryError {
+        CanonicalTelemetryError::Shutdown {
+            context: Box::new(ErrorContext::new(
+                error_codes::OTLP_TELEMETRY_SHUTDOWN,
+                "telemetry runtime is shut down",
+                Remediation::not_recoverable("do not emit telemetry after shutdown"),
+            )),
+        }
     }
 
     fn record_export_success(&self, exporter_kind: ExporterKind) {

@@ -1,6 +1,8 @@
 //! Canonical facade ingress coverage kept independent of the retired 1.x facade.
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Barrier, Mutex};
+use std::thread;
 
 use crate::assembly::V2SpanAssembler;
 use crate::config::{
@@ -13,11 +15,16 @@ use crate::testing::{RecordingLogExporter, RecordingMetricExporter, RecordingTra
 use crate::{ExporterHealthState, RuntimeTelemetry, error_codes};
 use sc_observability_types::v2::{self, MetricRecord as CanonicalMetricRecord};
 use sc_observability_types::{
-    ActionName, DurationMs, MetricName, ServiceName, SpanId, Timestamp, TraceId,
+    ActionName, DurationMs, Level, LogEvent, MetricName, ProcessIdentity, SchemaVersion,
+    ServiceName, SpanId, TargetCategory, Timestamp, TraceId,
 };
 
+type Logs = RecordingLogExporter<ExportRecord<LogRecord>>;
 type Traces = RecordingTraceExporter<ExportRecord<contracts::CompleteSpan>>;
 type Metrics = RecordingMetricExporter<ExportRecord<CanonicalMetricRecord>>;
+
+const RACE_EMITTERS: usize = 4;
+const PREFILLED_RECORD_ID: usize = 1_000_000;
 
 fn service_name() -> ServiceName {
     ServiceName::new("test-service").expect("valid service")
@@ -41,16 +48,22 @@ fn telemetry_config() -> TelemetryConfig {
 }
 
 fn recording() -> (RuntimeTelemetry, Arc<Traces>, Arc<Metrics>) {
+    let (telemetry, _, traces, metrics) = recording_with_logs();
+    (telemetry, traces, metrics)
+}
+
+fn recording_with_logs() -> (RuntimeTelemetry, Arc<Logs>, Arc<Traces>, Arc<Metrics>) {
+    let logs = Arc::new(Logs::default());
     let traces = Arc::new(Traces::default());
     let metrics = Arc::new(Metrics::default());
     let telemetry = RuntimeTelemetry::new_with_exporters_typed(
         telemetry_config(),
-        Arc::new(RecordingLogExporter::<ExportRecord<LogRecord>>::default()),
+        logs.clone(),
         traces.clone(),
         metrics.clone(),
     )
     .expect("recording telemetry");
-    (telemetry, traces, metrics)
+    (telemetry, logs, traces, metrics)
 }
 
 fn trace(span_id: &str) -> v2::TraceContext {
@@ -83,6 +96,185 @@ fn event(trace: v2::TraceContext, name: &str) -> v2::SpanSignal {
 
 fn exported_spans(traces: &Traces) -> Vec<ExportRecord<contracts::CompleteSpan>> {
     traces.batches.lock().expect("batches poisoned").concat()
+}
+
+fn log_event(id: usize) -> LogEvent {
+    LogEvent {
+        version: SchemaVersion::new("v1").expect("valid schema version"),
+        timestamp: Timestamp::UNIX_EPOCH,
+        level: Level::Info,
+        service: service_name(),
+        target: TargetCategory::new("runtime.shutdown").expect("valid target"),
+        action: ActionName::new("admission.race").expect("valid action"),
+        message: None,
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: None,
+        diagnostic: None,
+        state_transition: None,
+        fields: serde_json::Map::from_iter([("id".to_owned(), serde_json::Value::from(id))]),
+    }
+}
+
+fn metric(id: usize) -> CanonicalMetricRecord {
+    CanonicalMetricRecord::try_new(
+        Timestamp::UNIX_EPOCH,
+        service_name(),
+        MetricName::new(format!("runtime.shutdown.{id}")).expect("valid metric name"),
+        v2::MetricValue::Gauge(v2::FiniteF64::new(1.0).expect("finite gauge")),
+    )
+    .expect("valid metric")
+}
+
+fn span_signals(id: usize) -> (v2::SpanSignal, v2::SpanSignal) {
+    let trace = v2::TraceContext::new(
+        TraceId::new(format!("{id:032x}")).expect("valid trace id"),
+        SpanId::new(format!("{id:016x}")).expect("valid span id"),
+        v2::TraceFlags::new(0x01),
+    );
+    let started = started(trace);
+    let ended = started.clone().end(v2::SpanStatus::Ok, DurationMs::from(1));
+    (
+        v2::SpanSignal::Started(started),
+        v2::SpanSignal::Ended(ended),
+    )
+}
+
+fn race_until_shutdown(
+    telemetry: &Arc<RuntimeTelemetry>,
+    emit: impl Fn(&RuntimeTelemetry, usize) -> Result<(), v2::TelemetryError> + Send + Sync + 'static,
+) -> Vec<usize> {
+    let barrier = Arc::new(Barrier::new(RACE_EMITTERS + 1));
+    let accepted = Arc::new(Mutex::new(Vec::new()));
+    let emit = Arc::new(emit);
+    let mut emitters = Vec::with_capacity(RACE_EMITTERS);
+
+    for worker in 0..RACE_EMITTERS {
+        let barrier = Arc::clone(&barrier);
+        let accepted = Arc::clone(&accepted);
+        let emit = Arc::clone(&emit);
+        let telemetry = Arc::clone(telemetry);
+        emitters.push(thread::spawn(move || {
+            barrier.wait();
+            for id in (worker + 1..).step_by(RACE_EMITTERS) {
+                match emit(&telemetry, id) {
+                    Ok(()) => accepted.lock().expect("accepted ids poisoned").push(id),
+                    Err(v2::TelemetryError::Shutdown { .. }) => break,
+                    Err(error) => panic!("unexpected admission error: {error:?}"),
+                }
+            }
+        }));
+    }
+
+    barrier.wait();
+    telemetry.shutdown_typed().expect("shutdown completes");
+    for emitter in emitters {
+        emitter.join().expect("emitter finishes");
+    }
+    Arc::try_unwrap(accepted)
+        .expect("emitters released accepted ids")
+        .into_inner()
+        .expect("accepted ids poisoned")
+}
+
+fn expected_ids(accepted: Vec<usize>) -> HashSet<usize> {
+    accepted
+        .into_iter()
+        .chain(std::iter::once(PREFILLED_RECORD_ID))
+        .collect()
+}
+
+#[test]
+fn shutdown_drains_every_admitted_log_in_a_concurrent_race() {
+    let (telemetry, logs, _, _) = recording_with_logs();
+    let telemetry = Arc::new(telemetry);
+    telemetry
+        .emit_log(&log_event(PREFILLED_RECORD_ID))
+        .expect("prefilled log is admitted");
+
+    let expected = expected_ids(race_until_shutdown(&telemetry, |telemetry, id| {
+        telemetry.emit_log(&log_event(id))
+    }));
+    let exported: HashSet<_> = logs
+        .batches
+        .lock()
+        .expect("log batches poisoned")
+        .iter()
+        .flatten()
+        .map(|record| {
+            usize::try_from(
+                record.record.event.fields["id"]
+                    .as_u64()
+                    .expect("recorded id is an unsigned integer"),
+            )
+            .expect("recorded id fits usize")
+        })
+        .collect();
+
+    assert_eq!(exported, expected);
+}
+
+#[test]
+fn shutdown_drains_every_completed_admitted_span_in_a_concurrent_race() {
+    let (telemetry, _, traces, _) = recording_with_logs();
+    let telemetry = Arc::new(telemetry);
+    let (started, ended) = span_signals(PREFILLED_RECORD_ID);
+    telemetry
+        .emit_span(&started)
+        .expect("prefilled start is admitted");
+    telemetry
+        .emit_span(&ended)
+        .expect("prefilled end is admitted");
+
+    let expected = expected_ids(race_until_shutdown(&telemetry, |telemetry, id| {
+        let (started, ended) = span_signals(id);
+        telemetry.emit_span(&started)?;
+        telemetry.emit_span(&ended)
+    }));
+    let exported: HashSet<_> = exported_spans(&traces)
+        .into_iter()
+        .map(|record| {
+            usize::from_str_radix(record.record.record.trace().span_id.as_str(), 16)
+                .expect("recorded span id is hexadecimal")
+        })
+        .collect();
+
+    assert_eq!(exported, expected);
+}
+
+#[test]
+fn shutdown_drains_every_admitted_metric_in_a_concurrent_race() {
+    let (telemetry, _, _, metrics) = recording_with_logs();
+    let telemetry = Arc::new(telemetry);
+    telemetry
+        .emit_metric(&metric(PREFILLED_RECORD_ID))
+        .expect("prefilled metric is admitted");
+
+    let expected = expected_ids(race_until_shutdown(&telemetry, |telemetry, id| {
+        telemetry.emit_metric(&metric(id))
+    }));
+    let exported: HashSet<_> = metrics
+        .batches
+        .lock()
+        .expect("metric batches poisoned")
+        .iter()
+        .flatten()
+        .map(|record| {
+            record
+                .record
+                .name()
+                .as_str()
+                .rsplit_once('.')
+                .expect("metric name includes record id")
+                .1
+                .parse::<usize>()
+                .expect("metric record id is numeric")
+        })
+        .collect();
+
+    assert_eq!(exported, expected);
 }
 
 #[test]
