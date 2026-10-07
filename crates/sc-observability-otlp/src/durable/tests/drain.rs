@@ -213,7 +213,11 @@ impl ChildProcess {
             match self.stdout.read_line(&mut line) {
                 Ok(0) => {
                     let status = self.child.take().unwrap().wait().unwrap();
-                    panic!("child {} exited before {phase}: {status}", self.mode);
+                    panic!(
+                        "child {} exited before {phase}: exit code {:?}",
+                        self.mode,
+                        status.code()
+                    );
                 }
                 Ok(_) if line.trim_end() == expected => return,
                 Ok(_) if matches!(line.trim_end(), "READY" | "COMPLETE") => panic!(
@@ -234,7 +238,11 @@ impl ChildProcess {
     }
     fn assert_running(&mut self, phase: &str) {
         if let Some(status) = self.child.as_mut().unwrap().try_wait().unwrap() {
-            panic!("child {} exited before {phase}: {status}", self.mode);
+            panic!(
+                "child {} exited before {phase}: exit code {:?}",
+                self.mode,
+                status.code()
+            );
         }
     }
     fn kill(&mut self) {
@@ -410,7 +418,7 @@ fn child_exit_before_readiness_reports_status() {
         .or_else(|| error.downcast_ref::<&str>().copied())
         .unwrap();
     assert!(message.contains("child exit exited before readiness"));
-    assert!(message.contains("exit status"));
+    assert!(message.contains("exit code Some(0)"), "{message}");
 }
 #[test]
 fn child_exit_before_store_drains_reports_status() {
@@ -428,7 +436,7 @@ fn child_exit_before_store_drains_reports_status() {
         .or_else(|| error.downcast_ref::<&str>().copied())
         .unwrap();
     assert!(message.contains("child exit-after-ready exited before the store drained"));
-    assert!(message.contains("exit status"));
+    assert!(message.contains("exit code Some(0)"), "{message}");
 }
 fn seed(path: &Path, amount: usize) -> Vec<AdmissionReceipt> {
     let config = config(path);
