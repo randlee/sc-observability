@@ -1,4 +1,8 @@
 #![cfg(feature = "v1")]
+#![allow(
+    deprecated,
+    reason = "this compile-only contract fixture intentionally names the released v1 facade"
+)]
 
 //! Compile-only public-signature proof for the opt-in observation facade.
 

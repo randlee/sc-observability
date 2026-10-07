@@ -51,8 +51,13 @@ RESTORED_V1_DEPRECATED_OWNERS: dict[str, tuple[str, ...]] = {
     ),
     "crates/sc-observability-types/src/error_codes.rs": ("ALL", "ALL"),
     "crates/sc-observe/src/lib.rs": (
-        "register_subscriber",
-        "register_projection",
+        "ObservabilityConfig",
+        "ObservabilityBuilder",
+        "Observability",
+        "builder",
+        "emit",
+        "health",
+        "with_observability_health_provider",
     ),
 }
 

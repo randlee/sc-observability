@@ -16,7 +16,8 @@ use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{FlushError, InitError, ShutdownError};
 use sc_observability_types::{ServiceName, ToolName};
 
-use crate::{Observability, ObservabilityBuilder, ObservabilityConfig, RunningFlushError};
+use crate::canonical::RunningFlushError;
+use crate::{Observability, ObservabilityBuilder, ObservabilityConfig};
 
 fn legacy_init_error(error: InitError) -> LegacyInitError {
     LegacyInitError(error.into_context())
@@ -45,7 +46,9 @@ impl ObservabilityConfig {
         note = "Use sc_observe::v2::ObservabilityConfig::default_for(); see migrate-error-api.md."
     )]
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, LegacyInitError> {
-        Self::default_for_v2(tool_name, log_root).map_err(legacy_init_error)
+        crate::v2::ObservabilityConfig::default_for(tool_name, log_root)
+            .map(Self)
+            .map_err(legacy_init_error)
     }
 
     /// Derives a service name while retaining the released root failure contract.
@@ -54,7 +57,7 @@ impl ObservabilityConfig {
         note = "Use sc_observe::v2::ObservabilityConfig::service_name(); see migrate-error-api.md."
     )]
     pub fn service_name(&self) -> Result<ServiceName, LegacyInitError> {
-        self.service_name_v2().map_err(legacy_init_error)
+        self.0.service_name().map_err(legacy_init_error)
     }
 
     /// Builds v1 defaults while retaining the released typed failure contract.
@@ -63,7 +66,9 @@ impl ObservabilityConfig {
         note = "Use sc_observe::v2::ObservabilityConfig::default_for(); see migrate-error-api.md."
     )]
     pub fn default_for_typed(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitFailure> {
-        Self::default_for_v2(tool_name, log_root).map_err(InitFailure::from)
+        crate::v2::ObservabilityConfig::default_for(tool_name, log_root)
+            .map(Self)
+            .map_err(InitFailure::from)
     }
 
     /// Derives a service name while retaining the released typed failure contract.
@@ -72,7 +77,7 @@ impl ObservabilityConfig {
         note = "Use sc_observe::v2::ObservabilityConfig::service_name(); see migrate-error-api.md."
     )]
     pub fn service_name_typed(&self) -> Result<ServiceName, InitFailure> {
-        self.service_name_v2().map_err(InitFailure::from)
+        self.0.service_name().map_err(InitFailure::from)
     }
 }
 
@@ -83,7 +88,10 @@ impl Observability {
         note = "Use sc_observe::v2::Observability::new(); see migrate-error-api.md."
     )]
     pub fn new(config: ObservabilityConfig) -> Result<Self, LegacyInitError> {
-        Self::new_released(config).map_err(legacy_init_error)
+        crate::v2::Observability::builder(config.0)
+            .build_released()
+            .map(Self)
+            .map_err(legacy_init_error)
     }
 
     /// Flushes the shared runtime with the released root failure contract.
@@ -97,7 +105,8 @@ impl Observability {
         note = "Use sc_observe::v2::Observability::flush(); see migrate-error-api.md."
     )]
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.flush_running()
+        self.0
+            .flush_running()
             .map_err(RunningFlushError::into_canonical)
     }
 
@@ -113,7 +122,7 @@ impl Observability {
         note = "Use sc_observe::v2::Observability::shutdown(); see migrate-error-api.md."
     )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
-        self.shutdown_v2()
+        self.0.shutdown()
     }
 
     /// Constructs the existing runtime with the released typed failure contract.
@@ -122,7 +131,10 @@ impl Observability {
         note = "Use sc_observe::v2::Observability::new(); see migrate-error-api.md."
     )]
     pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure> {
-        Self::new_released(config).map_err(InitFailure::from)
+        crate::v2::Observability::builder(config.0)
+            .build_released()
+            .map(Self)
+            .map_err(InitFailure::from)
     }
 
     /// Flushes the existing runtime with the released typed failure contract.
@@ -131,7 +143,8 @@ impl Observability {
         note = "Use sc_observe::v2::Observability::flush(); see migrate-error-api.md."
     )]
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
-        self.flush_running()
+        self.0
+            .flush_running()
             .map_err(RunningFlushError::into_released)
     }
 
@@ -141,7 +154,7 @@ impl Observability {
         note = "Use sc_observe::v2::Observability::shutdown(); see migrate-error-api.md."
     )]
     pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
-        self.shutdown_v2().map_err(ShutdownFailure::from)
+        self.0.shutdown().map_err(ShutdownFailure::from)
     }
 }
 
@@ -152,7 +165,10 @@ impl ObservabilityBuilder {
         note = "Use sc_observe::v2::ObservabilityBuilder::build(); see migrate-error-api.md."
     )]
     pub fn build(self) -> Result<Observability, LegacyInitError> {
-        self.build_released().map_err(legacy_init_error)
+        self.0
+            .build_released()
+            .map(Observability)
+            .map_err(legacy_init_error)
     }
 
     /// Finalizes the existing builder with the released typed failure contract.
@@ -161,7 +177,40 @@ impl ObservabilityBuilder {
         note = "Use sc_observe::v2::ObservabilityBuilder::build(); see migrate-error-api.md."
     )]
     pub fn build_typed(self) -> Result<Observability, InitFailure> {
-        self.build_released().map_err(InitFailure::from)
+        self.0
+            .build_released()
+            .map(Observability)
+            .map_err(InitFailure::from)
+    }
+
+    /// Registers one released subscriber through the v1 compatibility facade.
+    #[deprecated(
+        since = "1.4.0",
+        note = "use sc_observe::v2::ObservabilityBuilder::register_subscriber; see docs/migration/phase-f.md"
+    )]
+    pub fn register_subscriber<T>(
+        self,
+        registration: sc_observability_types::SubscriberRegistration<T>,
+    ) -> Self
+    where
+        T: sc_observability_types::Observable,
+    {
+        Self(self.0.register_released_subscriber(registration))
+    }
+
+    /// Registers one released projection set through the v1 compatibility facade.
+    #[deprecated(
+        since = "1.4.0",
+        note = "use sc_observe::v2::ObservabilityBuilder::register_projection; see docs/migration/phase-f.md"
+    )]
+    pub fn register_projection<T>(
+        self,
+        registration: sc_observability_types::ProjectionRegistration<T>,
+    ) -> Self
+    where
+        T: sc_observability_types::Observable,
+    {
+        Self(self.0.register_released_projection(registration))
     }
 }
 

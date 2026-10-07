@@ -1,4 +1,4 @@
-//! Test-local forwarding adapter; no production integration is implied.
+//! Canonical-v2 test-local forwarding adapter; no production integration is implied.
 use sc_observability_types::{LogEvent, Observation, SinkHealth, SinkHealthState, SinkName};
 use std::io::{Read, Seek};
 use std::path::Path;
@@ -7,11 +7,6 @@ use std::time::{Duration, Instant};
 
 pub trait Consumer: Send + Sync + 'static {
     fn forward(&self, event: LogEvent) -> Result<(), sc_observability_types::ObservationError>;
-}
-impl Consumer for sc_observe::Observability {
-    fn forward(&self, event: LogEvent) -> Result<(), sc_observability_types::ObservationError> {
-        self.emit(Observation::new(event.service.clone(), event))
-    }
 }
 impl Consumer for sc_observe::v2::Observability {
     fn forward(&self, event: LogEvent) -> Result<(), sc_observability_types::ObservationError> {

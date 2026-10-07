@@ -106,7 +106,9 @@ pub mod v2 {
     #[doc(inline)]
     pub use crate::sink::LogSink;
     #[doc(inline)]
-    pub use crate::{ConsoleSink, JsonlFileSink, LoggerConfig, RetainedLogPolicy};
+    pub use crate::{
+        ConsoleSink, JsonlFileSink, LoggerConfig, RetainedLogPolicy, SinkRegistration,
+    };
     #[doc(inline)]
     pub use sc_observability_types::v2::{EventError, FlushError, InitError, LogSinkError};
 }

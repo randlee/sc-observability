@@ -278,7 +278,7 @@ pub fn create_test_blocking_core_backend(
         };
         let mut builder = sc_observability::v2::Logger::builder(config)
             .map_err(|error| conversion::canonical(&error, conversion::Kind::Internal))?;
-        builder.register_sink(sc_observability::SinkRegistration::typed(Arc::new(
+        builder.register_sink(sc_observability::v2::SinkRegistration::typed(Arc::new(
             TestBlockingSink {
                 gate: gate_for_sink,
             },

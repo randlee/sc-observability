@@ -11,7 +11,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegistration};
+use sc_observability::v2::LogSink;
+use sc_observability::{SinkHealth, SinkHealthState, SinkName, SinkRegistration};
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
     BridgeOptions, EventLevel, LoggerConfig, PolicyRejection, ServiceName, TargetCategory,
@@ -51,7 +52,7 @@ struct RecordingSink {
 }
 
 impl LogSink for RecordingSink {
-    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
         self.events
             .lock()
             .expect("recording lock")
@@ -133,7 +134,7 @@ fn attach_with_config(
     configure(&mut config);
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut builder = sc_observability::v2::LoggerBuilder::new(config).expect("builder");
-    builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
+    builder.register_sink(SinkRegistration::typed(Arc::new(RecordingSink {
         events: Arc::clone(&events),
     })));
     let logger = Arc::new(builder.build().expect("host logger"));

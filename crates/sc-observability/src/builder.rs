@@ -17,8 +17,8 @@ impl SinkRegistration {
     ///
     /// The registration stores the input [`Arc`] directly, with no adapter, so
     /// the canonical sink's structured diagnostic and source reach the runtime
-    /// unchanged. Released [`crate::LogSink`] values register through
-    /// [`SinkRegistration::new`] instead.
+    /// unchanged. Released [`crate::LogSink`] values require an explicit
+    /// migration to the canonical sink contract before registration.
     #[must_use]
     pub fn typed(sink: Arc<dyn LogSink>) -> Self {
         Self { sink, filter: None }
