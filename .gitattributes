@@ -10,3 +10,8 @@ bindings/tauri/permissions/schemas/*.json text eol=lf
 schema/api/** text eol=lf
 crates/sc-observability-otlp/src/durable/schema.sql text eol=lf
 crates/sc-observability-otlp/src/durable/tests/fixtures/schema-v1.sql text eol=lf
+
+# Generated sc-otel manual: cli_docs::generated_manual_is_current compares exact bytes.
+docs/manual/sc-otel/** text eol=lf
+site/manual/sc-otel/** text eol=lf
+crates/sc-otel-cli/src/manual.txt text eol=lf

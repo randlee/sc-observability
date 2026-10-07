@@ -28,7 +28,7 @@
     {"artifact": "sc-observability-tauri", "package": "sc-observability-tauri", "cargo_toml": "bindings/tauri/Cargo.toml", "publish": true, "publish_order": 9, "wait_after_publish_seconds": 30},
     {"artifact": "sc-observability-py", "package": "sc-observability-py", "cargo_toml": "bindings/python/sc-observability-py/Cargo.toml", "publish": true, "publish_order": 10, "wait_after_publish_seconds": 0}
   ],
-  "release_binaries": [],
+  "release_binaries": [{"name": "sc-otel", "bundled_paths": [{"source": "docs/manual/sc-otel", "destination": "share/doc/sc-otel", "homebrew_destination_components": ["doc", "sc-otel"]}]}],
   "python_packages": [
     {"artifact": "sc-observability-py-wheel", "package": "sc-observability", "manifest": "bindings/python/sc-observability-py/pyproject.toml", "module": "sc_observability", "publish": "pypi"}
   ],
