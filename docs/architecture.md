@@ -1875,3 +1875,9 @@ No transport implementation or runtime dependency enters the types layer.
   removable; mixed-use DTO/generated/assembly symbols still need individual
   confirmation. ATM's plan is QA-PASS; this is consumer alignment, not upstream
   implementation or compile approval.
+
+- **Shared-model removal ownership**: the integration sprint owns the schema
+  generator, shared schema/conformance fixtures and generated TypeScript/Python
+  outputs affected by confirmed OTel-only DTO deletion. Regenerate those outputs
+  through existing tooling and preserve logging contracts. CLI and Python
+  frontend work remains parallel in their disjoint package directories.
