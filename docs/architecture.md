@@ -1816,8 +1816,9 @@ No transport implementation or runtime dependency enters the types layer.
 
 ### ADR-023: Native OpenTelemetry And Thin Synchronous Frontends
 
-- **Status**: Proposed implementation; operator scope decided 2026-10-07,
-  implementation awaits Phase H plan-hardening and quality-mgr approval.
+- **Status**: Accepted 2026-10-07 by the lead after Phase H plan-QA round 2
+  PASS at `017ffecc` (zero open findings). Implementation dispatch remains a
+  separate authorization.
 - **Context**: 1.5.0 added a custom SQLite durable store and duplicate signal,
   lifecycle and transport implementations. Rand rejects those additions and
   explicitly authorizes removal without the normal deprecation step. Accepted
@@ -1929,7 +1930,8 @@ No transport implementation or runtime dependency enters the types layer.
 
 - **Frontend method boundary**: h-1 fixes `sync::Client::send_log`, `send_span`
   and `send_metrics` signatures in its design before either parallel frontend
-  starts. Parameters are native resource/scope, native log values, completed SDK
+  starts. Parameters are native resource/scope, a closure over native SdkLogRecord
+  (named timestamp/context setters), completed SDK
   SpanData (not SpanBuilder, which lacks completion metadata in 0.33.0), and
   a closure over the native Meter; there are no mirror request structs. Both
   frontends use the upstream types through OTLP re-exports. The shared implementation owns

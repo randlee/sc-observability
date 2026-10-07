@@ -673,11 +673,15 @@ metrics and profiles, including the pinned development-version profile protocol.
 Operator decisions 2026-10-07: remove the unused 1.5.0 OTel additions without a
 deprecation release, preserve accepted v2 logging, use the official blocking
 HTTP exporter for a thin shared sync client, and authorize minimal existing
-LogSink integration for file/OTel/both. Implementation awaits plan approval.
+LogSink integration for file/OTel/both. Plan-QA round 2 passed 2026-10-07;
+ADR-023 is Accepted. Implementation dispatch remains separately authorized.
 For Phase H these requirements supersede custom OTel facade, dual custom
 transport, durable admission, and full mirror-model requirements in OTLP-002,
 OTLP-005..014, OTLP-017, OTLP-020..024 and PHD-005..013. They do not retire
 logging requirements or erase historical release contracts.
+Status for Phase H: OTLP-002, OTLP-005..014, OTLP-017, OTLP-020..024 and
+PHD-005..013 are superseded only for the rejected OTel provisions by H-001..H-008
+and ADR-023; historical text and unrelated logging obligations remain intact.
 
 - H-001 Existing synchronous file logging and accepted canonical v2 logging,
   macros, levels, redaction, query/follow, nonblocking admission, retention and
