@@ -1811,3 +1811,67 @@ version 1.5.0 with no major-version bump. The producer contract, constructors, s
 error inventory and DTO handoffs are specified in
 [API design](api-design.md#phase-d-canonical-types-and-wire-handoff).
 No transport implementation or runtime dependency enters the types layer.
+
+
+### ADR-023: Native OpenTelemetry And Thin Synchronous Frontends
+
+- **Status**: Proposed implementation; operator scope decided 2026-10-07,
+  implementation awaits Phase H plan-hardening and quality-mgr approval.
+- **Context**: 1.5.0 added a custom SQLite durable store and duplicate signal,
+  lifecycle and transport implementations. Rand rejects those additions and
+  explicitly authorizes removal without the normal deprecation step. Accepted
+  v2 local logging is not rejected. The official 0.33.0 exporter supports both
+  blocking HTTP and native Tokio use.
+- **Decision**: Keep the existing sc-observability-otlp package boundary, replace
+  its OTel internals with native SDK/exporter access, shared configuration inputs (existing LoggerConfig and native SDK builders,
+  no parallel config model) and the minimal LogSink mapping. CLI and PyO3 call one thin synchronous client
+  using official HTTP/protobuf + reqwest-blocking-client. Native Tokio callers
+  use official async exporters and SDK providers directly. No new crate or
+  replacement public signal/provider model. The core logger gains no OTel or
+  Tokio dependency. Production dependency from the upper OTLP crate to the
+  existing core LogSink is permitted; update the existing dependency allow-list
+  and boundary record together, never bypass validation.
+- **Routing**: Existing core logger owns level filtering, redaction and file
+  fanout. OTel sink converts a redacted LogEvent directly to SDK log record and
+  emits through the native logger. Provider lifecycle remains caller-owned.
+  Existing tracing/log bridge paths must compose without a second global owner
+  or duplicate emissions. Sink admission is not a delivery guarantee.
+- **Synchronous client**: Construct native exporters with an explicitly selected
+  blocking HTTP client, use native SpanData/ResourceMetrics/LogBatch inputs and
+  native errors. Complete the upstream export future synchronously with a
+  standard executor; no bespoke runtime, worker, retry or queue. Expose native
+  exporter access rather than hiding SDK capabilities. CLI/Python may convert
+  their primitive arguments into these native inputs at their language boundary.
+- **Removal**: Delete old durable-store, custom SDK/sync_http transport, mirror
+  signal models and their unused dependencies after consumers move. No database
+  converter, v1 shell or silent preservation. Preserve logging contracts and
+  ordinary log files. Existing user SQLite files remain untouched. Historical
+  behavior tests are reused where applicable; tests solely proving rejected
+  admission semantics are deleted. Unused code in the affected boundaries is
+  removed after consumer checks. Solar owns the ATM BD alignment: agree native
+  0.33.0 features/configuration/resource conventions before fixing the sprint
+  contract, and obtain item-by-item confirmation before any core/-log/-types
+  deletion. ATM team-lead receives the same proposed changes. No answer means
+  preserve, not permission to delete.
+- **Supersedes for Phase H**: ADR-018's shared custom backend/lifecycle,
+  ADR-019's custom OTel transport/retry/mirror-model decisions, ADR-020's
+  compatibility requirement only for rejected OTel additions, and ADR-021's
+  durable submission architecture. Other logging/binding provisions remain.
+- **Evidence/limits**: An isolated 0.33.0 probe exported a span and metric from
+  ordinary synchronous main with the official blocking HTTP exporter and no
+  caller Tokio runtime. It is feasibility evidence, not release qualification.
+  Standard SDK timeouts do not imply forcible worker cancellation or remote
+  persistence. Native log recording can drop under SDK backpressure. Optional
+  Collector persistent forwarding is external deployment configuration.
+
+- **ATM alignment** (Solar, 2026-10-07): exact official API/SDK/OTLP 0.33.0;
+  ATM uses grpc-tonic and Tokio async processors/readers with unwanted defaults
+  disabled. Our blocking HTTP client is an optional synchronous-client feature,
+  absent from the native Tokio/LogSink-only dependency path. Check actual feature
+  unification, not only package defaults. Explicit application endpoint/auth and
+  resource identity take precedence over ambient OTEL settings. Retained event
+  service fields are distinct from resource.service.name. Exclude SDK diagnostic
+  events from recursive OTel routing. Solar confirms the named OTel-only models
+  removable; mixed-use DTO/generated/assembly symbols still need individual
+  confirmation. ATM's plan is QA-PASS; this is consumer alignment, not upstream
+  implementation or compile approval.

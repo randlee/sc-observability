@@ -666,3 +666,82 @@ metrics and profiles, including the pinned development-version profile protocol.
   Payload fields include the profile string-index forms and non-finite doubles
   (proto-JSON `"NaN"`, `"Infinity"`, `"-Infinity"`). `tracez.proto` (zPages) is
   not an OTLP payload and is outside this scope.
+
+
+## Phase H — Native OpenTelemetry Simplification (proposed implementation)
+
+Operator decisions 2026-10-07: remove the unused 1.5.0 OTel additions without a
+deprecation release, preserve accepted v2 logging, use the official blocking
+HTTP exporter for a thin shared sync client, and authorize minimal existing
+LogSink integration for file/OTel/both. Implementation awaits plan approval.
+For Phase H these requirements supersede custom OTel facade, dual custom
+transport, durable admission, and full mirror-model requirements in OTLP-002,
+OTLP-005..013, OTLP-017, OTLP-020..024 and PHD-005..013. They do not retire
+logging requirements or erase historical release contracts.
+
+- H-001 Existing synchronous file logging and accepted canonical v2 logging,
+  macros, levels, redaction, query/follow, nonblocking admission, retention and
+  binding lifecycle shall remain intact. OTel/Tokio dependencies stay above the
+  core logging boundary. Current sc-compose and planned ATM logging consumers
+  must remain supported; absence of current callers is not removal permission.
+- H-002 The OTel path shall use official opentelemetry, opentelemetry_sdk and
+  opentelemetry-otlp APIs and types. The Tokio path shall expose native exporters,
+  providers, instruments and standard customization; no replacement signal model,
+  provider facade, exporter trait, retry queue or transport implementation.
+  Native synchronous recording remains synchronous; genuine exporter futures
+  remain awaitable. Reuse existing LoggerConfig and native SDK configuration/builders; a shared
+  application configuration supplies their values. No parallel config hierarchy
+  or model layer. Minimal setup helpers are allowed only to remove duplication.
+- H-003 A thin synchronous client shall use the official OTLP HTTP/protobuf
+  exporter with its blocking reqwest client, sharing configuration with the
+  Tokio path. It shall require no caller-owned Tokio runtime. Transport feature
+  unification must not accidentally select an async HTTP client. Export methods
+  shall return actual native exporter outcomes, not durable admission receipts
+  or promises of remote persistence. No application database or extra queue.
+- H-004 Minimal mapping through the existing LogSink extension point shall
+  support file-only, OTel-only and both. The existing logger supplies one-event
+  fanout, level filtering and redaction before either destination. Mapping uses
+  native SDK log records. Preserve structured values and trace correlation or
+  report unsupported values explicitly. File-only creates no OTel provider;
+  OTel-only creates no file. Do not install a global subscriber implicitly,
+  duplicate events through tracing/log bridges, block sink writes on network
+  export, or shut down a caller-owned SDK provider. Macro and tracing input
+  composition must be tested without replacing the existing file logger.
+- H-005 sc-otel and Python PyO3 shall expose equivalent log/span/metric send
+  operations over that one sync client and configuration. CLI is a thin Clap
+  frontend and Python a thin language binding; neither owns a transport,
+  durable store, retry worker or alternate payload model. Python blocking I/O
+  releases the GIL. Native Rust APIs retain the full supported SDK surface;
+  these frontends need not reimplement every native SDK instrumentation API.
+- H-006 Remove custom SQLite storage, durable receipt/status/lease/replay APIs,
+  custom SDK and sync_http implementations, superseded signal mirrors, and
+  obsolete dependencies and tests of removed contracts. No v1 compatibility
+  stubs for rejected 1.5.0 OTel additions. Preserve reused wire/behavior fixtures
+  and shared logging types/errors. Never delete an existing user database
+  automatically. No OTel migration notes, deprecation gates, compatibility tests or historical
+  baseline-equivalence work. Profiles and
+  private historical-envelope import APIs introduced with the rejected mirror
+  contract are removed, not reimplemented around SDK 0.33.0. Delete other unused
+  code identified in the affected boundaries as well. Before deleting any core,
+  -log or -types symbol, obtain Solar (ATM BD replan owner) item-by-item
+  confirmation against current and planned consumers; copy ATM team-lead.
+  Preserve any symbol without that confirmation. Align official 0.33.0 features,
+  shared configuration and resource conventions with Solar before finalizing
+  the native-library sprint contract.
+- H-007 Return native network timeout/rejection errors at the synchronous
+  export boundary and document upstream partial-success handling accurately. SDK log admission is not a delivery
+  receipt. Use standard exporter timeouts and lifecycle; do not claim cancelling
+  a wait kills a blocking task or that every processor honors an overall timeout.
+  The host retains its process-exit policy. Optional off-the-shelf Collector
+  forwarding is deployment guidance, not an application-owned durable subsystem
+  or a required new ATM dependency.
+- H-008 File plus OTel simultaneous logging is the only new capability. Each
+  sprint shall list any added wrapper and its necessity; default is none.
+  Phase H shall finish with net deletion of source code, report actual
+  added/deleted source and test lines separately, and preserve relevant tests.
+  Reuse existing local collectors/capture fixtures to prove native sync and Tokio
+  export, equivalent installed CLI/Python payloads, and file/OTel/both. Update
+  generated Clap manual/web/installer documentation through the existing release
+  pipeline. CI remains the publication gate, not a prerequisite for sanity/QA
+  dispatch. No unrelated cleanup, new process framework, or release publication
+  is included in this planning authorization.
