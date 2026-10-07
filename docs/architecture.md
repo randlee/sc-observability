@@ -1896,3 +1896,7 @@ No transport implementation or runtime dependency enters the types layer.
   The integration sprint is rooted in `BOUNDARY-ScObservabilityOtlp`; its
   accepted cross-boundary removal reason is recorded in the sprint bead
   `metadata.vertical_rationale`. No new package boundary is introduced.
+
+  Existing validation recipes that select removed durable-store features are
+  updated in the integration sprint to audit the native dependency graphs;
+  license/advisory checks and surviving dependency bans remain enforced.
