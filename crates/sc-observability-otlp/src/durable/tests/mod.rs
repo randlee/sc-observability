@@ -5,7 +5,7 @@ use sc_observability_types::otlp::submission::*;
 use sc_observability_types::{otlp::submission::testing::DeliveryOutcome, v2::ExportError};
 use std::{
     collections::{HashMap, VecDeque},
-    io::Write,
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
 };
 mod backpressure;

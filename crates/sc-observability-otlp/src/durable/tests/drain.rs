@@ -202,27 +202,48 @@ fn shutdown_deadline_does_not_join_stalled_exporter() {
 
 struct ChildProcess {
     child: Option<std::process::Child>,
-    ready: std::sync::mpsc::Receiver<()>,
+    stdin: std::process::ChildStdin,
+    stdout: BufReader<std::process::ChildStdout>,
     mode: String,
-    address: std::net::SocketAddr,
 }
 impl ChildProcess {
-    fn ready(&self) {
-        self.ready
-            .recv()
-            .unwrap_or_else(|error| panic!("child {} exited before readiness: {error}", self.mode));
+    fn signal(&mut self, expected: &str, phase: &str) {
+        loop {
+            let mut line = String::new();
+            match self.stdout.read_line(&mut line) {
+                Ok(0) => {
+                    let status = self.child.take().unwrap().wait().unwrap();
+                    panic!("child {} exited before {phase}: {status}", self.mode);
+                }
+                Ok(_) if line.trim_end() == expected => return,
+                Ok(_) if matches!(line.trim_end(), "READY" | "COMPLETE") => panic!(
+                    "child {} sent {line:?} instead of {expected} during {phase}",
+                    self.mode
+                ),
+                Ok(_) => {}
+                Err(error) => panic!("failed to read child {} {phase}: {error}", self.mode),
+            }
+        }
+    }
+    fn ready(&mut self) {
+        self.signal("READY", "readiness");
+    }
+    fn complete(&mut self) {
+        self.stdin.write_all(b"COMPLETE\n").unwrap();
+        self.stdin.flush().unwrap();
     }
     fn kill(&mut self) {
         self.child.as_mut().unwrap().kill().unwrap();
     }
     fn wait(&mut self) -> std::process::ExitStatus {
+        if self.mode == "controlled" {
+            self.signal("COMPLETE", "completion");
+        }
         self.child.take().unwrap().wait().unwrap()
     }
 }
 impl Drop for ChildProcess {
     fn drop(&mut self) {
-        // Unblock the control listener even if the child failed before signaling.
-        let _ = std::net::TcpStream::connect(self.address);
         if let Some(mut child) = self.child.take() {
             let _ = child.kill();
             let _ = child.wait();
@@ -230,47 +251,49 @@ impl Drop for ChildProcess {
     }
 }
 fn child(path: &Path, mode: &str) -> ChildProcess {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = listener.local_addr().unwrap();
-    let child = std::process::Command::new(std::env::current_exe().unwrap())
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
             "durable::tests::drain::child_drainer",
             "--ignored",
+            "--nocapture",
+            "--quiet",
         ])
         .env("SC_D33_TEST_STORE", path)
         .env("SC_D33_TEST_MODE", mode)
-        .env("SC_D33_TEST_READY", address.to_string())
-        .stdout(std::process::Stdio::null())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::inherit())
         .spawn()
         .unwrap();
-    let (ready_send, ready) = std::sync::mpsc::sync_channel(1);
-    // The listener establishes readiness; process termination is observed by
-    // `ChildProcess::wait`, including when a child exits before draining.
-    std::thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
-            use std::io::Read;
-            let mut byte = [0];
-            if stream.read_exact(&mut byte).is_ok() && byte == [1] {
-                let _ = ready_send.send(());
-            }
-        }
-    });
+    let stdin = child.stdin.take().unwrap();
+    let stdout = BufReader::new(child.stdout.take().unwrap());
     ChildProcess {
         child: Some(child),
-        ready,
+        stdin,
+        stdout,
         mode: mode.to_owned(),
-        address,
     }
 }
 fn signal_ready() {
-    signal_parent(1);
+    signal_parent("READY");
 }
-fn signal_parent(signal: u8) {
-    let mut stream =
-        std::net::TcpStream::connect(std::env::var("SC_D33_TEST_READY").unwrap()).unwrap();
-    stream.write_all(&[signal]).unwrap();
+fn signal_complete() {
+    signal_parent("COMPLETE");
+}
+fn signal_parent(signal: &str) {
+    let mut stdout = std::io::stdout().lock();
+    writeln!(stdout, "{signal}").unwrap();
+    stdout.flush().unwrap();
+}
+fn wait_until_store_is_empty(path: &Path) {
+    loop {
+        let db = store::reader(&config(path).store_path).unwrap();
+        if query::snapshot(&db, None).unwrap().is_empty() {
+            return;
+        }
+        std::thread::yield_now();
+    }
 }
 struct CrashExporter {
     inner: ScriptedExporter,
@@ -295,6 +318,9 @@ impl SubmissionExporter for CrashExporter {
 fn child_drainer() {
     let path = PathBuf::from(std::env::var_os("SC_D33_TEST_STORE").expect("parent supplies store"));
     let mode = std::env::var("SC_D33_TEST_MODE").unwrap();
+    if mode == "exit" {
+        return;
+    }
     let exporter: Arc<dyn SubmissionExporter> = if mode == "crash" {
         Arc::new(CrashExporter {
             inner: ScriptedExporter::new(&path),
@@ -314,6 +340,18 @@ fn child_drainer() {
         loop {
             std::thread::park();
         }
+    }
+    if mode == "controlled" {
+        signal_ready();
+        let mut complete = String::new();
+        std::io::stdin().read_line(&mut complete).unwrap();
+        assert_eq!(
+            complete, "COMPLETE\n",
+            "parent ends concurrent drainers once clean"
+        );
+        client.shutdown(DEADLINE).unwrap();
+        signal_complete();
+        return;
     }
     if mode == "drain" {
         signal_ready();
@@ -347,6 +385,20 @@ fn receipt_after_commit() {
             .unwrap(),
         "wal"
     );
+}
+#[test]
+fn child_exit_before_readiness_reports_status() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut process = child(dir.path(), "exit");
+    let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| process.ready()))
+        .expect_err("an exited child cannot become ready");
+    let message = error
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| error.downcast_ref::<&str>().copied())
+        .unwrap();
+    assert!(message.contains("child exit exited before readiness"));
+    assert!(message.contains("exit status"));
 }
 fn seed(path: &Path, amount: usize) -> Vec<AdmissionReceipt> {
     let config = config(path);
@@ -382,10 +434,13 @@ fn delivery_counts(path: &Path) -> HashMap<String, usize> {
 fn two_process_drainers_no_loss() {
     let dir = tempfile::tempdir().unwrap();
     let receipts = seed(dir.path(), crate::constants::DRAIN_BATCH_SIZE * 2);
-    let mut first = child(dir.path(), "drain");
-    let mut second = child(dir.path(), "drain");
+    let mut first = child(dir.path(), "controlled");
+    let mut second = child(dir.path(), "controlled");
     first.ready();
     second.ready();
+    wait_until_store_is_empty(dir.path());
+    first.complete();
+    second.complete();
     assert!(first.wait().success());
     assert!(second.wait().success());
     let counts = delivery_counts(dir.path());
