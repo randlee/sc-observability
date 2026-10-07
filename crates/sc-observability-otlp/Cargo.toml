@@ -53,6 +53,10 @@ tokio = { workspace = true, features = ["test-util"] }
 # in integration tests only; production SDK transport keeps its pinned features.
 tonic = { workspace = true, features = ["router"] }
 rustls = { version = "=0.23.45", features = ["ring"] }
+# Decode the OTLP protobuf requests the synchronous client sends to the
+# loopback test collector.
+opentelemetry-proto = { workspace = true }
+prost = { workspace = true }
 
 [lints]
 workspace = true

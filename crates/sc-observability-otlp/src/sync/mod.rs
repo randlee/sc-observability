@@ -277,25 +277,31 @@ impl Client {
         Ok(self)
     }
 
-    /// Trusts an additional PEM root certificate alongside the platform
-    /// trust store. Certificate verification is always enabled.
+    /// Trusts the root certificates in a PEM certificate or bundle alongside
+    /// the platform trust store. Certificate verification is always enabled.
     ///
     /// # Errors
     ///
     /// Returns [`SyncError::Validation`] with
     /// [`error_codes::sync::INVALID_CONFIG`](crate::error_codes::sync::INVALID_CONFIG)
-    /// when the certificate cannot be parsed or loaded, or with
+    /// when the PEM holds no certificate or one cannot be parsed or loaded, or with
     /// [`error_codes::sync::RUNTIME_ENTERED`](crate::error_codes::sync::RUNTIME_ENTERED)
     /// inside an entered Tokio runtime.
     pub fn with_root_certificate_pem(mut self, pem: &[u8]) -> Result<Self, SyncError> {
         ensure_no_runtime()?;
-        let certificate = otel_reqwest::Certificate::from_pem(pem).map_err(|error| {
+        let certificates = otel_reqwest::Certificate::from_pem_bundle(pem).map_err(|error| {
             SyncError::validation(
                 codes::INVALID_CONFIG,
                 format!("invalid root certificate: {error}"),
             )
         })?;
-        self.root_certificates.push(certificate);
+        if certificates.is_empty() {
+            return Err(SyncError::validation(
+                codes::INVALID_CONFIG,
+                "root certificate PEM contains no certificate",
+            ));
+        }
+        self.root_certificates.extend(certificates);
         // Load the trust store once now so a bad certificate is a
         // configuration error rather than an export failure later.
         drop(self.http_client()?);
