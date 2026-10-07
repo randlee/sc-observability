@@ -10,6 +10,7 @@ pub(crate) mod submission;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::lifecycle::LifecycleHealth;
 #[cfg(any(test, feature = "sync-http", feature = "otlp-sdk"))]
@@ -58,8 +59,18 @@ pub(crate) trait ExporterLifecycle: Send + Sync {
     /// Flushes all work admitted before the backend's barrier.
     fn flush_blocking(&self) -> Result<(), ExportError>;
 
+    /// Flushes all work admitted before the backend's barrier with an explicit deadline.
+    fn flush_blocking_with_timeout(&self, _timeout: Duration) -> Result<(), ExportError> {
+        self.flush_blocking()
+    }
+
     /// Shuts the backend down after its ordered barrier.
     fn shutdown_blocking(&self) -> Result<(), ExportError>;
+
+    /// Shuts the backend down after its ordered barrier with an explicit deadline.
+    fn shutdown_blocking_with_timeout(&self, _timeout: Duration) -> Result<(), ExportError> {
+        self.shutdown_blocking()
+    }
 }
 
 /// Object-safe exporter for projected log records.

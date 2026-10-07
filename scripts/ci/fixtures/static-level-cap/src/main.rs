@@ -31,7 +31,7 @@ fn main() {
     assert!(capped.is_err(), "trace must be rejected by the Info static cap");
     sc_observability_log::v2::init(config(&root, LevelFilter::Info), options)
         .expect("info remains supported by the static cap")
-        .shutdown(Duration::from_secs(5))
+        .shutdown_with_timeout(Duration::from_secs(5))
         .expect("fixture bridge shuts down");
     let _ = std::fs::remove_dir_all(root);
 }

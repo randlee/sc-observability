@@ -904,9 +904,9 @@ mod sdk_backend {
 
             super::bridge::deliver(MESSAGE, observability.clone(), root.path(), false);
             // The shared lifecycle barrier is async-only inside the entered runtime.
-            assert!(telemetry.flush_typed().is_err());
+            assert!(telemetry.flush().is_err());
             telemetry
-                .flush_async_typed()
+                .flush_async()
                 .await
                 .expect("SDK lifecycle flush delivers to the collector");
             assert_healthy(&telemetry.health());
@@ -919,7 +919,7 @@ mod sdk_backend {
             observability.flush().expect("observe flush");
 
             telemetry
-                .shutdown_async_typed()
+                .shutdown_async()
                 .await
                 .expect("SDK lifecycle shutdown");
             assert!(matches!(
@@ -1065,7 +1065,7 @@ mod sync_http_backend {
 
         super::bridge::deliver(MESSAGE, observability.clone(), root.path(), true);
         telemetry
-            .flush_typed()
+            .flush()
             .expect("sync-http flush delivers to the collector");
         assert_healthy(&telemetry.health());
         assert_healthy(
@@ -1076,12 +1076,12 @@ mod sync_http_backend {
         );
         observability.flush().expect("observe flush");
 
-        telemetry.shutdown_typed().expect("sync-http shutdown");
+        telemetry.shutdown().expect("sync-http shutdown");
         assert!(matches!(
             telemetry.emit_log(&log_event("after-shutdown")),
             Err(TelemetryError::Shutdown)
         ));
-        assert!(telemetry.flush_typed().is_err());
+        assert!(telemetry.flush().is_err());
         observability.shutdown().expect("observe shutdown");
         super::bridge::reject_closed(observability.clone(), root.path());
 
@@ -1157,7 +1157,7 @@ mod sync_http_backend {
 
         super::bridge::deliver(MESSAGE, observability.clone(), root.path(), false);
         telemetry
-            .flush_typed()
+            .flush()
             .expect("sync-http flush delivers to the collector");
         assert_healthy(&telemetry.health());
         assert_healthy(
@@ -1168,12 +1168,12 @@ mod sync_http_backend {
         );
         observability.flush().expect("observe flush");
 
-        telemetry.shutdown_typed().expect("sync-http shutdown");
+        telemetry.shutdown().expect("sync-http shutdown");
         assert!(matches!(
             telemetry.emit_log(&log_event("after-shutdown")),
             Err(V2TelemetryError::Shutdown { .. })
         ));
-        assert!(telemetry.flush_typed().is_err());
+        assert!(telemetry.flush().is_err());
         observability.shutdown().expect("observe shutdown");
         super::bridge::reject_closed(observability.clone(), root.path());
 

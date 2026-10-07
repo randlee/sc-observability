@@ -18,6 +18,46 @@ The supported OTLP implementations are `otlp-sdk` (an async/Tokio host) and
 OTLP users construct `sc_observability_otlp::v2` configuration and select a
 backend directly.
 
+## OTLP span assembly types
+
+The released `sc_observability_otlp::v1::CompleteSpan` and
+`sc_observability_otlp::v1::SpanAssembler` have no public v2 equivalents. The
+canonical producer types are `sc_observability_types::v2::SpanRecord` and
+`SpanSignal`; `sc_observability_otlp::v2::Telemetry` assembles those signals
+internally into `sc_observability_types::otlp::OtlpCompleteSpan`. Its
+`V2SpanAssembler` is internal, so applications that used the released v1
+assembly types have no drop-in public replacement for them.
+
+## Lifecycle consolidation
+
+The canonical lifecycle handles use a shared-reference shutdown contract. The
+no-argument operations use the configured lifecycle deadline; callers that
+need a distinct deadline use the corresponding `_with_timeout` method. The
+retained v1 items below are deprecated compatibility aliases.
+
+| Changed item | Canonical replacement |
+| --- | --- |
+| v1 `LogGuard::flush(Duration)` | `sc_observability_log::v2::LogGuard::flush()` or `flush_with_timeout(Duration)` |
+| v1 `LogGuard::shutdown(self, Duration)` | `sc_observability_log::v2::LogGuard::shutdown()` or `shutdown_with_timeout(Duration)` |
+| v1 `LogControl::flush(Duration)` | `sc_observability_log::v2::LogControl::flush()` or `flush_with_timeout(Duration)` |
+| v2 `LogGuard::flush(Duration)` | `LogGuard::flush()` or `LogGuard::flush_with_timeout(Duration)` |
+| v2 `LogGuard::shutdown(self, Duration)` | `LogGuard::shutdown()` or `LogGuard::shutdown_with_timeout(Duration)` |
+| v2 `LogControl::flush(Duration)` | `LogControl::flush()` or `LogControl::flush_with_timeout(Duration)` |
+| v1 `Telemetry::flush_typed()` | `sc_observability_otlp::v2::Telemetry::flush()` |
+| v1 `Telemetry::flush_async_typed()` | `sc_observability_otlp::v2::Telemetry::flush_async()` |
+| v1 `Telemetry::shutdown_typed()` | `sc_observability_otlp::v2::Telemetry::shutdown()` |
+| v1 `Telemetry::shutdown_async_typed()` | `sc_observability_otlp::v2::Telemetry::shutdown_async()` |
+| v2 `RuntimeTelemetry::flush_typed()` | `RuntimeTelemetry::flush()` or `flush_with_timeout(Duration)` |
+| v2 `RuntimeTelemetry::shutdown_typed()` | `RuntimeTelemetry::shutdown()` or `shutdown_with_timeout(Duration)` |
+| v2 `RuntimeTelemetry::flush_async_typed()` | `RuntimeTelemetry::flush_async()` |
+| v2 `RuntimeTelemetry::shutdown_async_typed()` | `RuntimeTelemetry::shutdown_async()` |
+| v1 `Logger::shutdown(self) -> Logger<Stopped>` | `sc_observability::v2::Logger::shutdown()` or `shutdown_with_timeout(Duration)` |
+| v2 `Logger<State>` (`Running`/`Stopped` typestate) | `Logger` (no type parameter) |
+| v2 `Logger::shutdown(self) -> Logger<Stopped>` | `Logger::shutdown()` or `Logger::shutdown_with_timeout(Duration)` |
+| v2 `Logger::flush()` (configured deadline only) | `Logger::flush()` or `Logger::flush_with_timeout(Duration)` |
+| v2 `sc_observe::v2::Observability::flush()` (configured deadline only) | `Observability::flush()` or `Observability::flush_with_timeout(Duration)` |
+| v2 `sc_observe::v2::Observability::shutdown()` (configured deadline only) | `Observability::shutdown()` or `Observability::shutdown_with_timeout(Duration)` |
+
 ## Deferred ledger rows
 
 The 68 entries below are the deferred consumer-migration entries from the
@@ -94,7 +134,7 @@ repositories have stayed still.
 | F7-53 | root `InitError` | `sc_observability_log::v2::InitError` | `crates/btit-app/src/logging.rs:73` |
 | F7-54 | root `LogControl` | `sc_observability_log::v2::LogControl` | `crates/sc-observability-log-consumer-check/src/lib.rs:14,22` |
 | F7-55 | root `BridgeHealthReport` | `sc_observability_log::v2::BridgeHealthReport` | `crates/sc-observability-log-consumer-check/src/lib.rs:22` |
-| F7-56 | root `FailureReport` | `sc_observability_log::v2::FailureReport` | `crates/sc-observability-log-consumer-check/src/lib.rs:22` |
+| F7-56 | root `FailureReport` | `sc_observability_log::v2::BridgeHealthReport.helpers` | `crates/sc-observability-log-consumer-check/src/lib.rs:22` |
 | F7-57 | root `LoggerConfig` | `sc_observability_log::v2::LoggerConfig` | `crates/sc-observability-log/tests/compat_events.rs:15` |
 | F7-58 | root `BridgeOptions` | `sc_observability_log::v2::BridgeOptions` | `crates/sc-observability-log/tests/compat_events.rs:15` |
 | F7-59 | root `LevelFilter` | `sc_observability_log::v2::LevelFilter` | `crates/sc-observability-log/tests/compat_events.rs:15` |

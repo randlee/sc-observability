@@ -58,7 +58,7 @@ fn consumer_reads_health_and_flushes_through_control_only() {
             .contains("record seen by the consumer")
     );
 
-    guard.shutdown(Duration::from_secs(5)).unwrap();
+    guard.shutdown_with_timeout(Duration::from_secs(5)).unwrap();
 
     let stopped = read_status(&control, Duration::from_secs(1));
     assert!(matches!(stopped.flush, Err(FlushError::Drain { .. })));

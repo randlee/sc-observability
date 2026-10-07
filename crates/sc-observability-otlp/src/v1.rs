@@ -499,40 +499,52 @@ impl Telemetry {
     #[allow(deprecated)]
     #[deprecated(
         since = "1.4.0",
-        note = "Use Telemetry::flush_typed(); see migrate-error-api.md."
+        note = "use sc_observability_otlp::v2::Telemetry::flush; see docs/migration/phase-f.md"
     )]
     pub fn flush(&self) -> Result<(), FlushError> {
         self.flush_typed()
     }
 
     /// Flushes all configured exporters with the typed error.
+    #[deprecated(
+        note = "use sc_observability_otlp::v2::Telemetry::flush; see docs/migration/phase-f.md"
+    )]
     pub fn flush_typed(&self) -> Result<(), FlushError> {
-        self.inner.flush_typed()
+        self.inner.flush()
     }
 
     /// Awaits the canonical lifecycle flush barrier.
+    #[deprecated(
+        note = "use sc_observability_otlp::v2::Telemetry::flush_async; see docs/migration/phase-f.md"
+    )]
     pub async fn flush_async_typed(&self) -> Result<(), FlushError> {
-        self.inner.flush_async_typed().await
+        self.inner.flush_async().await
     }
 
     /// Shuts down all configured exporters with the released error type.
     #[allow(deprecated)]
     #[deprecated(
         since = "1.4.0",
-        note = "Use Telemetry::shutdown_typed(); see migrate-error-api.md."
+        note = "use sc_observability_otlp::v2::Telemetry::shutdown; see docs/migration/phase-f.md"
     )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         self.shutdown_typed()
     }
 
     /// Shuts down all configured exporters with the typed error.
+    #[deprecated(
+        note = "use sc_observability_otlp::v2::Telemetry::shutdown; see docs/migration/phase-f.md"
+    )]
     pub fn shutdown_typed(&self) -> Result<(), ShutdownError> {
-        self.inner.shutdown_typed()
+        self.inner.shutdown()
     }
 
     /// Awaits canonical graceful shutdown of all configured exporters.
+    #[deprecated(
+        note = "use sc_observability_otlp::v2::Telemetry::shutdown_async; see docs/migration/phase-f.md"
+    )]
     pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownError> {
-        self.inner.shutdown_async_typed().await
+        self.inner.shutdown_async().await
     }
 
     /// Returns the current exporter health report.

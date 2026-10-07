@@ -4,8 +4,8 @@ use crate::{
     timer::TimerService,
 };
 use arc_swap::{ArcSwap, ArcSwapOption};
+use sc_observability::LevelOwner;
 use sc_observability::v2::Logger;
-use sc_observability::{LevelOwner, Running};
 use sc_observability_dto::{self as dto, CompletionDto, Failure, LogHealthDto, LogSnapshotDto};
 use sc_observability_types as native;
 use std::collections::VecDeque;
@@ -15,7 +15,7 @@ use std::time::Duration;
 
 pub(crate) enum Backend {
     Core {
-        logger: ArcSwapOption<Logger<Running>>,
+        logger: ArcSwapOption<Logger>,
         // MUTEX: serializes Core level-owner updates; contention reports dispatch-full and poison reports an internal failure.
         level: Mutex<LevelOwner>,
         stamp: dto::EventStamp,
@@ -360,7 +360,7 @@ impl Coordinator {
                                 })?,
                             Backend::Bridge(control) => {
                                 control
-                                    .flush(timeout)
+                                    .flush_with_timeout(timeout)
                                     .map_err(|error| conversion::bridge_flush(&error))?;
                             }
                         }
@@ -424,10 +424,14 @@ impl Coordinator {
                         );
                         conversion::canonical(&error, conversion::Kind::Internal)
                     })?;
-                    let stopped = logger.shutdown();
+                    // The binding coordinator reports its retained health DTO after
+                    // draining; its independently owned shutdown operation preserves
+                    // the existing timeout contract rather than exposing the core
+                    // logger's new shared-handle result directly.
+                    let _ = logger.shutdown();
                     Ok(dto::from_canonical_core_health(
-                        stopped.health(),
-                        stopped.level_state(),
+                        logger.health(),
+                        logger.level_state(),
                     ))
                 }
                 Backend::Bridge(control) => Ok(conversion::bridge_health(
@@ -510,7 +514,7 @@ pub(crate) fn core(config: sc_observability::LoggerConfig) -> Result<Arc<Coordin
 
 fn core_parts(
     mut config: sc_observability::LoggerConfig,
-) -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), native::v2::InitError> {
+) -> Result<(dto::EventStamp, Logger, LevelOwner), native::v2::InitError> {
     let stamp = dto::EventStamp {
         service: config.service_name.clone(),
         timestamp: native::Timestamp::now_utc(),
@@ -545,13 +549,13 @@ fn core_parts(
 #[cfg(feature = "test-hooks")]
 #[doc(hidden)]
 pub(crate) fn core_from_test_factory(
-    build: impl FnOnce() -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), Failure>,
+    build: impl FnOnce() -> Result<(dto::EventStamp, Logger, LevelOwner), Failure>,
 ) -> Result<Arc<Coordinator>, Failure> {
     core_from_factory(build)
 }
 
 fn core_from_factory(
-    build: impl FnOnce() -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), Failure>,
+    build: impl FnOnce() -> Result<(dto::EventStamp, Logger, LevelOwner), Failure>,
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let (stamp, logger, level) = build()?;

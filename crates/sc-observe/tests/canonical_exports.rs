@@ -1,4 +1,8 @@
 #![cfg(feature = "v1")]
+#![allow(
+    deprecated,
+    reason = "this compile-only contract fixture intentionally names the released v1 facade"
+)]
 
 //! Compile-only public-signature proof for the opt-in observation facade.
 
@@ -21,6 +25,7 @@ use sc_observability_types::{
 use sc_observe::v2::{
     FlushError, InitError, Observability, ObservabilityBuilder, ObservabilityConfig, ShutdownError,
 };
+#[allow(deprecated)]
 use sc_observe::{
     Observability as LegacyObservability, ObservabilityBuilder as LegacyBuilder,
     ObservabilityConfig as LegacyConfig,
@@ -158,6 +163,10 @@ fn released_typed_helpers_keep_their_public_signatures() {
 
 #[test]
 fn released_and_canonical_observe_routing_exports_keep_their_public_signatures() {
+    #[allow(
+        deprecated,
+        reason = "the pin names the released root configuration type"
+    )]
     let _: fn(LegacyConfig) -> LegacyBuilder = LegacyObservability::builder;
     let _: fn(&LegacyObservability, Observation<String>) -> Result<(), ObservationError> =
         LegacyObservability::emit::<String>;

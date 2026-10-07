@@ -594,7 +594,7 @@ fn public_sdk_explicit_grpc_factory_exports_a_decoded_log_to_a_hermetic_collecto
             .emit_log(&log_event(service_name(), "tool_use"))
             .expect("public SDK facade admits the log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("awaited SDK lifecycle delivers the log");
 
@@ -626,7 +626,7 @@ fn public_sdk_explicit_grpc_factory_exports_a_decoded_log_to_a_hermetic_collecto
         }), "public log attributes reach the collector");
 
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("awaited SDK shutdown is ordered after the export");
         collector.abort();
@@ -665,7 +665,7 @@ fn public_sdk_factory_redacts_rejected_authorization_from_diagnostics_and_health
             .emit_log(&log_event(service_name(), "rejected credential"))
             .expect("SDK factory admits log before export");
         let error = telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect_err("collector credential rejection reaches awaited lifecycle barrier");
         let received = tokio::time::timeout(std::time::Duration::from_secs(2), metadata.recv())
@@ -726,7 +726,7 @@ fn public_sdk_factory_reports_retry_exhaustion_after_the_default_attempts() {
             .emit_log(&log_event(service_name(), "retry exhaustion"))
             .expect("SDK factory admits log before export");
         let error = telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect_err("retryable collector failures exhaust the SDK retry budget");
         let export_error = error
@@ -768,7 +768,7 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
         let address = listener.local_addr().expect("collector address");
         let (log_sender, mut logs) = tokio::sync::mpsc::channel(1);
         let (trace_sender, mut traces) = tokio::sync::mpsc::channel(1);
-        let (metric_sender, mut metrics) = tokio::sync::mpsc::channel(1);
+        let (metric_sender, mut metrics) = tokio::sync::mpsc::channel(2);
         let (shutdown_sender, shutdown) = tokio::sync::oneshot::channel();
         let collector = tokio::spawn(async move {
             tonic::transport::Server::builder()
@@ -805,7 +805,7 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
                 .expect("admit canonical metric");
         }
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("awaited SDK lifecycle delivers all signals");
 
@@ -854,12 +854,17 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
             "canonical linked-trace flags reach gRPC"
         );
 
-        let metric_request =
+        let metric_requests = [
             tokio::time::timeout(std::time::Duration::from_secs(2), metrics.recv())
                 .await
-                .expect("collector receives metrics")
-                .expect("metrics channel open");
-        let resource_metric = &metric_request.resource_metrics[0];
+                .expect("collector receives metric admission export")
+                .expect("metrics channel open"),
+            tokio::time::timeout(std::time::Duration::from_secs(2), metrics.recv())
+                .await
+                .expect("collector receives metric flush export")
+                .expect("metrics channel open"),
+        ];
+        let resource_metric = &metric_requests[0].resource_metrics[0];
         assert_sdk_default_resource_and_scope(
             resource_metric.resource.as_ref().expect("resource"),
             resource_metric.scope_metrics[0]
@@ -869,7 +874,12 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
             &resource_metric.schema_url,
             &resource_metric.scope_metrics[0].schema_url,
         );
-        let exported = &metric_request.resource_metrics[0].scope_metrics[0].metrics;
+        let exported: Vec<_> = metric_requests
+            .iter()
+            .flat_map(|request| &request.resource_metrics)
+            .flat_map(|resource| &resource.scope_metrics)
+            .flat_map(|scope| &scope.metrics)
+            .collect();
         assert_eq!(exported.len(), 5);
         assert_eq!(exported[0].name, "agent.canonical.events_total");
         assert!(matches!(
@@ -917,11 +927,11 @@ fn public_sdk_explicit_grpc_factory_exports_decoded_trace_counter_and_gauge() {
         }
 
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("awaited SDK shutdown is ordered after every export");
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("SDK public-factory shutdown remains idempotent after a completed export");
         let _ = shutdown_sender.send(());
@@ -966,10 +976,10 @@ fn public_sync_http_factory_exports_three_signals_to_the_pinned_desktop_viewer()
             .expect("sync-http factory admits canonical viewer metric");
     }
     telemetry
-        .flush_typed()
+        .flush()
         .expect("sync-http worker barrier delivers all viewer signals");
     telemetry
-        .shutdown_typed()
+        .shutdown()
         .expect("sync-http viewer delivery shuts down after its worker barrier");
 }
 
@@ -1002,11 +1012,11 @@ fn public_sdk_factory_exports_three_signals_to_the_pinned_desktop_viewer() {
                 .expect("SDK factory admits viewer canonical metric");
         }
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("awaited SDK lifecycle delivers all viewer signals");
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("SDK viewer delivery shuts down after its awaited lifecycle barrier");
     });
@@ -1074,7 +1084,7 @@ fn public_sdk_factory_recovers_a_partial_log_export_failure() {
             .emit_metric(&canonical_gauge)
             .expect("SDK factory admits healthy sibling metric");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("metric export succeeds before the partial failure");
         let _metric = tokio::time::timeout(std::time::Duration::from_secs(2), metrics.recv())
@@ -1086,7 +1096,7 @@ fn public_sdk_factory_recovers_a_partial_log_export_failure() {
             .emit_log(&log_event(service_name(), "partial SDK failure"))
             .expect("SDK factory admits failing log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect_err("terminal log failure reaches the awaited lifecycle barrier");
         let failed = telemetry.health();
@@ -1105,7 +1115,7 @@ fn public_sdk_factory_recovers_a_partial_log_export_failure() {
             .emit_log(&log_event(service_name(), "partial SDK recovery"))
             .expect("SDK factory admits recovery log");
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("next log export recovers the affected exporter");
         assert_eq!(
@@ -1115,7 +1125,7 @@ fn public_sdk_factory_recovers_a_partial_log_export_failure() {
         );
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("SDK recovery scenario shuts down cleanly");
         let _ = shutdown_sender.send(());
@@ -1134,15 +1144,15 @@ fn enabled_sdk_telemetry_awaits_shared_lifecycle_and_closes_admission() {
         let telemetry = V2Telemetry::new(enabled_telemetry_config())
             .expect("enabled SDK telemetry is constructed on its caller runtime");
 
-        assert!(telemetry.flush_typed().is_err());
-        assert!(telemetry.shutdown_typed().is_err());
+        assert!(telemetry.flush().is_err());
+        assert!(telemetry.shutdown().is_err());
 
         telemetry
-            .flush_async_typed()
+            .flush_async()
             .await
             .expect("empty shared SDK lifecycle barrier completes");
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("shared SDK lifecycle shutdown completes");
 
@@ -1167,11 +1177,11 @@ fn public_sdk_factory_shutdown_is_idempotent() {
         .expect("public SDK factory constructs");
 
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("first awaited SDK shutdown completes");
         telemetry
-            .shutdown_async_typed()
+            .shutdown_async()
             .await
             .expect("second awaited SDK shutdown is idempotent");
     });
@@ -1214,7 +1224,7 @@ fn admitted_sdk_export_failure_reaches_public_health_once() {
         telemetry
             .emit_log(&log_event(service_name(), "export failure"))
             .expect("buffer log before lifecycle barrier");
-        assert!(telemetry.flush_async_typed().await.is_err());
+        assert!(telemetry.flush_async().await.is_err());
 
         let health = telemetry.health();
         assert_eq!(health.state, TelemetryHealthState::Degraded);
@@ -1320,7 +1330,7 @@ fn public_sdk_factory_recovers_after_collector_unavailability() {
         config.transport.timeout_ms = Some(2_000_u64.into());
         let telemetry = V2Telemetry::new_typed(config).expect("public SDK factory");
         telemetry.emit_log(&log_event(service_name(), "unavailable SDK")).expect("admission");
-        let failure = telemetry.flush_async_typed().await.expect_err("unavailable gRPC collector fails export");
+        let failure = telemetry.flush_async().await.expect_err("unavailable gRPC collector fails export");
         assert!(matches!(public_flush_export_cause(&failure), sc_observability_types::v2::ExportError::Transport { .. }));
         assert_eq!(telemetry.health().state, TelemetryHealthState::Degraded);
         assert_eq!(telemetry.health().dropped_exports_total, 1);
@@ -1329,7 +1339,7 @@ fn public_sdk_factory_recovers_after_collector_unavailability() {
 
         availability.send(true).expect("collector state receiver");
         telemetry.emit_log(&log_event(service_name(), "recovered SDK")).expect("admission after recovery");
-        telemetry.flush_async_typed().await.expect("same factory delivers after recovery");
+        telemetry.flush_async().await.expect("same factory delivers after recovery");
         let request = tokio::time::timeout(std::time::Duration::from_secs(5), receiver.recv())
             .await.expect("recovery payload watchdog").expect("recovery payload");
         let log = &request.resource_logs[0].scope_logs[0].log_records[0];
@@ -1338,7 +1348,7 @@ fn public_sdk_factory_recovers_after_collector_unavailability() {
             Some(opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(value)) if value == "recovered SDK"));
         assert_eq!(telemetry.health().state, TelemetryHealthState::Healthy);
         assert_eq!(telemetry.health().dropped_exports_total, 1);
-        telemetry.shutdown_async_typed().await.expect("shutdown recovered SDK");
+        telemetry.shutdown_async().await.expect("shutdown recovered SDK");
         collector.abort();
         let _ = collector.await;
     });
@@ -1387,8 +1397,8 @@ fn public_sync_http_factory_rejects_invalid_model_before_collector_contact() {
             sc_observability_types::v2::EventError::Validation { .. }
         )
     ));
-    telemetry.flush_typed().expect("nothing was admitted");
-    telemetry.shutdown_typed().expect("empty shutdown");
+    telemetry.flush().expect("nothing was admitted");
+    telemetry.shutdown().expect("empty shutdown");
     assert_eq!(
         telemetry.health().dropped_exports_total,
         0,
@@ -1427,14 +1437,8 @@ fn public_sdk_factory_rejects_invalid_model_before_collector_contact() {
                 sc_observability_types::v2::EventError::Validation { .. }
             )
         ));
-        telemetry
-            .flush_async_typed()
-            .await
-            .expect("nothing was admitted");
-        telemetry
-            .shutdown_async_typed()
-            .await
-            .expect("empty shutdown");
+        telemetry.flush_async().await.expect("nothing was admitted");
+        telemetry.shutdown_async().await.expect("empty shutdown");
         assert_eq!(telemetry.health().dropped_exports_total, 0);
         assert_eq!(
             listener.accept().expect_err("no collector contact").kind(),
@@ -1491,7 +1495,7 @@ fn public_sync_http_factory_reports_stalled_collector_timeout() {
         .emit_log(&log_event(service_name(), "stalled collector"))
         .expect("admit stalled export");
     let operation = std::thread::spawn(move || {
-        let result = telemetry.flush_typed();
+        let result = telemetry.flush();
         (telemetry, result)
     });
     observed_rx
@@ -1509,5 +1513,5 @@ fn public_sync_http_factory_reports_stalled_collector_timeout() {
     ));
     assert_eq!(telemetry.health().state, TelemetryHealthState::Degraded);
     assert_eq!(telemetry.health().dropped_exports_total, 1);
-    telemetry.shutdown_typed().expect("shutdown after timeout");
+    telemetry.shutdown().expect("shutdown after timeout");
 }

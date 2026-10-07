@@ -4,6 +4,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use sc_observability_types::v2::ExportError;
 use sc_observability_types::{ErrorContext, Remediation};
@@ -20,7 +21,9 @@ pub(crate) enum LifecycleCall {
     FlushAsync,
     ShutdownAsync,
     FlushBlocking,
+    FlushBlockingWithTimeout(Duration),
     ShutdownBlocking,
+    ShutdownBlockingWithTimeout(Duration),
 }
 
 /// A successful lifecycle double that records every operation in order.
@@ -39,6 +42,9 @@ impl ExporterLifecycle for RecordingLifecycle {
     fn is_shutdown(&self) -> bool {
         let calls = self.calls.lock().expect("calls poisoned");
         calls.contains(&LifecycleCall::ShutdownBlocking)
+            || calls
+                .iter()
+                .any(|call| matches!(call, LifecycleCall::ShutdownBlockingWithTimeout(_)))
             || calls.contains(&LifecycleCall::ShutdownAsync)
     }
 
@@ -62,8 +68,18 @@ impl ExporterLifecycle for RecordingLifecycle {
         Ok(())
     }
 
+    fn flush_blocking_with_timeout(&self, timeout: Duration) -> Result<(), ExportError> {
+        self.record(LifecycleCall::FlushBlockingWithTimeout(timeout));
+        Ok(())
+    }
+
     fn shutdown_blocking(&self) -> Result<(), ExportError> {
         self.record(LifecycleCall::ShutdownBlocking);
+        Ok(())
+    }
+
+    fn shutdown_blocking_with_timeout(&self, timeout: Duration) -> Result<(), ExportError> {
+        self.record(LifecycleCall::ShutdownBlockingWithTimeout(timeout));
         Ok(())
     }
 }

@@ -39,10 +39,10 @@
 //!     correlation_id: None,
 //!     trace: None,
 //! })?;
-//! control.flush(Duration::from_secs(1))?;
+//! control.flush_with_timeout(Duration::from_secs(1))?;
 //! println!("{}", serde_json::to_string(&control.health())?);
 //!
-//! guard.shutdown(Duration::from_secs(5))?;
+//! guard.shutdown_with_timeout(Duration::from_secs(5))?;
 //! # Ok(())
 //! # }
 //! ```
@@ -96,6 +96,7 @@ pub mod error_codes;
 
 mod bridge;
 mod callsite;
+mod constants;
 mod context;
 mod control;
 mod error;
@@ -105,12 +106,10 @@ mod mapping;
 #[cfg(feature = "v1")]
 mod v1;
 
-use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
-use std::sync::{Arc, PoisonError};
-use std::time::Duration;
-
 use crate::health::BridgeLifecycle;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, PoisonError};
 
 #[doc(inline)]
 pub use bridge::{
@@ -118,13 +117,15 @@ pub use bridge::{
     PolicyRejection, attach_logger,
 };
 #[doc(inline)]
+pub use constants::{BRIDGE_HEALTH_SCHEMA_VERSION, DEFAULT_DROP_SHUTDOWN_TIMEOUT};
+#[doc(inline)]
 pub use control::{BridgeEvent, EmitOutcome};
 #[doc(inline)]
 pub use error::{ControlError, DropCause, FieldKeyError, LifecyclePhase, WaitError};
 #[doc(inline)]
 pub use error::{ShutdownOutcome, ShutdownReport, UnconfirmedShutdown};
 #[doc(inline)]
-pub use health::{BRIDGE_HEALTH_SCHEMA_VERSION, BridgeHealthReport};
+pub use health::{BridgeHealthReport, HelperHealth};
 #[doc(inline)]
 pub use sc_observability::v2::LoggerConfig;
 #[cfg(feature = "v1")]
@@ -182,11 +183,25 @@ pub mod v2 {
     #[doc(inline)]
     pub use crate::BridgeEvent;
     #[doc(inline)]
+    pub use crate::BridgeHealthReport;
+    #[doc(inline)]
     pub use crate::BridgeOptions;
+    #[doc(inline)]
+    pub use crate::HelperHealth;
+    #[doc(inline)]
+    pub use crate::Level;
+    #[doc(inline)]
+    pub use crate::LevelFilter;
+    #[doc(inline)]
+    pub use crate::LoggerConfig;
+    #[doc(inline)]
+    pub use crate::ServiceName;
     #[doc(inline)]
     pub use crate::bridge::LogAttachment;
     #[doc(inline)]
     pub use crate::error::EmitError;
+    #[doc(inline)]
+    pub use crate::{debug, error, event, info, instrument, trace, warn};
     #[doc(inline)]
     pub use sc_observability_types::v2::{EventError, FlushError, InitError, ShutdownError};
 
@@ -222,13 +237,31 @@ pub mod v2 {
             LogControl::new()
         }
 
+        /// Requests a flush using the bridge's configured default timeout.
+        ///
+        /// # Errors
+        ///
+        /// Returns the canonical drain error with its context and source.
+        pub fn flush(&self) -> Result<(), FlushError> {
+            self.flush_with_timeout(crate::DEFAULT_DROP_SHUTDOWN_TIMEOUT)
+        }
+
         /// Requests a bounded flush with the canonical operation error.
         ///
         /// # Errors
         ///
         /// Returns the canonical drain error with its context and source.
-        pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
+        pub fn flush_with_timeout(&self, timeout: Duration) -> Result<(), FlushError> {
             crate::handle::flush_installed(timeout)
+        }
+
+        /// Performs final flush and shutdown using the bridge's configured default timeout.
+        ///
+        /// # Errors
+        ///
+        /// Returns the canonical timeout or drain error with its source context.
+        pub fn shutdown(&self) -> Result<(), ShutdownError> {
+            self.shutdown_with_timeout(crate::DEFAULT_DROP_SHUTDOWN_TIMEOUT)
         }
 
         /// Performs final flush and shutdown, preserving canonical error context.
@@ -236,8 +269,14 @@ pub mod v2 {
         /// # Errors
         ///
         /// Returns the canonical timeout or drain error with its source context.
-        pub fn shutdown(mut self, timeout: Duration) -> Result<(), ShutdownError> {
-            self.inner.shut_down = true;
+        pub fn shutdown_with_timeout(&self, timeout: Duration) -> Result<(), ShutdownError> {
+            if self
+                .inner
+                .shut_down
+                .swap(true, std::sync::atomic::Ordering::AcqRel)
+            {
+                return Ok(());
+            }
             crate::handle::shutdown_sequence(timeout)
         }
 
@@ -395,20 +434,6 @@ impl DroppedEvents {
     }
 }
 
-/// Timeout used by the implicit drop paths for `LogGuard` and `LogAttachment`.
-///
-/// Dropping the owning [`LogGuard`] runs the same bounded flush-and-shutdown
-/// sequence as [`LogGuard::shutdown`], but it has no `Result` to return and
-/// therefore discards the outcome (`let _ = ..`). Dropping the non-owning
-/// [`LogAttachment`] instead performs a bounded best-effort detach; it does not
-/// shut down the logger or own `LevelOwner` authority. The constant is shared
-/// only for its timeout value, not for shutdown or `LevelOwner` authority. It
-/// also bounds the internal shutdown [`init`] attempts when another `log::Log`
-/// implementation is already installed.
-/// Call [`LogGuard::shutdown`] explicitly whenever its `Result` matters, for
-/// example to log or retry on failure.
-pub const DEFAULT_DROP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
-
 /// The lifecycle owner shared by the v2 facade and the released v1 type alias.
 ///
 /// Returned once per process by [`init`]. It is deliberately not `Clone` (a
@@ -422,7 +447,7 @@ pub const DEFAULT_DROP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 pub(crate) struct InnerLogGuard {
     active_log_path: Option<PathBuf>,
     level_owner: sc_observability::LevelOwner,
-    shut_down: bool,
+    shut_down: AtomicBool,
 }
 
 impl InnerLogGuard {
@@ -491,8 +516,7 @@ impl InnerLogGuard {
 
 impl Drop for InnerLogGuard {
     fn drop(&mut self) {
-        if !self.shut_down {
-            self.shut_down = true;
+        if !self.shut_down.swap(true, Ordering::AcqRel) {
             // The Result is intentionally discarded: `Drop` has no channel to report
             // failure to a caller. See `DEFAULT_DROP_SHUTDOWN_TIMEOUT` for the gap
             // this leaves and prefer an explicit `LogGuard::shutdown` call when the
@@ -592,7 +616,7 @@ fn init_canonical(
     Ok(InnerLogGuard {
         active_log_path,
         level_owner,
-        shut_down: false,
+        shut_down: AtomicBool::new(false),
     })
 }
 
@@ -676,7 +700,7 @@ pub mod __private {
     /// sink or redactor that logs) returns at once and is counted as
     /// `DropCause::ReentrantEmit`. Every dropped event is counted under exactly one
     /// [`DropCause`] before the result is discarded. Nothing is flushed; use
-    /// `LogControl::flush(timeout)`.
+    /// `LogControl::flush_with_timeout(timeout)`.
     pub fn emit(parts: EventParts) {
         let _ = handle::submit_guarded(|| handle::submit_installed(parts));
     }

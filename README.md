@@ -8,7 +8,7 @@ high-performance.
 
 | Crate | Purpose |
 | --- | --- |
-| [`sc-observability-types`](./crates/sc-observability-types/) | Shared contracts: identifiers, timestamps, diagnostics, health reports, query/follow value types, and error surfaces. |
+| [`sc-observability-types`](./crates/sc-observability-types/) | Shared contracts: identifiers, timestamps, typed spans, logs, metrics, profiles, diagnostics, health reports, query/follow values, and error surfaces. |
 | [`sc-observability`](./crates/sc-observability/) | Logging-only runtime: `Logger`, built-in file/console sinks, custom sink registration, redaction, health, query, and follow. |
 | [`sc-observe`](./crates/sc-observe/) | Typed routing over logging and OTLP, including combined health. |
 | [`sc-observability-otlp`](./crates/sc-observability-otlp/) | OTel export layer; choose `otlp-sdk` or `sync-http`. |
@@ -40,15 +40,29 @@ generated TypeScript client are separate binding artifacts. Their intended
 publish channels and deliberate post-Phase-B authorization are recorded in
 [`release/bindings-artifacts.toml`](./release/bindings-artifacts.toml).
 
+## 1.5.0 API and binding updates
+
+The 1.5.0 candidate keeps released 1.x APIs behind each library crate's
+default-on `v1` feature and deprecates them; canonical APIs are under `v2`.
+Build with `default-features = false` to check that a consumer uses no `v1`
+surface. See the [Phase F migration guide](./docs/migration/phase-f.md).
+
+The OTLP crate now supports both the async `otlp-sdk` and synchronous
+`sync-http` backends, plus durable telemetry submission for every signal.
+Python telemetry bindings release the GIL around flush, shutdown, and health;
+the six-platform wheel matrix includes Windows ARM64 (`win_arm64`). See the
+[Python platform policy](./release/python-platform-policy.json).
+
 ## Minimal Logging-Only Snippet
 
 ```rust
 use std::path::PathBuf;
 
 use sc_observability::{
-    ActionName, Level, LogEvent, Logger, LoggerConfig, OutcomeLabel, ProcessIdentity,
+    ActionName, Level, LogEvent, LoggerConfig, OutcomeLabel, ProcessIdentity,
     SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION,
 };
+use sc_observability::v2::Logger;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("example-service")?;

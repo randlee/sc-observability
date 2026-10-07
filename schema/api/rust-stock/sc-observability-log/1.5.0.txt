@@ -55,7 +55,91 @@ pub mod sc_observability_log::v2
 pub use sc_observability_log::v2::EventError
 pub use sc_observability_log::v2::FlushError
 pub use sc_observability_log::v2::InitError
+pub use sc_observability_log::v2::LevelFilter
+pub use sc_observability_log::v2::LoggerConfig
+pub use sc_observability_log::v2::ServiceName
 pub use sc_observability_log::v2::ShutdownError
+pub use sc_observability_log::v2::debug
+pub use sc_observability_log::v2::error
+pub use sc_observability_log::v2::event
+pub use sc_observability_log::v2::info
+pub use sc_observability_log::v2::instrument
+pub use sc_observability_log::v2::trace
+pub use sc_observability_log::v2::warn
+pub mod sc_observability_log::v2::error
+pub enum sc_observability_log::v2::error::ControlError
+pub sc_observability_log::v2::error::ControlError::NotRunning
+pub sc_observability_log::v2::error::ControlError::NotRunning::phase: sc_observability_log::LifecyclePhase
+pub sc_observability_log::v2::error::ControlError::Query
+pub sc_observability_log::v2::error::ControlError::Query::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::v2::error::ControlError::Unavailable
+pub sc_observability_log::v2::error::ControlError::Unavailable::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::ControlError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub enum sc_observability_log::v2::error::DropCause
+pub sc_observability_log::v2::error::DropCause::InvalidEvent
+pub sc_observability_log::v2::error::DropCause::LoggerPanicked
+pub sc_observability_log::v2::error::DropCause::NotInstalled
+pub sc_observability_log::v2::error::DropCause::QueueFull
+pub sc_observability_log::v2::error::DropCause::ReentrantEmit
+pub sc_observability_log::v2::error::DropCause::ShutdownTimedOut
+pub sc_observability_log::v2::error::DropCause::WriterDegraded
+impl sc_observability_log::DropCause
+pub const sc_observability_log::DropCause::ALL: [sc_observability_log::DropCause; 7]
+#[non_exhaustive] pub enum sc_observability_log::v2::error::EmitError
+pub sc_observability_log::v2::error::EmitError::InvalidEvent
+pub sc_observability_log::v2::error::EmitError::InvalidEvent::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::v2::error::EmitError::InvalidField
+pub sc_observability_log::v2::error::EmitError::InvalidField::raw_key: alloc::string::String
+pub sc_observability_log::v2::error::EmitError::InvalidField::reason: sc_observability_log::FieldKeyError
+pub sc_observability_log::v2::error::EmitError::NotInstalled
+pub sc_observability_log::v2::error::EmitError::NotRunning
+pub sc_observability_log::v2::error::EmitError::NotRunning::phase: sc_observability_log::LifecyclePhase
+pub sc_observability_log::v2::error::EmitError::Panicked
+pub sc_observability_log::v2::error::EmitError::QueueFull
+pub sc_observability_log::v2::error::EmitError::QueueFull::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::v2::error::EmitError::Reentrant
+pub sc_observability_log::v2::error::EmitError::ShutdownTimedOut
+pub sc_observability_log::v2::error::EmitError::ShutdownTimedOut::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::v2::error::EmitError::WriterDegraded
+pub sc_observability_log::v2::error::EmitError::WriterDegraded::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::v2::EmitError
+pub fn sc_observability_log::v2::EmitError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::v2::EmitError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub enum sc_observability_log::v2::error::FieldKeyError
+pub sc_observability_log::v2::error::FieldKeyError::Collision
+pub sc_observability_log::v2::error::FieldKeyError::Collision::other_raw_key: alloc::string::String
+pub sc_observability_log::v2::error::FieldKeyError::Empty
+pub sc_observability_log::v2::error::FieldKeyError::ReservedPrefix
+pub enum sc_observability_log::v2::error::LifecyclePhase
+pub sc_observability_log::v2::error::LifecyclePhase::Failed
+pub sc_observability_log::v2::error::LifecyclePhase::Running
+pub sc_observability_log::v2::error::LifecyclePhase::Stopped
+pub sc_observability_log::v2::error::LifecyclePhase::Stopping
+pub enum sc_observability_log::v2::error::ShutdownOutcome
+pub sc_observability_log::v2::error::ShutdownOutcome::Stopped
+pub sc_observability_log::v2::error::ShutdownOutcome::StoppedWithFlushError
+pub sc_observability_log::v2::error::ShutdownOutcome::StoppedWithFlushError::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::v2::error::ShutdownOutcome::Unconfirmed
+pub sc_observability_log::v2::error::ShutdownOutcome::Unconfirmed::cause: sc_observability_log::UnconfirmedShutdown
+pub enum sc_observability_log::v2::error::UnconfirmedShutdown
+pub sc_observability_log::v2::error::UnconfirmedShutdown::HelperLost
+pub sc_observability_log::v2::error::UnconfirmedShutdown::HelperLost::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::v2::error::UnconfirmedShutdown::HelperSpawn
+pub sc_observability_log::v2::error::UnconfirmedShutdown::HelperSpawn::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub enum sc_observability_log::v2::error::WaitError
+pub sc_observability_log::v2::error::WaitError::NotStarted
+pub sc_observability_log::v2::error::WaitError::TimedOut
+pub sc_observability_log::v2::error::WaitError::TimedOut::timeout: core::time::Duration
+pub sc_observability_log::v2::error::WaitError::Unavailable
+pub sc_observability_log::v2::error::WaitError::Unavailable::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::WaitError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub struct sc_observability_log::v2::error::ShutdownReport
+pub sc_observability_log::v2::error::ShutdownReport::health: sc_observability_log::BridgeHealthReport
+pub sc_observability_log::v2::error::ShutdownReport::outcome: sc_observability_log::ShutdownOutcome
 #[non_exhaustive] pub enum sc_observability_log::v2::EmitError
 pub sc_observability_log::v2::EmitError::InvalidEvent
 pub sc_observability_log::v2::EmitError::InvalidEvent::diagnostic: sc_observability_types::level::OperationDiagnostic
@@ -86,9 +170,31 @@ pub sc_observability_log::v2::BridgeEvent::outcome: core::option::Option<sc_obse
 pub sc_observability_log::v2::BridgeEvent::request_id: core::option::Option<sc_observability_types::validation::CorrelationId>
 pub sc_observability_log::v2::BridgeEvent::target: sc_observability_types::validation::TargetCategory
 pub sc_observability_log::v2::BridgeEvent::trace: core::option::Option<sc_observability_types::tracing::TraceContext>
+pub struct sc_observability_log::v2::BridgeHealthReport
+pub sc_observability_log::v2::BridgeHealthReport::active_log_path: core::option::Option<std::path::PathBuf>
+pub sc_observability_log::v2::BridgeHealthReport::configured_level: sc_observability_types::level::LevelFilter
+pub sc_observability_log::v2::BridgeHealthReport::dropped: sc_observability_log::DroppedEvents
+pub sc_observability_log::v2::BridgeHealthReport::effective_level: sc_observability_types::level::LevelFilter
+pub sc_observability_log::v2::BridgeHealthReport::helpers: sc_observability_log::HelperHealth
+pub sc_observability_log::v2::BridgeHealthReport::level_revision: u64
+pub sc_observability_log::v2::BridgeHealthReport::lifecycle: sc_observability_log::LifecyclePhase
+pub sc_observability_log::v2::BridgeHealthReport::logging: sc_observability_types::health::LoggingHealthReport
+pub sc_observability_log::v2::BridgeHealthReport::schema_version: u32
 pub struct sc_observability_log::v2::BridgeOptions
 pub sc_observability_log::v2::BridgeOptions::default_action: sc_observability_types::validation::ActionName
 pub sc_observability_log::v2::BridgeOptions::parse_bracket_action: bool
+pub struct sc_observability_log::v2::HelperHealth
+pub sc_observability_log::v2::HelperHealth::detached: u64
+pub sc_observability_log::v2::HelperHealth::flush_in_flight: bool
+pub struct sc_observability_log::v2::Level(_)
+impl sc_observability_log::Level
+pub const sc_observability_log::Level::DEBUG: sc_observability_log::Level
+pub const sc_observability_log::Level::ERROR: sc_observability_log::Level
+pub const sc_observability_log::Level::INFO: sc_observability_log::Level
+pub const sc_observability_log::Level::TRACE: sc_observability_log::Level
+pub const sc_observability_log::Level::WARN: sc_observability_log::Level
+impl core::convert::From<sc_observability_log::Level> for sc_observability_types::level::Level
+pub fn sc_observability_types::level::Level::from(sc_observability_log::Level) -> Self
 pub struct sc_observability_log::v2::LogAttachment
 impl sc_observability_log::LogAttachment
 pub fn sc_observability_log::LogAttachment::control(&self) -> sc_observability_log::v2::LogControl
@@ -102,7 +208,8 @@ pub struct sc_observability_log::v2::LogControl
 impl sc_observability_log::v2::LogControl
 pub fn sc_observability_log::v2::LogControl::active_log_path(&self) -> core::result::Result<core::option::Option<std::path::PathBuf>, sc_observability_log::ControlError>
 pub fn sc_observability_log::v2::LogControl::dropped_events(&self) -> sc_observability_log::DroppedEvents
-pub fn sc_observability_log::v2::LogControl::flush(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_log::v2::LogControl::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_log::v2::LogControl::flush_with_timeout(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_log::v2::LogControl::health(&self) -> core::result::Result<sc_observability_log::BridgeHealthReport, sc_observability_log::ControlError>
 pub fn sc_observability_log::v2::LogControl::query(&self, &sc_observability_types::query::LogQuery) -> core::result::Result<sc_observability_types::query::LogSnapshot, sc_observability_log::ControlError>
 pub fn sc_observability_log::v2::LogControl::try_log(&self, sc_observability_log::BridgeEvent) -> core::result::Result<sc_observability_log::EmitOutcome, sc_observability_log::v2::EmitError>
@@ -113,10 +220,12 @@ pub fn sc_observability_log::v2::LogGuard::active_log_path(&self) -> core::optio
 pub fn sc_observability_log::v2::LogGuard::control(&self) -> sc_observability_log::v2::LogControl
 pub fn sc_observability_log::v2::LogGuard::dropped_events(&self) -> sc_observability_log::DroppedEvents
 pub fn sc_observability_log::v2::LogGuard::elevate_level(&mut self, sc_observability_types::level::LevelFilter, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_types::level::LevelChange, sc_observability_types::level::LevelChangeError>
-pub fn sc_observability_log::v2::LogGuard::flush(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_log::v2::LogGuard::flush(&self) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
+pub fn sc_observability_log::v2::LogGuard::flush_with_timeout(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::FlushError>
 pub fn sc_observability_log::v2::LogGuard::health(&self) -> core::result::Result<sc_observability_log::BridgeHealthReport, sc_observability_log::ControlError>
 pub fn sc_observability_log::v2::LogGuard::reset_level(&mut self, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_types::level::LevelChange, sc_observability_types::level::LevelChangeError>
-pub fn sc_observability_log::v2::LogGuard::shutdown(self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observability_log::v2::LogGuard::shutdown(&self) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
+pub fn sc_observability_log::v2::LogGuard::shutdown_with_timeout(&self, core::time::Duration) -> core::result::Result<(), sc_observability_types::errors_v2::ShutdownError>
 pub fn sc_observability_log::v2::init(sc_observability::LoggerConfig, sc_observability_log::BridgeOptions) -> core::result::Result<sc_observability_log::v2::LogGuard, sc_observability_types::errors_v2::InitError>
 #[non_exhaustive] pub enum sc_observability_log::BridgeEventDecision
 pub sc_observability_log::BridgeEventDecision::Admit
@@ -268,6 +377,7 @@ pub sc_observability_log::BridgeHealthReport::active_log_path: core::option::Opt
 pub sc_observability_log::BridgeHealthReport::configured_level: sc_observability_types::level::LevelFilter
 pub sc_observability_log::BridgeHealthReport::dropped: sc_observability_log::DroppedEvents
 pub sc_observability_log::BridgeHealthReport::effective_level: sc_observability_types::level::LevelFilter
+pub sc_observability_log::BridgeHealthReport::helpers: sc_observability_log::HelperHealth
 pub sc_observability_log::BridgeHealthReport::level_revision: u64
 pub sc_observability_log::BridgeHealthReport::lifecycle: sc_observability_log::LifecyclePhase
 pub sc_observability_log::BridgeHealthReport::logging: sc_observability_types::health::LoggingHealthReport
@@ -279,6 +389,9 @@ pub struct sc_observability_log::DroppedEvents
 impl sc_observability_log::DroppedEvents
 pub fn sc_observability_log::DroppedEvents::get(&self, sc_observability_log::DropCause) -> u64
 pub fn sc_observability_log::DroppedEvents::total(&self) -> u64
+pub struct sc_observability_log::HelperHealth
+pub sc_observability_log::HelperHealth::detached: u64
+pub sc_observability_log::HelperHealth::flush_in_flight: bool
 pub struct sc_observability_log::Level(_)
 impl sc_observability_log::Level
 pub const sc_observability_log::Level::DEBUG: sc_observability_log::Level

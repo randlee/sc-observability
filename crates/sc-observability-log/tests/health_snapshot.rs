@@ -49,6 +49,10 @@ fn health_uses_the_core_report_and_retains_it_after_shutdown() {
     assert_eq!(json["lifecycle"], "running");
     assert!(json["logging"]["writer_state"].is_string());
     assert!(json["dropped"]["not_installed"].is_u64());
+    assert_eq!(
+        json["helpers"],
+        serde_json::json!({"flush_in_flight": false, "detached": 0})
+    );
 
     guard.shutdown(Duration::from_secs(5)).unwrap();
     let stopped = control.health().unwrap();

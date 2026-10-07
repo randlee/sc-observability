@@ -283,10 +283,10 @@ validation is rejected rather than replaced by a default.
 
 ## What a later major release removes
 
-ADR-020 permits removal only in a future, separately authorized major
-release; this release authorizes none. The compatibility layer is kept apart
-so that such a release can delete it without touching the canonical
-implementation:
+ADR-020 keeps the deprecated compatibility paths available throughout the
+1.5.0 compatible release. Consumers should migrate to canonical v2 paths
+before a future major release removes the compatibility layer. The layer is
+kept apart so its removal does not touch the canonical implementation:
 
 - the `compat` modules of `sc-observability`, `sc-observe`,
   `sc-observability-log` and `sc-observability-otlp`, and the nine released

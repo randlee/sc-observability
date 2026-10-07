@@ -9,7 +9,7 @@ use sc_observability_types::{ErrorContext, Remediation, v2::InitError as Canonic
 use crate::sink::LogSink;
 use crate::{
     CanonicalLogger, ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, LoggerConfig,
-    LoggerRuntime, QueueCapacity, Running, SinkRegistration, default_log_path,
+    LoggerRuntime, QueueCapacity, SinkRegistration, default_log_path,
 };
 
 impl SinkRegistration {
@@ -17,8 +17,8 @@ impl SinkRegistration {
     ///
     /// The registration stores the input [`Arc`] directly, with no adapter, so
     /// the canonical sink's structured diagnostic and source reach the runtime
-    /// unchanged. Released [`crate::LogSink`] values register through
-    /// [`SinkRegistration::new`] instead.
+    /// unchanged. Released [`crate::LogSink`] values require an explicit
+    /// migration to the canonical sink contract before registration.
     #[must_use]
     pub fn typed(sink: Arc<dyn LogSink>) -> Self {
         Self { sink, filter: None }
@@ -101,21 +101,21 @@ impl CanonicalLoggerBuilder {
     }
 
     /// Finalizes construction with the canonical recoverable error surface.
-    pub fn build(self) -> Result<CanonicalLogger<Running>, CanonicalInitError> {
+    pub fn build(self) -> Result<CanonicalLogger, CanonicalInitError> {
         self.build_inner().map(|(logger, _)| logger)
     }
 
     /// Finalizes construction and returns the logger with weak level ownership.
     pub fn build_with_level_owner(
         self,
-    ) -> Result<(CanonicalLogger<Running>, LevelOwner), CanonicalInitError> {
+    ) -> Result<(CanonicalLogger, LevelOwner), CanonicalInitError> {
         let (logger, control) = self.build_inner()?;
         Ok((logger, LevelOwner::new(&control)))
     }
 
     fn build_inner(
         self,
-    ) -> Result<(CanonicalLogger<Running>, Arc<Mutex<LevelControl>>), CanonicalInitError> {
+    ) -> Result<(CanonicalLogger, Arc<Mutex<LevelControl>>), CanonicalInitError> {
         let Self {
             config,
             file_sink,
@@ -174,12 +174,11 @@ impl CanonicalLoggerBuilder {
         Ok((
             CanonicalLogger {
                 runtime,
-                diagnostic_admitter: Some(diagnostic_admitter),
+                diagnostic_admitter: Mutex::new(Some(diagnostic_admitter)),
                 config,
                 sinks,
                 shutdown: Arc::new(AtomicBool::new(false)),
                 level_control: control.clone(),
-                state: std::marker::PhantomData,
             },
             control,
         ))

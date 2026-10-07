@@ -370,6 +370,11 @@ impl LifecycleCore {
     /// waiters on that barrier receive the same result; later successful
     /// windows can succeed without erasing cumulative health diagnostics.
     pub(crate) fn flush_async(&self) -> LifecycleWaiter {
+        self.flush_async_with_timeout(self.inner.flush_timeout)
+    }
+
+    /// Starts or joins the ordered flush barrier using `timeout` for a new barrier.
+    pub(crate) fn flush_async_with_timeout(&self, timeout: Duration) -> LifecycleWaiter {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
         if let Some(operation) = state.flush.as_ref().filter(|op| !op.is_complete()) {
             return LifecycleWaiter::new(Arc::clone(operation));
@@ -379,7 +384,7 @@ impl LifecycleCore {
             Arc::clone(&self.inner),
             OperationKind::Flush,
             cutoff,
-            self.inner.flush_timeout,
+            timeout,
             None,
             state.pending_failure.take(),
         ));
@@ -389,6 +394,11 @@ impl LifecycleCore {
 
     /// Atomically closes admission and starts or joins the one shutdown.
     pub(crate) fn shutdown_async(&self) -> LifecycleWaiter {
+        self.shutdown_async_with_timeout(self.inner.shutdown_timeout)
+    }
+
+    /// Atomically closes admission and starts or joins shutdown using `timeout` for a new barrier.
+    pub(crate) fn shutdown_async_with_timeout(&self, timeout: Duration) -> LifecycleWaiter {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
         // A terminal operation retains its result, including failure. Rejoining
         // must not replace that result with synthetic success after shutdown.
@@ -407,7 +417,7 @@ impl LifecycleCore {
             Arc::clone(&self.inner),
             OperationKind::Shutdown,
             cutoff,
-            self.inner.shutdown_timeout,
+            timeout,
             precondition,
             state.pending_failure.take(),
         ));

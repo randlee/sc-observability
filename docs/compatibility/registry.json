@@ -255,11 +255,16 @@
     {
       "file": "crates/sc-observe/src/lib.rs",
       "deprecated_symbols": [
-        "register_subscriber",
-        "register_projection"
+        "ObservabilityConfig",
+        "ObservabilityBuilder",
+        "Observability",
+        "builder",
+        "emit",
+        "health",
+        "with_observability_health_provider"
       ],
-      "reason": "The released root registration methods remain behind the v1 feature and accept their released v1 registration contracts; canonical registrations remain only on sc_observe::v2.",
-      "removal_point": "Remove these root v1 registration methods when the v1 feature and released 1.x consumers are retired."
+      "reason": "The released root observation facade remains behind the v1 feature as deprecated forwarding wrappers; canonical configuration, construction, routing, and health APIs remain only on sc_observe::v2.",
+      "removal_point": "Remove these root v1 forwarding facades when the v1 feature and released 1.x consumers are retired."
     }
   ],
   "compat_root_reexport_exceptions": [
@@ -2005,7 +2010,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "new"
       },
@@ -2030,7 +2035,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "with_diagnostic"
       },
@@ -2055,7 +2060,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "end"
       },
@@ -2080,7 +2085,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "timestamp"
       },
@@ -2105,7 +2110,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "service"
       },
@@ -2130,7 +2135,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "name"
       },
@@ -2155,7 +2160,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "trace"
       },
@@ -2180,7 +2185,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "status"
       },
@@ -2205,7 +2210,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "diagnostic"
       },
@@ -2230,7 +2235,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "attributes"
       },
@@ -2255,7 +2260,7 @@
       },
       "canonical_source": {
         "revision": "selected_head",
-        "path": "crates/sc-observability-types/src/span.rs",
+        "path": "crates/sc-observability-types/src/signals_v2.rs",
         "owner": "SpanRecord",
         "member": "duration_ms"
       },

@@ -1,14 +1,11 @@
-//! One `init` per test binary: a stuck flush leaves one detached helper, never more.
+//! One attached test logger per binary: a stuck flush leaves one detached helper, never more.
 //!
-//! QA-2 RSH-004. The active JSONL path is replaced by a FIFO with no reader, so
-//! the writer thread blocks opening it and sc-observability's flush never
-//! returns: a stuck sink. The first flush times out and detaches its helper;
-//! a retried flush returns `FlushError::InProgress` at once without starting a
-//! thread (`helpers.detached` stays 1). Opening the FIFO releases the writer:
-//! the helper finishes, the counter returns to 0 and the next flush succeeds.
+//! QA-2 RSH-004. A test-only registered sink blocks its first `flush` on a
+//! channel. This makes the stalled flush independent of OS pipe-buffer quota:
+//! the first flush times out, retries return `FlushError::InProgress` without
+//! starting another helper, release completes the helper, and the next flush
+//! succeeds.
 //!
-//! Unix only: the stuck sink is a named pipe (`mkfifo`).
-#![cfg(unix)]
 #![cfg(feature = "v1")]
 #![allow(
     deprecated,
@@ -19,12 +16,23 @@
     reason = "integration test: helper fns are not covered by clippy.toml allow-*-in-tests"
 )]
 
-use std::fs::OpenOptions;
-use std::time::{Duration, Instant};
-
-use sc_observability_log::{
-    ActionName, BridgeOptions, FlushError, LevelFilter, LoggerConfig, ServiceName, error_codes,
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+    mpsc,
 };
+use std::time::Duration;
+use std::time::Instant;
+
+use sc_observability::v2::LogSink;
+use sc_observability::{SinkHealth, SinkHealthState, SinkName, SinkRegistration};
+use sc_observability_log::v2::FlushError;
+use sc_observability_log::{
+    ActionName, AttachmentOptions, BridgeEventDecision, BridgeEventPolicy, BridgeOptions,
+    LoggerConfig, ServiceName, attach_logger,
+};
+use sc_observability_log::{LevelFilter, error_codes};
+use sc_observability_types::LogEvent;
 
 const STUCK_FLUSH_TIMEOUT: Duration = Duration::from_millis(100);
 /// Generous: a retried flush must be rejected long before this could elapse.
@@ -32,83 +40,171 @@ const RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
 const HELPER_FINISH_DEADLINE: Duration = Duration::from_secs(20);
 
-#[test]
-fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
-    let root = tempfile::tempdir().unwrap();
+struct StuckSink {
+    entered: mpsc::Receiver<()>,
+    release: mpsc::SyncSender<()>,
+    flush_calls: Arc<AtomicUsize>,
+}
+
+impl StuckSink {
+    fn prepare() -> (Self, Arc<dyn LogSink>) {
+        let (entered_tx, entered) = mpsc::sync_channel(1);
+        let (release, release_rx) = mpsc::sync_channel(0);
+        let flush_calls = Arc::new(AtomicUsize::new(0));
+        let sink = Arc::new(BlockingFlushSink {
+            entered: Mutex::new(Some(entered_tx)),
+            release: Mutex::new(Some(release_rx)),
+            flush_calls: Arc::clone(&flush_calls),
+        });
+        (
+            Self {
+                entered,
+                release,
+                flush_calls,
+            },
+            sink,
+        )
+    }
+
+    fn wait_until_blocked(&self) {
+        self.entered.recv_timeout(IO_TIMEOUT).unwrap();
+    }
+
+    fn release(&self) {
+        self.release.send(()).unwrap();
+    }
+
+    fn flush_calls(&self) -> usize {
+        self.flush_calls.load(Ordering::SeqCst)
+    }
+}
+
+struct BlockingFlushSink {
+    entered: Mutex<Option<mpsc::SyncSender<()>>>,
+    release: Mutex<Option<mpsc::Receiver<()>>>,
+    flush_calls: Arc<AtomicUsize>,
+}
+
+impl LogSink for BlockingFlushSink {
+    fn write(
+        &self,
+        _: &sc_observability_types::LogEvent,
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        Ok(())
+    }
+
+    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        self.flush_calls.fetch_add(1, Ordering::SeqCst);
+        if let Some(entered) = self.entered.lock().unwrap().take() {
+            entered.send(()).unwrap();
+        }
+        if let Some(release) = self.release.lock().unwrap().take() {
+            release.recv().unwrap();
+        }
+        Ok(())
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("flush-single-flight-blocking").unwrap(),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+struct Admit;
+
+impl BridgeEventPolicy for Admit {
+    fn decide(&self, _: &LogEvent) -> BridgeEventDecision {
+        BridgeEventDecision::Admit
+    }
+}
+
+fn attachment_options() -> AttachmentOptions {
+    AttachmentOptions::new(
+        BridgeOptions {
+            default_action: ActionName::new("log.record").unwrap(),
+            parse_bracket_action: false,
+        },
+        Arc::new(Admit),
+    )
+}
+
+fn blocking_logger(sink: Arc<dyn LogSink>) -> Arc<sc_observability::v2::Logger> {
     let mut config = LoggerConfig::default_for(
         ServiceName::new("flush-single-flight").unwrap(),
-        root.path().to_path_buf(),
+        std::env::temp_dir(),
     );
     config.level = LevelFilter::Info;
+    config.enable_file_sink = false;
     config.enable_console_sink = false;
-    let options = BridgeOptions {
-        default_action: ActionName::new("log.record").unwrap(),
-        parse_bracket_action: false,
-    };
-    let guard = sc_observability_log::init(config, options).unwrap();
-    let control = guard.control();
-    let path = control.active_log_path().unwrap().unwrap();
+    let mut builder = sc_observability::v2::LoggerBuilder::new(config).unwrap();
+    builder.register_sink(SinkRegistration::typed(sink));
+    Arc::new(builder.build().unwrap())
+}
 
-    // Nothing queued or in flight; then swap the active file for a reader-less FIFO.
-    control.flush(IO_TIMEOUT).unwrap();
-    if path.exists() {
-        std::fs::remove_file(&path).unwrap();
-    }
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let status = std::process::Command::new("mkfifo")
-        .arg(&path)
-        .status()
-        .unwrap();
-    assert!(status.success(), "mkfifo failed: {status}");
-
-    // The writer blocks opening the FIFO for this record, so flush cannot return.
-    sc_observability_log::info!(target: "flush_single_flight", "record behind a stuck sink");
+#[test]
+fn stuck_flush_keeps_one_detached_helper_and_rejects_retries() {
+    let (stuck_sink, sink) = StuckSink::prepare();
+    let host = blocking_logger(sink);
+    let mut attachment = attach_logger(Arc::clone(&host), attachment_options()).unwrap();
+    let control = attachment.control();
 
     // (a) The first flush times out and detaches exactly one helper.
-    let first = control.flush(STUCK_FLUSH_TIMEOUT);
+    let first = control.flush_with_timeout(STUCK_FLUSH_TIMEOUT);
     let first_error = first.unwrap_err();
     assert!(
-        matches!(first_error, FlushError::TimedOut { .. }),
+        matches!(first_error, FlushError::Drain { .. }),
         "{first_error:?}"
     );
     assert_eq!(
-        first_error.code(),
+        first_error.diagnostic().code,
         error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT
     );
+    stuck_sink.wait_until_blocked();
+    assert_eq!(stuck_sink.flush_calls(), 1);
 
     // A retry is rejected at once and spawns nothing.
     for _ in 0..3 {
         let started = Instant::now();
-        let retry = guard.flush(RETRY_TIMEOUT);
-        assert!(matches!(retry, Err(FlushError::InProgress)), "{retry:?}");
+        let retry = control.flush_with_timeout(RETRY_TIMEOUT);
+        assert!(matches!(retry, Err(FlushError::Drain { .. })), "{retry:?}");
         assert!(
             started.elapsed() < RETRY_TIMEOUT / 4,
             "InProgress must not wait for the flush timeout"
         );
         assert_eq!(
-            retry.unwrap_err().code(),
+            retry.unwrap_err().diagnostic().code,
             error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
         );
+        assert_eq!(
+            stuck_sink.flush_calls(),
+            1,
+            "a rejected retry must not call the sink"
+        );
     }
 
-    // (b) Open the FIFO read-write (never blocks, and keeps a writer so reads
-    // never hit EOF): the writer's open completes and the detached helper finishes.
-    let _reader = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&path)
-        .unwrap();
+    // (b) Release the sink: the detached helper returns and a later flush works.
+    stuck_sink.release();
     let deadline = Instant::now() + HELPER_FINISH_DEADLINE;
     loop {
-        if control.flush(IO_TIMEOUT).is_ok() {
-            break;
+        match control.flush_with_timeout(IO_TIMEOUT) {
+            Ok(()) => break,
+            Err(error)
+                if error.diagnostic().code
+                    == error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS
+                    && Instant::now() < deadline =>
+            {
+                std::thread::yield_now();
+            }
+            Err(error) => panic!("released flush must succeed: {error:?}"),
         }
-        assert!(
-            Instant::now() < deadline,
-            "the detached helper never finished"
-        );
-        std::thread::sleep(Duration::from_millis(10));
     }
-
-    guard.shutdown(IO_TIMEOUT).unwrap();
+    assert_eq!(stuck_sink.flush_calls(), 2);
+    attachment.detach(IO_TIMEOUT).unwrap();
+    Arc::try_unwrap(host)
+        .unwrap_or_else(|_| panic!("detach releases the attachment logger"))
+        .shutdown()
+        .unwrap();
 }

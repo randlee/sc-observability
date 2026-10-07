@@ -1143,7 +1143,7 @@ fn bridge_timeout(external: bool) {
     backend.try_log(event(), ProducerOrigin::RustHost).unwrap();
     if external {
         assert!(matches!(
-            control.flush(Duration::from_millis(1)),
+            control.flush_with_timeout(Duration::from_millis(1)),
             Err(sc_observability_types::v2::FlushError::Drain { .. })
         ));
     } else {
@@ -1161,7 +1161,7 @@ fn bridge_timeout(external: bool) {
     drop(held);
     drop(backend);
     crate::spawn::wait_live(1);
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
 }
 fn bridge_churn() {
     let (_root, host) = bridge_host();
@@ -1175,7 +1175,7 @@ fn bridge_churn() {
         assert!(matches!(saved.state(), OperationState::Completed { .. }));
         assert!(control.health().is_ok());
     }
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
 }
 fn bridge_canonical_v2() {
     let (root, mut config) = config();
@@ -1202,12 +1202,12 @@ fn bridge_canonical_v2() {
         .unwrap()
         .wait(Duration::from_secs(2))
         .unwrap();
-    control.flush(Duration::from_secs(2)).unwrap();
+    control.flush_with_timeout(Duration::from_secs(2)).unwrap();
     assert!(control.health().is_ok());
 
     drop(backend);
     crate::spawn::wait_live(1);
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
     drop(root);
 }
 fn native_diagnostic_fidelity() {
@@ -1523,7 +1523,7 @@ fn bridge_slot_ordering() {
     slots(&backend, &backend.shared);
     drop(backend);
     crate::spawn::wait_live(1);
-    host.shutdown(Duration::from_secs(5)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(5)).unwrap();
 }
 fn callback_race() {
     let (_root, owner, backend) = core();
@@ -1655,5 +1655,5 @@ fn bridge_observers_callbacks() {
     drop(backend);
     crate::spawn::wait_live(1);
     assert_eq!(operation.wait(Duration::ZERO).unwrap(), 19);
-    host.shutdown(Duration::from_secs(2)).unwrap();
+    host.shutdown_with_timeout(Duration::from_secs(2)).unwrap();
 }

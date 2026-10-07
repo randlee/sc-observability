@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 use std::cell::Cell;
 
+#[cfg(test)]
+use crate::constants::{ATTACHMENT_HELPER_PANIC, ATTACHMENT_HELPER_SPAWN_FAILURE};
 use crate::control::{BridgeEvent, LogControl};
 use crate::error::EmitError;
 use crate::handle;
@@ -56,11 +58,6 @@ thread_local! {
 // released attachment path has no hook and keeps its normal `Builder::spawn`.
 #[cfg(test)]
 static NEXT_ATTACHMENT_HELPER_FAULT: AtomicU8 = AtomicU8::new(0);
-#[cfg(test)]
-const ATTACHMENT_HELPER_SPAWN_FAILURE: u8 = 1;
-#[cfg(test)]
-const ATTACHMENT_HELPER_PANIC: u8 = 2;
-
 #[cfg(test)]
 fn fail_next_attachment_helper_spawn() {
     NEXT_ATTACHMENT_HELPER_FAULT.store(ATTACHMENT_HELPER_SPAWN_FAILURE, Ordering::SeqCst);
@@ -579,38 +576,12 @@ pub(crate) fn flush_attached(
 }
 
 fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), CoreFlushError> {
-    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     #[cfg(test)]
     let fault = NEXT_ATTACHMENT_HELPER_FAULT.swap(0, Ordering::SeqCst);
-    let spawn = move || {
-        std::thread::Builder::new()
-            .name("sc-observability-log-attachment-flush".to_owned())
-            .spawn(move || {
-                // Keep the attachment call alive until the helper exits.  A timed-out
-                // caller must not be able to detach while this helper still owns the
-                // attachment's logger reference.
-                #[cfg(test)]
-                assert!(
-                    fault != ATTACHMENT_HELPER_PANIC,
-                    "injected attachment helper loss"
-                );
-                let result = call.state.logger.flush();
-                drop(call);
-                let _ = sender.send(result);
-            })
-    };
     #[cfg(test)]
-    let spawn_result = if fault == ATTACHMENT_HELPER_SPAWN_FAILURE {
-        Err(std::io::Error::other(
-            "injected attachment helper spawn failure",
-        ))
-    } else {
-        spawn()
-    };
-    #[cfg(not(test))]
-    let spawn_result = spawn();
-    spawn_result.map_err(|source| {
-        crate::error::flush_drain_as(
+    if fault == ATTACHMENT_HELPER_SPAWN_FAILURE {
+        let source = std::io::Error::other("injected attachment helper spawn failure");
+        return Err(crate::error::flush_drain_as(
             crate::error::operation_context_with_source(
                 crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
                 source.to_string(),
@@ -618,12 +589,38 @@ fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), CoreFlushEr
                 source,
             ),
             FailureClassification::Unavailable,
-        )
-    })?;
-    match receiver.recv_timeout(timeout) {
+        ));
+    }
+    let Some(flight) = crate::handle::claim_flush_flight() else {
+        return Err(crate::error::flush_drain_as(
+            crate::error::operation_context(
+                crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS,
+                "a previous flush is still running; no new flush was started",
+                Remediation::recoverable(
+                    "wait for the existing flush before retrying",
+                    ["observe writer health"],
+                ),
+            ),
+            FailureClassification::QueueFull,
+        ));
+    };
+    let flush = move || {
+        // Keep the attachment call alive until the helper exits. A timed-out
+        // caller therefore cannot detach while the helper owns the logger.
+        let _flight = flight;
+        #[cfg(test)]
+        assert!(
+            fault != ATTACHMENT_HELPER_PANIC,
+            "injected attachment helper loss"
+        );
+        let result = call.state.logger.flush();
+        drop(call);
+        result
+    };
+    match crate::handle::run_bounded(timeout, flush) {
         Ok(Ok(())) => Ok(()),
         Ok(Err(source)) => Err(crate::error::flush_drain(source.into_context())),
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(crate::error::flush_drain_as(
+        Err(crate::handle::BoundedError::TimedOut) => Err(crate::error::flush_drain_as(
             crate::error::operation_context(
                 crate::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT,
                 format!("attachment flush did not complete within {timeout:?}"),
@@ -634,7 +631,16 @@ fn flush_call(call: AttachmentCall, timeout: Duration) -> Result<(), CoreFlushEr
             ),
             FailureClassification::timeout("flush"),
         )),
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(crate::error::flush_drain_as(
+        Err(crate::handle::BoundedError::Spawn { source }) => Err(crate::error::flush_drain_as(
+            crate::error::operation_context_with_source(
+                crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED,
+                source.to_string(),
+                Remediation::not_recoverable("inspect thread resource availability"),
+                source,
+            ),
+            FailureClassification::Unavailable,
+        )),
+        Err(crate::handle::BoundedError::WorkerLost) => Err(crate::error::flush_drain_as(
             crate::error::operation_context(
                 crate::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST,
                 "attachment flush helper ended without a result",
@@ -809,7 +815,7 @@ mod tests {
             .expect("all entered calls drain before releasing the host logger");
         ATTACHMENT.lock().expect("attachment registry").mode = AttachmentMode::Empty;
         drop(state);
-        Arc::try_unwrap(logger)
+        let _ = Arc::try_unwrap(logger)
             .unwrap_or_else(|_| panic!("attachment call releases the host logger"))
             .shutdown();
     }
@@ -929,7 +935,7 @@ mod tests {
             "a below-level installed record is skipped without a drop"
         );
         guard
-            .shutdown(Duration::from_secs(5))
+            .shutdown_with_timeout(Duration::from_secs(5))
             .expect("installed logger shuts down");
     }
 

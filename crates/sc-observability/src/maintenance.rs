@@ -53,7 +53,6 @@ pub(crate) struct WriterRuntime {
     // shared runtime state, so this mutex supplies that synchronization.
     done_rx: Mutex<mpsc::Receiver<()>>,
     join_handle: JoinHandle<()>,
-    join_timeout: Duration,
     writer_tracker: Arc<WriterTracker>,
     maintenance_tracker: Option<Arc<MaintenanceTracker>>,
     #[cfg(test)]
@@ -118,7 +117,6 @@ impl WriterRuntime {
             sender,
             done_rx: Mutex::new(done_rx),
             join_handle,
-            join_timeout: policy.writer_shutdown_timeout.as_duration(),
             writer_tracker,
             maintenance_tracker,
             #[cfg(test)]
@@ -149,7 +147,7 @@ impl WriterRuntime {
         self.writer_tracker.record_queue_full_drop()
     }
 
-    pub(crate) fn flush(&self) -> Result<(), FlushError> {
+    pub(crate) fn flush_with_timeout(&self, timeout: Duration) -> Result<(), FlushError> {
         let (tx, rx) = mpsc::channel();
         self.sender
             .send(WriterCommand::Flush(tx))
@@ -166,7 +164,7 @@ impl WriterRuntime {
                     ),
                 )),
             })?;
-        match rx.recv_timeout(self.join_timeout) {
+        match rx.recv_timeout(timeout) {
             Ok(Ok(())) => Ok(()),
             Ok(Err(summary)) => Err(FlushError::Drain {
                 context: Box::new(
@@ -189,7 +187,7 @@ impl WriterRuntime {
                     error_codes::LOGGER_WRITER_DEGRADED,
                     format!(
                         "writer thread did not complete flush within {}ms",
-                        self.join_timeout.as_millis()
+                        timeout.as_millis()
                     ),
                     Remediation::recoverable(
                         "inspect logger writer-thread health",
@@ -217,7 +215,7 @@ impl WriterRuntime {
         }
     }
 
-    pub(crate) fn shutdown(self) -> WriterHealthSnapshot {
+    pub(crate) fn shutdown_with_timeout(self, timeout: Duration) -> (WriterHealthSnapshot, bool) {
         drop(self.sender);
 
         let mut timed_out = false;
@@ -225,13 +223,12 @@ impl WriterRuntime {
             .done_rx
             .lock()
             .expect("writer done receiver poisoned")
-            .recv_timeout(self.join_timeout)
+            .recv_timeout(timeout)
         {
             Ok(()) => {}
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 timed_out = true;
-                self.writer_tracker
-                    .record_shutdown_timeout(self.join_timeout);
+                self.writer_tracker.record_shutdown_timeout(timeout);
                 #[cfg(test)]
                 if let Some(signal) = self.test_pass_signal.as_ref() {
                     signal.record_shutdown_timeout();
@@ -239,10 +236,7 @@ impl WriterRuntime {
                 if let Some(tracker) = self.maintenance_tracker.as_ref() {
                     tracker.record_failure(&ErrorContext::new(
                         error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
-                        format!(
-                            "maintenance did not stop within {}ms",
-                            self.join_timeout.as_millis()
-                        ),
+                        format!("maintenance did not stop within {}ms", timeout.as_millis()),
                         Remediation::recoverable(
                             "inspect maintenance shutdown timing",
                             [
@@ -284,7 +278,10 @@ impl WriterRuntime {
                 ));
         }
 
-        snapshot_from_trackers(&self.writer_tracker, self.maintenance_tracker.as_ref())
+        (
+            snapshot_from_trackers(&self.writer_tracker, self.maintenance_tracker.as_ref()),
+            timed_out,
+        )
     }
 
     pub(crate) fn snapshot(&self) -> WriterHealthSnapshot {
@@ -864,7 +861,6 @@ fn run_maintenance_if_due(
 }
 
 #[cfg(test)]
-#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 #[derive(Debug, Default)]
 pub(crate) struct TestPassDelaySignal {
     active: AtomicBool,
@@ -878,15 +874,14 @@ pub(crate) struct TestPassDelaySignal {
 }
 
 #[cfg(test)]
-#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 pub(crate) struct TestPassDelayReleaseGuard(Arc<TestPassDelaySignal>);
 
 #[cfg(test)]
-#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TestPassDelayWait {
     NotBlocked,
     Released,
+    #[cfg(feature = "v1")]
     TimedOut,
 }
 
@@ -898,7 +893,6 @@ impl Drop for TestPassDelayReleaseGuard {
 }
 
 #[cfg(test)]
-#[cfg_attr(not(feature = "v1"), allow(dead_code))]
 impl TestPassDelaySignal {
     fn set_active(&self, active: bool) {
         let _gate = self.gate.lock().expect("test gate poisoned");
@@ -934,6 +928,7 @@ impl TestPassDelaySignal {
         TestPassDelayWait::Released
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn wait_until_released_for(&self, timeout: Duration) -> TestPassDelayWait {
         if !self.block_until_released.load(Ordering::SeqCst) {
             return TestPassDelayWait::NotBlocked;
@@ -985,6 +980,7 @@ impl TestPassDelaySignal {
         self.changed.notify_all();
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn level_stopping(&self) -> bool {
         self.level_stopping.load(Ordering::SeqCst)
     }
@@ -1010,6 +1006,7 @@ impl TestPassDelaySignal {
         true
     }
 
+    #[cfg(feature = "v1")]
     pub(crate) fn wait_timed_out(&self) -> bool {
         self.wait_timed_out.load(Ordering::SeqCst)
     }
@@ -1029,6 +1026,7 @@ fn maybe_run_test_delay(
         match signal.wait_until_released() {
             TestPassDelayWait::NotBlocked => thread::sleep(delay),
             TestPassDelayWait::Released => {}
+            #[cfg(feature = "v1")]
             TestPassDelayWait::TimedOut => {
                 panic!("test maintenance delay release gate timed out")
             }

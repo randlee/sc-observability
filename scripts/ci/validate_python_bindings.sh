@@ -52,13 +52,17 @@ cp -R bindings/python/sc-observability-py/tests "$B4_TEMP_DIR/tests"
 "$B4_PYTHON" scripts/ci/stage_python_conformance.py --source . --tests "$B4_TEMP_DIR/tests"
 cp -R bindings/python/sc-observability-py/examples "$B4_TEMP_DIR/examples"
 SC_OBSERVABILITY_RUNTIME_TEST=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
-  "$B4_TEMP_DIR/venv/bin/python" -I -X dev -W error -m pytest \
+"$B4_TEMP_DIR/venv/bin/python" -I -X dev -W error -m pytest \
   "$B4_TEMP_DIR/tests" -ra
 "$B4_TEMP_DIR/venv/bin/python" -I -m mypy --strict --python-version 3.10 \
   "$B4_TEMP_DIR/tests/typing/test_result_narrowing.py" "$B4_TEMP_DIR/examples/standard_logging.py" \
   "$B4_TEMP_DIR/tests/typing/test_async_narrowing.py" "$B4_TEMP_DIR/examples/async_logging.py"
 "$B4_TEMP_DIR/venv/bin/python" -I "$B4_TEMP_DIR/examples/standard_logging.py"
 "$B4_TEMP_DIR/venv/bin/python" -I -X dev -W error "$B4_TEMP_DIR/examples/async_logging.py"
+if [[ -z "${SC_OBSERVABILITY_ATTACHED_PACKAGE+x}" ]]; then
+  SC_OBSERVABILITY_ATTACHED_PACKAGE="$("$B4_TEMP_DIR/venv/bin/python" -I -c 'import sc_observability; print(sc_observability.__file__)')"
+fi
+export SC_OBSERVABILITY_ATTACHED_PACKAGE
 env "${B4_EMBEDDED_ENV[@]}" PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
   cargo run --locked -p rust-python-logging
 

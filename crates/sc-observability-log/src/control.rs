@@ -69,12 +69,21 @@ impl LogControl {
         }
     }
 
+    /// Flushes using the bridge's configured default timeout.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FlushError`] when the lifecycle or bounded flush rejects the request.
+    pub fn flush(&self) -> Result<(), FlushError> {
+        self.flush_with_timeout(crate::DEFAULT_DROP_SHUTDOWN_TIMEOUT)
+    }
+
     /// Flushes on a helper thread, bounded by `timeout`.
     ///
     /// # Errors
     ///
     /// Returns [`FlushError`] when the lifecycle or bounded flush rejects the request.
-    pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
+    pub fn flush_with_timeout(&self, timeout: Duration) -> Result<(), FlushError> {
         if let Some(saved) = &self.attachment {
             return crate::bridge::flush_attached(saved, timeout);
         }

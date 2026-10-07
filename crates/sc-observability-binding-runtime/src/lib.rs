@@ -227,15 +227,11 @@ struct TestBlockingSink {
 }
 
 #[cfg(feature = "test-hooks")]
-#[expect(
-    deprecated,
-    reason = "fixture implements the retained LogSink boundary"
-)]
-impl sc_observability::LogSink for TestBlockingSink {
+impl sc_observability::v2::LogSink for TestBlockingSink {
     fn write(
         &self,
         _: &sc_observability::LogEvent,
-    ) -> Result<(), sc_observability_types::LogSinkError> {
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
         let mut state = self
             .gate
             .state
@@ -282,7 +278,7 @@ pub fn create_test_blocking_core_backend(
         };
         let mut builder = sc_observability::v2::Logger::builder(config)
             .map_err(|error| conversion::canonical(&error, conversion::Kind::Internal))?;
-        builder.register_sink(sc_observability::SinkRegistration::new(Arc::new(
+        builder.register_sink(sc_observability::v2::SinkRegistration::typed(Arc::new(
             TestBlockingSink {
                 gate: gate_for_sink,
             },

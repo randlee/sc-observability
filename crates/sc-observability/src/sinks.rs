@@ -345,7 +345,7 @@ impl JsonlFileSink {
 
 impl LogSink for JsonlFileSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        if let Some(parent) = self.path.parent() {
+        if let Some(parent) = self.path.parent().filter(|_| !is_named_pipe(&self.path)) {
             fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
         }
 
@@ -357,9 +357,12 @@ impl LogSink for JsonlFileSink {
             self.perform_maintenance(&policy)?;
         }
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
+        let mut options = OpenOptions::new();
+        options.append(true);
+        if !is_named_pipe(&self.path) {
+            options.create(true);
+        }
+        let mut file = options
             .open(&self.path)
             .map_err(|err| self.mark_failure(err))?;
         file.write_all(&line)
@@ -377,6 +380,16 @@ impl LogSink for JsonlFileSink {
             .expect("file sink health poisoned")
             .clone()
     }
+}
+
+#[cfg(windows)]
+fn is_named_pipe(path: &Path) -> bool {
+    path.to_string_lossy().starts_with(r"\\.\pipe\")
+}
+
+#[cfg(not(windows))]
+fn is_named_pipe(_path: &Path) -> bool {
+    false
 }
 
 #[derive(Debug, Clone)]

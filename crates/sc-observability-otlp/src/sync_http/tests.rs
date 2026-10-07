@@ -12,10 +12,10 @@ use sc_observability_types::{
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::fs;
-use std::io::{BufRead, ErrorKind, Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -25,7 +25,6 @@ use std::time::{Duration, Instant, SystemTime};
 
 // This is a test watchdog, not the production handshake deadline (1 ms).
 const STARTUP_TEST_WATCHDOG: Duration = Duration::from_secs(10);
-const TLS_SERVER_READY_WATCHDOG: Duration = Duration::from_secs(10);
 const REQUEST_FIXTURE_WATCHDOG: Duration = Duration::from_secs(2);
 const STALLED_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 8_000;
 // Leave the client-wide timeout much longer than the final attempt's remaining
@@ -552,94 +551,73 @@ fn custom_ca_file(contents: &str) -> PathBuf {
     path
 }
 
-fn start_tls_test_server(cert: &PathBuf, key: &PathBuf) -> (process::Child, std::net::SocketAddr) {
-    let server = Command::new("python3")
-        .args([
-            "-u",
-            "-c",
-            "import http.server, ssl, sys\nclass H(http.server.BaseHTTPRequestHandler):\n def do_POST(self):\n  n=int(self.headers.get('Content-Length','0')); self.rfile.read(n); self.send_response(200); self.send_header('Content-Length','0'); self.end_headers()\n def log_message(self,*args): pass\ns=http.server.HTTPServer(('127.0.0.1',0),H); c=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); c.load_cert_chain(sys.argv[1],sys.argv[2]); s.socket=c.wrap_socket(s.socket,server_side=True); print(f'READY {s.server_address[0]}:{s.server_address[1]}',flush=True); s.serve_forever()",
-        ])
-        .arg(cert)
-        .arg(key)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("start standard-library local TLS server");
-    let mut server = server;
-    let ready = match read_line_with_watchdog(
-        server.stdout.take().expect("TLS server ready output"),
-        TLS_SERVER_READY_WATCHDOG,
-    ) {
-        Ok(ready) => ready,
-        Err(error) if error.kind() == ErrorKind::TimedOut => {
-            let _ = server.kill();
-            let _ = server.wait();
-            panic!("timed out waiting for TLS test server readiness: {error}");
-        }
-        Err(error) => panic!("read TLS test server readiness: {error}"),
-    };
-    let Some(address) = ready
-        .trim()
-        .strip_prefix("READY ")
-        .and_then(|address| address.parse::<std::net::SocketAddr>().ok())
-    else {
-        let _ = server.kill();
-        let _ = server.wait();
-        panic!("local TLS server returned an invalid ready address: {ready:?}");
-    };
-    (server, address)
+struct TlsTestServer {
+    address: std::net::SocketAddr,
+    shutdown: Arc<AtomicBool>,
+    thread: thread::JoinHandle<()>,
 }
 
-fn read_line_with_watchdog<R>(reader: R, watchdog: Duration) -> std::io::Result<String>
-where
-    R: Read + Send + 'static,
-{
-    let (ready_tx, ready_rx) = mpsc::channel();
-    thread::spawn(move || {
-        let mut ready = String::new();
-        let result = std::io::BufReader::new(reader)
-            .read_line(&mut ready)
-            .map(|_| ready);
-        let _ = ready_tx.send(result);
+impl TlsTestServer {
+    fn shutdown(self) {
+        self.shutdown.store(true, Ordering::Release);
+        std::net::TcpStream::connect(self.address).expect("wake test TLS server for shutdown");
+        self.thread.join().expect("join test TLS server");
+    }
+}
+
+fn start_tls_test_server(cert: &PathBuf, key: &PathBuf) -> TlsTestServer {
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+
+    let certificate_chain =
+        CertificateDer::pem_reader_iter(fs::File::open(cert).expect("open test TLS certificate"))
+            .collect::<Result<Vec<_>, _>>()
+            .expect("parse test TLS certificate");
+    let private_key =
+        PrivateKeyDer::from_pem_reader(fs::File::open(key).expect("open test TLS private key"))
+            .expect("parse test TLS private key");
+    let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("configure test TLS protocol versions")
+    .with_no_client_auth()
+    .with_single_cert(certificate_chain, private_key)
+    .expect("configure test TLS certificate");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test TLS listener");
+    let address = listener
+        .local_addr()
+        .expect("read test TLS listener address");
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let server_shutdown = Arc::clone(&shutdown);
+    let server = thread::spawn(move || {
+        loop {
+            let (tcp_stream, _) = listener.accept().expect("accept test TLS connection");
+            if server_shutdown.load(Ordering::Acquire) {
+                break;
+            }
+            let mut stream = rustls::StreamOwned::new(
+                rustls::ServerConnection::new(Arc::new(config.clone()))
+                    .expect("construct test TLS server connection"),
+                tcp_stream,
+            );
+            let mut request = [0_u8; 4096];
+            if let Ok(request_len) = stream.read(&mut request) {
+                assert!(
+                    request[..request_len].starts_with(b"POST "),
+                    "test TLS server only accepts HTTP POST requests"
+                );
+                stream
+                    .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    .expect("write test TLS response");
+                stream.flush().expect("flush test TLS response");
+            }
+        }
     });
-
-    match ready_rx.recv_timeout(watchdog) {
-        Ok(result) => result,
-        Err(mpsc::RecvTimeoutError::Timeout) => Err(std::io::Error::new(
-            ErrorKind::TimedOut,
-            "timed out waiting for readiness line",
-        )),
-        Err(mpsc::RecvTimeoutError::Disconnected) => Err(std::io::Error::new(
-            ErrorKind::UnexpectedEof,
-            "readiness reader exited without a result",
-        )),
+    TlsTestServer {
+        address,
+        shutdown,
+        thread: server,
     }
-}
-
-#[test]
-fn tls_server_readiness_wait_times_out_if_stdout_stalls() {
-    struct GatedReader(mpsc::Receiver<()>);
-
-    impl Read for GatedReader {
-        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-            self.0
-                .recv()
-                .expect("test releases the stalled readiness reader");
-            let line = b"READY\n";
-            buffer[..line.len()].copy_from_slice(line);
-            Ok(line.len())
-        }
-    }
-
-    let (release_tx, release_rx) = mpsc::channel();
-    let error = read_line_with_watchdog(GatedReader(release_rx), Duration::from_millis(20))
-        .expect_err("a stalled readiness read must time out");
-
-    assert_eq!(error.kind(), ErrorKind::TimedOut);
-    release_tx
-        .send(())
-        .expect("release the detached readiness reader");
 }
 
 fn retry_policy(
@@ -915,25 +893,27 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
     assert!(generated.status.success(), "generate local TLS certificate");
     let unrelated = custom_ca_file(CUSTOM_CA_PEM);
     let ca = custom_ca_file(&fs::read_to_string(&cert).expect("read server CA"));
-    let (mut server, address) = start_tls_test_server(&cert, &key);
-    let exporter =
-        OtlpHttpExporter::for_test_config(format!("https://{address}"), None, Some(ca.clone()))
-            .expect("construct exporter with trusted CA");
+    let server = start_tls_test_server(&cert, &key);
+    let exporter = OtlpHttpExporter::for_test_config(
+        format!("https://{}", server.address),
+        None,
+        Some(ca.clone()),
+    )
+    .expect("construct exporter with trusted CA");
     let trusted =
         exporter.submit_json_blocking(SubmissionRoute::Signal(Signal::Logs), &logs_payload());
     exporter
         .shutdown_blocking()
         .expect("shut down successful TLS exporter");
-    let _ = server.kill();
-    let _ = server.wait();
+    server.shutdown();
     assert!(
         trusted.is_ok(),
         "trusted CA completes TLS export: {trusted:?}"
     );
 
-    let (mut server, address) = start_tls_test_server(&cert, &key);
+    let server = start_tls_test_server(&cert, &key);
     let exporter = OtlpHttpExporter::for_test_config(
-        format!("https://{address}"),
+        format!("https://{}", server.address),
         None,
         Some(unrelated.clone()),
     )
@@ -943,8 +923,7 @@ fn retained_custom_ca_bundle_verifies_real_tls_exports() {
     exporter
         .shutdown_blocking()
         .expect("shut down certificate-rejected TLS exporter");
-    let _ = server.kill();
-    let _ = server.wait();
+    server.shutdown();
     let error = rejected.expect_err("unrelated CA fails certificate verification");
     assert!(
         format!("{error:?}").contains("InvalidCertificate"),

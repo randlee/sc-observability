@@ -203,57 +203,35 @@ fn shutdown_deadline_does_not_join_stalled_exporter() {
 struct ChildProcess {
     child: Option<std::process::Child>,
     ready: std::sync::mpsc::Receiver<()>,
+    complete: Option<std::sync::mpsc::Receiver<()>>,
     mode: String,
     address: std::net::SocketAddr,
 }
 impl ChildProcess {
     fn ready(&self) {
         self.ready
-            .recv_timeout(DEADLINE)
-            .unwrap_or_else(|error| panic!("child {} readiness deadline: {error}", self.mode));
+            .recv()
+            .unwrap_or_else(|error| panic!("child {} exited before readiness: {error}", self.mode));
     }
     fn kill(&mut self) {
         self.child.as_mut().unwrap().kill().unwrap();
     }
     fn wait(&mut self) -> std::process::ExitStatus {
-        let mut child = self.child.take().unwrap();
-        let pid = child.id();
-        let (send, receive) = std::sync::mpsc::sync_channel(1);
-        std::thread::spawn(move || {
-            let _ = send.send(child.wait());
-        });
-        match receive.recv_timeout(DEADLINE) {
-            Ok(status) => status.unwrap(),
-            Err(error) => {
-                // The wait thread owns Child. Kill only this still-unreaped PID.
-                #[cfg(unix)]
-                let _ = std::process::Command::new("kill")
-                    .args(["-KILL", &pid.to_string()])
-                    .spawn();
-                #[cfg(windows)]
-                let _ = std::process::Command::new("taskkill")
-                    .args(["/F", "/PID", &pid.to_string()])
-                    .spawn();
-                let _ = receive.recv_timeout(DEADLINE);
-                panic!(
-                    "child {} completion deadline; pending process {pid}: {error}",
-                    self.mode
-                );
-            }
+        if let Some(complete) = self.complete.take() {
+            complete.recv().unwrap_or_else(|error| {
+                panic!("child {} exited before completion: {error}", self.mode)
+            });
         }
+        self.child.take().unwrap().wait().unwrap()
     }
 }
 impl Drop for ChildProcess {
     fn drop(&mut self) {
-        // Unblock the readiness listener even if the child failed before signaling.
-        let _ = std::net::TcpStream::connect_timeout(&self.address, DEADLINE);
+        // Unblock the control listener even if the child failed before signaling.
+        let _ = std::net::TcpStream::connect(self.address);
         if let Some(mut child) = self.child.take() {
             let _ = child.kill();
-            let (send, receive) = std::sync::mpsc::sync_channel(1);
-            std::thread::spawn(move || {
-                let _ = send.send(child.wait());
-            });
-            let _ = receive.recv_timeout(DEADLINE);
+            let _ = child.wait();
         }
     }
 }
@@ -273,29 +251,45 @@ fn child(path: &Path, mode: &str) -> ChildProcess {
         .stderr(std::process::Stdio::inherit())
         .spawn()
         .unwrap();
-    let (send, ready) = std::sync::mpsc::sync_channel(1);
-    // The listener owns readiness; no file-existence or scheduling poll loop.
+    let (ready_send, ready) = std::sync::mpsc::sync_channel(1);
+    let (complete_send, complete) = std::sync::mpsc::sync_channel(1);
+    let waits_for_completion = mode == "drain";
+    // The listener owns the explicit child state transitions; no scheduling poll
+    // loop or wall-clock completion deadline is required.
     std::thread::spawn(move || {
         if let Ok((mut stream, _)) = listener.accept() {
             use std::io::Read;
-            let _ = stream.set_read_timeout(Some(DEADLINE));
             let mut byte = [0];
             if stream.read_exact(&mut byte).is_ok() && byte == [1] {
-                let _ = send.send(());
+                let _ = ready_send.send(());
+            }
+        }
+        if waits_for_completion && let Ok((mut stream, _)) = listener.accept() {
+            use std::io::Read;
+            let mut byte = [0];
+            if stream.read_exact(&mut byte).is_ok() && byte == [2] {
+                let _ = complete_send.send(());
             }
         }
     });
     ChildProcess {
         child: Some(child),
         ready,
+        complete: waits_for_completion.then_some(complete),
         mode: mode.to_owned(),
         address,
     }
 }
 fn signal_ready() {
+    signal_parent(1);
+}
+fn signal_complete() {
+    signal_parent(2);
+}
+fn signal_parent(signal: u8) {
     let mut stream =
         std::net::TcpStream::connect(std::env::var("SC_D33_TEST_READY").unwrap()).unwrap();
-    stream.write_all(&[1]).unwrap();
+    stream.write_all(&[signal]).unwrap();
 }
 struct CrashExporter {
     inner: ScriptedExporter,
@@ -345,6 +339,9 @@ fn child_drainer() {
     }
     client.flush(DEADLINE).unwrap();
     client.shutdown(DEADLINE).unwrap();
+    if mode == "drain" {
+        signal_complete();
+    }
 }
 #[test]
 fn receipt_after_commit() {

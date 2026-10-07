@@ -1,4 +1,4 @@
-//! Test-local forwarding adapter; no production integration is implied.
+//! Canonical-v2 test-local forwarding adapter; no production integration is implied.
 use sc_observability_types::{LogEvent, Observation, SinkHealth, SinkHealthState, SinkName};
 use std::io::{Read, Seek};
 use std::path::Path;
@@ -7,11 +7,6 @@ use std::time::{Duration, Instant};
 
 pub trait Consumer: Send + Sync + 'static {
     fn forward(&self, event: LogEvent) -> Result<(), sc_observability_types::ObservationError>;
-}
-impl Consumer for sc_observe::Observability {
-    fn forward(&self, event: LogEvent) -> Result<(), sc_observability_types::ObservationError> {
-        self.emit(Observation::new(event.service.clone(), event))
-    }
 }
 impl Consumer for sc_observe::v2::Observability {
     fn forward(&self, event: LogEvent) -> Result<(), sc_observability_types::ObservationError> {
@@ -155,21 +150,21 @@ pub fn deliver<C: Consumer>(message: &str, consumer: Arc<C>, root: &Path, releas
     );
     control.try_log(event).expect("bridge admission");
     control
-        .flush(Duration::from_secs(5))
+        .flush_with_timeout(Duration::from_secs(5))
         .expect("core writer forwarding barrier");
     assert!(logger.health().last_writer_error.is_none());
     attachment
         .detach(Duration::from_secs(5))
         .expect("detach bridge");
     assert!(
-        control.flush(Duration::from_secs(1)).is_err(),
+        control.flush_with_timeout(Duration::from_secs(1)).is_err(),
         "stale control must reject"
     );
     let Ok(logger) = Arc::try_unwrap(logger) else {
         panic!("attachment leaked core owner");
     };
-    let stopped = logger.shutdown();
-    assert!(stopped.health().last_writer_error.is_none());
+    logger.shutdown().expect("shutdown logger");
+    assert!(logger.health().last_writer_error.is_none());
 }
 
 /// Check the real closed-observe rejection and its public core health propagation.
@@ -218,5 +213,5 @@ pub fn reject_closed<C: Consumer>(consumer: Arc<C>, root: &Path) {
     let last = health.last_error.expect("downstream diagnostic summary");
     assert_eq!(last.code, Some(expected.code));
     assert_eq!(last.message, expected.message);
-    logger.shutdown();
+    logger.shutdown().expect("shutdown logger");
 }

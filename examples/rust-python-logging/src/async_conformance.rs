@@ -185,7 +185,7 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
                 .map_err(failure)?;
         }
         if let Some(guard) = bridge_owner {
-            py.detach(move || guard.shutdown(Duration::from_secs(5)))
+            py.detach(move || guard.shutdown_with_timeout(Duration::from_secs(5)))
                 .map_err(failure)?;
         }
         result?;
@@ -289,7 +289,7 @@ pub fn finalize(mode: &str) -> Result<(), String> {
     }
     if let Some(guard) = bridge_owner {
         guard
-            .shutdown(Duration::from_secs(5))
+            .shutdown_with_timeout(Duration::from_secs(5))
             .map_err(|e| format!("{e:?}"))?;
     }
     python_result?;

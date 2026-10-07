@@ -26,8 +26,6 @@
 pub mod constants;
 pub mod error_codes;
 
-use std::marker::PhantomData;
-
 mod builder;
 mod follow;
 mod health;
@@ -106,9 +104,17 @@ pub mod v2 {
     #[doc(inline)]
     pub use crate::sink::LogSink;
     #[doc(inline)]
-    pub use crate::{ConsoleSink, JsonlFileSink, LoggerConfig, RetainedLogPolicy};
+    pub use crate::{
+        AdmissionOutcome, ConsoleSink, JsonlFileSink, LevelOwner, LevelState, LogEvent,
+        LogFollowSession, LogQuery, LogSnapshot, LoggerConfig, LoggingHealthReport,
+        RetainedLogPolicy, SinkRegistration, SinkRegistrationError,
+    };
     #[doc(inline)]
-    pub use sc_observability_types::v2::{EventError, FlushError, InitError, LogSinkError};
+    pub use sc_observability_types::v2::{
+        EventError, FlushError, InitError, LogSinkError, ShutdownError,
+    };
+    #[doc(inline)]
+    pub use sc_observability_types::{QueryError, ServiceName};
 }
 
 pub(crate) use maintenance::DiagnosticAdmitter;
@@ -534,31 +540,29 @@ mod canonical {
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
-    use super::{
-        DiagnosticAdmitter, LevelControl, LoggerConfig, LoggerRuntime, PhantomData, Running,
-        SinkRegistration,
-    };
+    use super::{DiagnosticAdmitter, LevelControl, LoggerConfig, LoggerRuntime, SinkRegistration};
 
     #[expect(
         missing_debug_implementations,
         reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
     )]
-    /// Structured logging runtime with query, follow, and typestate-checked shutdown.
-    pub struct Logger<State = Running> {
+    /// Structured logging runtime with query, follow, and shared-reference shutdown.
+    pub struct Logger {
         pub(crate) config: Arc<LoggerConfig>,
         pub(crate) sinks: Vec<SinkRegistration>,
         pub(crate) shutdown: Arc<AtomicBool>,
         pub(crate) runtime: LoggerRuntime,
-        pub(crate) diagnostic_admitter: Option<DiagnosticAdmitter>,
+        // MUTEX: shutdown releases this final sender before it takes the writer
+        // runtime, while normal canonical calls only need shared access.
+        pub(crate) diagnostic_admitter: Mutex<Option<DiagnosticAdmitter>>,
         // MUTEX: logger admission and LevelOwner changes share serialized state; each use keeps its explicit poison policy.
         pub(crate) level_control: Arc<Mutex<LevelControl>>,
-        pub(crate) state: PhantomData<State>,
     }
 }
 
 pub(crate) use canonical::Logger as CanonicalLogger;
 
-impl<State> CanonicalLogger<State> {
+impl CanonicalLogger {
     /// Returns the configured service identity, independent of sink layout.
     #[must_use]
     pub fn service_name(&self) -> &ServiceName {
@@ -600,6 +604,18 @@ fn writer_degraded_error_context(message: &str) -> ErrorContext {
     )
 }
 
+#[allow(
+    deprecated,
+    reason = "the retained shutdown code is the canonical closed-lifecycle diagnostic"
+)]
+fn shutdown_error_context(message: &str) -> ErrorContext {
+    ErrorContext::new(
+        error_codes::LOGGER_SHUTDOWN,
+        message,
+        Remediation::not_recoverable("construct a new logger before retrying"),
+    )
+}
+
 fn shutdown_timed_out_error_context(message: &str) -> ErrorContext {
     ErrorContext::new(
         error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
@@ -636,7 +652,7 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
     parent.join(format!("{file_name}.{index}"))
 }
 
-#[cfg(all(test, feature = "v1"))]
+#[cfg(test)]
 #[cfg_attr(
     feature = "v1",
     expect(
@@ -646,6 +662,24 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
 )]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "v1"))]
+    use crate::CanonicalLogger as Logger;
+
+    #[cfg(not(feature = "v1"))]
+    trait CanonicalEmit {
+        fn emit(&self, event: LogEvent) -> Result<(), CanonicalEventError>;
+    }
+
+    #[cfg(not(feature = "v1"))]
+    impl CanonicalEmit for Logger {
+        fn emit(&self, event: LogEvent) -> Result<(), CanonicalEventError> {
+            self.log(event)?;
+            self.flush().map_err(|error| CanonicalEventError::Routing {
+                context: error.into_context(),
+            })
+        }
+    }
+    #[cfg(feature = "v1")]
     use crate::runtime::LevelLifecycle;
     use crate::v2::LogSink;
     use sc_observability_types::v2::LogSinkError;
@@ -653,10 +687,12 @@ mod tests {
         EventError as CanonicalEventError, InitError as CanonicalInitError,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, LogOrder,
-        LogQuery, LogSnapshot, ProcessIdentity, ProcessIdentityPolicy, QueryError,
-        QueryHealthState, Remediation, SinkName, TargetCategory, Timestamp,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogOrder, LogQuery, LogSnapshot,
+        ProcessIdentity, ProcessIdentityPolicy, QueryError, QueryHealthState, Remediation,
+        SinkName, TargetCategory, Timestamp,
     };
+    #[cfg(feature = "v1")]
+    use sc_observability_types::{DiagnosticInfo, ErrorContext};
     use serde_json::{Map, json};
     use std::fs::{self, OpenOptions};
     use std::ops::Deref;
@@ -665,6 +701,7 @@ mod tests {
     use std::time::{Duration, Instant};
     use temp_env::{with_var, with_var_unset};
 
+    #[cfg(feature = "v1")]
     fn legacy_sink_error(context: Box<ErrorContext>) -> LogSinkError {
         LogSinkError::Write { context }
     }
@@ -797,10 +834,12 @@ mod tests {
         )
     }
 
+    #[cfg(feature = "v1")]
     fn file_identity(path: &Path) -> crate::query::FileIdentity {
         crate::query::file_identity_for_path(path)
     }
 
+    #[cfg(feature = "v1")]
     fn recreate_with_distinct_identity(active_path: &Path) {
         let replacement_path = active_path.with_extension("replacement");
         let previous_identity = file_identity(active_path);
@@ -995,6 +1034,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     fn release_test_pass_delay(signal: &Arc<crate::maintenance::TestPassDelaySignal>) {
         signal.release_delay();
         assert!(
@@ -1007,6 +1047,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn test_pass_delay_timeout_is_explicit_and_bounded() {
         let signal = crate::maintenance::TestPassDelaySignal::default();
@@ -1046,6 +1087,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn test_pass_delay_release_guard_unblocks_waiter_on_drop() {
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
@@ -1086,6 +1128,7 @@ mod tests {
         MaintenanceCadence::new(Duration::from_secs(value))
     }
 
+    #[cfg(feature = "v1")]
     fn join_ms(value: u64) -> WriterShutdownTimeout {
         WriterShutdownTimeout::new(Duration::from_millis(value))
     }
@@ -1266,6 +1309,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn invalid_event_returns_event_error() {
         let root = temp_path("invalid");
@@ -1276,6 +1320,7 @@ mod tests {
         assert!(logger.emit(event).is_err());
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn logger_emit_admits_events_and_preserves_event_errors() {
         let root = temp_path("injected-log-emitter");
@@ -1304,6 +1349,7 @@ mod tests {
         assert_eq!(error.0.diagnostic().code, error_codes::LOGGER_INVALID_EVENT);
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn flush_failures_propagate_and_are_counted_in_health() {
         struct FlushFailSink;
@@ -1354,6 +1400,7 @@ mod tests {
         assert!(health.last_error.is_some());
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn flush_times_out_when_writer_is_blocked() {
         let root = temp_path("flush-writer-timeout");
@@ -1399,6 +1446,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn rotated_log_paths_keep_the_active_filename_prefix() {
         let sink = JsonlFileSink::new(
@@ -1646,9 +1694,9 @@ mod tests {
         config.maintenance_test_pass_delay = Some(Duration::from_millis(100));
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
         config.maintenance_test_pass_signal = Some(signal.clone());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
-        logger.emit(log_event(service_name())).expect("emit");
+        logger.log(log_event(service_name())).expect("log");
         assert!(
             signal.wait_for_state(
                 TEST_WATCHDOG,
@@ -1657,10 +1705,10 @@ mod tests {
             "expected maintenance worker to enter the delayed test pass"
         );
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
 
         assert_eq!(
-            stopped
+            logger
                 .health()
                 .maintenance
                 .expect("maintenance health")
@@ -1797,6 +1845,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn owner_construction_returns_the_injected_writer_start_source() {
         let root = temp_path("writer-start-failure");
@@ -1855,7 +1904,7 @@ mod tests {
         config.enable_console_sink = true;
         config.level = LevelFilter::Info;
         let (logger, mut owner) =
-            Logger::new_with_level_owner(config).expect("construct logger with owner");
+            crate::v2::Logger::new_with_level_owner(config).expect("construct logger with owner");
 
         assert_eq!(logger.level_state().revision, 0);
         let changed = owner
@@ -1897,12 +1946,12 @@ mod tests {
                 .expect("typed filtered admission"),
             AdmissionOutcome::Filtered
         );
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
         assert!(matches!(
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
         ));
-        assert_eq!(stopped.level_state().effective_level, LevelFilter::Info);
+        assert_eq!(logger.level_state().effective_level, LevelFilter::Info);
     }
 
     #[test]
@@ -1988,7 +2037,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         config.enable_console_sink = true;
-        let logger = Arc::new(Logger::new(config).expect("typed logger"));
+        let logger = Arc::new(crate::CanonicalLogger::new(config).expect("typed logger"));
         let barrier = Arc::new(Barrier::new(3));
         let (flush_tx, flush_rx) = mpsc::channel();
         let (admission_tx, admission_rx) = mpsc::channel();
@@ -2026,7 +2075,7 @@ mod tests {
         let Ok(logger) = Arc::try_unwrap(logger) else {
             panic!("all concurrent handles dropped");
         };
-        logger.shutdown();
+        logger.shutdown().expect("shutdown");
     }
 
     #[test]
@@ -2083,8 +2132,8 @@ mod tests {
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Unavailable { .. })
         ));
-        let stopped = logger.shutdown();
-        assert_eq!(stopped.level_state().revision, 1);
+        logger.shutdown().expect("shutdown succeeds");
+        assert_eq!(logger.level_state().revision, 1);
     }
 
     #[test]
@@ -2210,6 +2259,7 @@ mod tests {
         let _ = logger.shutdown();
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn saturated_diagnostic_queue_keeps_the_level_change_committed() {
         let root = temp_path("level-diagnostic-saturation");
@@ -2253,6 +2303,7 @@ mod tests {
         let _ = logger.shutdown();
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn level_owner_rejects_changes_during_an_actual_shutdown_stopping_window() {
         let root = temp_path("level-owner-stopping-window");
@@ -2266,7 +2317,6 @@ mod tests {
         config.maintenance_test_pass_signal = Some(signal.clone());
         let (logger, mut owner) =
             CanonicalLogger::new_with_level_owner(config).expect("construct logger with owner");
-        let initial_state = logger.level_state();
         let control = logger.level_control.clone();
 
         logger
@@ -2298,14 +2348,17 @@ mod tests {
             Err(LevelChangeError::Stopping)
         ));
         release_test_pass_delay(&signal);
-        let stopped = shutdown.join().expect("shutdown thread");
-        assert_eq!(stopped.level_state(), initial_state);
+        shutdown
+            .join()
+            .expect("shutdown thread")
+            .expect("shutdown succeeds");
         assert!(matches!(
             owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
         ));
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn emit_path_remains_available_during_maintenance_pass() {
         let root = temp_path("maintenance-nonblocking");
@@ -2605,11 +2658,12 @@ mod tests {
 
         let root = temp_path("query-health");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
         logger
-            .emit(log_event_with_request(service_name(), "healthy", 20))
-            .expect("emit");
+            .log(log_event_with_request(service_name(), "healthy", 20))
+            .expect("log");
+        logger.flush().expect("flush healthy event");
 
         let active_path = default_log_path(&root, &service_name());
         let mut file = OpenOptions::new()
@@ -2626,9 +2680,9 @@ mod tests {
         assert_eq!(degraded_health.state, QueryHealthState::Degraded);
         assert!(degraded_health.last_error.is_some());
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
         assert_eq!(
-            stopped.health().query.expect("query health").state,
+            logger.health().query.expect("query health").state,
             QueryHealthState::Unavailable
         );
     }
@@ -2637,12 +2691,12 @@ mod tests {
     fn logger_health_reports_unavailable_after_shutdown() {
         let root = temp_path("query-shutdown-variant");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = Logger::new(config).expect("logger");
+        let logger = crate::v2::Logger::new(config).expect("logger");
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown");
 
         assert_eq!(
-            stopped.health().query.expect("query health").state,
+            logger.health().query.expect("query health").state,
             QueryHealthState::Unavailable
         );
     }
@@ -2720,6 +2774,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "v1")]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
@@ -2991,13 +3046,41 @@ mod canonical_behavior_tests {
     }
 
     #[test]
+    #[allow(
+        deprecated,
+        reason = "the retained shutdown code remains the lifecycle diagnostic"
+    )]
     fn shutdown_blocks_future_emits() {
         let root = temp_path("shutdown");
         let config = LoggerConfig::default_for(service_name(), root.path_buf());
-        let logger = CanonicalLogger::new(config).expect("logger");
-        let stopped = logger.shutdown();
+        let logger = Arc::new(CanonicalLogger::new(config).expect("logger"));
+        let shared_logger = logger.clone();
+        std::thread::spawn(move || {
+            shared_logger
+                .shutdown_with_timeout(Duration::from_secs(1))
+                .expect("shutdown succeeds from a shared reference");
+        })
+        .join()
+        .expect("shutdown thread completes");
+        logger.shutdown().expect("second shutdown is idempotent");
 
-        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
+        assert_eq!(logger.health().state, LoggingHealthState::Unavailable);
+        let error = logger
+            .log(log_event(service_name()))
+            .expect_err("logging after shutdown must be rejected");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_SHUTDOWN);
+        assert_eq!(
+            error.failure_classification(),
+            sc_observability_types::FailureClassification::Closed
+        );
+        let error = logger
+            .flush()
+            .expect_err("flushing after shutdown must be rejected");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_SHUTDOWN);
+        assert_eq!(
+            error.failure_classification(),
+            sc_observability_types::FailureClassification::Closed
+        );
     }
 
     #[test]
@@ -3011,10 +3094,10 @@ mod canonical_behavior_tests {
         builder.register_sink(SinkRegistration::typed(sink.clone()));
         let logger = builder.build().expect("logger");
 
-        let stopped = logger.shutdown();
+        logger.shutdown().expect("shutdown succeeds");
 
         assert_eq!(sink.flushes.load(Ordering::SeqCst), 1);
-        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
+        assert_eq!(logger.health().state, LoggingHealthState::Unavailable);
     }
 
     #[test]
@@ -3052,7 +3135,7 @@ mod canonical_behavior_tests {
     }
 
     #[test]
-    fn shutdown_returns_after_join_timeout_without_waiting_for_blocked_writer() {
+    fn shutdown_with_timeout_returns_without_waiting_for_blocked_writer() {
         let root = temp_path("shutdown-maintenance-timeout");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence =
@@ -3072,7 +3155,7 @@ mod canonical_behavior_tests {
         ));
         let (finished_tx, finished_rx) = std::sync::mpsc::channel();
         let shutdown = std::thread::spawn(move || {
-            let stopped = logger.shutdown();
+            let stopped = logger.shutdown_with_timeout(Duration::from_millis(10));
             finished_tx
                 .send(())
                 .expect("test waits for shutdown to return");
@@ -3085,18 +3168,14 @@ mod canonical_behavior_tests {
         finished_rx.recv_timeout(TEST_WATCHDOG).expect(
             "shutdown must return after configured timeout without joining the blocked writer",
         );
-        let stopped = shutdown
+        let shutdown_error = shutdown
             .join()
-            .expect("shutdown thread should complete after timeout");
-        let maintenance = stopped.health().maintenance.expect("maintenance health");
-        assert!(maintenance.last_error.is_some());
-        assert_eq!(stopped.health().writer_state, WriterState::Degraded);
-        let timeout = stopped
-            .health()
-            .last_writer_error
-            .expect("timeout retained in health");
-        assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
-        assert_eq!(timeout.message, "writer thread did not stop within 10ms");
+            .expect("shutdown thread should complete after timeout")
+            .expect_err("blocked writer must report the configured shutdown timeout");
+        assert!(matches!(
+            shutdown_error,
+            sc_observability_types::v2::ShutdownError::Timeout { .. }
+        ));
         assert!(
             signal.is_active(),
             "shutdown returned before blocked writer left pass"

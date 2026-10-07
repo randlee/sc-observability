@@ -202,6 +202,10 @@ impl TypedLogSink for crate::ConsoleSink {
 }
 impl SinkRegistration {
     /// Registers a released root sink through the canonical typed registration.
+    #[deprecated(
+        since = "1.4.0",
+        note = "use crate::v2::SinkRegistration::typed; see docs/migration/phase-f.md"
+    )]
     pub fn new(sink: Arc<dyn LogSink>) -> Self {
         Self::typed(Arc::new(RootSinkAdapter { value: sink }))
     }
@@ -319,7 +323,7 @@ impl LoggerBuilder {
     }
 
     /// Creates a released typed builder facade.
-    #[deprecated(note = "see docs/migration/phase-f.md")]
+    #[deprecated(note = "use crate::v2::LoggerBuilder::new; see docs/migration/phase-f.md")]
     pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
         CanonicalLoggerBuilder::new(config)
             .map(Self::from)
@@ -363,7 +367,7 @@ impl LoggerBuilder {
     }
 
     /// Builds the released typed initialization facade.
-    #[deprecated(note = "see docs/migration/phase-f.md")]
+    #[deprecated(note = "use crate::v2::LoggerBuilder::build; see docs/migration/phase-f.md")]
     pub fn build_typed(self) -> Result<Logger<Running>, InitFailure> {
         self.inner
             .build()
@@ -384,7 +388,9 @@ impl LoggerBuilder {
     }
 
     /// Builds the released typed initialization facade with level ownership.
-    #[deprecated(note = "see docs/migration/phase-f.md")]
+    #[deprecated(
+        note = "use crate::v2::LoggerBuilder::build_with_level_owner; see docs/migration/phase-f.md"
+    )]
     pub fn build_with_level_owner_typed(
         self,
     ) -> Result<(Logger<Running>, LevelOwner), InitFailure> {
@@ -395,8 +401,8 @@ impl LoggerBuilder {
     }
 }
 
-impl<State> From<CanonicalLogger<State>> for Logger<State> {
-    fn from(inner: CanonicalLogger<State>) -> Self {
+impl<State> From<CanonicalLogger> for Logger<State> {
+    fn from(inner: CanonicalLogger) -> Self {
         Self {
             inner,
             shutdown: std::marker::PhantomData,
@@ -404,7 +410,7 @@ impl<State> From<CanonicalLogger<State>> for Logger<State> {
     }
 }
 
-impl<State> From<Logger<State>> for CanonicalLogger<State> {
+impl<State> From<Logger<State>> for CanonicalLogger {
     fn from(value: Logger<State>) -> Self {
         value.inner
     }
@@ -418,9 +424,12 @@ impl Logger<Running> {
     }
 
     /// Shuts down the shared canonical runtime and returns a stopped facade.
-    #[deprecated(note = "use crate::v2::Logger::shutdown; see docs/migration/phase-f.md")]
+    #[deprecated(
+        note = "use sc_observability::v2::Logger::shutdown(&self); see docs/migration/phase-f.md"
+    )]
     pub fn shutdown(self) -> Logger<Stopped> {
-        Logger::from(self.inner.shutdown())
+        let _ = self.inner.shutdown();
+        Logger::from(self.inner)
     }
 
     /// Starts a 1.x builder with the released initialization error wrapper.
@@ -433,7 +442,7 @@ impl Logger<Running> {
     }
 
     /// Starts a released typed builder facade.
-    #[deprecated(note = "see docs/migration/phase-f.md")]
+    #[deprecated(note = "use crate::v2::LoggerBuilder::new; see docs/migration/phase-f.md")]
     pub fn builder_typed(config: LoggerConfig) -> Result<LoggerBuilder, InitFailure> {
         LoggerBuilder::new_typed(config)
     }
@@ -460,7 +469,7 @@ impl Logger<Running> {
     }
 
     /// Creates a released typed logger facade.
-    #[deprecated(note = "see docs/migration/phase-f.md")]
+    #[deprecated(note = "use crate::v2::Logger::new; see docs/migration/phase-f.md")]
     pub fn new_typed(config: LoggerConfig) -> Result<Self, InitFailure> {
         CanonicalLogger::new(config)
             .map(Self::from)
@@ -468,7 +477,9 @@ impl Logger<Running> {
     }
 
     /// Creates a released typed logger facade with level ownership.
-    #[deprecated(note = "see docs/migration/phase-f.md")]
+    #[deprecated(
+        note = "use crate::v2::Logger::new_with_level_owner; see docs/migration/phase-f.md"
+    )]
     pub fn new_with_level_owner_typed(
         config: LoggerConfig,
     ) -> Result<(Self, LevelOwner), InitFailure> {
@@ -488,7 +499,7 @@ impl Logger<Running> {
 
     /// Validates, redacts, and blocks for queue admission using typed 1.x
     /// failures.
-    #[deprecated(note = "see docs/migration/phase-f.md")]
+    #[deprecated(note = "use crate::v2::Logger::log; see docs/migration/phase-f.md")]
     pub fn log_typed(&self, event: LogEvent) -> Result<(), LogFailure> {
         self.log(event).map_err(Into::into)
     }
@@ -503,7 +514,7 @@ impl Logger<Running> {
     }
 
     /// Attempts non-blocking queue admission using typed 1.x failures.
-    #[deprecated(note = "see docs/migration/phase-f.md")]
+    #[deprecated(note = "use crate::v2::Logger::try_log; see docs/migration/phase-f.md")]
     pub fn try_log_typed(&self, event: LogEvent) -> Result<(), TryLogFailure> {
         self.try_log(event).map_err(Into::into)
     }
