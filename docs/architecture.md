@@ -1878,6 +1878,17 @@ No transport implementation or runtime dependency enters the types layer.
 
 - **Shared-model removal ownership**: the integration sprint owns the schema
   generator, shared schema/conformance fixtures and generated TypeScript/Python
-  outputs affected by confirmed OTel-only DTO deletion. Regenerate those outputs
+  outputs affected by confirmed OTel-only DTO deletion; Python generated/** has
+  this single owner. Frontend sprints edit only their own registration and stubs.
+  Regenerate those outputs
   through existing tooling and preserve logging contracts. CLI and Python
   frontend work remains parallel in their disjoint package directories.
+
+- **Atomic removal rationale**: old durable, custom SDK and sync_http modules
+  directly import the shared OTel models being deleted. Removing definitions
+  in a parallel sprint would leave those callers uncompilable. After the two
+  frontends migrate, delete callers and definitions together in the integration
+  sprint; no compatibility adapter or extra serial deletion wave. Confirmed
+  OTel-only models are removed; unconfirmed mixed-use symbols remain protected.
+  h-1 prepares shared Cargo manifests and lockfile; frontend sprints do not
+  mutate those registries, and h-4 removes obsolete dependencies at integration.
