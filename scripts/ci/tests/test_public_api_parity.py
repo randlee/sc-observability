@@ -35,10 +35,10 @@ MUTATIONS = {
 
 OTLP_LIKE_FEATURES = {
     'default': [],
-    'durable-store': ['sync-http', 'dep:rusqlite', 'dep:serde-saphyr', 'dep:uuid'],
-    'otlp-sdk': ['dep:opentelemetry', 'dep:tokio', 'dep:tonic'],
-    'sdk-test-support': ['otlp-sdk'],
-    'sync-http': ['dep:reqwest', 'dep:tokio'],
+    'feature-a': ['feature-b', 'dep:serde-saphyr', 'dep:uuid'],
+    'feature-b': ['dep:reqwest', 'dep:tokio'],
+    'feature-c': ['dep:opentelemetry', 'dep:tokio', 'dep:tonic'],
+    'feature-d': ['feature-c'],
 }
 
 
@@ -76,10 +76,10 @@ def full_cells(expected):
 
 class FeatureSelectionTests(unittest.TestCase):
     def test_closure_resolves_crate_local_features_only(self):
-        self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, ['durable-store']),
-                         frozenset({'durable-store', 'sync-http'}))
-        self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, ['sdk-test-support']),
-                         frozenset({'sdk-test-support', 'otlp-sdk'}))
+        self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, ['feature-a']),
+                         frozenset({'feature-a', 'feature-b'}))
+        self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, ['feature-d']),
+                         frozenset({'feature-d', 'feature-c'}))
         self.assertEqual(parity.feature_closure(OTLP_LIKE_FEATURES, []), frozenset())
 
     def test_dependency_feature_activates_same_named_crate_feature(self):
@@ -102,8 +102,8 @@ class FeatureSelectionTests(unittest.TestCase):
         self.assertEqual(default['id'], 'default')
         bare = next(item for item in selections if item['id'] == 'none')
         self.assertEqual(bare['flags'], ['--no-default-features'])
-        durable = next(item for item in selections if item['id'] == 'durable-store+sync-http')
-        self.assertEqual(durable['flags'], ['--no-default-features', '--features', 'durable-store'])
+        feature_pair = next(item for item in selections if item['id'] == 'feature-a+feature-b')
+        self.assertEqual(feature_pair['flags'], ['--no-default-features', '--features', 'feature-a'])
         self.assertNotIn(['--no-default-features', '--features', 'default'], [item['flags'] for item in selections])
 
     def test_crate_without_default_feature_has_single_bare_default(self):
