@@ -641,13 +641,15 @@ fn invalid_input_is_validation_and_sends_nothing() {
 
 #[test]
 fn collector_failures_are_export_errors() {
-    let unreachable = {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("reserve port");
-        listener.local_addr().expect("reserved address")
-    };
-    let mut client = Client::new(&format!("http://{unreachable}"))
-        .and_then(|client| client.with_timeout(STALL_TIMEOUT))
-        .expect("client");
+    let refusing_listener = TcpListener::bind("127.0.0.1:0").expect("bind refusing listener");
+    let mut client = Client::new(&format!(
+        "http://{}",
+        refusing_listener
+            .local_addr()
+            .expect("refusing listener address")
+    ))
+    .and_then(|client| client.with_timeout(STALL_TIMEOUT))
+    .expect("client");
     assert!(matches!(
         client.send_span(&resource(), completed_span()),
         Err(SyncError::Export(_))
