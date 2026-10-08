@@ -39,7 +39,7 @@ integrate branch *args:
 
 # Regenerate the release manual and website from the live sc-otel Clap tree.
 cli-docs:
-    SC_OTEL_UPDATE_DOCS=1 cargo test --locked -p sc-otel-cli --bin sc-otel cli_docs::generated_manual_is_current
+    SC_OTEL_UPDATE_DOCS=1 cargo test --locked -p sc-otel-cli --bin sc-otel cli_docs::generated_artifacts_are_current
 
 # Verify checked-in documentation matches this CLI version and all public options.
 cli-docs-check:

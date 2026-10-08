@@ -1,0 +1,77 @@
+{
+  "commands": [
+    "log",
+    "span",
+    "metric"
+  ],
+  "contract": "sc-otel.result/v2",
+  "outcomes": [
+    {
+      "case": "clap_display",
+      "examples": [
+        "--help",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stderr": {
+        "kind": "empty"
+      },
+      "stdout": {
+        "kind": "clap_rendered"
+      }
+    },
+    {
+      "case": "clap_usage_error",
+      "exit_code": 2,
+      "stderr": {
+        "kind": "clap_rendered_multiline"
+      },
+      "stdout": {
+        "kind": "empty"
+      }
+    },
+    {
+      "case": "export_success",
+      "exit_code": 0,
+      "stderr": {
+        "kind": "empty"
+      },
+      "stdout": {
+        "kind": "empty"
+      }
+    },
+    {
+      "case": "validation_error",
+      "exit_code": 3,
+      "stderr": {
+        "format": "sc-otel: {error}\\n",
+        "kind": "sc_otel_prefixed_error"
+      },
+      "stdout": {
+        "kind": "empty"
+      }
+    },
+    {
+      "case": "export_error",
+      "exit_code": 7,
+      "stderr": {
+        "format": "sc-otel: {error_code}: {error}; check the endpoint and --root-certificate; raise --timeout if needed\\n",
+        "kind": "sc_otel_prefixed_error"
+      },
+      "stdout": {
+        "kind": "empty"
+      }
+    },
+    {
+      "case": "caught_panic",
+      "exit_code": 1,
+      "stderr": {
+        "format": "sc-otel: unexpected internal error [{code}].\\nRecovery: ...",
+        "kind": "internal_diagnostic_multiline"
+      },
+      "stdout": {
+        "kind": "empty"
+      }
+    }
+  ]
+}

@@ -1,8 +1,12 @@
 //! Generate release documentation from the actual Clap tree, never a parallel flag list.
 //! Only compiled into the test harness; it adds no production command or dependency.
 
-use crate::cli::Cli;
+use crate::{
+    cli::Cli,
+    error_codes::{EXIT_EXPORT, EXIT_INTERNAL, EXIT_OK, EXIT_USAGE, EXIT_VALIDATION},
+};
 use clap::{Command, CommandFactory};
+use serde_json::{Value, json};
 use std::{fmt::Write, path::Path};
 
 const REGENERATE: &str = "just cli-docs";
@@ -100,7 +104,7 @@ fn artifact(root: &Path, relative: &str, expected: &str, update: bool) {
 }
 
 #[test]
-fn generated_manual_is_current() {
+fn generated_artifacts_are_current() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -121,6 +125,265 @@ fn generated_manual_is_current() {
         update,
     );
     artifact(root, "site/manual/sc-otel/index.html", &html, update);
+    artifact(
+        root,
+        "schema/cli/sc-otel/commands/1.6.0.json",
+        &json_artifact(&command_contract()),
+        update,
+    );
+    artifact(
+        root,
+        "schema/cli/sc-otel/results/v2.json",
+        &json_artifact(&result_contract()),
+        update,
+    );
+}
+
+/// Projects the built Clap tree rather than treating help text as a second
+/// parser specification. This is test-only: it does not add a CLI dependency
+/// or alter the runtime command surface.
+fn command_contract() -> Value {
+    command_contract_for(&Cli::command())
+}
+
+fn command_contract_for(command: &Command) -> Value {
+    let mut arguments = command
+        .get_arguments()
+        .map(|argument| {
+            let action = argument.get_action();
+            let num_args = effective_num_args(argument);
+            let mut conflicts = command
+                .get_arg_conflicts_with(argument)
+                .into_iter()
+                .map(|conflict| conflict.get_id().as_str().to_owned())
+                .collect::<Vec<_>>();
+            conflicts.sort();
+            let mut flags = argument
+                .get_long_and_visible_aliases()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|name| format!("--{name}"))
+                .chain(
+                    argument
+                        .get_short_and_visible_aliases()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|name| format!("-{name}")),
+                )
+                .collect::<Vec<_>>();
+            flags.sort();
+            let mut allowed_values = argument
+                .get_possible_values()
+                .into_iter()
+                .flat_map(|value| {
+                    value
+                        .get_name_and_aliases()
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            allowed_values.sort();
+            allowed_values.dedup();
+            let value_names = argument.get_value_names().map(|names| {
+                names
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            });
+            let mut contract = json!({
+                "id": argument.get_id().as_str(),
+                "flags": flags,
+                "action": format!("{action:?}"),
+                "num_args": {
+                    "min": num_args.min_values(),
+                    "max": num_args.max_values(),
+                },
+                "global": argument.is_global_set(),
+                "value_name": value_names,
+                "required": argument.is_required_set(),
+                "default_values": argument.get_default_values().iter().map(|value| value.to_string_lossy()).collect::<Vec<_>>(),
+                "allowed_values": allowed_values,
+                "conflicts_with": conflicts,
+            });
+            if let Some(constraint) = parser_constraint(command, argument) {
+                contract["value_constraint"] = json!(constraint);
+            }
+            contract
+        })
+        .collect::<Vec<_>>();
+    arguments.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
+
+    let mut groups = command
+        .get_groups()
+        .map(|group| {
+            let mut group = group.clone();
+            let mut members = group
+                .get_args()
+                .map(|member| member.as_str().to_owned())
+                .collect::<Vec<_>>();
+            members.sort();
+            json!({
+                "id": group.get_id().as_str(),
+                "required": group.is_required_set(),
+                "multiple": group.is_multiple(),
+                "members": members,
+            })
+        })
+        .collect::<Vec<_>>();
+    groups.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
+
+    let mut subcommands = command
+        .get_subcommands()
+        .map(command_contract_for)
+        .collect::<Vec<_>>();
+    subcommands.sort_by(|left, right| left["name"].as_str().cmp(&right["name"].as_str()));
+
+    json!({
+        "name": command.get_name(),
+        "aliases": command.get_all_aliases().collect::<Vec<_>>(),
+        "arguments": arguments,
+        "groups": groups,
+        "subcommands": subcommands,
+    })
+}
+
+fn effective_num_args(argument: &clap::Arg) -> clap::builder::ValueRange {
+    argument.get_num_args().unwrap_or_else(|| {
+        if argument.get_action().takes_values() {
+            clap::builder::ValueRange::SINGLE
+        } else {
+            clap::builder::ValueRange::EMPTY
+        }
+    })
+}
+
+/// The result is not a JSON response model: successful sends deliberately
+/// print nothing. It records the actual process streams and exit behavior in
+/// `main.rs`, including Clap's multi-line diagnostics and the panic path.
+fn result_contract() -> Value {
+    json!({
+        "contract": "sc-otel.result/v2",
+        "commands": ["log", "span", "metric"],
+        "outcomes": [
+            {
+                "case": "clap_display",
+                "examples": ["--help", "--version"],
+                "exit_code": EXIT_OK,
+                "stdout": {"kind": "clap_rendered"},
+                "stderr": {"kind": "empty"},
+            },
+            {
+                "case": "clap_usage_error",
+                "exit_code": EXIT_USAGE,
+                "stdout": {"kind": "empty"},
+                "stderr": {"kind": "clap_rendered_multiline"},
+            },
+            {
+                "case": "export_success",
+                "exit_code": EXIT_OK,
+                "stdout": {"kind": "empty"},
+                "stderr": {"kind": "empty"},
+            },
+            {
+                "case": "validation_error",
+                "exit_code": EXIT_VALIDATION,
+                "stdout": {"kind": "empty"},
+                "stderr": {"kind": "sc_otel_prefixed_error", "format": "sc-otel: {error}\\n"},
+            },
+            {
+                "case": "export_error",
+                "exit_code": EXIT_EXPORT,
+                "stdout": {"kind": "empty"},
+                "stderr": {"kind": "sc_otel_prefixed_error", "format": "sc-otel: {error_code}: {error}; check the endpoint and --root-certificate; raise --timeout if needed\\n"},
+            },
+            {
+                "case": "caught_panic",
+                "exit_code": EXIT_INTERNAL,
+                "stdout": {"kind": "empty"},
+                "stderr": {"kind": "internal_diagnostic_multiline", "format": "sc-otel: unexpected internal error [{code}].\\nRecovery: ..."},
+            },
+        ],
+    })
+}
+
+fn parser_constraint(command: &Command, argument: &clap::Arg) -> Option<String> {
+    const INVALID_VALUE: &str = "__sc_otel_contract_invalid_value__";
+
+    if !argument.get_action().takes_values() || !argument.get_possible_values().is_empty() {
+        return None;
+    }
+
+    let flag = argument
+        .get_long()
+        .map(|name| format!("--{name}"))
+        .or_else(|| argument.get_short().map(|name| format!("-{name}")))?;
+    let probe = command.clone();
+    match probe.try_get_matches_from([command.get_name(), flag.as_str(), INVALID_VALUE]) {
+        Err(error) if error.kind() == clap::error::ErrorKind::ValueValidation => {
+            Some(error.to_string())
+        }
+        _ => None,
+    }
+}
+
+fn json_artifact(contract: &Value) -> String {
+    let mut artifact = serde_json::to_string_pretty(contract).expect("contract is serializable");
+    artifact.push('\n');
+    artifact
+}
+
+fn contract_matches(expected: &Value, actual: &Value) -> Result<(), String> {
+    (expected == actual).then_some(()).ok_or_else(|| {
+        "generated command contract no longer matches the Clap definition".to_owned()
+    })
+}
+
+#[test]
+fn command_contract_has_only_current_thin_commands() {
+    let contract = command_contract();
+    let commands = contract["subcommands"]
+        .as_array()
+        .expect("subcommands are an array")
+        .iter()
+        .map(|command| command["name"].as_str().expect("command has a name"))
+        .collect::<Vec<_>>();
+    assert_eq!(commands, ["log", "metric", "span"]);
+}
+
+#[test]
+fn planted_command_definition_drift_is_detected() {
+    let expected = command_contract();
+    let drifted = Cli::command().subcommand(Command::new("planted-contract-drift"));
+    let error = contract_matches(&expected, &command_contract_for(&drifted))
+        .expect_err("a changed Clap command definition must invalidate the artifact");
+    assert!(error.contains("no longer matches"));
+}
+
+#[test]
+fn result_contract_matches_the_current_process_surface() {
+    let contract = result_contract();
+    let outcomes = contract["outcomes"]
+        .as_array()
+        .expect("outcomes are an array");
+    assert!(outcomes.iter().any(|outcome| {
+        outcome["case"] == "clap_usage_error"
+            && outcome["exit_code"] == EXIT_USAGE
+            && outcome["stderr"]["kind"] == "clap_rendered_multiline"
+    }));
+    assert!(outcomes.iter().any(|outcome| {
+        outcome["case"] == "export_success"
+            && outcome["exit_code"] == EXIT_OK
+            && outcome["stdout"]["kind"] == "empty"
+    }));
+    assert!(outcomes.iter().any(|outcome| {
+        outcome["case"] == "validation_error" && outcome["exit_code"] == EXIT_VALIDATION
+    }));
+    assert!(outcomes.iter().any(|outcome| {
+        outcome["case"] == "export_error" && outcome["exit_code"] == EXIT_EXPORT
+    }));
+    assert!(outcomes.iter().any(|outcome| {
+        outcome["case"] == "caught_panic" && outcome["exit_code"] == EXIT_INTERNAL
+    }));
 }
 
 #[test]

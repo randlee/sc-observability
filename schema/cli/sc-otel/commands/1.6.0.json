@@ -1,0 +1,621 @@
+{
+  "aliases": [],
+  "arguments": [
+    {
+      "action": "Set",
+      "allowed_values": [],
+      "conflicts_with": [],
+      "default_values": [],
+      "flags": [
+        "--endpoint"
+      ],
+      "global": true,
+      "id": "endpoint",
+      "num_args": {
+        "max": 1,
+        "min": 1
+      },
+      "required": false,
+      "value_name": [
+        "URL"
+      ]
+    },
+    {
+      "action": "Append",
+      "allowed_values": [],
+      "conflicts_with": [],
+      "default_values": [],
+      "flags": [
+        "--header"
+      ],
+      "global": true,
+      "id": "headers",
+      "num_args": {
+        "max": 1,
+        "min": 1
+      },
+      "required": false,
+      "value_name": [
+        "NAME=VALUE"
+      ]
+    },
+    {
+      "action": "Set",
+      "allowed_values": [],
+      "conflicts_with": [],
+      "default_values": [],
+      "flags": [
+        "--root-certificate"
+      ],
+      "global": true,
+      "id": "root_certificate",
+      "num_args": {
+        "max": 1,
+        "min": 1
+      },
+      "required": false,
+      "value_name": [
+        "FILE"
+      ]
+    },
+    {
+      "action": "Set",
+      "allowed_values": [],
+      "conflicts_with": [],
+      "default_values": [],
+      "flags": [
+        "--service"
+      ],
+      "global": true,
+      "id": "service",
+      "num_args": {
+        "max": 1,
+        "min": 1
+      },
+      "required": false,
+      "value_name": [
+        "NAME"
+      ]
+    },
+    {
+      "action": "Set",
+      "allowed_values": [],
+      "conflicts_with": [],
+      "default_values": [],
+      "flags": [
+        "--timeout"
+      ],
+      "global": true,
+      "id": "timeout",
+      "num_args": {
+        "max": 1,
+        "min": 1
+      },
+      "required": false,
+      "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--timeout <SECONDS>': timeout must be a whole number of seconds greater than zero\n\nFor more information, try '--help'.\n",
+      "value_name": [
+        "SECONDS"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "id": "Cli",
+      "members": [
+        "endpoint",
+        "headers",
+        "root_certificate",
+        "service",
+        "timeout"
+      ],
+      "multiple": true,
+      "required": false
+    }
+  ],
+  "name": "sc-otel",
+  "subcommands": [
+    {
+      "aliases": [],
+      "arguments": [
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--attributes"
+          ],
+          "global": false,
+          "id": "attributes",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_name": [
+            "JSON|@FILE|-"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--body"
+          ],
+          "global": false,
+          "id": "body",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": true,
+          "value_name": [
+            "BODY"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [
+            "debug",
+            "error",
+            "fatal",
+            "info",
+            "trace",
+            "warn"
+          ],
+          "conflicts_with": [],
+          "default_values": [
+            "info"
+          ],
+          "flags": [
+            "--severity"
+          ],
+          "global": false,
+          "id": "severity",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_name": [
+            "SEVERITY"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--span-id"
+          ],
+          "global": false,
+          "id": "span_id",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--span-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: span id: expected 16 lowercase hex digits\n\nFor more information, try '--help'.\n",
+          "value_name": [
+            "HEX"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--trace-id"
+          ],
+          "global": false,
+          "id": "trace_id",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--trace-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: trace id: expected 32 lowercase hex digits\n\nFor more information, try '--help'.\n",
+          "value_name": [
+            "HEX"
+          ]
+        }
+      ],
+      "groups": [
+        {
+          "id": "AttributeArgs",
+          "members": [
+            "attributes"
+          ],
+          "multiple": true,
+          "required": false
+        },
+        {
+          "id": "LogArgs",
+          "members": [],
+          "multiple": true,
+          "required": false
+        }
+      ],
+      "name": "log",
+      "subcommands": []
+    },
+    {
+      "aliases": [],
+      "arguments": [
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--attributes"
+          ],
+          "global": false,
+          "id": "attributes",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_name": [
+            "JSON|@FILE|-"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--description"
+          ],
+          "global": false,
+          "id": "description",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_name": [
+            "DESCRIPTION"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [
+            "counter",
+            "gauge",
+            "histogram",
+            "up-down-counter"
+          ],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--kind"
+          ],
+          "global": false,
+          "id": "kind",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": true,
+          "value_name": [
+            "KIND"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--name"
+          ],
+          "global": false,
+          "id": "name",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": true,
+          "value_name": [
+            "NAME"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--unit"
+          ],
+          "global": false,
+          "id": "unit",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_name": [
+            "UNIT"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--value"
+          ],
+          "global": false,
+          "id": "value",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": true,
+          "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--value <VALUE>': invalid float literal\n\nFor more information, try '--help'.\n",
+          "value_name": [
+            "VALUE"
+          ]
+        }
+      ],
+      "groups": [
+        {
+          "id": "AttributeArgs",
+          "members": [
+            "attributes"
+          ],
+          "multiple": true,
+          "required": false
+        },
+        {
+          "id": "MetricArgs",
+          "members": [],
+          "multiple": true,
+          "required": false
+        }
+      ],
+      "name": "metric",
+      "subcommands": []
+    },
+    {
+      "aliases": [],
+      "arguments": [
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--attributes"
+          ],
+          "global": false,
+          "id": "attributes",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_name": [
+            "JSON|@FILE|-"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--end-time-unix-nano"
+          ],
+          "global": false,
+          "id": "end_time_unix_nano",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--end-time-unix-nano <NANOS>': invalid digit found in string\n\nFor more information, try '--help'.\n",
+          "value_name": [
+            "NANOS"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--error"
+          ],
+          "global": false,
+          "id": "error",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_name": [
+            "DESCRIPTION"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [
+            "client",
+            "consumer",
+            "internal",
+            "producer",
+            "server"
+          ],
+          "conflicts_with": [],
+          "default_values": [
+            "internal"
+          ],
+          "flags": [
+            "--kind"
+          ],
+          "global": false,
+          "id": "kind",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_name": [
+            "KIND"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--name"
+          ],
+          "global": false,
+          "id": "name",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": true,
+          "value_name": [
+            "NAME"
+          ]
+        },
+        {
+          "action": "SetTrue",
+          "allowed_values": [
+            "false",
+            "true"
+          ],
+          "conflicts_with": [
+            "error"
+          ],
+          "default_values": [],
+          "flags": [
+            "--ok"
+          ],
+          "global": false,
+          "id": "ok",
+          "num_args": {
+            "max": 0,
+            "min": 0
+          },
+          "required": false,
+          "value_name": [
+            "OK"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--parent-span-id"
+          ],
+          "global": false,
+          "id": "parent_span_id",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--parent-span-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: span id: expected 16 lowercase hex digits\n\nFor more information, try '--help'.\n",
+          "value_name": [
+            "HEX"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--span-id"
+          ],
+          "global": false,
+          "id": "span_id",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--span-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: span id: expected 16 lowercase hex digits\n\nFor more information, try '--help'.\n",
+          "value_name": [
+            "HEX"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--start-time-unix-nano"
+          ],
+          "global": false,
+          "id": "start_time_unix_nano",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--start-time-unix-nano <NANOS>': invalid digit found in string\n\nFor more information, try '--help'.\n",
+          "value_name": [
+            "NANOS"
+          ]
+        },
+        {
+          "action": "Set",
+          "allowed_values": [],
+          "conflicts_with": [],
+          "default_values": [],
+          "flags": [
+            "--trace-id"
+          ],
+          "global": false,
+          "id": "trace_id",
+          "num_args": {
+            "max": 1,
+            "min": 1
+          },
+          "required": false,
+          "value_constraint": "error: invalid value '__sc_otel_contract_invalid_value__' for '--trace-id <HEX>': synchronous OTLP input rejected (SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD): Operation failed: trace id: expected 32 lowercase hex digits\n\nFor more information, try '--help'.\n",
+          "value_name": [
+            "HEX"
+          ]
+        }
+      ],
+      "groups": [
+        {
+          "id": "AttributeArgs",
+          "members": [
+            "attributes"
+          ],
+          "multiple": true,
+          "required": false
+        },
+        {
+          "id": "SpanArgs",
+          "members": [],
+          "multiple": true,
+          "required": false
+        }
+      ],
+      "name": "span",
+      "subcommands": []
+    }
+  ]
+}
