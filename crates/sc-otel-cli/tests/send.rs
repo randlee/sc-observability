@@ -5,7 +5,7 @@ use std::{
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     process::{Child, ChildStdin, Command, Output, Stdio},
-    sync::mpsc,
+    sync::{Arc, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -29,6 +29,19 @@ const PROXY_AND_TRUST_ENV: [&str; 10] = [
     "no_proxy",
     "SSL_CERT_FILE",
     "SSL_CERT_DIR",
+];
+/// Home and per-user directory variables pointed at the test directory, so a
+/// stray store in any of them would show up as a file there.
+const HOME_ENV: [&str; 9] = [
+    "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_RUNTIME_DIR",
 ];
 
 struct Captured {
@@ -67,21 +80,42 @@ impl Collector {
 
     /// Serves one request on a thread so the CLI can run on the test thread.
     fn serve(self, status: &'static str) -> thread::JoinHandle<Captured> {
+        thread::spawn(move || handle(self.accept(), status).expect("request line"))
+    }
+
+    /// Serves one connection over TLS; `None` when no request arrives, as when
+    /// the client rejects the certificate during the handshake.
+    fn serve_tls(
+        self,
+        status: &'static str,
+        config: Arc<rustls::ServerConfig>,
+    ) -> thread::JoinHandle<Option<Captured>> {
         thread::spawn(move || {
-            let address = self.listener.local_addr().expect("collector address");
-            let (accepted, watch) = mpsc::channel();
-            let watchdog = thread::spawn(move || {
-                if let Err(mpsc::RecvTimeoutError::Timeout) = watch.recv_timeout(FIXTURE_WATCHDOG) {
-                    let mut wake = TcpStream::connect(address).expect("wake collector watchdog");
-                    wake.write_all(FIXTURE_WATCHDOG_WAKE.as_bytes())
-                        .expect("write watchdog wake");
-                }
-            });
-            let (stream, _) = self.listener.accept().expect("accept");
-            let _ = accepted.send(());
-            watchdog.join().expect("collector watchdog");
-            handle(stream, status)
+            let connection = rustls::ServerConnection::new(config).expect("TLS server connection");
+            handle(rustls::StreamOwned::new(connection, self.accept()), status)
         })
+    }
+
+    /// Blocks for one connection; past the watchdog the fixture connects to
+    /// itself and writes the wake line, which `handle` rejects.
+    fn accept(&self) -> TcpStream {
+        let address = self.listener.local_addr().expect("collector address");
+        let (accepted, watch) = mpsc::channel();
+        let watchdog = thread::spawn(move || {
+            if let Err(mpsc::RecvTimeoutError::Timeout) = watch.recv_timeout(FIXTURE_WATCHDOG) {
+                let mut wake = TcpStream::connect(address).expect("wake collector watchdog");
+                wake.write_all(FIXTURE_WATCHDOG_WAKE.as_bytes())
+                    .expect("write watchdog wake");
+            }
+        });
+        let (stream, _) = self.listener.accept().expect("accept");
+        let _ = accepted.send(());
+        watchdog.join().expect("collector watchdog");
+        stream.set_nonblocking(false).expect("blocking stream");
+        stream
+            .set_read_timeout(Some(FIXTURE_WATCHDOG))
+            .expect("read watchdog");
+        stream
     }
 
     /// After the CLI has exited, proves it never connected.
@@ -96,14 +130,14 @@ impl Collector {
     }
 }
 
-fn handle(mut stream: TcpStream, status: &str) -> Captured {
-    stream.set_nonblocking(false).expect("blocking stream");
-    stream
-        .set_read_timeout(Some(FIXTURE_WATCHDOG))
-        .expect("read watchdog");
-    let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
+/// Reads one request and answers it; `None` when the connection ends or fails
+/// before a request line arrives.
+fn handle<S: Read + Write>(stream: S, status: &str) -> Option<Captured> {
+    let mut reader = BufReader::new(stream);
     let mut line = String::new();
-    reader.read_line(&mut line).expect("request line");
+    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+        return None;
+    }
     assert_ne!(line, FIXTURE_WATCHDOG_WAKE, "no request arrived");
     let path = line.split_whitespace().nth(1).expect("path").to_owned();
     let mut headers = Vec::new();
@@ -123,23 +157,72 @@ fn handle(mut stream: TcpStream, status: &str) -> Captured {
         .map_or(0, |(_, value)| value.parse().expect("content length"));
     let mut body = vec![0; length];
     reader.read_exact(&mut body).expect("body");
+    let stream = reader.get_mut();
     write!(
         stream,
         "HTTP/1.1 {status}\r\ncontent-type: application/x-protobuf\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
     )
     .expect("response");
-    Captured {
+    stream.flush().expect("flush response");
+    Some(Captured {
         path,
         headers,
         body,
+    })
+}
+
+/// A `127.0.0.1` server certificate generated in-process for one test, valid
+/// from a day before to a day after now: platform verifiers such as macOS
+/// reject long-lived server certificates, so a committed fixture would expire.
+struct LoopbackCertificate {
+    pem_directory: tempfile::TempDir,
+    config: Arc<rustls::ServerConfig>,
+}
+
+impl LoopbackCertificate {
+    fn generate() -> Self {
+        let mut params = rcgen::CertificateParams::new(vec!["127.0.0.1".to_owned()])
+            .expect("certificate parameters");
+        let now = time::OffsetDateTime::now_utc();
+        params.not_before = now - time::Duration::DAY;
+        params.not_after = now + time::Duration::DAY;
+        params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+        let key = rcgen::KeyPair::generate().expect("key pair");
+        let certificate = params.self_signed(&key).expect("self-signed certificate");
+        let pem_directory = tempfile::tempdir().expect("certificate directory");
+        std::fs::write(pem_directory.path().join("loopback.crt"), certificate.pem())
+            .expect("write certificate");
+        let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .expect("TLS protocol versions")
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![certificate.der().clone()],
+            rustls::pki_types::PrivateKeyDer::Pkcs8(key.serialize_der().into()),
+        )
+        .expect("server certificate");
+        Self {
+            pem_directory,
+            config: Arc::new(config),
+        }
+    }
+
+    fn path(&self) -> std::path::PathBuf {
+        self.pem_directory.path().join("loopback.crt")
     }
 }
 
 /// The binary with ambient `OTel`, proxy and trust settings removed and an empty
-/// working directory, so a test sees only the configuration it sets.
+/// working directory that is also its home and XDG directories, so a test sees
+/// only the configuration it sets and any file the CLI creates.
 fn sc_otel(directory: &tempfile::TempDir) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
     command.current_dir(directory.path());
+    for key in HOME_ENV {
+        command.env(key, directory.path());
+    }
     for (key, _) in std::env::vars_os() {
         if key.to_string_lossy().starts_with("OTEL_") {
             command.env_remove(key);
@@ -162,6 +245,20 @@ fn sc_otel_removes_ambient_proxy_and_trust_settings() {
                 .iter()
                 .any(|(name, value)| *name == key && value.is_none()),
             "{key} was not removed from the spawned CLI environment"
+        );
+    }
+}
+
+#[test]
+fn sc_otel_points_home_and_xdg_directories_at_the_working_directory() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let command = sc_otel(&directory);
+    let set = command.get_envs().collect::<Vec<_>>();
+    for key in HOME_ENV {
+        assert!(
+            set.iter()
+                .any(|(name, value)| *name == key && *value == Some(directory.path().as_os_str())),
+            "{key} does not point at the test directory"
         );
     }
 }
@@ -450,6 +547,59 @@ fn rejected_export_exits_7_without_printing_credentials() {
 }
 
 #[test]
+fn unreachable_collector_exits_7() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    // Port 0 is never a listening endpoint, so every connect fails at once.
+    let output = run(sc_otel(&directory)
+        .args(["--endpoint", "http://127.0.0.1:0", "--timeout", "5"])
+        .args(["log", "--body", "unreachable"]));
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("SC_OBSERVABILITY_OTLP_EXPORT_FAILED"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("export failed"), "{stderr}");
+    assert!(output.stdout.is_empty());
+    assert_no_files(&directory);
+}
+
+#[test]
+fn https_export_succeeds_only_with_the_trusted_root_certificate() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let certificate = LoopbackCertificate::generate();
+    let collector = Collector::start();
+    let endpoint = collector.endpoint.replace("http://", "https://");
+    let request = collector.serve_tls("200 OK", Arc::clone(&certificate.config));
+    let output = run(sc_otel(&directory)
+        .args(["--endpoint", &endpoint, "--timeout", "5"])
+        .arg("--root-certificate")
+        .arg(certificate.path())
+        .args(["log", "--body", "over-tls"]));
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let request = request
+        .join()
+        .expect("TLS collector")
+        .expect("trusted export reached the collector");
+    assert_eq!(request.path, "/v1/logs");
+    assert!(request.body_contains(b"over-tls"));
+    assert_no_files(&directory);
+
+    let collector = Collector::start();
+    let endpoint = collector.endpoint.replace("http://", "https://");
+    let request = collector.serve_tls("200 OK", certificate.config);
+    let output = run(sc_otel(&directory)
+        .args(["--endpoint", &endpoint, "--timeout", "5"])
+        .args(["log", "--body", "untrusted"]));
+    assert_eq!(output.status.code(), Some(7), "{output:?}");
+    assert!(
+        request.join().expect("TLS collector").is_none(),
+        "an export without the trusted root reached the collector"
+    );
+    assert_no_files(&directory);
+}
+
+#[test]
 fn rejected_export_does_not_print_environment_header_values() {
     const ENV_SECRET: &str = "Bearer environment-secret";
 
@@ -484,6 +634,36 @@ fn malformed_header_exits_3_without_printing_credentials() {
     assert!(stderr.contains("header must use NAME=VALUE"), "{stderr}");
     assert!(!stderr.contains(SECRET), "{stderr}");
     assert!(output.stdout.is_empty());
+    assert_no_files(&directory);
+}
+
+#[test]
+fn invalid_header_name_or_value_exits_3_and_sends_nothing() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let collector = Collector::start();
+    let endpoint = collector.endpoint.clone();
+    let cases = [
+        (format!("bad name={SECRET}"), "invalid header name"),
+        (
+            format!("x-api-key={SECRET}\n"),
+            "invalid value for header x-api-key",
+        ),
+    ];
+    for (header, message) in cases {
+        let output = run(sc_otel(&directory)
+            .args(["--endpoint", &endpoint, "--header", &header])
+            .args(["log", "--body", "x"]));
+        assert_eq!(output.status.code(), Some(3), "{header:?}: {output:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("SC_OBSERVABILITY_OTLP_SYNC_INVALID_CONFIG"),
+            "{stderr}"
+        );
+        assert!(stderr.contains(message), "{stderr}");
+        assert!(!stderr.contains(SECRET), "{stderr}");
+        assert!(output.stdout.is_empty());
+    }
+    collector.assert_untouched();
     assert_no_files(&directory);
 }
 
