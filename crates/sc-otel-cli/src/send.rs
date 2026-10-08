@@ -203,11 +203,16 @@ fn attributes(source: Option<&str>) -> Result<Vec<(String, Json)>, SyncError> {
     } else {
         source.to_owned()
     };
-    check_input_limits(text.len(), 0)?;
+    check_attribute_input_limits(text.len(), 0)?;
     let object: serde_json::Map<String, Json> = serde_json::from_str(&text)
         .map_err(|error| invalid(format!("attributes must be one JSON object: {error}")))?;
-    check_input_limits(text.len(), object.len())?;
+    check_attribute_input_limits(text.len(), object.len())?;
     Ok(object.into_iter().collect())
+}
+
+/// Applies the shared input bounds to CLI attribute input.
+fn check_attribute_input_limits(input_bytes: usize, attributes: usize) -> Result<(), SyncError> {
+    check_input_limits(input_bytes, attributes)
 }
 
 /// Reads at most one byte past the input limit, so oversized input is
@@ -219,7 +224,7 @@ fn read_capped(reader: impl Read, name: &str) -> Result<String, SyncError> {
         .take(cap)
         .read_to_end(&mut bytes)
         .map_err(|error| invalid(format!("cannot read {name}: {error}")))?;
-    check_input_limits(bytes.len(), 0)?;
+    check_attribute_input_limits(bytes.len(), 0)?;
     String::from_utf8(bytes).map_err(|_| invalid(format!("{name} is not UTF-8")))
 }
 
