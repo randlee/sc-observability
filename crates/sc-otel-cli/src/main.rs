@@ -4,6 +4,7 @@ mod cli;
 #[cfg(test)]
 mod cli_docs;
 mod constants;
+mod error_codes;
 mod send;
 
 use clap::Parser;
@@ -21,7 +22,7 @@ fn main() -> ExitCode {
                 "sc-otel: unexpected internal error: {}",
                 panic_message(&*payload)
             );
-            ExitCode::from(constants::EXIT_INTERNAL)
+            ExitCode::from(error_codes::EXIT_INTERNAL)
         }
     }
 }
@@ -39,9 +40,9 @@ fn run() -> u8 {
         Ok(cli) => cli,
         Err(error) => {
             let exit = if error.use_stderr() {
-                constants::EXIT_USAGE
+                error_codes::EXIT_USAGE
             } else {
-                constants::EXIT_OK
+                error_codes::EXIT_OK
             };
             if let Err(print_error) = error.print() {
                 eprintln!("sc-otel: unable to render usage error: {print_error}");
@@ -50,7 +51,7 @@ fn run() -> u8 {
         }
     };
     match send::run(&cli) {
-        Ok(()) => constants::EXIT_OK,
+        Ok(()) => error_codes::EXIT_OK,
         Err(error) => {
             // Display only: the client redacts header values and URL userinfo there.
             eprintln!("sc-otel: {error}");

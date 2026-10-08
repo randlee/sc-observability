@@ -2,9 +2,8 @@
 //! shared synchronous client.
 
 use crate::cli::{Cli, Command, Kind, LogArgs, LogSeverity, MetricArgs, MetricKind, SpanArgs};
-use crate::constants::{
-    DEFAULT_ENDPOINT, ENDPOINT_ENV, EXIT_EXPORT, EXIT_VALIDATION, SCOPE_NAME, STDIN_SOURCE,
-};
+use crate::constants::{DEFAULT_ENDPOINT, ENDPOINT_ENV, SCOPE_NAME, STDIN_SOURCE};
+use crate::error_codes::{EXIT_EXPORT, EXIT_VALIDATION};
 use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
 use sc_observability_otlp::api::trace::{
     SpanContext, SpanId, SpanKind, Status, TraceFlags, TraceState,
@@ -256,7 +255,7 @@ fn unix_nanos(nanos: u64) -> SystemTime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::{EXIT_EXPORT, EXIT_VALIDATION};
+    use crate::error_codes::{EXIT_EXPORT, EXIT_VALIDATION};
     use sc_observability_otlp::constants::MAX_BATCH_RECORDS;
     use sc_observability_otlp::sdk::error::OTelSdkError;
 
