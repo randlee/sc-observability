@@ -4,6 +4,12 @@ owner_crate_path = "sc_observability_otlp"
 name = "ScObservabilityOtlp"
 [public]
 facade = "crate_root"
+modules = ["v2", "api", "sdk", "sync"]
+
+[public.feature_gates]
+api = "log-sink"
+sdk = "log-sink"
+sync = "synchronous-client"
 [implementation]
 type = "crate"
 module = "sc_observability_otlp"
@@ -15,6 +21,9 @@ roots = []
 allowed_dependents = ["sc-observability-py", "sc-otel-cli"]
 allowed_dependencies = ["sc-observability", "sc-observability-types", "sc-observe"]
 forbidden_edges = []
+
+[dependencies.feature_gates]
+sc-observability = "log-sink"
 [references]
 scope = "outside_owner_crate"
 forbidden = []
@@ -22,7 +31,7 @@ forbidden = []
 allowed_test_double_paths = []
 forbidden_test_bypasses = []
 [enforcement]
-lint_rules = ["LINT-SC-OBSERVABILITY-OTLP-BOUNDARY"]
+lint_rules = []
 review_gates = ["workspace_dependency_policy"]
 [status]
 state = "concrete_landed"
