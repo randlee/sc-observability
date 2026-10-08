@@ -13,20 +13,13 @@ migration by building with `default-features = false` (and therefore without
 `v1`). A later release deletes the `v1` modules and features. Deprecated paths
 are not a compatibility promise: move to the canonical replacement below.
 
-The supported OTLP implementations are `otlp-sdk` (an async/Tokio host) and
-`sync-http` (a synchronous host). There is no 1.x OTLP facade migration: new
-OTLP users construct `sc_observability_otlp::v2` configuration and select a
-backend directly.
-
-## OTLP span assembly types
-
-The released `sc_observability_otlp::v1::CompleteSpan` and
-`sc_observability_otlp::v1::SpanAssembler` have no public v2 equivalents. The
-canonical producer types are `sc_observability_types::v2::SpanRecord` and
-`SpanSignal`; `sc_observability_otlp::v2::Telemetry` assembles those signals
-internally into `sc_observability_types::otlp::OtlpCompleteSpan`. Its
-`V2SpanAssembler` is internal, so applications that used the released v1
-assembly types have no drop-in public replacement for them.
+Phase H removed the OTLP facade without a compatibility path (H-006):
+the `v1`/`v2` `Telemetry`, `RuntimeTelemetry`, `OtelConfig` and span assembly
+types, and the `otlp-sdk`/`sync-http` backends. OTLP users call the official
+OpenTelemetry SDK through `sc_observability_otlp::{api, sdk}`: a Tokio host
+bridges logging with `OtelLogSink` (feature `log-sink`), and a synchronous
+host sends logs, spans and metrics with `sync::Client` (feature
+`synchronous-client`). ADR-023 records the contract.
 
 ## Lifecycle consolidation
 
@@ -43,14 +36,6 @@ retained v1 items below are deprecated compatibility aliases.
 | v2 `LogGuard::flush(Duration)` | `LogGuard::flush()` or `LogGuard::flush_with_timeout(Duration)` |
 | v2 `LogGuard::shutdown(self, Duration)` | `LogGuard::shutdown()` or `LogGuard::shutdown_with_timeout(Duration)` |
 | v2 `LogControl::flush(Duration)` | `LogControl::flush()` or `LogControl::flush_with_timeout(Duration)` |
-| v1 `Telemetry::flush_typed()` | `sc_observability_otlp::v2::Telemetry::flush()` |
-| v1 `Telemetry::flush_async_typed()` | `sc_observability_otlp::v2::Telemetry::flush_async()` |
-| v1 `Telemetry::shutdown_typed()` | `sc_observability_otlp::v2::Telemetry::shutdown()` |
-| v1 `Telemetry::shutdown_async_typed()` | `sc_observability_otlp::v2::Telemetry::shutdown_async()` |
-| v2 `RuntimeTelemetry::flush_typed()` | `RuntimeTelemetry::flush()` or `flush_with_timeout(Duration)` |
-| v2 `RuntimeTelemetry::shutdown_typed()` | `RuntimeTelemetry::shutdown()` or `shutdown_with_timeout(Duration)` |
-| v2 `RuntimeTelemetry::flush_async_typed()` | `RuntimeTelemetry::flush_async()` |
-| v2 `RuntimeTelemetry::shutdown_async_typed()` | `RuntimeTelemetry::shutdown_async()` |
 | v1 `Logger::shutdown(self) -> Logger<Stopped>` | `sc_observability::v2::Logger::shutdown()` or `shutdown_with_timeout(Duration)` |
 | v2 `Logger<State>` (`Running`/`Stopped` typestate) | `Logger` (no type parameter) |
 | v2 `Logger::shutdown(self) -> Logger<Stopped>` | `Logger::shutdown()` or `Logger::shutdown_with_timeout(Duration)` |
