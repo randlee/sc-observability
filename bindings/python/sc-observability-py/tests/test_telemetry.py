@@ -195,13 +195,39 @@ def test_unavailable_native_extension_is_an_internal_failure() -> None:
     _failure(result, "internal", "SC_OBSERVABILITY_BINDING_INTERNAL")
 
 
+# Bounds each collector wait; a send that fails before connecting or sending
+# fails the test here instead of reaching the faulthandler watchdog.
+COLLECTOR_WAIT_S = 30
+
+
+def _read_request(connection: socket.socket) -> bytes:
+    """Reads one HTTP request, head and content-length body, so the reply
+    never closes a connection with unread request bytes."""
+    request = b""
+    while b"\r\n\r\n" not in request:
+        chunk = connection.recv(65536)
+        assert chunk, f"connection closed before the request head: {request!r}"
+        request += chunk
+    head, _, body = request.partition(b"\r\n\r\n")
+    length = next((int(line.split(b":", 1)[1]) for line in head.split(b"\r\n")
+                   if line.lower().startswith(b"content-length:")), 0)
+    while len(body) < length:
+        chunk = connection.recv(65536)
+        assert chunk, "connection closed before the request body"
+        body += chunk
+    return head + b"\r\n\r\n" + body
+
+
 def test_blocked_export_releases_the_gil_and_returns_a_tagged_failure() -> None:
     # The client timeout outlives the watchdog, so a send holding the GIL can
     # only end by the watchdog killing the process: the main thread below must
-    # run Python while the send is blocked for the test to finish.
-    faulthandler.dump_traceback_later(60, exit=True)
+    # run Python while the send is blocked for the test to finish. Every
+    # socket wait has its own shorter deadline, so the watchdog fires only for
+    # that deadlock.
+    faulthandler.dump_traceback_later(5 * COLLECTOR_WAIT_S, exit=True)
     try:
         with socket.create_server(("127.0.0.1", 0)) as server:
+            server.settimeout(COLLECTOR_WAIT_S)
             endpoint = f"http://127.0.0.1:{server.getsockname()[1]}"
             results: list[Result[None]] = []
             done = threading.Event()
@@ -214,13 +240,25 @@ def test_blocked_export_releases_the_gil_and_returns_a_tagged_failure() -> None:
 
             worker = threading.Thread(target=send, daemon=True)
             worker.start()
-            connection, _ = server.accept()
+            try:
+                connection, _ = server.accept()
+            except TimeoutError:
+                pytest.fail(f"no export connection within {COLLECTOR_WAIT_S} s; results: {results}")
             with connection:
-                connection.recv(65536)
+                connection.settimeout(COLLECTOR_WAIT_S)
+                try:
+                    request = _read_request(connection)
+                except TimeoutError:
+                    pytest.fail(f"no complete export request within {COLLECTOR_WAIT_S} s")
+                assert request.startswith(b"POST /v1/logs "), request[:64]
                 # The collector has the request and has not answered: the send is blocked.
                 assert not done.is_set()
-        assert done.wait(30), "send did not finish after the collector closed the connection"
-        worker.join(timeout=30)
+                # Answer with a rejection rather than closing the connection: a
+                # 4xx is not retried (test_rejected_export_is_tagged_and_redacted
+                # sees exactly one request), so the send ends on this reply.
+                connection.sendall(b"HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+            assert done.wait(COLLECTOR_WAIT_S), "send did not finish after the collector rejected it"
+        worker.join(timeout=COLLECTOR_WAIT_S)
         assert len(results) == 1
         _failure(results[0], "unavailable", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED")
     finally:
