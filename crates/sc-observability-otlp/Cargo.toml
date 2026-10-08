@@ -36,6 +36,7 @@ tempfile.workspace = true
 sc-observability.workspace = true
 tokio = { workspace = true }
 rustls = { version = "=0.23.45", features = ["ring"] }
+rcgen = "=0.14.10"
 # Decode the OTLP protobuf requests the synchronous client sends to the
 # loopback test collector.
 opentelemetry-proto = { workspace = true }

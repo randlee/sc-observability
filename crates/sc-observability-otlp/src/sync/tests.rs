@@ -3,10 +3,8 @@
 
 use std::borrow::Cow;
 use std::ffi::OsString;
-use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
-use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -1155,74 +1153,31 @@ fn explicit_headers_win_over_signal_environment_headers() {
     }
 }
 
-/// Self-signed loopback certificate and key generated with the `openssl` CLI.
-struct TestCertificate {
-    cert: PathBuf,
-    key: PathBuf,
-}
-
-impl TestCertificate {
-    fn generate() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("clock after epoch")
-            .as_nanos();
-        let base =
-            std::env::temp_dir().join(format!("sc-otlp-sync-{}-{nonce}", std::process::id()));
-        let cert = base.with_extension("crt");
-        let key = base.with_extension("key");
-        let generated = Command::new("openssl")
-            .args(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout"])
-            .arg(&key)
-            .arg("-out")
-            .arg(&cert)
-            .args([
-                "-days",
-                "2",
-                "-subj",
-                "/CN=127.0.0.1",
-                "-addext",
-                "subjectAltName=IP:127.0.0.1",
-                "-addext",
-                "basicConstraints=critical,CA:FALSE",
-                "-addext",
-                "extendedKeyUsage=serverAuth",
-            ])
-            .output()
-            .expect("openssl is available for the TLS test");
-        assert!(
-            generated.status.success(),
-            "generate loopback TLS certificate"
-        );
-        Self { cert, key }
-    }
-
-    fn server_config(&self) -> TlsConfig {
-        use rustls::pki_types::pem::PemObject;
-        use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-        let chain = CertificateDer::pem_file_iter(&self.cert)
-            .expect("open certificate")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("parse certificate");
-        let key = PrivateKeyDer::from_pem_file(&self.key).expect("parse key");
-        Arc::new(
-            rustls::ServerConfig::builder_with_provider(Arc::new(
-                rustls::crypto::ring::default_provider(),
-            ))
-            .with_safe_default_protocol_versions()
-            .expect("TLS protocol versions")
-            .with_no_client_auth()
-            .with_single_cert(chain, key)
-            .expect("server certificate"),
+/// Builds a short-lived loopback TLS server without host tools or expiring fixtures.
+fn loopback_tls_server_config() -> (TlsConfig, String) {
+    use rustls::pki_types::PrivateKeyDer;
+    let now = time::OffsetDateTime::now_utc();
+    let mut params = rcgen::CertificateParams::new(vec!["127.0.0.1".to_owned()])
+        .expect("loopback certificate parameters");
+    params.not_before = now - time::Duration::DAY;
+    params.not_after = now + time::Duration::DAY;
+    params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+    let key = rcgen::KeyPair::generate().expect("loopback certificate key");
+    let certificate = params.self_signed(&key).expect("loopback certificate");
+    let config = Arc::new(
+        rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .expect("TLS protocol versions")
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![certificate.der().clone()],
+            PrivateKeyDer::Pkcs8(key.serialize_der().into()),
         )
-    }
-}
-
-impl Drop for TestCertificate {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.cert);
-        let _ = fs::remove_file(&self.key);
-    }
+        .expect("server certificate"),
+    );
+    (config, certificate.pem())
 }
 
 fn start_tls_collector(config: TlsConfig) -> Collector {
@@ -1246,18 +1201,14 @@ fn start_tls_collector(config: TlsConfig) -> Collector {
     }
 }
 
-fn read(path: &Path) -> Vec<u8> {
-    fs::read(path).expect("read certificate")
-}
-
 #[test]
 fn tls_verifies_trusted_and_rejects_untrusted_certificates() {
-    let certificate = TestCertificate::generate();
-    let collector = start_tls_collector(certificate.server_config());
+    let (config, certificate) = loopback_tls_server_config();
+    let collector = start_tls_collector(config);
     let endpoint = format!("https://{}", collector.address);
 
     let mut trusted = Client::new(&endpoint)
-        .and_then(|client| client.with_root_certificate_pem(&read(&certificate.cert)))
+        .and_then(|client| client.with_root_certificate_pem(certificate.as_bytes()))
         .expect("client trusting the loopback certificate");
     trusted
         .send_span(&resource(), completed_span())
