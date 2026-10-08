@@ -185,3 +185,15 @@ fn help_names_no_retired_store_command() {
         assert!(!html.contains(retired), "{retired} remains on the website");
     }
 }
+
+#[test]
+fn manual_documents_removed_auth_header_and_handoff() {
+    let manual = include_str!("manual.txt");
+    assert!(manual.contains("does not read SC_OTEL_AUTH_HEADER"));
+    assert!(manual.contains("ADR-023 supersedes"));
+
+    let handoff = include_str!("../../../docs/plans/phase-h/h-2-to-h-4-cli-removal-handoff.md");
+    assert!(handoff.contains("does not read `SC_OTEL_AUTH_HEADER`"));
+    assert!(handoff.contains("ADR-023 supersedes ADR-021"));
+    assert!(handoff.contains("do not map it to `Authorization`"));
+}

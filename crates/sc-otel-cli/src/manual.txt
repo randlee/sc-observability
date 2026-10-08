@@ -15,7 +15,10 @@ CONFIGURATION
   Headers: OTEL_EXPORTER_OTLP_HEADERS and the per-signal *_HEADERS variables
   are sent with every request. --header NAME=VALUE replaces a header of the
   same name. Keep credentials in the environment rather than on the command
-  line. Header values and endpoint user information never appear in errors.
+  line. This thin CLI does not read SC_OTEL_AUTH_HEADER; ADR-023 supersedes
+  ADR-021's submission architecture for Phase H. Use the standard
+  OTEL_EXPORTER_OTLP_HEADERS or per-signal *_HEADERS variables instead.
+  Header values and endpoint user information never appear in errors.
 
   Resource: --service sets service.name; otherwise OTEL_SERVICE_NAME and
   OTEL_RESOURCE_ATTRIBUTES apply as in the OpenTelemetry SDK.

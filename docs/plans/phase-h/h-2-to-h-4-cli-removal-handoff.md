@@ -19,3 +19,11 @@ These declarations are part of the H-4 integration cleanup described by
 and the H-4 sprint bead. The test-double feature remains listed here as a
 current declaration; its eventual removal depends on the migrated CLI tests,
 not on this handoff alone.
+
+The thin `sc-otel` CLI intentionally does not read `SC_OTEL_AUTH_HEADER`; this
+is not a compatibility alias. ADR-023 supersedes ADR-021's submission
+architecture for Phase H. Use `OTEL_EXPORTER_OTLP_HEADERS`, per-signal
+`*_HEADERS`, or `--header NAME=VALUE` for credentials. H-4 should remove the
+obsolete `SC_OTEL_AUTH_HEADER` compatibility path from any remaining legacy
+installer or adapter if present; do not map it to `Authorization` in the thin
+CLI.
