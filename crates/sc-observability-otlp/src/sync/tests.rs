@@ -550,6 +550,26 @@ fn send_metrics_exports_typed_observations_in_one_request() {
 }
 
 #[test]
+fn dropped_metric_measurement_is_invalid_and_sends_nothing() {
+    let collector = Collector::start(Reply::Ok);
+    let mut client = Client::new(&collector.endpoint()).expect("client");
+
+    let result = client.send_metrics(&resource(), scope(), |meter| {
+        // The SDK replaces an invalid instrument name with a no-op, producing
+        // an empty `ResourceMetrics` collection at flush time.
+        meter.u64_counter("1-invalid name").build().add(1, &[]);
+        Ok(())
+    });
+
+    let requests = collector.requests();
+    assert!(
+        requests.is_empty(),
+        "the HTTP 200 collector receives no empty metrics export"
+    );
+    assert_eq!(validation_code(result), codes::INVALID_RECORD);
+}
+
+#[test]
 fn invalid_input_is_validation_and_sends_nothing() {
     let collector = Collector::start(Reply::Ok);
     let mut client = Client::new(&collector.endpoint()).expect("client");

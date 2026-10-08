@@ -79,7 +79,7 @@ use opentelemetry_otlp::{
 };
 use opentelemetry_sdk::error::{OTelSdkError, OTelSdkResult};
 use opentelemetry_sdk::logs::{LogBatch, LogExporter as _, SdkLoggerProvider};
-use opentelemetry_sdk::metrics::data::ResourceMetrics;
+use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData, ResourceMetrics};
 use opentelemetry_sdk::metrics::exporter::PushMetricExporter;
 use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
 use opentelemetry_sdk::trace::SpanExporter as _;
@@ -633,7 +633,7 @@ struct FlushOnlyExporter {
 
 impl PushMetricExporter for FlushOnlyExporter {
     async fn export(&self, metrics: &ResourceMetrics) -> OTelSdkResult {
-        if !self.gate.armed.load(Ordering::SeqCst) {
+        if !self.gate.armed.load(Ordering::SeqCst) || !has_metric_data_points(metrics) {
             return Ok(());
         }
         self.gate.exported.store(true, Ordering::SeqCst);
@@ -650,6 +650,34 @@ impl PushMetricExporter for FlushOnlyExporter {
 
     fn temporality(&self) -> Temporality {
         self.inner.temporality()
+    }
+}
+
+/// Returns whether an SDK collection contains at least one metric data point.
+fn has_metric_data_points(metrics: &ResourceMetrics) -> bool {
+    metrics.scope_metrics().any(|scope_metrics| {
+        scope_metrics
+            .metrics()
+            .any(|metric| aggregated_metric_has_points(metric.data()))
+    })
+}
+
+/// Returns whether one native aggregation contains at least one data point.
+fn aggregated_metric_has_points(data: &AggregatedMetrics) -> bool {
+    match data {
+        AggregatedMetrics::F64(data) => metric_data_has_points(data),
+        AggregatedMetrics::I64(data) => metric_data_has_points(data),
+        AggregatedMetrics::U64(data) => metric_data_has_points(data),
+    }
+}
+
+/// Returns whether one native aggregation contains at least one data point.
+fn metric_data_has_points<T>(data: &MetricData<T>) -> bool {
+    match data {
+        MetricData::Gauge(data) => data.data_points().next().is_some(),
+        MetricData::Sum(data) => data.data_points().next().is_some(),
+        MetricData::Histogram(data) => data.data_points().next().is_some(),
+        MetricData::ExponentialHistogram(data) => data.data_points().next().is_some(),
     }
 }
 
