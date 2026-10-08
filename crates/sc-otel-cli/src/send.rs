@@ -51,7 +51,13 @@ pub(crate) const fn exit_code(error: &SyncError) -> u8 {
 fn client(cli: &Cli) -> Result<Client, SyncError> {
     let endpoint = resolve_endpoint(cli.endpoint.as_deref())?;
     let mut client = Client::new(&endpoint)?;
-    for (name, value) in &cli.headers {
+    for header in &cli.headers {
+        let (name, value) = header
+            .split_once('=')
+            .filter(|(name, _)| !name.is_empty())
+            .ok_or_else(|| {
+                SyncError::validation(codes::INVALID_CONFIG, "header must use NAME=VALUE")
+            })?;
         client = client.with_header(name, value)?;
     }
     if let Some(timeout) = cli.timeout {

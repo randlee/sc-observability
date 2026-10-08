@@ -18,8 +18,8 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_name = "URL")]
     pub(crate) endpoint: Option<String>,
     /// Send a request header as NAME=VALUE; repeat for more. Replaces a header of the same name from `OTEL_EXPORTER_OTLP_HEADERS`. Prefer that variable for credentials: command lines are visible to other processes.
-    #[arg(long = "header", global = true, value_name = "NAME=VALUE", value_parser = parse_header)]
-    pub(crate) headers: Vec<(String, String)>,
+    #[arg(long = "header", global = true, value_name = "NAME=VALUE")]
+    pub(crate) headers: Vec<String>,
     /// Bound connecting, each request and the exporter's retries, in whole seconds greater than zero. Defaults to 3 seconds.
     #[arg(long, global = true, value_name = "SECONDS", value_parser = parse_seconds)]
     pub(crate) timeout: Option<Duration>,
@@ -39,7 +39,11 @@ impl fmt::Debug for Cli {
         let headers = self
             .headers
             .iter()
-            .map(|(name, _)| name)
+            .map(|header| {
+                header
+                    .split_once('=')
+                    .map_or("<invalid header>", |(name, _)| name)
+            })
             .collect::<Vec<_>>();
 
         f.debug_struct("Cli")
@@ -202,13 +206,6 @@ pub(crate) enum MetricKind {
     Histogram,
 }
 
-fn parse_header(value: &str) -> Result<(String, String), String> {
-    match value.split_once('=') {
-        Some((name, value)) if !name.is_empty() => Ok((name.to_owned(), value.to_owned())),
-        _ => Err("expected NAME=VALUE".into()),
-    }
-}
-
 fn parse_seconds(value: &str) -> Result<Duration, String> {
     match value.parse::<u64>() {
         Ok(seconds) if seconds > 0 => Ok(Duration::from_secs(seconds)),
@@ -248,10 +245,7 @@ mod tests {
         ])
         .expect("valid log command");
         assert_eq!(cli.endpoint.as_deref(), Some("https://collector:4318"));
-        assert_eq!(
-            cli.headers,
-            [("authorization".to_owned(), "Bearer a=b".to_owned())]
-        );
+        assert_eq!(cli.headers, ["authorization=Bearer a=b".to_owned()]);
         assert_eq!(cli.timeout, Some(std::time::Duration::from_secs(9)));
         assert!(matches!(cli.command, Command::Log(_)));
     }
@@ -334,8 +328,6 @@ mod tests {
             &[
                 "metric", "--name", "x", "--kind", "gauge", "--value", "many",
             ],
-            &["--header", "=value", "log", "--body", "x"],
-            &["--header", "novalue", "log", "--body", "x"],
             &["--timeout", "0", "log", "--body", "x"],
             &["--store", "queue.sqlite", "log", "--body", "x"],
             &["emit", "--log", "{}"],
@@ -346,5 +338,21 @@ mod tests {
             assert!(error.use_stderr(), "{args:?}: {:?}", error.kind());
             assert_ne!(error.kind(), ErrorKind::DisplayHelp, "{args:?}");
         }
+    }
+
+    #[test]
+    fn malformed_header_reaches_credential_safe_validation() {
+        let cli = parse(&[
+            "--header",
+            "Authorization: Bearer secret",
+            "log",
+            "--body",
+            "x",
+        ])
+        .expect("the application validates headers without clap rendering their value");
+        assert_eq!(cli.headers, ["Authorization: Bearer secret".to_owned()]);
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("<invalid header>"), "{rendered}");
+        assert!(!rendered.contains("Bearer secret"), "{rendered}");
     }
 }

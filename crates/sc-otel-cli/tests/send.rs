@@ -461,6 +461,20 @@ fn rejected_export_does_not_print_environment_header_values() {
 }
 
 #[test]
+fn malformed_header_exits_3_without_printing_credentials() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let output = run(sc_otel(&directory)
+        .args(["--header", &format!("Authorization: Bearer {SECRET}")])
+        .args(["log", "--body", "rejected"]));
+    assert_eq!(output.status.code(), Some(3), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("header must use NAME=VALUE"), "{stderr}");
+    assert!(!stderr.contains(SECRET), "{stderr}");
+    assert!(output.stdout.is_empty());
+    assert_no_files(&directory);
+}
+
+#[test]
 fn invalid_input_exits_3_and_sends_nothing() {
     let directory = tempfile::tempdir().expect("tempdir");
     let collector = Collector::start();
