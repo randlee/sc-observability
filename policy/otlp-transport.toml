@@ -1,4 +1,4 @@
-# ADR-019/ADR-023 transport allowlist. Both existing dependency validators consume
+# ADR-009/ADR-023 transport allow-list. Both existing dependency validators consume
 # these exact workspace pins, effective features, and feature bindings.
 [transport.opentelemetry]
 version = "=0.33.0"

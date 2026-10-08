@@ -82,6 +82,28 @@ def validate_transport_dependencies(root: Path) -> set[str]:
                 result.add(entry)
         return result
 
+    def activates_directly(entry, dependency):
+        return entry == f"dep:{dependency}" or entry.split("/", 1)[0] == dependency
+
+    core = manifest["dependencies"].get("sc-observability")
+    if not isinstance(core, dict) or core.get("optional") is not True:
+        raise SystemExit("OTLP dependency sc-observability: must be optional")
+    core_features = sorted(
+        feature
+        for feature, entries in features.items()
+        if any(activates_directly(entry, "sc-observability") for entry in entries)
+    )
+    if core_features != ["log-sink"]:
+        raise SystemExit(
+            "OTLP dependency sc-observability: must be activated only by log-sink, "
+            f"found {core_features}"
+        )
+
+    backends = sorted({backend for rule in policy.values() for backend in rule["backends"]})
+    for backend in backends:
+        if backend not in features:
+            raise SystemExit(f"OTLP transport policy: backend {backend} is not a feature")
+
     for name, rule in policy.items():
         prefix = f"OTLP transport {name}: "
         declaration = manifest["dependencies"].get(name, {})
@@ -102,7 +124,7 @@ def validate_transport_dependencies(root: Path) -> set[str]:
             raise SystemExit(prefix + "effective dependency features differ from transport policy")
         if name in activated("default"):
             raise SystemExit(prefix + "must not be enabled by default")
-        for backend in ("log-sink", "synchronous-client"):
+        for backend in backends:
             if (name in activated(backend)) != (backend in rule["backends"]):
                 raise SystemExit(prefix + f"incorrect binding to {backend}")
     return set(policy)

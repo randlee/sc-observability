@@ -25,8 +25,8 @@ class TransportPolicyTests(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
 
-    def replace(self, before, after):
-        path = self.root / MANIFEST
+    def replace(self, before, after, relative=MANIFEST):
+        path = self.root / relative
         text = path.read_text(encoding="utf-8")
         self.assertIn(before, text)
         path.write_text(text.replace(before, after), encoding="utf-8")
@@ -79,6 +79,37 @@ sc-lint-attributes""",
     def test_transport_dependency_must_be_feature_bound(self):
         self.replace('"dep:opentelemetry", ', '')
         self.rejects("opentelemetry: incorrect binding")
+
+    def test_every_policy_backend_is_checked(self):
+        self.replace(
+            "\n[dependencies]",
+            '\nexporter = ["dep:opentelemetry-http"]\n\n[dependencies]',
+        )
+        self.replace(
+            'backends = ["synchronous-client"]\nfeatures = []\ndefault_features = true',
+            'backends = ["synchronous-client", "exporter"]\nfeatures = []\ndefault_features = true',
+            "policy/otlp-transport.toml",
+        )
+        self.rejects("opentelemetry-http: incorrect binding to exporter")
+
+    def test_policy_backend_must_be_a_feature(self):
+        self.replace(
+            '[transport.tokio]\nversion = "=1.53.1"\nbackends = ["synchronous-client"]',
+            '[transport.tokio]\nversion = "=1.53.1"\nbackends = ["sync-client"]',
+            "policy/otlp-transport.toml",
+        )
+        self.rejects("backend sync-client is not a feature")
+
+    def test_core_logger_must_be_optional(self):
+        self.replace(
+            "sc-observability = { workspace = true, optional = true }",
+            "sc-observability.workspace = true",
+        )
+        self.rejects("sc-observability: must be optional")
+
+    def test_core_logger_is_activated_only_by_log_sink(self):
+        self.replace('"dep:tokio"]', '"dep:tokio", "dep:sc-observability"]')
+        self.rejects(r"sc-observability: must be activated only by log-sink, found \['log-sink', 'synchronous-client'\]")
 
     def test_transport_workspace_pin_must_match_policy(self):
         cargo = self.root / "Cargo.toml"
