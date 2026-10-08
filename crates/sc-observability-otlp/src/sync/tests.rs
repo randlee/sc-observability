@@ -36,6 +36,8 @@ use crate::error_codes::sync as codes;
 const FIXTURE_WATCHDOG: Duration = Duration::from_secs(10);
 /// Client timeout used by the stalled-endpoint tests.
 const STALL_TIMEOUT: Duration = Duration::from_millis(250);
+/// Bounds the child-process precedence proof while its collector remains held.
+const PRECEDENCE_CHILD_WATCHDOG: Duration = Duration::from_secs(5);
 const SERVICE: &str = "sync-client-test";
 const ACCEPT_POLL: Duration = Duration::from_millis(5);
 
@@ -848,10 +850,8 @@ fn explicit_configuration_child() {
         return;
     };
     let mut client = Client::new(&endpoint)
-        .and_then(|client| client.with_timeout(STALL_TIMEOUT))
         .and_then(|client| client.with_header("x-tenant", EXPLICIT_TENANT))
         .expect("client");
-    let started = Instant::now();
     client
         .send_log(&resource(), scope(), |record| {
             record.set_body(AnyValue::from("precedence"));
@@ -867,22 +867,28 @@ fn explicit_configuration_child() {
             Ok(())
         })
         .expect("metrics sent to the explicit endpoint");
-    assert!(started.elapsed() < FIXTURE_WATCHDOG * 3);
 }
 
-/// Runs [`explicit_configuration_child`] with conflicting OTEL endpoint and
-/// timeout settings plus `extra` and returns the requests the explicit
-/// endpoint received, by signal path.
-fn run_precedence_child(extra: &[(&str, &str)]) -> Vec<Captured> {
-    let collector = Collector::start(Reply::Ok);
+/// Child half of the timeout-precedence proof. Its explicit timeout must win
+/// over the conflicting OTEL environment timeouts set by the parent.
+#[test]
+fn explicit_timeout_precedence_child() {
+    let Ok(endpoint) = std::env::var("SC_OTLP_SYNC_PRECEDENCE_STALL_ENDPOINT") else {
+        return;
+    };
+    let mut client = Client::new(&endpoint)
+        .and_then(|client| client.with_timeout(STALL_TIMEOUT))
+        .expect("client with explicit timeout");
+    assert!(matches!(
+        client.send_span(&resource(), completed_span()),
+        Err(SyncError::Export(_))
+    ));
+}
+
+fn precedence_child_command(test_name: &str, endpoint: String) -> Command {
     let mut command = Command::new(std::env::current_exe().expect("test binary"));
     command
-        .args([
-            "--exact",
-            "sync::tests::explicit_configuration_child",
-            "--nocapture",
-        ])
-        .env("SC_OTLP_SYNC_PRECEDENCE_ENDPOINT", collector.endpoint())
+        .args(["--exact", test_name, "--nocapture"])
         .env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:9");
     for signal in ["LOGS", "TRACES", "METRICS"] {
         command
@@ -894,7 +900,21 @@ fn run_precedence_child(extra: &[(&str, &str)]) -> Vec<Captured> {
     }
     command
         .env("OTEL_EXPORTER_OTLP_TIMEOUT", "60000")
-        .envs(extra.iter().copied());
+        .env("SC_OTLP_SYNC_PRECEDENCE_ENDPOINT", &endpoint)
+        .env("SC_OTLP_SYNC_PRECEDENCE_STALL_ENDPOINT", endpoint);
+    command
+}
+
+/// Runs [`explicit_configuration_child`] with conflicting OTEL endpoint and
+/// timeout settings plus `extra` and returns the requests the explicit
+/// endpoint received, by signal path.
+fn run_precedence_child(extra: &[(&str, &str)]) -> Vec<Captured> {
+    let collector = Collector::start(Reply::Ok);
+    let mut command = precedence_child_command(
+        "sync::tests::explicit_configuration_child",
+        collector.endpoint(),
+    );
+    command.envs(extra.iter().copied());
     let output = command.output().expect("run precedence child test");
     assert!(
         output.status.success(),
@@ -917,6 +937,48 @@ fn run_precedence_child(extra: &[(&str, &str)]) -> Vec<Captured> {
         "every signal reached the explicit endpoint"
     );
     requests
+}
+
+#[test]
+fn explicit_timeout_wins_over_environment_while_collector_is_held() {
+    let (collector, stalled) = Collector::start_stalled();
+    let mut command = precedence_child_command(
+        "sync::tests::explicit_timeout_precedence_child",
+        collector.endpoint(),
+    );
+    let (output_tx, output_rx) = mpsc::channel();
+    let child = thread::spawn(move || {
+        let _ = output_tx.send(command.output());
+    });
+
+    if let Err(error) = stalled.request_arrived.recv_timeout(FIXTURE_WATCHDOG) {
+        let _ = stalled.release.send(());
+        child.join().expect("join precedence child");
+        panic!("precedence child never reached the stalled collector: {error:?}");
+    }
+    let output = match output_rx.recv_timeout(PRECEDENCE_CHILD_WATCHDOG) {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => {
+            let _ = stalled.release.send(());
+            child.join().expect("join precedence child");
+            panic!("run precedence child: {error}");
+        }
+        Err(error) => {
+            let _ = stalled.release.send(());
+            child.join().expect("join precedence child");
+            panic!("explicit timeout did not beat environment timeout: {error:?}");
+        }
+    };
+    assert!(
+        output.status.success(),
+        "precedence child failed: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    stalled
+        .release
+        .send(())
+        .expect("release stalled collector after explicit timeout");
+    child.join().expect("join precedence child");
 }
 
 #[test]
