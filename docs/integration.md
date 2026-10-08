@@ -112,15 +112,15 @@ The existing harness CLI is:
 ```text
 python viewer_harness.py start --binary <path> --binary-sha256 <digest> --version <version> --state-dir <dir>
 python viewer_harness.py status --state-dir <dir>
-python viewer_harness.py assert-production --state-dir <dir> --backend sdk|sync-http
+python viewer_harness.py probe --base <ui-url> --otlp-http <otlp-http-url>
 python viewer_harness.py stop --state-dir <dir> --timeout 10
 ```
 
 Use an isolated state directory per job/process and distinct available loopback
 ports. `start` accepts `--host 127.0.0.1 --http <port> --grpc <port> --ui <port>`;
 default ports are not concurrency isolation. Stop owned viewers in `finally`.
-The Rust viewer suite can develop against this interface while e-2 implements
-platform support. Viewer readback must obey PHD-012 and ADR-021; collector
+The wheel-cli-viewer suite runs `tests/telemetry-e2e/test_viewer_readback.py`
+against this interface. Viewer readback must obey PHD-012 and ADR-021; collector
 capture does not stand in for stored viewer data or unsupported capabilities.
 
 ## Default-branch registration

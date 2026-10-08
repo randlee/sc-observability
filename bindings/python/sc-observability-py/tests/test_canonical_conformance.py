@@ -12,11 +12,11 @@ from sc_observability import generated
 def corpus_path(test_file: Path) -> Path:
     """Use bundled test data when relocated, or the checkout's shared corpus."""
     directory = test_file.resolve().parent
-    bundled = directory / "conformance/v1/conversion-cases.json"
+    bundled = directory / "conformance/v2/conversion-cases.json"
     if bundled.is_file():
         return bundled
     for parent in directory.parents:
-        shared = parent / "bindings/conformance/v1/conversion-cases.json"
+        shared = parent / "bindings/conformance/v2/conversion-cases.json"
         if shared.is_file():
             return shared
     raise FileNotFoundError(f"canonical conformance corpus missing beside {test_file}")
@@ -26,7 +26,7 @@ class CanonicalConformanceTests(unittest.TestCase):
     def test_relocated_suite_uses_bundled_corpus(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             tests = Path(temporary) / "tests"
-            bundled = tests / "conformance/v1/conversion-cases.json"
+            bundled = tests / "conformance/v2/conversion-cases.json"
             bundled.parent.mkdir(parents=True)
             bundled.write_bytes(corpus_path(Path(__file__)).read_bytes())
             self.assertEqual(corpus_path(tests / "test_canonical_conformance.py"), bundled.resolve())

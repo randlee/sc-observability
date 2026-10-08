@@ -41,7 +41,7 @@ const transport: JsonTransport = {
 
 async function main(): Promise<void> {
   const conversionCases = JSON.parse(
-    readFileSync("../../bindings/conformance/v1/conversion-cases.json", "utf8"),
+    readFileSync("../../bindings/conformance/v2/conversion-cases.json", "utf8"),
   ) as Array<Record<string, unknown>>;
   for (const testCase of conversionCases.filter((item) => item.operation === "canonical_envelope")) {
     if (testCase.result === "decoded") {
@@ -98,23 +98,6 @@ async function main(): Promise<void> {
     ["SubscriberError::Subscriber", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
     ["LogSinkError::Write", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
     ["LogSinkError::Flush", "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"],
-    ["ConfigFailure::ZeroDuration", "OTLP_CONFIG_ZERO_DURATION"],
-    ["ConfigFailure::DurationOverflow", "OTLP_CONFIG_DURATION_OVERFLOW"],
-    ["ConfigFailure::InvalidBoundOrdering", "OTLP_CONFIG_BOUND_ORDER"],
-    ["ConfigFailure::InvalidJitterPercent", "OTLP_CONFIG_JITTER_PERCENT"],
-    ["ConfigFailure::InvalidQueueCapacity", "OTLP_CONFIG_QUEUE_CAPACITY"],
-    ["ConfigFailure::InvalidQueueByteCapacity", "OTLP_CONFIG_QUEUE_BYTE_CAPACITY"],
-    ["ConfigFailure::ConfigFieldNotApplicable", "OTLP_CONFIG_FIELD_NOT_APPLICABLE"],
-    ["ConfigFailure::InsecureTransportRejected", "OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED"],
-    ["ConfigFailure::InvalidEndpoint", "OTLP_CONFIG_INVALID_ENDPOINT"],
-    ["ConfigFailure::InvalidHeader", "OTLP_CONFIG_INVALID_HEADER"],
-    ["ConfigFailure::TransportConstructionFailed", "OTLP_TRANSPORT_CONSTRUCTION_FAILED"],
-    ["ConfigFailure::UnsupportedBackend", "OTLP_UNSUPPORTED_BACKEND"],
-    ["ConfigFailure::UnsupportedProtocol", "OTLP_UNSUPPORTED_PROTOCOL"],
-    ["ConfigFailure::TokioRuntimeRequired", "OTLP_TOKIO_RUNTIME_REQUIRED"],
-    ["MetricModelError::InvalidHistogram", "SC_METRIC_INVALID_HISTOGRAM"],
-    ["MetricModelError::InvalidTemporality", "SC_METRIC_INVALID_TEMPORALITY"],
-    ["MetricModelError::InvalidInterval", "SC_METRIC_INVALID_INTERVAL"],
   ];
   assert(
     JSON.stringify(Object.entries(CANONICAL_ERROR_CODES)) === JSON.stringify(expectedCanonicalCatalogue),

@@ -12,7 +12,7 @@ fn roundtrip<T: serde::de::DeserializeOwned + serde::Serialize>(v: Value) -> Val
         .unwrap()
 }
 
-fn selected_v1_path(filename: &str) -> PathBuf {
+fn selected_path(filename: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../schema")
         .join(filename)
@@ -81,11 +81,8 @@ fn temporary_contract_directory_removes_path_after_unwind() {
 }
 
 #[test]
-fn selected_v1_contracts_match_current_dto_and_error_definitions() {
-    let output = generator_check(
-        &selected_v1_path("v1.json"),
-        &selected_v1_path("errors-v1.json"),
-    );
+fn selected_v2_contracts_match_current_dto_and_error_definitions() {
+    let output = generator_check(&selected_path("v2.json"), &selected_path("errors-v2.json"));
     assert!(
         output.status.success(),
         "{}",
@@ -118,7 +115,7 @@ fn selected_v1_contract_history_matches_the_accepted_local_baseline() {
             String::from_utf8_lossy(&baseline.stderr),
         );
 
-        let selected = fs::read(selected_v1_path(filename)).unwrap_or_else(|error| {
+        let selected = fs::read(selected_path(filename)).unwrap_or_else(|error| {
             panic!(
                 "immutable history check: {contract_name} v1 retained file \
                  {repository_path} is missing ({error}); v1 is immutable and an intentional \
@@ -142,9 +139,11 @@ fn selected_v1_write_mode_refuses_to_overwrite_accepted_contracts() {
     let output = Command::new(env!("CARGO_BIN_EXE_sc-observability-schema"))
         .args([
             "--output",
-            selected_v1_path("v1.json").to_str().expect("schema path is UTF-8"),
+            selected_path("v1.json")
+                .to_str()
+                .expect("schema path is UTF-8"),
             "--errors-output",
-            selected_v1_path("errors-v1.json")
+            selected_path("errors-v1.json")
                 .to_str()
                 .expect("error catalogue path is UTF-8"),
         ])
@@ -158,6 +157,31 @@ fn selected_v1_write_mode_refuses_to_overwrite_accepted_contracts() {
     assert!(stderr.contains("binding schema v1"));
     assert!(stderr.contains("v2.json"));
     assert!(stderr.contains("errors-v2.json"));
+}
+
+#[test]
+fn selected_v2_write_mode_refuses_to_overwrite_current_contracts() {
+    let output = Command::new(env!("CARGO_BIN_EXE_sc-observability-schema"))
+        .args([
+            "--output",
+            selected_path("v2.json")
+                .to_str()
+                .expect("schema path is UTF-8"),
+            "--errors-output",
+            selected_path("errors-v2.json")
+                .to_str()
+                .expect("error catalogue path is UTF-8"),
+        ])
+        .output()
+        .expect("run schema generator in write mode");
+    assert!(
+        !output.status.success(),
+        "write mode must not overwrite selected v2 snapshots"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("binding schema v2"));
+    assert!(stderr.contains("v3.json"));
+    assert!(stderr.contains("errors-v3.json"));
 }
 
 #[test]
@@ -203,8 +227,8 @@ fn versioned_output_pair_selects_schema_id_metadata_and_drift_label() {
     assert!(stderr.contains(schema.to_str().expect("schema path is UTF-8")));
 }
 
-fn set_schema_version_to_v2(contract: &mut Value) {
-    contract["x-sc-bindings"]["schema_version"] = json!(2);
+fn set_schema_version_to_v3(contract: &mut Value) {
+    contract["x-sc-bindings"]["schema_version"] = json!(3);
 }
 
 fn remove_schema_defaults(contract: &mut Value) {
@@ -219,7 +243,7 @@ fn change_error_catalogue_code(contract: &mut Value) {
 }
 
 #[test]
-fn selected_v1_contract_mismatches_name_contract_version_and_changed_field() {
+fn selected_v2_contract_mismatches_name_contract_version_and_changed_field() {
     enum ChangedContract {
         Schema,
         Errors,
@@ -237,52 +261,51 @@ fn selected_v1_contract_mismatches_name_contract_version_and_changed_field() {
         MismatchCase {
             name: "changed schema version",
             changed_contract: ChangedContract::Schema,
-            mutate: set_schema_version_to_v2,
-            expected_label: "binding schema v1",
+            mutate: set_schema_version_to_v3,
+            expected_label: "binding schema v2",
             expected_pointer: "/x-sc-bindings/schema_version",
         },
         MismatchCase {
             name: "missing schema field",
             changed_contract: ChangedContract::Schema,
             mutate: remove_schema_defaults,
-            expected_label: "binding schema v1",
+            expected_label: "binding schema v2",
             expected_pointer: "/x-sc-bindings/defaults",
         },
         MismatchCase {
             name: "changed error catalogue code",
             changed_contract: ChangedContract::Errors,
             mutate: change_error_catalogue_code,
-            expected_label: "binding error catalogue v1",
+            expected_label: "binding error catalogue v2",
             expected_pointer: "/0/code",
         },
     ] {
         let directory = TemporaryContractDirectory::new(case.name);
-        let schema = directory.join("v1.json");
-        let errors = directory.join("errors-v1.json");
-        fs::copy(selected_v1_path("v1.json"), &schema).expect("copy selected schema");
-        fs::copy(selected_v1_path("errors-v1.json"), &errors).expect("copy selected errors");
+        let schema = directory.join("v2.json");
+        let errors = directory.join("errors-v2.json");
+        fs::copy(selected_path("v2.json"), &schema).expect("copy selected schema");
+        fs::copy(selected_path("errors-v2.json"), &errors).expect("copy selected errors");
 
         let changed_path = match case.changed_contract {
             ChangedContract::Schema => &schema,
             ChangedContract::Errors => &errors,
         };
-        let mut changed: Value = serde_json::from_slice(
-            &fs::read(changed_path).expect("read selected contract"),
-        )
-        .expect("selected contract is JSON");
+        let mut changed: Value =
+            serde_json::from_slice(&fs::read(changed_path).expect("read selected contract"))
+                .expect("selected contract is JSON");
         (case.mutate)(&mut changed);
         let mut bytes = serde_json::to_vec_pretty(&changed).expect("serialize changed contract");
         bytes.push(b'\n');
         fs::write(changed_path, &bytes).expect("write changed contract");
 
         let output = generator_check(&schema, &errors);
+        assert!(!output.status.success(), "{} must fail", case.name);
+        let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            !output.status.success(),
-            "{} must fail",
+            stderr.contains(case.expected_label),
+            "{}: {stderr}",
             case.name
         );
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains(case.expected_label), "{}: {stderr}", case.name);
         assert!(
             stderr.contains(case.expected_pointer),
             "{}: {stderr}",
@@ -304,7 +327,7 @@ fn selected_v1_contract_mismatches_name_contract_version_and_changed_field() {
 #[test]
 fn every_registered_type_agrees_with_serde_and_frozen_expectations() {
     let cases: Vec<Value> =
-        serde_json::from_str(include_str!("../../conformance/v1/schema-cases.json")).unwrap();
+        serde_json::from_str(include_str!("../../conformance/v2/schema-cases.json")).unwrap();
     for case in cases {
         if case["valid"] != true {
             continue;
@@ -396,7 +419,7 @@ fn every_registered_type_agrees_with_serde_and_frozen_expectations() {
 #[test]
 fn semantic_negatives_have_exact_failure_kinds_and_codes() {
     let cases: Vec<Value> =
-        serde_json::from_str(include_str!("../../conformance/v1/conversion-cases.json")).unwrap();
+        serde_json::from_str(include_str!("../../conformance/v2/conversion-cases.json")).unwrap();
     for case in cases {
         let value = case["value"].clone();
         if case["operation"] == "canonical_envelope" {

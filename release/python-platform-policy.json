@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate_version": "1.5.0",
+  "candidate_version": "1.6.0",
   "abi": "abi3",
   "wheel_abi": "cp310-abi3",
   "minimum_python": "3.10",

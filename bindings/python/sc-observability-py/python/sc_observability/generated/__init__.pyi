@@ -414,13 +414,6 @@ class InputHealthRequest:
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
-class InputHistogramPoint:
-    bucket_counts: tuple[InputDecimal, ...]
-    count: InputDecimal
-    explicit_bounds: tuple[float, ...]
-    sum: float
-
-@dataclass(frozen=True, kw_only=True)
 class InputLevelChangeChanged:
     current: InputLevelState
     diagnostic: InputChangeDiagnostic
@@ -518,30 +511,6 @@ class InputMaintenanceHealth:
     pruned_files_total: InputDecimal
     rotated_files_total: InputDecimal
     state: InputWorkerState
-
-@dataclass(frozen=True, kw_only=True)
-class InputMetricRecord:
-    attributes: Mapping[str, InputValue]
-    name: str
-    service: str
-    timestamp: str
-    unit: str | None = None
-    value: InputMetricValue
-
-@dataclass(frozen=True, kw_only=True)
-class InputMetricValueGauge:
-    data: float
-    kind: Literal['gauge'] = dataclass_field(default='gauge', init=False)
-
-@dataclass(frozen=True, kw_only=True)
-class InputMetricValueSum:
-    data: Mapping[str, NoReturn]
-    kind: Literal['sum'] = dataclass_field(default='sum', init=False)
-
-@dataclass(frozen=True, kw_only=True)
-class InputMetricValueHistogram:
-    data: Mapping[str, NoReturn]
-    kind: Literal['histogram'] = dataclass_field(default='histogram', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputPathUtf8:
@@ -668,49 +637,6 @@ class InputSinkHealth:
     state: InputAvailability
 
 @dataclass(frozen=True, kw_only=True)
-class InputSpanEvent:
-    attributes: Mapping[str, InputValue]
-    diagnostic: InputStoredDiagnostic | None = None
-    name: str
-    timestamp: str
-    trace: InputTraceContextV2
-
-@dataclass(frozen=True, kw_only=True)
-class InputSpanLink:
-    attributes: Mapping[str, InputValue]
-    flags: int
-    span_id: str
-    trace_id: str
-
-@dataclass(frozen=True, kw_only=True)
-class InputSpanRecord:
-    attributes: Mapping[str, InputValue]
-    diagnostic: InputStoredDiagnostic | None = None
-    duration_ms: InputDecimal | None = None
-    kind: InputSpanKind
-    links: tuple[InputSpanLink, ...]
-    name: str
-    service: str
-    status: InputSpanStatus
-    timestamp: str
-    trace: InputTraceContextV2
-
-@dataclass(frozen=True, kw_only=True)
-class InputSpanSignalStarted:
-    data: InputSpanRecord
-    kind: Literal['started'] = dataclass_field(default='started', init=False)
-
-@dataclass(frozen=True, kw_only=True)
-class InputSpanSignalEvent:
-    data: InputSpanEvent
-    kind: Literal['event'] = dataclass_field(default='event', init=False)
-
-@dataclass(frozen=True, kw_only=True)
-class InputSpanSignalEnded:
-    data: InputSpanRecord
-    kind: Literal['ended'] = dataclass_field(default='ended', init=False)
-
-@dataclass(frozen=True, kw_only=True)
 class InputStateTransition:
     entity_id: str | None = None
     entity_kind: str
@@ -749,13 +675,6 @@ class InputStoredEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class InputTraceContext:
-    parent_span_id: str | None = None
-    span_id: str
-    trace_id: str
-
-@dataclass(frozen=True, kw_only=True)
-class InputTraceContextV2:
-    flags: int
     parent_span_id: str | None = None
     span_id: str
     trace_id: str
@@ -1303,13 +1222,6 @@ class OutputHealthRequest:
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
-class OutputHistogramPoint:
-    bucket_counts: tuple[OutputDecimal, ...]
-    count: OutputDecimal
-    explicit_bounds: tuple[float, ...]
-    sum: float
-
-@dataclass(frozen=True, kw_only=True)
 class OutputLevelChangeChanged:
     current: OutputLevelState
     diagnostic: OutputChangeDiagnostic
@@ -1407,30 +1319,6 @@ class OutputMaintenanceHealth:
     pruned_files_total: OutputDecimal
     rotated_files_total: OutputDecimal
     state: OutputWorkerState
-
-@dataclass(frozen=True, kw_only=True)
-class OutputMetricRecord:
-    attributes: Mapping[str, OutputValue]
-    name: str
-    service: str
-    timestamp: str
-    unit: str | None
-    value: OutputMetricValue
-
-@dataclass(frozen=True, kw_only=True)
-class OutputMetricValueGauge:
-    data: float
-    kind: Literal['gauge'] = dataclass_field(default='gauge', init=False)
-
-@dataclass(frozen=True, kw_only=True)
-class OutputMetricValueSum:
-    data: Mapping[str, NoReturn]
-    kind: Literal['sum'] = dataclass_field(default='sum', init=False)
-
-@dataclass(frozen=True, kw_only=True)
-class OutputMetricValueHistogram:
-    data: Mapping[str, NoReturn]
-    kind: Literal['histogram'] = dataclass_field(default='histogram', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputPathUtf8:
@@ -1557,49 +1445,6 @@ class OutputSinkHealth:
     state: OutputAvailability
 
 @dataclass(frozen=True, kw_only=True)
-class OutputSpanEvent:
-    attributes: Mapping[str, OutputValue]
-    diagnostic: OutputStoredDiagnostic | None
-    name: str
-    timestamp: str
-    trace: OutputTraceContextV2
-
-@dataclass(frozen=True, kw_only=True)
-class OutputSpanLink:
-    attributes: Mapping[str, OutputValue]
-    flags: int
-    span_id: str
-    trace_id: str
-
-@dataclass(frozen=True, kw_only=True)
-class OutputSpanRecord:
-    attributes: Mapping[str, OutputValue]
-    diagnostic: OutputStoredDiagnostic | None
-    duration_ms: OutputDecimal | None
-    kind: OutputSpanKind
-    links: tuple[OutputSpanLink, ...]
-    name: str
-    service: str
-    status: OutputSpanStatus
-    timestamp: str
-    trace: OutputTraceContextV2
-
-@dataclass(frozen=True, kw_only=True)
-class OutputSpanSignalStarted:
-    data: OutputSpanRecord
-    kind: Literal['started'] = dataclass_field(default='started', init=False)
-
-@dataclass(frozen=True, kw_only=True)
-class OutputSpanSignalEvent:
-    data: OutputSpanEvent
-    kind: Literal['event'] = dataclass_field(default='event', init=False)
-
-@dataclass(frozen=True, kw_only=True)
-class OutputSpanSignalEnded:
-    data: OutputSpanRecord
-    kind: Literal['ended'] = dataclass_field(default='ended', init=False)
-
-@dataclass(frozen=True, kw_only=True)
 class OutputStateTransition:
     entity_id: str | None
     entity_kind: str
@@ -1638,13 +1483,6 @@ class OutputStoredEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputTraceContext:
-    parent_span_id: str | None
-    span_id: str
-    trace_id: str
-
-@dataclass(frozen=True, kw_only=True)
-class OutputTraceContextV2:
-    flags: int
     parent_span_id: str | None
     span_id: str
     trace_id: str
@@ -1786,7 +1624,6 @@ class OutputWireEnvelope8Error:
 
 InputAdmission: TypeAlias = InputAdmissionAccepted | InputAdmissionFiltered
 InputAdmissionOperation: TypeAlias = Literal['log'] | Literal['try_log']
-InputAggregationTemporality: TypeAlias = Literal['delta'] | Literal['cumulative']
 InputAvailability: TypeAlias = Literal['healthy'] | Literal['degraded_dropping'] | Literal['unavailable']
 InputCanonicalFailure: TypeAlias = InputCanonicalFailureValidation | InputCanonicalFailureQueueFull | InputCanonicalFailureBelowBaseline | InputCanonicalFailureUnsupportedLevel | InputCanonicalFailurePermissionDenied | InputCanonicalFailureClosed | InputCanonicalFailureUnavailable | InputCanonicalFailureIo | InputCanonicalFailureTimeout | InputCanonicalFailureCancelled | InputCanonicalFailureUnsupportedVersion | InputCanonicalFailureInternal | InputCanonicalFailureUnknownRemote
 InputCanonicalWireEnvelope: TypeAlias = InputCanonicalWireEnvelopeOk | InputCanonicalWireEnvelopeError
@@ -1805,7 +1642,6 @@ InputLevelRequest: TypeAlias = InputLevelRequestElevate | InputLevelRequestReset
 InputLifecycle: TypeAlias = Literal['running'] | Literal['stopping'] | Literal['stopped'] | Literal['failed']
 InputLogOperation: TypeAlias = Literal['log']
 InputLogOrder: TypeAlias = Literal['oldest_first'] | Literal['newest_first']
-InputMetricValue: TypeAlias = InputMetricValueGauge | InputMetricValueSum | InputMetricValueHistogram
 InputPath: TypeAlias = InputPathUtf8 | InputPathUnrepresentable | InputPathAbsent
 InputQueryState: TypeAlias = Literal['healthy'] | Literal['degraded'] | Literal['unavailable']
 InputRemediation: TypeAlias = InputRemediationRecoverable | InputRemediationNotRecoverable
@@ -1817,9 +1653,6 @@ InputResult5: TypeAlias = InputResult5Ok | InputResult5Error
 InputResult6: TypeAlias = InputResult6Ok | InputResult6Error
 InputResult7: TypeAlias = InputResult7Ok | InputResult7Error
 InputResult8: TypeAlias = InputResult8Ok | InputResult8Error
-InputSpanKind: TypeAlias = Literal['internal'] | Literal['server'] | Literal['client'] | Literal['producer'] | Literal['consumer']
-InputSpanSignal: TypeAlias = InputSpanSignalStarted | InputSpanSignalEvent | InputSpanSignalEnded
-InputSpanStatus: TypeAlias = Literal['Ok'] | Literal['Error'] | Literal['Unset']
 InputValue: TypeAlias = InputValueNull | InputValueBoolean | InputValueString | InputValueInteger | InputValueFloat | InputValueArray | InputValueObject
 InputWireEnvelope: TypeAlias = InputWireEnvelopeOk | InputWireEnvelopeError
 InputWireEnvelope2: TypeAlias = InputWireEnvelope2Ok | InputWireEnvelope2Error
@@ -1832,7 +1665,6 @@ InputWireEnvelope8: TypeAlias = InputWireEnvelope8Ok | InputWireEnvelope8Error
 InputWorkerState: TypeAlias = Literal['running'] | Literal['degraded'] | Literal['stopped']
 OutputAdmission: TypeAlias = OutputAdmissionAccepted | OutputAdmissionFiltered
 OutputAdmissionOperation: TypeAlias = Literal['log'] | Literal['try_log']
-OutputAggregationTemporality: TypeAlias = Literal['delta'] | Literal['cumulative']
 OutputAvailability: TypeAlias = Literal['healthy'] | Literal['degraded_dropping'] | Literal['unavailable']
 OutputCanonicalFailure: TypeAlias = OutputCanonicalFailureValidation | OutputCanonicalFailureQueueFull | OutputCanonicalFailureBelowBaseline | OutputCanonicalFailureUnsupportedLevel | OutputCanonicalFailurePermissionDenied | OutputCanonicalFailureClosed | OutputCanonicalFailureUnavailable | OutputCanonicalFailureIo | OutputCanonicalFailureTimeout | OutputCanonicalFailureCancelled | OutputCanonicalFailureUnsupportedVersion | OutputCanonicalFailureInternal | OutputCanonicalFailureUnknownRemote
 OutputCanonicalWireEnvelope: TypeAlias = OutputCanonicalWireEnvelopeOk | OutputCanonicalWireEnvelopeError
@@ -1851,7 +1683,6 @@ OutputLevelRequest: TypeAlias = OutputLevelRequestElevate | OutputLevelRequestRe
 OutputLifecycle: TypeAlias = Literal['running'] | Literal['stopping'] | Literal['stopped'] | Literal['failed']
 OutputLogOperation: TypeAlias = Literal['log']
 OutputLogOrder: TypeAlias = Literal['oldest_first'] | Literal['newest_first']
-OutputMetricValue: TypeAlias = OutputMetricValueGauge | OutputMetricValueSum | OutputMetricValueHistogram
 OutputPath: TypeAlias = OutputPathUtf8 | OutputPathUnrepresentable | OutputPathAbsent
 OutputQueryState: TypeAlias = Literal['healthy'] | Literal['degraded'] | Literal['unavailable']
 OutputRemediation: TypeAlias = OutputRemediationRecoverable | OutputRemediationNotRecoverable
@@ -1863,9 +1694,6 @@ OutputResult5: TypeAlias = OutputResult5Ok | OutputResult5Error
 OutputResult6: TypeAlias = OutputResult6Ok | OutputResult6Error
 OutputResult7: TypeAlias = OutputResult7Ok | OutputResult7Error
 OutputResult8: TypeAlias = OutputResult8Ok | OutputResult8Error
-OutputSpanKind: TypeAlias = Literal['internal'] | Literal['server'] | Literal['client'] | Literal['producer'] | Literal['consumer']
-OutputSpanSignal: TypeAlias = OutputSpanSignalStarted | OutputSpanSignalEvent | OutputSpanSignalEnded
-OutputSpanStatus: TypeAlias = Literal['Ok'] | Literal['Error'] | Literal['Unset']
 OutputValue: TypeAlias = OutputValueNull | OutputValueBoolean | OutputValueString | OutputValueInteger | OutputValueFloat | OutputValueArray | OutputValueObject
 OutputWireEnvelope: TypeAlias = OutputWireEnvelopeOk | OutputWireEnvelopeError
 OutputWireEnvelope2: TypeAlias = OutputWireEnvelope2Ok | OutputWireEnvelope2Error
@@ -1896,7 +1724,6 @@ InputWireEnvelopeLogHealth: TypeAlias = InputWireEnvelope5
 InputWireEnvelopeLogSnapshot: TypeAlias = InputWireEnvelope4
 Admission: TypeAlias = OutputAdmission
 AdmissionOperation: TypeAlias = OutputAdmissionOperation
-AggregationTemporality: TypeAlias = OutputAggregationTemporality
 Availability: TypeAlias = OutputAvailability
 BridgeHealth: TypeAlias = OutputBridgeHealth
 CanonicalDiagnostic: TypeAlias = OutputCanonicalDiagnostic
@@ -1918,7 +1745,6 @@ FailureCounts: TypeAlias = OutputFailureCounts
 FieldMatch: TypeAlias = OutputFieldMatch
 FlushRequest: TypeAlias = OutputFlushRequest
 HealthRequest: TypeAlias = OutputHealthRequest
-HistogramPoint: TypeAlias = OutputHistogramPoint
 LevelChange: TypeAlias = OutputLevelChange
 LevelChangeRequest: TypeAlias = OutputLevelChangeRequest
 LevelChangeSource: TypeAlias = OutputLevelChangeSource
@@ -1935,8 +1761,6 @@ LogQuery: TypeAlias = OutputLogQuery
 LogSnapshot: TypeAlias = OutputLogSnapshot
 LoggingHealth: TypeAlias = OutputLoggingHealth
 MaintenanceHealth: TypeAlias = OutputMaintenanceHealth
-MetricRecord: TypeAlias = OutputMetricRecord
-MetricValue: TypeAlias = OutputMetricValue
 OutputOperationDiagnostic: TypeAlias = OutputDiagnostic
 OperationDiagnostic: TypeAlias = OutputOperationDiagnostic
 Path: TypeAlias = OutputPath
@@ -1962,17 +1786,10 @@ ResultLogHealth: TypeAlias = OutputResultLogHealth
 OutputResultLogSnapshot: TypeAlias = OutputResult4
 ResultLogSnapshot: TypeAlias = OutputResultLogSnapshot
 SinkHealth: TypeAlias = OutputSinkHealth
-SpanEvent: TypeAlias = OutputSpanEvent
-SpanKind: TypeAlias = OutputSpanKind
-SpanLink: TypeAlias = OutputSpanLink
-SpanRecord: TypeAlias = OutputSpanRecord
-SpanSignal: TypeAlias = OutputSpanSignal
-SpanStatus: TypeAlias = OutputSpanStatus
 StateTransition: TypeAlias = OutputStateTransition
 StoredDiagnostic: TypeAlias = OutputStoredDiagnostic
 StoredEvent: TypeAlias = OutputStoredEvent
 TraceContext: TypeAlias = OutputTraceContext
-TraceContextV2: TypeAlias = OutputTraceContextV2
 TryLogRequest: TypeAlias = OutputTryLogRequest
 Value: TypeAlias = OutputValue
 OutputWireEnvelopeAdmission: TypeAlias = OutputWireEnvelope

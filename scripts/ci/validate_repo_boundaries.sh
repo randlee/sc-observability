@@ -176,21 +176,21 @@ required_record_fields = {
     "removable_paths",
 }
 required_symbol_fields = {"area", "kind", "status", "canonical"} | required_record_fields
-if len(symbols) != 58 or len({row.get("symbol") for row in symbols}) != 58:
-    raise SystemExit("compatibility registry must contain each of the 58 audited symbols once")
+if len(symbols) != 41 or len({row.get("symbol") for row in symbols}) != 41:
+    raise SystemExit("compatibility registry must contain each of the 41 audited symbols once")
 if any(not required_symbol_fields.issubset(row) for row in symbols):
     raise SystemExit("compatibility registry has an incomplete symbol row")
 if {row["status"] for row in symbols} - {"restored_root", "canonical_routed", "pending_d23_wrapper"}:
     raise SystemExit("compatibility registry has an unknown disposition")
 allowed_treatments = {"unchanged_alias", "existing_pair", "new_adapter", "restoration"}
 all_contract_rows = symbols + registry.get("method_contracts", []) + registry.get("trait_slot_contracts", [])
-if len(registry.get("method_contracts", [])) != 143:
-    raise SystemExit("compatibility registry must contain all 143 audited inherent/free callables")
-if len({row.get("symbol") for row in registry["method_contracts"]}) != 143:
+if len(registry.get("method_contracts", [])) != 96:
+    raise SystemExit("compatibility registry must contain all 96 audited inherent/free callables")
+if len({row.get("symbol") for row in registry["method_contracts"]}) != 96:
     raise SystemExit("compatibility callable records must have unique symbols")
-if len(registry.get("trait_slot_contracts", [])) != 12:
-    raise SystemExit("compatibility registry must contain all 12 audited trait slots")
-if len({row.get("symbol") for row in registry["trait_slot_contracts"]}) != 12:
+if len(registry.get("trait_slot_contracts", [])) != 10:
+    raise SystemExit("compatibility registry must contain all 10 audited trait slots")
+if len({row.get("symbol") for row in registry["trait_slot_contracts"]}) != 10:
     raise SystemExit("compatibility trait-slot records must have unique symbols")
 if any(not required_record_fields.issubset(row) for row in all_contract_rows):
     raise SystemExit("compatibility registry has an incomplete contract record")

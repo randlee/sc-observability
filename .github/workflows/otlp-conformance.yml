@@ -6,107 +6,15 @@ on:
 jobs:
   collector-conformance:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        features: [otlp-sdk, sync-http, "otlp-sdk,sync-http"]
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: '1.94.1'
           components: clippy, rustfmt
-      - name: Run the canonical span and histogram corpus through each production feature set
+      - name: Run the official Collector end-to-end suite against the pinned release
         run: >-
-          cargo test --locked -p sc-observability-otlp
-          --test full_stack_integration --features ${{ matrix.features }}
-
-  desktop-viewer-factory-conformance:
-    name: desktop-viewer-factory-conformance (macOS arm64)
-    runs-on: macos-14
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
-        with:
-          toolchain: '1.94.1'
-          components: clippy, rustfmt
-      - name: Define owned desktop viewer state
-        run: echo "VIEWER_STATE_DIR=$RUNNER_TEMP/sc-observability-d9-viewer" >> "$GITHUB_ENV"
-      - name: Read pinned viewer manifest
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          manifest = json.loads(Path(
-              'scripts/ci/fixtures/otlp/desktop-viewer/release.json'
-          ).read_text())
-          platform = manifest['platforms']['darwin_arm64']
-          with Path(os.environ['GITHUB_ENV']).open('a') as output:
-              output.write(f"VIEWER_VERSION={manifest['version']}\n")
-              output.write(f"VIEWER_BINARY_SHA256={platform['binary_sha256']}\n")
-          PY
-      - name: Download verified pinned desktop viewer
-        run: >-
-          python3 scripts/ci/fixtures/otlp/desktop-viewer/download_pinned_release.py
-          "$RUNNER_TEMP/otel-desktop-viewer"
-      - name: Select isolated free viewer ports
-        run: |
-          python3 - <<'PY'
-          import os
-          import socket
-          from pathlib import Path
-
-          listeners = []
-          try:
-              for _ in range(3):
-                  listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                  listener.bind(("127.0.0.1", 0))
-                  listeners.append(listener)
-              ports = [listener.getsockname()[1] for listener in listeners]
-          finally:
-              for listener in listeners:
-                  listener.close()
-          with Path(os.environ["GITHUB_ENV"]).open("a") as output:
-              for name, port in zip(("D9_VIEWER_HTTP", "D9_VIEWER_GRPC", "D9_VIEWER_UI"), ports):
-                  output.write(f"{name}={port}\n")
-          PY
-      - name: Start an owned isolated desktop viewer
-        run: |
-          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py start \
-            --binary "$RUNNER_TEMP/otel-desktop-viewer" \
-            --version "$VIEWER_VERSION" \
-            --binary-sha256 "$VIEWER_BINARY_SHA256" \
-            --state-dir "$VIEWER_STATE_DIR" \
-            --host 127.0.0.1 --http "$D9_VIEWER_HTTP" \
-            --grpc "$D9_VIEWER_GRPC" --ui "$D9_VIEWER_UI"
-      - name: Run sync-http public factory against the pinned viewer
-        run: >-
-          D9_VIEWER_SYNC_HTTP_ADDRESS=127.0.0.1:$D9_VIEWER_HTTP
-          cargo test --locked -p sc-observability-otlp
-          --test full_stack_integration --features sync-http
-          -- --ignored public_sync_http_factory_exports_three_signals_to_the_pinned_desktop_viewer
-      - name: Query sync-http public-factory output in the pinned viewer
-        run: >-
-          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py assert-production
-          --state-dir "$VIEWER_STATE_DIR" --backend sync-http
-      - name: Run SDK public factory against the pinned viewer
-        run: >-
-          D9_VIEWER_SDK_ADDRESS=127.0.0.1:$D9_VIEWER_GRPC
-          cargo test --locked -p sc-observability-otlp
-          --test full_stack_integration --features otlp-sdk
-          -- --ignored public_sdk_factory_exports_three_signals_to_the_pinned_desktop_viewer
-      - name: Query SDK public-factory output in the pinned viewer
-        run: >-
-          python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py assert-production
-          --state-dir "$VIEWER_STATE_DIR" --backend sdk
-      - name: Remove the owned desktop viewer state
-        if: always()
-        run: |
-          if [ -d "$VIEWER_STATE_DIR" ]; then
-            python3 scripts/ci/fixtures/otlp/desktop-viewer/viewer_harness.py stop \
-              --state-dir "$VIEWER_STATE_DIR" --remove-state
-          fi
+          python3 scripts/integrate/suites/collector/run.py
+          --source-sha "$GITHUB_SHA"
+          --output-dir "$RUNNER_TEMP/collector-evidence"

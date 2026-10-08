@@ -19,7 +19,7 @@ resolver = "2"
 
 [workspace.package]
 authors = ["Rand Lee"]
-version = "1.5.0"
+version = "1.6.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.94.1"
@@ -28,18 +28,18 @@ homepage = "https://github.com/randlee/sc-observability"
 
 [workspace.dependencies]
 clap = { version = "=4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
-sc-observability-dto = { version = "1.5.0", path = "crates/sc-observability-dto" }
+sc-observability-dto = { version = "1.6.0", path = "crates/sc-observability-dto" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
-sc-observability-types = { version = "1.5.0", path = "crates/sc-observability-types", default-features = false }
-sc-observability = { version = "1.5.0", path = "crates/sc-observability", default-features = false }
-sc-observability-log = { version = "1.5.0", path = "crates/sc-observability-log", default-features = false }
-sc-observe = { version = "1.5.0", path = "crates/sc-observe", default-features = false }
-sc-observability-otlp = { version = "1.5.0", path = "crates/sc-observability-otlp", default-features = false }
-sc-observability-binding-runtime = { version = "1.5.0", path = "crates/sc-observability-binding-runtime", default-features = false }
-sc-observability-log-macros = { version = "=1.5.0", path = "crates/sc-observability-log-macros" }
+sc-observability-types = { version = "1.6.0", path = "crates/sc-observability-types", default-features = false }
+sc-observability = { version = "1.6.0", path = "crates/sc-observability", default-features = false }
+sc-observability-log = { version = "1.6.0", path = "crates/sc-observability-log", default-features = false }
+sc-observe = { version = "1.6.0", path = "crates/sc-observe", default-features = false }
+sc-observability-otlp = { version = "1.6.0", path = "crates/sc-observability-otlp", default-features = false }
+sc-observability-binding-runtime = { version = "1.6.0", path = "crates/sc-observability-binding-runtime", default-features = false }
+sc-observability-log-macros = { version = "=1.6.0", path = "crates/sc-observability-log-macros" }
 log = { version = "0.4", features = ["std", "kv"] }
 hostname = "0.4"
 tempfile = "3"

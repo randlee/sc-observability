@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate_version": "1.5.0",
+  "candidate_version": "1.6.0",
   "crates": {
     "sc-observability-types": {
       "baseline_version": "1.4.1",

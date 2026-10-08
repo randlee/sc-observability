@@ -500,17 +500,6 @@ def _find_value(value: Any, needle: Any) -> bool:
     return str(value) == str(needle)
 
 
-def _require_attributes(subject: Any, expected: dict[str, Any], context: str) -> None:
-    """Require named attribute pairs instead of accepting values anywhere in a response."""
-    attributes = subject.get("attributes") if isinstance(subject, dict) else None
-    if not isinstance(attributes, list):
-        raise HarnessError(f"{context} omitted decoded attributes")
-    for key, value in expected.items():
-        if not any(isinstance(attribute, dict) and attribute.get("key") == key
-                   and attribute.get("value") == value for attribute in attributes):
-            raise HarnessError(f"{context} omitted {key}={value!r}")
-
-
 def _wait_rpc(base: str, method: str, params: list[Any], needle: str,
               deadline: float) -> Any:
     last_error: Exception | None = None
@@ -619,111 +608,6 @@ def probe(args: argparse.Namespace) -> None:
                       "expected": expected, "results": results}, indent=2))
 
 
-def assert_production(args: argparse.Namespace) -> None:
-    """Query records emitted by one public factory; never submit probe data."""
-    _, metadata = _owned(Path(args.state_dir).expanduser().resolve())
-    base = f"http://{metadata['host']}:{metadata['ui']}"
-    low, high = "-1000000000", "1893456000000000000"
-    if args.backend == "sync-http":
-        expected = {
-            "body": "d9-viewer-sync-http-factory", "trace": "0123456789abcdef0123456789abcdef",
-            "parent": "fedcba9876543210", "kind": "Internal", "status": "Ok", "flags": 0,
-            "event_attributes": {"corpus.phase": "decoded"}, "links": [],
-            "metrics": {"agent.events_total": ("Sum", {"doubleValue": 7.0}), "agent.queue_depth": ("Gauge", {"doubleValue": 3.0})},
-        }
-    else:
-        expected = {
-            "body": "d9-viewer-sdk-factory", "trace": "1234567890abcdef1234567890abcdef",
-            "parent": "abcdef0123456789", "kind": "Client", "status": "Error", "flags": 1,
-            "event_attributes": {
-                "sc.observability.span_event.parent_span_id": "abcdef0123456789",
-                "sc.observability.span_event.span_id": "1234567890abcdef",
-                "sc.observability.span_event.trace_flags": "1",
-                "sc.observability.span_event.trace_id": "1234567890abcdef1234567890abcdef",
-            },
-            "links": [{
-                "traceID": "fedcba9876543210fedcba9876543210",
-                "spanID": "fedcba9876543210", "flags": 3,
-                "attributes": {"link.reason": "follows"},
-            }],
-            "metrics": {
-                "agent.canonical.events_total": ("Sum", {"doubleValue": 7.0}),
-                "agent.canonical.queue_depth": ("Gauge", {"doubleValue": 3.0}),
-                "agent.canonical.histogram.zero": ("Histogram", {"count": 3, "sum": 4.5, "explicitBounds": [], "bucketCounts": [3]}),
-                "agent.canonical.histogram.one": ("Histogram", {"count": 3, "sum": 20.0, "explicitBounds": [5.0], "bucketCounts": [1, 2]}),
-                "agent.canonical.histogram.many": ("Histogram", {"count": 10, "sum": 555.0, "explicitBounds": [1.0, 10.0, 100.0], "bucketCounts": [1, 2, 3, 4]}),
-            },
-        }
-    deadline = time.monotonic() + QUERY_SECONDS
-    logs = _wait_rpc(base, "searchLogs", [low, high], expected["body"], deadline)
-    rows = logs if isinstance(logs, list) else []
-    log_id = next((row.get("id") for row in rows if isinstance(row, dict)
-                   and row.get("bodyPreview") == expected["body"]), None)
-    if not log_id:
-        raise HarnessError("production log query returned no matching row id")
-    log = rpc(base, "getLog", [log_id])
-    if (not isinstance(log, dict) or log.get("body") != expected["body"]
-            or log.get("severityText") != "INFO" or log.get("severityNumber") != 9):
-        raise HarnessError("production log detail did not preserve matched body/severity fields")
-    _require_attributes(log.get("resource"), {"service.name": "test-service"},
-                        "production log resource")
-    _require_attributes(log, {"corpus.phase": "decoded", "event.name": "agent.observe",
-                              "log.target": "test.agent"}, "production log")
-    spans = _wait_rpc(base, "searchSpans", [expected["trace"]], expected["parent"], deadline)
-    if not isinstance(spans, dict) or spans.get("traceID") != expected["trace"]:
-        raise HarnessError("production span query did not return the requested trace")
-    span_id = expected["trace"][:16]
-    try:
-        span = next(row["spanData"] for row in spans["spans"]
-                    if row.get("spanData", {}).get("spanID") == span_id)
-    except (KeyError, StopIteration, TypeError) as error:
-        raise HarnessError(f"production span query omitted expected span {span_id}") from error
-    for field, value in (("parentSpanID", expected["parent"]), ("name", "agent.run"),
-                         ("kind", expected["kind"]), ("flags", expected["flags"]),
-                         ("statusCode", expected["status"])):
-        if span.get(field) != value:
-            raise HarnessError(f"production span {field} was {span.get(field)!r}, expected {value!r}")
-    resources = spans.get("resources")
-    resource = resources.get(str(span.get("r"))) if isinstance(resources, dict) else None
-    _require_attributes(resource, {"service.name": "test-service"}, "production span resource")
-    _require_attributes(span, {"corpus.phase": "decoded"}, "production span")
-    event = next((item for item in span.get("events", []) if isinstance(item, dict)
-                  and item.get("name") == "tool.call"), None)
-    _require_attributes(event, expected["event_attributes"], "production span event")
-    links = span.get("links")
-    if not isinstance(links, list) or len(links) != len(expected["links"]):
-        raise HarnessError("production span links did not match the expected decoded shape")
-    for link, required in zip(links, expected["links"]):
-        if not isinstance(link, dict):
-            raise HarnessError("production span link was not decoded")
-        for field in ("traceID", "spanID", "flags"):
-            if link.get(field) != required[field]:
-                raise HarnessError(f"production span link {field} did not match")
-        _require_attributes(link, required["attributes"], "production span link")
-    metrics = _wait_rpc(base, "searchMetricSummaries", [low, high],
-                        next(iter(expected["metrics"])), deadline)
-    summaries = metrics if isinstance(metrics, list) else []
-    for name, (metric_type, fields) in expected["metrics"].items():
-        row = next((item for item in summaries if isinstance(item, dict)
-                    and item.get("name") == name), None)
-        if not row or row.get("metricType") != metric_type:
-            raise HarnessError(f"production metric {name!r} was absent or had the wrong type")
-        stream_id = row.get("id") or row.get("streamID") or row.get("streamId")
-        if not stream_id:
-            raise HarnessError(f"production metric {name!r} returned no stream identifier")
-        detail = rpc(base, "getMetric", [stream_id, low, high])
-        try:
-            point = detail["timeseries"][0]["datapoints"][0]
-        except (KeyError, IndexError, TypeError) as error:
-            raise HarnessError(f"production metric {name!r} omitted its decoded datapoint") from error
-        for field, value in fields.items():
-            if point.get(field) != value:
-                raise HarnessError(f"production metric {name!r} {field} was {point.get(field)!r}, expected {value!r}")
-    print(json.dumps({"status": "pass", "proof": "public-factory-viewer-query",
-                      "backend": args.backend, "log": expected["body"],
-                      "trace": expected["trace"], "metrics": list(expected["metrics"])}, indent=2))
-
-
 def run_ci(args: argparse.Namespace) -> None:
     """Run the isolated lifecycle and guarantee cleanup after probe failure."""
     state = Path(args.state_dir).expanduser().resolve()
@@ -774,11 +658,6 @@ def parser() -> argparse.ArgumentParser:
     verify.add_argument("--grpc-target", default="127.0.0.1:4317")
     verify.add_argument("--run-id")
     verify.set_defaults(func=probe)
-    production = commands.add_parser("assert-production",
-                                     help="query actual public-factory viewer output without sending data")
-    production.add_argument("--state-dir", required=True)
-    production.add_argument("--backend", choices=("sync-http", "sdk"), required=True)
-    production.set_defaults(func=assert_production)
     ci = commands.add_parser("ci", help="run an isolated probe and always clean up its instance")
     ci.add_argument("--binary", required=True)
     ci.add_argument("--binary-sha256", required=True)

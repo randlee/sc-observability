@@ -102,7 +102,7 @@ where
 
 fn fixture(name: &str) -> Value {
     let cases: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../bindings/conformance/v1/schema-cases.json"
+        "../../../bindings/conformance/v2/schema-cases.json"
     ))
     .unwrap();
     cases

@@ -151,7 +151,7 @@
     }
   ],
   "qualificationCandidate": {
-    "version": "1.5.0",
+    "version": "1.6.0",
     "publication": "pending_release_owner_authorization",
     "packages": [
       "sc-observability-types",

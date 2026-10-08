@@ -769,7 +769,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "log-settings-example"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
@@ -893,7 +893,7 @@ dependencies = [
 
 [[package]]
 name = "otlp-native-example"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "log",
  "opentelemetry",
@@ -1281,7 +1281,7 @@ dependencies = [
 
 [[package]]
 name = "rust-python-logging"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "pyo3",
  "sc-observability",
@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "sc-observability-types",
  "serde",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-binding-runtime"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "arc-swap",
  "sc-observability",
@@ -1442,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-dto"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "sc-observability-types",
  "schemars",
@@ -1452,7 +1452,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-log"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "hostname",
  "log",
@@ -1471,14 +1471,14 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-log-consumer-check"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "sc-observability-log",
 ]
 
 [[package]]
 name = "sc-observability-log-macros"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-otlp"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "futures-executor",
  "opentelemetry",
@@ -1507,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-py"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "pyo3",
  "sc-observability",
@@ -1521,7 +1521,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-types"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1531,7 +1531,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observe"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
@@ -1540,7 +1540,7 @@ dependencies = [
 
 [[package]]
 name = "sc-otel-cli"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "clap",
  "sc-observability-otlp",

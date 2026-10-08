@@ -1,9 +1,9 @@
 # Binding API coverage
 
-## Neutral schema v1
+## Neutral schema v2
 
 Rust DTO declarations own these projections. Frozen wire cases live in
-`conformance/v1/schema-cases.json`; every registered type roundtrips through Rust
+`conformance/v2/schema-cases.json`; every registered type roundtrips through Rust
 Serde and both generated validators. `schema-generator/tests/conformance.rs`
 compares against committed normalized values without rewriting them.
 

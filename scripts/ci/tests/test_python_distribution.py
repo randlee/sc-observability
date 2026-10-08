@@ -132,7 +132,7 @@ class DistributionTests(unittest.TestCase):
     def test_relocated_conformance_corpus_is_an_exact_source_input(self):
         from stage_python_conformance import stage_conformance
         source = Path(__file__).resolve().parents[3]
-        corpus = source / 'bindings/conformance/v1/conversion-cases.json'
+        corpus = source / 'bindings/conformance/v2/conversion-cases.json'
         with tempfile.TemporaryDirectory() as temporary:
             tests = Path(temporary) / 'tests'
             # This fixture proves relocation only. Production staging retains
@@ -140,7 +140,7 @@ class DistributionTests(unittest.TestCase):
             # accepted base from its workflow caller.
             staged = stage_conformance(source, tests, verify_accepted_history=False)
             self.assertEqual(staged.relative_to(tests).as_posix(),
-                             'conformance/v1/conversion-cases.json')
+                             'conformance/v2/conversion-cases.json')
             self.assertEqual(staged.read_bytes(), corpus.read_bytes())
             cases = json.loads(staged.read_text(encoding='utf-8'))
             self.assertTrue(any(case.get('operation') == 'canonical_envelope' for case in cases))

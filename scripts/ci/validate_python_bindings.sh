@@ -29,7 +29,7 @@ trap 'rm -rf "$B4_TEMP_DIR"' EXIT
 cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings
 env "${B4_EMBEDDED_ENV[@]}" cargo test --locked -p sc-observability-py
 "$B4_GENERATOR_PYTHON" scripts/generate_python_bindings.py \
-  --schema bindings/schema/v1.json \
+  --schema bindings/schema/v2.json \
   --output-dir bindings/python/sc-observability-py/python/sc_observability/generated \
   --check
 

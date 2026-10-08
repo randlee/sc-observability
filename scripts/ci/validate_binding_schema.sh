@@ -15,7 +15,7 @@ fi
 [[ "$(rustc --version)" == 'rustc 1.94.1 '* ]]
 cargo test --locked --manifest-path bindings/schema-generator/Cargo.toml
 cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- \
-  --output bindings/schema/v1.json --errors-output bindings/schema/errors-v1.json --check
+  --output bindings/schema/v2.json --errors-output bindings/schema/errors-v2.json --check
 "$python_bin" scripts/ci/validate_binding_generators.py
 BINDING_PYTHON="$python_bin" bash scripts/ci/validate_binding_python_typing.sh
 "$python_bin" -m unittest discover -s scripts/ci/tests -p test_binding_source_bundle.py
@@ -26,6 +26,6 @@ trap 'rm -rf "$(dirname "$binding_bundle_dir")"' EXIT
 "$python_bin" scripts/ci/validate_binding_bundle.py \
   --bundle "$binding_bundle_dir" --evidence target/b3-bundle-evidence.json
 "$python_bin" scripts/generate_typescript_bindings.py \
-  --schema bindings/schema/v1.json \
+  --schema bindings/schema/v2.json \
   --output-dir bindings/typescript/src/generated --check
 echo "binding schema validation passed"

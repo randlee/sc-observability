@@ -10,8 +10,8 @@ from pathlib import Path
 
 
 def stage_conformance(source: Path, tests: Path, *, verify_accepted_history: bool = True) -> Path:
-    corpus = source / 'bindings/conformance/v1/conversion-cases.json'
-    destination = tests / 'conformance/v1/conversion-cases.json'
+    corpus = source / 'bindings/conformance/v2/conversion-cases.json'
+    destination = tests / 'conformance/v2/conversion-cases.json'
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(corpus, destination)
     if verify_accepted_history:

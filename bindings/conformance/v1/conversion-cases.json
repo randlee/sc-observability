@@ -152,6 +152,323 @@
     "code": "SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION"
   },
   {
+    "id": "phase-d-explicit_bounds",
+    "operation": "metric",
+    "kind": "validation",
+    "code": "SC_METRIC_INVALID_HISTOGRAM",
+    "value": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              2.0,
+              1.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:00Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-bucket_counts",
+    "operation": "metric",
+    "kind": "validation",
+    "code": "SC_METRIC_INVALID_HISTOGRAM",
+    "value": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:00Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-count",
+    "operation": "metric",
+    "kind": "validation",
+    "code": "SC_METRIC_INVALID_HISTOGRAM",
+    "value": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "0",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:00Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-empty-delta",
+    "operation": "metric",
+    "kind": "validation",
+    "code": "SC_METRIC_INVALID_TEMPORALITY",
+    "value": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:01Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-reversed-interval",
+    "operation": "metric",
+    "kind": "validation",
+    "code": "SC_METRIC_INVALID_INTERVAL",
+    "value": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "histogram",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:02Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-unknown-metric",
+    "operation": "metric",
+    "kind": "validation",
+    "code": "SC_OBSERVABILITY_BINDING_INVALID_INPUT",
+    "value": {
+      "timestamp": "1970-01-01T00:00:01Z",
+      "service": "demo",
+      "name": "latency",
+      "value": {
+        "kind": "future_metric",
+        "data": {
+          "point": {
+            "explicit_bounds": [
+              1.0,
+              2.0
+            ],
+            "bucket_counts": [
+              "1",
+              "2",
+              "18446744073709551612"
+            ],
+            "count": "18446744073709551615",
+            "sum": 12.0
+          },
+          "temporality": "delta",
+          "start_time": "1970-01-01T00:00:00Z"
+        }
+      },
+      "unit": "ms",
+      "attributes": {
+        "sequence": {
+          "kind": "integer",
+          "value": "18446744073709551615"
+        },
+        "label": {
+          "kind": "string",
+          "value": "18446744073709551615"
+        }
+      }
+    }
+  },
+  {
+    "id": "phase-d-ended-no-duration",
+    "operation": "span",
+    "kind": "validation",
+    "code": "SC_OBSERVABILITY_BINDING_INVALID_INPUT",
+    "value": {
+      "kind": "ended",
+      "data": {
+        "timestamp": "1970-01-01T00:00:00Z",
+        "service": "demo",
+        "name": "run",
+        "trace": {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "parent_span_id": null,
+          "flags": 131
+        },
+        "status": "Ok",
+        "diagnostic": null,
+        "attributes": {},
+        "duration_ms": null,
+        "kind": "server",
+        "links": [
+          {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "flags": 131,
+            "attributes": {}
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "phase-d-unknown-span",
+    "operation": "span",
+    "kind": "validation",
+    "code": "SC_OBSERVABILITY_BINDING_INVALID_INPUT",
+    "value": {
+      "kind": "future",
+      "data": {
+        "timestamp": "1970-01-01T00:00:00Z",
+        "service": "demo",
+        "name": "run",
+        "trace": {
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "span_id": "0123456789abcdef",
+          "parent_span_id": null,
+          "flags": 131
+        },
+        "status": "Ok",
+        "diagnostic": null,
+        "attributes": {},
+        "duration_ms": "18446744073709551615",
+        "kind": "server",
+        "links": [
+          {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "flags": 131,
+            "attributes": {}
+          }
+        ]
+      }
+    }
+  },
+  {
     "id": "canonical-envelope-unknown-error-kind",
     "operation": "canonical_envelope",
     "result": "decoded",

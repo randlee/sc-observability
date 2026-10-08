@@ -48,10 +48,9 @@ it occupies one of the defaults; select explicit free port overrides instead.
 
 The harness is standard-library Python. The commands below show a local macOS
 run of the pinned `darwin_arm64` artifact: download and verify it, then start an
-isolated instance with a disposable database. The CI qualification job uses
-the same pinned release and harness lifecycle, but selects free loopback ports
-and invokes `assert-production` after each public-factory backend rather than
-running this synthetic setup command verbatim.
+isolated instance with a disposable database. The wheel-cli-viewer suite uses
+the same pinned release with free loopback ports and reads back records sent
+by the installed CLI and Python wheel (`tests/telemetry-e2e/test_viewer_readback.py`).
 
 ```sh
 VIEWER_RELEASE=scripts/ci/fixtures/otlp/desktop-viewer/release.json
@@ -76,8 +75,7 @@ The `ci` command runs start, status, probe and cleanup in one process, including
 cleanup after a failed probe. The individual `start`, `status`, `probe`, and
 `stop` commands are available for local diagnosis. The public-api-governance
 job runs hermetic harness unit tests only; live viewer delivery is qualified by
-the separate `desktop-viewer-factory-conformance` job after each backend emits
-through its real public factory.
+the wheel-cli-viewer suite.
 The probe uses bounded synthetic data (`service.name=sc-observability-d9`, a
 unique `test.run_id`, and backend `setup-probe`) and has a 120-second query
 deadline. It needs no Grafana credentials.
