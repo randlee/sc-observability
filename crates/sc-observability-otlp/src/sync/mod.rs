@@ -235,6 +235,17 @@ pub fn parse_span_id(field: &str, value: &str) -> Result<SpanId, SyncError> {
     SpanId::from_hex(value).map_err(|error| invalid_id(field, &error))
 }
 
+/// Returns whether a supplied parent span ID establishes remote provenance.
+///
+/// A parent ID identifies a causal relationship, but does not by itself say
+/// that the parent originated in another process. Frontends therefore mark
+/// such a parent as local unless a future shared input contract carries
+/// explicit remote provenance.
+#[must_use]
+pub const fn parent_span_is_remote() -> bool {
+    false
+}
+
 /// Returns span start and end times given as Unix nanoseconds; a missing end
 /// is the current time and a missing start is the end.
 ///

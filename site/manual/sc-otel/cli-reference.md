@@ -182,7 +182,7 @@ Options:
           Bound OTLP connection, requests and exporter retries only; input reads may block until EOF. Defaults to 3 seconds; whole seconds greater than zero
 
       --parent-span-id <HEX>
-          Remote parent span id (16 hex digits). Requires --trace-id
+          Parent span id (16 hex digits); a supplied id is local unless provenance is explicit. Requires --trace-id
 
       --root-certificate <FILE>
           Trust the CA certificates in this PEM file in addition to the system roots

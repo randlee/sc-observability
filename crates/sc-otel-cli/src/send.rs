@@ -16,7 +16,7 @@ use sc_observability_otlp::sdk::trace::{
     IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
 };
 use sc_observability_otlp::sync::{
-    Client, SyncError, check_input_limits, resolve_endpoint, span_times,
+    Client, SyncError, check_input_limits, parent_span_is_remote, resolve_endpoint, span_times,
 };
 use serde_json::Value as Json;
 use std::{fs::File, io::Read, path::Path, time::SystemTime};
@@ -116,7 +116,7 @@ fn span(args: &SpanArgs, scope: InstrumentationScope) -> Result<SpanData, SyncEr
             TraceState::NONE,
         ),
         parent_span_id: args.parent_span_id.unwrap_or(SpanId::INVALID),
-        parent_span_is_remote: args.parent_span_id.is_some(),
+        parent_span_is_remote: parent_span_is_remote(),
         span_kind: match args.kind {
             Kind::Internal => SpanKind::Internal,
             Kind::Server => SpanKind::Server,
@@ -418,7 +418,7 @@ mod tests {
             "--parent-span-id",
             "00f067aa0ba902b7",
         ]);
-        assert!(child.parent_span_is_remote);
+        assert!(!child.parent_span_is_remote);
         assert_eq!(child.span_context.trace_flags(), TraceFlags::SAMPLED);
     }
 

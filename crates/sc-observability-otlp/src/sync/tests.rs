@@ -29,8 +29,8 @@ use opentelemetry_sdk::trace::{SpanData, SpanEvents, SpanLinks};
 use prost::Message;
 
 use super::{
-    Client, DEFAULT_OTLP_ENDPOINT, REDACTED, SyncError, check_input_limits, parse_span_id,
-    parse_trace_id, resolve_endpoint_with, span_times,
+    Client, DEFAULT_OTLP_ENDPOINT, REDACTED, SyncError, check_input_limits, parent_span_is_remote,
+    parse_span_id, parse_trace_id, resolve_endpoint_with, span_times,
 };
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
@@ -1290,6 +1290,11 @@ fn ids_must_be_fixed_width_lowercase_hex() {
         assert_eq!(code, codes::INVALID_RECORD);
         assert!(error.to_string().contains(&format!("{field}: expected")));
     }
+}
+
+#[test]
+fn parent_id_does_not_establish_remote_provenance() {
+    assert!(!parent_span_is_remote());
 }
 
 #[test]

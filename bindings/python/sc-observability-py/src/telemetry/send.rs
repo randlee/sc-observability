@@ -16,8 +16,8 @@ use sc_observability_otlp::sdk::trace::{
     IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
 };
 use sc_observability_otlp::sync::{
-    Client, SyncError, check_input_limits, parse_span_id, parse_trace_id, resolve_endpoint,
-    span_times,
+    Client, SyncError, check_input_limits, parent_span_is_remote, parse_span_id, parse_trace_id,
+    resolve_endpoint, span_times,
 };
 use std::{
     panic::AssertUnwindSafe,
@@ -358,8 +358,7 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
             TraceState::NONE,
         ),
         parent_span_id: parent_span_id.unwrap_or(SpanId::INVALID),
-        // The caller names a parent id only; nothing says it came from another process.
-        parent_span_is_remote: false,
+        parent_span_is_remote: parent_span_is_remote(),
         span_kind,
         name: fields.name.into(),
         start_time,

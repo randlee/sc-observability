@@ -529,8 +529,8 @@ fn span_exports_completed_native_span() {
         b"eu-west",
         &hex(TRACE_ID),
         &hex(SPAN_ID),
-        // OTLP Span.flags field 16: sampled plus the known-remote parent bits.
-        &[0x85, 0x01, 0x01, 0x03, 0x00, 0x00],
+        // OTLP Span.flags field 16: sampled with a supplied, locally-provenanced parent.
+        &[0x85, 0x01, 0x01, 0x01, 0x00, 0x00],
         &1_700_000_000_000_000_000_u64.to_le_bytes(),
         &1_700_000_005_000_000_000_u64.to_le_bytes(),
     ] {
