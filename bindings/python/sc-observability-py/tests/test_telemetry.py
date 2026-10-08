@@ -183,8 +183,10 @@ def test_invalid_instrument_name_records_nothing(collector: Collector) -> None:
 
 def test_wrong_argument_types_are_programmer_errors() -> None:
     telemetry = Telemetry("http://127.0.0.1:9")
-    with pytest.raises(TypeError, match="Mapping"):
+    with pytest.raises(TypeError, match="attributes must be a Mapping"):
         telemetry.log("x", attributes=[("k", "v")])  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="headers must be a Mapping"):
+        Telemetry(headers=[("k", "v")])  # type: ignore[arg-type]
     with pytest.raises(TypeError):
         telemetry.log(42)  # type: ignore[arg-type]
 
@@ -193,6 +195,14 @@ def test_unavailable_native_extension_is_an_internal_failure() -> None:
     with patch("sc_observability.telemetry.importlib.import_module", side_effect=ImportError("missing")):
         result = Telemetry().log("x")
     _failure(result, "internal", "SC_OBSERVABILITY_BINDING_INTERNAL")
+
+
+def test_missing_native_symbol_is_an_internal_failure() -> None:
+    # A build without the otlp-telemetry feature has the module but not the function.
+    with patch("sc_observability.telemetry.importlib.import_module", return_value=object()):
+        result = Telemetry().log("x")
+    message = _failure(result, "internal", "SC_OBSERVABILITY_BINDING_INTERNAL")
+    assert "send_log" in message, message
 
 
 # Bounds each collector wait; a send that fails before connecting or sending

@@ -17,12 +17,16 @@ SpanKind: TypeAlias = Literal["internal", "server", "client", "producer", "consu
 MetricKind: TypeAlias = Literal["counter", "up_down_counter", "gauge", "histogram"]
 
 
-def _attributes(attributes: Mapping[str, AttributeValue] | None) -> list[tuple[str, AttributeValue]]:
-    if attributes is None:
+def _items(name: str, mapping: Mapping[str, Any] | None) -> list[tuple[str, Any]]:
+    if mapping is None:
         return []
-    if not isinstance(attributes, Mapping):
-        raise TypeError("attributes must be a Mapping")
-    return list(attributes.items())
+    if not isinstance(mapping, Mapping):
+        raise TypeError(f"{name} must be a Mapping")
+    return list(mapping.items())
+
+
+def _attributes(attributes: Mapping[str, AttributeValue] | None) -> list[tuple[str, AttributeValue]]:
+    return _items("attributes", attributes)
 
 
 class Telemetry:
@@ -46,7 +50,7 @@ class Telemetry:
                  service_name: str | None = None) -> None:
         self._config = {
             "endpoint": endpoint,
-            "headers": list((headers or {}).items()),
+            "headers": _items("headers", headers),
             "timeout_s": timeout_s,
             "root_certificate": None if root_certificate is None else fspath(root_certificate),
             "service_name": service_name,
@@ -85,7 +89,7 @@ class Telemetry:
 
     def _send(self, function: str, fields: Mapping[str, Any]) -> Result[None]:
         try:
-            native = importlib.import_module("sc_observability._native")
+            send = getattr(importlib.import_module("sc_observability._native"), function)
         except Exception as error:
             return Err(_internal(f"native extension unavailable: {_foreign_message(error)}"))
-        return _decode_control(getattr(native, function)(self._config, fields))
+        return _decode_control(send(self._config, fields))

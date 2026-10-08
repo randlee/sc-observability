@@ -71,9 +71,9 @@ env "${B4_EMBEDDED_ENV[@]}" PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error \
 if rg -n '\braise\b' bindings/python/sc-observability-py/python/sc_observability/{__init__,logging,context,async_logging}.py; then
   exit 1
 fi
-# The one allowed raise: a non-Mapping attributes argument is a programmer error.
+# The one allowed raise: a non-Mapping headers or attributes argument is a programmer error.
 if rg -n '\braise\b' bindings/python/sc-observability-py/python/sc_observability/telemetry.py \
-  | rg -v -F 'raise TypeError("attributes must be a Mapping")'; then
+  | rg -v -F 'raise TypeError(f"{name} must be a Mapping")'; then
   exit 1
 fi
 if rg -n 'panic!|\.unwrap\(' bindings/python/sc-observability-py/src; then
