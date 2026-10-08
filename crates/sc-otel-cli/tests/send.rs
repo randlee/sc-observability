@@ -219,13 +219,12 @@ impl RunningChild {
         };
         let stdout = self.stdout.join().expect("stdout reader");
         let stderr = self.stderr.join().expect("stderr reader");
-        if timed_out {
-            panic!(
-                "sc-otel exceeded hard deadline; status: {status}; stdout:\n{}\nstderr:\n{}",
-                String::from_utf8_lossy(&stdout),
-                String::from_utf8_lossy(&stderr),
-            );
-        }
+        assert!(
+            !timed_out,
+            "sc-otel exceeded hard deadline; status: {status}; stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&stdout),
+            String::from_utf8_lossy(&stderr),
+        );
         Output {
             status,
             stdout,
