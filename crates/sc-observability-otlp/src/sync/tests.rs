@@ -44,6 +44,7 @@ const ACCEPT_POLL: Duration = Duration::from_millis(5);
 enum Reply {
     Ok,
     Status(u16, &'static str),
+    Redirect(String),
     Stall(StalledRequest),
 }
 
@@ -188,6 +189,7 @@ fn handle<S: Read + Write>(mut stream: S, reply: &Reply, requests: &Mutex<Vec<Ca
     match reply {
         Reply::Ok => respond(&mut stream, 200, ""),
         Reply::Status(code, body) => respond(&mut stream, *code, body),
+        Reply::Redirect(location) => respond_redirect(&mut stream, location),
         Reply::Stall(stalled) => {
             if stalled.request_arrived.send(()).is_ok() {
                 let _ = stalled.release.recv_timeout(FIXTURE_WATCHDOG);
@@ -240,6 +242,14 @@ fn respond<S: Write>(stream: &mut S, code: u16, body: &str) {
     let response = format!(
         "HTTP/1.1 {code} Test\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
+    );
+    let _ = stream.write_all(response.as_bytes());
+    let _ = stream.flush();
+}
+
+fn respond_redirect<S: Write>(stream: &mut S, location: &str) {
+    let response = format!(
+        "HTTP/1.1 307 Temporary Redirect\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
     );
     let _ = stream.write_all(response.as_bytes());
     let _ = stream.flush();
@@ -668,6 +678,35 @@ fn collector_failures_are_export_errors() {
         }),
         Err(SyncError::Export(_))
     ));
+}
+
+#[test]
+fn explicit_headers_are_not_forwarded_across_redirects() {
+    let redirected_collector = Collector::start(Reply::Ok);
+    let redirecting_collector = Collector::start(Reply::Redirect(redirected_collector.endpoint()));
+    let mut client = Client::new(&redirecting_collector.endpoint())
+        .and_then(|client| client.with_header("x-api-key", "collector-secret"))
+        .expect("client");
+
+    assert!(matches!(
+        client.send_span(&resource(), completed_span()),
+        Err(SyncError::Export(_))
+    ));
+    let source_requests = redirecting_collector.requests();
+    assert_eq!(
+        source_requests.len(),
+        1,
+        "redirecting collector received the export"
+    );
+    assert_eq!(
+        source_requests[0].header("x-api-key"),
+        Some("collector-secret"),
+        "explicit credential reached only the configured collector"
+    );
+    assert!(
+        redirected_collector.requests().is_empty(),
+        "redirect target must not receive the credential-bearing request"
+    );
 }
 
 fn assert_stalled_send_returns(

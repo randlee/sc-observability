@@ -509,6 +509,7 @@ impl Client {
         let inner = otel_reqwest::blocking::Client::builder()
             .connect_timeout(self.timeout)
             .timeout(self.timeout)
+            .redirect(otel_reqwest::redirect::Policy::none())
             .tls_certs_merge(self.root_certificates.iter().cloned())
             .build()
             .map_err(|error| {
