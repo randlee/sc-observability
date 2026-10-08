@@ -2,6 +2,7 @@
 //! runtime, against a loopback collector that captures each OTLP request.
 
 use std::{
+    ffi::{OsStr, OsString},
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     process::{Child, ChildStdin, Command, Output, Stdio},
@@ -214,39 +215,121 @@ impl LoopbackCertificate {
     }
 }
 
-/// The binary with ambient `OTel`, proxy and trust settings removed and an empty
-/// working directory that is also its home and XDG directories, so a test sees
-/// only the configuration it sets and any file the CLI creates.
-fn sc_otel(directory: &tempfile::TempDir) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
-    command.current_dir(directory.path());
-    for key in HOME_ENV {
-        command.env(key, directory.path());
+/// Returns whether two environment names identify the same setting on this platform.
+fn environment_name_matches(name: &OsStr, expected: &str) -> bool {
+    #[cfg(windows)]
+    {
+        name.to_string_lossy().eq_ignore_ascii_case(expected)
     }
-    for (key, _) in std::env::vars_os() {
-        if key.to_string_lossy().starts_with("OTEL_") {
+    #[cfg(not(windows))]
+    {
+        name == OsStr::new(expected)
+    }
+}
+
+/// Returns whether `name` is an ambient OpenTelemetry setting on this platform.
+fn is_otel_environment_name(name: &OsStr) -> bool {
+    #[cfg(windows)]
+    {
+        name.to_string_lossy()
+            .get(.."OTEL_".len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("OTEL_"))
+    }
+    #[cfg(not(windows))]
+    {
+        name.to_str().is_some_and(|name| name.starts_with("OTEL_"))
+    }
+}
+
+/// Removes ambient `OTel`, proxy and trust settings from a test command.
+fn remove_ambient_settings(
+    command: &mut Command,
+    environment: impl IntoIterator<Item = (OsString, OsString)>,
+) {
+    for (key, _) in environment {
+        if is_otel_environment_name(&key) {
             command.env_remove(key);
         }
     }
     for key in PROXY_AND_TRUST_ENV {
         command.env_remove(key);
     }
+}
+
+/// The binary with ambient settings removed and an empty test-local home.
+fn sc_otel(directory: &tempfile::TempDir) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
+    command.current_dir(directory.path());
+    for key in HOME_ENV {
+        command.env(key, directory.path());
+    }
+    remove_ambient_settings(&mut command, std::env::vars_os());
     command
+}
+
+fn environment_is_removed(command: &Command, expected: &str) -> bool {
+    command
+        .get_envs()
+        .any(|(name, value)| environment_name_matches(name, expected) && value.is_none())
 }
 
 #[test]
 fn sc_otel_removes_ambient_proxy_and_trust_settings() {
     let directory = tempfile::tempdir().expect("tempdir");
     let command = sc_otel(&directory);
-    let removed = command.get_envs().collect::<Vec<_>>();
     for key in PROXY_AND_TRUST_ENV {
         assert!(
-            removed
-                .iter()
-                .any(|(name, value)| *name == key && value.is_none()),
+            environment_is_removed(&command, key),
             "{key} was not removed from the spawned CLI environment"
         );
     }
+}
+
+#[test]
+fn ambient_otel_settings_are_removed_with_platform_name_semantics() {
+    let mut command = Command::new("sc-otel-test");
+    remove_ambient_settings(
+        &mut command,
+        [
+            (
+                OsString::from("OTEL_EXPORTER_OTLP_ENDPOINT"),
+                OsString::from("http://ambient.invalid"),
+            ),
+            (
+                OsString::from("otel_service_name"),
+                OsString::from("ambient-service"),
+            ),
+        ],
+    );
+
+    assert!(environment_is_removed(
+        &command,
+        "OTEL_EXPORTER_OTLP_ENDPOINT"
+    ));
+    #[cfg(windows)]
+    assert!(environment_is_removed(&command, "OTEL_SERVICE_NAME"));
+    #[cfg(not(windows))]
+    assert!(!environment_is_removed(&command, "OTEL_SERVICE_NAME"));
+}
+
+#[test]
+#[cfg(windows)]
+fn environment_name_matching_is_case_insensitive_on_windows() {
+    assert!(environment_name_matches(
+        OsStr::new("http_proxy"),
+        "HTTP_PROXY"
+    ));
+    assert!(is_otel_environment_name(OsStr::new("otel_service_name")));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn environment_name_matching_keeps_unix_aliases_distinct() {
+    assert!(!environment_name_matches(
+        OsStr::new("http_proxy"),
+        "HTTP_PROXY"
+    ));
+    assert!(!is_otel_environment_name(OsStr::new("otel_service_name")));
 }
 
 #[test]
