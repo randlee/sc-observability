@@ -57,8 +57,8 @@ pub(super) struct SpanFields<'py> {
     span_id: Option<String>,
     parent_span_id: Option<String>,
     kind: String,
-    start_time_unix_nano: Option<u64>,
-    end_time_unix_nano: Option<u64>,
+    start_time_unix_nano: Option<Bound<'py, PyInt>>,
+    end_time_unix_nano: Option<Bound<'py, PyInt>>,
     ok: bool,
     error: Option<String>,
     attributes: Vec<(String, Bound<'py, PyAny>)>,
@@ -352,7 +352,14 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         .transpose()?;
     let end_time = fields
         .end_time_unix_nano
-        .map_or_else(SystemTime::now, unix_nanos);
+        .map(|nanos| unix_nanos("end_time_unix_nano", &nanos))
+        .transpose()?
+        .unwrap_or_else(SystemTime::now);
+    let start_time = fields
+        .start_time_unix_nano
+        .map(|nanos| unix_nanos("start_time_unix_nano", &nanos))
+        .transpose()?
+        .unwrap_or(end_time);
     let attributes = attributes(fields.attributes, fields.name.len())?;
     Ok(SpanData {
         span_context: SpanContext::new(
@@ -366,7 +373,7 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         parent_span_is_remote: parent_span_id.is_some(),
         span_kind,
         name: fields.name.into(),
-        start_time: fields.start_time_unix_nano.map_or(end_time, unix_nanos),
+        start_time,
         end_time,
         attributes: key_values(attributes),
         dropped_attributes_count: 0,
@@ -454,8 +461,15 @@ fn invalid(message: String) -> SyncError {
     SyncError::validation(codes::INVALID_RECORD, message)
 }
 
-fn unix_nanos(nanos: u64) -> SystemTime {
-    SystemTime::UNIX_EPOCH + Duration::from_nanos(nanos)
+fn unix_nanos(field: &str, nanos: &Bound<'_, PyInt>) -> Result<SystemTime, SyncError> {
+    nanos
+        .extract()
+        .map(|nanos| SystemTime::UNIX_EPOCH + Duration::from_nanos(nanos))
+        .map_err(|_| {
+            invalid(format!(
+                "{field}: integer outside the unsigned 64-bit range"
+            ))
+        })
 }
 
 /// A non-zero id from the standard library's randomly keyed hasher; each

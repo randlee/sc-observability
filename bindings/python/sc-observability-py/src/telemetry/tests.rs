@@ -106,8 +106,8 @@ fn log_and_span_field_combinations_are_validated() {
             span_id: None,
             parent_span_id: parent.map(Into::into),
             kind: kind.into(),
-            start_time_unix_nano: Some(1),
-            end_time_unix_nano: Some(2),
+            start_time_unix_nano: None,
+            end_time_unix_nano: None,
             ok,
             error: error.map(Into::into),
             attributes: Vec::new(),
@@ -127,6 +127,27 @@ fn log_and_span_field_combinations_are_validated() {
     assert_eq!(generated.span_kind, SpanKind::Server);
     assert_eq!(generated.status, Status::error("boom"));
     assert_eq!(generated.parent_span_id, SpanId::INVALID);
+}
+
+#[test]
+fn span_times_outside_the_unsigned_64_bit_range_are_validation_failures() {
+    Python::initialize();
+    Python::attach(|py| {
+        let int = |source: &CStr| {
+            py.eval(source, None, None)
+                .expect("valid int")
+                .cast_into::<PyInt>()
+                .expect("an int")
+        };
+        assert!(unix_nanos("start_time_unix_nano", &int(c"0")).is_ok());
+        assert!(unix_nanos("end_time_unix_nano", &int(c"2**64 - 1")).is_ok());
+        for source in [c"-1", c"2**64"] {
+            assert_eq!(
+                code(unix_nanos("end_time_unix_nano", &int(source))),
+                codes::INVALID_RECORD
+            );
+        }
+    });
 }
 
 fn python_attributes<'py>(py: Python<'py>, source: &CStr) -> Vec<(String, Bound<'py, PyAny>)> {
