@@ -282,6 +282,45 @@ fn core_logger_events_are_redacted_then_mapped_to_native_records() {
 }
 
 #[test]
+fn core_log_sink_maps_every_level_from_shared_severity_fields() {
+    let exporter = CapturingExporter::default();
+    let provider = provider(exporter.clone());
+    let sink = OtelLogSink::new(&provider, scope());
+    let levels = [
+        Level::Trace,
+        Level::Debug,
+        Level::Info,
+        Level::Warn,
+        Level::Error,
+    ];
+
+    for level in levels {
+        let mut event = event("application");
+        event.level = level;
+        sink.write(&event).expect("write event");
+    }
+    provider.force_flush().expect("provider flush");
+
+    let records = exporter.records();
+    assert_eq!(records.len(), levels.len());
+    for (record, level) in records.iter().zip(levels) {
+        let (number, text) = crate::severity::fields(level);
+        assert_eq!(
+            record.severity_number().map(|severity| severity as u8),
+            Some(number),
+            "native severity number for {level:?}"
+        );
+        assert_eq!(
+            record.severity_text(),
+            Some(text),
+            "native severity text for {level:?}"
+        );
+    }
+
+    provider.shutdown().expect("provider shutdown");
+}
+
+#[test]
 fn all_zero_trace_ids_are_not_mapped_as_trace_context() {
     let exporter = CapturingExporter::default();
     let provider = provider(exporter.clone());
