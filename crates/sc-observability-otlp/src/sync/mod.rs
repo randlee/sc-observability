@@ -265,6 +265,9 @@ impl Client {
 
     /// Adds a header, such as `authorization`, sent with every export.
     ///
+    /// Header values sent to an `http` endpoint are unencrypted. Send credentials only to
+    /// `https` endpoints or trusted loopback/local collectors.
+    ///
     /// Header values are treated as credentials and never appear in error
     /// text or `Debug` output.
     ///
