@@ -8,11 +8,8 @@ pub const sc_observability_types::constants::OTLP_SEVERITY_MAX: u8
 pub const sc_observability_types::constants::SPAN_ID_LEN: usize
 pub const sc_observability_types::constants::TELEMETRY_DEFAULT_ENDPOINT: &str
 pub const sc_observability_types::constants::TELEMETRY_DEFAULT_SERVICE: &str
-pub const sc_observability_types::constants::TELEMETRY_DELIVERED_RETENTION: core::time::Duration
 pub const sc_observability_types::constants::TELEMETRY_EMIT_FLUSH_DEADLINE: core::time::Duration
-pub const sc_observability_types::constants::TELEMETRY_MAX_STORE_BYTES: u64
 pub const sc_observability_types::constants::TELEMETRY_RECORD_KEY_MAX_BYTES: usize
-pub const sc_observability_types::constants::TELEMETRY_RECORD_KEY_RETENTION: core::time::Duration
 pub const sc_observability_types::constants::TELEMETRY_REQUEST_TIMEOUT: core::time::Duration
 pub const sc_observability_types::constants::TELEMETRY_SECONDS_PER_HOUR: u64
 pub const sc_observability_types::constants::TRACE_ID_LEN: usize
