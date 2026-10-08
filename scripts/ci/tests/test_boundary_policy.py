@@ -112,10 +112,41 @@ class BoundaryPolicyTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(discovers_home_paths(Path(path), text))
 
+    def test_home_discovery_is_rejected_in_integration_tests(self):
+        for token in (
+            "dirs::home_dir",
+            "dirs_next::home_dir",
+            "home_dir()",
+            'var("HOME")',
+            'var_os("HOME")',
+        ):
+            with self.subTest(token=token):
+                self.assertTrue(
+                    discovers_home_paths(
+                        Path("crates/sc-otel-cli/tests/send.rs"), token
+                    )
+                )
+
     def test_integration_test_environment_isolation_is_accepted(self):
         isolation = 'for key in ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME"] { command.env(key, dir); }'
         self.assertFalse(
             discovers_home_paths(Path("crates/sc-otel-cli/tests/send.rs"), isolation)
+        )
+        self.assertFalse(
+            discovers_home_paths(
+                Path("crates/sc-otel-cli/tests/nested/send.rs"),
+                'command.env("XDG_CONFIG_HOME", dir); command.env("XDG_DATA_HOME", dir);',
+            )
+        )
+        self.assertFalse(
+            discovers_home_paths(
+                Path("crates/sc-otel-cli/tests"), 'command.env("XDG_CONFIG_HOME", dir);'
+            )
+        )
+        self.assertTrue(
+            discovers_home_paths(
+                Path("crates/sc-otel-cli/tests"), 'std::env::var("HOME")'
+            )
         )
         self.assertFalse(
             discovers_home_paths(Path("crates/sc-otel-cli/src/send.rs"), "let endpoint = 1;")

@@ -18,6 +18,8 @@ HOME_DISCOVERY_TOKENS = (
     "home_dir()",
     'var("HOME")',
     'var_os("HOME")',
+)
+HOME_TEST_ISOLATION_TOKENS = (
     "XDG_CONFIG_HOME",
     "XDG_DATA_HOME",
 )
@@ -26,13 +28,15 @@ HOME_DISCOVERY_TOKENS = (
 def discovers_home_paths(relative_path: Path, text: str) -> bool:
     """Shared crate source must not discover home or XDG locations.
 
-    Integration tests under `crates/<crate>/tests/` are exempt: they set these
-    variables to isolate a child process, which is not discovery.
+    Integration tests under `crates/<crate>/tests/` may set XDG markers to
+    isolate a child process, but must still reject home-directory discovery.
     """
     parts = relative_path.parts
-    if len(parts) > 3 and parts[0] == "crates" and parts[2] == "tests":
-        return False
-    return any(token in text for token in HOME_DISCOVERY_TOKENS)
+    is_crate_test_path = len(parts) >= 3 and parts[0] == "crates" and parts[2] == "tests"
+    tokens = HOME_DISCOVERY_TOKENS
+    if not is_crate_test_path:
+        tokens += HOME_TEST_ISOLATION_TOKENS
+    return any(token in text for token in tokens)
 
 
 def boundary_manifest(root: Path, package: str) -> tuple[Path, dict]:
