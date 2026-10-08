@@ -5,7 +5,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -949,6 +949,46 @@ fn precedence_child_command(test_name: &str, endpoint: String) -> Command {
 /// Runs [`explicit_configuration_child`] with conflicting OTEL endpoint and
 /// timeout settings plus `extra` and returns the requests the explicit
 /// endpoint received, by signal path.
+fn run_precedence_child_command(command: &mut Command) -> Output {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().expect("spawn precedence child test");
+    let mut stdout = child.stdout.take().expect("precedence child stdout");
+    let mut stderr = child.stderr.take().expect("precedence child stderr");
+    let stdout_reader = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stdout
+            .read_to_end(&mut bytes)
+            .expect("read precedence child stdout");
+        bytes
+    });
+    let stderr_reader = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        stderr
+            .read_to_end(&mut bytes)
+            .expect("read precedence child stderr");
+        bytes
+    });
+    let deadline = Instant::now() + FIXTURE_WATCHDOG;
+    let status = loop {
+        match child.try_wait().expect("poll precedence child") {
+            Some(status) => break status,
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_reader.join();
+                let _ = stderr_reader.join();
+                panic!("precedence child exceeded fixture watchdog and was killed");
+            }
+            None => thread::sleep(ACCEPT_POLL),
+        }
+    };
+    Output {
+        status,
+        stdout: stdout_reader.join().expect("join precedence stdout reader"),
+        stderr: stderr_reader.join().expect("join precedence stderr reader"),
+    }
+}
+
 fn run_precedence_child(extra: &[(&str, &str)]) -> Vec<Captured> {
     let collector = Collector::start(Reply::Ok);
     let mut command = precedence_child_command(
@@ -956,7 +996,7 @@ fn run_precedence_child(extra: &[(&str, &str)]) -> Vec<Captured> {
         collector.endpoint(),
     );
     command.envs(extra.iter().copied());
-    let output = command.output().expect("run precedence child test");
+    let output = run_precedence_child_command(&mut command);
     assert!(
         output.status.success(),
         "child failed: {}",
