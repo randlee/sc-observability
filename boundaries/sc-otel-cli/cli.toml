@@ -14,7 +14,11 @@ roots = []
 [dependencies]
 allowed_dependents = []
 allowed_dependencies = ["sc-observability-otlp"]
-forbidden_edges = [{ from = "sc-otel-cli", to = "sc-observe" }]
+forbidden_edges = [
+    { from = "sc-otel-cli", to = "sc-observe" },
+    { from = "sc-otel-cli", to = "rusqlite" },
+    { from = "sc-otel-cli", to = "uuid" },
+]
 [references]
 scope = "outside_owner_crate"
 forbidden = []
@@ -22,7 +26,7 @@ forbidden = []
 allowed_test_double_paths = []
 forbidden_test_bypasses = []
 [enforcement]
-lint_rules = ["LINT-SC-OTEL-CLI-BOUNDARY"]
+lint_rules = []
 review_gates = ["workspace_dependency_policy"]
 [status]
 state = "concrete_landed"
