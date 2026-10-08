@@ -2,7 +2,7 @@
 //! shared synchronous client.
 
 use crate::cli::{Cli, Command, Kind, LogArgs, LogSeverity, MetricArgs, MetricKind, SpanArgs};
-use crate::constants::{MAX_ROOT_CERTIFICATE_BYTES, SCOPE_NAME, STDIN_SOURCE};
+use crate::constants::{SCOPE_NAME, STDIN_SOURCE};
 use crate::error_codes::{EXIT_EXPORT, EXIT_VALIDATION};
 use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
 use sc_observability_otlp::api::trace::{
@@ -16,10 +16,11 @@ use sc_observability_otlp::sdk::trace::{
     IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
 };
 use sc_observability_otlp::sync::{
-    Client, SyncError, check_input_limits, parent_span_is_remote, resolve_endpoint, span_times,
+    Client, SyncError, check_input_limits, parent_span_is_remote, read_root_certificate,
+    resolve_endpoint, span_times,
 };
 use serde_json::Value as Json;
-use std::{fs::File, io::Read, path::Path, time::SystemTime};
+use std::{io::Read, time::SystemTime};
 
 /// Runs the parsed command; the error decides the process exit.
 pub(crate) fn run(cli: &Cli) -> Result<(), SyncError> {
@@ -214,55 +215,6 @@ fn read_capped(reader: impl Read, name: &str) -> Result<String, SyncError> {
     String::from_utf8(bytes).map_err(|_| invalid(format!("{name} is not UTF-8")))
 }
 
-/// Reads a custom certificate only from regular files and within its PEM limit.
-fn read_root_certificate(path: &Path) -> Result<Vec<u8>, SyncError> {
-    let metadata = std::fs::metadata(path).map_err(|error| {
-        SyncError::validation(
-            codes::INVALID_CONFIG,
-            format!("cannot read root certificate {}: {error}", path.display()),
-        )
-    })?;
-    if !metadata.is_file() {
-        return Err(SyncError::validation(
-            codes::INVALID_CONFIG,
-            format!("root certificate {} must be a regular file", path.display()),
-        ));
-    }
-    let file = File::open(path).map_err(|error| {
-        SyncError::validation(
-            codes::INVALID_CONFIG,
-            format!("cannot read root certificate {}: {error}", path.display()),
-        )
-    })?;
-    read_capped_bytes(
-        file,
-        &format!("root certificate {}", path.display()),
-        MAX_ROOT_CERTIFICATE_BYTES,
-        codes::INVALID_CONFIG,
-    )
-}
-
-/// Reads at most one byte beyond `limit`, rejecting excess without buffering it.
-fn read_capped_bytes(
-    reader: impl Read,
-    name: &str,
-    limit: usize,
-    read_error_code: &'static str,
-) -> Result<Vec<u8>, SyncError> {
-    let cap = u64::try_from(limit).map_or(u64::MAX, |limit| limit.saturating_add(1));
-    let mut bytes = Vec::new();
-    reader.take(cap).read_to_end(&mut bytes).map_err(|error| {
-        SyncError::validation(read_error_code, format!("cannot read {name}: {error}"))
-    })?;
-    if bytes.len() > limit {
-        return Err(SyncError::validation(
-            codes::INPUT_LIMIT_EXCEEDED,
-            format!("{name} exceeds the {limit}-byte limit"),
-        ));
-    }
-    Ok(bytes)
-}
-
 fn key_values(attributes: Vec<(String, Json)>) -> Result<Vec<KeyValue>, SyncError> {
     attributes
         .into_iter()
@@ -300,6 +252,22 @@ fn invalid(message: String) -> SyncError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn client_with_root_certificate(path: &std::path::Path) -> Result<Client, SyncError> {
+        use clap::Parser;
+
+        let path = path.to_str().expect("UTF-8 temporary certificate path");
+        let cli = Cli::try_parse_from([
+            "sc-otel",
+            "--root-certificate",
+            path,
+            "log",
+            "--body",
+            "test",
+        ])
+        .expect("valid CLI arguments");
+        client(&cli)
+    }
     use crate::error_codes::{EXIT_EXPORT, EXIT_VALIDATION};
     use sc_observability_otlp::constants::MAX_BATCH_RECORDS;
     use sc_observability_otlp::sdk::error::OTelSdkError;
@@ -426,11 +394,11 @@ mod tests {
     fn root_certificate_file_is_byte_capped() {
         let directory = tempfile::tempdir().expect("tempdir");
         let path = directory.path().join("roots.pem");
-        std::fs::write(&path, vec![b'x'; MAX_ROOT_CERTIFICATE_BYTES + 1])
+        std::fs::write(&path, vec![b'x'; MAX_INPUT_BYTES + 1])
             .expect("write oversized root certificate");
 
-        let error = read_root_certificate(&path).expect_err("oversized PEM");
-        assert_eq!(code(&error), codes::INPUT_LIMIT_EXCEEDED);
+        let error = client_with_root_certificate(&path).expect_err("oversized PEM");
+        assert_eq!(code(&error), codes::INVALID_CONFIG);
     }
 
     #[cfg(unix)]
@@ -446,7 +414,7 @@ mod tests {
 
         let (sender, receiver) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let _ = sender.send(read_root_certificate(&path));
+            let _ = sender.send(client_with_root_certificate(&path));
         });
         let result = receiver
             .recv_timeout(std::time::Duration::from_secs(2))

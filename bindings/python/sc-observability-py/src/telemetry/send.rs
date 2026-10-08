@@ -17,7 +17,7 @@ use sc_observability_otlp::sdk::trace::{
 };
 use sc_observability_otlp::sync::{
     Client, SyncError, check_input_limits, parent_span_is_remote, parse_span_id, parse_trace_id,
-    resolve_endpoint, span_times,
+    read_root_certificate, resolve_endpoint, span_times,
 };
 use std::{
     panic::AssertUnwindSafe,
@@ -260,12 +260,7 @@ fn client(config: &Config) -> Result<Client, SyncError> {
         client = client.with_timeout(timeout)?;
     }
     if let Some(path) = &config.root_certificate {
-        let pem = std::fs::read(path).map_err(|error| {
-            SyncError::validation(
-                codes::INVALID_CONFIG,
-                format!("cannot read root certificate {}: {error}", path.display()),
-            )
-        })?;
+        let pem = read_root_certificate(path)?;
         client = client.with_root_certificate_pem(&pem)?;
     }
     Ok(client)

@@ -64,7 +64,10 @@
 
 use std::borrow::Cow;
 use std::fmt;
+use std::fs::File;
 use std::future::Future;
+use std::io::Read;
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -120,6 +123,55 @@ pub enum SyncError {
     },
     /// The official exporter or SDK lifecycle failed.
     Export(sdk::error::OTelSdkError),
+}
+
+/// Reads a frontend-supplied PEM bundle from one bounded regular file.
+///
+/// The CLI and Python boundary share this reader so neither can block on a
+/// device or FIFO, nor buffer more than one MiB of certificate input.
+///
+/// # Errors
+///
+/// Returns [`SyncError::Validation`] with [`codes::INVALID_CONFIG`] when the
+/// path cannot be read, is not a regular file, or exceeds the byte limit.
+pub fn read_root_certificate(path: &Path) -> Result<Vec<u8>, SyncError> {
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!("cannot read root certificate {}: {error}", path.display()),
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!("root certificate {} must be a regular file", path.display()),
+        ));
+    }
+    let file = File::open(path).map_err(|error| {
+        SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!("cannot read root certificate {}: {error}", path.display()),
+        )
+    })?;
+    let limit = MAX_INPUT_BYTES;
+    let cap = u64::try_from(limit).map_or(u64::MAX, |limit| limit.saturating_add(1));
+    let mut bytes = Vec::new();
+    file.take(cap).read_to_end(&mut bytes).map_err(|error| {
+        SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!("cannot read root certificate {}: {error}", path.display()),
+        )
+    })?;
+    if bytes.len() > limit {
+        return Err(SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!(
+                "root certificate {} exceeds the {limit}-byte limit",
+                path.display()
+            ),
+        ));
+    }
+    Ok(bytes)
 }
 
 impl SyncError {

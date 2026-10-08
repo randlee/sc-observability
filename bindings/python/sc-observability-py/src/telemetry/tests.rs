@@ -45,6 +45,31 @@ fn expect_err<T>(result: Result<T, SyncError>) -> SyncError {
 }
 
 #[test]
+fn root_certificate_uses_the_shared_bounded_regular_file_reader() {
+    let directory = std::env::temp_dir().join(format!(
+        "sc-observability-py-root-certificate-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir(&directory).expect("create temporary certificate directory");
+    let oversized = directory.join("oversized.pem");
+    std::fs::write(&oversized, vec![b'x'; MAX_INPUT_BYTES + 1])
+        .expect("write oversized root certificate");
+    assert_eq!(
+        code(client(&config(None, Some(oversized))).map(drop)),
+        codes::INVALID_CONFIG
+    );
+
+    let non_regular = directory.join("certificate-directory");
+    std::fs::create_dir(&non_regular).expect("create certificate directory");
+    assert_eq!(
+        code(client(&config(None, Some(non_regular))).map(drop)),
+        codes::INVALID_CONFIG
+    );
+    std::fs::remove_dir_all(directory).expect("remove temporary certificate directory");
+}
+
+#[test]
 fn failures_project_to_the_shared_failure_union_with_registry_codes() {
     let Failure::Validation { diagnostic, field } = failure(
         "send_log",
