@@ -4,8 +4,11 @@
     reason = "routing integration compatibility fixtures exercise the retained trait errors"
 )]
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use sc_observability::LoggerConfig;
+use sc_observability::v2::LogSink;
 use sc_observability_types::v2::{
     LogProjector, ObservationSubscriber, ProjectionError, ProjectionRegistration, SubscriberError,
     SubscriberRegistration,
@@ -15,8 +18,9 @@ use sc_observability_types::{
     LogProjector as LegacyLogProjector, Observation,
     ObservationSubscriber as LegacyObservationSubscriber, OutcomeLabel, ProcessIdentity,
     ProjectionRegistration as LegacyProjectionRegistration, Remediation, SchemaVersion,
-    ServiceName, SpanId, SubscriberRegistration as LegacySubscriberRegistration, TargetCategory,
-    Timestamp, TraceContext as LegacyTraceContext, TraceId,
+    ServiceName, SinkHealth, SinkHealthState, SinkName, SpanId,
+    SubscriberRegistration as LegacySubscriberRegistration, TargetCategory, Timestamp,
+    TraceContext as LegacyTraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -24,6 +28,46 @@ use serde_json::Map;
 #[derive(Debug, Clone)]
 struct AgentEvent {
     kind: &'static str,
+}
+
+struct RecordingLogSubscriber {
+    deliveries: Arc<AtomicU64>,
+}
+
+impl ObservationSubscriber<LogEvent> for RecordingLogSubscriber {
+    fn observe(&self, _observation: &Observation<LogEvent>) -> Result<(), SubscriberError> {
+        self.deliveries.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct ForwardingLogSink {
+    consumer: Arc<sc_observe::v2::Observability>,
+}
+
+impl sc_observability::v2::LogSink for ForwardingLogSink {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+        self.consumer
+            .emit(Observation::new(event.service.clone(), event.clone()))
+            .map_err(|source| sc_observability_types::v2::LogSinkError::Write {
+                context: Box::new(
+                    ErrorContext::new(
+                        sc_observe::error_codes::OBSERVATION_ROUTING_FAILURE,
+                        "test-local forwarding consumer rejected the event",
+                        Remediation::not_recoverable("rebuild the closed observation consumer"),
+                    )
+                    .source(Box::new(source)),
+                ),
+            })
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("routing-integration-forwarder").expect("valid sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
 }
 
 struct RecordingSubscriber {
@@ -307,6 +351,98 @@ fn assert_routed_failures(
         Some("SC_OBSERVE_OBSERVATION_ROUTING_FAILURE")
     );
     assert_eq!(last_error.message, "routing fixture failed");
+}
+
+fn forwarding_log_event() -> LogEvent {
+    LogProjector::project_logs(
+        &RecordingLogProjector {
+            calls: Arc::new(Mutex::new(Vec::new())),
+            id: "forwarding",
+        },
+        &observation(),
+    )
+    .expect("forwarding log event")
+    .into_iter()
+    .next()
+    .expect("one forwarding log event")
+}
+
+#[test]
+fn forwarding_sink_delivery_and_closed_rejection_update_core_writer_health() {
+    let deliveries = Arc::new(AtomicU64::new(0));
+    let consumer_config = sc_observe::v2::ObservabilityConfig::default_for(
+        tool_name(),
+        temp_path("forwarding-consumer"),
+    )
+    .expect("consumer config");
+    let consumer = Arc::new(
+        sc_observe::v2::Observability::builder(consumer_config)
+            .register_subscriber(SubscriberRegistration::new(Arc::new(
+                RecordingLogSubscriber {
+                    deliveries: deliveries.clone(),
+                },
+            )))
+            .build()
+            .expect("forwarding consumer"),
+    );
+
+    let sink = Arc::new(ForwardingLogSink {
+        consumer: consumer.clone(),
+    });
+    let mut core_config = LoggerConfig::default_for(
+        ServiceName::new("obs-app").expect("valid core service"),
+        temp_path("forwarding-core"),
+    );
+    core_config.enable_file_sink = false;
+    core_config.enable_console_sink = false;
+    let mut builder = sc_observability::v2::Logger::builder(core_config).expect("core builder");
+    builder.register_sink(sc_observability::SinkRegistration::typed(sink.clone()));
+    let logger = builder.build().expect("core logger");
+    let event = forwarding_log_event();
+
+    logger
+        .log(event.clone())
+        .expect("open forwarding admission");
+    logger
+        .flush_with_timeout(std::time::Duration::from_secs(5))
+        .expect("open forwarding barrier");
+    assert_eq!(deliveries.load(Ordering::SeqCst), 1);
+    assert!(logger.health().last_writer_error.is_none());
+
+    consumer.shutdown().expect("close forwarding consumer");
+    let rejection = sink
+        .write(&event)
+        .expect_err("closed consumer rejects forwarding");
+    assert!(matches!(
+        std::error::Error::source(&rejection)
+            .expect("closed rejection source")
+            .downcast_ref::<sc_observability_types::ObservationError>(),
+        Some(sc_observability_types::ObservationError::Shutdown)
+    ));
+    let expected = rejection.diagnostic().clone();
+
+    logger
+        .log(event)
+        .expect("queue admission precedes sink failure");
+    logger
+        .flush_with_timeout(std::time::Duration::from_secs(5))
+        .expect("closed forwarding barrier");
+    let health = logger.health();
+    assert_eq!(health.dropped_events_total, 1);
+    assert_eq!(
+        health
+            .last_writer_error
+            .expect("writer degraded by closed forwarding")
+            .code,
+        Some(sc_observability::error_codes::LOGGER_WRITER_DEGRADED)
+    );
+    let last_error = health.last_error.expect("typed forwarding summary");
+    assert_eq!(
+        last_error.code.as_ref().map(ErrorCode::as_str),
+        Some(expected.code.as_str())
+    );
+    assert_eq!(last_error.message, expected.message);
+    logger.shutdown().expect("core shutdown");
 }
 
 /// Released root-error implementations route through both facades with their
