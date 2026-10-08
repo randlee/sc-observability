@@ -2,7 +2,7 @@
 //! shared synchronous client.
 
 use crate::cli::{Cli, Command, Kind, LogArgs, LogSeverity, MetricArgs, MetricKind, SpanArgs};
-use crate::constants::{DEFAULT_ENDPOINT, ENDPOINT_ENV, SCOPE_NAME, STDIN_SOURCE};
+use crate::constants::{SCOPE_NAME, STDIN_SOURCE};
 use crate::error_codes::{EXIT_EXPORT, EXIT_VALIDATION};
 use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
 use sc_observability_otlp::api::trace::{
@@ -15,7 +15,7 @@ use sc_observability_otlp::sdk::Resource;
 use sc_observability_otlp::sdk::trace::{
     IdGenerator, RandomIdGenerator, SpanData, SpanEvents, SpanLinks,
 };
-use sc_observability_otlp::sync::{Client, SyncError, check_input_limits};
+use sc_observability_otlp::sync::{Client, SyncError, check_input_limits, resolve_endpoint};
 use serde_json::Value as Json;
 use std::{
     io::Read,
@@ -49,19 +49,7 @@ pub(crate) const fn exit_code(error: &SyncError) -> u8 {
 }
 
 fn client(cli: &Cli) -> Result<Client, SyncError> {
-    let endpoint = match &cli.endpoint {
-        Some(endpoint) => endpoint.clone(),
-        None => match std::env::var(ENDPOINT_ENV) {
-            Ok(endpoint) => endpoint,
-            Err(std::env::VarError::NotPresent) => DEFAULT_ENDPOINT.to_owned(),
-            Err(std::env::VarError::NotUnicode(_)) => {
-                return Err(SyncError::validation(
-                    codes::INVALID_CONFIG,
-                    format!("{ENDPOINT_ENV} must be valid UTF-8"),
-                ));
-            }
-        },
-    };
+    let endpoint = resolve_endpoint(cli.endpoint.as_deref())?;
     let mut client = Client::new(&endpoint)?;
     for (name, value) in &cli.headers {
         client = client.with_header(name, value)?;
@@ -88,18 +76,18 @@ fn send_log(
     args: &LogArgs,
 ) -> Result<(), SyncError> {
     let attributes = attributes(args.attributes.attributes.as_deref())?;
-    let (severity, text) = match args.severity {
-        LogSeverity::Trace => (Severity::Trace, "TRACE"),
-        LogSeverity::Debug => (Severity::Debug, "DEBUG"),
-        LogSeverity::Info => (Severity::Info, "INFO"),
-        LogSeverity::Warn => (Severity::Warn, "WARN"),
-        LogSeverity::Error => (Severity::Error, "ERROR"),
-        LogSeverity::Fatal => (Severity::Fatal, "FATAL"),
+    let severity = match args.severity {
+        LogSeverity::Trace => Severity::Trace,
+        LogSeverity::Debug => Severity::Debug,
+        LogSeverity::Info => Severity::Info,
+        LogSeverity::Warn => Severity::Warn,
+        LogSeverity::Error => Severity::Error,
+        LogSeverity::Fatal => Severity::Fatal,
     };
     client.send_log(resource, scope, |record| {
         record.set_timestamp(SystemTime::now());
         record.set_severity_number(severity);
-        record.set_severity_text(text);
+        record.set_severity_text(severity.name());
         record.set_body(AnyValue::from(args.body.clone()));
         if let (Some(trace_id), Some(span_id)) = (args.trace_id, args.span_id) {
             record.set_trace_context(trace_id, span_id, None);

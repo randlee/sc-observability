@@ -1,8 +1,8 @@
 //! Extracts Python arguments while holding the GIL, then builds, uses and
 //! drops one synchronous client per call with the GIL released.
+use crate::{internal_failure, result_json, unavailable_failure};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyFloat, PyInt, PyString};
-use crate::{internal_failure, result_json, unavailable_failure};
 use sc_observability_dto::{Failure, boundary_diagnostic};
 use sc_observability_otlp::api::logs::{AnyValue, LogRecord as _, Severity};
 use sc_observability_otlp::api::trace::{
@@ -13,7 +13,9 @@ use sc_observability_otlp::error_codes::{TELEMETRY_EXPORT_FAILED, sync as codes}
 use sc_observability_otlp::sdk::Resource;
 use sc_observability_otlp::sdk::error::OTelSdkError;
 use sc_observability_otlp::sdk::trace::{SpanData, SpanEvents, SpanLinks};
-use sc_observability_otlp::sync::{Client, SyncError, check_input_limits};
+use sc_observability_otlp::sync::{
+    Client, SyncError, check_input_limits, parse_span_id, parse_trace_id, resolve_endpoint,
+};
 use std::{
     hash::{BuildHasher, RandomState},
     panic::AssertUnwindSafe,
@@ -25,8 +27,6 @@ use std::{
 #[path = "tests.rs"]
 mod tests;
 
-const DEFAULT_ENDPOINT: &str = "http://localhost:4318";
-const ENDPOINT_ENV: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 const SCOPE_NAME: &str = "sc_observability";
 
 #[derive(FromPyObject)]
@@ -96,7 +96,7 @@ impl Scalar {
 }
 
 struct Log {
-    severity: (Severity, &'static str),
+    severity: Severity,
     body: String,
     trace: Option<(TraceId, SpanId)>,
     attributes: Vec<(String, Scalar)>,
@@ -142,7 +142,9 @@ pub(super) fn send_span(py: Python<'_>, config: Config, fields: SpanFields<'_>) 
 /// Exports one metric measurement.
 #[pyfunction]
 pub(super) fn send_metric(py: Python<'_>, config: Config, fields: MetricFields<'_>) -> String {
-    run(py, config, "send_metric", || metric(fields).map(Signal::Metric))
+    run(py, config, "send_metric", || {
+        metric(fields).map(Signal::Metric)
+    })
 }
 
 /// Returns the ADR-014 `Result[None]` wire envelope.
@@ -182,7 +184,12 @@ fn failure(operation: &str, error: &SyncError) -> Failure {
     match error {
         SyncError::Validation { code, .. } => Failure::Validation {
             diagnostic: Box::new(boundary_diagnostic(code, error.to_string())),
-            field: if *code == codes::INVALID_CONFIG { "config" } else { "fields" }.into(),
+            field: if *code == codes::INVALID_CONFIG {
+                "config"
+            } else {
+                "fields"
+            }
+            .into(),
         },
         SyncError::Export(OTelSdkError::Timeout(_)) => Failure::Timeout {
             diagnostic: Box::new(boundary_diagnostic(
@@ -207,8 +214,8 @@ fn export(config: Config, signal: Signal) -> Result<(), SyncError> {
     match signal {
         Signal::Log(log) => client.send_log(&resource, scope(), |record| {
             record.set_timestamp(SystemTime::now());
-            record.set_severity_number(log.severity.0);
-            record.set_severity_text(log.severity.1);
+            record.set_severity_number(log.severity);
+            record.set_severity_text(log.severity.name());
             record.set_body(AnyValue::from(log.body));
             if let Some((trace_id, span_id)) = log.trace {
                 record.set_trace_context(trace_id, span_id, None);
@@ -249,10 +256,7 @@ fn export(config: Config, signal: Signal) -> Result<(), SyncError> {
 }
 
 fn client(config: &Config) -> Result<Client, SyncError> {
-    let endpoint = match &config.endpoint {
-        Some(endpoint) => endpoint.clone(),
-        None => std::env::var(ENDPOINT_ENV).unwrap_or_else(|_| DEFAULT_ENDPOINT.to_owned()),
-    };
+    let endpoint = resolve_endpoint(config.endpoint.as_deref())?;
     let mut client = Client::new(&endpoint)?;
     for (name, value) in &config.headers {
         client = client.with_header(name, value)?;
@@ -286,18 +290,19 @@ fn scope() -> InstrumentationScope {
 
 fn log(fields: LogFields<'_>) -> Result<Log, SyncError> {
     let severity = match fields.severity.as_str() {
-        "trace" => (Severity::Trace, "TRACE"),
-        "debug" => (Severity::Debug, "DEBUG"),
-        "info" => (Severity::Info, "INFO"),
-        "warn" => (Severity::Warn, "WARN"),
-        "error" => (Severity::Error, "ERROR"),
-        "fatal" => (Severity::Fatal, "FATAL"),
+        "trace" => Severity::Trace,
+        "debug" => Severity::Debug,
+        "info" => Severity::Info,
+        "warn" => Severity::Warn,
+        "error" => Severity::Error,
+        "fatal" => Severity::Fatal,
         other => return Err(invalid(format!("unknown severity {other:?}"))),
     };
     let trace = match (fields.trace_id.as_deref(), fields.span_id.as_deref()) {
-        (Some(trace_id), Some(span_id)) => {
-            Some((trace_id_from(trace_id)?, span_id_from("span_id", span_id)?))
-        }
+        (Some(trace_id), Some(span_id)) => Some((
+            parse_trace_id("trace_id", trace_id)?,
+            parse_span_id("span_id", span_id)?,
+        )),
         (None, None) => None,
         _ => {
             return Err(invalid(
@@ -333,17 +338,17 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         other => return Err(invalid(format!("unknown span kind {other:?}"))),
     };
     let trace_id = match fields.trace_id.as_deref() {
-        Some(value) => trace_id_from(value)?,
+        Some(value) => parse_trace_id("trace_id", value)?,
         None => TraceId::from(u128::from(random()) << 64 | u128::from(random())),
     };
     let span_id = match fields.span_id.as_deref() {
-        Some(value) => span_id_from("span_id", value)?,
+        Some(value) => parse_span_id("span_id", value)?,
         None => SpanId::from(random()),
     };
     let parent_span_id = fields
         .parent_span_id
         .as_deref()
-        .map(|value| span_id_from("parent_span_id", value))
+        .map(|value| parse_span_id("parent_span_id", value))
         .transpose()?;
     let end_time = fields
         .end_time_unix_nano
@@ -443,30 +448,6 @@ fn key_values(attributes: Vec<(String, Scalar)>) -> Vec<KeyValue> {
         .into_iter()
         .map(|(key, value)| KeyValue::new(key, value.native::<Value>()))
         .collect()
-}
-
-fn trace_id_from(value: &str) -> Result<TraceId, SyncError> {
-    check_hex("trace_id", value, 32)?;
-    TraceId::from_hex(value).map_err(|error| invalid(format!("trace_id: {error}")))
-}
-
-fn span_id_from(field: &str, value: &str) -> Result<SpanId, SyncError> {
-    check_hex(field, value, 16)?;
-    SpanId::from_hex(value).map_err(|error| invalid(format!("{field}: {error}")))
-}
-
-/// The SDK parsers accept short and uppercase ids; OTLP ids are fixed-width lowercase hex.
-fn check_hex(name: &str, value: &str, digits: usize) -> Result<(), SyncError> {
-    let lowercase_hex = value
-        .bytes()
-        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    if value.len() == digits && lowercase_hex {
-        Ok(())
-    } else {
-        Err(invalid(format!(
-            "{name}: expected {digits} lowercase hex digits"
-        )))
-    }
 }
 
 fn invalid(message: String) -> SyncError {

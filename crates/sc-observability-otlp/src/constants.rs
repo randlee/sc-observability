@@ -1,5 +1,12 @@
 //! Crate-local constants for `sc-observability-otlp`.
 
+/// Endpoint the synchronous frontends use when neither an explicit endpoint
+/// nor [`OTLP_ENDPOINT_ENV`] is set.
+pub(crate) const DEFAULT_OTLP_ENDPOINT: &str = "http://localhost:4318";
+
+/// Environment variable naming the synchronous frontends' default endpoint.
+pub(crate) const OTLP_ENDPOINT_ENV: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
+
 /// Default OTLP request timeout in milliseconds.
 pub const DEFAULT_OTLP_TIMEOUT_MS: u64 = 3_000;
 /// Largest frontend input, in bytes, accepted by one synchronous-client call

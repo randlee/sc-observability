@@ -16,7 +16,10 @@ fn config(timeout_s: Option<f64>, root_certificate: Option<PathBuf>) -> Config {
 
 /// The registry code of an expected failure.
 fn code<T>(result: Result<T, SyncError>) -> String {
-    failure("send_log", &expect_err(result)).diagnostic().code.clone()
+    failure("send_log", &expect_err(result))
+        .diagnostic()
+        .code
+        .clone()
 }
 
 fn log_fields<'py>(
@@ -42,16 +45,21 @@ fn expect_err<T>(result: Result<T, SyncError>) -> SyncError {
 
 #[test]
 fn failures_project_to_the_shared_failure_union_with_registry_codes() {
-    let Failure::Validation { diagnostic, field } =
-        failure("send_log", &SyncError::validation(codes::INVALID_RECORD, "bad"))
-    else {
+    let Failure::Validation { diagnostic, field } = failure(
+        "send_log",
+        &SyncError::validation(codes::INVALID_RECORD, "bad"),
+    ) else {
         std::panic::panic_any("record rejection must be a validation failure");
     };
-    assert_eq!((diagnostic.code.as_str(), field.as_str()), (codes::INVALID_RECORD, "fields"));
+    assert_eq!(
+        (diagnostic.code.as_str(), field.as_str()),
+        (codes::INVALID_RECORD, "fields")
+    );
     assert!(diagnostic.message.contains("bad"));
-    let Failure::Validation { field, .. } =
-        failure("send_log", &SyncError::validation(codes::INVALID_CONFIG, "bad"))
-    else {
+    let Failure::Validation { field, .. } = failure(
+        "send_log",
+        &SyncError::validation(codes::INVALID_CONFIG, "bad"),
+    ) else {
         std::panic::panic_any("config rejection must be a validation failure");
     };
     assert_eq!(field, "config");
@@ -63,30 +71,20 @@ fn failures_project_to_the_shared_failure_union_with_registry_codes() {
     };
     assert_eq!(diagnostic.code, TELEMETRY_EXPORT_FAILED.as_str());
     assert!(diagnostic.message.contains("refused"));
-    let Failure::Timeout { diagnostic, operation } = failure(
+    let Failure::Timeout {
+        diagnostic,
+        operation,
+    } = failure(
         "send_metric",
         &SyncError::Export(OTelSdkError::Timeout(Duration::from_secs(3))),
-    ) else {
+    )
+    else {
         std::panic::panic_any("an exporter deadline must be a timeout");
     };
     assert_eq!(
         (diagnostic.code.as_str(), operation.as_str()),
         (TELEMETRY_EXPORT_FAILED.as_str(), "send_metric")
     );
-}
-
-#[test]
-fn ids_must_be_fixed_width_lowercase_hex() {
-    assert!(trace_id_from("4bf92f3577b34da6a3ce929d0e0e4736").is_ok());
-    assert!(span_id_from("span_id", "00f067aa0ba902b7").is_ok());
-    for result in [
-        trace_id_from("4BF92F3577B34DA6A3CE929D0E0E4736").map(drop),
-        trace_id_from("4bf92f").map(drop),
-        span_id_from("parent_span_id", "f067aa0ba902b7").map(drop),
-        span_id_from("span_id", "00f067aa0ba902bz").map(drop),
-    ] {
-        assert_eq!(code(result), codes::INVALID_RECORD);
-    }
 }
 
 #[test]

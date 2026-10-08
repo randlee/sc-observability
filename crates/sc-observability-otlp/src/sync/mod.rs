@@ -85,8 +85,9 @@ use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
 use opentelemetry_sdk::trace::SpanExporter as _;
 
 use crate::constants::{
-    DEFAULT_OTLP_TIMEOUT_MS, MAX_BATCH_RECORDS, MAX_INPUT_BYTES, OTLP_HTTP_LOGS_PATH,
-    OTLP_HTTP_METRICS_PATH, OTLP_HTTP_TRACES_PATH, SYNC_METRIC_READER_INTERVAL,
+    DEFAULT_OTLP_ENDPOINT, DEFAULT_OTLP_TIMEOUT_MS, MAX_BATCH_RECORDS, MAX_INPUT_BYTES,
+    OTLP_ENDPOINT_ENV, OTLP_HTTP_LOGS_PATH, OTLP_HTTP_METRICS_PATH, OTLP_HTTP_TRACES_PATH,
+    SYNC_METRIC_READER_INTERVAL,
 };
 use crate::error_codes::sync as codes;
 use crate::{api, sdk};
@@ -173,6 +174,74 @@ pub fn check_input_limits(input_bytes: usize, records: usize) -> Result<(), Sync
         ));
     }
     Ok(())
+}
+
+/// Returns `explicit`, else `OTEL_EXPORTER_OTLP_ENDPOINT`, else
+/// `http://localhost:4318`: the endpoint precedence shared by the CLI and
+/// Python frontends.
+///
+/// # Errors
+///
+/// Returns [`SyncError::Validation`] with
+/// [`error_codes::sync::INVALID_CONFIG`](crate::error_codes::sync::INVALID_CONFIG)
+/// when the environment variable is set but not valid UTF-8.
+pub fn resolve_endpoint(explicit: Option<&str>) -> Result<String, SyncError> {
+    if let Some(endpoint) = explicit {
+        return Ok(endpoint.to_owned());
+    }
+    match std::env::var(OTLP_ENDPOINT_ENV) {
+        Ok(endpoint) => Ok(endpoint),
+        Err(std::env::VarError::NotPresent) => Ok(DEFAULT_OTLP_ENDPOINT.to_owned()),
+        Err(std::env::VarError::NotUnicode(_)) => Err(SyncError::validation(
+            codes::INVALID_CONFIG,
+            format!("{OTLP_ENDPOINT_ENV} must be valid UTF-8"),
+        )),
+    }
+}
+
+/// Parses a trace id given as 32 lowercase hex digits; `field` names it in
+/// the error.
+///
+/// # Errors
+///
+/// Returns [`SyncError::Validation`] with
+/// [`error_codes::sync::INVALID_RECORD`](crate::error_codes::sync::INVALID_RECORD)
+/// for any other text.
+pub fn parse_trace_id(field: &str, value: &str) -> Result<TraceId, SyncError> {
+    check_hex(field, value, 32)?;
+    TraceId::from_hex(value).map_err(|error| invalid_id(field, &error))
+}
+
+/// Parses a span id given as 16 lowercase hex digits; `field` names it in
+/// the error.
+///
+/// # Errors
+///
+/// Returns [`SyncError::Validation`] with
+/// [`error_codes::sync::INVALID_RECORD`](crate::error_codes::sync::INVALID_RECORD)
+/// for any other text.
+pub fn parse_span_id(field: &str, value: &str) -> Result<SpanId, SyncError> {
+    check_hex(field, value, 16)?;
+    SpanId::from_hex(value).map_err(|error| invalid_id(field, &error))
+}
+
+/// The SDK parsers accept short and uppercase ids; OTLP ids are fixed-width lowercase hex.
+fn check_hex(field: &str, value: &str, digits: usize) -> Result<(), SyncError> {
+    let lowercase_hex = value
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+    if value.len() == digits && lowercase_hex {
+        Ok(())
+    } else {
+        Err(invalid_id(
+            field,
+            &format_args!("expected {digits} lowercase hex digits"),
+        ))
+    }
+}
+
+fn invalid_id(field: &str, reason: &dyn fmt::Display) -> SyncError {
+    SyncError::validation(codes::INVALID_RECORD, format!("{field}: {reason}"))
 }
 
 /// Blocking OTLP/HTTP protobuf client over the official 0.33.0 exporters.

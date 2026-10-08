@@ -2,6 +2,7 @@
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use sc_observability_otlp::api::trace::{SpanId, TraceId};
+use sc_observability_otlp::sync::{self, SyncError};
 use std::{fmt, path::PathBuf, time::Duration};
 
 #[derive(Parser)]
@@ -215,26 +216,12 @@ fn parse_seconds(value: &str) -> Result<Duration, String> {
     }
 }
 
-fn parse_trace_id(value: &str) -> Result<TraceId, String> {
-    check_hex(value, 32)?;
-    TraceId::from_hex(value).map_err(|error| error.to_string())
+fn parse_trace_id(value: &str) -> Result<TraceId, SyncError> {
+    sync::parse_trace_id("trace id", value)
 }
 
-fn parse_span_id(value: &str) -> Result<SpanId, String> {
-    check_hex(value, 16)?;
-    SpanId::from_hex(value).map_err(|error| error.to_string())
-}
-
-/// The SDK parsers accept short and uppercase ids; OTLP ids are fixed-width lowercase hex.
-fn check_hex(value: &str, digits: usize) -> Result<(), String> {
-    let lowercase_hex = value
-        .bytes()
-        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    if value.len() == digits && lowercase_hex {
-        Ok(())
-    } else {
-        Err(format!("expected {digits} lowercase hex digits"))
-    }
+fn parse_span_id(value: &str) -> Result<SpanId, SyncError> {
+    sync::parse_span_id("span id", value)
 }
 
 #[cfg(test)]

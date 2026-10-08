@@ -28,7 +28,9 @@ use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::{SpanData, SpanEvents, SpanLinks};
 use prost::Message;
 
-use super::{Client, SyncError, check_input_limits};
+use super::{
+    Client, SyncError, check_input_limits, parse_span_id, parse_trace_id, resolve_endpoint,
+};
 use crate::constants::{MAX_BATCH_RECORDS, MAX_INPUT_BYTES};
 use crate::error_codes::sync as codes;
 
@@ -1242,5 +1244,42 @@ fn tls_verifies_trusted_and_rejects_untrusted_certificates() {
         collector.requests().len(),
         1,
         "only the verified export was delivered"
+    );
+}
+
+#[test]
+fn ids_must_be_fixed_width_lowercase_hex() {
+    assert!(parse_trace_id("trace_id", "4bf92f3577b34da6a3ce929d0e0e4736").is_ok());
+    assert!(parse_span_id("span_id", "00f067aa0ba902b7").is_ok());
+    for (result, field) in [
+        (
+            parse_trace_id("trace_id", "4BF92F3577B34DA6A3CE929D0E0E4736").map(drop),
+            "trace_id",
+        ),
+        (parse_trace_id("trace_id", "4bf92f").map(drop), "trace_id"),
+        (
+            parse_span_id("parent_span_id", "f067aa0ba902b7").map(drop),
+            "parent_span_id",
+        ),
+        (
+            parse_span_id("span_id", "00f067aa0ba902bz").map(drop),
+            "span_id",
+        ),
+    ] {
+        let Err(error @ SyncError::Validation { code, .. }) = result else {
+            std::panic::panic_any("a malformed id must be a validation failure");
+        };
+        assert_eq!(code, codes::INVALID_RECORD);
+        assert!(error.to_string().contains(&format!("{field}: expected")));
+    }
+}
+
+#[test]
+fn an_explicit_endpoint_wins_over_the_environment() {
+    assert_eq!(
+        resolve_endpoint(Some("https://collector:4318"))
+            .ok()
+            .as_deref(),
+        Some("https://collector:4318")
     );
 }
