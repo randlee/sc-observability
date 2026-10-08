@@ -129,7 +129,7 @@ fn handle(mut stream: TcpStream, status: &str) -> Captured {
     }
 }
 
-/// The binary with ambient OTel, proxy and trust settings removed and an empty
+/// The binary with ambient `OTel`, proxy and trust settings removed and an empty
 /// working directory, so a test sees only the configuration it sets.
 fn sc_otel(directory: &tempfile::TempDir) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_sc-otel"));
