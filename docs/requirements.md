@@ -83,7 +83,7 @@ This crate owns shared neutral contracts only.
 - TYP-018 Superseded by H-006 (Phase H): the span record types are removed. Final span duration shall be exposed only on `SpanRecord<SpanEnded>`.
 - TYP-019 Superseded by H-006 (Phase H): the span record types are removed. Canonical `sc_observability_types::v2` span-state serialization shall not expose a producer-facing mutable state field.
 - TYP-020 `Observable` shall remain an open trait for consumer-owned payload types.
-- TYP-021 `SpanProjector<T>` and `MetricProjector<T>` superseded by H-006 (Phase H): removed. `ObservationSubscriber<T>`, `ObservationFilter<T>`, `LogProjector<T>`, `SpanProjector<T>`, and `MetricProjector<T>` shall remain open extension points.
+- TYP-021 `SpanProjector<T>` and `MetricProjector<T>` superseded by H-006 (Phase H): removed. `ObservationSubscriber<T>`, `ObservationFilter<T>`, and `LogProjector<T>` shall remain open extension points.
 - TYP-023 Traits used behind `Arc<dyn ...>` shall remain object-safe, with `T` fixed at each usage site.
 - TYP-024 Traits used in concurrent routing or injection contexts shall be `Send + Sync`.
 - TYP-025 `ToolName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the top-level tool or executable identity used for config and path derivation.

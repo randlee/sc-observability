@@ -1958,7 +1958,8 @@ No transport implementation or runtime dependency enters the types layer.
     `api::logs::{AnyValue, LogRecord, Severity}`,
     `api::trace::{Event, Link, SpanContext, SpanId, SpanKind, Status,
     TraceFlags, TraceId, TraceState}`, `api::metrics::{Meter, MeterProvider}`,
-    `sdk::Resource`, `sdk::trace::{SpanData, SpanEvents, SpanLinks}`,
+    `sdk::Resource`, `sdk::trace::{IdGenerator, RandomIdGenerator, SpanData,
+    SpanEvents, SpanLinks}`,
     `sdk::logs::{SdkLogRecord, SdkLoggerProvider}`,
     `sdk::error::{OTelSdkError, OTelSdkResult}`; unmodified upstream types, no
     glob re-export.
@@ -1970,6 +1971,9 @@ No transport implementation or runtime dependency enters the types layer.
     sdk::trace::SpanData)`; `send_metrics<F>(&mut self, &sdk::Resource,
     api::InstrumentationScope, F)` with `F: FnOnce(&api::metrics::Meter) ->
     Result<(), SyncError>`; `sync::check_input_limits(bytes, records)`;
+    `sync::resolve_endpoint(Option<&str>) -> Result<Cow<str>, SyncError>`;
+    `sync::parse_trace_id(field, value) -> Result<TraceId, SyncError>` and
+    `sync::parse_span_id(field, value) -> Result<SpanId, SyncError>`;
     `sync::span_times(Option<u64>, Option<u64>)`, which orders span times on the
     supplied Unix nanoseconds before converting them to `SystemTime`;
     `OtelLogSink::new(&sdk::logs::SdkLoggerProvider, api::InstrumentationScope)`
