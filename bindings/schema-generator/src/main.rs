@@ -3,8 +3,8 @@ use sc_observability_dto::*;
 use sc_observability_types::{
     ErrorCode, ErrorContext, Remediation,
     v2::{
-        ConfigFailure, EventError, FlushError, IdentityError, InitError, LogSinkError,
-        MetricModelError, ProjectionError, ShutdownError, SubscriberError,
+        EventError, FlushError, IdentityError, InitError, LogSinkError, ProjectionError,
+        ShutdownError, SubscriberError,
     },
 };
 use schemars::{
@@ -12,7 +12,11 @@ use schemars::{
     generate::{SchemaGenerator, SchemaSettings},
 };
 use serde_json::{Map, Value, json};
-use std::{collections::BTreeSet, error::Error, path::{Path, PathBuf}};
+use std::{
+    collections::BTreeSet,
+    error::Error,
+    path::{Path, PathBuf},
+};
 fn register<T: JsonSchema>(
     g: &mut SchemaGenerator,
     entries: &mut Map<String, Value>,
@@ -118,125 +122,6 @@ fn canonical_error_catalogue() -> Vec<Value> {
         (
             "LogSinkError::Flush",
             LogSinkError::Flush {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::ZeroDuration",
-            ConfigFailure::ZeroDuration {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::DurationOverflow",
-            ConfigFailure::DurationOverflow {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::InvalidBoundOrdering",
-            ConfigFailure::InvalidBoundOrdering {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::InvalidJitterPercent",
-            ConfigFailure::InvalidJitterPercent {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::InvalidQueueCapacity",
-            ConfigFailure::InvalidQueueCapacity {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::InvalidQueueByteCapacity",
-            ConfigFailure::InvalidQueueByteCapacity {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::ConfigFieldNotApplicable",
-            ConfigFailure::ConfigFieldNotApplicable {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::InsecureTransportRejected",
-            ConfigFailure::InsecureTransportRejected {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::InvalidEndpoint",
-            ConfigFailure::InvalidEndpoint {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::InvalidHeader",
-            ConfigFailure::InvalidHeader {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::TransportConstructionFailed",
-            ConfigFailure::TransportConstructionFailed {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::UnsupportedBackend",
-            ConfigFailure::UnsupportedBackend {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::UnsupportedProtocol",
-            ConfigFailure::UnsupportedProtocol {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "ConfigFailure::TokioRuntimeRequired",
-            ConfigFailure::TokioRuntimeRequired {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "MetricModelError::InvalidHistogram",
-            MetricModelError::InvalidHistogram {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "MetricModelError::InvalidTemporality",
-            MetricModelError::InvalidTemporality {
-                context: catalogue_context(),
-            }
-            .code(),
-        ),
-        (
-            "MetricModelError::InvalidInterval",
-            MetricModelError::InvalidInterval {
                 context: catalogue_context(),
             }
             .code(),
@@ -353,21 +238,6 @@ fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
     )?;
     register::<CanonicalDiagnosticDto>(&mut generator, &mut entries, "CanonicalDiagnosticDto")?;
     register::<CanonicalFailureDto>(&mut generator, &mut entries, "CanonicalFailureDto")?;
-    register::<TraceContextV2Dto>(&mut generator, &mut entries, "TraceContextV2Dto")?;
-    register::<SpanLinkDto>(&mut generator, &mut entries, "SpanLinkDto")?;
-    register::<SpanKindDto>(&mut generator, &mut entries, "SpanKindDto")?;
-    register::<AggregationTemporalityDto>(
-        &mut generator,
-        &mut entries,
-        "AggregationTemporalityDto",
-    )?;
-    register::<HistogramPointDto>(&mut generator, &mut entries, "HistogramPointDto")?;
-    register::<MetricValueDto>(&mut generator, &mut entries, "MetricValueDto")?;
-    register::<MetricRecordDto>(&mut generator, &mut entries, "MetricRecordDto")?;
-    register::<SpanStatusDto>(&mut generator, &mut entries, "SpanStatusDto")?;
-    register::<SpanRecordDto>(&mut generator, &mut entries, "SpanRecordDto")?;
-    register::<SpanEventDto>(&mut generator, &mut entries, "SpanEventDto")?;
-    register::<SpanSignalDto>(&mut generator, &mut entries, "SpanSignalDto")?;
     register::<CanonicalWireEnvelope<AdmissionDto>>(
         &mut generator,
         &mut entries,
@@ -599,9 +469,9 @@ fn selected_snapshot_paths(selected_version: u32) -> (PathBuf, PathBuf) {
 
 fn selected_version_from_output_paths(output: &Path, errors_output: &Path) -> Result<u32, String> {
     fn version(filename: Option<&std::ffi::OsStr>, prefix: &str) -> Result<u32, String> {
-        let filename = filename.and_then(std::ffi::OsStr::to_str).ok_or_else(|| {
-            format!("selected schema output must use {prefix}<version>.json")
-        })?;
+        let filename = filename
+            .and_then(std::ffi::OsStr::to_str)
+            .ok_or_else(|| format!("selected schema output must use {prefix}<version>.json"))?;
         let version = filename
             .strip_prefix(prefix)
             .and_then(|value| value.strip_suffix(".json"))
@@ -750,10 +620,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let output = output.ok_or("--output required")?;
     let errors_output = errors_output.ok_or("--errors-output required")?;
-    let selected_version = selected_version_from_output_paths(
-        Path::new(&output),
-        Path::new(&errors_output),
-    )?;
+    let selected_version =
+        selected_version_from_output_paths(Path::new(&output), Path::new(&errors_output))?;
     if !check {
         reject_selected_snapshot_overwrite(
             Path::new(&output),
@@ -901,14 +769,8 @@ mod tests {
         let path = directory.join("schema.json");
         std::fs::write(&path, crlf).unwrap();
 
-        let error = write_or_check(
-            &path,
-            canonical,
-            true,
-            "binding schema",
-            1,
-        )
-        .expect_err("CRLF must be drift");
+        let error = write_or_check(&path, canonical, true, "binding schema", 1)
+            .expect_err("CRLF must be drift");
         assert!(error.to_string().contains("generated drift"));
         assert_eq!(std::fs::read(&path).unwrap(), crlf);
 
@@ -919,7 +781,7 @@ mod tests {
     #[test]
     fn canonical_error_catalogue_uses_native_variant_codes_in_order() {
         let catalogue = canonical_error_catalogue();
-        assert_eq!(catalogue.len(), 29);
+        assert_eq!(catalogue.len(), 12);
         let entries: Vec<(&str, &str)> = catalogue
             .iter()
             .map(|entry| {
@@ -979,68 +841,6 @@ mod tests {
                 (
                     "LogSinkError::Flush",
                     "SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID"
-                ),
-                ("ConfigFailure::ZeroDuration", "OTLP_CONFIG_ZERO_DURATION"),
-                (
-                    "ConfigFailure::DurationOverflow",
-                    "OTLP_CONFIG_DURATION_OVERFLOW"
-                ),
-                (
-                    "ConfigFailure::InvalidBoundOrdering",
-                    "OTLP_CONFIG_BOUND_ORDER"
-                ),
-                (
-                    "ConfigFailure::InvalidJitterPercent",
-                    "OTLP_CONFIG_JITTER_PERCENT"
-                ),
-                (
-                    "ConfigFailure::InvalidQueueCapacity",
-                    "OTLP_CONFIG_QUEUE_CAPACITY"
-                ),
-                (
-                    "ConfigFailure::InvalidQueueByteCapacity",
-                    "OTLP_CONFIG_QUEUE_BYTE_CAPACITY"
-                ),
-                (
-                    "ConfigFailure::ConfigFieldNotApplicable",
-                    "OTLP_CONFIG_FIELD_NOT_APPLICABLE"
-                ),
-                (
-                    "ConfigFailure::InsecureTransportRejected",
-                    "OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED"
-                ),
-                (
-                    "ConfigFailure::InvalidEndpoint",
-                    "OTLP_CONFIG_INVALID_ENDPOINT"
-                ),
-                ("ConfigFailure::InvalidHeader", "OTLP_CONFIG_INVALID_HEADER"),
-                (
-                    "ConfigFailure::TransportConstructionFailed",
-                    "OTLP_TRANSPORT_CONSTRUCTION_FAILED"
-                ),
-                (
-                    "ConfigFailure::UnsupportedBackend",
-                    "OTLP_UNSUPPORTED_BACKEND"
-                ),
-                (
-                    "ConfigFailure::UnsupportedProtocol",
-                    "OTLP_UNSUPPORTED_PROTOCOL"
-                ),
-                (
-                    "ConfigFailure::TokioRuntimeRequired",
-                    "OTLP_TOKIO_RUNTIME_REQUIRED"
-                ),
-                (
-                    "MetricModelError::InvalidHistogram",
-                    "SC_METRIC_INVALID_HISTOGRAM"
-                ),
-                (
-                    "MetricModelError::InvalidTemporality",
-                    "SC_METRIC_INVALID_TEMPORALITY"
-                ),
-                (
-                    "MetricModelError::InvalidInterval",
-                    "SC_METRIC_INVALID_INTERVAL"
                 ),
             ]
         );

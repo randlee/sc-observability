@@ -138,11 +138,7 @@ if observe_test_deps - {"serde_json"}:
         f"{sorted(observe_test_deps - {'serde_json'})}"
     )
 
-required_otlp = {
-    "sc-lint-attributes",
-    "serde_json",
-    "thiserror",
-}
+required_otlp = {"serde_json"}
 # ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
 sys.path.insert(0, str(root / "scripts/ci"))
 from otlp_dependencies import validate_transport_dependencies

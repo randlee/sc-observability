@@ -1,4 +1,4 @@
-//! Private OTLP log-severity projection shared by both wire transports.
+//! Private mapping from core log levels to OpenTelemetry severity text.
 
 use sc_observability_types::Level;
 

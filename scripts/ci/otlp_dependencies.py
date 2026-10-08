@@ -55,13 +55,13 @@ def validate_transport_dependencies(root: Path) -> set[str]:
             raise SystemExit(
                 f"OTLP dependency sc-observe: dev-only; it must not appear in [{kind}]"
             )
-    # Validate the reviewed SDK closure first. A dependency can later become a
+    # Validate the reviewed transport closure first. A dependency can later become a
     # direct, policy-governed transport (for example tonic for generated OTLP
     # clients); that must not change this invariant's diagnostic or let a
     # missing reviewed transitive pin be masked by a per-transport comparison.
     for name, version in document["sdk_transport_lock"].items():
         if (name, version) not in locked:
-            raise SystemExit(f"OTLP SDK transport {name}: reviewed lock pin {version} missing")
+            raise SystemExit(f"OTLP transport {name}: reviewed lock pin {version} missing")
 
     def activated(feature, visited=None):
         visited = set() if visited is None else visited
@@ -102,7 +102,7 @@ def validate_transport_dependencies(root: Path) -> set[str]:
             raise SystemExit(prefix + "effective dependency features differ from transport policy")
         if name in activated("default"):
             raise SystemExit(prefix + "must not be enabled by default")
-        for backend in ("otlp-sdk", "sync-http"):
+        for backend in ("log-sink", "synchronous-client"):
             if (name in activated(backend)) != (backend in rule["backends"]):
                 raise SystemExit(prefix + f"incorrect binding to {backend}")
     return set(policy)

@@ -5,15 +5,13 @@ use crate::constants::{
 };
 use crate::error_codes;
 use crate::{
-    AdmissionDto, AggregationTemporalityDto, AvailabilityDto, CanonicalDiagnosticDto,
-    CanonicalFailureDto, CanonicalWireEnvelope, ChangeDiagnosticDto, DecimalDtoError, Diagnostic,
-    DiagnosticSummaryDto, Failure, HistogramPointDto, LevelChangeDto, LevelChangeSourceDto,
-    LevelDto, LevelFilterDto, LevelRequestDto, LevelStateDto, LogEventDto, LogHealthDto,
-    LogOrderDto, LogQueryDto, LogSnapshotDto, LoggingHealthDto, MaintenanceHealthDto,
-    MetricRecordDto, MetricValueDto, PathDto, ProcessIdentityDto, QueryHealthDto, QueryStateDto,
-    RemediationDto, SinkHealthDto, SpanEventDto, SpanKindDto, SpanLinkDto, SpanRecordDto,
-    SpanSignalDto, SpanStatusDto, StateTransitionDto, StoredDiagnosticDto, StoredEventDto,
-    TraceContextDto, TraceContextV2Dto, ValueDto, WireEnvelope, WorkerStateDto,
+    AdmissionDto, AvailabilityDto, CanonicalDiagnosticDto, CanonicalFailureDto,
+    CanonicalWireEnvelope, ChangeDiagnosticDto, DecimalDtoError, Diagnostic, DiagnosticSummaryDto,
+    Failure, LevelChangeDto, LevelChangeSourceDto, LevelDto, LevelFilterDto, LevelRequestDto,
+    LevelStateDto, LogEventDto, LogHealthDto, LogOrderDto, LogQueryDto, LogSnapshotDto,
+    LoggingHealthDto, MaintenanceHealthDto, PathDto, ProcessIdentityDto, QueryHealthDto,
+    QueryStateDto, RemediationDto, SinkHealthDto, StateTransitionDto, StoredDiagnosticDto,
+    StoredEventDto, TraceContextDto, ValueDto, WireEnvelope, WorkerStateDto,
 };
 use sc_observability_types as core;
 use serde::de::DeserializeOwned;
@@ -922,12 +920,12 @@ fn check_event_keys(value: &Value) -> Result<(), Failure> {
 }
 
 mod canonical;
-mod signals;
+mod envelope;
 
 pub use canonical::{
     failure_from_classification, failure_from_diagnostic, from_canonical_diagnostic,
 };
-pub use signals::{decode_canonical_envelope, decode_metric, decode_span};
+pub use envelope::decode_canonical_envelope;
 
 #[cfg(test)]
 mod number_projection_tests {

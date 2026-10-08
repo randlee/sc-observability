@@ -80,14 +80,11 @@ jobs:
       - name: Run clippy
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
-      - name: Check durable-store crate dependency policy
-        run: cargo deny --manifest-path crates/sc-observability-otlp/Cargo.toml --features durable-store --locked check --config policy/deny-durable-store.toml licenses bans advisories
-
       - name: Check Python OTLP dependency policy
-        run: cargo deny --manifest-path bindings/python/sc-observability-py/Cargo.toml --features otlp-telemetry --locked check --config policy/deny-durable-store.toml licenses bans advisories
+        run: cargo deny --manifest-path bindings/python/sc-observability-py/Cargo.toml --features otlp-telemetry --locked check --config policy/deny.toml licenses bans advisories
 
       - name: Check CLI dependency policy
-        run: cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --locked check --config policy/deny-durable-store.toml licenses bans advisories
+        run: cargo deny --manifest-path crates/sc-otel-cli/Cargo.toml --all-features --locked check --config policy/deny.toml licenses bans advisories
 
   docs-consistency:
     name: docs-consistency (ubuntu)
@@ -231,7 +228,6 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/integrate/suites/collector -p test_run.py
           python3 -m unittest discover -s scripts/integrate/suites/rust-consumers -p test_run.py
-          python3 -m unittest discover -s scripts/integrate/suites/rust-viewer -p test_run.py
           python3 -m unittest discover -s scripts/integrate/suites/tauri/tests -p test_run.py
           python3 -m unittest discover -s scripts/integrate/suites/wheel-cli-viewer/tests -p test_run.py
           python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py
@@ -333,7 +329,6 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts/integrate/suites/collector -p test_run.py
           python3 -m unittest discover -s scripts/integrate/suites/rust-consumers -p test_run.py
-          python3 -m unittest discover -s scripts/integrate/suites/rust-viewer -p test_run.py
           python3 -m unittest discover -s scripts/integrate/suites/tauri/tests -p test_run.py
           python3 -m unittest discover -s scripts/integrate/suites/wheel-cli-viewer/tests -p test_run.py
           python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py

@@ -11,8 +11,8 @@ just integrate integrate/phase-e --suite wheel-cli-viewer --os macos
 The branch must already be pushed and contain `integration.yml` and the common
 runner. The dispatcher validates comma-separated selectors before contacting
 GitHub, rejects empty, unknown and duplicate entries, and prints the selected
-coverage and run URL. Defaults select all six suites and `macos,windows,linux`:
-18 independent suite/OS jobs. A partial selection is labelled explicitly and
+coverage and run URL. Defaults select all five suites and `macos,windows,linux`:
+15 independent suite/OS jobs. A partial selection is labelled explicitly and
 cannot establish complete phase-end coverage. Matrix selection can be checked
 locally without `gh`, native dependencies or completed suite implementations:
 
@@ -23,9 +23,8 @@ python3 -m unittest scripts.integrate.tests.test_dispatch
 
 | Selector | Integration boundary |
 | --- | --- |
-| `wheel-cli-viewer` | Installed Python wheel and CLI, pinned viewer readback, offline recovery, restart and partial delivery |
-| `rust-viewer` | Public SDK and sync-http factory viewer assertions |
-| `collector` | Hermetic OTLP backend conformance and canonical ingress |
+| `wheel-cli-viewer` | Installed Python wheel and CLI (`sync::Client`), pinned viewer readback |
+| `collector` | Real official OpenTelemetry Collector end-to-end suite (`tests/telemetry-e2e`): sync and Tokio export, logging modes, CLI/Python equivalence |
 | `wheels` | Candidate wheel installation, owned/attached runtime and embedding |
 | `tauri` | Packaged npm/Rust artifacts through real frontend/host IPC |
 | `rust-consumers` | Packaged core, binding bridge, runtime-level and log-bridge consumers outside the workspace |
@@ -38,15 +37,6 @@ creating the run; every job checks out its immutable `github.sha`, and the
 common runner verifies HEAD equals that SHA. Suite builds use that checkout.
 Branch changes after dispatch do not move the run's source.
 
-An explicitly compatible E3/E4 Rust preparation may avoid recompiling the same
-OTLP test target. It is valid only for the same immutable SHA, OS/architecture,
-Rust `1.94.1`, `Cargo.lock`, target/profile/`RUSTFLAGS`,
-`otlp-sdk,sync-http` feature projection, named test binary, and restored target
-path. This shares compilation only: both suite cells retain their own selected
-tests and assertions, and E4 compiles its additional `canonical_ingress` binary
-when required. A mismatch or absent compatible target is a normal local compile,
-not a fallback to another suite's artifact.
-
 No other sibling artifact exchange is implied. E2's wheel/CLI and E6's
 Tauri/npm artifacts have distinct build contracts. E5's isolated sdist wheel
 and embedding checks, and E7's isolated external-consumer checks, must build in
@@ -54,7 +44,7 @@ their own constrained roots. The workflow remains `workflow_dispatch` only:
 there is no automatic per-sprint preparation and no generic cache framework.
 
 The selection job validates workflow-form inputs and emits the matrix; it is
-not an aggregate status job. Matrix fail-fast is disabled. The six suite owners
+not an aggregate status job. Matrix fail-fast is disabled. The five suite owners
 preserve runnable assertions after individual assertion failures; setup/build
 failure exits nonzero. Console output is captured in `runner.log`; existing
 suite logs/reports under the output directory are uploaded even after failure.

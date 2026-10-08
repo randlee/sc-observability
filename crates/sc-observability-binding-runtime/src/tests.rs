@@ -1263,7 +1263,7 @@ fn native_diagnostic_fidelity() {
     let diagnostic = native::OperationDiagnostic {
         code: native::error_codes::DIAGNOSTIC_INVALID,
         message: "exact unclassified drain message".into(),
-        remediation: native::Remediation::recoverable("inspect the export cause", ["retry later"]),
+        remediation: native::Remediation::recoverable("inspect the drain cause", ["retry later"]),
         at: native::Timestamp::UNIX_EPOCH,
     };
     let error = native::v2::FlushError::Drain {
@@ -1273,13 +1273,7 @@ fn native_diagnostic_fidelity() {
                 diagnostic.message.clone(),
                 diagnostic.remediation.clone(),
             )
-            .source(Box::new(native::v2::ExportError::QueueFull {
-                context: Box::new(native::ErrorContext::new(
-                    native::error_codes::otlp::OTLP_QUEUE_FULL,
-                    "export queue is full",
-                    native::Remediation::recoverable("reduce export load", ["retry later"]),
-                )),
-            })),
+            .source(Box::new(std::io::Error::other("disk is full"))),
         ),
     };
     let canonical = dto::CanonicalFailureDto::try_from(&error).expect("DTO projection");
@@ -1287,13 +1281,13 @@ fn native_diagnostic_fidelity() {
 
     assert_eq!(
         serde_json::to_value(&canonical).expect("DTO serialization")["kind"],
-        "queue_full",
-        "canonical DTO derives kind from the unclassified drain's export cause"
+        "io",
+        "canonical DTO defaults an unclassified drain to io"
     );
     assert_eq!(
         serde_json::to_value(&runtime).expect("runtime serialization")["kind"],
-        "queue_full",
-        "runtime conversion derives kind from the unclassified drain's export cause"
+        "io",
+        "runtime conversion defaults an unclassified drain to io"
     );
     assert_eq!(runtime.diagnostic().code, diagnostic.code.as_str());
     assert_eq!(runtime.diagnostic().message, diagnostic.message);

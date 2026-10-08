@@ -7,7 +7,7 @@
 - [`public-api-checklist.md`](./public-api-checklist.md)
 - [`atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
 
-## Phase H applicability (planned)
+## Phase H applicability
 
 H-001..H-008 and ADR-023 supersede the historical custom OTel model,
 projector, durable-store and lifecycle test requirements below only for the
@@ -61,9 +61,6 @@ Required tests:
   - `LogSnapshot`
   - `QueryError`
   - `QueryHealthReport`
-  - `SpanSignal`
-  - `MetricRecord`
-- typestate tests for `SpanRecord<SpanStarted>::end(...)`
 
 ### 3.2 `sc-observability`
 
@@ -110,14 +107,12 @@ Required tests:
 
 ### 3.4 `sc-observability-otlp`
 
-Required tests:
+Required tests (h-1, ADR-023):
 
-- `TelemetryConfigBuilder` defaults
-- invalid config rejection at `Telemetry::new(...)`
-- `SpanAssembler` start/event/end assembly
-- incomplete span drop accounting
-- exporter failure accounting
-- post-shutdown `TelemetryError::Shutdown`
+- `sync::Client` construction, configuration precedence and validation errors
+- `send_log`, `send_span` and `send_metrics` native export and failure results
+- `OtelLogSink` mapping and caller-owned provider lifetime
+- `log-sink` feature isolation from the OTLP transport
 
 ## 4. Integration Test Layers
 
@@ -127,15 +122,16 @@ Required shared integration tests:
 
 - logging-only CLI path
 - routing + logging path
-- full stack path with OTLP attached through projector registration
+- full stack path: `tests/telemetry-e2e` exports sync, Tokio, installed CLI
+  and installed Python signals and file-only/OTel-only/both logging to a local
+  official OpenTelemetry Collector and reads back its file export (H-008)
 
 ### ATM Boundary Proof
 
 Required unpublished example/integration coverage:
 
 - ATM-shaped payload type remains outside shared crates
-- ATM-shaped projectors can emit `LogEvent`, `SpanSignal`, and `MetricRecord`
-- OTLP attachment works through builder registration
+- ATM-shaped projectors can emit `LogEvent`
 - no `agent-team-mail-*` dependency is introduced
 
 ## 5. CI Gates

@@ -1,4 +1,4 @@
-name: Durable telemetry platforms
+name: CLI platforms
 on:
   workflow_dispatch:
     inputs:
@@ -9,8 +9,8 @@ on:
 permissions:
   contents: read
 jobs:
-  durable:
-    name: durable (${{ matrix.target }})
+  cli:
+    name: cli (${{ matrix.target }})
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +44,5 @@ jobs:
           toolchain: '1.94.1'
           components: clippy, rustfmt
           targets: ${{ matrix.target }}
-      - name: Check durable dependency graph
-        run: cargo check -p sc-observability-otlp --features durable-store --locked --target ${{ matrix.target }}
       - name: Build CLI
         run: cargo build -p sc-otel-cli --locked --target ${{ matrix.target }}

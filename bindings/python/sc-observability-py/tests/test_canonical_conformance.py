@@ -75,13 +75,6 @@ class CanonicalConformanceTests(unittest.TestCase):
                     )
                     self.assertIsInstance(failure, generated.OutputFailureValidation)
 
-    def test_generated_span_signal_models_use_tagged_variant_names(self) -> None:
-        for prefix in ("Input", "Output"):
-            for variant in ("Started", "Event", "Ended"):
-                self.assertTrue(hasattr(generated, f"{prefix}SpanSignal{variant}"))
-            for index in range(3):
-                self.assertFalse(hasattr(generated, f"{prefix}SpanSignal{index}"))
-
 
 if __name__ == "__main__":
     unittest.main()

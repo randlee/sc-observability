@@ -384,17 +384,6 @@ fn every_registered_type_agrees_with_serde_and_frozen_expectations() {
             "WireEnvelopeClientStatus" => roundtrip::<WireEnvelope<ClientStatus>>(value),
             "CanonicalDiagnosticDto" => roundtrip::<CanonicalDiagnosticDto>(value),
             "CanonicalFailureDto" => roundtrip::<CanonicalFailureDto>(value),
-            "TraceContextV2Dto" => roundtrip::<TraceContextV2Dto>(value),
-            "SpanLinkDto" => roundtrip::<SpanLinkDto>(value),
-            "SpanKindDto" => roundtrip::<SpanKindDto>(value),
-            "AggregationTemporalityDto" => roundtrip::<AggregationTemporalityDto>(value),
-            "HistogramPointDto" => roundtrip::<HistogramPointDto>(value),
-            "MetricValueDto" => roundtrip::<MetricValueDto>(value),
-            "MetricRecordDto" => roundtrip::<MetricRecordDto>(value),
-            "SpanStatusDto" => roundtrip::<SpanStatusDto>(value),
-            "SpanRecordDto" => roundtrip::<SpanRecordDto>(value),
-            "SpanEventDto" => roundtrip::<SpanEventDto>(value),
-            "SpanSignalDto" => roundtrip::<SpanSignalDto>(value),
             "CanonicalWireEnvelopeAdmissionDto" => {
                 roundtrip::<CanonicalWireEnvelope<AdmissionDto>>(value)
             }
@@ -436,8 +425,6 @@ fn semantic_negatives_have_exact_failure_kinds_and_codes() {
             continue;
         }
         let error = match case["operation"].as_str().unwrap() {
-            "metric" => decode_metric(value).unwrap_err(),
-            "span" => decode_span(value).unwrap_err(),
             "event" => decode_event(value)
                 .and_then(|event| {
                     to_core_event(

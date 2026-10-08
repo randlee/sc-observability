@@ -14,10 +14,10 @@ name = "_native"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-otlp-telemetry = ["dep:sc-observability-otlp", "sc-observability-otlp/durable-store", "sc-observability-otlp/synchronous-client"]
+otlp-telemetry = ["dep:sc-observability-otlp", "sc-observability-otlp/synchronous-client"]
 # Private validation seam compiled only by the B.4 source-validation wheel.
 # It is deliberately absent from normal package builds and public stubs.
-test-hooks = ["sc-observability-types/test-double", "sc-observability-binding-runtime/test-hooks"]
+test-hooks = ["sc-observability-binding-runtime/test-hooks"]
 
 [dependencies]
 sc-observability-otlp = { workspace = true, optional = true }

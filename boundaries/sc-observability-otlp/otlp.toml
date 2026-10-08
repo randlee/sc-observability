@@ -4,7 +4,7 @@ owner_crate_path = "sc_observability_otlp"
 name = "ScObservabilityOtlp"
 [public]
 facade = "crate_root"
-modules = ["v2", "api", "sdk", "sync"]
+modules = ["api", "sdk", "sync"]
 
 [public.feature_gates]
 api = "log-sink"
@@ -19,7 +19,7 @@ constructor = "none"
 roots = []
 [dependencies]
 allowed_dependents = ["sc-observability-py", "sc-otel-cli"]
-allowed_dependencies = ["sc-observability", "sc-observability-types", "sc-observe"]
+allowed_dependencies = ["sc-observability", "sc-observability-types"]
 forbidden_edges = []
 
 [dependencies.feature_gates]

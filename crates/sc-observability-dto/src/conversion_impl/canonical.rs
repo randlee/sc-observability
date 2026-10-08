@@ -137,26 +137,6 @@ canonical_projection!(ShutdownError);
 canonical_projection!(ProjectionError);
 canonical_projection!(SubscriberError);
 canonical_projection!(LogSinkError);
-canonical_projection!(MetricModelError);
-canonical_projection!(ConfigFailure);
-canonical_projection!(ExportError);
-
-impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
-    type Error = Failure;
-    fn try_from(value: &core::v2::TelemetryError) -> Result<Self, Self::Error> {
-        match value {
-            core::v2::TelemetryError::ExportFailure(error) => Self::try_from(error),
-            core::v2::TelemetryError::Event(error) => Self::try_from(error),
-            core::v2::TelemetryError::Shutdown { context } => Ok(Self::Closed {
-                diagnostic: Box::new(from_canonical_diagnostic(context.diagnostic())?),
-            }),
-            _ => Ok(canonical_failure(
-                Box::new(from_canonical_diagnostic(value.diagnostic())?),
-                value.failure_classification(),
-            )),
-        }
-    }
-}
 
 #[cfg(test)]
 mod export_projection_tests {
@@ -275,18 +255,22 @@ mod export_projection_tests {
 
     #[test]
     fn queue_full_projects_to_queue_full_with_its_diagnostic() {
-        let error = core::v2::ExportError::QueueFull {
-            context: Box::new(core::ErrorContext::new(
-                core::error_codes::otlp::OTLP_QUEUE_FULL,
+        let error = core::v2::EventError::classified_routing(
+            Box::new(core::ErrorContext::new(
+                core::error_codes::DIAGNOSTIC_INVALID,
                 "queue full in unit regression",
                 core::Remediation::recoverable("retry later", ["inspect health"]),
             )),
-        };
+            core::v2::FailureClassification::QueueFull,
+        );
 
         let projected = CanonicalFailureDto::try_from(&error).expect("conversion succeeds");
         assert!(matches!(projected, CanonicalFailureDto::QueueFull { .. }));
         let diagnostic = projected.diagnostic();
-        assert_eq!(diagnostic.diagnostic.code, "OTLP_QUEUE_FULL");
+        assert_eq!(
+            diagnostic.diagnostic.code,
+            core::error_codes::DIAGNOSTIC_INVALID.as_str()
+        );
         assert_eq!(
             diagnostic.diagnostic.message,
             "queue full in unit regression"

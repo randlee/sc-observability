@@ -45,7 +45,6 @@ use crate::errors_v2::{
     FlushError as CanonicalFlushError, InitError as CanonicalInitError,
     ShutdownError as CanonicalShutdownError,
 };
-use crate::v2::{MetricRecord, SpanSignal};
 use crate::{
     Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, LogEvent, Observable, Observation,
     ProcessIdentity, Remediation, error_codes, sealed,
@@ -470,34 +469,4 @@ pub trait TypedLogProjector<T: Observable>: Send + Sync {
         &self,
         observation: &Observation<T>,
     ) -> Result<Vec<LogEvent>, ProjectionFailure>;
-}
-
-/// Typed span projector contract.
-#[deprecated(note = "removed; see docs/migration/phase-f.md")]
-#[allow(deprecated)]
-pub trait TypedSpanProjector<T: Observable>: Send + Sync {
-    /// Projects an observation into span signals.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ProjectionFailure`] when span projection cannot complete.
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionFailure>;
-}
-
-/// Typed metric projector contract.
-#[deprecated(note = "removed; see docs/migration/phase-f.md")]
-#[allow(deprecated)]
-pub trait TypedMetricProjector<T: Observable>: Send + Sync {
-    /// Projects an observation into metric records.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ProjectionFailure`] when metric projection cannot complete.
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionFailure>;
 }

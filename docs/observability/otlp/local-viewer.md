@@ -11,12 +11,10 @@ the downloader selects the current host entry and verifies both digests. The
 managed launchd service instructions in this document apply to macOS. Setup
 provenance is the `obs-d9-local-viewer-setup` deliverables and
 [`collector-environments.md`](../../plans/phase-d/collector-environments.md).
-The `desktop-viewer-factory-conformance` job in
-`otlp-conformance.yml` downloads the pinned macOS artifact, starts an isolated
-viewer on dynamically selected loopback ports, and qualifies both public
-factory backends by querying their exported production records. It remains a
-macOS-only check until the replacement `rust-viewer` suite has native results;
-the manifest's other entries do not imply CI proof for those hosts. Do not
+The former `desktop-viewer-factory-conformance` job qualified the SDK and
+sync-http factory backends removed by H-006; export is now qualified against a
+local official Collector by `tests/telemetry-e2e` ([smoke test](smoke-test.md),
+H-008). The manifest's entries do not imply CI proof for those hosts. Do not
 resolve `latest` at run time.
 
 ## Installed desktop service
@@ -133,12 +131,9 @@ artifact passed a local isolated `ci`-subcommand lifecycle with run ID
 `d9-ci-query-final`, that all three empty protobuf requests returned HTTP 200,
 and that the gRPC listener was reachable. The isolated PID, database, and run
 directory were reported removed by the harness. Raw command output was not
-retained, so these owner-run results are attested only. The retained,
-reproducible verification is the CI job `desktop-viewer-factory-conformance`
-(macOS arm64) in `.github/workflows/otlp-conformance.yml`. It starts the pinned
-desktop viewer, runs both public factory tests (SDK and sync-http), and asserts
-the production logs, spans and metrics with `viewer_harness.py assert-production`.
-A passing run on macOS arm64 is run 36813560097.
+retained, so these owner-run results are attested only. The historical CI job
+`desktop-viewer-factory-conformance` (macOS arm64, run 36813560097) qualified
+the SDK and sync-http factory backends removed by H-006.
 
 The managed launchd agent was reloaded by its owner to apply the requested
 five-minute post-login delay. During that intentional delay, a probe attempt

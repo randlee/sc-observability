@@ -1,15 +1,12 @@
 //! Canonical observation extension contracts.
 //!
-//! These traits and registrations report the canonical `v2` errors and project
-//! the canonical `v2` span and metric models. The released root traits in
-//! `projection` and `process` keep their 1.4.1 signatures; both families share
-//! [`ObservationFilter`]. Model conversion between the families fails
-//! explicitly when a value has no representation on the other side.
+//! These traits and registrations report the canonical `v2` errors. The
+//! released root traits in `projection` and `process` keep their 1.4.1
+//! signatures; both families share [`ObservationFilter`].
 
 use std::sync::Arc;
 
 use crate::errors_v2::{IdentityError, ProjectionError, SubscriberError};
-use crate::signals_v2::{MetricRecord, SpanSignal};
 use crate::{LogEvent, Observable, Observation, ProcessIdentity};
 
 type SubscriberRegistrationParts<T> = (
@@ -19,8 +16,6 @@ type SubscriberRegistrationParts<T> = (
 
 type ProjectionRegistrationParts<T> = (
     Option<Arc<dyn LogProjector<T>>>,
-    Option<Arc<dyn SpanProjector<T>>>,
-    Option<Arc<dyn MetricProjector<T>>>,
     Option<Arc<dyn ObservationFilter<T>>>,
 );
 
@@ -72,40 +67,6 @@ where
     fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>;
 }
 
-/// Open projector contract from typed observations into span signals.
-pub trait SpanProjector<T>: Send + Sync
-where
-    T: Observable,
-{
-    /// Projects one observation into zero or more span lifecycle signals.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ProjectionError`] when the projector cannot derive span
-    /// signals for the supplied observation.
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError>;
-}
-
-/// Open projector contract from typed observations into metric records.
-pub trait MetricProjector<T>: Send + Sync
-where
-    T: Observable,
-{
-    /// Projects one observation into zero or more metric records.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ProjectionError`] when the projector cannot derive metric
-    /// output for the supplied observation.
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError>;
-}
-
 /// Construction-time registration for one typed observation subscriber.
 #[derive(Clone)]
 #[expect(
@@ -149,7 +110,7 @@ where
     }
 }
 
-/// Construction-time registration for log/span/metric projection of a payload.
+/// Construction-time registration for log projection of a payload.
 #[derive(Clone)]
 #[expect(
     missing_debug_implementations,
@@ -161,10 +122,6 @@ where
 {
     /// Optional log projector.
     log_projector: Option<Arc<dyn LogProjector<T>>>,
-    /// Optional span projector.
-    span_projector: Option<Arc<dyn SpanProjector<T>>>,
-    /// Optional metric projector.
-    metric_projector: Option<Arc<dyn MetricProjector<T>>>,
     /// Optional filter evaluated before projection.
     filter: Option<Arc<dyn ObservationFilter<T>>>,
 }
@@ -178,8 +135,6 @@ where
     pub fn new() -> Self {
         Self {
             log_projector: None,
-            span_projector: None,
-            metric_projector: None,
             filter: None,
         }
     }
@@ -191,20 +146,6 @@ where
         self
     }
 
-    /// Attaches a span projector.
-    #[must_use]
-    pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
-        self.span_projector = Some(projector);
-        self
-    }
-
-    /// Attaches a metric projector.
-    #[must_use]
-    pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
-        self.metric_projector = Some(projector);
-        self
-    }
-
     /// Attaches a filter evaluated before projection.
     #[must_use]
     pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
@@ -212,15 +153,10 @@ where
         self
     }
 
-    /// Splits the registration into its projector components and optional filter.
+    /// Splits the registration into its log projector and optional filter.
     #[must_use]
     pub fn into_parts(self) -> ProjectionRegistrationParts<T> {
-        (
-            self.log_projector,
-            self.span_projector,
-            self.metric_projector,
-            self.filter,
-        )
+        (self.log_projector, self.filter)
     }
 }
 

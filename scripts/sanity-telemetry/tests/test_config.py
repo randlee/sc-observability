@@ -20,7 +20,6 @@ def test_committed_config_and_state_ignore_contract() -> None:
         "team": "sc-obs",
         "github": {"pr_url_template": "https://github.com/randlee/sc-observability/pull/{pr_number}"},
         "otlp": {"endpoint": "http://localhost:4318"},
-        "store": {"path": ".sc/telemetry-state/store.sqlite"},
         "sources": [
             {"path": ".sc/qa-log/phase-d.jsonl", "kind": "qa", "phase": "phase-d"},
             {"path": ".sc/sanity-log/sanity-llm.jsonl", "kind": "sanity", "phase": "phase-d", "reviewer": "sanity-llm"},
@@ -29,6 +28,23 @@ def test_committed_config_and_state_ignore_contract() -> None:
         ],
     }
     assert subprocess.run(["git", "check-ignore", ".sc/telemetry-state/x"], cwd=ROOT).returncode == 0
+
+
+def test_service_and_otlp_endpoint_are_validated(tmp_path: Path) -> None:
+    path = tmp_path / "importer.yaml"
+    path.write_text("service: svc\notlp: {endpoint: 'http://127.0.0.1:4318'}\nsources: []\n")
+    assert load_config(path)["otlp"] == {"endpoint": "http://127.0.0.1:4318"}
+    path.write_text("sources: []\n")
+    assert "otlp" not in load_config(path)
+    for body in [
+        "service: 1\nsources: []\n",
+        "otlp: not-a-mapping\nsources: []\n",
+        "otlp: {endpoint: 4318}\nsources: []\n",
+        "otlp: {endpoint: ''}\nsources: []\n",
+    ]:
+        path.write_text(body)
+        with pytest.raises(ValueError):
+            load_config(path)
 
 
 def _selected_importer_schema() -> dict[str, object]:

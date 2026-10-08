@@ -66,30 +66,6 @@ validated_hex_id_type!(
     &error_codes::SPAN_ID_INVALID
 );
 
-impl TraceId {
-    /// Formats a nonzero integer as a valid identifier; zero-padded lowercase
-    /// hex of `TRACE_ID_LEN` digits always satisfies `validate_lower_hex`.
-    pub(crate) fn from_nonzero(value: std::num::NonZeroU128) -> Self {
-        Self(format!(
-            "{:0width$x}",
-            value.get(),
-            width = crate::constants::TRACE_ID_LEN
-        ))
-    }
-}
-
-impl SpanId {
-    /// Formats a nonzero integer as a valid identifier; zero-padded lowercase
-    /// hex of `SPAN_ID_LEN` digits always satisfies `validate_lower_hex`.
-    pub(crate) fn from_nonzero(value: std::num::NonZeroU64) -> Self {
-        Self(format!(
-            "{:0width$x}",
-            value.get(),
-            width = crate::constants::SPAN_ID_LEN
-        ))
-    }
-}
-
 pub(crate) fn validate_lower_hex(
     value: &str,
     expected_len: usize,
@@ -186,26 +162,5 @@ mod tests {
         let uppercase_span =
             SpanId::new("0123456789ABCDEf").expect_err("uppercase span id should fail");
         assert_eq!(uppercase_span.code(), &error_codes::SPAN_ID_INVALID);
-    }
-
-    #[test]
-    fn nonzero_constructors_always_yield_valid_identifiers() {
-        use std::num::{NonZeroU64, NonZeroU128};
-        for value in [NonZeroU128::MIN, NonZeroU128::MAX] {
-            let id = TraceId::from_nonzero(value);
-            assert_eq!(TraceId::new(id.as_str()), Ok(id));
-        }
-        assert_eq!(
-            TraceId::from_nonzero(NonZeroU128::MIN).as_str(),
-            "00000000000000000000000000000001"
-        );
-        for value in [NonZeroU64::MIN, NonZeroU64::MAX] {
-            let id = SpanId::from_nonzero(value);
-            assert_eq!(SpanId::new(id.as_str()), Ok(id));
-        }
-        assert_eq!(
-            SpanId::from_nonzero(NonZeroU64::MAX).as_str(),
-            "ffffffffffffffff"
-        );
     }
 }

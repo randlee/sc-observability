@@ -114,7 +114,7 @@ fn fixture(name: &str) -> Value {
 fn context() -> Box<core::ErrorContext> {
     Box::new(
         core::ErrorContext::new(
-            core::error_codes::otlp::OTLP_QUEUE_FULL,
+            core::error_codes::DIAGNOSTIC_INVALID,
             "queue full",
             core::Remediation::recoverable("retry later", ["inspect health"]),
         )
@@ -126,11 +126,14 @@ fn context() -> Box<core::ErrorContext> {
 }
 #[test]
 fn canonical_error_projection_preserves_context() {
-    let error = v2::ExportError::QueueFull { context: context() };
+    let error = v2::EventError::classified_routing(context(), v2::FailureClassification::QueueFull);
     let pointer = std::ptr::from_ref(error.context());
     let projected = CanonicalFailureDto::try_from(&error).unwrap();
     let d = projected.diagnostic();
-    assert_eq!(d.diagnostic.code, "OTLP_QUEUE_FULL");
+    assert_eq!(
+        d.diagnostic.code,
+        core::error_codes::DIAGNOSTIC_INVALID.as_str()
+    );
     assert_eq!(
         d.diagnostic.remediation,
         error.diagnostic().remediation.clone().into()
@@ -203,108 +206,6 @@ fn shared_failure_shape_preserves_each_diagnostic_contract_losslessly() {
         Some("https://example.test/queue-full")
     );
     assert!(canonical.diagnostic().details.contains_key("capacity"));
-}
-#[test]
-fn histogram_conversion_is_lossless() {
-    let mut wire = fixture("MetricRecordDto");
-    // Attribute projection is deferred separately; retain full histogram coverage.
-    wire["attributes"] = json!({});
-    let record = decode_metric(wire.clone()).unwrap();
-    match record.value() {
-        v2::MetricValue::Histogram {
-            point,
-            temporality,
-            start_time,
-        } => {
-            assert_eq!(point.count(), u64::MAX);
-            assert_eq!(point.bucket_counts(), [1, 2, u64::MAX - 3]);
-            assert_eq!(
-                point
-                    .explicit_bounds()
-                    .iter()
-                    .map(|v| v.get())
-                    .collect::<Vec<_>>(),
-                [1.0, 2.0]
-            );
-            assert_eq!(point.sum().get(), 12.0);
-            assert_eq!(*temporality, v2::AggregationTemporality::Delta);
-            assert_eq!(*start_time, core::Timestamp::UNIX_EPOCH);
-        }
-        _ => panic!("expected histogram"),
-    }
-    let dto = MetricRecordDto::try_from(&record).unwrap();
-    assert_eq!(serde_json::to_value(dto).unwrap(), wire);
-}
-#[test]
-#[ignore = "obs-dto-attribute-projection: attributed DTO round trips deferred by user; see docs/plans/phase-d/known-limitations.md"]
-fn metric_attributes_round_trip() {
-    let wire = fixture("MetricRecordDto");
-    let record = decode_metric(wire.clone()).unwrap();
-    let dto = MetricRecordDto::try_from(&record).unwrap();
-    assert_eq!(serde_json::to_value(dto).unwrap(), wire);
-}
-#[test]
-fn invalid_histogram_rejected() {
-    let cases: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../bindings/conformance/v1/conversion-cases.json"
-    ))
-    .unwrap();
-    let mut count = 0;
-    for case in cases.into_iter().filter(|c| c["operation"] == "metric") {
-        let error = decode_metric(case["value"].clone()).unwrap_err();
-        assert_eq!(error.diagnostic().code, case["code"].as_str().unwrap());
-        count += 1;
-    }
-    assert!(count >= 6);
-}
-#[test]
-fn span_flags_links_duration_and_typestate_round_trip() {
-    let wire = fixture("SpanSignalDto");
-    let span = decode_span(wire.clone()).unwrap();
-    if let v2::SpanSignal::Ended(record) = &span {
-        assert_eq!(record.duration_ms().as_u64(), u64::MAX);
-        assert_eq!(record.trace().flags.bits(), 131);
-        assert_eq!(record.links()[0].flags.bits(), 131);
-        assert_eq!(record.kind(), v2::SpanKind::Server);
-    } else {
-        panic!("expected ended span");
-    }
-    assert_eq!(
-        serde_json::to_value(SpanSignalDto::try_from(&span).unwrap()).unwrap(),
-        wire
-    );
-    let mut bad = wire;
-    bad["data"]["duration_ms"] = Value::Null;
-    assert!(decode_span(bad).is_err());
-}
-
-#[test]
-fn span_signal_wire_variants_use_adjacent_tags() {
-    let ended = fixture("SpanSignalDto");
-    let mut started = ended.clone();
-    started["kind"] = json!("started");
-    started["data"]["duration_ms"] = Value::Null;
-    started["data"]["status"] = json!("Unset");
-    let event = json!({
-        "kind": "event",
-        "data": {
-            "timestamp": "1970-01-01T00:00:00Z",
-            "trace": {
-                "trace_id": "0123456789abcdef0123456789abcdef",
-                "span_id": "0123456789abcdef",
-                "parent_span_id": null,
-                "flags": 131
-            },
-            "name": "event",
-            "attributes": {},
-            "diagnostic": null
-        }
-    });
-
-    for wire in [started, event, ended] {
-        let signal: SpanSignalDto = serde_json::from_value(wire.clone()).unwrap();
-        assert_eq!(serde_json::to_value(signal).unwrap(), wire);
-    }
 }
 #[test]
 fn unknown_errors_remain_tagged_failures() {
@@ -435,26 +336,19 @@ fn serde_generated_failure_kinds_match_known_kinds() {
 }
 
 #[test]
-fn nested_export_timeout_keeps_lifecycle_category_and_code() {
-    let code = core::error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT;
-    let context = || {
-        Box::new(core::ErrorContext::new(
-            code.clone(),
-            "deadline elapsed",
-            core::Remediation::recoverable("inspect health", [] as [&str; 0]),
-        ))
-    };
-    let nested = v2::ExportError::LifecycleTimeout { context: context() };
-    let error = v2::FlushError::Drain {
-        context: Box::new(
+fn classified_flush_timeout_keeps_lifecycle_category_and_code() {
+    let code = core::error_codes::DIAGNOSTIC_INVALID;
+    let error = v2::FlushError::classified_drain(
+        Box::new(
             core::ErrorContext::new(
                 code.clone(),
                 "flush failed",
                 core::Remediation::recoverable("inspect health", [] as [&str; 0]),
             )
-            .source(Box::new(nested)),
+            .source(Box::new(std::io::Error::other("deadline elapsed"))),
         ),
-    };
+        v2::FailureClassification::timeout("flush"),
+    );
     let wire = CanonicalFailureDto::try_from(&error).unwrap();
     assert!(matches!(wire, CanonicalFailureDto::Timeout { .. }));
     assert_eq!(wire.diagnostic().diagnostic.code, code.as_str());

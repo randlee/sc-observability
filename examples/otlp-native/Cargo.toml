@@ -1,0 +1,24 @@
+[package]
+name = "otlp-native-example"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+sc-observability.workspace = true
+sc-observability-log.workspace = true
+sc-observability-otlp = { workspace = true, features = ["synchronous-client"] }
+sc-observability-types.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp = { workspace = true, features = ["http-proto", "reqwest-blocking-client"] }
+log.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

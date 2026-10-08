@@ -3,10 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sc_observability import Ok
-from sc_observability.telemetry import Telemetry, build_envelope
-
-from import_sanity import Source, map_row
+from import_sanity import Call, Source, _trace_id, map_row
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -15,142 +12,113 @@ CONFIG = {
     "team": "sc-obs",
     "github": {"pr_url_template": "https://github.com/randlee/sc-observability/pull/{pr_number}"},
 }
+PR = {"vcs.pr.number": 12, "pr.url": "https://github.com/randlee/sc-observability/pull/12"}
 
 
-def _double(tmp_path: Path) -> Telemetry:
-    result = Telemetry._with_test_double(store_path=tmp_path / "store", endpoint="http://127.0.0.1:4318", service_name="d35-test")
-    assert isinstance(result, Ok)
-    return result.value
+def _log(calls: list[Call]) -> Call:
+    assert calls[0].method == "log"
+    return calls[0]
 
 
-def _attrs(document: dict[str, object]) -> dict[str, object]:
-    return document["logs"][0]["attributes"]  # type: ignore[index,return-value]
-
-
-def _decoded_attributes(attributes: list[list[object]]) -> dict[str, object]:
-    return {name: value["data"] for name, value in attributes}  # type: ignore[misc,index]
-
-
-def test_real_format_fixtures_map_to_exact_envelopes_admitted_by_test_double(tmp_path: Path) -> None:
+def test_real_format_fixtures_map_to_exact_calls() -> None:
     cases = (
-        ("sanity-current", "sanity", {
-            "phase": "phase-d", "review.reviewer": "sanity-llm", "review.verdict": "PASS",
+        ("sanity-current", "sanity", "2026-10-01T12:00:00.123456789Z", {
+            "team": "sc-obs", "phase": "phase-d", "review.reviewer": "sanity-llm", "review.verdict": "PASS",
             "vcs.commit.sha": "a" * 40, "review.task": "obs-d-35", "review.sprint": "d-35",
-            "review.iteration": 1, "review.duration_s": 60, "review.findings": 0,
-            "vcs.pr.number": 12, "pr.url": "https://github.com/randlee/sc-observability/pull/12",
+            "review.iteration": 1, "review.duration_s": 60, "review.findings": 0, **PR,
         }),
-        ("sanity-legacy", "sanity", {
-            "phase": "phase-d", "review.reviewer": "sanity-llm", "review.verdict": "FAIL",
+        ("sanity-legacy", "sanity", "2026-10-01T12:00:00.000000000Z", {
+            "team": "sc-obs", "phase": "phase-d", "review.reviewer": "sanity-llm", "review.verdict": "FAIL",
             "review.task": "obs-d-35", "review.sprint": "d-35", "review.iteration": 1,
-            "review.duration": "1m", "review.findings": 1, "vcs.pr.number": 12,
-            "pr.url": "https://github.com/randlee/sc-observability/pull/12",
+            "review.duration": "1m", "review.findings": 1, **PR,
         }),
-        ("qa", "qa", {
-            "phase": "phase-d", "review.verdict": "FAIL", "review.task": "obs-d-35",
+        ("qa", "qa", "2026-10-01T12:00:00.000000000Z", {
+            "team": "sc-obs", "phase": "phase-d", "review.verdict": "FAIL", "review.task": "obs-d-35",
             "review.sprint": "d-35", "review.iteration": 1, "review.duration": "1m",
             "review.findings": 6, "qa.blocking": 1, "qa.important": 2, "qa.minor": 3,
-            "qa.tested": "all", "vcs.pr.number": 12,
-            "pr.url": "https://github.com/randlee/sc-observability/pull/12",
+            "qa.tested": "all", **PR,
         }),
-        ("qa-correction", "qa", {
-            "phase": "phase-d", "review.verdict": "PASS", "review.task": "obs-d-35",
+        ("qa-correction", "qa", "2026-10-01T12:01:00.000000000Z", {
+            "team": "sc-obs", "phase": "phase-d", "review.verdict": "PASS", "review.task": "obs-d-35",
             "review.sprint": "d-35", "review.iteration": 2, "review.findings": 0,
             "qa.blocking": 0, "qa.important": 0, "qa.minor": 0, "qa.tested": "all",
-            "qa.correction": True, "qa.corrects": "row-1", "vcs.pr.number": 12,
-            "pr.url": "https://github.com/randlee/sc-observability/pull/12",
+            "qa.correction": True, "qa.corrects": "row-1", **PR,
         }),
-        ("finding-counts", "finding-counts", {
-            "phase": "phase-d", "qa.blocking": 1, "qa.important": 2, "qa.minor": 3,
+        ("finding-counts", "finding-counts", "2026-10-01T12:00:00.000000000Z", {
+            "team": "sc-obs", "phase": "phase-d", "qa.blocking": 1, "qa.important": 2, "qa.minor": 3,
         }),
     )
-    telemetry = _double(tmp_path)
-    for name, kind, expected_attrs in cases:
+    for name, kind, time, expected_attrs in cases:
         row = json.loads((FIXTURES / f"{name}.json").read_text())
         reviewer = "sanity-llm" if kind == "sanity" else None
-        source = Source(f".sc/{name}.jsonl", kind, "phase-d", reviewer)
-        document = map_row(source, row, CONFIG)
-        assert document is not None
-        assert document["resource"] == {
-            "attributes": {"service.name": "sc-observability", "team": "sc-obs"},
-            "dropped_attributes_count": 0, "entity_refs": [], "schema_url": None,
-        }
-        assert document["scope"] == {
-            "name": "sc-observability.sanity", "version": None, "attributes": {},
-            "dropped_attributes_count": 0, "schema_url": None,
-        }
-        assert _attrs(document) == expected_attrs
-        normalized = build_envelope(document)
-        assert isinstance(normalized, Ok), normalized
-        envelope = json.loads(normalized.value)
-        signal_row = envelope["logs"][0]["record"]
-        assert _decoded_attributes(signal_row["attributes"]) == expected_attrs
-        assert _decoded_attributes(envelope["logs"][0]["resource"]["attributes"]) == {
-            "service.name": "sc-observability", "team": "sc-obs",
-        }
-        receipt = telemetry.emit(document)
-        assert isinstance(receipt, Ok), receipt
-        assert receipt.value.record_key == document["record_key"]
-        assert receipt.value.signals
+        calls = map_row(Source(f".sc/{name}.jsonl", kind, "phase-d", reviewer), row, CONFIG)
+        assert calls is not None
+        body = "finding-counts" if kind == "finding-counts" else row["verdict"]
+        assert _log(calls) == Call("log", (body,), {"attributes": {**expected_attrs, "event.time": time}})
         if name == "sanity-current":
-            assert document["logs"] == [{"time": "2026-10-01T12:00:00.123456789Z", "body": "PASS", "attributes": expected_attrs}]
-            assert document["spans"] == [{
-                "name": "sanity.review", "start_time": "2026-10-01T11:59:00.000000000Z",
-                "end_time": "2026-10-01T12:00:00.123456789Z", "attributes": expected_attrs,
-                "trace_id": document["spans"][0]["trace_id"],
-            }]
-            assert len(document["spans"][0]["trace_id"]) == 32
-        elif name == "sanity-legacy":
-            assert document["spans"] == []
-            assert "vcs.commit.sha" not in expected_attrs
+            assert calls[1:] == [Call("span", ("sanity.review",), {
+                "start_time_unix_nano": 1_790_855_940_000_000_000,
+                "end_time_unix_nano": 1_790_856_000_123_456_789,
+                "attributes": expected_attrs,
+                "trace_id": _trace_id("run-pair"),
+            })]
+            assert len(calls[1].kwargs["trace_id"]) == 32
         elif name == "finding-counts":
-            assert [metric["name"] for metric in document["metrics"]] == ["sc.qa.findings.open", "sc.qa.findings.total"]
-            assert [metric["data"]["data"]["points"][0]["value"]["data"] for metric in document["metrics"]] == [6, 9]
+            assert calls[1:] == [
+                Call("metric", ("sc.qa.findings.open", "gauge", 6.0), {"attributes": expected_attrs}),
+                Call("metric", ("sc.qa.findings.total", "gauge", 9.0), {"attributes": expected_attrs}),
+            ]
+        else:
+            assert calls[1:] == []
+            if name == "sanity-legacy":
+                assert "vcs.commit.sha" not in expected_attrs
 
 
 def test_current_format_nine_digit_timestamp_preserves_nanoseconds() -> None:
     row = json.loads((FIXTURES / "sanity-current.json").read_text())
-    document = map_row(Source(".sc/sanity.jsonl", "sanity", "phase-d", "sanity-llm"), row, CONFIG)
-    assert document is not None
-    assert document["logs"][0]["time"] == "2026-10-01T12:00:00.123456789Z"
+    calls = map_row(Source(".sc/sanity.jsonl", "sanity", "phase-d", "sanity-llm"), row, CONFIG)
+    assert calls is not None
+    assert calls[0].kwargs["attributes"]["event.time"] == "2026-10-01T12:00:00.123456789Z"
+    assert calls[1].kwargs["end_time_unix_nano"] % 1_000_000_000 == 123_456_789
 
 
-def test_llm_and_jev_envelopes_share_trace_and_keep_exact_error_fields(tmp_path: Path) -> None:
+def test_llm_and_jev_calls_share_trace_and_keep_exact_error_fields() -> None:
     row = json.loads((FIXTURES / "sanity-current.json").read_text())
     row.update({"verdict": "CANNOT_RUN", "findings": None, "error": {"code": "SC_SANITY_TOOL_MISSING", "message": "missing tool"}})
     source = Source(".sc/sanity.jsonl", "sanity", "phase-d")
     llm = map_row(source, row, CONFIG)
     jev = map_row(source, dict(row, reviewer="sanity-jev"), CONFIG)
     assert llm is not None and jev is not None
-    assert _attrs(llm) == {
-        "phase": "phase-d", "review.reviewer": "sanity-llm", "review.verdict": "CANNOT_RUN",
+    expected = {
+        "team": "sc-obs", "phase": "phase-d", "review.reviewer": "sanity-llm", "review.verdict": "CANNOT_RUN",
         "vcs.commit.sha": "a" * 40, "review.task": "obs-d-35", "review.sprint": "d-35",
-        "review.iteration": 1, "review.duration_s": 60,
-        "vcs.pr.number": 12, "pr.url": "https://github.com/randlee/sc-observability/pull/12",
+        "review.iteration": 1, "review.duration_s": 60, **PR,
         "review.error.code": "SC_SANITY_TOOL_MISSING", "review.error.message": "missing tool",
     }
-    assert llm["spans"][0]["status"] == {"code": "error", "message": "missing tool"}
-    assert llm["spans"][0]["trace_id"] == jev["spans"][0]["trace_id"]
-    llm_envelope = build_envelope(llm)
-    jev_envelope = build_envelope(jev)
-    assert isinstance(llm_envelope, Ok) and isinstance(jev_envelope, Ok)
-    llm_trace = json.loads(llm_envelope.value)["spans"][0]["record"]["trace_id"]
-    jev_trace = json.loads(jev_envelope.value)["spans"][0]["record"]["trace_id"]
-    assert llm_trace == jev_trace
-    telemetry = _double(tmp_path)
-    for document in (llm, jev):
-        normalized = build_envelope(document)
-        receipt = telemetry.emit(document)
-        assert isinstance(normalized, Ok) and isinstance(receipt, Ok)
-        assert receipt.value.record_key == document["record_key"]
-    assert llm["spans"][0]["trace_id"] == jev["spans"][0]["trace_id"]
+    assert llm[0].kwargs["attributes"] == {**expected, "event.time": "2026-10-01T12:00:00.123456789Z"}
+    assert llm[1].method == "span"
+    assert llm[1].kwargs["ok"] is False and llm[1].kwargs["error"] == "missing tool"
+    assert llm[1].kwargs["attributes"] == expected
+    assert jev[1].kwargs["attributes"]["review.reviewer"] == "sanity-jev"
+    assert llm[1].kwargs["trace_id"] == jev[1].kwargs["trace_id"] == _trace_id("run-pair")
+
+
+def test_span_without_run_id_or_error_leaves_trace_and_status_to_client() -> None:
+    row = json.loads((FIXTURES / "sanity-current.json").read_text())
+    del row["run_id"]
+    calls = map_row(Source(".sc/sanity.jsonl", "sanity", "phase-d"), row, CONFIG)
+    assert calls is not None and calls[1].method == "span"
+    assert not {"trace_id", "ok", "error"} & set(calls[1].kwargs)
+    assert _trace_id("") is None and _trace_id(7) is None
 
 
 def test_missing_fields_and_absent_pr_template_are_omitted() -> None:
     source = Source(".sc/qa.jsonl", "qa")
     row = {"completed_at": "2026-10-01T12:00:00Z", "verdict": "PASS", "findings": None, "pr_number": 7}
-    document = map_row(source, row, {"service": "svc", "team": "team"})
-    assert document is not None
-    assert document["logs"][0]["attributes"] == {"review.verdict": "PASS", "vcs.pr.number": 7}
+    calls = map_row(source, row, {"service": "svc"})
+    assert calls == [Call("log", ("PASS",), {"attributes": {
+        "review.verdict": "PASS", "vcs.pr.number": 7, "event.time": "2026-10-01T12:00:00.000000000Z",
+    }})]
     assert map_row(source, {"verdict": "PASS"}, CONFIG) is None
     assert map_row(source, {"completed_at": "2026-10-01T12:00:00Z"}, CONFIG) is None
     assert map_row(source, {"completed_at": "2026-02-30T12:00:00Z", "verdict": "PASS"}, CONFIG) is None

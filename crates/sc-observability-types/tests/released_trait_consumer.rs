@@ -1,8 +1,7 @@
 //! External-consumer proof for the canonical open extension traits.
 //!
 //! Each case compiles a consumer crate outside this workspace with a path
-//! dependency on this crate. The canonical consumer implements the `v2` traits
-//! with the `v2` span and metric models.
+//! dependency on this crate. The canonical consumer implements the `v2` traits.
 #![cfg(feature = "v1")]
 #![allow(
     clippy::expect_used,
@@ -19,9 +18,8 @@ use serde_json::Value;
 const CANONICAL_CONSUMER: &str = r"use std::sync::Arc;
 
 use sc_observability_types::v2::{
-    IdentityError, LogProjector, MetricProjector, MetricRecord, ObservationSubscriber,
-    ProcessIdentityResolver, ProjectionError, ProjectionRegistration, SpanProjector, SpanSignal,
-    SubscriberError, SubscriberRegistration,
+    IdentityError, LogProjector, ObservationSubscriber, ProcessIdentityResolver, ProjectionError,
+    ProjectionRegistration, SubscriberError, SubscriberRegistration,
 };
 use sc_observability_types::{LogEvent, Observation, ProcessIdentity, ProcessIdentityPolicy};
 
@@ -44,25 +42,13 @@ impl LogProjector<Ev> for Proj {
         Ok(Vec::new())
     }
 }
-impl SpanProjector<Ev> for Proj {
-    fn project_spans(&self, _: &Observation<Ev>) -> Result<Vec<SpanSignal>, ProjectionError> {
-        Ok(Vec::new())
-    }
-}
-impl MetricProjector<Ev> for Proj {
-    fn project_metrics(&self, _: &Observation<Ev>) -> Result<Vec<MetricRecord>, ProjectionError> {
-        Ok(Vec::new())
-    }
-}
 
 fn main() {
     let subscriber: Arc<dyn ObservationSubscriber<Ev>> = Arc::new(Sub);
     let (_subscriber, _filter) = SubscriberRegistration::new(subscriber).into_parts();
     let projector = Arc::new(Proj);
-    let (_log, _span, _metric, _filter) = ProjectionRegistration::<Ev>::new()
-        .with_log_projector(projector.clone())
-        .with_span_projector(projector.clone())
-        .with_metric_projector(projector)
+    let (_log, _filter) = ProjectionRegistration::<Ev>::new()
+        .with_log_projector(projector)
         .into_parts();
 }
 ";

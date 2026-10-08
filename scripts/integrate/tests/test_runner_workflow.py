@@ -46,7 +46,6 @@ class RunnerWorkflowTests(unittest.TestCase):
         self.assertEqual([
             'python3 -m unittest discover -s scripts/integrate/suites/collector -p test_run.py',
             'python3 -m unittest discover -s scripts/integrate/suites/rust-consumers -p test_run.py',
-            'python3 -m unittest discover -s scripts/integrate/suites/rust-viewer -p test_run.py',
             'python3 -m unittest discover -s scripts/integrate/suites/tauri/tests -p test_run.py',
             'python3 -m unittest discover -s scripts/integrate/suites/wheel-cli-viewer/tests -p test_run.py',
             'python3 -m unittest discover -s scripts/integrate/suites/wheels/tests -p test_run.py',
