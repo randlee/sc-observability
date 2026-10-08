@@ -34,7 +34,7 @@ Options:
           Send a request header as NAME=VALUE; repeat for more. Replaces a header of the same name from `OTEL_EXPORTER_OTLP_HEADERS`. Prefer that variable for credentials: command lines are visible to other processes
 
       --timeout <SECONDS>
-          Bound connecting, each request and the exporter's retries, in whole seconds greater than zero. Defaults to 3 seconds
+          Bound OTLP connection, requests and exporter retries only; input reads may block until EOF. Defaults to 3 seconds; whole seconds greater than zero
 
       --root-certificate <FILE>
           Trust the CA certificates in this PEM file in addition to the system roots
@@ -80,6 +80,9 @@ ATTRIBUTES
   --attributes takes one JSON object of string, boolean and number values,
   inline, as @FILE, or as - to read standard input:
     sc-otel log --body done --attributes '{"job":"build","attempt":2}'
+  Reads from @FILE and - wait until EOF and can block while a pipe, terminal
+  or FIFO remains open. The global --timeout bounds OTLP export only; it does
+  not bound these input reads.
   Input is limited to 1 MiB and 10,000 attributes. Null, array and object
   values are rejected. If an object repeats a key, the last value is used.
   Unsigned integers greater than i64::MAX are converted to floating point and
@@ -126,7 +129,7 @@ Options:
           [possible values: trace, debug, info, warn, error, fatal]
 
       --timeout <SECONDS>
-          Bound connecting, each request and the exporter's retries, in whole seconds greater than zero. Defaults to 3 seconds
+          Bound OTLP connection, requests and exporter retries only; input reads may block until EOF. Defaults to 3 seconds; whole seconds greater than zero
 
       --trace-id <HEX>
           Correlate the record with this trace (32 hex digits). Requires --span-id
@@ -138,7 +141,7 @@ Options:
           Correlate the record with this span (16 hex digits). Requires --trace-id
 
       --attributes <JSON|@FILE|->
-          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. At most 1 MiB and 10,000 attributes
+          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. Reads from @FILE and - wait until EOF; --timeout does not bound input reads. At most 1 MiB and 10,000 attributes
 
       --service <NAME>
           Resource service.name. Defaults to `OTEL_SERVICE_NAME`, then the SDK default `unknown_service`. `OTEL_RESOURCE_ATTRIBUTES` adds further resource attributes
@@ -176,7 +179,7 @@ Options:
           Span id (16 hex digits). Defaults to a new random id
 
       --timeout <SECONDS>
-          Bound connecting, each request and the exporter's retries, in whole seconds greater than zero. Defaults to 3 seconds
+          Bound OTLP connection, requests and exporter retries only; input reads may block until EOF. Defaults to 3 seconds; whole seconds greater than zero
 
       --parent-span-id <HEX>
           Remote parent span id (16 hex digits). Requires --trace-id
@@ -206,7 +209,7 @@ Options:
           Set the span status to Error with this description
 
       --attributes <JSON|@FILE|->
-          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. At most 1 MiB and 10,000 attributes
+          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. Reads from @FILE and - wait until EOF; --timeout does not bound input reads. At most 1 MiB and 10,000 attributes
 
   -h, --help
           Print help (see a summary with '-h')
@@ -241,7 +244,7 @@ Options:
           [possible values: counter, up-down-counter, gauge, histogram]
 
       --timeout <SECONDS>
-          Bound connecting, each request and the exporter's retries, in whole seconds greater than zero. Defaults to 3 seconds
+          Bound OTLP connection, requests and exporter retries only; input reads may block until EOF. Defaults to 3 seconds; whole seconds greater than zero
 
       --value <VALUE>
           Measurement value
@@ -259,7 +262,7 @@ Options:
           Resource service.name. Defaults to `OTEL_SERVICE_NAME`, then the SDK default `unknown_service`. `OTEL_RESOURCE_ATTRIBUTES` adds further resource attributes
 
       --attributes <JSON|@FILE|->
-          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. At most 1 MiB and 10,000 attributes
+          Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. Reads from @FILE and - wait until EOF; --timeout does not bound input reads. At most 1 MiB and 10,000 attributes
 
   -h, --help
           Print help (see a summary with '-h')

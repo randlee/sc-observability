@@ -806,7 +806,15 @@ fn child_deadline_kills_and_reaps_when_standard_input_never_reaches_eof() {
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_with_deadline(
             sc_otel(&directory)
-                .args(["log", "--body", "blocked", "--attributes", "-"])
+                .args([
+                    "--timeout",
+                    "1",
+                    "log",
+                    "--body",
+                    "blocked",
+                    "--attributes",
+                    "-",
+                ])
                 .stdin(Stdio::piped()),
             Duration::from_millis(100),
         )

@@ -20,7 +20,7 @@ pub(crate) struct Cli {
     /// Send a request header as NAME=VALUE; repeat for more. Replaces a header of the same name from `OTEL_EXPORTER_OTLP_HEADERS`. Prefer that variable for credentials: command lines are visible to other processes.
     #[arg(long = "header", global = true, value_name = "NAME=VALUE")]
     pub(crate) headers: Vec<String>,
-    /// Bound connecting, each request and the exporter's retries, in whole seconds greater than zero. Defaults to 3 seconds.
+    /// Bound OTLP connection, requests and exporter retries only; input reads may block until EOF. Defaults to 3 seconds; whole seconds greater than zero.
     #[arg(long, global = true, value_name = "SECONDS", value_parser = parse_seconds)]
     pub(crate) timeout: Option<Duration>,
     /// Trust the CA certificates in this PEM file in addition to the system roots.
@@ -102,7 +102,7 @@ pub(crate) enum Command {
 
 #[derive(Debug, Args)]
 pub(crate) struct AttributeArgs {
-    /// Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. At most 1 MiB and 10,000 attributes.
+    /// Attributes as one JSON object of string, boolean or number values: inline JSON, @FILE, or - for standard input. Reads from @FILE and - wait until EOF; --timeout does not bound input reads. At most 1 MiB and 10,000 attributes.
     #[arg(long, value_name = "JSON|@FILE|-")]
     pub(crate) attributes: Option<String>,
 }

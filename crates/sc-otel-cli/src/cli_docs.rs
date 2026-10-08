@@ -152,6 +152,12 @@ fn documented_input_limits_and_timeout_match_the_registry() {
             "generated CLI help does not match its registry value: {expected}"
         );
     }
+    assert!(rendered_help.contains(
+        "OTLP connection requests and exporter retries only; input reads may block until EOF"
+    ));
+    let manual = include_str!("manual.txt");
+    assert!(manual.contains("wait until EOF"));
+    assert!(manual.contains("bounds OTLP export only"));
 }
 
 #[test]
