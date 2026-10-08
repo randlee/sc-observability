@@ -5,6 +5,7 @@ use std::{
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     process::{Child, ChildStdin, Command, Output, Stdio},
+    sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
@@ -13,6 +14,7 @@ use std::{
 const FIXTURE_WATCHDOG: Duration = Duration::from_secs(20);
 /// Hard deadline for each CLI child, independent of the collector fixture.
 const CHILD_WATCHDOG: Duration = Duration::from_secs(20);
+const FIXTURE_WATCHDOG_WAKE: &str = "fixture-watchdog-wake\n";
 const TRACE_ID: &str = "4bf92f3577b34da6a3ce929d0e0e4736";
 const SPAN_ID: &str = "00f067aa0ba902b7";
 const SECRET: &str = "s3cret-token-value";
@@ -59,7 +61,6 @@ struct Collector {
 impl Collector {
     fn start() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind collector");
-        listener.set_nonblocking(true).expect("nonblocking accept");
         let endpoint = format!("http://{}", listener.local_addr().expect("address"));
         Self { listener, endpoint }
     }
@@ -67,23 +68,27 @@ impl Collector {
     /// Serves one request on a thread so the CLI can run on the test thread.
     fn serve(self, status: &'static str) -> thread::JoinHandle<Captured> {
         thread::spawn(move || {
-            let deadline = Instant::now() + FIXTURE_WATCHDOG;
-            let stream = loop {
-                match self.listener.accept() {
-                    Ok((stream, _)) => break stream,
-                    Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                        assert!(Instant::now() < deadline, "no request arrived");
-                        thread::sleep(Duration::from_millis(5));
-                    }
-                    Err(error) => panic!("accept: {error}"),
+            let address = self.listener.local_addr().expect("collector address");
+            let (accepted, watch) = mpsc::channel();
+            let watchdog = thread::spawn(move || {
+                if let Err(mpsc::RecvTimeoutError::Timeout) = watch.recv_timeout(FIXTURE_WATCHDOG) {
+                    let mut wake = TcpStream::connect(address).expect("wake collector watchdog");
+                    wake.write_all(FIXTURE_WATCHDOG_WAKE.as_bytes())
+                        .expect("write watchdog wake");
                 }
-            };
+            });
+            let (stream, _) = self.listener.accept().expect("accept");
+            let _ = accepted.send(());
+            watchdog.join().expect("collector watchdog");
             handle(stream, status)
         })
     }
 
     /// After the CLI has exited, proves it never connected.
     fn assert_untouched(&self) {
+        self.listener
+            .set_nonblocking(true)
+            .expect("nonblocking untouched check");
         match self.listener.accept() {
             Err(error) if error.kind() == ErrorKind::WouldBlock => {}
             other => panic!("the collector received a connection: {other:?}"),
@@ -99,6 +104,7 @@ fn handle(mut stream: TcpStream, status: &str) -> Captured {
     let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
     let mut line = String::new();
     reader.read_line(&mut line).expect("request line");
+    assert_ne!(line, FIXTURE_WATCHDOG_WAKE, "no request arrived");
     let path = line.split_whitespace().nth(1).expect("path").to_owned();
     let mut headers = Vec::new();
     loop {
@@ -279,7 +285,7 @@ fn log_exports_native_record_with_cli_and_environment_configuration() {
             "x-tenant=from-env,x-env-only=yes",
         )
         .args(["--endpoint", &endpoint, "--service", "cli-service"])
-        .args(["--header", "x-tenant=from-cli", "--timeout", "5"])
+        .args(["--header", "x-tenant=from-cli"])
         .args(["log", "--body", "hello-from-cli", "--severity", "warn"])
         .args(["--trace-id", TRACE_ID, "--span-id", SPAN_ID])
         .args(["--attributes", r#"{"job":"build-42","attempt":2}"#]));
@@ -419,7 +425,7 @@ fn rejected_export_exits_7_without_printing_credentials() {
         .replace("http://", "http://user:s3cret-pass@");
     let request = collector.serve("400 Bad Request");
     let output = run(sc_otel(&directory)
-        .args(["--endpoint", &endpoint, "--timeout", "5"])
+        .args(["--endpoint", &endpoint])
         .args(["--header", &format!("authorization=Bearer {SECRET}")])
         .args(["log", "--body", "rejected"]));
     assert_eq!(output.status.code(), Some(7), "{output:?}");
