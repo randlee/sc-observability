@@ -347,6 +347,11 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
         .map(|nanos| unix_nanos("start_time_unix_nano", &nanos))
         .transpose()?
         .unwrap_or(end_time);
+    if start_time > end_time {
+        return Err(invalid(
+            "start_time_unix_nano must not be after end_time_unix_nano".into(),
+        ));
+    }
     let attributes = attributes(fields.attributes, fields.name.len())?;
     Ok(SpanData {
         span_context: SpanContext::new(
@@ -357,7 +362,8 @@ fn span(fields: SpanFields<'_>) -> Result<SpanData, SyncError> {
             TraceState::NONE,
         ),
         parent_span_id: parent_span_id.unwrap_or(SpanId::INVALID),
-        parent_span_is_remote: parent_span_id.is_some(),
+        // The caller names a parent id only; nothing says it came from another process.
+        parent_span_is_remote: false,
         span_kind,
         name: fields.name.into(),
         start_time,

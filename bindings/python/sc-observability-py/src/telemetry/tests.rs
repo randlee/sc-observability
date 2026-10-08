@@ -151,6 +151,42 @@ fn span_times_outside_the_unsigned_64_bit_range_are_validation_failures() {
     });
 }
 
+#[test]
+fn a_parent_is_local_and_start_after_end_is_rejected() {
+    Python::initialize();
+    Python::attach(|py| {
+        let int = |source: &CStr| {
+            py.eval(source, None, None)
+                .expect("valid int")
+                .cast_into::<PyInt>()
+                .expect("an int")
+        };
+        let fields = |start: &CStr, end: &CStr, parent: Option<&str>| SpanFields {
+            name: "span".into(),
+            trace_id: Some("4bf92f3577b34da6a3ce929d0e0e4736".into()),
+            span_id: None,
+            parent_span_id: parent.map(Into::into),
+            kind: "internal".into(),
+            start_time_unix_nano: Some(int(start)),
+            end_time_unix_nano: Some(int(end)),
+            ok: false,
+            error: None,
+            attributes: Vec::new(),
+        };
+        let child = match span(fields(c"1", c"2", Some("00f067aa0ba902b7"))) {
+            Ok(span) => span,
+            Err(error) => std::panic::panic_any(error.to_string()),
+        };
+        assert_eq!(child.parent_span_id, SpanId::from(0x00f0_67aa_0ba9_02b7));
+        assert!(!child.parent_span_is_remote);
+        assert!(span(fields(c"2", c"2", None)).is_ok());
+        assert_eq!(
+            code(span(fields(c"3", c"2", None)).map(drop)),
+            codes::INVALID_RECORD
+        );
+    });
+}
+
 fn python_attributes<'py>(py: Python<'py>, source: &CStr) -> Vec<(String, Bound<'py, PyAny>)> {
     py.eval(source, None, None)
         .and_then(|value| value.extract())

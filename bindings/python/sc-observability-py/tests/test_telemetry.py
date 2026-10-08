@@ -160,6 +160,7 @@ LIMIT = "SC_OBSERVABILITY_OTLP_SYNC_INPUT_LIMIT_EXCEEDED"
     (lambda t: t.span("x", span_id="f067aa0ba902b7"), INVALID_RECORD),
     (lambda t: t.span("x", start_time_unix_nano=-1), INVALID_RECORD),
     (lambda t: t.span("x", end_time_unix_nano=2**64), INVALID_RECORD),
+    (lambda t: t.span("x", start_time_unix_nano=2, end_time_unix_nano=1), INVALID_RECORD),
     (lambda t: t.metric("x", "summary", 1), INVALID_RECORD),
 ], ids=lambda value: value if isinstance(value, str) else "")
 def test_invalid_fields_are_tagged_and_send_nothing(collector: Collector, call: Any, code: str) -> None:
