@@ -262,6 +262,35 @@ fn metric_exports_one_measurement_to_the_environment_endpoint() {
 }
 
 #[test]
+fn metric_counter_and_histogram_edge_values_export_without_cli_range_validation() {
+    let cases = [
+        ("negative-counter", "counter", "-1"),
+        ("negative-histogram", "histogram", "-1"),
+        ("nan-counter", "counter", "NaN"),
+        ("nan-histogram", "histogram", "NaN"),
+        ("infinite-counter", "counter", "inf"),
+        ("infinite-histogram", "histogram", "inf"),
+    ];
+    for (name, kind, value) in cases {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let collector = Collector::start();
+        let endpoint = collector.endpoint.clone();
+        let request = collector.serve("200 OK");
+        let output = run(sc_otel(&directory)
+            .args(["--endpoint", &endpoint])
+            .args(["metric", "--name", name, "--kind", kind, "--value", value]));
+        assert_eq!(output.status.code(), Some(0), "{name}: {output:?}");
+        let request = request.join().expect("collector");
+        assert_eq!(request.path, "/v1/metrics", "{name}");
+        assert!(
+            request.body_contains(name.as_bytes()),
+            "{name} was not present in the metric request"
+        );
+        assert_no_files(&directory);
+    }
+}
+
+#[test]
 fn rejected_export_exits_7_without_printing_credentials() {
     let directory = tempfile::tempdir().expect("tempdir");
     let collector = Collector::start();
@@ -291,7 +320,7 @@ fn invalid_input_exits_3_and_sends_nothing() {
     let directory = tempfile::tempdir().expect("tempdir");
     let collector = Collector::start();
     let endpoint = collector.endpoint.clone();
-    let cases: [(&[&str], &str); 4] = [
+    let cases: [(&[&str], &str); 3] = [
         (
             &[
                 "log",
@@ -315,18 +344,6 @@ fn invalid_input_exits_3_and_sends_nothing() {
             "SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD",
         ),
         (
-            &[
-                "metric",
-                "--name",
-                "1-not-an-instrument-name",
-                "--kind",
-                "gauge",
-                "--value",
-                "1",
-            ],
-            "SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD",
-        ),
-        (
             &["--root-certificate", "missing.pem", "log", "--body", "x"],
             "SC_OBSERVABILITY_OTLP_SYNC_INVALID_CONFIG",
         ),
@@ -338,6 +355,34 @@ fn invalid_input_exits_3_and_sends_nothing() {
         assert_eq!(output.status.code(), Some(3), "{args:?}: {output:?}");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains(code), "{args:?}: {stderr}");
+    }
+    collector.assert_untouched();
+    assert_no_files(&directory);
+}
+
+#[test]
+fn invalid_metric_names_exit_3_and_send_nothing_for_every_instrument_kind() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let collector = Collector::start();
+    let endpoint = collector.endpoint.clone();
+    for kind in ["counter", "up-down-counter", "gauge", "histogram"] {
+        let output = run(sc_otel(&directory).args([
+            "--endpoint",
+            &endpoint,
+            "metric",
+            "--name",
+            "1-not-an-instrument-name",
+            "--kind",
+            kind,
+            "--value",
+            "1",
+        ]));
+        assert_eq!(output.status.code(), Some(3), "{kind}: {output:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("SC_OBSERVABILITY_OTLP_SYNC_INVALID_RECORD"),
+            "{kind}: {stderr}"
+        );
     }
     collector.assert_untouched();
     assert_no_files(&directory);

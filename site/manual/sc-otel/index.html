@@ -259,7 +259,7 @@ Examples:
   sc-otel metric --name queue.depth --kind gauge --value 42 --attributes &#39;{&quot;queue&quot;:&quot;default&quot;}&#39;
   sc-otel metric --name job.duration --kind histogram --unit s --value 12.5
 
-Counter and histogram values must not be negative. An invalid instrument name records nothing and fails with exit 3.</pre></section>
+Counter and histogram values, including negative and non-finite values, are passed to the OpenTelemetry SDK without CLI range validation. An invalid instrument name records nothing, sends no request, and fails with exit 3.</pre></section>
 <section id="sc-otel-help"><h2>sc-otel help</h2><pre>Print this message or the help of the given subcommand(s)
 
 Usage: sc-otel help [COMMAND]

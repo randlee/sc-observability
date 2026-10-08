@@ -46,7 +46,7 @@ pub(crate) enum Command {
     Span(SpanArgs),
     /// Export one metric measurement.
     #[command(
-        after_long_help = "Examples:\n  sc-otel metric --name jobs.completed --kind counter --value 1\n  sc-otel metric --name queue.depth --kind gauge --value 42 --attributes '{\"queue\":\"default\"}'\n  sc-otel metric --name job.duration --kind histogram --unit s --value 12.5\n\nCounter and histogram values must not be negative. An invalid instrument name records nothing and fails with exit 3."
+        after_long_help = "Examples:\n  sc-otel metric --name jobs.completed --kind counter --value 1\n  sc-otel metric --name queue.depth --kind gauge --value 42 --attributes '{\"queue\":\"default\"}'\n  sc-otel metric --name job.duration --kind histogram --unit s --value 12.5\n\nCounter and histogram values, including negative and non-finite values, are passed to the OpenTelemetry SDK without CLI range validation. An invalid instrument name records nothing, sends no request, and fails with exit 3."
     )]
     Metric(MetricArgs),
 }
